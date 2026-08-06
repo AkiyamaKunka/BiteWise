@@ -328,6 +328,65 @@ def _result_text(envelope) -> Optional[str]:
     return text
 
 
+class PlanRefused(Exception):
+    """The plan itself refused this run — not a CLI-shape failure.
+
+    Distinct from None (the run happened and answered junk) and from
+    AnalyzerBusy (contention). The model is simply not served by this
+    subscription right now: a usage window is exhausted, or the chosen
+    model needs purchased credits the plan does not include (Fable 5 on
+    a Pro plan, verified live 2026-08-06). Retrying — in place OR via the
+    file path — reproduces it exactly, so callers must surface the REASON
+    to the user instead of a generic 'no usable result'.
+    """
+
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _plan_refusal(stdout: str) -> Optional[str]:
+    """A user-facing reason when the stream output shows a PLAN refusal.
+
+    The CLI reports these as a terminal result envelope carrying
+    is_error with an api_error_status (429), and/or a rate_limit_event
+    whose errorCode is credits_required. Its own `result` text is already
+    written for a human ("Fable 5 requires usage credits."), so it is
+    preferred verbatim over anything we could invent.
+    """
+    refused = False
+    message = None
+    for line in (stdout or "").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            event = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(event, dict):
+            continue
+        if event.get("type") == "rate_limit_event":
+            info = event.get("rate_limit_info")
+            if isinstance(info, dict) and (
+                info.get("status") == "rejected"
+                or info.get("errorCode") == "credits_required"
+            ):
+                refused = True
+        if event.get("type") == "result" and event.get("is_error"):
+            status = event.get("api_error_status")
+            text = event.get("result")
+            if status == 429 or (
+                isinstance(text, str) and "credit" in text.lower()
+            ):
+                refused = True
+            if isinstance(text, str) and text.strip():
+                message = text.strip()
+    if not refused:
+        return None
+    return message or "this plan cannot serve the selected model right now"
+
+
 def _log_cli_exit(proc) -> None:
     text = (proc.stderr or proc.stdout or "").strip()
     # Redact BEFORE truncating: a CLI that echoes a bad argument back into
@@ -425,6 +484,14 @@ def _attempt_stream(
             env=env,
         )
         if proc.returncode != 0:
+            # A PLAN refusal exits nonzero too, but it is not a CLI-shape
+            # failure: the file fallback would reproduce it verbatim and
+            # the user needs the reason, not a retry (Fable-on-Pro,
+            # 2026-08-06).
+            refusal = _plan_refusal(proc.stdout)
+            if refusal:
+                log.warning(f"Claude plan refused the run: {refusal}")
+                raise PlanRefused(refusal)
             _log_cli_exit(proc)
             return None, True
         envelope = _parse_stream_result(proc.stdout)
@@ -440,6 +507,11 @@ def _attempt_stream(
     except subprocess.TimeoutExpired:
         log.warning(f"Claude CLI timed out after {_timeout_seconds()}s.")
         return None, False
+    except PlanRefused:
+        # Must reach the caller: the catch-all below would turn an
+        # actionable "this plan cannot serve that model" into a silent
+        # None, which is exactly the failure this class exists to end.
+        raise
     except Exception as e:
         log.warning(f"Claude analyzer failed unexpectedly: {type(e).__name__}: {e}")
         return None, False
@@ -742,10 +814,15 @@ def analyze_leftover_photo(
         if backend == "glm":
             return _attempt_glm_vision(cli, image_bytes, env, start, prompt,
                                        require_is_food=False)
-        analysis, _retry = _attempt_stream(cli, image_bytes, env, start,
-                                           prompt, backend,
-                                           require_is_food=False,
-                                           model=model, effort=effort)
+        try:
+            analysis, _retry = _attempt_stream(cli, image_bytes, env, start,
+                                               prompt, backend,
+                                               require_is_food=False,
+                                               model=model, effort=effort)
+        except PlanRefused:
+            if raise_on_busy:
+                raise
+            return None
         return analysis
     finally:
         _CLI_LOCK.release()
@@ -811,13 +888,25 @@ def analyze_food_photo(
             # carry the image; the vision MCP path is the ONLY photo path.
             return _attempt_glm_vision(cli, image_bytes, env, start, prompt)
         if backend == "doubao":
-            analysis, _ = _attempt_stream(
-                cli, image_bytes, env, start, prompt, backend)
+            try:
+                analysis, _ = _attempt_stream(
+                    cli, image_bytes, env, start, prompt, backend)
+            except PlanRefused:
+                if raise_on_busy:
+                    raise
+                return None
             return analysis
         if _dispatch_mode() == "stream":
-            analysis, retry_via_file = _attempt_stream(
-                cli, image_bytes, env, start, prompt,
-                model=model, effort=effort)
+            try:
+                analysis, retry_via_file = _attempt_stream(
+                    cli, image_bytes, env, start, prompt,
+                    model=model, effort=effort)
+            except PlanRefused:
+                # Only API callers want the reason; the Telegram path keeps
+                # its documented "None -> fall back to Gemini" contract.
+                if raise_on_busy:
+                    raise
+                return None
             if not retry_via_file:
                 return analysis
             if not allow_file_fallback:

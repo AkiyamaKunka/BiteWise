@@ -149,7 +149,8 @@ void main() {
     await tester.enterText(find.byKey(const Key('itemCal1')), '80');
     await tester.enterText(find.byKey(const Key('itemPro1')), '7');
 
-    await tester.tap(find.byKey(const Key('useItemTotals')));
+    // Totals are DERIVED from the items now (user decision 2026-08-06):
+    // no button to press — typing the rows already moved them.
     await tester.pump();
     expect(
         tester
@@ -164,12 +165,28 @@ void main() {
             .text,
         '7');
 
-    // Removing the first row must not corrupt the second one's values.
+    // Removing the first row must not corrupt the second one's values —
+    // AND must move the totals (user-reported 2026-08-06: deleting an
+    // item left the meal's calories untouched).
     await tester.tap(find.byKey(const Key('removeItem0')));
     await tester.pump();
     expect(
         tester.widget<TextField>(find.byKey(const Key('itemName0'))).controller!.text,
         'Egg');
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editorCalories')))
+            .controller!
+            .text,
+        '80',
+        reason: 'the deleted 200 kcal row must leave the total');
+    expect(
+        tester
+            .widget<TextField>(find.byKey(const Key('editorCarbs')))
+            .controller!
+            .text,
+        '0',
+        reason: "the deleted row's carbs go with it");
 
     await tester.tap(find.byKey(const Key('saveMealButton')));
     await tester.pumpAndSettle();

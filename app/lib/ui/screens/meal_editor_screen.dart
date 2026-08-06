@@ -134,13 +134,55 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   ({TextEditingController name, TextEditingController cal,
       TextEditingController pro, TextEditingController carb,
-      TextEditingController fat}) _controllersFor(MealItemDraft it) => (
-        name: TextEditingController(text: it.name),
-        cal: TextEditingController(text: it.calories),
-        pro: TextEditingController(text: it.protein),
-        carb: TextEditingController(text: it.carbs),
-        fat: TextEditingController(text: it.fat),
-      );
+      TextEditingController fat}) _controllersFor(MealItemDraft it) {
+    final row = (
+      name: TextEditingController(text: it.name),
+      cal: TextEditingController(text: it.calories),
+      pro: TextEditingController(text: it.protein),
+      carb: TextEditingController(text: it.carbs),
+      fat: TextEditingController(text: it.fat),
+    );
+    // Totals are DERIVED from the items (user decision 2026-08-06):
+    // editing any item number moves the meal total in the same frame,
+    // so a deleted or corrected row can never leave a stale total.
+    for (final c in [row.cal, row.pro, row.carb, row.fat]) {
+      c.addListener(_recomputeTotalsFromItems);
+    }
+    return row;
+  }
+
+  /// True when the totals are owned by the item rows. With no items the
+  /// totals stay hand-editable — that is the manual-entry path.
+  bool get _totalsDerived => _draft.items.isNotEmpty;
+
+  /// Push the item sum into the total fields. Silent on the no-item path,
+  /// and guarded against the listener loop (_cal's own listener fires
+  /// _syncTotals, never this).
+  void _recomputeTotalsFromItems() {
+    if (!_totalsDerived) return;
+    for (var i = 0; i < _draft.items.length && i < _itemCtrls.length; i++) {
+      final c = _itemCtrls[i];
+      _draft.items[i]
+        ..name = c.name.text
+        ..calories = c.cal.text
+        ..protein = c.pro.text
+        ..carbs = c.carb.text
+        ..fat = c.fat.text;
+    }
+    final t = _draft.itemTotals();
+    final next = [
+      _plain(t.calories.clamp(0, maxMealCalories)),
+      _plain(t.protein.clamp(0, maxMacroGrams)),
+      _plain(t.carbs.clamp(0, maxMacroGrams)),
+      _plain(t.fat.clamp(0, maxMacroGrams)),
+    ];
+    final ctrls = [_cal, _pro, _carb, _fat];
+    for (var i = 0; i < ctrls.length; i++) {
+      // Assign only on CHANGE: an unconditional write would move the
+      // caret and re-enter through the controller's own listener.
+      if (ctrls[i].text != next[i]) ctrls[i].text = next[i];
+    }
+  }
 
   @override
   void dispose() {
@@ -342,27 +384,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       row.fat.dispose();
       _draft.items.removeAt(i);
     });
-  }
-
-  void _useItemTotals() {
-    _harvest();
-    final t = _draft.itemTotals();
-    // Clamp to the same ceilings validate() enforces: writing 39,998 into a
-    // field that refuses to save above 20,000 is a trap, not a shortcut.
-    final capped = t.calories > maxMealCalories ||
-        t.protein > maxMacroGrams ||
-        t.carbs > maxMacroGrams ||
-        t.fat > maxMacroGrams;
-    setState(() {
-      _cal.text = _plain(t.calories.clamp(0, maxMealCalories));
-      _pro.text = _plain(t.protein.clamp(0, maxMacroGrams));
-      _carb.text = _plain(t.carbs.clamp(0, maxMacroGrams));
-      _fat.text = _plain(t.fat.clamp(0, maxMacroGrams));
-    });
-    if (capped) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Item totals exceeded the maximum and were capped.')));
-    }
+    // The whole point of the report: removing a row must move the total.
+    _recomputeTotalsFromItems();
   }
 
   static String _plain(num v) =>
@@ -489,12 +512,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               Expanded(
                   child:
                       Text('Items', style: theme.textTheme.titleSmall)),
-              if (_draft.items.isNotEmpty)
-                TextButton(
-                  key: const Key('useItemTotals'),
-                  onPressed: _useItemTotals,
-                  child: const Text('Sum into totals'),
-                ),
+              if (_totalsDerived)
+                Text('Totals follow these items',
+                    key: const Key('totalsDerivedHint'),
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
             ],
           ),
           for (var i = 0; i < _draft.items.length; i++)
@@ -519,6 +541,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                   _draft.items.add(it);
                   _itemCtrls.add(_controllersFor(it));
                 });
+                _recomputeTotalsFromItems();
               },
               icon: const Icon(Icons.add, size: 18),
               label: const Text('Add item'),
