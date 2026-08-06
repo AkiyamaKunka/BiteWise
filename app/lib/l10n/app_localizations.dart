@@ -1175,7 +1175,7 @@ abstract class AppLocalizations {
   /// No description provided for @planModelFable.
   ///
   /// In en, this message translates to:
-  /// **'Fable — frontier, most capable'**
+  /// **'Fable — frontier · needs credits on Pro'**
   String get planModelFable;
 }
 

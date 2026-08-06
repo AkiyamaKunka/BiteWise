@@ -603,5 +603,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planEffortHigh => '高 — 最仔细';
 
   @override
-  String get planModelFable => 'Fable — 旗舰，能力最强';
+  String get planModelFable => 'Fable — 旗舰 · Pro 需另购额度';
 }
