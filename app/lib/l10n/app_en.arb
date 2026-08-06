@@ -363,5 +363,14 @@
   "planEffortLow": "Low — fastest",
   "planEffortMedium": "Medium",
   "planEffortHigh": "High — most thorough",
-  "planModelFable": "Fable — frontier · needs credits on Pro"
+  "planModelFable": "Fable — frontier · needs credits on Pro",
+  "typicalDayOnly": "Typical day: ~{typical} kcal",
+  "@typicalDayOnly": {
+    "placeholders": {
+      "typical": {
+        "type": "String"
+      }
+    }
+  },
+  "garminIdleLine": "Garmin connected · no activity recorded yet today"
 }

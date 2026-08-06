@@ -1177,6 +1177,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fable — frontier · needs credits on Pro'**
   String get planModelFable;
+
+  /// No description provided for @typicalDayOnly.
+  ///
+  /// In en, this message translates to:
+  /// **'Typical day: ~{typical} kcal'**
+  String typicalDayOnly(String typical);
+
+  /// No description provided for @garminIdleLine.
+  ///
+  /// In en, this message translates to:
+  /// **'Garmin connected · no activity recorded yet today'**
+  String get garminIdleLine;
 }
 
 class _AppLocalizationsDelegate

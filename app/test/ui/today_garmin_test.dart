@@ -47,14 +47,20 @@ void main() {
   testWidgets('an unavailable day (null) draws nothing', (tester) async {
     await pump(tester, garmin: (date) async => null);
     expect(find.byKey(const Key('garminBurnLine')), findsNothing);
+    expect(find.byKey(const Key('garminIdleLine')), findsNothing,
+        reason: 'not connected must never claim to be connected');
   });
 
-  testWidgets('a zero-burn day draws nothing — a "~0 kcal" line is noise',
-      (tester) async {
+  testWidgets('a zero-burn day says CONNECTED instead of drawing a '
+      '"~0 kcal" line — silence read as "Garmin is broken" (user report '
+      '2026-08-06)', (tester) async {
     await pump(tester,
         garmin: (date) async => const GarminDaily(
             activeCalories: 0, steps: 0, distanceM: 0, activityCount: 0));
-    expect(find.byKey(const Key('garminBurnLine')), findsNothing);
+    expect(find.byKey(const Key('garminBurnLine')), findsNothing,
+        reason: 'no fake arithmetic on a zero day');
+    expect(find.byKey(const Key('garminIdleLine')), findsOneWidget,
+        reason: 'but the connection itself must be visible');
   });
 
   testWidgets('a fetch that throws leaves the screen intact', (tester) async {

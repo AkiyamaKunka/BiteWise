@@ -645,4 +645,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get planModelFable => 'Fable — frontier · needs credits on Pro';
+
+  @override
+  String typicalDayOnly(String typical) {
+    return 'Typical day: ~$typical kcal';
+  }
+
+  @override
+  String get garminIdleLine =>
+      'Garmin connected · no activity recorded yet today';
 }

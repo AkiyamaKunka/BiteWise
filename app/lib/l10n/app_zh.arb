@@ -179,5 +179,7 @@
   "planEffortLow": "低 — 最快",
   "planEffortMedium": "中",
   "planEffortHigh": "高 — 最仔细",
-  "planModelFable": "Fable — 旗舰 · Pro 需另购额度"
+  "planModelFable": "Fable — 旗舰 · Pro 需另购额度",
+  "typicalDayOnly": "日常：~{typical} 千卡",
+  "garminIdleLine": "Garmin 已连接 · 今天还没有活动数据"
 }

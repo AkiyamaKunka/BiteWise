@@ -57,25 +57,18 @@ class CalorieRing extends StatelessWidget {
         ? null
         : (_eaten / budget).clamp(0.0, 1.0).toDouble();
     final over = budget != null && _eaten > budget;
-    final centerBig = budget == null
-        ? formatKcal(_eaten)
-        : over
-            ? '+${formatKcal(_eaten - budget)}'
-            : formatKcal(budget - _eaten);
+    // The hero is what you ATE, never what is left (owner decision
+    // 2026-08-06): a tracker's job is to report intake, and a
+    // countdown-to-zero frames every meal as spending a budget. The arc
+    // still carries the progress-against-typical context.
     final l = context.l10n;
-    final centerSmall = budget == null
-        ? l.ringKcalToday
-        : over
-            ? l.ringAboveTypical // matches the caption's wording
-            : burnKcal.round() > 0
-                ? l.ringLeftToday
-                : l.ringHeadroom;
+    final centerBig = formatKcal(_eaten);
+    final centerSmall = l.ringKcalToday;
     final semantics = budget == null
         ? '${formatKcal(_eaten)} kcal eaten today'
-        : over
-            ? '${formatKcal(_eaten - budget)} kcal above typical'
-            : '${formatKcal(budget - _eaten)} kcal left today, of a '
-                '${formatKcal(budget)} kcal typical day';
+        : '${formatKcal(_eaten)} kcal eaten today, of a '
+            '${formatKcal(budget)} kcal typical day'
+            '${over ? ' (above typical)' : ''}';
     return SizedBox(
       width: size,
       height: size,

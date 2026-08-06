@@ -604,4 +604,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planModelFable => 'Fable — 旗舰 · Pro 需另购额度';
+
+  @override
+  String typicalDayOnly(String typical) {
+    return '日常：~$typical 千卡';
+  }
+
+  @override
+  String get garminIdleLine => 'Garmin 已连接 · 今天还没有活动数据';
 }
