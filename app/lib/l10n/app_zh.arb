@@ -196,5 +196,14 @@
   "goalNotSet": "未设置",
   "goalFooter": "每日总结会以此为基准。留空则与你的日常水平比较。",
   "goalFieldLabel": "千卡 / 天",
-  "goalClear": "清除目标"
+  "goalClear": "清除目标",
+  "macroProtein": "蛋白质",
+  "macroCarbs": "碳水",
+  "macroFat": "脂肪",
+  "macroProteinShort": "蛋",
+  "macroCarbsShort": "碳",
+  "macroFatShort": "脂",
+  "editorProteinLabel": "蛋白质（克）",
+  "editorCarbsLabel": "碳水（克）",
+  "editorFatLabel": "脂肪（克）"
 }

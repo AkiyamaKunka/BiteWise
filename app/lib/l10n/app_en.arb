@@ -432,5 +432,14 @@
   "goalNotSet": "Not set",
   "goalFooter": "The daily summary measures against this. Leave it empty and it compares against your typical day instead.",
   "goalFieldLabel": "kcal per day",
-  "goalClear": "Clear goal"
+  "goalClear": "Clear goal",
+  "macroProtein": "Protein",
+  "macroCarbs": "Carbs",
+  "macroFat": "Fat",
+  "macroProteinShort": "P",
+  "macroCarbsShort": "C",
+  "macroFatShort": "F",
+  "editorProteinLabel": "Protein (g)",
+  "editorCarbsLabel": "Carbs (g)",
+  "editorFatLabel": "Fat (g)"
 }

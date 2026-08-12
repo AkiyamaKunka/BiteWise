@@ -1279,6 +1279,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear goal'**
   String get goalClear;
+
+  /// No description provided for @macroProtein.
+  ///
+  /// In en, this message translates to:
+  /// **'Protein'**
+  String get macroProtein;
+
+  /// No description provided for @macroCarbs.
+  ///
+  /// In en, this message translates to:
+  /// **'Carbs'**
+  String get macroCarbs;
+
+  /// No description provided for @macroFat.
+  ///
+  /// In en, this message translates to:
+  /// **'Fat'**
+  String get macroFat;
+
+  /// No description provided for @macroProteinShort.
+  ///
+  /// In en, this message translates to:
+  /// **'P'**
+  String get macroProteinShort;
+
+  /// No description provided for @macroCarbsShort.
+  ///
+  /// In en, this message translates to:
+  /// **'C'**
+  String get macroCarbsShort;
+
+  /// No description provided for @macroFatShort.
+  ///
+  /// In en, this message translates to:
+  /// **'F'**
+  String get macroFatShort;
+
+  /// No description provided for @editorProteinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Protein (g)'**
+  String get editorProteinLabel;
+
+  /// No description provided for @editorCarbsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Carbs (g)'**
+  String get editorCarbsLabel;
+
+  /// No description provided for @editorFatLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Fat (g)'**
+  String get editorFatLabel;
 }
 
 class _AppLocalizationsDelegate

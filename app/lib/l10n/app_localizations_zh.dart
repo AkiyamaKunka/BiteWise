@@ -669,4 +669,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get goalClear => '清除目标';
+
+  @override
+  String get macroProtein => '蛋白质';
+
+  @override
+  String get macroCarbs => '碳水';
+
+  @override
+  String get macroFat => '脂肪';
+
+  @override
+  String get macroProteinShort => '蛋';
+
+  @override
+  String get macroCarbsShort => '碳';
+
+  @override
+  String get macroFatShort => '脂';
+
+  @override
+  String get editorProteinLabel => '蛋白质（克）';
+
+  @override
+  String get editorCarbsLabel => '碳水（克）';
+
+  @override
+  String get editorFatLabel => '脂肪（克）';
 }

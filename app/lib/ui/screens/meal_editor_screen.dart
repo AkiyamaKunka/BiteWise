@@ -18,6 +18,7 @@ import 'package:flutter/material.dart';
 import '../../core/coerce.dart' show normalizeImageHash;
 import '../../core/contracts.dart';
 import '../format.dart' show formatKcal, isoDate;
+import '../l10n.dart';
 import '../meal_edit_logic.dart';
 import '../widgets/macro_chart.dart';
 
@@ -478,21 +479,21 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                 child: _NumberField(
                     fieldKey: const Key('editorProtein'),
                     controller: _pro,
-                    label: 'Protein (g)'),
+                    label: context.l10n.editorProteinLabel),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _NumberField(
                     fieldKey: const Key('editorCarbs'),
                     controller: _carb,
-                    label: 'Carbs (g)'),
+                    label: context.l10n.editorCarbsLabel),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: _NumberField(
                     fieldKey: const Key('editorFat'),
                     controller: _fat,
-                    label: 'Fat (g)'),
+                    label: context.l10n.editorFatLabel),
               ),
             ],
           ),

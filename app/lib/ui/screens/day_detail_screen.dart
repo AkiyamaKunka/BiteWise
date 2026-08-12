@@ -125,8 +125,7 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
                             key: const Key('dayTotalKcal'),
                             style: theme.textTheme.headlineSmall),
                         Text(
-                            '${totals.meals} '
-                            '${totals.meals == 1 ? 'meal' : 'meals'}',
+                            context.l10n.reportMeals(totals.meals),
                             style: theme.textTheme.bodySmall?.copyWith(
                                 color: theme.colorScheme.onSurfaceVariant)),
                         const SizedBox(height: 12),

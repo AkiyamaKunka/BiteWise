@@ -715,4 +715,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get goalClear => 'Clear goal';
+
+  @override
+  String get macroProtein => 'Protein';
+
+  @override
+  String get macroCarbs => 'Carbs';
+
+  @override
+  String get macroFat => 'Fat';
+
+  @override
+  String get macroProteinShort => 'P';
+
+  @override
+  String get macroCarbsShort => 'C';
+
+  @override
+  String get macroFatShort => 'F';
+
+  @override
+  String get editorProteinLabel => 'Protein (g)';
+
+  @override
+  String get editorCarbsLabel => 'Carbs (g)';
+
+  @override
+  String get editorFatLabel => 'Fat (g)';
 }
