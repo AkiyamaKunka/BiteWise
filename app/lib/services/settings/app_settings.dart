@@ -56,6 +56,10 @@ enum AiProvider { gemini, openai, anthropic, server, qwen, doubao, glm }
 const List<String> kServerPlanModels = ['opus', 'sonnet', 'haiku', 'fable'];
 const List<String> kServerPlanEfforts = ['low', 'medium', 'high'];
 
+/// Sanity ceiling for the daily goal — a typo of 20000 must not become
+/// a permanent 'you are 18,000 under' message.
+const int maxDailyGoalKcal = 20000;
+
 class AppSettings extends ChangeNotifier {
   AppSettings._(this._prefs, this._keys);
 
@@ -79,6 +83,8 @@ class AppSettings extends ChangeNotifier {
   static const String _kUnits = 'settings.units';
   static const String _kServerModel = 'settings.server_model';
   static const String _kServerEffort = 'settings.server_effort';
+  static const String _kCalorieGoal = 'settings.calorie_goal';
+  static const String _kSummaryPostedDate = 'settings.summary_posted_date';
   static const String _kWatcherEnabled = 'settings.watcher_enabled';
   static const String _kDietaryProfile = 'settings.dietary_profile';
   static const String _kQuotaPauseUntil = 'settings.quota_pause_until';
@@ -140,6 +146,7 @@ class AppSettings extends ChangeNotifier {
   String _units = 'metric'; // 'metric' | 'imperial'
   String _serverModel = ''; // '' = server default | opus/sonnet/haiku
   String _serverEffort = ''; // '' = server default | low/medium/high
+  int _calorieGoal = 0; // 0 = unset -> the daily summary uses the median
   bool _watcherEnabled = false;
   String? _dietaryProfile;
   DateTime? _quotaPauseUntil;
@@ -197,6 +204,8 @@ class AppSettings extends ChangeNotifier {
     s._serverModel = kServerPlanModels.contains(sm) ? sm : '';
     final se = p.getString(_kServerEffort) ?? '';
     s._serverEffort = kServerPlanEfforts.contains(se) ? se : '';
+    final goal = p.getInt(_kCalorieGoal) ?? 0;
+    s._calorieGoal = (goal > 0 && goal <= maxDailyGoalKcal) ? goal : 0;
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
@@ -449,6 +458,26 @@ class AppSettings extends ChangeNotifier {
   /// stays metric everywhere; the Chinese UI ignores this and renders
   /// metric regardless (user decision 2026-08-03). App-only (spec §9).
   String get units => _units;
+
+  /// Daily calorie goal for the coach notification; 0 = unset, and the
+  /// summary falls back to the typical-day median (owner decision
+  /// 2026-08-06: "target if set, else typical").
+  int get calorieGoal => _calorieGoal;
+
+  Future<void> setCalorieGoal(int value) async {
+    final v = (value > 0 && value <= maxDailyGoalKcal) ? value : 0;
+    _calorieGoal = v;
+    await _prefs.setInt(_kCalorieGoal, v);
+    notifyListeners();
+  }
+
+  /// Watermark: the last date whose summary was already posted, so the
+  /// Timer path and the WorkManager catch-up can never double-notify.
+  String get summaryPostedDate =>
+      _prefs.getString(_kSummaryPostedDate) ?? '';
+
+  Future<void> markSummaryPosted(String isoDate) =>
+      _prefs.setString(_kSummaryPostedDate, isoDate);
 
   /// Claude-plan model/effort choice (2026-08-05): '' = server default.
   /// CLAUDE-ONLY — the vendor plans map model names server-side and the

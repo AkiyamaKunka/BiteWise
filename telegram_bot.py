@@ -5061,6 +5061,13 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                             "reason": "the analyzer is busy with another "
                                       "photo",
                             "retry": True}), 503
+        except claude_analyzer.PlanRefused as refusal:
+            # The plan itself said no (usage window, or a model this plan
+            # does not include). Retrying reproduces it — hand the user
+            # the CLI's own words so they can switch models.
+            return jsonify({"error": "claude_unavailable",
+                            "reason": refusal.reason,
+                            "retry": False}), 503
         if not analysis:
             # The run HAPPENED and failed: timeout, a reply that broke the
             # is_food contract, or a blind GLM run. Retrying spends another
@@ -5129,6 +5136,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                             "reason": "the analyzer is busy with another "
                                       "photo",
                             "retry": True}), 503
+        except claude_analyzer.PlanRefused as refusal:
+            return jsonify({"error": "claude_unavailable",
+                            "reason": refusal.reason,
+                            "retry": False}), 503
         if not leftover:
             return jsonify({"error": "claude_unavailable",
                             "reason": "the estimation ran but produced no "
@@ -5171,6 +5182,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return jsonify({"error": "claude_unavailable",
                             "reason": "the analyzer is busy",
                             "retry": True}), 503
+        except claude_analyzer.PlanRefused as refusal:
+            return jsonify({"error": "claude_unavailable",
+                            "reason": refusal.reason,
+                            "retry": False}), 503
         if not out:
             return jsonify({"error": "claude_unavailable",
                             "reason": "the analysis ran but produced no "

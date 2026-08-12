@@ -164,6 +164,12 @@ class ReportNotifier {
   Future<void> showMealCard(String title, String body) =>
       _present(_nextMealCardId++, title, body);
 
+  /// The daily coach summary. Shares the daily-report id so a re-post
+  /// REPLACES rather than stacks — one summary per day, by construction
+  /// (user request 2026-08-06).
+  Future<void> showDailySummary(String title, String body) =>
+      _present(dailyReportNotificationId, title, body);
+
   Future<void> _present(int id, String title, String body) async {
     final presenter = _presenter;
     if (presenter != null) return presenter(id, title, body);

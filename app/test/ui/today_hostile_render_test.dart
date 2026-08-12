@@ -131,7 +131,9 @@ void main() {
         tester.widget<Text>(find.byKey(const Key('typicalDayLine'))).data!;
     // median(2000, 1000) = 1500; headroom = 1500 − 400 = 1100.
     expect(line, contains('Typical day: ~1,500 kcal'));
-    expect(line, contains('~1,100 kcal headroom'));
+    expect(line, isNot(contains('headroom')),
+        reason: 'the remaining framing is gone (owner decision '
+            '2026-08-06) — the caption is context only');
   });
 
   testWidgets('empty today shows the spec empty copy', (tester) async {

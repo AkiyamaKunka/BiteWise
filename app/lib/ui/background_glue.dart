@@ -28,6 +28,8 @@ import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
+import '../services/report/daily_summary.dart';
+import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'photo_pipeline.dart';
 
@@ -172,6 +174,28 @@ Future<bool> runHeadlessBackfill() async {
   final notifier = ReportNotifier(
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
+  // The DURABLE daily-summary path. ReportNotifier's in-process Timer
+  // dies with the app, and EMUI kills aggressively — so the notification
+  // the user asked for is delivered by this 30-minute heartbeat instead,
+  // guarded by a per-date watermark so the live Timer cannot double-post
+  // (user request 2026-08-06).
+  try {
+    await maybePostDailySummary(DailySummaryDeps(
+      dao: await createMealsDao(),
+      reportTime: settings.reportTime,
+      calorieGoal: settings.calorieGoal,
+      postedDate: settings.summaryPostedDate,
+      markPosted: settings.markSummaryPosted,
+      present: (title, body) async {
+        await notifier.init();
+        await notifier.showDailySummary(title, body);
+      },
+      strings: coachStringsFor(settings.appLanguage),
+      now: DateTime.now,
+    ));
+  } catch (_) {
+    // A summary must never take the photo scan down with it.
+  }
   return headlessBackfillWith(
     settings: settings,
     prefs: prefs,

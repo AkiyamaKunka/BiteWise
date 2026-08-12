@@ -363,5 +363,83 @@
   "planEffortLow": "Low — fastest",
   "planEffortMedium": "Medium",
   "planEffortHigh": "High — most thorough",
-  "planModelFable": "Fable — frontier, most capable"
+  "planModelFable": "Fable — frontier · needs credits on Pro",
+  "typicalDayOnly": "Typical day: ~{typical} kcal",
+  "@typicalDayOnly": {
+    "placeholders": {
+      "typical": {
+        "type": "String"
+      }
+    }
+  },
+  "garminIdleLine": "Garmin connected · no activity recorded yet today",
+  "coachTitle": "Today: {kcal} kcal",
+  "@coachTitle": {
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "coachEmpty": "Nothing logged today. Snap your next meal and it lands here automatically.",
+  "coachUnderGoal": "{delta} kcal under your goal — that's a real cut. Discipline like this compounds. 💪",
+  "@coachUnderGoal": {
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachUnderTypical": "{delta} kcal below your usual day. Strong work — that's the kind of day that moves the needle.",
+  "@coachUnderTypical": {
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachOnTarget": "Right on target today. Consistency beats intensity — keep stacking days like this.",
+  "coachOverGoal": "{delta} kcal over your goal today. One day doesn't undo a week — you're back at it tomorrow.",
+  "@coachOverGoal": {
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachOverTypical": "{delta} kcal above your usual today. Worth knowing, not worth worrying about — tomorrow's a clean slate.",
+  "@coachOverTypical": {
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachNoReference": "Logged and counted. A few more days and I can tell you how today compares.",
+  "coachDetail": "{meals} meals · {protein} g protein",
+  "@coachDetail": {
+    "placeholders": {
+      "meals": {
+        "type": "String"
+      },
+      "protein": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsRowGoal": "Daily calorie goal",
+  "goalSheetTitle": "Daily calorie goal",
+  "goalNotSet": "Not set",
+  "goalFooter": "The daily summary measures against this. Leave it empty and it compares against your typical day instead.",
+  "goalFieldLabel": "kcal per day",
+  "goalClear": "Clear goal",
+  "macroProtein": "Protein",
+  "macroCarbs": "Carbs",
+  "macroFat": "Fat",
+  "macroProteinShort": "P",
+  "macroCarbsShort": "C",
+  "macroFatShort": "F",
+  "editorProteinLabel": "Protein (g)",
+  "editorCarbsLabel": "Carbs (g)",
+  "editorFatLabel": "Fat (g)"
 }

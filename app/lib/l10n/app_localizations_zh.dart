@@ -603,5 +603,97 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planEffortHigh => '高 — 最仔细';
 
   @override
-  String get planModelFable => 'Fable — 旗舰，能力最强';
+  String get planModelFable => 'Fable — 旗舰 · Pro 需另购额度';
+
+  @override
+  String typicalDayOnly(String typical) {
+    return '日常：~$typical 千卡';
+  }
+
+  @override
+  String get garminIdleLine => 'Garmin 已连接 · 今天还没有活动数据';
+
+  @override
+  String coachTitle(String kcal) {
+    return '今天：$kcal 千卡';
+  }
+
+  @override
+  String get coachEmpty => '今天还没有记录。拍下一餐，它会自动出现在这里。';
+
+  @override
+  String coachUnderGoal(String delta) {
+    return '比目标少 $delta 千卡 —— 实打实的缺口，这种自律会累积成结果。💪';
+  }
+
+  @override
+  String coachUnderTypical(String delta) {
+    return '比你平时少 $delta 千卡。今天很棒，这样的一天才是真正有效的。';
+  }
+
+  @override
+  String get coachOnTarget => '今天正好达标。稳定比猛冲更重要，继续保持。';
+
+  @override
+  String coachOverGoal(String delta) {
+    return '今天比目标多 $delta 千卡。一天不会毁掉一周，明天继续。';
+  }
+
+  @override
+  String coachOverTypical(String delta) {
+    return '今天比平时多 $delta 千卡。知道就好，不用焦虑 —— 明天重新开始。';
+  }
+
+  @override
+  String get coachNoReference => '已记录。再积累几天，我就能告诉你今天和平时比如何了。';
+
+  @override
+  String coachDetail(String meals, String protein) {
+    return '$meals 餐 · 蛋白质 $protein 克';
+  }
+
+  @override
+  String get settingsRowGoal => '每日热量目标';
+
+  @override
+  String get goalSheetTitle => '每日热量目标';
+
+  @override
+  String get goalNotSet => '未设置';
+
+  @override
+  String get goalFooter => '每日总结会以此为基准。留空则与你的日常水平比较。';
+
+  @override
+  String get goalFieldLabel => '千卡 / 天';
+
+  @override
+  String get goalClear => '清除目标';
+
+  @override
+  String get macroProtein => '蛋白质';
+
+  @override
+  String get macroCarbs => '碳水';
+
+  @override
+  String get macroFat => '脂肪';
+
+  @override
+  String get macroProteinShort => '蛋';
+
+  @override
+  String get macroCarbsShort => '碳';
+
+  @override
+  String get macroFatShort => '脂';
+
+  @override
+  String get editorProteinLabel => '蛋白质（克）';
+
+  @override
+  String get editorCarbsLabel => '碳水（克）';
+
+  @override
+  String get editorFatLabel => '脂肪（克）';
 }

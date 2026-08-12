@@ -644,5 +644,102 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planEffortHigh => 'High — most thorough';
 
   @override
-  String get planModelFable => 'Fable — frontier, most capable';
+  String get planModelFable => 'Fable — frontier · needs credits on Pro';
+
+  @override
+  String typicalDayOnly(String typical) {
+    return 'Typical day: ~$typical kcal';
+  }
+
+  @override
+  String get garminIdleLine =>
+      'Garmin connected · no activity recorded yet today';
+
+  @override
+  String coachTitle(String kcal) {
+    return 'Today: $kcal kcal';
+  }
+
+  @override
+  String get coachEmpty =>
+      'Nothing logged today. Snap your next meal and it lands here automatically.';
+
+  @override
+  String coachUnderGoal(String delta) {
+    return '$delta kcal under your goal — that\'s a real cut. Discipline like this compounds. 💪';
+  }
+
+  @override
+  String coachUnderTypical(String delta) {
+    return '$delta kcal below your usual day. Strong work — that\'s the kind of day that moves the needle.';
+  }
+
+  @override
+  String get coachOnTarget =>
+      'Right on target today. Consistency beats intensity — keep stacking days like this.';
+
+  @override
+  String coachOverGoal(String delta) {
+    return '$delta kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.';
+  }
+
+  @override
+  String coachOverTypical(String delta) {
+    return '$delta kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.';
+  }
+
+  @override
+  String get coachNoReference =>
+      'Logged and counted. A few more days and I can tell you how today compares.';
+
+  @override
+  String coachDetail(String meals, String protein) {
+    return '$meals meals · $protein g protein';
+  }
+
+  @override
+  String get settingsRowGoal => 'Daily calorie goal';
+
+  @override
+  String get goalSheetTitle => 'Daily calorie goal';
+
+  @override
+  String get goalNotSet => 'Not set';
+
+  @override
+  String get goalFooter =>
+      'The daily summary measures against this. Leave it empty and it compares against your typical day instead.';
+
+  @override
+  String get goalFieldLabel => 'kcal per day';
+
+  @override
+  String get goalClear => 'Clear goal';
+
+  @override
+  String get macroProtein => 'Protein';
+
+  @override
+  String get macroCarbs => 'Carbs';
+
+  @override
+  String get macroFat => 'Fat';
+
+  @override
+  String get macroProteinShort => 'P';
+
+  @override
+  String get macroCarbsShort => 'C';
+
+  @override
+  String get macroFatShort => 'F';
+
+  @override
+  String get editorProteinLabel => 'Protein (g)';
+
+  @override
+  String get editorCarbsLabel => 'Carbs (g)';
+
+  @override
+  String get editorFatLabel => 'Fat (g)';
 }

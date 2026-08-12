@@ -90,3 +90,49 @@ def test_argv_never_takes_unlisted_values_even_if_called_directly():
         cmd, "claude", model="--dangerously-skip-permissions", effort="rm")
     assert "--dangerously-skip-permissions" not in cmd
     assert "rm" not in cmd
+
+
+class TestPlanRefusal:
+    """A plan that cannot serve the chosen model must say WHY.
+
+    Live-verified 2026-08-06: Fable 5 on a Pro plan makes the CLI exit 1
+    with a rate_limit_event (credits_required) and a human-readable
+    result string. Before this, the app showed the generic 'the analysis
+    ran but produced no usable result' — hiding a one-tap fix.
+    """
+
+    STREAM = "\n".join([
+        '{"type":"system","subtype":"init","model":"claude-fable-5"}',
+        '{"type":"rate_limit_event","rate_limit_info":{"status":"rejected",'
+        '"errorCode":"credits_required"}}',
+        '{"type":"result","subtype":"success","is_error":true,'
+        '"api_error_status":429,'
+        '"result":"Fable 5 requires usage credits. /model to switch models."}',
+    ])
+
+    def test_refusal_is_detected_with_the_clis_own_words(self):
+        assert (claude_analyzer._plan_refusal(self.STREAM)
+                == "Fable 5 requires usage credits. /model to switch models.")
+
+    def test_ordinary_failures_are_not_refusals(self):
+        assert claude_analyzer._plan_refusal("") is None
+        assert claude_analyzer._plan_refusal("not json at all") is None
+        assert claude_analyzer._plan_refusal(
+            '{"type":"result","is_error":true,"result":"bad json from model"}'
+        ) is None, "a junk answer must stay a retryable CLI-shape failure"
+
+    def test_endpoint_returns_the_reason_not_the_generic_503(
+            self, client, monkeypatch):
+        def refuse(*a, **kw):
+            raise claude_analyzer.PlanRefused(
+                "Fable 5 requires usage credits. /model to switch models.")
+
+        monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+        monkeypatch.setattr(claude_analyzer, "analyze_food_photo", refuse)
+        resp = client.http.post("/api/analyze_photo",
+                                headers={"X-API-Key": "secret-key"},
+                                json=_photo_payload(model="fable"))
+        assert resp.status_code == 503
+        body = resp.get_json()
+        assert "usage credits" in body["reason"]
+        assert body["retry"] is False, "retrying reproduces it exactly"

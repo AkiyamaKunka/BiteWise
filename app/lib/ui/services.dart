@@ -67,6 +67,10 @@ abstract class SettingsStore {
   String get serverModel;
   String get serverEffort;
 
+  /// Daily calorie goal for the coach notification; 0 = unset (the
+  /// summary then compares against the typical-day median).
+  int get calorieGoal;
+
   Future<void> update({
     String? apiKey,
     String? provider,
@@ -81,6 +85,7 @@ abstract class SettingsStore {
     String? units,
     String? serverModel,
     String? serverEffort,
+    int? calorieGoal,
   });
 }
 

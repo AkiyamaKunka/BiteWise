@@ -302,14 +302,11 @@ class TodayScreenState extends State<TodayScreen> {
     final burn = _garmin?.activeCalories ?? 0;
     String? typicalLine;
     if (typical != null) {
-      final total = totals.cal.round();
-      // Headroom vs above-typical wording, spec §5.1 — the string is
-      // parity-pinned; the ring VISUALIZES it, the caption still states it.
-      typicalLine = total <= typical
-          ? context.l10n.typicalDayHeadroom(
-              formatKcal(typical), formatKcal(typical - total))
-          : context.l10n.typicalDayOver(
-              formatKcal(typical), formatKcal(total - typical));
+      // Context only: what a normal day looks like for you. The old
+      // "· ~N kcal headroom / above typical" tail went with the rest of
+      // the remaining framing (owner decision 2026-08-06) — this screen
+      // reports intake, it does not run a countdown.
+      typicalLine = context.l10n.typicalDayOnly(formatKcal(typical));
     }
     // Hero layout (research: MFP arithmetic × Apple ring — see
     // uiux_direction.md): ring answers "how am I doing", the rows beside it
@@ -352,20 +349,15 @@ class TodayScreenState extends State<TodayScreen> {
                               label: context.l10n.rowBurn,
                               value: '+${formatKcal(burn)}',
                               dot: scheme.tertiary),
-                        ArithmeticRow(
-                            label: context.l10n.rowEaten,
-                            value: '−${formatKcal(totals.cal.round())}',
-                            dot: scheme.primary),
+                        // The eaten row is the EMPHASIZED one now: it is
+                        // what the ring's center restates. No remaining
+                        // row — the owner tracks intake, not a countdown
+                        // (2026-08-06).
                         ArithmeticRow(
                             key: const Key('arithmeticResultRow'),
-                            label: totals.cal.round() >
-                                    typical + burn.round()
-                                ? context.l10n.rowResultOver
-                                : context.l10n.rowResultLeft,
-                            value: formatKcal(
-                                (typical + burn.round() - totals.cal.round())
-                                    .abs()),
-                            dot: Colors.transparent,
+                            label: context.l10n.rowEaten,
+                            value: formatKcal(totals.cal.round()),
+                            dot: scheme.primary,
                             emphasized: true),
                       ] else
                         ArithmeticRow(
@@ -392,6 +384,15 @@ class TodayScreenState extends State<TodayScreen> {
                   key: const Key('typicalDayLine'),
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: scheme.onSurfaceVariant)),
+            ],
+            if (_garmin != null && _garmin!.activeCalories <= 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                context.l10n.garminIdleLine,
+                key: const Key('garminIdleLine'),
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: scheme.onSurfaceVariant),
+              ),
             ],
             if (_garmin != null && _garmin!.activeCalories > 0) ...[
               const SizedBox(height: 4),

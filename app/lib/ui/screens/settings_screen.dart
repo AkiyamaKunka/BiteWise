@@ -481,6 +481,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Widget> _reportSection(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionReport,
+          footer: context.l10n.goalFooter,
           children: [
             GroupedRow(
               key: const Key('reportTimeTile'),
@@ -490,9 +491,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _reportTime,
               onTap: _pickReportTime,
             ),
+            GroupedRow(
+              key: const Key('calorieGoalTile'),
+              icon: Icons.flag_outlined,
+              iconColor: theme.colorScheme.secondary,
+              title: context.l10n.settingsRowGoal,
+              value: widget.settings.calorieGoal > 0
+                  ? context.l10n.kcalAmount('${widget.settings.calorieGoal}')
+                  : context.l10n.goalNotSet,
+              onTap: _pickCalorieGoal,
+            ),
           ],
         ),
   ];
+
+  /// The daily goal the coach notification measures against; empty clears
+  /// it and the summary falls back to the typical-day median.
+  Future<void> _pickCalorieGoal() async {
+    final ctrl = TextEditingController(
+        text: widget.settings.calorieGoal > 0
+            ? '${widget.settings.calorieGoal}'
+            : '');
+    final saved = await showDialog<int>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.l10n.goalSheetTitle),
+        content: TextField(
+          key: const Key('calorieGoalField'),
+          controller: ctrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: ctx.l10n.goalFieldLabel,
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              key: const Key('calorieGoalClear'),
+              onPressed: () => Navigator.pop(ctx, 0),
+              child: Text(ctx.l10n.goalClear)),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(ctx.l10n.cancel)),
+          FilledButton(
+            key: const Key('calorieGoalSave'),
+            onPressed: () => Navigator.pop(
+                ctx, int.tryParse(ctrl.text.trim()) ?? 0),
+            child: Text(ctx.l10n.save),
+          ),
+        ],
+      ),
+    );
+    if (saved == null || !mounted) return;
+    await widget.settings.update(calorieGoal: saved);
+    if (mounted) setState(() {});
+  }
 
   /// Dietary profile appended to the photo prompt (§1.3).
   List<Widget> _profileSection(ThemeData theme) => [

@@ -18,6 +18,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n.dart';
+
 /// Macro identity colours. Index order is the contract — callers must not
 /// reassign hues per screen (colour follows the entity, never its rank).
 class MacroPalette {
@@ -63,17 +65,21 @@ class MacroSlice {
   final Color color;
 }
 
+/// [labels] are the localized macro names (protein, carbs, fat) — the
+/// chart is used inside meal surfaces, so these MUST follow the app
+/// language (user report 2026-08-06: they stayed English in zh).
 List<MacroSlice> macroSlices({
   required num proteinG,
   required num carbsG,
   required num fatG,
   required MacroPalette palette,
+  (String, String, String) labels = ('Protein', 'Carbs', 'Fat'),
 }) =>
     [
-      MacroSlice('Protein', proteinG, proteinG * kcalPerGramProtein,
+      MacroSlice(labels.$1, proteinG, proteinG * kcalPerGramProtein,
           palette.protein),
-      MacroSlice('Carbs', carbsG, carbsG * kcalPerGramCarbs, palette.carbs),
-      MacroSlice('Fat', fatG, fatG * kcalPerGramFat, palette.fat),
+      MacroSlice(labels.$2, carbsG, carbsG * kcalPerGramCarbs, palette.carbs),
+      MacroSlice(labels.$3, fatG, fatG * kcalPerGramFat, palette.fat),
     ];
 
 /// Horizontal stacked bar: what this meal's energy is made of.
@@ -97,7 +103,9 @@ class MacroBreakdownBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     final slices = macroSlices(
+      labels: (l.macroProtein, l.macroCarbs, l.macroFat),
       proteinG: math.max(0, proteinG),
       carbsG: math.max(0, carbsG),
       fatG: math.max(0, fatG),

@@ -1,7 +1,8 @@
-// The Today hero ring (2026-08-02 redesign, reconciled after review).
-// Pins the arithmetic's honesty: budget = typical + burn, and the center
-// number IS what the visible rows produce — the one place the redesign
-// could actively lie about the day.
+// The Today hero ring. Since 2026-08-06 the center reports what you ATE,
+// never what is left (owner decision): a tracker reports intake, and a
+// countdown-to-zero frames every meal as spending a budget. The arc still
+// carries progress against typical + burn, so these pin BOTH — the number
+// is always the eaten total, and the sweep still reflects the budget.
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,42 +19,41 @@ void main() {
   String center(WidgetTester tester) =>
       tester.widget<Text>(find.byKey(const Key('ringCenterValue'))).data!;
 
-  testWidgets('under typical: center = headroom', (tester) async {
+  testWidgets('under typical: center = what was EATEN', (tester) async {
     await pump(tester,
         const CalorieRing(eatenKcal: 1240, typicalKcal: 2020));
-    expect(center(tester), '780');
-    expect(find.text('headroom'), findsOneWidget);
+    expect(center(tester), '1,240');
+    expect(find.text('kcal today'), findsOneWidget);
+    expect(find.text('780'), findsNothing,
+        reason: 'the remaining number must not appear anywhere');
   });
 
-  testWidgets('burn EXTENDS the budget and renames the label — the MFP '
-      'equation, reconciled', (tester) async {
+  testWidgets('burn still extends the budget (the arc), but never the '
+      'center number', (tester) async {
     await pump(
         tester,
         const CalorieRing(
             eatenKcal: 1240, typicalKcal: 2020, burnKcal: 88));
-    expect(center(tester), '868',
-        reason: '2020 + 88 − 1240: the rows must produce this number');
-    expect(find.text('left today'), findsOneWidget);
+    expect(center(tester), '1,240',
+        reason: 'eaten is eaten — burn moves the sweep, not the hero');
+    expect(find.text('kcal today'), findsOneWidget);
   });
 
-  testWidgets('over budget: +over, caption-matching wording, no shame state',
+  testWidgets('over typical: still the eaten total, no shame state',
       (tester) async {
     await pump(tester,
         const CalorieRing(eatenKcal: 3340, typicalKcal: 1760));
-    expect(center(tester), '+1,580');
-    expect(find.text('above typical'), findsOneWidget,
-        reason: 'the spec-pinned caption says "above typical" — one card, '
-            'one vocabulary');
+    expect(center(tester), '3,340');
+    expect(find.text('kcal today'), findsOneWidget);
+    expect(find.textContaining('+'), findsNothing,
+        reason: 'no over-budget accusation in the hero');
   });
 
-  testWidgets('rounding parity: 2000.3 eaten vs 2000 typical is ZERO '
-      'headroom, not "+0 over"', (tester) async {
+  testWidgets('rounding: the eaten total rounds once, consistently',
+      (tester) async {
     await pump(tester,
         const CalorieRing(eatenKcal: 2000.3, typicalKcal: 2000));
-    expect(center(tester), '0');
-    expect(find.text('headroom'), findsOneWidget,
-        reason: 'the caption rounds first; the ring must round the same '
-            'way or the card contradicts itself');
+    expect(center(tester), '2,000');
   });
 
   testWidgets('no typical yet: center = eaten, labeled plainly',
@@ -72,7 +72,7 @@ void main() {
     expect(tester.takeException(), isNull,
         reason: 'FittedBox must absorb the scale; clipped hero text is the '
             'a11y must-fix this pins');
-    expect(center(tester), '10,780');
+    expect(center(tester), '11,240');
   });
 
   testWidgets('macro trio fills by CALORIE share (Atwater), matching the '
