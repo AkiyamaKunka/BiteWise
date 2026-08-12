@@ -1189,6 +1189,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Garmin connected · no activity recorded yet today'**
   String get garminIdleLine;
+
+  /// No description provided for @coachTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Today: {kcal} kcal'**
+  String coachTitle(String kcal);
+
+  /// No description provided for @coachEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing logged today. Snap your next meal and it lands here automatically.'**
+  String get coachEmpty;
+
+  /// No description provided for @coachUnderGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal under your goal — that\'s a real cut. Discipline like this compounds. 💪'**
+  String coachUnderGoal(String delta);
+
+  /// No description provided for @coachUnderTypical.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal below your usual day. Strong work — that\'s the kind of day that moves the needle.'**
+  String coachUnderTypical(String delta);
+
+  /// No description provided for @coachOnTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Right on target today. Consistency beats intensity — keep stacking days like this.'**
+  String get coachOnTarget;
+
+  /// No description provided for @coachOverGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.'**
+  String coachOverGoal(String delta);
+
+  /// No description provided for @coachOverTypical.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.'**
+  String coachOverTypical(String delta);
+
+  /// No description provided for @coachNoReference.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged and counted. A few more days and I can tell you how today compares.'**
+  String get coachNoReference;
+
+  /// No description provided for @coachDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'{meals} meals · {protein} g protein'**
+  String coachDetail(String meals, String protein);
+
+  /// No description provided for @settingsRowGoal.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily calorie goal'**
+  String get settingsRowGoal;
+
+  /// No description provided for @goalSheetTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily calorie goal'**
+  String get goalSheetTitle;
+
+  /// No description provided for @goalNotSet.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get goalNotSet;
+
+  /// No description provided for @goalFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'The daily summary measures against this. Leave it empty and it compares against your typical day instead.'**
+  String get goalFooter;
+
+  /// No description provided for @goalFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'kcal per day'**
+  String get goalFieldLabel;
+
+  /// No description provided for @goalClear.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear goal'**
+  String get goalClear;
 }
 
 class _AppLocalizationsDelegate

@@ -25,9 +25,10 @@ import '../services/photo/share_intake.dart';
 import '../services/photo/watcher.dart';
 import '../services/report/builders.dart';
 import '../services/report/notifications.dart';
+import '../services/report/daily_summary.dart';
+import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
-import 'format.dart' show isoDate;
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 import 'refresh_signal.dart';
@@ -77,12 +78,37 @@ class AppServices {
     // dailyBody gets the ARMED SLOT's date: a Timer delivered late (after
     // overnight suspension) must still report the day it was scheduled
     // for, not the fresh morning's near-empty totals.
-    final notifier = ReportNotifier(
-        dailyBody: (slotDate) => reports.dailyReport(isoDate(slotDate)));
+    late final ReportNotifier notifier;
+    // The coach summary (user request 2026-08-06) replaces the long
+    // Telegram-parity report as the notification body: a lock screen wants
+    // one sentence and two numbers, not a full meal table. Both firing
+    // paths — this Timer and the WorkManager heartbeat in
+    // background_glue — call the SAME builder behind the SAME per-date
+    // watermark, so whichever runs first wins and the other no-ops.
+    Future<void> postSummary() => maybePostDailySummary(DailySummaryDeps(
+          dao: dao,
+          reportTime: settings.reportTime,
+          calorieGoal: settings.calorieGoal,
+          postedDate: settings.summaryPostedDate,
+          markPosted: settings.markSummaryPosted,
+          present: notifier.showDailySummary,
+          strings: coachStringsFor(settings.appLanguage),
+          now: DateTime.now,
+        ));
+    notifier = ReportNotifier(dailyBody: (slotDate) async {
+      await postSummary();
+      // The notifier presents its own body too; returning empty would show
+      // a blank card, so hand back the same summary text it just posted
+      // (idempotent: the watermark already fired the real notification).
+      return '';
+    });
     unawaited(() async {
       try {
         await notifier.init();
         await notifier.scheduleDaily(settings.reportTime);
+        // Catch-up at launch: if the slot passed while the app was dead
+        // and no background run has happened yet, say it now.
+        await postSummary();
       } catch (_) {
         // Permission denial / corrupt hh:mm must never break startup.
       }
@@ -211,6 +237,8 @@ class _AppSettingsStore implements SettingsStore {
   String get serverModel => _s.serverModel;
   @override
   String get serverEffort => _s.serverEffort;
+  @override
+  int get calorieGoal => _s.calorieGoal;
 
   @override
   Future<void> update({
@@ -227,11 +255,13 @@ class _AppSettingsStore implements SettingsStore {
     String? units,
     String? serverModel,
     String? serverEffort,
+    int? calorieGoal,
   }) async {
     if (appLanguage != null) await _s.setAppLanguage(appLanguage);
     if (units != null) await _s.setUnits(units);
     if (serverModel != null) await _s.setServerModel(serverModel);
     if (serverEffort != null) await _s.setServerEffort(serverEffort);
+    if (calorieGoal != null) await _s.setCalorieGoal(calorieGoal);
     if (provider != null) {
       await _s.setProvider(AiProvider.values
           .firstWhere((v) => v.name == provider, orElse: () => _s.provider));

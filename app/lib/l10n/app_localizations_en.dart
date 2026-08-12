@@ -654,4 +654,65 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get garminIdleLine =>
       'Garmin connected · no activity recorded yet today';
+
+  @override
+  String coachTitle(String kcal) {
+    return 'Today: $kcal kcal';
+  }
+
+  @override
+  String get coachEmpty =>
+      'Nothing logged today. Snap your next meal and it lands here automatically.';
+
+  @override
+  String coachUnderGoal(String delta) {
+    return '$delta kcal under your goal — that\'s a real cut. Discipline like this compounds. 💪';
+  }
+
+  @override
+  String coachUnderTypical(String delta) {
+    return '$delta kcal below your usual day. Strong work — that\'s the kind of day that moves the needle.';
+  }
+
+  @override
+  String get coachOnTarget =>
+      'Right on target today. Consistency beats intensity — keep stacking days like this.';
+
+  @override
+  String coachOverGoal(String delta) {
+    return '$delta kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.';
+  }
+
+  @override
+  String coachOverTypical(String delta) {
+    return '$delta kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.';
+  }
+
+  @override
+  String get coachNoReference =>
+      'Logged and counted. A few more days and I can tell you how today compares.';
+
+  @override
+  String coachDetail(String meals, String protein) {
+    return '$meals meals · $protein g protein';
+  }
+
+  @override
+  String get settingsRowGoal => 'Daily calorie goal';
+
+  @override
+  String get goalSheetTitle => 'Daily calorie goal';
+
+  @override
+  String get goalNotSet => 'Not set';
+
+  @override
+  String get goalFooter =>
+      'The daily summary measures against this. Leave it empty and it compares against your typical day instead.';
+
+  @override
+  String get goalFieldLabel => 'kcal per day';
+
+  @override
+  String get goalClear => 'Clear goal';
 }
