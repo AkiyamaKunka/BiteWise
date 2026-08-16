@@ -83,6 +83,38 @@ void main() {
     expect(fired.length, 2);
   });
 
+  testWidgets(
+      'a null dailyBody presents NOTHING — the provider already posted',
+      (tester) async {
+    // Regression, found on-device 2026-08-16 23:55. The coach summary posts
+    // itself through showDailySummary on dailyReportNotificationId; the
+    // scheduled fire then presented AGAIN on that same id, replacing the
+    // user's Chinese summary with "📊 Daily Calorie Report" and an empty
+    // body. The provider now returns null to claim the slot.
+    var now = DateTime(2026, 7, 17, 7, 0);
+    final fired = <(int, String, String)>[];
+    var providerCalls = 0;
+    final notifier = ReportNotifier(
+      clock: () => now,
+      presenter: (id, title, body) async => fired.add((id, title, body)),
+      dailyBody: (slotDate) async {
+        providerCalls++;
+        return null; // "handled — do not present over me"
+      },
+    );
+
+    await notifier.scheduleDaily('08:00');
+    now = DateTime(2026, 7, 17, 8, 0);
+    await tester.pump(const Duration(hours: 1));
+
+    expect(providerCalls, 1, reason: 'the slot still fires');
+    expect(fired, isEmpty,
+        reason: 'but nothing is presented over the provider\'s own card');
+    // Tomorrow is still armed: claiming the slot must not break the chain.
+    expect(notifier.nextDailyFire, DateTime(2026, 7, 18, 8, 0));
+    notifier.cancelDaily();
+  });
+
   testWidgets('re-scheduling replaces the previous slot', (tester) async {
     var now = DateTime(2026, 7, 17, 7, 0);
     final fired = <(int, String, String)>[];
