@@ -50,21 +50,53 @@ class DailySummaryDeps {
   final DateTime Function() now;
 }
 
-/// Post today's summary if it is due and unposted. Returns true when a
+/// How long after a missed slot the summary may still be delivered.
+///
+/// MEASURED, not guessed: on the user's Honor device the "30-minute"
+/// WorkManager job actually ran at 1–6 hour intervals, and last night
+/// nothing ran between ~20:00 and 00:52. A 23:34 slot therefore had a
+/// 26-minute window against a heartbeat that was hours wide, so the summary
+/// was missed and then discarded — every night (2026-08-16 diagnosis).
+///
+/// Eight hours covers the observed gap while keeping the catch-up honest:
+/// a summary that arrives the next morning still describes a day the user
+/// remembers. Beyond that it is stale, and silence is better.
+const Duration kSummaryGraceWindow = Duration(hours: 8);
+
+/// Post the pending summary if one is due and unposted. Returns true when a
 /// notification was actually presented.
 ///
-/// Deliberately does NOT post for a day that is already over: a catch-up
-/// run at 03:00 must summarize nothing rather than shout about yesterday
-/// (the watermark advances so the stale day is skipped for good).
+/// Covers the day whose slot most recently passed — normally today, but
+/// after midnight it may still be YESTERDAY, because a throttled background
+/// run is often the first chance the app gets. That late run used to be
+/// dropped (today's slot hasn't arrived, so nothing matched) and the day was
+/// lost for good; it is now caught up within [kSummaryGraceWindow] and
+/// titled "Yesterday" so it never names the wrong day.
 Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   final now = deps.now();
-  final today = isoDate(now);
-  if (deps.postedDate == today) return false; // already said it once
-
   final slot = _parseHhmm(deps.reportTime);
   if (slot == null) return false;
-  final due = DateTime(now.year, now.month, now.day, slot.$1, slot.$2);
-  if (now.isBefore(due)) return false; // not yet — the day is still open
+
+  DateTime slotOn(DateTime day) =>
+      DateTime(day.year, day.month, day.day, slot.$1, slot.$2);
+
+  // Which day is this run reporting on?
+  final DateTime coveredDay;
+  final bool late;
+  if (!now.isBefore(slotOn(now))) {
+    coveredDay = now; // today's slot has passed
+    late = false;
+  } else {
+    // Today's slot is still ahead. Yesterday's may have been missed by a
+    // throttled heartbeat — catch it up while it is still worth saying.
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (now.difference(slotOn(yesterday)) > kSummaryGraceWindow) return false;
+    coveredDay = yesterday;
+    late = true;
+  }
+
+  final today = isoDate(coveredDay);
+  if (deps.postedDate == today) return false; // already said it once
 
   final meals = await deps.dao.mealsBetween(today, today);
   final food = meals.where(isFoodMeal).toList();
@@ -77,8 +109,11 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   // Typical day = the median of the prior 7 days, the same number Today
   // shows — computed here so the notification can never disagree with the
   // screen.
-  final priorFrom = isoDate(now.subtract(const Duration(days: 7)));
-  final priorTo = isoDate(now.subtract(const Duration(days: 1)));
+  // Relative to the day being REPORTED, not to the clock: a catch-up run at
+  // 00:52 must compare yesterday against the seven days before IT, or the
+  // covered day silently lands inside its own baseline.
+  final priorFrom = isoDate(coveredDay.subtract(const Duration(days: 7)));
+  final priorTo = isoDate(coveredDay.subtract(const Duration(days: 1)));
   final prior = await deps.dao.mealsBetween(priorFrom, priorTo);
   final typical = typicalDayKcal(dailyCalorieTotals(prior));
 
@@ -90,6 +125,7 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
     typicalKcal: typical,
     strings: deps.strings,
     formatKcal: formatKcal,
+    forYesterday: late,
   );
 
   await deps.present(summary.title, summary.body);

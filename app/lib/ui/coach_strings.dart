@@ -18,6 +18,7 @@ CoachStrings coachStringsFor(String appLanguage) {
   final l = localizationsFor(appLanguage);
   return CoachStrings(
     title: l.coachTitle,
+    titleYesterday: l.coachTitleYesterday,
     empty: l.coachEmpty,
     underGoal: l.coachUnderGoal,
     underTypical: l.coachUnderTypical,

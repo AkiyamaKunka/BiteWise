@@ -393,10 +393,20 @@ void main() {
       expect(scheduler.inputData, {'lookbackDays': 5});
     });
 
-    test('disabled → cancels and never registers', () async {
+    test('watcher off → the job STAYS registered, because the daily '
+        'summary rides it too', () async {
+      // Regression, 2026-08-16: this used to cancel the periodic job, which
+      // silently killed the daily coach notification while its own setting
+      // still read as enabled. The scan half self-guards inside
+      // headlessBackfillWith, so keeping the job costs no extra scanning.
       final settings = await settingsWith(key: 'k', watcher: false);
       await syncBackgroundScan(settings);
-      expect(scheduler.calls, ['cancel:$photoBackfillUniqueName']);
+      expect(scheduler.calls, [
+        'init',
+        'cancel:$photoBackfillUniqueName',
+        'register:$photoBackfillUniqueName:$photoBackfillTaskName',
+      ]);
+      expect(scheduler.frequency, backgroundScanFrequency);
     });
   });
 

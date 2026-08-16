@@ -183,6 +183,7 @@
   "typicalDayOnly": "日常：~{typical} 千卡",
   "garminIdleLine": "Garmin 已连接 · 今天还没有活动数据",
   "coachTitle": "今天：{kcal} 千卡",
+  "coachTitleYesterday": "昨天：{kcal} 千卡",
   "coachEmpty": "今天还没有记录。拍下一餐，它会自动出现在这里。",
   "coachUnderGoal": "比目标少 {delta} 千卡 —— 实打实的缺口，这种自律会累积成结果。💪",
   "coachUnderTypical": "比你平时少 {delta} 千卡。今天很棒，这样的一天才是真正有效的。",

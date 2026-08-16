@@ -661,6 +661,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String coachTitleYesterday(String kcal) {
+    return 'Yesterday: $kcal kcal';
+  }
+
+  @override
   String get coachEmpty =>
       'Nothing logged today. Snap your next meal and it lands here automatically.';
 

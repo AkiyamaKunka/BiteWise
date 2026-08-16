@@ -36,6 +36,7 @@ class CoachSummary {
 class CoachStrings {
   const CoachStrings({
     required this.title,
+    required this.titleYesterday,
     required this.empty,
     required this.underGoal,
     required this.underTypical,
@@ -48,6 +49,12 @@ class CoachStrings {
 
   /// (kcal) → "Today: 2,180 kcal"
   final String Function(String kcal) title;
+
+  /// (kcal) → "Yesterday: 2,180 kcal". Used when a throttled background run
+  /// delivers the summary after midnight; "Today" would then name the wrong
+  /// day (2026-08-16 — an Honor device ran the 30-minute job at 1–6 hour
+  /// intervals, so a 23:34 slot was routinely first seen at 00:52).
+  final String Function(String kcal) titleYesterday;
   final String empty;
 
   /// (delta) → the coach line for a day under the reference.
@@ -78,6 +85,8 @@ CoachSummary buildCoachSummary({
   int? typicalKcal,
   required CoachStrings strings,
   required String Function(num) formatKcal,
+  /// The summary covers the previous day (a late catch-up run).
+  bool forYesterday = false,
 }) {
   final eaten = _finite(eatenKcal).round();
   final goal = (goalKcal != null && goalKcal > 0) ? goalKcal : null;
@@ -88,7 +97,8 @@ CoachSummary buildCoachSummary({
       ? CoachReference.goal
       : (typical != null ? CoachReference.typical : CoachReference.none);
 
-  final title = strings.title(formatKcal(eaten));
+  final title = (forYesterday ? strings.titleYesterday : strings.title)(
+      formatKcal(eaten));
 
   if (mealCount <= 0) {
     return CoachSummary(

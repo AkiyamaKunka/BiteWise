@@ -226,8 +226,17 @@ void appBackgroundDispatcher() {
 /// Reconcile the periodic job with the current settings — call at startup
 /// and whenever watcherEnabled/lookbackDays change. Android-only inside
 /// (enableBackgroundScan no-ops on iOS: share/picker only by spec §6).
+///
+/// ALWAYS registered, deliberately. The job carries TWO passengers: the
+/// photo backfill and the daily coach summary. Passing watcherEnabled here
+/// cancelled the whole job when the watcher was off, which silently killed
+/// the notification while its own setting still looked enabled — the user
+/// had no way to see why nothing arrived (2026-08-16). The scan half is
+/// already self-guarding (headlessBackfillWith returns early when the
+/// watcher is off), so an always-on job scans nothing extra; it only keeps
+/// the summary's delivery path alive.
 Future<void> syncBackgroundScan(AppSettings settings) =>
-    enableBackgroundScan(settings.watcherEnabled,
+    enableBackgroundScan(true,
         lookbackDays: settings.lookbackDays,
         frequency: backgroundScanFrequency,
         dispatcher: appBackgroundDispatcher);
