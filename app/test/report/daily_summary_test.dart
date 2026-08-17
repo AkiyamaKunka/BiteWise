@@ -11,6 +11,7 @@ import '../support/fake_meals_dao.dart';
 
 final strings = CoachStrings(
   title: (k) => 'Today: $k kcal',
+  titleYesterday: (k) => 'Yesterday: $k kcal',
   empty: 'Nothing logged today.',
   underGoal: (d) => '$d under goal',
   underTypical: (d) => '$d below usual',
@@ -150,4 +151,71 @@ void main() {
     expect(posted.single.$1, contains('1,800'));
     expect(posted.single.$2, contains('1 meals'));
   });
+
+  // ---------------------------------------------------------------------
+  // The 2026-08-16 field bug. On the user's Honor device the "30-minute"
+  // WorkManager heartbeat actually ran at 1–6 hour intervals: last night
+  // nothing ran between ~20:00 and 00:52, so a 23:34 slot was first seen
+  // AFTER midnight. Today's slot had not arrived, nothing matched, and the
+  // day's summary was discarded — silently, every night.
+  // ---------------------------------------------------------------------
+
+  test('a late run after midnight still delivers the slot it missed',
+      () async {
+    final slotDay = DateTime(2026, 8, 15);
+    dao.put(meal(iso(slotDay), 1800));
+    // 00:52 the next morning — the exact time the device's first post-slot
+    // job actually ran.
+    final now = DateTime(2026, 8, 16, 0, 52);
+    expect(await maybePostDailySummary(deps(now: now, reportTime: '23:34')),
+        isTrue);
+    expect(posted.single.$1, contains('1,800'));
+    expect(posted.single.$1, startsWith('Yesterday:'),
+        reason: 'after midnight it must not claim to be today');
+    expect(marks, [iso(slotDay)],
+        reason: 'the watermark belongs to the day covered, not the clock');
+  });
+
+  test('the catch-up still fires only once', () async {
+    final slotDay = DateTime(2026, 8, 15);
+    dao.put(meal(iso(slotDay), 1800));
+    final now = DateTime(2026, 8, 16, 0, 52);
+    final d = deps(
+        now: now, reportTime: '23:34', postedDate: iso(slotDay));
+    expect(await maybePostDailySummary(d), isFalse);
+    expect(posted, isEmpty);
+  });
+
+  test('past the grace window the stale day stays silent', () async {
+    dao.put(meal(iso(DateTime(2026, 8, 15)), 1800));
+    // 23:34 + 8h = 07:34; 09:00 is too late to still be news.
+    final now = DateTime(2026, 8, 16, 9, 00);
+    expect(await maybePostDailySummary(deps(now: now, reportTime: '23:34')),
+        isFalse);
+    expect(posted, isEmpty);
+  });
+
+  test('a catch-up compares against the days before the day it covers',
+      () async {
+    final slotDay = DateTime(2026, 8, 15);
+    dao.put(meal(iso(slotDay), 1600, id: 1));
+    dao.put(meal(iso(slotDay.subtract(const Duration(days: 1))), 2000, id: 2));
+    dao.put(meal(iso(slotDay.subtract(const Duration(days: 2))), 2000, id: 3));
+    final now = DateTime(2026, 8, 16, 0, 52);
+    await maybePostDailySummary(deps(now: now, reportTime: '23:34'));
+    // 1600 vs a 2000 median. If the window were anchored to the CLOCK the
+    // covered day would sit inside its own baseline and skew the median.
+    expect(posted.single.$2, contains('400 below usual'));
+  });
+
+  test('an early-morning run with no missed slot stays silent', () async {
+    // Slot 21:30 yesterday was already posted; 02:00 must not re-report it
+    // and must not pre-empt today.
+    dao.put(meal(iso(DateTime(2026, 8, 15)), 1800));
+    final now = DateTime(2026, 8, 16, 2, 00);
+    final d = deps(now: now, postedDate: iso(DateTime(2026, 8, 15)));
+    expect(await maybePostDailySummary(d), isFalse);
+    expect(posted, isEmpty);
+  });
 }
+

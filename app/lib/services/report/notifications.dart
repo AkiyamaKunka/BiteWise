@@ -24,7 +24,7 @@ class ReportNotifier {
     FlutterLocalNotificationsPlugin? plugin,
     DateTime Function()? clock,
     NotificationPresenter? presenter,
-    Future<String> Function(DateTime slotDate)? dailyBody,
+    Future<String?> Function(DateTime slotDate)? dailyBody,
     int? mealCardIdSeed,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
         _clock = clock ?? DateTime.now,
@@ -53,7 +53,9 @@ class ReportNotifier {
   /// delivers it at next resume) must report the intended day, not
   /// whatever partial day it happens to fire in. A throwing provider
   /// degrades to a generic body, never a missed notification.
-  final Future<String> Function(DateTime slotDate)? _dailyBody;
+  /// Returns the body to present, or NULL when the provider already
+  /// presented its own notification and this one must stay silent.
+  final Future<String?> Function(DateTime slotDate)? _dailyBody;
 
   Timer? _dailyTimer;
   ({int hour, int minute})? _dailyTime;
@@ -150,7 +152,17 @@ class ReportNotifier {
     final provider = _dailyBody;
     if (provider != null) {
       try {
-        body = await provider(slotDate);
+        final produced = await provider(slotDate);
+        // NULL means "I already presented the notification myself — do not
+        // present another one". The coach summary posts through
+        // showDailySummary, which shares dailyReportNotificationId; without
+        // this the _present below REPLACED that summary with this generic
+        // English title and whatever body the provider returned. It
+        // returned '', so the user got "📊 Daily Calorie Report" and a
+        // blank line instead of their Chinese summary — every single time
+        // the notification fired (found on-device 2026-08-16 at 23:55).
+        if (produced == null) return;
+        body = produced;
       } catch (_) {
         // Keep the fallback body; the schedule already re-armed.
       }

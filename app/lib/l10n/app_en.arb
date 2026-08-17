@@ -381,6 +381,11 @@
       }
     }
   },
+  "coachTitleYesterday": "Yesterday: {kcal} kcal",
+  "@coachTitleYesterday": {
+    "description": "Notification title when a throttled background run delivers the summary after midnight — saying 'Today' then would name the wrong day.",
+    "placeholders": { "kcal": { "type": "String" } }
+  },
   "coachEmpty": "Nothing logged today. Snap your next meal and it lands here automatically.",
   "coachUnderGoal": "{delta} kcal under your goal — that's a real cut. Discipline like this compounds. 💪",
   "@coachUnderGoal": {

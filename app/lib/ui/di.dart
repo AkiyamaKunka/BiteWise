@@ -97,10 +97,12 @@ class AppServices {
         ));
     notifier = ReportNotifier(dailyBody: (slotDate) async {
       await postSummary();
-      // The notifier presents its own body too; returning empty would show
-      // a blank card, so hand back the same summary text it just posted
-      // (idempotent: the watermark already fired the real notification).
-      return '';
+      // NULL, not '': postSummary has ALREADY presented the coach summary
+      // through showDailySummary, which uses the same notification id.
+      // Returning a string makes the notifier present again over the top —
+      // and '' produced the English "📊 Daily Calorie Report" with a blank
+      // body that the user actually saw on 2026-08-16. Null means "handled".
+      return null;
     });
     unawaited(() async {
       try {

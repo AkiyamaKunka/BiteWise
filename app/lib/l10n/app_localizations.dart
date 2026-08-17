@@ -1196,6 +1196,12 @@ abstract class AppLocalizations {
   /// **'Today: {kcal} kcal'**
   String coachTitle(String kcal);
 
+  /// Notification title when a throttled background run delivers the summary after midnight — saying 'Today' then would name the wrong day.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday: {kcal} kcal'**
+  String coachTitleYesterday(String kcal);
+
   /// No description provided for @coachEmpty.
   ///
   /// In en, this message translates to:

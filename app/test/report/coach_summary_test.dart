@@ -13,6 +13,7 @@ String _fmt(num v) {
 
 final strings = CoachStrings(
   title: (k) => 'Today: $k kcal',
+  titleYesterday: (k) => 'Yesterday: $k kcal',
   empty: 'Nothing logged today.',
   underGoal: (d) => '$d kcal under your goal',
   underTypical: (d) => '$d kcal below your usual day',

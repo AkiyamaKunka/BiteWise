@@ -619,6 +619,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String coachTitleYesterday(String kcal) {
+    return '昨天：$kcal 千卡';
+  }
+
+  @override
   String get coachEmpty => '今天还没有记录。拍下一餐，它会自动出现在这里。';
 
   @override
