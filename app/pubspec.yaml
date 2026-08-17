@@ -47,7 +47,12 @@ dependencies:
   flutter_secure_storage: ^10.3.1
   receive_sharing_intent: ^1.9.0
   share_plus: ^13.2.1
-  intl: 0.20.2  # pinned by flutter_localizations
+  # 'any', NOT a hard pin: flutter_localizations pins intl itself, and the
+  # exact version it wants changes with the Flutter SDK. CI tracks
+  # `channel: stable` with no version pin, so the day stable moved past the
+  # pinned 0.20.2 every Flutter CI run died in version solving — with no
+  # dependency change of our own (2026-08-17).
+  intl: any
   permission_handler: ^12.0.3
   url_launcher: ^6.3.2
 
