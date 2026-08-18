@@ -1345,6 +1345,318 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Fat (g)'**
   String get editorFatLabel;
+
+  /// No description provided for @diagTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Test AI provider'**
+  String get diagTitle;
+
+  /// No description provided for @diagIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.'**
+  String get diagIntro;
+
+  /// No description provided for @diagRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Testing…'**
+  String get diagRunning;
+
+  /// No description provided for @diagRunAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Run again'**
+  String get diagRunAgain;
+
+  /// No description provided for @diagRunChecks.
+  ///
+  /// In en, this message translates to:
+  /// **'Run the checks'**
+  String get diagRunChecks;
+
+  /// No description provided for @diagVerdictOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Everything works. If a photo still fails, it is photo-specific — try \"Analyze again\" on it.'**
+  String get diagVerdictOk;
+
+  /// No description provided for @diagVerdictProblems.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 problem found — the red/orange rows below say what to do.} other{{count} problems found — the red/orange rows below say what to do.}}'**
+  String diagVerdictProblems(int count);
+
+  /// No description provided for @diagStageTestRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Test run'**
+  String get diagStageTestRun;
+
+  /// No description provided for @diagTestRunFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'The check itself failed part-way through.'**
+  String get diagTestRunFailed;
+
+  /// No description provided for @diagFixTestRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-run; if it keeps failing here, the provider is answering something the app cannot parse at all.'**
+  String get diagFixTestRun;
+
+  /// No description provided for @diagStageConfiguration.
+  ///
+  /// In en, this message translates to:
+  /// **'Configuration'**
+  String get diagStageConfiguration;
+
+  /// No description provided for @diagStageEndpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'Endpoint reachability'**
+  String get diagStageEndpoint;
+
+  /// No description provided for @diagStageAuth.
+  ///
+  /// In en, this message translates to:
+  /// **'Authentication'**
+  String get diagStageAuth;
+
+  /// No description provided for @diagStageText.
+  ///
+  /// In en, this message translates to:
+  /// **'Text analysis'**
+  String get diagStageText;
+
+  /// No description provided for @diagStagePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo analysis'**
+  String get diagStagePhoto;
+
+  /// No description provided for @diagStageQuota.
+  ///
+  /// In en, this message translates to:
+  /// **'Quota'**
+  String get diagStageQuota;
+
+  /// No description provided for @diagNoServerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'No server address is set.'**
+  String get diagNoServerAddress;
+
+  /// No description provided for @diagFixEnterServer.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your server address in Settings, then re-run.'**
+  String get diagFixEnterServer;
+
+  /// No description provided for @diagNoUploadKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No server upload key is set.'**
+  String get diagNoUploadKey;
+
+  /// No description provided for @diagNoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No API key is set for this provider.'**
+  String get diagNoApiKey;
+
+  /// No description provided for @diagFixPasteKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the key in Settings, then re-run.'**
+  String get diagFixPasteKey;
+
+  /// No description provided for @diagServerConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Server address and upload key are set (backend: {backend}).'**
+  String diagServerConfigured(String backend);
+
+  /// No description provided for @diagProviderConfigured.
+  ///
+  /// In en, this message translates to:
+  /// **'Provider \"{provider}\" with a key and model \"{model}\".'**
+  String diagProviderConfigured(String provider, String model);
+
+  /// No description provided for @diagTargetServer.
+  ///
+  /// In en, this message translates to:
+  /// **'server'**
+  String get diagTargetServer;
+
+  /// No description provided for @diagTargetYourServer.
+  ///
+  /// In en, this message translates to:
+  /// **'your server'**
+  String get diagTargetYourServer;
+
+  /// No description provided for @diagEndpointAnswered.
+  ///
+  /// In en, this message translates to:
+  /// **'The {target} endpoint answered.'**
+  String diagEndpointAnswered(String target);
+
+  /// No description provided for @diagEndpointUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach {target} at all.'**
+  String diagEndpointUnreachable(String target);
+
+  /// No description provided for @diagFixVpn.
+  ///
+  /// In en, this message translates to:
+  /// **'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).'**
+  String get diagFixVpn;
+
+  /// No description provided for @diagFixServerUnreachable.
+  ///
+  /// In en, this message translates to:
+  /// **'Check the server address, that the server is running, and your network.'**
+  String get diagFixServerUnreachable;
+
+  /// No description provided for @diagFixNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Check your network connection and try again.'**
+  String get diagFixNetwork;
+
+  /// No description provided for @diagKeyAccepted.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider accepted your key.'**
+  String get diagKeyAccepted;
+
+  /// No description provided for @diagOutOfCredit.
+  ///
+  /// In en, this message translates to:
+  /// **'The key works, but the account cannot pay right now.'**
+  String get diagOutOfCredit;
+
+  /// No description provided for @diagFixTopUp.
+  ///
+  /// In en, this message translates to:
+  /// **'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free, no VPN needed in mainland China).'**
+  String get diagFixTopUp;
+
+  /// No description provided for @diagRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'The key works, but the provider is rate-limiting right now.'**
+  String get diagRateLimited;
+
+  /// No description provided for @diagFixWaitRateLimit.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait a minute and re-run; photos are kept and retried automatically meanwhile.'**
+  String get diagFixWaitRateLimit;
+
+  /// No description provided for @diagKeyRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'The key was not accepted.'**
+  String get diagKeyRejected;
+
+  /// No description provided for @diagFixRecopyKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).'**
+  String get diagFixRecopyKey;
+
+  /// No description provided for @diagTextOk.
+  ///
+  /// In en, this message translates to:
+  /// **'The model answered JSON — chat fixes and \"describe a meal\" work.'**
+  String get diagTextOk;
+
+  /// No description provided for @diagTextBad.
+  ///
+  /// In en, this message translates to:
+  /// **'The model did not return usable JSON for a text request.'**
+  String get diagTextBad;
+
+  /// No description provided for @diagTextBadDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat fixes and \"describe a meal\" may fail; photo analysis can still work.'**
+  String get diagTextBadDetail;
+
+  /// No description provided for @diagFixPickModel.
+  ///
+  /// In en, this message translates to:
+  /// **'If this persists, pick a different model in Settings.'**
+  String get diagFixPickModel;
+
+  /// No description provided for @diagPhotoOk.
+  ///
+  /// In en, this message translates to:
+  /// **'The model analyzed a test image and answered the meal format.'**
+  String get diagPhotoOk;
+
+  /// No description provided for @diagPhotoThoughtFood.
+  ///
+  /// In en, this message translates to:
+  /// **'It even thought the test disc was food.'**
+  String get diagPhotoThoughtFood;
+
+  /// No description provided for @diagPhotoNotFood.
+  ///
+  /// In en, this message translates to:
+  /// **'Verdict \"not food\" — correct for the test image.'**
+  String get diagPhotoNotFood;
+
+  /// No description provided for @diagPhotoTempFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo analysis failed with a TEMPORARY problem.'**
+  String get diagPhotoTempFail;
+
+  /// No description provided for @diagPhotoPermFail.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo analysis failed and a retry will NOT fix it.'**
+  String get diagPhotoPermFail;
+
+  /// No description provided for @diagFixPhotoTemp.
+  ///
+  /// In en, this message translates to:
+  /// **'Usually a rate limit or a busy server — photos are kept and retried automatically.'**
+  String get diagFixPhotoTemp;
+
+  /// No description provided for @diagFixPhotoPerm.
+  ///
+  /// In en, this message translates to:
+  /// **'Read the message above — it names the broken piece (model, format, or account).'**
+  String get diagFixPhotoPerm;
+
+  /// No description provided for @diagQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyses are PAUSED — the daily quota was hit.'**
+  String get diagQuotaPaused;
+
+  /// No description provided for @diagQuotaPausedUntil.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused until {until}.'**
+  String diagQuotaPausedUntil(String until);
+
+  /// No description provided for @diagFixQuota.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait it out (photos are kept), or change the key or provider to resume immediately.'**
+  String get diagFixQuota;
+
+  /// No description provided for @diagQuotaOk.
+  ///
+  /// In en, this message translates to:
+  /// **'No quota pause is active.'**
+  String get diagQuotaOk;
 }
 
 class _AppLocalizationsDelegate
