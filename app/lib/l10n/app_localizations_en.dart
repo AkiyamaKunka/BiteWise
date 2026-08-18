@@ -670,6 +670,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Nothing logged today. Snap your next meal and it lands here automatically.';
 
   @override
+  String get coachEmptyYesterday =>
+      'Nothing logged yesterday. Snap your next meal and it lands here automatically.';
+
+  @override
   String coachUnderGoal(String delta) {
     return '$delta kcal under your goal — that\'s a real cut. Discipline like this compounds. 💪';
   }

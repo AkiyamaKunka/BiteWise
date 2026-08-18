@@ -1208,6 +1208,12 @@ abstract class AppLocalizations {
   /// **'Nothing logged today. Snap your next meal and it lands here automatically.'**
   String get coachEmpty;
 
+  /// No description provided for @coachEmptyYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing logged yesterday. Snap your next meal and it lands here automatically.'**
+  String get coachEmptyYesterday;
+
   /// No description provided for @coachUnderGoal.
   ///
   /// In en, this message translates to:

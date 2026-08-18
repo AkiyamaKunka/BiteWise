@@ -627,6 +627,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coachEmpty => '今天还没有记录。拍下一餐，它会自动出现在这里。';
 
   @override
+  String get coachEmptyYesterday => '昨天没有记录。拍下一餐，它会自动出现在这里。';
+
+  @override
   String coachUnderGoal(String delta) {
     return '比目标少 $delta 千卡 —— 实打实的缺口，这种自律会累积成结果。💪';
   }
