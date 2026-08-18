@@ -627,6 +627,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coachEmpty => '今天还没有记录。拍下一餐，它会自动出现在这里。';
 
   @override
+  String get coachEmptyYesterday => '昨天没有记录。拍下一餐，它会自动出现在这里。';
+
+  @override
   String coachUnderGoal(String delta) {
     return '比目标少 $delta 千卡 —— 实打实的缺口，这种自律会累积成结果。💪';
   }
@@ -701,4 +704,180 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editorFatLabel => '脂肪（克）';
+
+  @override
+  String get diagTitle => '测试 AI 服务';
+
+  @override
+  String get diagIntro =>
+      '逐步检查你的 AI 配置，并准确指出问题所在：配置、网络（VPN）、Key、账户余额、返回格式和额度。运行测试会消耗两次小的 AI 调用。';
+
+  @override
+  String get diagRunning => '测试中…';
+
+  @override
+  String get diagRunAgain => '重新测试';
+
+  @override
+  String get diagRunChecks => '开始检查';
+
+  @override
+  String get diagVerdictOk => '一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试“重新分析”。';
+
+  @override
+  String diagVerdictProblems(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '发现 $count 个问题 —— 下面红色/橙色的行说明该怎么做。',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get diagStageTestRun => '测试运行';
+
+  @override
+  String get diagTestRunFailed => '检查本身中途失败了。';
+
+  @override
+  String get diagFixTestRun => '重新运行；如果一直卡在这里，说明服务返回的内容应用完全无法解析。';
+
+  @override
+  String get diagStageConfiguration => '配置';
+
+  @override
+  String get diagStageEndpoint => '网络连通性';
+
+  @override
+  String get diagStageAuth => '身份验证';
+
+  @override
+  String get diagStageText => '文字分析';
+
+  @override
+  String get diagStagePhoto => '照片分析';
+
+  @override
+  String get diagStageQuota => '额度';
+
+  @override
+  String get diagNoServerAddress => '还没有设置服务器地址。';
+
+  @override
+  String get diagFixEnterServer => '先在设置里填写服务器地址，然后重新测试。';
+
+  @override
+  String get diagNoUploadKey => '还没有设置服务器上传 Key。';
+
+  @override
+  String get diagNoApiKey => '这个服务还没有设置 API Key。';
+
+  @override
+  String get diagFixPasteKey => '把 Key 粘贴到设置里，然后重新测试。';
+
+  @override
+  String diagServerConfigured(String backend) {
+    return '服务器地址和上传 Key 都已设置（后端：$backend）。';
+  }
+
+  @override
+  String diagProviderConfigured(String provider, String model) {
+    return '服务“$provider”已配置 Key，模型为“$model”。';
+  }
+
+  @override
+  String get diagTargetServer => '服务器';
+
+  @override
+  String get diagTargetYourServer => '你的服务器';
+
+  @override
+  String diagEndpointAnswered(String target) {
+    return '$target的接口有响应。';
+  }
+
+  @override
+  String diagEndpointUnreachable(String target) {
+    return '完全连不上$target。';
+  }
+
+  @override
+  String get diagFixVpn =>
+      '这个服务在中国大陆需要 VPN 才能访问。请打开 VPN，或改用通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+
+  @override
+  String get diagFixServerUnreachable => '检查服务器地址、服务器是否在运行，以及你的网络。';
+
+  @override
+  String get diagFixNetwork => '检查网络连接后重试。';
+
+  @override
+  String get diagKeyAccepted => '服务已接受你的 Key。';
+
+  @override
+  String get diagOutOfCredit => 'Key 有效，但账户当前无法扣费。';
+
+  @override
+  String get diagFixTopUp => '给服务账户充值，或改用免费额度（智谱 GLM 的默认视觉模型免费，在中国大陆也无需 VPN）。';
+
+  @override
+  String get diagRateLimited => 'Key 有效，但服务正在限流。';
+
+  @override
+  String get diagFixWaitRateLimit => '等一分钟再试；期间照片会被保留并自动重试。';
+
+  @override
+  String get diagKeyRejected => 'Key 未被接受。';
+
+  @override
+  String get diagFixRecopyKey =>
+      '从服务商控制台重新复制 Key —— 并确认它属于当前这个服务（不同服务的 Key 不能混用）。';
+
+  @override
+  String get diagTextOk => '模型返回了 JSON —— 对话纠正和“描述一餐”都可用。';
+
+  @override
+  String get diagTextBad => '模型没有为文字请求返回可用的 JSON。';
+
+  @override
+  String get diagTextBadDetail => '对话纠正和“描述一餐”可能失败；照片分析仍然可以正常工作。';
+
+  @override
+  String get diagFixPickModel => '如果一直这样，在设置里换一个模型。';
+
+  @override
+  String get diagPhotoOk => '模型分析了测试图片，并按用餐格式返回。';
+
+  @override
+  String get diagPhotoThoughtFood => '它甚至认为测试图案是食物。';
+
+  @override
+  String get diagPhotoNotFood => '判定为“不是食物”—— 对这张测试图片来说是正确的。';
+
+  @override
+  String get diagPhotoTempFail => '照片分析失败，属于临时性问题。';
+
+  @override
+  String get diagPhotoPermFail => '照片分析失败，重试也无法解决。';
+
+  @override
+  String get diagFixPhotoTemp => '通常是限流或服务器繁忙 —— 照片会被保留并自动重试。';
+
+  @override
+  String get diagFixPhotoPerm => '看上面的信息 —— 它会指出坏掉的环节（模型、格式或账户）。';
+
+  @override
+  String get diagQuotaPaused => '分析已暂停 —— 今天的额度已用完。';
+
+  @override
+  String diagQuotaPausedUntil(String until) {
+    return '暂停至 $until。';
+  }
+
+  @override
+  String get diagFixQuota => '等待恢复（照片会保留），或更换 Key / 服务立即恢复。';
+
+  @override
+  String get diagQuotaOk => '没有额度暂停。';
 }

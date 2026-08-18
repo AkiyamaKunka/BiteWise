@@ -384,9 +384,14 @@
   "coachTitleYesterday": "Yesterday: {kcal} kcal",
   "@coachTitleYesterday": {
     "description": "Notification title when a throttled background run delivers the summary after midnight — saying 'Today' then would name the wrong day.",
-    "placeholders": { "kcal": { "type": "String" } }
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
   },
   "coachEmpty": "Nothing logged today. Snap your next meal and it lands here automatically.",
+  "coachEmptyYesterday": "Nothing logged yesterday. Snap your next meal and it lands here automatically.",
   "coachUnderGoal": "{delta} kcal under your goal — that's a real cut. Discipline like this compounds. 💪",
   "@coachUnderGoal": {
     "placeholders": {
@@ -446,5 +451,102 @@
   "macroFatShort": "F",
   "editorProteinLabel": "Protein (g)",
   "editorCarbsLabel": "Carbs (g)",
-  "editorFatLabel": "Fat (g)"
+  "editorFatLabel": "Fat (g)",
+  "diagTitle": "Test AI provider",
+  "diagIntro": "Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.",
+  "diagRunning": "Testing…",
+  "diagRunAgain": "Run again",
+  "diagRunChecks": "Run the checks",
+  "diagVerdictOk": "Everything works. If a photo still fails, it is photo-specific — try \"Analyze again\" on it.",
+  "diagVerdictProblems": "{count, plural, =1{1 problem found — the red/orange rows below say what to do.} other{{count} problems found — the red/orange rows below say what to do.}}",
+  "@diagVerdictProblems": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "diagStageTestRun": "Test run",
+  "diagTestRunFailed": "The check itself failed part-way through.",
+  "diagFixTestRun": "Re-run; if it keeps failing here, the provider is answering something the app cannot parse at all.",
+  "diagStageConfiguration": "Configuration",
+  "diagStageEndpoint": "Endpoint reachability",
+  "diagStageAuth": "Authentication",
+  "diagStageText": "Text analysis",
+  "diagStagePhoto": "Photo analysis",
+  "diagStageQuota": "Quota",
+  "diagNoServerAddress": "No server address is set.",
+  "diagFixEnterServer": "Enter your server address in Settings, then re-run.",
+  "diagNoUploadKey": "No server upload key is set.",
+  "diagNoApiKey": "No API key is set for this provider.",
+  "diagFixPasteKey": "Paste the key in Settings, then re-run.",
+  "diagServerConfigured": "Server address and upload key are set (backend: {backend}).",
+  "@diagServerConfigured": {
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "diagProviderConfigured": "Provider \"{provider}\" with a key and model \"{model}\".",
+  "@diagProviderConfigured": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "diagTargetServer": "server",
+  "diagTargetYourServer": "your server",
+  "diagEndpointAnswered": "The {target} endpoint answered.",
+  "@diagEndpointAnswered": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "diagEndpointUnreachable": "Could not reach {target} at all.",
+  "@diagEndpointUnreachable": {
+    "placeholders": {
+      "target": {
+        "type": "String"
+      }
+    }
+  },
+  "diagFixVpn": "This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).",
+  "diagFixServerUnreachable": "Check the server address, that the server is running, and your network.",
+  "diagFixNetwork": "Check your network connection and try again.",
+  "diagKeyAccepted": "The provider accepted your key.",
+  "diagOutOfCredit": "The key works, but the account cannot pay right now.",
+  "diagFixTopUp": "Top up the provider account, or switch to a free tier (Zhipu GLM's default vision model is free, no VPN needed in mainland China).",
+  "diagRateLimited": "The key works, but the provider is rate-limiting right now.",
+  "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
+  "diagKeyRejected": "The key was not accepted.",
+  "diagFixRecopyKey": "Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).",
+  "diagTextOk": "The model answered JSON — chat fixes and \"describe a meal\" work.",
+  "diagTextBad": "The model did not return usable JSON for a text request.",
+  "diagTextBadDetail": "Chat fixes and \"describe a meal\" may fail; photo analysis can still work.",
+  "diagFixPickModel": "If this persists, pick a different model in Settings.",
+  "diagPhotoOk": "The model analyzed a test image and answered the meal format.",
+  "diagPhotoThoughtFood": "It even thought the test disc was food.",
+  "diagPhotoNotFood": "Verdict \"not food\" — correct for the test image.",
+  "diagPhotoTempFail": "Photo analysis failed with a TEMPORARY problem.",
+  "diagPhotoPermFail": "Photo analysis failed and a retry will NOT fix it.",
+  "diagFixPhotoTemp": "Usually a rate limit or a busy server — photos are kept and retried automatically.",
+  "diagFixPhotoPerm": "Read the message above — it names the broken piece (model, format, or account).",
+  "diagQuotaPaused": "Analyses are PAUSED — the daily quota was hit.",
+  "diagQuotaPausedUntil": "Paused until {until}.",
+  "@diagQuotaPausedUntil": {
+    "placeholders": {
+      "until": {
+        "type": "String"
+      }
+    }
+  },
+  "diagFixQuota": "Wait it out (photos are kept), or change the key or provider to resume immediately.",
+  "diagQuotaOk": "No quota pause is active."
 }

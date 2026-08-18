@@ -38,6 +38,7 @@ class CoachStrings {
     required this.title,
     required this.titleYesterday,
     required this.empty,
+    required this.emptyYesterday,
     required this.underGoal,
     required this.underTypical,
     required this.onTarget,
@@ -56,6 +57,11 @@ class CoachStrings {
   /// intervals, so a 23:34 slot was routinely first seen at 00:52).
   final String Function(String kcal) titleYesterday;
   final String empty;
+
+  /// The empty-day line for a catch-up summary. Without this the title
+  /// said 昨天 while the body still said "nothing logged TODAY" — seen on
+  /// the real 2026-08-18 catch-up notification.
+  final String emptyYesterday;
 
   /// (delta) → the coach line for a day under the reference.
   final String Function(String delta) underGoal;
@@ -103,7 +109,7 @@ CoachSummary buildCoachSummary({
   if (mealCount <= 0) {
     return CoachSummary(
       title: title,
-      body: strings.empty,
+      body: forYesterday ? strings.emptyYesterday : strings.empty,
       eaten: eaten,
       deltaKcal: 0,
       reference: kind,

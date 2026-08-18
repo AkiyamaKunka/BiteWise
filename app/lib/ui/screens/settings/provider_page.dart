@@ -217,6 +217,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                   diagnostics: ProviderDiagnostics(
                     settings: settings,
                     analyzer: widget.analyzer,
+                    l10n: context.l10n,
                   ),
                 ),
               )),
