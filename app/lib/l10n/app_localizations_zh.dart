@@ -1254,4 +1254,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String covFailedCount(int count) {
     return '$count 张失败';
   }
+
+  @override
+  String get macroNoBreakdown => '没有记录营养素分布。';
 }

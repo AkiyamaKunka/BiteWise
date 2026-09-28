@@ -2257,6 +2257,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} failed'**
   String covFailedCount(int count);
+
+  /// No description provided for @macroNoBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'No macro breakdown recorded.'**
+  String get macroNoBreakdown;
 }
 
 class _AppLocalizationsDelegate

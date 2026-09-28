@@ -1349,4 +1349,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String covFailedCount(int count) {
     return '$count failed';
   }
+
+  @override
+  String get macroNoBreakdown => 'No macro breakdown recorded.';
 }

@@ -850,5 +850,6 @@
         "type": "int"
       }
     }
-  }
+  },
+  "macroNoBreakdown": "No macro breakdown recorded."
 }

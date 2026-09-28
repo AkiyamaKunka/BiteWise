@@ -359,5 +359,6 @@
   "covDaysShort": "{days} 天",
   "covLoggedAsMeals": "已记录 {count} 餐",
   "covNotFoodCount": "{count} 张非食物",
-  "covFailedCount": "{count} 张失败"
+  "covFailedCount": "{count} 张失败",
+  "macroNoBreakdown": "没有记录营养素分布。"
 }
