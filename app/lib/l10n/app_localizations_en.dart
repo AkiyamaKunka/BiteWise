@@ -670,6 +670,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Nothing logged today. Snap your next meal and it lands here automatically.';
 
   @override
+  String get coachEmptyYesterday =>
+      'Nothing logged yesterday. Snap your next meal and it lands here automatically.';
+
+  @override
   String coachUnderGoal(String delta) {
     return '$delta kcal under your goal — that\'s a real cut. Discipline like this compounds. 💪';
   }
@@ -747,4 +751,202 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorFatLabel => 'Fat (g)';
+
+  @override
+  String get diagTitle => 'Test AI provider';
+
+  @override
+  String get diagIntro =>
+      'Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.';
+
+  @override
+  String get diagRunning => 'Testing…';
+
+  @override
+  String get diagRunAgain => 'Run again';
+
+  @override
+  String get diagRunChecks => 'Run the checks';
+
+  @override
+  String get diagVerdictOk =>
+      'Everything works. If a photo still fails, it is photo-specific — try \"Analyze again\" on it.';
+
+  @override
+  String diagVerdictProblems(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other:
+          '$count problems found — the red/orange rows below say what to do.',
+      one: '1 problem found — the red/orange rows below say what to do.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get diagStageTestRun => 'Test run';
+
+  @override
+  String get diagTestRunFailed => 'The check itself failed part-way through.';
+
+  @override
+  String get diagFixTestRun =>
+      'Re-run; if it keeps failing here, the provider is answering something the app cannot parse at all.';
+
+  @override
+  String get diagStageConfiguration => 'Configuration';
+
+  @override
+  String get diagStageEndpoint => 'Endpoint reachability';
+
+  @override
+  String get diagStageAuth => 'Authentication';
+
+  @override
+  String get diagStageText => 'Text analysis';
+
+  @override
+  String get diagStagePhoto => 'Photo analysis';
+
+  @override
+  String get diagStageQuota => 'Quota';
+
+  @override
+  String get diagNoServerAddress => 'No server address is set.';
+
+  @override
+  String get diagFixEnterServer =>
+      'Enter your server address in Settings, then re-run.';
+
+  @override
+  String get diagNoUploadKey => 'No server upload key is set.';
+
+  @override
+  String get diagNoApiKey => 'No API key is set for this provider.';
+
+  @override
+  String get diagFixPasteKey => 'Paste the key in Settings, then re-run.';
+
+  @override
+  String diagServerConfigured(String backend) {
+    return 'Server address and upload key are set (backend: $backend).';
+  }
+
+  @override
+  String diagProviderConfigured(String provider, String model) {
+    return 'Provider \"$provider\" with a key and model \"$model\".';
+  }
+
+  @override
+  String get diagTargetServer => 'server';
+
+  @override
+  String get diagTargetYourServer => 'your server';
+
+  @override
+  String diagEndpointAnswered(String target) {
+    return 'The $target endpoint answered.';
+  }
+
+  @override
+  String diagEndpointUnreachable(String target) {
+    return 'Could not reach $target at all.';
+  }
+
+  @override
+  String get diagFixVpn =>
+      'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).';
+
+  @override
+  String get diagFixServerUnreachable =>
+      'Check the server address, that the server is running, and your network.';
+
+  @override
+  String get diagFixNetwork => 'Check your network connection and try again.';
+
+  @override
+  String get diagKeyAccepted => 'The provider accepted your key.';
+
+  @override
+  String get diagOutOfCredit =>
+      'The key works, but the account cannot pay right now.';
+
+  @override
+  String get diagFixTopUp =>
+      'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free, no VPN needed in mainland China).';
+
+  @override
+  String get diagRateLimited =>
+      'The key works, but the provider is rate-limiting right now.';
+
+  @override
+  String get diagFixWaitRateLimit =>
+      'Wait a minute and re-run; photos are kept and retried automatically meanwhile.';
+
+  @override
+  String get diagKeyRejected => 'The key was not accepted.';
+
+  @override
+  String get diagFixRecopyKey =>
+      'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).';
+
+  @override
+  String get diagTextOk =>
+      'The model answered JSON — chat fixes and \"describe a meal\" work.';
+
+  @override
+  String get diagTextBad =>
+      'The model did not return usable JSON for a text request.';
+
+  @override
+  String get diagTextBadDetail =>
+      'Chat fixes and \"describe a meal\" may fail; photo analysis can still work.';
+
+  @override
+  String get diagFixPickModel =>
+      'If this persists, pick a different model in Settings.';
+
+  @override
+  String get diagPhotoOk =>
+      'The model analyzed a test image and answered the meal format.';
+
+  @override
+  String get diagPhotoThoughtFood => 'It even thought the test disc was food.';
+
+  @override
+  String get diagPhotoNotFood =>
+      'Verdict \"not food\" — correct for the test image.';
+
+  @override
+  String get diagPhotoTempFail =>
+      'Photo analysis failed with a TEMPORARY problem.';
+
+  @override
+  String get diagPhotoPermFail =>
+      'Photo analysis failed and a retry will NOT fix it.';
+
+  @override
+  String get diagFixPhotoTemp =>
+      'Usually a rate limit or a busy server — photos are kept and retried automatically.';
+
+  @override
+  String get diagFixPhotoPerm =>
+      'Read the message above — it names the broken piece (model, format, or account).';
+
+  @override
+  String get diagQuotaPaused =>
+      'Analyses are PAUSED — the daily quota was hit.';
+
+  @override
+  String diagQuotaPausedUntil(String until) {
+    return 'Paused until $until.';
+  }
+
+  @override
+  String get diagFixQuota =>
+      'Wait it out (photos are kept), or change the key or provider to resume immediately.';
+
+  @override
+  String get diagQuotaOk => 'No quota pause is active.';
 }

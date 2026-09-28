@@ -15,6 +15,7 @@ final strings = CoachStrings(
   title: (k) => 'Today: $k kcal',
   titleYesterday: (k) => 'Yesterday: $k kcal',
   empty: 'Nothing logged today.',
+  emptyYesterday: 'Nothing logged yesterday.',
   underGoal: (d) => '$d kcal under your goal',
   underTypical: (d) => '$d kcal below your usual day',
   onTarget: 'Right on target today.',
@@ -107,6 +108,23 @@ void main() {
     expect(s.title, 'Today: 0 kcal');
     expect(s.body, isNot(contains('NaN')));
     expect(s.body, isNot(contains('Infinity')));
+  });
+
+  test('a catch-up empty day says YESTERDAY in the body too', () {
+    // Field bug 2026-08-18: the real catch-up notification read
+    // "昨天：0 千卡" over a body that still said "nothing logged TODAY".
+    final s = buildCoachSummary(
+      eatenKcal: 0,
+      mealCount: 0,
+      proteinG: 0,
+      goalKcal: 2000,
+      strings: strings,
+      formatKcal: _fmt,
+      forYesterday: true,
+    );
+    expect(s.title, 'Yesterday: 0 kcal');
+    expect(s.body, 'Nothing logged yesterday.');
+    expect(s.body, isNot(contains('today')));
   });
 
   test('the detail line reports meals and protein', () {

@@ -20,6 +20,7 @@ CoachStrings coachStringsFor(String appLanguage) {
     title: l.coachTitle,
     titleYesterday: l.coachTitleYesterday,
     empty: l.coachEmpty,
+    emptyYesterday: l.coachEmptyYesterday,
     underGoal: l.coachUnderGoal,
     underTypical: l.coachUnderTypical,
     onTarget: l.coachOnTarget,

@@ -6,6 +6,7 @@
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
 import 'package:flutter/material.dart';
@@ -25,6 +26,9 @@ ProviderDiagnostics _diag({
     ProviderDiagnostics(
       settings: settings ?? FakeSettings(),
       analyzer: analyzer ?? _okAnalyzer(),
+      // English l10n keeps every existing stage/summary assertion below
+      // byte-identical to the strings this page shipped with.
+      l10n: AppLocalizationsEn(),
       client: client ?? MockClient((_) async => http.Response('ok', 404)),
       testImage: _img,
     );

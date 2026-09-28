@@ -13,6 +13,7 @@ final strings = CoachStrings(
   title: (k) => 'Today: $k kcal',
   titleYesterday: (k) => 'Yesterday: $k kcal',
   empty: 'Nothing logged today.',
+  emptyYesterday: 'Nothing logged yesterday.',
   underGoal: (d) => '$d under goal',
   underTypical: (d) => '$d below usual',
   onTarget: 'On target.',

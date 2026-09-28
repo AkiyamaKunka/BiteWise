@@ -159,8 +159,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// Push the item sum into the total fields. Silent on the no-item path,
   /// and guarded against the listener loop (_cal's own listener fires
   /// _syncTotals, never this).
-  void _recomputeTotalsFromItems() {
-    if (!_totalsDerived) return;
+  /// [afterRemoval] lets the LAST item's deletion zero the totals.
+  /// Without it the guard below trips — the row is already gone, so
+  /// `_totalsDerived` is false — and the meal keeps the totals of an item
+  /// that no longer exists (found on-device 2026-08-17: deleting the only
+  /// item of a 350 kcal meal left the totals reading 350). The guard still
+  /// protects a meal that never had an item breakdown, where hand-typed
+  /// totals are the only source of truth.
+  void _recomputeTotalsFromItems({bool afterRemoval = false}) {
+    if (!_totalsDerived && !afterRemoval) return;
     for (var i = 0; i < _draft.items.length && i < _itemCtrls.length; i++) {
       final c = _itemCtrls[i];
       _draft.items[i]
@@ -385,8 +392,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       row.fat.dispose();
       _draft.items.removeAt(i);
     });
-    // The whole point of the report: removing a row must move the total.
-    _recomputeTotalsFromItems();
+    // The whole point of the report: removing a row must move the total —
+    // including the last row, whose sum is zero.
+    _recomputeTotalsFromItems(afterRemoval: true);
   }
 
   static String _plain(num v) =>

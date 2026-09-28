@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../diagnostics.dart';
+import '../l10n.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
   final ProviderDiagnostics diagnostics;
@@ -36,13 +37,13 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       // green "Everything works" verdict — that is the exact false
       // reassurance this page exists to prevent.
       if (mounted) {
+        final l = context.l10n;
         setState(() => _results.add(DiagResult(
-              'Test run',
+              l.diagStageTestRun,
               DiagStatus.fail,
-              'The check itself failed part-way through.',
+              l.diagTestRunFailed,
               detail: '$e',
-              fix: 'Re-run; if it keeps failing here, the provider is '
-                  'answering something the app cannot parse at all.',
+              fix: l.diagFixTestRun,
             )));
       }
     } finally {
@@ -64,18 +65,16 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l = context.l10n;
     final problems =
         _results.where((r) => r.status != DiagStatus.pass).length;
     return Scaffold(
-      appBar: AppBar(title: const Text('Test AI provider')),
+      appBar: AppBar(title: Text(l.diagTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Checks your AI setup step by step and names exactly what is '
-            'broken: configuration, network (VPN), key, account credit, '
-            'reply format, and quota. Running the test spends two small '
-            'AI calls.',
+            l.diagIntro,
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
@@ -90,10 +89,10 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                     child: CircularProgressIndicator(strokeWidth: 2))
                 : const Icon(Icons.play_arrow),
             label: Text(_running
-                ? 'Testing…'
+                ? l.diagRunning
                 : _ran
-                    ? 'Run again'
-                    : 'Run the checks'),
+                    ? l.diagRunAgain
+                    : l.diagRunChecks),
           ),
           if (_ran && !_running) ...[
             const SizedBox(height: 12),
@@ -106,11 +105,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 padding: const EdgeInsets.all(12),
                 child: Text(
                   problems == 0
-                      ? 'Everything works. If a photo still fails, it is '
-                          'photo-specific — try "Analyze again" on it.'
-                      : '$problems problem${problems == 1 ? '' : 's'} '
-                          'found — the red/orange rows below say what to '
-                          'do.',
+                      ? l.diagVerdictOk
+                      : l.diagVerdictProblems(problems),
                   style: theme.textTheme.titleSmall,
                 ),
               ),
