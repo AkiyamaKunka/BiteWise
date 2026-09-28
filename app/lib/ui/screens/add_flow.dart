@@ -192,9 +192,8 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     if (!mounted) return;
     if (deliberate == null) {
       setState(() => _analyzing = false);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('That photo could not be read (too large or '
-              'removed).')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.addPhotoUnreadable)));
       return;
     }
     await _analyze(deliberate);
@@ -219,31 +218,33 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // repeats the same verdict.
     final canLogManually = outcome.kind == PhotoOutcomeKind.skipped ||
         outcome.kind == PhotoOutcomeKind.failed;
+    final l = context.l10n;
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(switch (outcome.kind) {
-          PhotoOutcomeKind.saved => 'Meal logged',
-          PhotoOutcomeKind.skipped => 'No food detected',
-          PhotoOutcomeKind.duplicate => 'Duplicate photo',
-          PhotoOutcomeKind.alreadyTracked => 'Already logged',
-          PhotoOutcomeKind.failed => 'Analysis failed',
-          PhotoOutcomeKind.leftoverApplied => 'Leftovers deducted',
+          PhotoOutcomeKind.saved => l.outcomeSaved,
+          PhotoOutcomeKind.skipped => l.outcomeSkipped,
+          PhotoOutcomeKind.duplicate => l.outcomeDuplicate,
+          PhotoOutcomeKind.alreadyTracked => l.outcomeAlreadyTracked,
+          PhotoOutcomeKind.failed => l.outcomeFailed,
+          PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
+        // outcome.message is the pipeline's own line (English, parity-
+        // pinned); only the framing around it is localized here.
         content: Text(canLogManually
-            ? '${outcome.message}\n\nIf this IS food, log it yourself — '
-                'the photo stays attached to the meal.'
+            ? '${outcome.message}\n\n${l.outcomeLogManuallyHint}'
             : outcome.message),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('ok'),
-            child: const Text('OK'),
+            child: Text(l.okButton),
           ),
           if (canLogManually)
             FilledButton(
               key: const Key('logManuallyButton'),
               onPressed: () => Navigator.of(ctx).pop('manual'),
-              child: const Text('Log manually'),
+              child: Text(l.logManually),
             ),
         ],
       ),
@@ -270,7 +271,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Recent photos')),
+      appBar: AppBar(title: Text(context.l10n.addPhotosTitle)),
       body: Stack(
         children: [
           FutureBuilder<List<RecentAsset>>(
@@ -283,7 +284,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                 return Center(
                     child: Padding(
                   padding: const EdgeInsets.all(24),
-                  child: Text('Could not load photos: ${snap.error}'),
+                  child: Text(context.l10n.addPhotosLoadFailed('${snap.error}')),
                 ));
               }
               final assets = snap.data ?? const <RecentAsset>[];
@@ -295,10 +296,9 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Text(
-                          "CalorieTracker isn't allowed to see your "
-                          'photos.',
-                          key: Key('photoPermissionDenied'),
+                        Text(
+                          context.l10n.photoPermissionDenied,
+                          key: const Key('photoPermissionDenied'),
                           textAlign: TextAlign.center,
                         ),
                         if (open != null) ...[
@@ -306,7 +306,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                           FilledButton.tonal(
                             key: const Key('openSystemSettings'),
                             onPressed: () => open(),
-                            child: const Text('Open system settings'),
+                            child: Text(context.l10n.openSystemSettings),
                           ),
                         ],
                       ],
@@ -463,7 +463,7 @@ class _AddTextScreenState extends State<AddTextScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Describe a meal')),
+      appBar: AppBar(title: Text(context.l10n.describeTitle)),
       // SCROLLABLE: the field is autofocused (keyboard up on entry) and the
       // inline messages can run several lines — the quota-pause refusal is
       // four paragraphs. In a fixed Column that pushed the primary button
@@ -480,17 +480,15 @@ class _AddTextScreenState extends State<AddTextScreen> {
               maxLines: 4,
               autofocus: true,
               textInputAction: TextInputAction.newline,
-              decoration: const InputDecoration(
-                labelText: 'What did you eat?',
-                hintText: 'e.g. "two eggs and toast with butter"\n'
-                    'or "一碗牛肉面加一个鸡蛋"',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.describeLabel,
+                hintText: context.l10n.describeHint,
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 8),
             Text(
-              'Any language works. You will see the estimate and can fix it '
-              'before it is saved.',
+              context.l10n.describeHelp,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -510,7 +508,9 @@ class _AddTextScreenState extends State<AddTextScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.auto_awesome),
-              label: Text(_sending ? 'Estimating…' : 'Estimate this meal'),
+              label: Text(_sending
+                  ? context.l10n.describeEstimating
+                  : context.l10n.describeEstimate),
             ),
           ],
         ),

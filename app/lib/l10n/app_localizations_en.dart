@@ -949,4 +949,71 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagQuotaOk => 'No quota pause is active.';
+
+  @override
+  String get addPhotosTitle => 'Recent photos';
+
+  @override
+  String get addPhotoUnreadable =>
+      'That photo could not be read (too large or removed).';
+
+  @override
+  String addPhotosLoadFailed(String error) {
+    return 'Could not load photos: $error';
+  }
+
+  @override
+  String get photoPermissionDenied =>
+      'Bitewise isn\'t allowed to see your photos.';
+
+  @override
+  String get openSystemSettings => 'Open system settings';
+
+  @override
+  String get outcomeSaved => 'Meal logged';
+
+  @override
+  String get outcomeSkipped => 'No food detected';
+
+  @override
+  String get outcomeDuplicate => 'Duplicate photo';
+
+  @override
+  String get outcomeAlreadyTracked => 'Already logged';
+
+  @override
+  String get outcomeFailed => 'Analysis failed';
+
+  @override
+  String get outcomeLeftoverApplied => 'Leftovers deducted';
+
+  @override
+  String get outcomeLogManuallyHint =>
+      'If this IS food, log it yourself — the photo stays attached to the meal.';
+
+  @override
+  String get okButton => 'OK';
+
+  @override
+  String get logManually => 'Log manually';
+
+  @override
+  String get describeTitle => 'Describe a meal';
+
+  @override
+  String get describeLabel => 'What did you eat?';
+
+  @override
+  String get describeHint =>
+      'e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"';
+
+  @override
+  String get describeHelp =>
+      'Any language works. You will see the estimate and can fix it before it is saved.';
+
+  @override
+  String get describeEstimating => 'Estimating…';
+
+  @override
+  String get describeEstimate => 'Estimate this meal';
 }
