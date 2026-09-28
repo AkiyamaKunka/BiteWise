@@ -98,7 +98,38 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   final today = isoDate(coveredDay);
   if (deps.postedDate == today) return false; // already said it once
 
-  final meals = await deps.dao.mealsBetween(today, today);
+  final summary = await summaryForDay(
+    dao: deps.dao,
+    day: coveredDay,
+    calorieGoal: deps.calorieGoal,
+    strings: deps.strings,
+    forYesterday: late,
+  );
+  await deps.present(summary.title, summary.body);
+  await deps.markPosted(today);
+  return true;
+}
+
+/// The coach summary for [day], exactly as [maybePostDailySummary] would
+/// post it — but with no watermark and no presenting.
+///
+/// Split out for iOS (2026-09-28): there the OS delivers the notification
+/// (no background execution exists to compute it at the slot), so the
+/// content has to be built AHEAD of time and handed over. Sharing this one
+/// builder is what keeps the pre-armed card and the live card identical.
+///
+/// [day] may be tomorrow: after tonight's slot has passed, the next card
+/// describes a day with nothing logged yet, and the empty-day line is the
+/// honest content until the user logs something and the card is re-armed.
+Future<CoachSummary> summaryForDay({
+  required MealsDao dao,
+  required DateTime day,
+  required int calorieGoal,
+  required CoachStrings strings,
+  bool forYesterday = false,
+}) async {
+  final date = isoDate(day);
+  final meals = await dao.mealsBetween(date, date);
   final food = meals.where(isFoodMeal).toList();
   num cal = 0, protein = 0;
   for (final m in food) {
@@ -107,30 +138,23 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   }
 
   // Typical day = the median of the prior 7 days, the same number Today
-  // shows — computed here so the notification can never disagree with the
-  // screen.
-  // Relative to the day being REPORTED, not to the clock: a catch-up run at
-  // 00:52 must compare yesterday against the seven days before IT, or the
-  // covered day silently lands inside its own baseline.
-  final priorFrom = isoDate(coveredDay.subtract(const Duration(days: 7)));
-  final priorTo = isoDate(coveredDay.subtract(const Duration(days: 1)));
-  final prior = await deps.dao.mealsBetween(priorFrom, priorTo);
+  // shows — anchored to the day being REPORTED, never to the clock, or the
+  // covered day lands inside its own baseline.
+  final priorFrom = isoDate(day.subtract(const Duration(days: 7)));
+  final priorTo = isoDate(day.subtract(const Duration(days: 1)));
+  final prior = await dao.mealsBetween(priorFrom, priorTo);
   final typical = typicalDayKcal(dailyCalorieTotals(prior));
 
-  final summary = buildCoachSummary(
+  return buildCoachSummary(
     eatenKcal: cal,
     mealCount: food.length,
     proteinG: protein,
-    goalKcal: deps.calorieGoal,
+    goalKcal: calorieGoal,
     typicalKcal: typical,
-    strings: deps.strings,
+    strings: strings,
     formatKcal: formatKcal,
-    forYesterday: late,
+    forYesterday: forYesterday,
   );
-
-  await deps.present(summary.title, summary.body);
-  await deps.markPosted(today);
-  return true;
 }
 
 (int, int)? _parseHhmm(String raw) {

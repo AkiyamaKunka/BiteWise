@@ -153,6 +153,33 @@ void main() {
     expect(posted.single.$2, contains('1 meals'));
   });
 
+  test('summaryForDay is byte-identical to what the live path posts',
+      () async {
+    // iOS pre-arms this content hours before the slot; Android posts it
+    // live. One builder, so the two can never disagree.
+    final now = DateTime(2026, 8, 6, 21, 31);
+    dao.put(meal(iso(now), 1800, id: 1));
+    dao.put(meal(iso(now.subtract(const Duration(days: 1))), 2000, id: 2));
+    dao.put(meal(iso(now.subtract(const Duration(days: 2))), 2000, id: 3));
+    await maybePostDailySummary(deps(now: now, goal: 2000));
+    final s = await summaryForDay(
+        dao: dao, day: now, calorieGoal: 2000, strings: strings);
+    expect((s.title, s.body), posted.single);
+  });
+
+  test('a card armed for TOMORROW describes tomorrow, not today', () async {
+    // After tonight's slot passes, the next OS card fires tomorrow. Today's
+    // meals must not leak into it: the honest content for a day with
+    // nothing logged is the empty line, until something is logged and the
+    // card is re-armed.
+    dao.put(meal('2026-08-06', 1800));
+    final tomorrowSlot = DateTime(2026, 8, 7, 23, 55);
+    final s = await summaryForDay(
+        dao: dao, day: tomorrowSlot, calorieGoal: 2000, strings: strings);
+    expect(s.title, 'Today: 0 kcal');
+    expect(s.body, 'Nothing logged today.');
+  });
+
   // ---------------------------------------------------------------------
   // The 2026-08-16 field bug. On the user's Honor device the "30-minute"
   // WorkManager heartbeat actually ran at 1–6 hour intervals: last night

@@ -40,7 +40,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Calorie Tracker reads your photo library so you can pick recent food photos and log meals from them.</string>
+	<string>Bitewise reads your photo library so you can pick recent food photos and log meals from them.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

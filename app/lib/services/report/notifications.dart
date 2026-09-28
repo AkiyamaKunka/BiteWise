@@ -13,23 +13,32 @@ library;
 import 'dart:async';
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/timezone.dart' as tz;
 
 /// Test seam: replaces the plugin's show() so scheduling logic is testable
 /// without platform channels.
 typedef NotificationPresenter = Future<void> Function(
     int id, String title, String body);
 
+/// Test seam for [ReportNotifier.scheduleDailyAt]: the OS-side schedule
+/// call, so the iOS delivery path is assertable without platform channels.
+typedef NotificationScheduler = Future<void> Function(
+    int id, String title, String body, DateTime when);
+
 class ReportNotifier {
   ReportNotifier({
     FlutterLocalNotificationsPlugin? plugin,
     DateTime Function()? clock,
     NotificationPresenter? presenter,
+    NotificationScheduler? scheduler,
     Future<String?> Function(DateTime slotDate)? dailyBody,
     int? mealCardIdSeed,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
         _clock = clock ?? DateTime.now,
         // ignore: prefer_initializing_formals
         _presenter = presenter,
+        // ignore: prefer_initializing_formals
+        _scheduler = scheduler,
         // ignore: prefer_initializing_formals
         _dailyBody = dailyBody {
     // Each background run constructs a FRESH notifier; a fixed 100-base
@@ -47,6 +56,19 @@ class ReportNotifier {
   final FlutterLocalNotificationsPlugin _plugin;
   final DateTime Function() _clock;
   final NotificationPresenter? _presenter;
+  final NotificationScheduler? _scheduler;
+
+  static const NotificationDetails _details = NotificationDetails(
+    android: AndroidNotificationDetails(
+      _channelId,
+      'Reports & meals',
+      channelDescription: 'Daily calorie reports and auto-logged meal cards',
+      importance: Importance.defaultImportance,
+      priority: Priority.defaultPriority,
+    ),
+    iOS: DarwinNotificationDetails(),
+    macOS: DarwinNotificationDetails(),
+  );
 
   /// Body provider for the scheduled notification, given the DATE the slot
   /// was armed for — a Timer that fires late (overnight iOS suspension
@@ -170,6 +192,46 @@ class ReportNotifier {
     await _present(dailyReportNotificationId, '📊 Daily Calorie Report', body);
   }
 
+  /// Hand the daily summary to the OS to deliver at [when] — the iOS path.
+  ///
+  /// iOS suspends the process seconds after backgrounding and this app has
+  /// no background execution there (spec §6: share/picker only, no
+  /// WorkManager), so [scheduleDaily]'s in-process Timer only ever fires if
+  /// the app happens to be open at the slot. The OS scheduler fires with
+  /// the app dead. The trade: content must exist at ARM time, so callers
+  /// re-arm whenever it could have changed (launch, lifecycle, slot edits).
+  ///
+  /// ONE-SHOT, deliberately. A repeating trigger (matchDateTimeComponents)
+  /// would re-fire the same card tomorrow — yesterday's numbers under a
+  /// "today" title. If the app is never opened again, silence beats a lie.
+  ///
+  /// Same id as the live path, so a re-arm REPLACES the pending card rather
+  /// than stacking one per app open.
+  Future<void> scheduleDailyAt({
+    required DateTime when,
+    required String title,
+    required String body,
+  }) async {
+    final scheduler = _scheduler;
+    if (scheduler != null) {
+      return scheduler(dailyReportNotificationId, title, body, when);
+    }
+    await _plugin.zonedSchedule(
+      id: dailyReportNotificationId,
+      title: title,
+      body: body,
+      // UTC on purpose: [when] is an absolute instant, and TZDateTime.from
+      // preserves instants across locations, so no tz database and no
+      // platform timezone lookup are needed. (A location would only matter
+      // for a repeating wall-clock trigger, which this is not.)
+      scheduledDate: tz.TZDateTime.from(when, tz.UTC),
+      notificationDetails: _details,
+      // Ignored on iOS. Inexact so that if Android ever opts in this cannot
+      // throw for a missing SCHEDULE_EXACT_ALARM grant.
+      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+    );
+  }
+
   /// Meal card for watcher-logged meals (spec §6 auto intake surfaces its
   /// §5.4 result card as a notification). Ids increment so multiple
   /// auto-logged meals stack instead of overwriting each other.
@@ -185,18 +247,7 @@ class ReportNotifier {
   Future<void> _present(int id, String title, String body) async {
     final presenter = _presenter;
     if (presenter != null) return presenter(id, title, body);
-    const details = NotificationDetails(
-      android: AndroidNotificationDetails(
-        _channelId,
-        'Reports & meals',
-        channelDescription: 'Daily calorie reports and auto-logged meal cards',
-        importance: Importance.defaultImportance,
-        priority: Priority.defaultPriority,
-      ),
-      iOS: DarwinNotificationDetails(),
-      macOS: DarwinNotificationDetails(),
-    );
     await _plugin.show(
-        id: id, title: title, body: body, notificationDetails: details);
+        id: id, title: title, body: body, notificationDetails: _details);
   }
 }

@@ -5,6 +5,7 @@
 library;
 
 import 'dart:async' show unawaited;
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show compute;
@@ -104,13 +105,41 @@ class AppServices {
       // body that the user actually saw on 2026-08-16. Null means "handled".
       return null;
     });
+    // iOS has NO background execution in this app (spec §6: share/picker
+    // only, enableBackgroundScan no-ops, no BGTask ids) and suspends the
+    // process seconds after backgrounding — so the Timer that scheduleDaily
+    // arms never fires unless the app happens to be open at the slot. The
+    // whole August delivery work (catch-up window, watermark) is therefore
+    // Android-only in practice; on iOS the summary simply never arrived
+    // (found 2026-09-28). Hand delivery to the OS: a one-shot card for the
+    // next slot carrying the summary as it stands NOW, re-armed on launch,
+    // on every lifecycle transition (app.dart) and on slot edits (below).
+    final osSchedulesSummary = Platform.isIOS;
+    Future<void> armOsSummary() async {
+      final when = ReportNotifier.nextDailyOccurrence(
+          ReportNotifier.parseHhmm(settings.reportTime), DateTime.now());
+      // The day the card DESCRIBES is the day it fires on — after tonight's
+      // slot that is tomorrow, whose honest content is the empty-day line
+      // until something is logged and this re-runs.
+      final s = await summaryForDay(
+        dao: dao,
+        day: when,
+        calorieGoal: settings.calorieGoal,
+        strings: coachStringsFor(settings.appLanguage),
+      );
+      await notifier.scheduleDailyAt(when: when, title: s.title, body: s.body);
+    }
     unawaited(() async {
       try {
         await notifier.init();
-        await notifier.scheduleDaily(settings.reportTime);
-        // Catch-up at launch: if the slot passed while the app was dead
-        // and no background run has happened yet, say it now.
-        await postSummary();
+        if (osSchedulesSummary) {
+          await armOsSummary();
+        } else {
+          await notifier.scheduleDaily(settings.reportTime);
+          // Catch-up at launch: if the slot passed while the app was dead
+          // and no background run has happened yet, say it now.
+          await postSummary();
+        }
       } catch (_) {
         // Permission denial / corrupt hh:mm must never break startup.
       }
@@ -138,8 +167,11 @@ class AppServices {
       executor: executor,
       photoIntake: photoIntake,
       reports: reports,
-      settings: _AppSettingsStore(settings, notifier),
+      settings: _AppSettingsStore(settings, notifier,
+          // iOS: a slot edit must re-arm the OS card for the new time.
+          onReportTimeChanged: osSchedulesSummary ? armOsSummary : null),
       settingsChanges: settings,
+      refreshDailyNotification: osSchedulesSummary ? armOsSummary : null,
       garminDaily: makeGarminDailyFetch(settings),
       picker: _ShareIntakePicker(photoLibrary),
       requestPhotoPermission: requestPhotos,
@@ -197,15 +229,20 @@ class AppServices {
 /// 2026-07-31). [notifier] is optional here; the daily-report reschedule
 /// is exercised by the report suite.
 SettingsStore createSettingsStore(AppSettings settings,
-        {ReportNotifier? notifier}) =>
-    _AppSettingsStore(settings, notifier ?? ReportNotifier(dailyBody: null));
+        {ReportNotifier? notifier,
+        Future<void> Function()? onReportTimeChanged}) =>
+    _AppSettingsStore(settings, notifier ?? ReportNotifier(dailyBody: null),
+        onReportTimeChanged: onReportTimeChanged);
 
 /// Adapts the persistent AppSettings onto the UI's SettingsStore, keeping
 /// the background job and the daily-report schedule in lockstep with edits.
 class _AppSettingsStore implements SettingsStore {
   final AppSettings _s;
   final ReportNotifier _notifier;
-  _AppSettingsStore(this._s, this._notifier);
+  _AppSettingsStore(this._s, this._notifier, {this.onReportTimeChanged});
+
+  /// iOS: re-arm the OS-scheduled summary card when the slot moves.
+  final Future<void> Function()? onReportTimeChanged;
 
   @override
   String get apiKey => _s.activeApiKey ?? '';
@@ -301,6 +338,7 @@ class _AppSettingsStore implements SettingsStore {
       try {
         await _s.setReportTime(reportTime); // validates HH:mm, throws on junk
         await _notifier.scheduleDaily(_s.reportTime); // re-arm on the new slot
+        await onReportTimeChanged?.call(); // iOS: re-arm the OS card too
       } on ArgumentError {
         // UI always sends zero-padded HH:mm; a junk value keeps the default.
       }
