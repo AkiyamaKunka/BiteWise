@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../nl_presenter.dart';
+import '../l10n.dart';
 
 class FixMealScreen extends StatefulWidget {
   final NlExecutor executor;
@@ -48,7 +49,7 @@ class _FixMealScreenState extends State<FixMealScreen> {
       if (!mounted) return;
       // Executor is spec'd never to throw (§4.9); belt-and-braces anyway.
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('That request failed: $e')));
+          .showSnackBar(SnackBar(content: Text(context.l10n.fixRequestFailed('$e'))));
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -58,7 +59,7 @@ class _FixMealScreenState extends State<FixMealScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     return Scaffold(
-      appBar: AppBar(title: const Text('Fix a meal')),
+      appBar: AppBar(title: Text(context.l10n.fixTitle)),
       // Scrollable for the same reason as AddTextScreen: autofocused
       // keyboard + multi-line refusal messages must never push the send
       // button off-screen.
@@ -68,9 +69,7 @@ class _FixMealScreenState extends State<FixMealScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Say what to change, move, or delete — describe the meal '
-              'however you like ("the noodles", "breakfast", "the 600 '
-              'kcal one"), in any language.',
+              context.l10n.fixIntro,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -81,8 +80,7 @@ class _FixMealScreenState extends State<FixMealScreen> {
             // earlier days — so "meal 2" could rewrite yesterday's lunch
             // (review 2026-07-31). Describing the dish is unambiguous.
             Text(
-              'Naming the food is safest — meal numbers count across the '
-              'last 7 days, not just today.',
+              context.l10n.fixNamingTip,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
@@ -95,11 +93,10 @@ class _FixMealScreenState extends State<FixMealScreen> {
               enabled: !_sending,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _send(),
-              decoration: const InputDecoration(
-                labelText: 'What should change?',
-                hintText: 'e.g. "the noodles were roast duck rice"\n'
-                    'or "删除刚才那杯咖啡"',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: context.l10n.fixLabel,
+                hintText: context.l10n.fixHint,
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 12),
@@ -112,11 +109,11 @@ class _FixMealScreenState extends State<FixMealScreen> {
                       height: 16,
                       child: CircularProgressIndicator(strokeWidth: 2))
                   : const Icon(Icons.build_outlined),
-              label: Text(_sending ? 'Working…' : 'Apply the fix'),
+              label: Text(_sending ? context.l10n.working : context.l10n.fixApply),
             ),
             if (_log.isNotEmpty) ...[
               const SizedBox(height: 20),
-              Text('Applied this session',
+              Text(context.l10n.fixAppliedHeader,
                   style: theme.textTheme.titleSmall),
               for (final line in _log.reversed)
                 Padding(

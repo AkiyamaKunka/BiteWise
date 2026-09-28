@@ -62,7 +62,7 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = 'Could not load this day: $e';
+        _error = context.l10n.dayLoadFailed('$e');
       });
     }
   }
@@ -110,7 +110,7 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
                           Text(_error!, textAlign: TextAlign.center),
                           const SizedBox(height: 12),
                           FilledButton(
-                              onPressed: _load, child: const Text('Retry')),
+                              onPressed: _load, child: Text(context.l10n.retry)),
                         ],
                       ),
                     ),
@@ -140,8 +140,7 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 24),
                             child: Text(
-                              'Nothing logged on this day yet. '
-                              'Tap + to add a meal.',
+                              context.l10n.dayEmpty,
                               key: const Key('dayEmpty'),
                               textAlign: TextAlign.center,
                               style: theme.textTheme.bodyMedium?.copyWith(
@@ -223,7 +222,7 @@ class _MealRow extends StatelessWidget {
                   ],
                   if (!food) ...[
                     const SizedBox(width: 8),
-                    Text('not food',
+                    Text(context.l10n.notFoodTag,
                         style: theme.textTheme.bodySmall?.copyWith(
                             color: theme.colorScheme.onSurfaceVariant)),
                   ],

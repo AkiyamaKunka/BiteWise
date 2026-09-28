@@ -14,6 +14,7 @@ import '../../core/contracts.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
 import '../photo_pipeline.dart';
+import '../l10n.dart';
 
 bool _alwaysCan() => true;
 
@@ -75,7 +76,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final granted = await widget.requestPhotoPermission();
     if (!mounted) return;
     if (!granted) {
-      setState(() => _error = 'Photo permission is required for the check.');
+      setState(() => _error = context.l10n.covPermissionRequired);
       return;
     }
     setState(() {
@@ -105,7 +106,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
       if (!mounted) return;
       setState(() {
         _phase = _Phase.idle;
-        _error = 'Check failed: $e';
+        _error = context.l10n.covCheckFailed('$e');
       });
     }
   }
@@ -124,26 +125,20 @@ class _CoverageScreenState extends State<CoverageScreen> {
     // catch-up would re-analyze every one of them.
     if (!widget.canAnalyze()) {
       if (!mounted) return false;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('No analysis is possible right now — add a key for '
-              'the selected provider, or wait for the quota pause to end.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.covNoAnalysis)));
       return false;
     }
     final minutes = (items.length * 22 / 60).ceil();
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$verb ${items.length} photo'
-            '${items.length == 1 ? '' : 's'}?'),
-        content: Text(
-            'Each photo is analyzed separately, one after another — expect '
-            'roughly $minutes minute${minutes == 1 ? '' : 's'} and '
-            '${items.length} model call${items.length == 1 ? '' : 's'}. '
-            'You can leave this screen; the work continues.'),
+        title: Text(ctx.l10n.covBulkTitle(verb, items.length)),
+        content: Text(ctx.l10n.covBulkBody(minutes, items.length)),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
+              child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('confirmBulkAction'),
               onPressed: () => Navigator.of(ctx).pop(true),
@@ -157,6 +152,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
   /// Push [items] through the pipeline one at a time, with progress. The
   /// screen re-audits afterwards so the summary reflects reality, not hope.
   Future<void> _processAll(List<CoverageItem> items, String label) async {
+    final l = context.l10n; // captured before the awaits below
     setState(() {
       _phase = _Phase.acting;
       _actedOn = 0;
@@ -209,14 +205,10 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final remaining = items.length - attempted;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(stopped
-            ? '$label stopped after $attempted of ${items.length}: analysis '
-                'is unavailable right now (quota pause or missing key). The '
-                'remaining $remaining photo${remaining == 1 ? '' : 's'} were '
-                'not touched — run this again later.'
+            ? l.covStopped(label, attempted, items.length, remaining)
             : failures == 0
-                ? '$label done (${items.length} photos).'
-                : '$label done — $failures of ${items.length} could not be '
-                    'processed (kept in the Failed list for retry).')));
+                ? l.covDone(label, items.length)
+                : l.covDoneFailures(label, failures, items.length))));
     await _runAudit();
   }
 
@@ -228,8 +220,8 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final photo = await widget.auditor.loadForProcessing(item);
     if (!mounted) return;
     if (photo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('That photo is no longer readable.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.covPhotoUnreadable)));
       return;
     }
     final saved = await open(photo);
@@ -247,14 +239,12 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final report = _report;
     final busy = _phase == _Phase.scanning || _phase == _Phase.acting;
     return Scaffold(
-      appBar: AppBar(title: const Text('Photo coverage')),
+      appBar: AppBar(title: Text(context.l10n.covTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            'Checks every photo of the last $_days day(s) against the log: '
-            'each one is fingerprinted and looked up — nothing is sent to '
-            'the AI by the check itself.',
+            context.l10n.covIntro(_days),
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
           ),
@@ -282,10 +272,10 @@ class _CoverageScreenState extends State<CoverageScreen> {
             onPressed: busy ? null : _runAudit,
             icon: const Icon(Icons.fact_check_outlined),
             label: Text(_phase == _Phase.scanning
-                ? 'Checking…'
+                ? context.l10n.covChecking
                 : _phase == _Phase.acting
-                    ? 'Working…'
-                    : 'Run check'),
+                    ? context.l10n.working
+                    : context.l10n.covRun),
           ),
           if (busy) ...[
             const SizedBox(height: 12),
@@ -314,7 +304,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Text('Never scanned (${report.missing.length})',
+                    child: Text(context.l10n.covNeverScanned(report.missing.length),
                         style: theme.textTheme.titleSmall),
                   ),
                   FilledButton.tonal(
@@ -322,11 +312,14 @@ class _CoverageScreenState extends State<CoverageScreen> {
                     onPressed: busy
                         ? null
                         : () async {
-                            if (await _confirmBulk(report.missing, 'Log')) {
-                              await _processAll(report.missing, 'Logging');
+                            final l = context.l10n; // before the await
+                            if (await _confirmBulk(
+                                report.missing, l.covVerbLog)) {
+                              await _processAll(
+                                  report.missing, l.covProgLogging);
                             }
                           },
-                    child: const Text('Log all'),
+                    child: Text(context.l10n.covLogAll),
                   ),
                 ],
               ),
@@ -336,8 +329,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                      '…and ${report.missing.length - _maxTiles} more — '
-                      '"Log all" still covers every one.',
+                      context.l10n.covMoreLogAll(report.missing.length - _maxTiles),
                       style: theme.textTheme.bodySmall),
                 ),
             ],
@@ -347,7 +339,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
                 children: [
                   Expanded(
                     child: Text(
-                        'Judged "not food" (${report.skippedNonFood.length})',
+                        context.l10n.covJudgedNotFood(report.skippedNonFood.length),
                         style: theme.textTheme.titleSmall),
                   ),
                   // A 'skipped' tombstone is permanent for the automated
@@ -360,20 +352,19 @@ class _CoverageScreenState extends State<CoverageScreen> {
                     onPressed: busy
                         ? null
                         : () async {
+                            final l = context.l10n; // before the await
                             if (await _confirmBulk(
-                                report.skippedNonFood, 'Analyze again')) {
+                                report.skippedNonFood, l.covAnalyzeAgain)) {
                               await _processAll(
-                                  report.skippedNonFood, 'Re-analyzing');
+                                  report.skippedNonFood, l.covProgReanalyzing);
                             }
                           },
-                    child: const Text('Analyze again'),
+                    child: Text(context.l10n.covAnalyzeAgain),
                   ),
                 ],
               ),
               Text(
-                  'Drinks, order screenshots and unusual dishes land here. '
-                  '"Analyze again" re-asks the AI (useful after the rules '
-                  'improve); tap a row to enter it yourself.',
+                  context.l10n.covNotFoodHelp,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
               for (final item in report.skippedNonFood.take(_maxTiles))
@@ -397,7 +388,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: Text('Failed earlier (${report.failed.length})',
+                    child: Text(context.l10n.covFailedEarlier(report.failed.length),
                         style: theme.textTheme.titleSmall),
                   ),
                   FilledButton.tonal(
@@ -405,11 +396,14 @@ class _CoverageScreenState extends State<CoverageScreen> {
                     onPressed: busy
                         ? null
                         : () async {
-                            if (await _confirmBulk(report.failed, 'Retry')) {
-                              await _processAll(report.failed, 'Retrying');
+                            final l = context.l10n; // before the await
+                            if (await _confirmBulk(
+                                report.failed, l.covVerbRetry)) {
+                              await _processAll(
+                                  report.failed, l.covProgRetrying);
                             }
                           },
-                    child: const Text('Retry all'),
+                    child: Text(context.l10n.covRetryAll),
                   ),
                 ],
               ),
@@ -419,8 +413,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                      '…and ${report.failed.length - _maxTiles} more — '
-                      '"Retry all" still covers every one.',
+                      context.l10n.covMoreRetryAll(report.failed.length - _maxTiles),
                       style: theme.textTheme.bodySmall),
                 ),
             ],
@@ -460,9 +453,9 @@ class _SummaryCard extends StatelessWidget {
                 Expanded(
                   child: Text(
                     ok
-                        ? 'All ${report.scanned} photos are accounted for.'
-                        : '${report.scanned} photos checked — '
-                            '${report.missing.length} never scanned.',
+                        ? context.l10n.covAllAccounted(report.scanned)
+                        : context.l10n.covSummary(
+                            report.scanned, report.missing.length),
                     style: theme.textTheme.titleSmall,
                   ),
                 ),
@@ -488,9 +481,7 @@ class _SummaryCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Note: the app has LIMITED photo access — only the '
-                  'selected photos can be checked. Grant full access in '
-                  'system settings for a complete answer.',
+                  context.l10n.covLimitedAccess,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.error),
                 ),
@@ -499,8 +490,7 @@ class _SummaryCard extends StatelessWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Note: over 2000 photos in this window — older ones were '
-                  'not checked. Shorten the window for a complete answer.',
+                  context.l10n.covTruncated,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: theme.colorScheme.error),
                 ),

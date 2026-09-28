@@ -7,7 +7,6 @@ import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
