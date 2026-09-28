@@ -11,6 +11,24 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// In-memory stand-in for flutter_secure_storage — the real one is a
+/// platform channel with no implementation under `flutter test`.
+class _MemoryKeyStore implements SecureKeyStore {
+  final Map<String, String> data = {};
+  @override
+  Future<String?> read(String key) async => data[key];
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+}
+
+Future<AppSettings> _fresh() async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  return AppSettings.load(prefs: prefs, keyStore: _MemoryKeyStore());
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   final bytes = Uint8List.fromList(List.filled(64, 7));
@@ -19,8 +37,7 @@ void main() {
 
   test('API-key provider with no key → noApiKey, retryable, no transport',
       () async {
-    SharedPreferences.setMockInitialValues({});
-    final settings = await AppSettings.load(); // default provider: Gemini
+    final settings = await _fresh(); // default provider: Gemini
     final analyzer = MultiProviderAnalyzer(settings, client: noNetwork);
     final out = await analyzer.analyzePhoto(bytes);
     expect(out.analysis, isNull);
@@ -31,8 +48,7 @@ void main() {
 
   test('subscription/server path with nothing configured → noServerKey',
       () async {
-    SharedPreferences.setMockInitialValues({});
-    final settings = await AppSettings.load();
+    final settings = await _fresh();
     await settings.setProvider(AiProvider.server);
     final analyzer = MultiProviderAnalyzer(settings, client: noNetwork);
     final out = await analyzer.analyzePhoto(bytes);
