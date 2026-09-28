@@ -1,0 +1,3 @@
+/* Home-screen label. Mirrors Info.plist; the zh-Hans variant is the point. */
+"CFBundleDisplayName" = "Bitewise";
+"NSPhotoLibraryUsageDescription" = "Bitewise reads your photo library so you can pick recent food photos and log meals from them.";

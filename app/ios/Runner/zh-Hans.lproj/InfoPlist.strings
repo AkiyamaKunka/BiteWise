@@ -1,0 +1,3 @@
+/* 与 Android values-zh/strings.xml 的 app_name 保持一致：中文系统下主屏显示 筷拍。 */
+"CFBundleDisplayName" = "筷拍";
+"NSPhotoLibraryUsageDescription" = "筷拍需要读取你的照片库，以便选择最近的食物照片并记录为一餐。";
