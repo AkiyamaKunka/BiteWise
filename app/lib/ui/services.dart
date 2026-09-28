@@ -151,6 +151,13 @@ class UiServices {
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
 
+  /// Re-arms the OS-scheduled daily summary (iOS). The shell calls it on
+  /// every lifecycle transition so the pending card is never staler than
+  /// the last time the user had the app open. Null on Android (the
+  /// WorkManager heartbeat computes the summary at the slot instead) and
+  /// in tests.
+  final Future<void> Function()? refreshDailyNotification;
+
   /// Opens the OS app-settings page (permission remediation: once the OS
   /// stops re-showing the photo dialog, in-app re-requests are no-ops and
   /// this is the ONLY way back). Null in tests hides the buttons.
@@ -174,5 +181,6 @@ class UiServices {
     this.openSystemSettings,
     this.garminDaily,
     this.settingsChanges,
+    this.refreshDailyNotification,
   });
 }

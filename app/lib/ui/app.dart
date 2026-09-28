@@ -216,8 +216,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state != AppLifecycleState.resumed) return;
     final s = widget.services;
+    // iOS: whatever the user last saw is what the OS will deliver at the
+    // slot — re-arm on EVERY transition (pause included: that is the last
+    // moment content can still change before the app is suspended).
+    final rearm = s.refreshDailyNotification;
+    if (rearm != null) {
+      unawaited(rearm().then((_) {}, onError: (Object _) {}));
+    }
+    if (state != AppLifecycleState.resumed) return;
     // The background job may have logged meals while we were away — the
     // IndexedStack keeps stale screens alive, so refresh them now.
     _todayKey.currentState?.reload();

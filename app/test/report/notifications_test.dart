@@ -115,6 +115,31 @@ void main() {
     notifier.cancelDaily();
   });
 
+  test('scheduleDailyAt hands the OS ONE card for the slot, by the live id',
+      () async {
+    // The iOS path (2026-09-28): no background execution exists to build
+    // the summary at the slot, so it is built ahead of time and handed to
+    // the OS. Pinned here: the id is the SAME as the live path's, so every
+    // re-arm replaces the pending card instead of stacking one per launch.
+    final scheduled = <(int, String, String, DateTime)>[];
+    final notifier = ReportNotifier(
+      scheduler: (id, title, body, when) async =>
+          scheduled.add((id, title, body, when)),
+    );
+    final when = DateTime(2026, 9, 28, 23, 55);
+    await notifier.scheduleDailyAt(
+        when: when, title: '今天：1,800 千卡', body: '比目标少 200 千卡');
+    expect(scheduled, hasLength(1));
+    expect(scheduled.single.$1, ReportNotifier.dailyReportNotificationId);
+    expect(scheduled.single.$4, when);
+
+    // Re-arm after a meal is logged: same id, fresher content.
+    await notifier.scheduleDailyAt(
+        when: when, title: '今天：2,100 千卡', body: '比目标多 100 千卡');
+    expect(scheduled.last.$1, ReportNotifier.dailyReportNotificationId);
+    expect(scheduled.last.$2, '今天：2,100 千卡');
+  });
+
   testWidgets('re-scheduling replaces the previous slot', (tester) async {
     var now = DateTime(2026, 7, 17, 7, 0);
     final fired = <(int, String, String)>[];
