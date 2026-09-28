@@ -467,7 +467,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                   key: const Key('editorTimeButton'),
                   onPressed: _pickTime,
                   icon: const Icon(Icons.schedule_outlined, size: 18),
-                  label: Text(_draft.time),
+                  // Locale clock (24h in zh), like every other time in the UI.
+                  label: Text(context.clock(_draft.time)),
                 ),
               ),
             ],
