@@ -1657,6 +1657,126 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No quota pause is active.'**
   String get diagQuotaOk;
+
+  /// No description provided for @addPhotosTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent photos'**
+  String get addPhotosTitle;
+
+  /// No description provided for @addPhotoUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'That photo could not be read (too large or removed).'**
+  String get addPhotoUnreadable;
+
+  /// No description provided for @addPhotosLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load photos: {error}'**
+  String addPhotosLoadFailed(String error);
+
+  /// No description provided for @photoPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Bitewise isn\'t allowed to see your photos.'**
+  String get photoPermissionDenied;
+
+  /// No description provided for @openSystemSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'Open system settings'**
+  String get openSystemSettings;
+
+  /// No description provided for @outcomeSaved.
+  ///
+  /// In en, this message translates to:
+  /// **'Meal logged'**
+  String get outcomeSaved;
+
+  /// No description provided for @outcomeSkipped.
+  ///
+  /// In en, this message translates to:
+  /// **'No food detected'**
+  String get outcomeSkipped;
+
+  /// No description provided for @outcomeDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate photo'**
+  String get outcomeDuplicate;
+
+  /// No description provided for @outcomeAlreadyTracked.
+  ///
+  /// In en, this message translates to:
+  /// **'Already logged'**
+  String get outcomeAlreadyTracked;
+
+  /// No description provided for @outcomeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis failed'**
+  String get outcomeFailed;
+
+  /// No description provided for @outcomeLeftoverApplied.
+  ///
+  /// In en, this message translates to:
+  /// **'Leftovers deducted'**
+  String get outcomeLeftoverApplied;
+
+  /// No description provided for @outcomeLogManuallyHint.
+  ///
+  /// In en, this message translates to:
+  /// **'If this IS food, log it yourself — the photo stays attached to the meal.'**
+  String get outcomeLogManuallyHint;
+
+  /// No description provided for @okButton.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get okButton;
+
+  /// No description provided for @logManually.
+  ///
+  /// In en, this message translates to:
+  /// **'Log manually'**
+  String get logManually;
+
+  /// No description provided for @describeTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Describe a meal'**
+  String get describeTitle;
+
+  /// No description provided for @describeLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'What did you eat?'**
+  String get describeLabel;
+
+  /// No description provided for @describeHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"'**
+  String get describeHint;
+
+  /// No description provided for @describeHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Any language works. You will see the estimate and can fix it before it is saved.'**
+  String get describeHelp;
+
+  /// No description provided for @describeEstimating.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimating…'**
+  String get describeEstimating;
+
+  /// No description provided for @describeEstimate.
+  ///
+  /// In en, this message translates to:
+  /// **'Estimate this meal'**
+  String get describeEstimate;
 }
 
 class _AppLocalizationsDelegate

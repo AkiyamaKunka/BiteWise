@@ -548,5 +548,32 @@
     }
   },
   "diagFixQuota": "Wait it out (photos are kept), or change the key or provider to resume immediately.",
-  "diagQuotaOk": "No quota pause is active."
+  "diagQuotaOk": "No quota pause is active.",
+  "addPhotosTitle": "Recent photos",
+  "addPhotoUnreadable": "That photo could not be read (too large or removed).",
+  "addPhotosLoadFailed": "Could not load photos: {error}",
+  "@addPhotosLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "photoPermissionDenied": "Bitewise isn't allowed to see your photos.",
+  "openSystemSettings": "Open system settings",
+  "outcomeSaved": "Meal logged",
+  "outcomeSkipped": "No food detected",
+  "outcomeDuplicate": "Duplicate photo",
+  "outcomeAlreadyTracked": "Already logged",
+  "outcomeFailed": "Analysis failed",
+  "outcomeLeftoverApplied": "Leftovers deducted",
+  "outcomeLogManuallyHint": "If this IS food, log it yourself — the photo stays attached to the meal.",
+  "okButton": "OK",
+  "logManually": "Log manually",
+  "describeTitle": "Describe a meal",
+  "describeLabel": "What did you eat?",
+  "describeHint": "e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"",
+  "describeHelp": "Any language works. You will see the estimate and can fix it before it is saved.",
+  "describeEstimating": "Estimating…",
+  "describeEstimate": "Estimate this meal"
 }

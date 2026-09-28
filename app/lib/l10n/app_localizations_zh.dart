@@ -880,4 +880,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagQuotaOk => '没有额度暂停。';
+
+  @override
+  String get addPhotosTitle => '最近照片';
+
+  @override
+  String get addPhotoUnreadable => '无法读取这张照片（太大或已被删除）。';
+
+  @override
+  String addPhotosLoadFailed(String error) {
+    return '无法加载照片：$error';
+  }
+
+  @override
+  String get photoPermissionDenied => '筷拍没有获得访问照片的权限。';
+
+  @override
+  String get openSystemSettings => '打开系统设置';
+
+  @override
+  String get outcomeSaved => '已记录一餐';
+
+  @override
+  String get outcomeSkipped => '没有识别到食物';
+
+  @override
+  String get outcomeDuplicate => '重复的照片';
+
+  @override
+  String get outcomeAlreadyTracked => '已经记录过';
+
+  @override
+  String get outcomeFailed => '分析失败';
+
+  @override
+  String get outcomeLeftoverApplied => '已扣除剩菜';
+
+  @override
+  String get outcomeLogManuallyHint => '如果这确实是食物，可以手动记录 —— 照片会附在这一餐上。';
+
+  @override
+  String get okButton => '好';
+
+  @override
+  String get logManually => '手动记录';
+
+  @override
+  String get describeTitle => '文字描述一餐';
+
+  @override
+  String get describeLabel => '你吃了什么？';
+
+  @override
+  String get describeHint =>
+      '例如：\"一碗牛肉面加一个鸡蛋\"\n或 \"two eggs and toast with butter\"';
+
+  @override
+  String get describeHelp => '任何语言都可以。保存前你会看到估算结果，并且可以修改。';
+
+  @override
+  String get describeEstimating => '估算中…';
+
+  @override
+  String get describeEstimate => '估算这一餐';
 }
