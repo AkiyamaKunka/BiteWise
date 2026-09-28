@@ -946,4 +946,56 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationsOffHint => '通知已关闭 —— 每日总结无法送达。';
+
+  @override
+  String outcomeSavedMsg(String summary) {
+    return '已记录：$summary';
+  }
+
+  @override
+  String outcomeLeftoverMsg(String summary) {
+    return '已扣除剩菜：$summary';
+  }
+
+  @override
+  String get outcomeNotFoodMsg => '这张照片里没有识别到食物。';
+
+  @override
+  String get outcomeDuplicateMsg => '看起来和几分钟前记录的一张照片重复了。';
+
+  @override
+  String get outcomeAlreadyTrackedMsg => '这张照片已经记录过了。';
+
+  @override
+  String get errNoApiKey => '当前服务还没有设置 API Key —— 请在设置里添加。';
+
+  @override
+  String get errNoServerKey => '还没有设置服务器地址或上传 Key —— 请在设置里添加。';
+
+  @override
+  String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
+
+  @override
+  String get errRateLimited => '服务正在限流 —— 照片已保留，稍后会自动重试。';
+
+  @override
+  String get errQuotaPaused => '分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。';
+
+  @override
+  String get errNetwork => '连不上服务（网络或服务问题）。照片已保留，稍后会自动重试。';
+
+  @override
+  String get errBadModel => '服务不接受这个模型 —— 请在设置里检查模型名。';
+
+  @override
+  String get errBadResponse => 'AI 返回的内容应用无法使用。';
+
+  @override
+  String get errBadPhoto => '无法处理这张照片（解码失败）。';
+
+  @override
+  String get errServerBusy => '你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。';
+
+  @override
+  String get mealCardAutoTitle => '🍽️ 已自动记录一餐';
 }

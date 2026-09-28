@@ -1029,10 +1029,28 @@ class MultiProviderAnalyzer implements AnalyzerService {
         AiProvider.glm => _glm,
       };
 
+  /// Phone-side credential check BEFORE any transport. Without it a
+  /// key-less Gemini call still went out and came back as "rejected the
+  /// API key" — the wrong remedy for a user who simply has not set one up
+  /// (and, for a subscription user, the wrong provider name entirely) —
+  /// seen on a fresh simulator 2026-09-28. Retryable: user state, not a
+  /// photo defect, so automated intake keeps the photo eligible.
+  AnalysisOutcome? _missingCredential() {
+    if ((_settings.activeApiKey ?? '').trim().isNotEmpty) return null;
+    final msg = _settings.provider == AiProvider.server
+        ? 'No server address or upload key is set — add them in Settings.'
+        : 'No ${_settings.providerDisplayName} API key — add one in '
+            'Settings.';
+    return AnalysisOutcome(error: msg, retryable: true, wall: Duration.zero);
+  }
+
   @override
   Future<AnalysisOutcome> analyzePhoto(Uint8List originalBytes,
-          {List<Map<String, dynamic>>? recentMeals}) =>
-      _active.analyzePhoto(originalBytes, recentMeals: recentMeals);
+      {List<Map<String, dynamic>>? recentMeals}) async {
+    final missing = _missingCredential();
+    if (missing != null) return missing;
+    return _active.analyzePhoto(originalBytes, recentMeals: recentMeals);
+  }
 
   @override
   Future<Map<String, dynamic>?> textIntent(String prompt) =>

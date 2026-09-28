@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../../services/analyzer/normalize.dart' show makeMealThumb;
+import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
@@ -230,11 +231,9 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
           PhotoOutcomeKind.failed => l.outcomeFailed,
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
-        // outcome.message is the pipeline's own line (English, parity-
-        // pinned); only the framing around it is localized here.
         content: Text(canLogManually
-            ? '${outcome.message}\n\n${l.outcomeLogManuallyHint}'
-            : outcome.message),
+            ? '${outcomeBody(l, outcome)}\n\n${l.outcomeLogManuallyHint}'
+            : outcomeBody(l, outcome)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('ok'),

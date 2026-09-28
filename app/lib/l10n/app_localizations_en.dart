@@ -1020,4 +1020,67 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get notificationsOffHint =>
       'Notifications are off — the daily summary can\'t be delivered.';
+
+  @override
+  String outcomeSavedMsg(String summary) {
+    return 'Meal logged: $summary';
+  }
+
+  @override
+  String outcomeLeftoverMsg(String summary) {
+    return 'Leftovers deducted: $summary';
+  }
+
+  @override
+  String get outcomeNotFoodMsg => 'No food detected in this photo.';
+
+  @override
+  String get outcomeDuplicateMsg =>
+      'Looks like a duplicate of a photo logged minutes ago.';
+
+  @override
+  String get outcomeAlreadyTrackedMsg => 'This photo was already logged.';
+
+  @override
+  String get errNoApiKey =>
+      'No API key is set for this provider — add one in Settings.';
+
+  @override
+  String get errNoServerKey =>
+      'No server address or upload key is set — add them in Settings.';
+
+  @override
+  String get errRejectedKey =>
+      'The provider rejected the API key. Check the key in Settings.';
+
+  @override
+  String get errRateLimited =>
+      'The provider is rate-limiting right now — the photo is kept and retried later.';
+
+  @override
+  String get errQuotaPaused =>
+      'Analysis is paused: the daily quota was hit. The photo is kept and retried later.';
+
+  @override
+  String get errNetwork =>
+      'Could not reach the provider (network or service issue). The photo is kept and retried later.';
+
+  @override
+  String get errBadModel =>
+      'The provider rejected the model — check the model name in Settings.';
+
+  @override
+  String get errBadResponse =>
+      'The AI answered in a form the app could not use.';
+
+  @override
+  String get errBadPhoto =>
+      'This photo could not be processed (it could not be decoded).';
+
+  @override
+  String get errServerBusy =>
+      'Your server is busy with another analysis — the photo is kept and retried later.';
+
+  @override
+  String get mealCardAutoTitle => '🍽️ Meal logged automatically';
 }

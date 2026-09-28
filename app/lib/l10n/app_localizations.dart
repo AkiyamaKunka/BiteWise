@@ -1783,6 +1783,102 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notifications are off — the daily summary can\'t be delivered.'**
   String get notificationsOffHint;
+
+  /// No description provided for @outcomeSavedMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Meal logged: {summary}'**
+  String outcomeSavedMsg(String summary);
+
+  /// No description provided for @outcomeLeftoverMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Leftovers deducted: {summary}'**
+  String outcomeLeftoverMsg(String summary);
+
+  /// No description provided for @outcomeNotFoodMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'No food detected in this photo.'**
+  String get outcomeNotFoodMsg;
+
+  /// No description provided for @outcomeDuplicateMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Looks like a duplicate of a photo logged minutes ago.'**
+  String get outcomeDuplicateMsg;
+
+  /// No description provided for @outcomeAlreadyTrackedMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was already logged.'**
+  String get outcomeAlreadyTrackedMsg;
+
+  /// No description provided for @errNoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No API key is set for this provider — add one in Settings.'**
+  String get errNoApiKey;
+
+  /// No description provided for @errNoServerKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No server address or upload key is set — add them in Settings.'**
+  String get errNoServerKey;
+
+  /// No description provided for @errRejectedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider rejected the API key. Check the key in Settings.'**
+  String get errRejectedKey;
+
+  /// No description provided for @errRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider is rate-limiting right now — the photo is kept and retried later.'**
+  String get errRateLimited;
+
+  /// No description provided for @errQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused: the daily quota was hit. The photo is kept and retried later.'**
+  String get errQuotaPaused;
+
+  /// No description provided for @errNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the provider (network or service issue). The photo is kept and retried later.'**
+  String get errNetwork;
+
+  /// No description provided for @errBadModel.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider rejected the model — check the model name in Settings.'**
+  String get errBadModel;
+
+  /// No description provided for @errBadResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI answered in a form the app could not use.'**
+  String get errBadResponse;
+
+  /// No description provided for @errBadPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo could not be processed (it could not be decoded).'**
+  String get errBadPhoto;
+
+  /// No description provided for @errServerBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server is busy with another analysis — the photo is kept and retried later.'**
+  String get errServerBusy;
+
+  /// No description provided for @mealCardAutoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'🍽️ Meal logged automatically'**
+  String get mealCardAutoTitle;
 }
 
 class _AppLocalizationsDelegate

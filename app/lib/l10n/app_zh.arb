@@ -280,5 +280,21 @@
   "describeHelp": "任何语言都可以。保存前你会看到估算结果，并且可以修改。",
   "describeEstimating": "估算中…",
   "describeEstimate": "估算这一餐",
-  "notificationsOffHint": "通知已关闭 —— 每日总结无法送达。"
+  "notificationsOffHint": "通知已关闭 —— 每日总结无法送达。",
+  "outcomeSavedMsg": "已记录：{summary}",
+  "outcomeLeftoverMsg": "已扣除剩菜：{summary}",
+  "outcomeNotFoodMsg": "这张照片里没有识别到食物。",
+  "outcomeDuplicateMsg": "看起来和几分钟前记录的一张照片重复了。",
+  "outcomeAlreadyTrackedMsg": "这张照片已经记录过了。",
+  "errNoApiKey": "当前服务还没有设置 API Key —— 请在设置里添加。",
+  "errNoServerKey": "还没有设置服务器地址或上传 Key —— 请在设置里添加。",
+  "errRejectedKey": "服务拒绝了 API Key，请在设置里检查。",
+  "errRateLimited": "服务正在限流 —— 照片已保留，稍后会自动重试。",
+  "errQuotaPaused": "分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。",
+  "errNetwork": "连不上服务（网络或服务问题）。照片已保留，稍后会自动重试。",
+  "errBadModel": "服务不接受这个模型 —— 请在设置里检查模型名。",
+  "errBadResponse": "AI 返回的内容应用无法使用。",
+  "errBadPhoto": "无法处理这张照片（解码失败）。",
+  "errServerBusy": "你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。",
+  "mealCardAutoTitle": "🍽️ 已自动记录一餐"
 }

@@ -576,5 +576,35 @@
   "describeHelp": "Any language works. You will see the estimate and can fix it before it is saved.",
   "describeEstimating": "Estimating…",
   "describeEstimate": "Estimate this meal",
-  "notificationsOffHint": "Notifications are off — the daily summary can't be delivered."
+  "notificationsOffHint": "Notifications are off — the daily summary can't be delivered.",
+  "outcomeSavedMsg": "Meal logged: {summary}",
+  "@outcomeSavedMsg": {
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeLeftoverMsg": "Leftovers deducted: {summary}",
+  "@outcomeLeftoverMsg": {
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeNotFoodMsg": "No food detected in this photo.",
+  "outcomeDuplicateMsg": "Looks like a duplicate of a photo logged minutes ago.",
+  "outcomeAlreadyTrackedMsg": "This photo was already logged.",
+  "errNoApiKey": "No API key is set for this provider — add one in Settings.",
+  "errNoServerKey": "No server address or upload key is set — add them in Settings.",
+  "errRejectedKey": "The provider rejected the API key. Check the key in Settings.",
+  "errRateLimited": "The provider is rate-limiting right now — the photo is kept and retried later.",
+  "errQuotaPaused": "Analysis is paused: the daily quota was hit. The photo is kept and retried later.",
+  "errNetwork": "Could not reach the provider (network or service issue). The photo is kept and retried later.",
+  "errBadModel": "The provider rejected the model — check the model name in Settings.",
+  "errBadResponse": "The AI answered in a form the app could not use.",
+  "errBadPhoto": "This photo could not be processed (it could not be decoded).",
+  "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
+  "mealCardAutoTitle": "🍽️ Meal logged automatically"
 }
