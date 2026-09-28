@@ -1960,6 +1960,15 @@ def test_upload_captured_at_dates_meal_on_capture_day(mock_db, monkeypatch, tmp_
     monkeypatch.setattr(telegram_bot, "ANDROID_API_KEY", "test-upload-key")
     monkeypatch.setattr(telegram_bot, "ALLOWED_CHAT_ID", 12345)
     monkeypatch.setattr(database, "get_android_timezone", lambda *a, **k: "+0800")
+    # PIN THE CLOCK. The upload path honours captured_at only inside
+    # CAPTURED_AT_MAX_AGE_DAYS (45) of user-local now; the fixed July
+    # dates below silently fell out of that window on 2026-08-25 and both
+    # tests went red with no code change (noticed 2026-09-28). The dates
+    # stay because they document a real on-device session; the clock is
+    # what must not drift.
+    monkeypatch.setattr(database, "user_local_now",
+                        lambda *a, **k: datetime(2026, 7, 14, 12, 0, 0,
+                                                 tzinfo=timezone(timedelta(hours=8))))
     monkeypatch.setattr(
         telegram_bot, "analyze_food_photo_with_retries",
         lambda client, image_bytes, *a, **k: {"is_food": True, "meal_description": "Backfill",
@@ -1999,6 +2008,15 @@ def test_upload_accepts_raw_body_image(mock_db, monkeypatch, tmp_path):
     monkeypatch.setattr(telegram_bot, "ANDROID_API_KEY", "test-upload-key")
     monkeypatch.setattr(telegram_bot, "ALLOWED_CHAT_ID", 12345)
     monkeypatch.setattr(database, "get_android_timezone", lambda *a, **k: "+0800")
+    # PIN THE CLOCK. The upload path honours captured_at only inside
+    # CAPTURED_AT_MAX_AGE_DAYS (45) of user-local now; the fixed July
+    # dates below silently fell out of that window on 2026-08-25 and both
+    # tests went red with no code change (noticed 2026-09-28). The dates
+    # stay because they document a real on-device session; the clock is
+    # what must not drift.
+    monkeypatch.setattr(database, "user_local_now",
+                        lambda *a, **k: datetime(2026, 7, 14, 12, 0, 0,
+                                                 tzinfo=timezone(timedelta(hours=8))))
     monkeypatch.setattr(
         telegram_bot, "analyze_food_photo_with_retries",
         lambda client, image_bytes, *a, **k: {"is_food": True, "meal_description": "Raw upload",
