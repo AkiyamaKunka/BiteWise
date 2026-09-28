@@ -264,7 +264,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
                       : (v) => setState(() => _days = v.round()),
                 ),
               ),
-              Text('$_days d'),
+              Text(context.l10n.covDaysShort(_days)),
             ],
           ),
           FilledButton.icon(
