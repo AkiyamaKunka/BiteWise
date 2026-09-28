@@ -14,7 +14,22 @@ ENV_FILE="${1:?usage: run_e2e_ios.sh <env-file with E2E_GEMINI_KEY=...>}"
 ENV_FILE="$(cd "$(dirname "$ENV_FILE")" && pwd)/$(basename "$ENV_FILE")"
 [[ -f "$ENV_FILE" ]] || { echo "env file not found: $ENV_FILE" >&2; exit 1; }
 
-UDID="${E2E_SIM_UDID:-6A13AADC-0B09-4AE2-8F8E-BAAC14352C99}"
+# Simulator: $E2E_SIM_UDID if set, else a booted iPhone, else the first
+# available iPhone. The old hardcoded default (ct-test) vanished with an
+# Xcode update and silently broke every run (2026-09-28).
+if [[ -n "${E2E_SIM_UDID:-}" ]]; then
+  UDID="$E2E_SIM_UDID"
+else
+  UDID="$(xcrun simctl list devices available -j | python3 -c '
+import json, sys
+d = json.load(sys.stdin)["devices"]
+c = [x for r, l in d.items() if "iOS" in r for x in l
+     if x.get("isAvailable") and x["name"].startswith("iPhone")]
+b = [x for x in c if x["state"] == "Booted"]
+pick = (b or c)
+sys.exit("no available iPhone simulator; set E2E_SIM_UDID") if not pick else None
+print(pick[0]["udid"])')"
+fi
 BUNDLE_ID="dev.calorietracker.calorieTracker"
 PHOTOS_DIR="${E2E_PHOTOS_DIR:-$(dirname "$ENV_FILE")}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"

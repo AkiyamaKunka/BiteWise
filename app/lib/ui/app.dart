@@ -212,6 +212,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (!mounted) return;
     _todayKey.currentState?.reload();
     _historyKey.currentState?.reload();
+    // iOS: a meal just landed (pipeline / share sheet) — the pending OS card
+    // must carry it even if the user stays in the app through the slot.
+    final rearm = widget.services.refreshDailyNotification;
+    if (rearm != null) {
+      unawaited(rearm().then((_) {}, onError: (Object _) {}));
+    }
   }
 
   @override

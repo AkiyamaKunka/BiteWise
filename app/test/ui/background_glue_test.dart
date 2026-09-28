@@ -10,6 +10,7 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
+import 'package:calorie_tracker/ui/refresh_signal.dart';
 import 'package:calorie_tracker/ui/background_glue.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
@@ -407,6 +408,68 @@ void main() {
         'register:$photoBackfillUniqueName:$photoBackfillTaskName',
       ]);
       expect(scheduler.frequency, backgroundScanFrequency);
+    });
+  });
+
+  group('HomeShell iOS daily-card re-arm', () {
+    // The OS-scheduled summary (iOS) carries content computed at ARM time,
+    // so the shell must re-arm on every moment content can change:
+    // lifecycle transitions and meal saves. Both pinned here.
+    UiServices services(Future<void> Function() rearm) => UiServices(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer(),
+          executor: FakeExecutor(),
+          settings: FakeSettings(watcherEnabled: false),
+          picker: FakePicker(),
+          requestPhotoPermission: () async => true,
+          reports: FakeReports(),
+          refreshDailyNotification: rearm,
+        );
+
+    testWidgets('every lifecycle transition re-arms (pause included)',
+        (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(services: services(() async => calls++))));
+      for (final state in [
+        AppLifecycleState.inactive,
+        AppLifecycleState.paused,
+        AppLifecycleState.resumed,
+      ]) {
+        tester.binding.handleAppLifecycleStateChanged(state);
+        await tester.pump();
+      }
+      expect(calls, 3);
+    });
+
+    testWidgets('a meal landing re-arms too', (tester) async {
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(services: services(() async => calls++))));
+      signalMealsChanged();
+      await tester.pump();
+      expect(calls, 1);
+    });
+
+    testWidgets('Android (no hook) is untouched', (tester) async {
+      final intake = FakeIntake();
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(
+              services: UiServices(
+        dao: FakeDao(),
+        analyzer: FakeAnalyzer(),
+        executor: FakeExecutor(),
+        settings: FakeSettings(watcherEnabled: false),
+        picker: FakePicker(),
+        requestPhotoPermission: () async => true,
+        photoIntake: intake,
+        reports: FakeReports(),
+      ))));
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      signalMealsChanged();
+      await tester.pump();
+      // Nothing to assert on beyond "no throw": the hook is null on Android.
+      expect(intake.backfillScans, 0);
     });
   });
 
