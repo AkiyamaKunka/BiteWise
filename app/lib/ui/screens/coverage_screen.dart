@@ -464,10 +464,10 @@ class _SummaryCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               [
-                '${report.logged.length} logged as meals',
-                '${report.skippedNonFood.length} not food',
+                context.l10n.covLoggedAsMeals(report.logged.length),
+                context.l10n.covNotFoodCount(report.skippedNonFood.length),
                 if (report.failed.isNotEmpty)
-                    '${report.failed.length} failed',
+                    context.l10n.covFailedCount(report.failed.length),
                 if (report.deleted > 0) '${report.deleted} deleted by you',
                 if (report.inFlight > 0) '${report.inFlight} in progress',
                 if (report.unreadable > 0)

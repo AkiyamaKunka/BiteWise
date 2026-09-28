@@ -357,5 +357,7 @@
   "covDone": "{label}完成（{count} 张照片）。",
   "covDoneFailures": "{label}完成 —— {count} 张中有 {failures} 张无法处理（已保留在“之前失败”列表中以便重试）。",
   "covDaysShort": "{days} 天",
-  "covResultDetail": "已记录 {meals} 餐 · {notFood} 张非食物"
+  "covLoggedAsMeals": "已记录 {count} 餐",
+  "covNotFoodCount": "{count} 张非食物",
+  "covFailedCount": "{count} 张失败"
 }

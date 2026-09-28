@@ -827,13 +827,26 @@
       }
     }
   },
-  "covResultDetail": "{meals} logged as meals · {notFood} not food",
-  "@covResultDetail": {
+  "covLoggedAsMeals": "{count} logged as meals",
+  "@covLoggedAsMeals": {
     "placeholders": {
-      "meals": {
+      "count": {
         "type": "int"
-      },
-      "notFood": {
+      }
+    }
+  },
+  "covNotFoodCount": "{count} not food",
+  "@covNotFoodCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covFailedCount": "{count} failed",
+  "@covFailedCount": {
+    "placeholders": {
+      "count": {
         "type": "int"
       }
     }

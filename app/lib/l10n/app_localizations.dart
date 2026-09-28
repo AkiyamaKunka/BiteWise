@@ -2240,11 +2240,23 @@ abstract class AppLocalizations {
   /// **'{days} d'**
   String covDaysShort(int days);
 
-  /// No description provided for @covResultDetail.
+  /// No description provided for @covLoggedAsMeals.
   ///
   /// In en, this message translates to:
-  /// **'{meals} logged as meals · {notFood} not food'**
-  String covResultDetail(int meals, int notFood);
+  /// **'{count} logged as meals'**
+  String covLoggedAsMeals(int count);
+
+  /// No description provided for @covNotFoodCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not food'**
+  String covNotFoodCount(int count);
+
+  /// No description provided for @covFailedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} failed'**
+  String covFailedCount(int count);
 }
 
 class _AppLocalizationsDelegate

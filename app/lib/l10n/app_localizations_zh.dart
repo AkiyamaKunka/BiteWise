@@ -1241,7 +1241,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String covResultDetail(int meals, int notFood) {
-    return '已记录 $meals 餐 · $notFood 张非食物';
+  String covLoggedAsMeals(int count) {
+    return '已记录 $count 餐';
+  }
+
+  @override
+  String covNotFoodCount(int count) {
+    return '$count 张非食物';
+  }
+
+  @override
+  String covFailedCount(int count) {
+    return '$count 张失败';
   }
 }

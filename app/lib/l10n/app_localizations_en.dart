@@ -1336,7 +1336,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String covResultDetail(int meals, int notFood) {
-    return '$meals logged as meals · $notFood not food';
+  String covLoggedAsMeals(int count) {
+    return '$count logged as meals';
+  }
+
+  @override
+  String covNotFoodCount(int count) {
+    return '$count not food';
+  }
+
+  @override
+  String covFailedCount(int count) {
+    return '$count failed';
   }
 }
