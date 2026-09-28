@@ -355,5 +355,7 @@
   "covProgRetrying": "重试中",
   "covStopped": "{label}在第 {attempted}/{total} 张后停止：现在无法分析（额度暂停或缺少 Key）。剩下的 {remaining, plural, other{{remaining} 张}}没有处理 —— 稍后再运行一次。",
   "covDone": "{label}完成（{count} 张照片）。",
-  "covDoneFailures": "{label}完成 —— {count} 张中有 {failures} 张无法处理（已保留在“之前失败”列表中以便重试）。"
+  "covDoneFailures": "{label}完成 —— {count} 张中有 {failures} 张无法处理（已保留在“之前失败”列表中以便重试）。",
+  "covDaysShort": "{days} 天",
+  "covResultDetail": "已记录 {meals} 餐 · {notFood} 张非食物"
 }

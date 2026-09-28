@@ -258,7 +258,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
                   min: 1,
                   max: 30,
                   divisions: 29,
-                  label: '$_days d',
+                  label: context.l10n.covDaysShort(_days),
                   onChanged: busy
                       ? null
                       : (v) => setState(() => _days = v.round()),

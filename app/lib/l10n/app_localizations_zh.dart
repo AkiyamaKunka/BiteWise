@@ -1234,4 +1234,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String covDoneFailures(String label, int failures, int count) {
     return '$label完成 —— $count 张中有 $failures 张无法处理（已保留在“之前失败”列表中以便重试）。';
   }
+
+  @override
+  String covDaysShort(int days) {
+    return '$days 天';
+  }
+
+  @override
+  String covResultDetail(int meals, int notFood) {
+    return '已记录 $meals 餐 · $notFood 张非食物';
+  }
 }

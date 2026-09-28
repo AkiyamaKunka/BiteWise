@@ -1329,4 +1329,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String covDoneFailures(String label, int failures, int count) {
     return '$label done — $failures of $count could not be processed (kept in the Failed list for retry).';
   }
+
+  @override
+  String covDaysShort(int days) {
+    return '$days d';
+  }
+
+  @override
+  String covResultDetail(int meals, int notFood) {
+    return '$meals logged as meals · $notFood not food';
+  }
 }

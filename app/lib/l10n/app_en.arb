@@ -818,5 +818,24 @@
         "type": "int"
       }
     }
+  },
+  "covDaysShort": "{days} d",
+  "@covDaysShort": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "covResultDetail": "{meals} logged as meals · {notFood} not food",
+  "@covResultDetail": {
+    "placeholders": {
+      "meals": {
+        "type": "int"
+      },
+      "notFood": {
+        "type": "int"
+      }
+    }
   }
 }

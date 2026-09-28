@@ -2233,6 +2233,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).'**
   String covDoneFailures(String label, int failures, int count);
+
+  /// No description provided for @covDaysShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} d'**
+  String covDaysShort(int days);
+
+  /// No description provided for @covResultDetail.
+  ///
+  /// In en, this message translates to:
+  /// **'{meals} logged as meals · {notFood} not food'**
+  String covResultDetail(int meals, int notFood);
 }
 
 class _AppLocalizationsDelegate
