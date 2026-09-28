@@ -289,6 +289,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             startClaudeAuth: s.startClaudeAuth,
             completeClaudeAuth: s.completeClaudeAuth,
             openSystemSettings: s.openSystemSettings,
+            notificationsEnabled: s.notificationsEnabled,
           ),
         ],
       ),

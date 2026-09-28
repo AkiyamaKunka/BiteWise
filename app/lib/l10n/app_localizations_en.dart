@@ -1016,4 +1016,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get describeEstimate => 'Estimate this meal';
+
+  @override
+  String get notificationsOffHint =>
+      'Notifications are off — the daily summary can\'t be delivered.';
 }

@@ -595,4 +595,67 @@ void planTuningTests() {
             '400 every photo');
     expect(find.byKey(const Key('planEffortRow')), findsNothing);
   });
+
+  group('notifications-off remedy (2026-09-28)', () {
+    // On iOS a declined notification permission makes every scheduled
+    // daily summary vanish with no trace. The report section must say so
+    // and offer the only fix, and must clear itself when the user comes
+    // back from system settings.
+    Widget screen({Future<bool?> Function()? enabled,
+            Future<void> Function()? open}) =>
+        _wrap(SettingsScreen(
+          settings: FakeSettings(apiKey: 'k'),
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          notificationsEnabled: enabled,
+          openSystemSettings: open,
+        ));
+
+    testWidgets('off → hint + system-settings button', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      var opened = 0;
+      await tester.pumpWidget(screen(
+          enabled: () async => false, open: () async => opened++));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsOneWidget);
+      await tester.ensureVisible(
+          find.byKey(const Key('notificationsOffOpenSettings')));
+      await tester.tap(find.byKey(const Key('notificationsOffOpenSettings')));
+      await tester.pump();
+      expect(opened, 1);
+    });
+
+    testWidgets('on, or unknown → no row', (tester) async {
+      await tester.pumpWidget(screen(enabled: () async => true));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+      await tester.pumpWidget(screen(enabled: () async => null));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+      await tester.pumpWidget(screen()); // not probed at all (tests/Android)
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+    });
+
+    testWidgets('re-probes on resume and clears itself', (tester) async {
+      var enabled = false;
+      await tester.pumpWidget(screen(enabled: () async => enabled));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsOneWidget);
+      enabled = true; // the user flipped it in system settings…
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+    });
+
+    testWidgets('a throwing probe keeps the row hidden', (tester) async {
+      await tester.pumpWidget(
+          screen(enabled: () async => throw StateError('no channel')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+    });
+  });
 }

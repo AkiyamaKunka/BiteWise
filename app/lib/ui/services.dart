@@ -151,6 +151,10 @@ class UiServices {
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
 
+  /// Whether the OS will show this app's notifications; null = unknown.
+  /// Settings shows a "notifications are off" remedy when this is false.
+  final Future<bool?> Function()? notificationsEnabled;
+
   /// Re-arms the OS-scheduled daily summary (iOS). The shell calls it on
   /// every lifecycle transition so the pending card is never staler than
   /// the last time the user had the app open. Null on Android (the
@@ -182,5 +186,6 @@ class UiServices {
     this.garminDaily,
     this.settingsChanges,
     this.refreshDailyNotification,
+    this.notificationsEnabled,
   });
 }

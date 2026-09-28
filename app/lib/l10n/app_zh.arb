@@ -279,5 +279,6 @@
   "describeHint": "例如：\"一碗牛肉面加一个鸡蛋\"\n或 \"two eggs and toast with butter\"",
   "describeHelp": "任何语言都可以。保存前你会看到估算结果，并且可以修改。",
   "describeEstimating": "估算中…",
-  "describeEstimate": "估算这一餐"
+  "describeEstimate": "估算这一餐",
+  "notificationsOffHint": "通知已关闭 —— 每日总结无法送达。"
 }
