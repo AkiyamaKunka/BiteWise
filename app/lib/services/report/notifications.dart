@@ -209,7 +209,9 @@ class ReportNotifier {
       if (ios != null) return (await ios.checkPermissions())?.isEnabled;
       final android = _plugin.resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>();
-      if (android != null) return android.areNotificationsEnabled();
+      // await: a returned-but-unawaited Future would escape the catch below
+      // (unawaited_return_in_try_block on newer Dart; CI caught it).
+      if (android != null) return await android.areNotificationsEnabled();
     } catch (_) {
       // A probe failure must never break Settings; "unknown" hides the hint.
     }
