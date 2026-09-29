@@ -2,9 +2,10 @@
 /// FAB → add flow. Also the startup-failure screen used by main.dart.
 library;
 
-import 'dart:async' show unawaited;
+import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:io' show File;
 
+import '../core/setup_link.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -157,11 +158,22 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       GlobalKey<HistoryScreenState>();
   final GlobalKey<BodyScreenState> _bodyKey = GlobalKey<BodyScreenState>();
 
+  StreamSubscription<Uri>? _linkSub;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     mealsChangedSignal.addListener(_onMealsChanged);
+    // One-click setup: a bitewise://setup link (QR, adb, devicectl) lands
+    // here whether the app was warm (stream) or cold (initial link).
+    _linkSub = widget.services.setupLinks?.listen(_onSetupLink);
+    final initial = widget.services.initialSetupLink;
+    if (initial != null) {
+      unawaited(initial().then((uri) {
+        if (uri != null && mounted) _onSetupLink(uri);
+      }, onError: (Object _) {}));
+    }
     // Onboarding: with no API key yet, land on Settings first.
     _index = widget.services.settings.apiKey.trim().isEmpty ? 3 : 0;
     // Debug-only: headless simulator screenshot runs force a tab by
@@ -190,6 +202,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                   analyzer: s.analyzer,
                   startClaudeAuth: s.startClaudeAuth,
                   completeClaudeAuth: s.completeClaudeAuth,
+            serverLoginState: s.serverLoginState,
                 ),
               ));
             });
@@ -201,9 +214,52 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _linkSub?.cancel();
     mealsChangedSignal.removeListener(_onMealsChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  /// A setup link arrived. Never applied silently: a crafted link could
+  /// point every future photo upload at a stranger's server, so the user
+  /// sees exactly what it names and confirms with one tap.
+  Future<void> _onSetupLink(Uri uri) async {
+    final l = context.l10n;
+    final link = parseSetupLink(uri);
+    if (link == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l.setupLinkInvalid)));
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(ctx.l10n.setupLinkTitle),
+        content: Text(ctx.l10n
+            .setupLinkBody(link.server, link.backend, link.keyTail)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.l10n.cancel)),
+          FilledButton(
+              key: const Key('setupLinkConfirm'),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(ctx.l10n.setupLinkConfirm)),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final s = widget.services.settings;
+    // Provider FIRST: the store routes apiKey to the active provider's slot.
+    await s.update(
+        provider: 'server',
+        serverBackend: link.backend,
+        serverBaseUrl: link.server);
+    await s.update(apiKey: link.key);
+    if (!mounted) return;
+    setState(() => _index = 3); // land on Settings, where the result shows
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(l.setupLinkDone)));
   }
 
   /// A meal was saved somewhere in the app (watcher, catch-up, coverage
@@ -288,6 +344,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             photoLibrary: s.photoLibrary,
             startClaudeAuth: s.startClaudeAuth,
             completeClaudeAuth: s.completeClaudeAuth,
+            serverLoginState: s.serverLoginState,
             openSystemSettings: s.openSystemSettings,
             notificationsEnabled: s.notificationsEnabled,
           ),

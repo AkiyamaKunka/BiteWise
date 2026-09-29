@@ -178,6 +178,19 @@ def backend_available(backend: str, for_photo: bool = False) -> bool:
     return True
 
 
+def login_state() -> str:
+    """Whether this machine holds a Claude-plan sign-in for the CLI.
+
+    'token' when the setup-token OAuth credential the phone's "Connect
+    Claude" flow mints is present in the environment, else 'none'. Surfaced
+    on /api/auth_check so a freshly provisioned phone can SEE that the
+    server is already signed in instead of implying a re-connect is needed
+    (2026-09-28). Presence, not validity: validity is proven by the next
+    real analysis, whose auth failure the app reports explicitly.
+    """
+    return "token" if (os.environ.get("CLAUDE_CODE_OAUTH_TOKEN") or "").strip() else "none"
+
+
 def backend_status() -> Dict[str, str]:
     """Per-backend one-phrase state for /api/auth_check — the phone's
     'Test connection' shows these so a missing server-side plan key is
@@ -420,7 +433,12 @@ def _finish_analysis(
     try:
         analysis = parse_ai_json(result_text)
     except (json.JSONDecodeError, ValueError) as e:
-        log.warning(f"Could not parse Claude analysis JSON: {e}")
+        # Keep the evidence: an empty reply, a rate-limit sentence and a
+        # truncated object all read as "Expecting value" — the snippet is
+        # what tells them apart next time (2026-09-29, 1 of 46 photos).
+        snippet = repr((result_text or "")[:200])
+        log.warning(f"Could not parse Claude analysis JSON: {e} "
+                    f"(len={len(result_text or '')}, head={snippet})")
         return None
     if not isinstance(analysis, dict):
         log.warning("Claude analysis JSON was not an object.")

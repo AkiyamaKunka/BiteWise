@@ -2263,6 +2263,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No macro breakdown recorded.'**
   String get macroNoBreakdown;
+
+  /// No description provided for @setupLinkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up server from this link?'**
+  String get setupLinkTitle;
+
+  /// No description provided for @setupLinkBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.'**
+  String setupLinkBody(String server, String backend, String keyTail);
+
+  /// No description provided for @setupLinkConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Use this server'**
+  String get setupLinkConfirm;
+
+  /// No description provided for @setupLinkDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Server configured — photos will be analyzed through your plan.'**
+  String get setupLinkDone;
+
+  /// No description provided for @setupLinkInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'That setup link is not valid.'**
+  String get setupLinkInvalid;
+
+  /// No description provided for @serverLoginRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Server Claude sign-in'**
+  String get serverLoginRow;
+
+  /// No description provided for @serverLoginOk.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in ✓'**
+  String get serverLoginOk;
+
+  /// No description provided for @serverLoginMissing.
+  ///
+  /// In en, this message translates to:
+  /// **'Not signed in'**
+  String get serverLoginMissing;
+
+  /// No description provided for @serverLoginUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not check'**
+  String get serverLoginUnknown;
+
+  /// No description provided for @serverLoginChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get serverLoginChecking;
+
+  /// No description provided for @serverLoginFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.'**
+  String get serverLoginFooter;
+
+  /// No description provided for @errServerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server could not analyze this photo this time — it is kept and retried later.'**
+  String get errServerFailed;
 }
 
 class _AppLocalizationsDelegate

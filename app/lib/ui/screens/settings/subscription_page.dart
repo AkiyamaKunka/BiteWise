@@ -5,6 +5,7 @@
 /// a plan is active.
 library;
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:url_launcher/url_launcher.dart' as launcher;
@@ -20,12 +21,14 @@ class SubscriptionProviderPage extends StatefulWidget {
     required this.settings,
     this.startClaudeAuth,
     this.completeClaudeAuth,
+    this.serverLoginState,
     this.openUrl,
   });
 
   final SettingsStore settings;
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
+  final Future<String?> Function()? serverLoginState;
   final Future<bool> Function(Uri url)? openUrl;
 
   @override
@@ -39,6 +42,12 @@ class _SubscriptionProviderPageState
   late final TextEditingController _serverUrlController;
   bool _authBusy = false;
 
+  /// 'token' | 'none' | null (unknown / not applicable). Fetched on open
+  /// and after a Connect round-trip, so the row never lies about state it
+  /// just changed.
+  String? _loginState;
+  bool _loginChecking = false;
+
   bool get _planActive => widget.settings.provider == 'server';
 
   @override
@@ -48,6 +57,28 @@ class _SubscriptionProviderPageState
         text: _planActive ? widget.settings.apiKey : '');
     _serverUrlController =
         TextEditingController(text: widget.settings.serverBaseUrl);
+    _refreshLoginState();
+  }
+
+  Future<void> _refreshLoginState() async {
+    final probe = widget.serverLoginState;
+    if (probe == null ||
+        !_planActive ||
+        widget.settings.serverBackend != 'claude') {
+      return;
+    }
+    setState(() => _loginChecking = true);
+    String? state;
+    try {
+      state = await probe();
+    } catch (_) {
+      state = null;
+    }
+    if (!mounted) return;
+    setState(() {
+      _loginState = state;
+      _loginChecking = false;
+    });
   }
 
   @override
@@ -144,6 +175,7 @@ class _SubscriptionProviderPageState
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
               error ?? context.l10n.connectDone)));
+      unawaited(_refreshLoginState());
     } finally {
       if (mounted) setState(() => _authBusy = false);
     }
@@ -328,6 +360,30 @@ class _SubscriptionProviderPageState
                     ],
                     apply: (v) => settings.update(serverEffort: v),
                   ),
+                ),
+              ],
+            ),
+          if (settings.serverBackend == 'claude' &&
+              (_loginChecking || _loginState != null))
+            GroupedSection(
+              footer: context.l10n.serverLoginFooter,
+              children: [
+                GroupedRow(
+                  key: const Key('serverLoginRow'),
+                  icon: _loginState == 'token'
+                      ? Icons.verified_user_outlined
+                      : Icons.person_off_outlined,
+                  iconColor: _loginState == 'token'
+                      ? scheme.primary
+                      : scheme.error,
+                  title: context.l10n.serverLoginRow,
+                  value: _loginChecking
+                      ? context.l10n.serverLoginChecking
+                      : switch (_loginState) {
+                          'token' => context.l10n.serverLoginOk,
+                          'none' => context.l10n.serverLoginMissing,
+                          _ => context.l10n.serverLoginUnknown,
+                        },
                 ),
               ],
             ),

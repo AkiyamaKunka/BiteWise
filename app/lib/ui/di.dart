@@ -8,6 +8,7 @@ import 'dart:async' show unawaited;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show compute;
 
 import 'package:permission_handler/permission_handler.dart';
@@ -61,6 +62,7 @@ class AppServices {
     // they exist regardless of the currently selected provider (the user
     // may re-connect Claude while temporarily on Gemini).
     final serverAnalyzer = ServerAnalyzer(settings);
+    final appLinks = AppLinks();
     final executor = createExecutor(dao, analyzer, settings);
     // The photo module reads lookbackDays through the live settings object,
     // so slider edits apply to the next scan without rewiring (spec §6.4).
@@ -189,6 +191,10 @@ class AppServices {
       photoLibrary: photoLibrary,
       startClaudeAuth: serverAnalyzer.startClaudeAuth,
       completeClaudeAuth: serverAnalyzer.completeClaudeAuth,
+      serverLoginState: serverAnalyzer.serverLoginState,
+      // One-click setup links (bitewise://setup?...), see setup_link.dart.
+      setupLinks: appLinks.uriLinkStream,
+      initialSetupLink: appLinks.getInitialLink,
       notificationsEnabled: notifier.notificationsEnabled,
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler

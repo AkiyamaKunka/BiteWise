@@ -47,6 +47,14 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- One-click server setup link (bitewise://setup?...): the
+                 provisioning QR / adb / devicectl path (2026-09-28). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="bitewise" android:host="setup"/>
+            </intent-filter>
             <!-- Share-sheet photo intake (spec §6, deliberate re-send path):
                  receive_sharing_intent delivers images shared to the app. -->
             <intent-filter>
