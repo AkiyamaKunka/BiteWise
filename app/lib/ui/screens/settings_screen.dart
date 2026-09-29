@@ -46,6 +46,10 @@ class SettingsScreen extends StatefulWidget {
   /// stops re-showing the photo-permission dialog. Null hides the action.
   final Future<void> Function()? openSystemSettings;
 
+  /// Whether the OS will deliver notifications; null = unknown / not
+  /// probed (tests). False surfaces the daily-summary remedy row.
+  final Future<bool?> Function()? notificationsEnabled;
+
   /// Coverage-audit pieces; all three null in tests → the tile is hidden.
   final CoverageAuditor? coverage;
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
@@ -65,13 +69,15 @@ class SettingsScreen extends StatefulWidget {
     this.completeClaudeAuth,
     this.openUrl,
     this.openSystemSettings,
+    this.notificationsEnabled,
   });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+class _SettingsScreenState extends State<SettingsScreen>
+    with WidgetsBindingObserver {
   late final TextEditingController _profileController;
   final TextEditingController _importController = TextEditingController();
   late int _lookbackDays;
@@ -79,6 +85,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _watcherEnabled;
   bool _exporting = false;
   bool _importing = false;
+
+  /// True only when the OS says notifications are OFF for this app. On iOS
+  /// a declined permission makes every scheduled summary vanish silently,
+  /// so the report section says so and offers the only remedy (system
+  /// settings). Unknown/null keeps the row hidden.
+  bool _notificationsOff = false;
 
   @override
   void initState() {
@@ -88,10 +100,35 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _lookbackDays = s.lookbackDays.clamp(1, 30); // spec §6.4 range
     _reportTime = s.reportTime.isEmpty ? '21:00' : s.reportTime;
     _watcherEnabled = s.watcherEnabled;
+    WidgetsBinding.instance.addObserver(this);
+    _probeNotifications();
+  }
+
+  /// Re-probe on resume: the user comes BACK from system settings to this
+  /// very screen (it lives in the IndexedStack), so the row must clear
+  /// itself without a restart.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _probeNotifications();
+  }
+
+  Future<void> _probeNotifications() async {
+    final probe = widget.notificationsEnabled;
+    if (probe == null) return;
+    bool? enabled;
+    try {
+      enabled = await probe();
+    } catch (_) {
+      return; // unknown: keep the row hidden rather than cry wolf
+    }
+    if (!mounted) return;
+    final off = enabled == false;
+    if (off != _notificationsOff) setState(() => _notificationsOff = off);
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _profileController.dispose();
     _importController.dispose();
     super.dispose();
@@ -491,6 +528,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               value: _reportTime,
               onTap: _pickReportTime,
             ),
+            if (_notificationsOff) _notificationsOffRow(theme),
             GroupedRow(
               key: const Key('calorieGoalTile'),
               icon: Icons.flag_outlined,
@@ -504,6 +542,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ],
         ),
   ];
+
+  /// Shown only when the OS reports notifications OFF: without this the
+  /// daily summary simply never arrives and nothing on the phone says why.
+  Widget _notificationsOffRow(ThemeData theme) {
+    final open = widget.openSystemSettings;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.notifications_off_outlined,
+                  size: 18, color: theme.colorScheme.error),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  context.l10n.notificationsOffHint,
+                  key: const Key('notificationsOffHint'),
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.error),
+                ),
+              ),
+            ],
+          ),
+          if (open != null) ...[
+            const SizedBox(height: 8),
+            FilledButton.tonal(
+              key: const Key('notificationsOffOpenSettings'),
+              onPressed: () => open(),
+              child: Text(context.l10n.openSystemSettings),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
 
   /// The daily goal the coach notification measures against; empty clears
   /// it and the summary falls back to the typical-day median.

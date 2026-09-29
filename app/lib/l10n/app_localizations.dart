@@ -1777,6 +1777,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Estimate this meal'**
   String get describeEstimate;
+
+  /// No description provided for @notificationsOffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications are off — the daily summary can\'t be delivered.'**
+  String get notificationsOffHint;
 }
 
 class _AppLocalizationsDelegate

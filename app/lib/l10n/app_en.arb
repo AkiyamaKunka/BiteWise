@@ -575,5 +575,6 @@
   "describeHint": "e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"",
   "describeHelp": "Any language works. You will see the estimate and can fix it before it is saved.",
   "describeEstimating": "Estimating…",
-  "describeEstimate": "Estimate this meal"
+  "describeEstimate": "Estimate this meal",
+  "notificationsOffHint": "Notifications are off — the daily summary can't be delivered."
 }

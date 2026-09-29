@@ -943,4 +943,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get describeEstimate => '估算这一餐';
+
+  @override
+  String get notificationsOffHint => '通知已关闭 —— 每日总结无法送达。';
 }

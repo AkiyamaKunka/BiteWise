@@ -31,6 +31,7 @@ class ReportNotifier {
     DateTime Function()? clock,
     NotificationPresenter? presenter,
     NotificationScheduler? scheduler,
+    Future<bool?> Function()? enabledProbe,
     Future<String?> Function(DateTime slotDate)? dailyBody,
     int? mealCardIdSeed,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
@@ -39,6 +40,8 @@ class ReportNotifier {
         _presenter = presenter,
         // ignore: prefer_initializing_formals
         _scheduler = scheduler,
+        // ignore: prefer_initializing_formals
+        _enabledProbe = enabledProbe,
         // ignore: prefer_initializing_formals
         _dailyBody = dailyBody {
     // Each background run constructs a FRESH notifier; a fixed 100-base
@@ -57,6 +60,7 @@ class ReportNotifier {
   final DateTime Function() _clock;
   final NotificationPresenter? _presenter;
   final NotificationScheduler? _scheduler;
+  final Future<bool?> Function()? _enabledProbe;
 
   static const NotificationDetails _details = NotificationDetails(
     android: AndroidNotificationDetails(
@@ -190,6 +194,28 @@ class ReportNotifier {
       }
     }
     await _present(dailyReportNotificationId, '📊 Daily Calorie Report', body);
+  }
+
+  /// Whether the OS will show this app's notifications at all. Null when
+  /// the platform cannot say. On iOS a declined permission makes every
+  /// scheduled summary vanish silently — Settings uses this to say so
+  /// instead of letting the user wonder (2026-09-28).
+  Future<bool?> notificationsEnabled() async {
+    final probe = _enabledProbe;
+    if (probe != null) return probe();
+    try {
+      final ios = _plugin.resolvePlatformSpecificImplementation<
+          IOSFlutterLocalNotificationsPlugin>();
+      if (ios != null) return (await ios.checkPermissions())?.isEnabled;
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      // await: a returned-but-unawaited Future would escape the catch below
+      // (unawaited_return_in_try_block on newer Dart; CI caught it).
+      if (android != null) return await android.areNotificationsEnabled();
+    } catch (_) {
+      // A probe failure must never break Settings; "unknown" hides the hint.
+    }
+    return null;
   }
 
   /// Hand the daily summary to the OS to deliver at [when] — the iOS path.

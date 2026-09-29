@@ -189,6 +189,7 @@ class AppServices {
       photoLibrary: photoLibrary,
       startClaudeAuth: serverAnalyzer.startClaudeAuth,
       completeClaudeAuth: serverAnalyzer.completeClaudeAuth,
+      notificationsEnabled: notifier.notificationsEnabled,
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },
