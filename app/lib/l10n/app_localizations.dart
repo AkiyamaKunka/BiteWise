@@ -2329,6 +2329,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.'**
   String get serverLoginFooter;
+
+  /// No description provided for @errServerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server could not analyze this photo this time — it is kept and retried later.'**
+  String get errServerFailed;
 }
 
 class _AppLocalizationsDelegate

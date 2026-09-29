@@ -1293,4 +1293,7 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get serverLoginFooter =>
       '已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。';
+
+  @override
+  String get errServerFailed => '你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。';
 }

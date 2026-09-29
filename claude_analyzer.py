@@ -433,7 +433,12 @@ def _finish_analysis(
     try:
         analysis = parse_ai_json(result_text)
     except (json.JSONDecodeError, ValueError) as e:
-        log.warning(f"Could not parse Claude analysis JSON: {e}")
+        # Keep the evidence: an empty reply, a rate-limit sentence and a
+        # truncated object all read as "Expecting value" — the snippet is
+        # what tells them apart next time (2026-09-29, 1 of 46 photos).
+        snippet = repr((result_text or "")[:200])
+        log.warning(f"Could not parse Claude analysis JSON: {e} "
+                    f"(len={len(result_text or '')}, head={snippet})")
         return None
     if not isinstance(analysis, dict):
         log.warning("Claude analysis JSON was not an object.")

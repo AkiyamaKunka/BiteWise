@@ -1389,4 +1389,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get serverLoginFooter =>
       'Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.';
+
+  @override
+  String get errServerFailed =>
+      'Your server could not analyze this photo this time — it is kept and retried later.';
 }
