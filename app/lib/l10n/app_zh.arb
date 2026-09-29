@@ -367,8 +367,9 @@
   "setupLinkDone": "服务器已配置 —— 照片将通过你的套餐分析。",
   "setupLinkInvalid": "这个配置链接无效。",
   "serverLoginRow": "服务器 Claude 登录",
-  "serverLoginOk": "已登录 ✓ —— 无需再连接",
-  "serverLoginMissing": "未登录 —— 请用下方“连接 Claude”",
-  "serverLoginUnknown": "无法检查 —— 服务器不可达或密钥被拒",
-  "serverLoginChecking": "检查中…"
+  "serverLoginOk": "已登录 ✓",
+  "serverLoginMissing": "未登录",
+  "serverLoginUnknown": "无法检查",
+  "serverLoginChecking": "检查中…",
+  "serverLoginFooter": "已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。"
 }

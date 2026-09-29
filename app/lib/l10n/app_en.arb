@@ -871,8 +871,9 @@
   "setupLinkDone": "Server configured — photos will be analyzed through your plan.",
   "setupLinkInvalid": "That setup link is not valid.",
   "serverLoginRow": "Server Claude sign-in",
-  "serverLoginOk": "Signed in ✓ — nothing to connect",
-  "serverLoginMissing": "Not signed in — use Connect Claude below",
-  "serverLoginUnknown": "Could not check — server unreachable or key rejected",
-  "serverLoginChecking": "Checking…"
+  "serverLoginOk": "Signed in ✓",
+  "serverLoginMissing": "Not signed in",
+  "serverLoginUnknown": "Could not check",
+  "serverLoginChecking": "Checking…",
+  "serverLoginFooter": "Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key."
 }

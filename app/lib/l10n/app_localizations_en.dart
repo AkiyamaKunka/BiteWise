@@ -1375,15 +1375,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverLoginRow => 'Server Claude sign-in';
 
   @override
-  String get serverLoginOk => 'Signed in ✓ — nothing to connect';
+  String get serverLoginOk => 'Signed in ✓';
 
   @override
-  String get serverLoginMissing => 'Not signed in — use Connect Claude below';
+  String get serverLoginMissing => 'Not signed in';
 
   @override
-  String get serverLoginUnknown =>
-      'Could not check — server unreachable or key rejected';
+  String get serverLoginUnknown => 'Could not check';
 
   @override
   String get serverLoginChecking => 'Checking…';
+
+  @override
+  String get serverLoginFooter =>
+      'Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.';
 }

@@ -366,6 +366,7 @@ class _SubscriptionProviderPageState
           if (settings.serverBackend == 'claude' &&
               (_loginChecking || _loginState != null))
             GroupedSection(
+              footer: context.l10n.serverLoginFooter,
               children: [
                 GroupedRow(
                   key: const Key('serverLoginRow'),

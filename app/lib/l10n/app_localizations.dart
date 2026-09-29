@@ -2303,19 +2303,19 @@ abstract class AppLocalizations {
   /// No description provided for @serverLoginOk.
   ///
   /// In en, this message translates to:
-  /// **'Signed in ✓ — nothing to connect'**
+  /// **'Signed in ✓'**
   String get serverLoginOk;
 
   /// No description provided for @serverLoginMissing.
   ///
   /// In en, this message translates to:
-  /// **'Not signed in — use Connect Claude below'**
+  /// **'Not signed in'**
   String get serverLoginMissing;
 
   /// No description provided for @serverLoginUnknown.
   ///
   /// In en, this message translates to:
-  /// **'Could not check — server unreachable or key rejected'**
+  /// **'Could not check'**
   String get serverLoginUnknown;
 
   /// No description provided for @serverLoginChecking.
@@ -2323,6 +2323,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Checking…'**
   String get serverLoginChecking;
+
+  /// No description provided for @serverLoginFooter.
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.'**
+  String get serverLoginFooter;
 }
 
 class _AppLocalizationsDelegate

@@ -1279,14 +1279,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get serverLoginRow => '服务器 Claude 登录';
 
   @override
-  String get serverLoginOk => '已登录 ✓ —— 无需再连接';
+  String get serverLoginOk => '已登录 ✓';
 
   @override
-  String get serverLoginMissing => '未登录 —— 请用下方“连接 Claude”';
+  String get serverLoginMissing => '未登录';
 
   @override
-  String get serverLoginUnknown => '无法检查 —— 服务器不可达或密钥被拒';
+  String get serverLoginUnknown => '无法检查';
 
   @override
   String get serverLoginChecking => '检查中…';
+
+  @override
+  String get serverLoginFooter =>
+      '已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。';
 }
