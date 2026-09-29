@@ -40,6 +40,7 @@ class SettingsScreen extends StatefulWidget {
   /// button; [openUrl] is injectable so widget tests need no url_launcher.
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
+  final Future<String?> Function()? serverLoginState;
   final Future<bool> Function(Uri url)? openUrl;
 
   /// Opens the OS app-settings page — the only remedy once the system
@@ -67,6 +68,7 @@ class SettingsScreen extends StatefulWidget {
     this.photoLibrary,
     this.startClaudeAuth,
     this.completeClaudeAuth,
+    this.serverLoginState,
     this.openUrl,
     this.openSystemSettings,
     this.notificationsEnabled,
@@ -406,6 +408,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                     analyzer: widget.analyzer,
                     startClaudeAuth: widget.startClaudeAuth,
                     completeClaudeAuth: widget.completeClaudeAuth,
+                    serverLoginState: widget.serverLoginState,
                     openUrl: widget.openUrl,
                   ),
                 ));

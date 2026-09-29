@@ -1352,4 +1352,38 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get macroNoBreakdown => 'No macro breakdown recorded.';
+
+  @override
+  String get setupLinkTitle => 'Set up server from this link?';
+
+  @override
+  String setupLinkBody(String server, String backend, String keyTail) {
+    return 'Server: $server\\nPlan: $backend\\nUpload key: ••••$keyTail\\n\\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.';
+  }
+
+  @override
+  String get setupLinkConfirm => 'Use this server';
+
+  @override
+  String get setupLinkDone =>
+      'Server configured — photos will be analyzed through your plan.';
+
+  @override
+  String get setupLinkInvalid => 'That setup link is not valid.';
+
+  @override
+  String get serverLoginRow => 'Server Claude sign-in';
+
+  @override
+  String get serverLoginOk => 'Signed in ✓ — nothing to connect';
+
+  @override
+  String get serverLoginMissing => 'Not signed in — use Connect Claude below';
+
+  @override
+  String get serverLoginUnknown =>
+      'Could not check — server unreachable or key rejected';
+
+  @override
+  String get serverLoginChecking => 'Checking…';
 }

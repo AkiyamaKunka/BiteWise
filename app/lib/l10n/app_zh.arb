@@ -360,5 +360,15 @@
   "covLoggedAsMeals": "已记录 {count} 餐",
   "covNotFoodCount": "{count} 张非食物",
   "covFailedCount": "{count} 张失败",
-  "macroNoBreakdown": "没有记录营养素分布。"
+  "macroNoBreakdown": "没有记录营养素分布。",
+  "setupLinkTitle": "通过这个链接配置服务器？",
+  "setupLinkBody": "服务器：{server}\\n套餐：{backend}\\n上传密钥：••••{keyTail}\\n\\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。",
+  "setupLinkConfirm": "使用这台服务器",
+  "setupLinkDone": "服务器已配置 —— 照片将通过你的套餐分析。",
+  "setupLinkInvalid": "这个配置链接无效。",
+  "serverLoginRow": "服务器 Claude 登录",
+  "serverLoginOk": "已登录 ✓ —— 无需再连接",
+  "serverLoginMissing": "未登录 —— 请用下方“连接 Claude”",
+  "serverLoginUnknown": "无法检查 —— 服务器不可达或密钥被拒",
+  "serverLoginChecking": "检查中…"
 }

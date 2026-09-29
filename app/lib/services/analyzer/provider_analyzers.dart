@@ -868,6 +868,33 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         message: error);
   }
 
+  /// Whether the SERVER already holds a Claude-plan sign-in — the fact a
+  /// freshly provisioned phone needs, so it stops implying "Connect Claude"
+  /// is required (2026-09-28). 'token' | 'none'; null when the server is
+  /// unreachable, rejects the key, or predates the field (older server).
+  Future<String?> serverLoginState() async {
+    final base = settings.serverBaseUrl;
+    final key = (settings.serverApiKey ?? '').trim();
+    if (base.isEmpty || key.isEmpty) return null;
+    try {
+      final req = http.Request('POST', _uri('/api/auth_check'))
+        ..headers['content-type'] = 'application/json'
+        ..headers['X-API-Key'] = key
+        ..headers['X-Client-Platform'] = 'app'
+        ..body = '{}';
+      final resp = await client
+          .send(req)
+          .then(http.Response.fromStream)
+          .timeout(deadline);
+      if (resp.statusCode != 200) return null;
+      final decoded = jsonDecode(resp.body);
+      final v = decoded is Map ? decoded['claude_login'] : null;
+      return (v == 'token' || v == 'none') ? v as String : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// /api/auth_check proves "address reachable + key accepted" with no side
   /// effects and no CLI run. Deliberately NOT /ping: that is the Termux
   /// watcher's liveness channel, and stamping it from here would forge
