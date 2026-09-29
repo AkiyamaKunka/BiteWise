@@ -882,10 +882,13 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         ..headers['X-API-Key'] = key
         ..headers['X-Client-Platform'] = 'app'
         ..body = '{}';
+      // A short cap, NOT the 5-minute analysis deadline: this row is read
+      // while the page is open, and against an unreachable host it sat on
+      // "checking…" for the whole deadline (seen on the simulator).
       final resp = await client
           .send(req)
           .then(http.Response.fromStream)
-          .timeout(deadline);
+          .timeout(const Duration(seconds: 8));
       if (resp.statusCode != 200) return null;
       final decoded = jsonDecode(resp.body);
       final v = decoded is Map ? decoded['claude_login'] : null;
