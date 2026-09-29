@@ -362,7 +362,7 @@
   "covFailedCount": "{count} 张失败",
   "macroNoBreakdown": "没有记录营养素分布。",
   "setupLinkTitle": "通过这个链接配置服务器？",
-  "setupLinkBody": "服务器：{server}\\n套餐：{backend}\\n上传密钥：••••{keyTail}\\n\\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。",
+  "setupLinkBody": "服务器：{server}\n套餐：{backend}\n上传密钥：••••{keyTail}\n\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。",
   "setupLinkConfirm": "使用这台服务器",
   "setupLinkDone": "服务器已配置 —— 照片将通过你的套餐分析。",
   "setupLinkInvalid": "这个配置链接无效。",

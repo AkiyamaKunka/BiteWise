@@ -1358,7 +1358,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String setupLinkBody(String server, String backend, String keyTail) {
-    return 'Server: $server\\nPlan: $backend\\nUpload key: ••••$keyTail\\n\\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.';
+    return 'Server: $server\nPlan: $backend\nUpload key: ••••$keyTail\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.';
   }
 
   @override

@@ -1263,7 +1263,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String setupLinkBody(String server, String backend, String keyTail) {
-    return '服务器：$server\\n套餐：$backend\\n上传密钥：••••$keyTail\\n\\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。';
+    return '服务器：$server\n套餐：$backend\n上传密钥：••••$keyTail\n\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。';
   }
 
   @override

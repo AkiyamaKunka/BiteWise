@@ -2273,7 +2273,7 @@ abstract class AppLocalizations {
   /// No description provided for @setupLinkBody.
   ///
   /// In en, this message translates to:
-  /// **'Server: {server}\\nPlan: {backend}\\nUpload key: ••••{keyTail}\\n\\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.'**
+  /// **'Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.'**
   String setupLinkBody(String server, String backend, String keyTail);
 
   /// No description provided for @setupLinkConfirm.

@@ -853,7 +853,7 @@
   },
   "macroNoBreakdown": "No macro breakdown recorded.",
   "setupLinkTitle": "Set up server from this link?",
-  "setupLinkBody": "Server: {server}\\nPlan: {backend}\\nUpload key: ••••{keyTail}\\n\\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.",
+  "setupLinkBody": "Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.",
   "@setupLinkBody": {
     "placeholders": {
       "server": {
