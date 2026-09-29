@@ -870,8 +870,10 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
 
   /// Whether the SERVER already holds a Claude-plan sign-in — the fact a
   /// freshly provisioned phone needs, so it stops implying "Connect Claude"
-  /// is required (2026-09-28). 'token' | 'none'; null when the server is
-  /// unreachable, rejects the key, or predates the field (older server).
+  /// is required (2026-09-28). 'token' | 'none' from the server;
+  /// 'unreachable' / 'rejected' when it could not be asked (the page shows
+  /// "could not check"); null ONLY for a 200 without the field — an older
+  /// server — where the page hides the row rather than guess.
   Future<String?> serverLoginState() async {
     final base = settings.serverBaseUrl;
     final key = (settings.serverApiKey ?? '').trim();
@@ -889,12 +891,13 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           .send(req)
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 8));
-      if (resp.statusCode != 200) return null;
+      if (resp.statusCode == 401 || resp.statusCode == 403) return 'rejected';
+      if (resp.statusCode != 200) return 'unreachable';
       final decoded = jsonDecode(resp.body);
       final v = decoded is Map ? decoded['claude_login'] : null;
       return (v == 'token' || v == 'none') ? v as String : null;
     } catch (_) {
-      return null;
+      return 'unreachable';
     }
   }
 
