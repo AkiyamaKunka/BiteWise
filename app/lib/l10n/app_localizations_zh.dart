@@ -946,4 +946,315 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationsOffHint => '通知已关闭 —— 每日总结无法送达。';
+
+  @override
+  String outcomeSavedMsg(String summary) {
+    return '已记录：$summary';
+  }
+
+  @override
+  String outcomeLeftoverMsg(String summary) {
+    return '已扣除剩菜：$summary';
+  }
+
+  @override
+  String get outcomeNotFoodMsg => '这张照片里没有识别到食物。';
+
+  @override
+  String get outcomeDuplicateMsg => '看起来和几分钟前记录的一张照片重复了。';
+
+  @override
+  String get outcomeAlreadyTrackedMsg => '这张照片已经记录过了。';
+
+  @override
+  String get errNoApiKey => '当前服务还没有设置 API Key —— 请在设置里添加。';
+
+  @override
+  String get errNoServerKey => '还没有设置服务器地址或上传 Key —— 请在设置里添加。';
+
+  @override
+  String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
+
+  @override
+  String get errRateLimited => '服务正在限流 —— 照片已保留，稍后会自动重试。';
+
+  @override
+  String get errQuotaPaused => '分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。';
+
+  @override
+  String get errNetwork => '连不上服务（网络或服务问题）。照片已保留，稍后会自动重试。';
+
+  @override
+  String get errBadModel => '服务不接受这个模型 —— 请在设置里检查模型名。';
+
+  @override
+  String get errBadResponse => 'AI 返回的内容应用无法使用。';
+
+  @override
+  String get errBadPhoto => '无法处理这张照片（解码失败）。';
+
+  @override
+  String get errServerBusy => '你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。';
+
+  @override
+  String get mealCardAutoTitle => '🍽️ 已自动记录一餐';
+
+  @override
+  String dayLoadFailed(String error) {
+    return '无法加载这一天：$error';
+  }
+
+  @override
+  String get dayEmpty => '这一天还没有记录。点 + 添加一餐。';
+
+  @override
+  String get notFoodTag => '非食物';
+
+  @override
+  String fixRequestFailed(String error) {
+    return '请求失败：$error';
+  }
+
+  @override
+  String get fixTitle => '修改某餐';
+
+  @override
+  String get fixIntro =>
+      '说出要改、要挪或要删的内容 —— 用你习惯的方式描述那一餐（\"那碗面\"、\"早餐\"、\"600 千卡那个\"），任何语言都可以。';
+
+  @override
+  String get fixNamingTip => '最稳妥的是说出食物名 —— 餐次编号是按最近 7 天算的，不只是今天。';
+
+  @override
+  String get fixLabel => '要改什么？';
+
+  @override
+  String get fixHint => '例如：\"那碗面其实是烧鸭饭\"\n或 \"删除刚才那杯咖啡\"';
+
+  @override
+  String get working => '处理中…';
+
+  @override
+  String get fixApply => '应用修改';
+
+  @override
+  String get fixAppliedHeader => '本次已应用';
+
+  @override
+  String editorSaveFailed(String error) {
+    return '保存失败：$error';
+  }
+
+  @override
+  String editorDeleteFailed(String error) {
+    return '删除失败：$error';
+  }
+
+  @override
+  String get editorDeleteTitle => '删除这一餐？';
+
+  @override
+  String get editorDeleteBody => '它会从历史和总计中移除。此操作无法撤销。';
+
+  @override
+  String get editorTitleAdd => '添加一餐';
+
+  @override
+  String get editorTitleEdit => '编辑这一餐';
+
+  @override
+  String get editorDeleteTooltip => '删除这一餐';
+
+  @override
+  String get editorDescriptionLabel => '吃了什么？';
+
+  @override
+  String get editorTotalsHeader => '总计';
+
+  @override
+  String get editorCaloriesLabel => '热量（千卡）';
+
+  @override
+  String get editorItemsHeader => '食物';
+
+  @override
+  String get editorTotalsDerivedHint => '总计随下面的食物变化';
+
+  @override
+  String get editorAddItem => '添加食物';
+
+  @override
+  String get editorAdd => '添加';
+
+  @override
+  String get editorItemLabel => '食物';
+
+  @override
+  String get editorRemoveItemTooltip => '移除';
+
+  @override
+  String get covPermissionRequired => '检查需要照片权限。';
+
+  @override
+  String covCheckFailed(String error) {
+    return '检查失败：$error';
+  }
+
+  @override
+  String get covNoAnalysis => '现在无法分析 —— 请为当前服务添加 Key，或等待额度暂停结束。';
+
+  @override
+  String covBulkTitle(String verb, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 张照片',
+    );
+    return '$verb $_temp0？';
+  }
+
+  @override
+  String covBulkBody(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes 分钟',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 次模型调用',
+    );
+    return '每张照片会依次单独分析 —— 预计约 $_temp0、$_temp1。你可以离开此页面，处理会继续。';
+  }
+
+  @override
+  String get covPhotoUnreadable => '这张照片已无法读取。';
+
+  @override
+  String get covTitle => '照片覆盖检查';
+
+  @override
+  String covIntro(int days) {
+    return '检查最近 $days 天的每张照片是否已记录：只做指纹比对 —— 检查本身不会把任何照片发给 AI。';
+  }
+
+  @override
+  String get covChecking => '检查中…';
+
+  @override
+  String get covRun => '开始检查';
+
+  @override
+  String covNeverScanned(int count) {
+    return '从未扫描（$count）';
+  }
+
+  @override
+  String get covLogAll => '全部记录';
+
+  @override
+  String covMoreLogAll(int count) {
+    return '…还有 $count 张 —— \"全部记录\" 会覆盖全部。';
+  }
+
+  @override
+  String covJudgedNotFood(int count) {
+    return '判定为\"非食物\"（$count）';
+  }
+
+  @override
+  String get covAnalyzeAgain => '重新分析';
+
+  @override
+  String get covNotFoodHelp =>
+      '饮品、订单截图和少见的菜会落在这里。\"重新分析\" 会再问一次 AI（规则改进后很有用）；点某一行可以手动录入。';
+
+  @override
+  String covFailedEarlier(int count) {
+    return '之前失败（$count）';
+  }
+
+  @override
+  String get covRetryAll => '全部重试';
+
+  @override
+  String covMoreRetryAll(int count) {
+    return '…还有 $count 张 —— \"全部重试\" 会覆盖全部。';
+  }
+
+  @override
+  String covAllAccounted(int count) {
+    return '全部 $count 张照片都已记录。';
+  }
+
+  @override
+  String covSummary(int scanned, int missing) {
+    return '已检查 $scanned 张 —— $missing 张从未扫描。';
+  }
+
+  @override
+  String get covLimitedAccess =>
+      '注意：应用只有部分照片权限 —— 只能检查被选中的照片。在系统设置里授予完全访问才能得到完整结果。';
+
+  @override
+  String get covTruncated => '注意：这个窗口内超过 2000 张照片 —— 更早的没有检查。缩短窗口可得到完整结果。';
+
+  @override
+  String get covVerbLog => '记录';
+
+  @override
+  String get covVerbRetry => '重试';
+
+  @override
+  String get covProgLogging => '记录中';
+
+  @override
+  String get covProgReanalyzing => '重新分析中';
+
+  @override
+  String get covProgRetrying => '重试中';
+
+  @override
+  String covStopped(String label, int attempted, int total, int remaining) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining 张',
+    );
+    return '$label在第 $attempted/$total 张后停止：现在无法分析（额度暂停或缺少 Key）。剩下的 $_temp0没有处理 —— 稍后再运行一次。';
+  }
+
+  @override
+  String covDone(String label, int count) {
+    return '$label完成（$count 张照片）。';
+  }
+
+  @override
+  String covDoneFailures(String label, int failures, int count) {
+    return '$label完成 —— $count 张中有 $failures 张无法处理（已保留在“之前失败”列表中以便重试）。';
+  }
+
+  @override
+  String covDaysShort(int days) {
+    return '$days 天';
+  }
+
+  @override
+  String covLoggedAsMeals(int count) {
+    return '已记录 $count 餐';
+  }
+
+  @override
+  String covNotFoodCount(int count) {
+    return '$count 张非食物';
+  }
+
+  @override
+  String covFailedCount(int count) {
+    return '$count 张失败';
+  }
+
+  @override
+  String get macroNoBreakdown => '没有记录营养素分布。';
 }

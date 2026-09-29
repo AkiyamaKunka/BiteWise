@@ -308,7 +308,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _errors = ['Could not save: $e'];
+        _errors = [context.l10n.editorSaveFailed('$e')];
       });
     }
   }
@@ -319,18 +319,16 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete this meal?'),
-        content: const Text(
-            'It will be removed from your history and totals. This cannot '
-            'be undone.'),
+        title: Text(ctx.l10n.editorDeleteTitle),
+        content: Text(ctx.l10n.editorDeleteBody),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
+              child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('confirmDeleteMeal'),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Delete')),
+              child: Text(ctx.l10n.delete)),
         ],
       ),
     );
@@ -344,7 +342,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       if (!mounted) return;
       setState(() {
         _saving = false;
-        _errors = ['Could not delete: $e'];
+        _errors = [context.l10n.editorDeleteFailed('$e')];
       });
     }
   }
@@ -409,12 +407,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             0;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.isNew ? 'Add meal' : 'Edit meal'),
+        title: Text(widget.isNew
+            ? context.l10n.editorTitleAdd
+            : context.l10n.editorTitleEdit),
         actions: [
           if (!widget.isNew)
             IconButton(
               key: const Key('deleteMealButton'),
-              tooltip: 'Delete meal',
+              tooltip: context.l10n.editorDeleteTooltip,
               icon: const Icon(Icons.delete_outline),
               onPressed: _saving ? null : _delete,
             ),
@@ -445,9 +445,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             key: const Key('editorDescription'),
             controller: _desc,
             textCapitalization: TextCapitalization.sentences,
-            decoration: const InputDecoration(
-              labelText: 'What was it?',
-              border: OutlineInputBorder(),
+            decoration: InputDecoration(
+              labelText: context.l10n.editorDescriptionLabel,
+              border: const OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
@@ -467,18 +467,19 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                   key: const Key('editorTimeButton'),
                   onPressed: _pickTime,
                   icon: const Icon(Icons.schedule_outlined, size: 18),
-                  label: Text(_draft.time),
+                  // Locale clock (24h in zh), like every other time in the UI.
+                  label: Text(context.clock(_draft.time)),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 20),
-          Text('Totals', style: theme.textTheme.titleSmall),
+          Text(context.l10n.editorTotalsHeader, style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           _NumberField(
             fieldKey: const Key('editorCalories'),
             controller: _cal,
-            label: 'Calories (kcal)',
+            label: context.l10n.editorCaloriesLabel,
           ),
           const SizedBox(height: 8),
           Row(
@@ -507,7 +508,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           ),
           const SizedBox(height: 16),
           // Live composition of what's typed above.
-          Text('~${formatKcal(kcalNow)} kcal',
+          Text('~${context.l10n.kcalAmount(formatKcal(kcalNow))}',
               style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
           MacroBreakdownBar(
@@ -520,9 +521,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             children: [
               Expanded(
                   child:
-                      Text('Items', style: theme.textTheme.titleSmall)),
+                      Text(context.l10n.editorItemsHeader, style: theme.textTheme.titleSmall)),
               if (_totalsDerived)
-                Text('Totals follow these items',
+                Text(context.l10n.editorTotalsDerivedHint,
                     key: const Key('totalsDerivedHint'),
                     style: theme.textTheme.bodySmall
                         ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
@@ -553,7 +554,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                 _recomputeTotalsFromItems();
               },
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Add item'),
+              label: Text(context.l10n.editorAddItem),
             ),
           ),
         ],
@@ -565,7 +566,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             ? const SizedBox(
                 width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
             : const Icon(Icons.check),
-        label: Text(widget.isNew ? 'Add' : 'Save'),
+        label: Text(widget.isNew ? context.l10n.editorAdd : context.l10n.save),
       ),
     );
   }
@@ -623,16 +624,16 @@ class _ItemRow extends StatelessWidget {
                   child: TextField(
                     key: Key('itemName$index'),
                     controller: ctrls.name,
-                    decoration: const InputDecoration(
-                      labelText: 'Item',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: context.l10n.editorItemLabel,
+                      border: const OutlineInputBorder(),
                       isDense: true,
                     ),
                   ),
                 ),
                 IconButton(
                   key: Key('removeItem$index'),
-                  tooltip: 'Remove item',
+                  tooltip: context.l10n.editorRemoveItemTooltip,
                   icon: const Icon(Icons.close),
                   onPressed: onRemove,
                 ),

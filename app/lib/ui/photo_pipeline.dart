@@ -14,6 +14,7 @@ import 'package:intl/intl.dart';
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
+import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
 import '../services/analyzer/normalize.dart' show makeMealThumb;
 import '../services/photo/filename_dates.dart'
@@ -45,9 +46,22 @@ class PhotoOutcome {
   /// the photo stays eligible and a later scan re-offers it. Consumers use
   /// this to hold watermarks/seen-sets open instead of marking coverage.
   final bool retryable;
-  final String message; // user-facing summary
+  final String message; // user-facing summary (English, parity-pinned)
+
+  /// Why a [PhotoOutcomeKind.failed] happened, classified for localization;
+  /// [AnalysisErrorKind.none] for every other kind.
+  final AnalysisErrorKind errorKind;
+
+  /// The variable part the UI needs to re-say [message] in another
+  /// language: the meal summary for saved/leftover, the raw error for
+  /// failed. Null means "nothing beyond the kind" — the UI then falls back
+  /// to [message] verbatim.
+  final String? detail;
   const PhotoOutcome(this.kind, this.message,
-      {this.analysis, this.retryable = false});
+      {this.analysis,
+      this.retryable = false,
+      this.errorKind = AnalysisErrorKind.none,
+      this.detail});
 }
 
 class PhotoPipeline {
@@ -181,13 +195,17 @@ class PhotoPipeline {
           // photo. Burning it to 'failed' would drop it forever on the
           // automated path (watch intake never reclaims, spec §2.3).
           await dao.releasePhotoHash(hash);
-          return PhotoOutcome(PhotoOutcomeKind.failed, why, retryable: true);
+          return PhotoOutcome(PhotoOutcomeKind.failed, why,
+              retryable: true,
+              errorKind: classifyAnalysisError(outcome.error),
+              detail: why);
         }
         // Permanent failure: kept as status failed for deliberate retry
         // (spec §6.5).
         await dao.markPhotoHash(hash, IngestionStatus.failed);
         notify?.call('Photo analysis failed — kept for retry. $why');
-        return PhotoOutcome(PhotoOutcomeKind.failed, why);
+        return PhotoOutcome(PhotoOutcomeKind.failed, why,
+            errorKind: classifyAnalysisError(outcome.error), detail: why);
       }
       if (!outcome.isFood) {
         // Tombstone so backfill never re-analyzes it (spec §6.4).
@@ -224,7 +242,7 @@ class PhotoPipeline {
           } catch (_) {}
           return PhotoOutcome(
               PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
-              analysis: applied.adjusted);
+              analysis: applied.adjusted, detail: summary);
         }
       }
 
@@ -285,7 +303,7 @@ class PhotoPipeline {
       // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
       // a number that is guaranteed to miss.
       return PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-          analysis: analysis);
+          analysis: analysis, detail: summary);
     } catch (e) {
       // Containment: never rethrow (spec §6). Mark failed ONLY if we hold
       // the reservation — a pre-reservation throw (e.g. the duplicate
@@ -300,7 +318,8 @@ class PhotoPipeline {
         } catch (_) {}
       }
       return PhotoOutcome(PhotoOutcomeKind.failed, 'Photo intake failed: $e',
-          retryable: !reserved);
+          retryable: !reserved, errorKind: AnalysisErrorKind.unknown,
+          detail: '$e');
     }
   }
 }

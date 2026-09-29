@@ -1020,4 +1020,336 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get notificationsOffHint =>
       'Notifications are off — the daily summary can\'t be delivered.';
+
+  @override
+  String outcomeSavedMsg(String summary) {
+    return 'Meal logged: $summary';
+  }
+
+  @override
+  String outcomeLeftoverMsg(String summary) {
+    return 'Leftovers deducted: $summary';
+  }
+
+  @override
+  String get outcomeNotFoodMsg => 'No food detected in this photo.';
+
+  @override
+  String get outcomeDuplicateMsg =>
+      'Looks like a duplicate of a photo logged minutes ago.';
+
+  @override
+  String get outcomeAlreadyTrackedMsg => 'This photo was already logged.';
+
+  @override
+  String get errNoApiKey =>
+      'No API key is set for this provider — add one in Settings.';
+
+  @override
+  String get errNoServerKey =>
+      'No server address or upload key is set — add them in Settings.';
+
+  @override
+  String get errRejectedKey =>
+      'The provider rejected the API key. Check the key in Settings.';
+
+  @override
+  String get errRateLimited =>
+      'The provider is rate-limiting right now — the photo is kept and retried later.';
+
+  @override
+  String get errQuotaPaused =>
+      'Analysis is paused: the daily quota was hit. The photo is kept and retried later.';
+
+  @override
+  String get errNetwork =>
+      'Could not reach the provider (network or service issue). The photo is kept and retried later.';
+
+  @override
+  String get errBadModel =>
+      'The provider rejected the model — check the model name in Settings.';
+
+  @override
+  String get errBadResponse =>
+      'The AI answered in a form the app could not use.';
+
+  @override
+  String get errBadPhoto =>
+      'This photo could not be processed (it could not be decoded).';
+
+  @override
+  String get errServerBusy =>
+      'Your server is busy with another analysis — the photo is kept and retried later.';
+
+  @override
+  String get mealCardAutoTitle => '🍽️ Meal logged automatically';
+
+  @override
+  String dayLoadFailed(String error) {
+    return 'Could not load this day: $error';
+  }
+
+  @override
+  String get dayEmpty => 'Nothing logged on this day yet. Tap + to add a meal.';
+
+  @override
+  String get notFoodTag => 'not food';
+
+  @override
+  String fixRequestFailed(String error) {
+    return 'That request failed: $error';
+  }
+
+  @override
+  String get fixTitle => 'Fix a meal';
+
+  @override
+  String get fixIntro =>
+      'Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.';
+
+  @override
+  String get fixNamingTip =>
+      'Naming the food is safest — meal numbers count across the last 7 days, not just today.';
+
+  @override
+  String get fixLabel => 'What should change?';
+
+  @override
+  String get fixHint =>
+      'e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"';
+
+  @override
+  String get working => 'Working…';
+
+  @override
+  String get fixApply => 'Apply the fix';
+
+  @override
+  String get fixAppliedHeader => 'Applied this session';
+
+  @override
+  String editorSaveFailed(String error) {
+    return 'Could not save: $error';
+  }
+
+  @override
+  String editorDeleteFailed(String error) {
+    return 'Could not delete: $error';
+  }
+
+  @override
+  String get editorDeleteTitle => 'Delete this meal?';
+
+  @override
+  String get editorDeleteBody =>
+      'It will be removed from your history and totals. This cannot be undone.';
+
+  @override
+  String get editorTitleAdd => 'Add meal';
+
+  @override
+  String get editorTitleEdit => 'Edit meal';
+
+  @override
+  String get editorDeleteTooltip => 'Delete meal';
+
+  @override
+  String get editorDescriptionLabel => 'What was it?';
+
+  @override
+  String get editorTotalsHeader => 'Totals';
+
+  @override
+  String get editorCaloriesLabel => 'Calories (kcal)';
+
+  @override
+  String get editorItemsHeader => 'Items';
+
+  @override
+  String get editorTotalsDerivedHint => 'Totals follow these items';
+
+  @override
+  String get editorAddItem => 'Add item';
+
+  @override
+  String get editorAdd => 'Add';
+
+  @override
+  String get editorItemLabel => 'Item';
+
+  @override
+  String get editorRemoveItemTooltip => 'Remove item';
+
+  @override
+  String get covPermissionRequired =>
+      'Photo permission is required for the check.';
+
+  @override
+  String covCheckFailed(String error) {
+    return 'Check failed: $error';
+  }
+
+  @override
+  String get covNoAnalysis =>
+      'No analysis is possible right now — add a key for the selected provider, or wait for the quota pause to end.';
+
+  @override
+  String covBulkTitle(String verb, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count photos',
+      one: '1 photo',
+    );
+    return '$verb $_temp0?';
+  }
+
+  @override
+  String covBulkBody(int minutes, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      minutes,
+      locale: localeName,
+      other: '$minutes minutes',
+      one: '1 minute',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count model calls',
+      one: '1 model call',
+    );
+    return 'Each photo is analyzed separately, one after another — expect roughly $_temp0 and $_temp1. You can leave this screen; the work continues.';
+  }
+
+  @override
+  String get covPhotoUnreadable => 'That photo is no longer readable.';
+
+  @override
+  String get covTitle => 'Photo coverage';
+
+  @override
+  String covIntro(int days) {
+    return 'Checks every photo of the last $days day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
+  }
+
+  @override
+  String get covChecking => 'Checking…';
+
+  @override
+  String get covRun => 'Run check';
+
+  @override
+  String covNeverScanned(int count) {
+    return 'Never scanned ($count)';
+  }
+
+  @override
+  String get covLogAll => 'Log all';
+
+  @override
+  String covMoreLogAll(int count) {
+    return '…and $count more — \"Log all\" still covers every one.';
+  }
+
+  @override
+  String covJudgedNotFood(int count) {
+    return 'Judged \"not food\" ($count)';
+  }
+
+  @override
+  String get covAnalyzeAgain => 'Analyze again';
+
+  @override
+  String get covNotFoodHelp =>
+      'Drinks, order screenshots and unusual dishes land here. \"Analyze again\" re-asks the AI (useful after the rules improve); tap a row to enter it yourself.';
+
+  @override
+  String covFailedEarlier(int count) {
+    return 'Failed earlier ($count)';
+  }
+
+  @override
+  String get covRetryAll => 'Retry all';
+
+  @override
+  String covMoreRetryAll(int count) {
+    return '…and $count more — \"Retry all\" still covers every one.';
+  }
+
+  @override
+  String covAllAccounted(int count) {
+    return 'All $count photos are accounted for.';
+  }
+
+  @override
+  String covSummary(int scanned, int missing) {
+    return '$scanned photos checked — $missing never scanned.';
+  }
+
+  @override
+  String get covLimitedAccess =>
+      'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.';
+
+  @override
+  String get covTruncated =>
+      'Note: over 2000 photos in this window — older ones were not checked. Shorten the window for a complete answer.';
+
+  @override
+  String get covVerbLog => 'Log';
+
+  @override
+  String get covVerbRetry => 'Retry';
+
+  @override
+  String get covProgLogging => 'Logging';
+
+  @override
+  String get covProgReanalyzing => 'Re-analyzing';
+
+  @override
+  String get covProgRetrying => 'Retrying';
+
+  @override
+  String covStopped(String label, int attempted, int total, int remaining) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining photos were',
+      one: '1 photo was',
+    );
+    return '$label stopped after $attempted of $total: analysis is unavailable right now (quota pause or missing key). The remaining $_temp0 not touched — run this again later.';
+  }
+
+  @override
+  String covDone(String label, int count) {
+    return '$label done ($count photos).';
+  }
+
+  @override
+  String covDoneFailures(String label, int failures, int count) {
+    return '$label done — $failures of $count could not be processed (kept in the Failed list for retry).';
+  }
+
+  @override
+  String covDaysShort(int days) {
+    return '$days d';
+  }
+
+  @override
+  String covLoggedAsMeals(int count) {
+    return '$count logged as meals';
+  }
+
+  @override
+  String covNotFoodCount(int count) {
+    return '$count not food';
+  }
+
+  @override
+  String covFailedCount(int count) {
+    return '$count failed';
+  }
+
+  @override
+  String get macroNoBreakdown => 'No macro breakdown recorded.';
 }

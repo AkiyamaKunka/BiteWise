@@ -576,5 +576,280 @@
   "describeHelp": "Any language works. You will see the estimate and can fix it before it is saved.",
   "describeEstimating": "Estimating…",
   "describeEstimate": "Estimate this meal",
-  "notificationsOffHint": "Notifications are off — the daily summary can't be delivered."
+  "notificationsOffHint": "Notifications are off — the daily summary can't be delivered.",
+  "outcomeSavedMsg": "Meal logged: {summary}",
+  "@outcomeSavedMsg": {
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeLeftoverMsg": "Leftovers deducted: {summary}",
+  "@outcomeLeftoverMsg": {
+    "placeholders": {
+      "summary": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeNotFoodMsg": "No food detected in this photo.",
+  "outcomeDuplicateMsg": "Looks like a duplicate of a photo logged minutes ago.",
+  "outcomeAlreadyTrackedMsg": "This photo was already logged.",
+  "errNoApiKey": "No API key is set for this provider — add one in Settings.",
+  "errNoServerKey": "No server address or upload key is set — add them in Settings.",
+  "errRejectedKey": "The provider rejected the API key. Check the key in Settings.",
+  "errRateLimited": "The provider is rate-limiting right now — the photo is kept and retried later.",
+  "errQuotaPaused": "Analysis is paused: the daily quota was hit. The photo is kept and retried later.",
+  "errNetwork": "Could not reach the provider (network or service issue). The photo is kept and retried later.",
+  "errBadModel": "The provider rejected the model — check the model name in Settings.",
+  "errBadResponse": "The AI answered in a form the app could not use.",
+  "errBadPhoto": "This photo could not be processed (it could not be decoded).",
+  "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
+  "mealCardAutoTitle": "🍽️ Meal logged automatically",
+  "dayLoadFailed": "Could not load this day: {error}",
+  "@dayLoadFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "dayEmpty": "Nothing logged on this day yet. Tap + to add a meal.",
+  "notFoodTag": "not food",
+  "fixRequestFailed": "That request failed: {error}",
+  "@fixRequestFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "fixTitle": "Fix a meal",
+  "fixIntro": "Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.",
+  "fixNamingTip": "Naming the food is safest — meal numbers count across the last 7 days, not just today.",
+  "fixLabel": "What should change?",
+  "fixHint": "e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"",
+  "working": "Working…",
+  "fixApply": "Apply the fix",
+  "fixAppliedHeader": "Applied this session",
+  "editorSaveFailed": "Could not save: {error}",
+  "@editorSaveFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editorDeleteFailed": "Could not delete: {error}",
+  "@editorDeleteFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "editorDeleteTitle": "Delete this meal?",
+  "editorDeleteBody": "It will be removed from your history and totals. This cannot be undone.",
+  "editorTitleAdd": "Add meal",
+  "editorTitleEdit": "Edit meal",
+  "editorDeleteTooltip": "Delete meal",
+  "editorDescriptionLabel": "What was it?",
+  "editorTotalsHeader": "Totals",
+  "editorCaloriesLabel": "Calories (kcal)",
+  "editorItemsHeader": "Items",
+  "editorTotalsDerivedHint": "Totals follow these items",
+  "editorAddItem": "Add item",
+  "editorAdd": "Add",
+  "editorItemLabel": "Item",
+  "editorRemoveItemTooltip": "Remove item",
+  "covPermissionRequired": "Photo permission is required for the check.",
+  "covCheckFailed": "Check failed: {error}",
+  "@covCheckFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "covNoAnalysis": "No analysis is possible right now — add a key for the selected provider, or wait for the quota pause to end.",
+  "covBulkTitle": "{verb} {count, plural, =1{1 photo} other{{count} photos}}?",
+  "@covBulkTitle": {
+    "placeholders": {
+      "verb": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covBulkBody": "Each photo is analyzed separately, one after another — expect roughly {minutes, plural, =1{1 minute} other{{minutes} minutes}} and {count, plural, =1{1 model call} other{{count} model calls}}. You can leave this screen; the work continues.",
+  "@covBulkBody": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covPhotoUnreadable": "That photo is no longer readable.",
+  "covTitle": "Photo coverage",
+  "covIntro": "Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
+  "@covIntro": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "covChecking": "Checking…",
+  "covRun": "Run check",
+  "covNeverScanned": "Never scanned ({count})",
+  "@covNeverScanned": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covLogAll": "Log all",
+  "covMoreLogAll": "…and {count} more — \"Log all\" still covers every one.",
+  "@covMoreLogAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covJudgedNotFood": "Judged \"not food\" ({count})",
+  "@covJudgedNotFood": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covAnalyzeAgain": "Analyze again",
+  "covNotFoodHelp": "Drinks, order screenshots and unusual dishes land here. \"Analyze again\" re-asks the AI (useful after the rules improve); tap a row to enter it yourself.",
+  "covFailedEarlier": "Failed earlier ({count})",
+  "@covFailedEarlier": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covRetryAll": "Retry all",
+  "covMoreRetryAll": "…and {count} more — \"Retry all\" still covers every one.",
+  "@covMoreRetryAll": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covAllAccounted": "All {count} photos are accounted for.",
+  "@covAllAccounted": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covSummary": "{scanned} photos checked — {missing} never scanned.",
+  "@covSummary": {
+    "placeholders": {
+      "scanned": {
+        "type": "int"
+      },
+      "missing": {
+        "type": "int"
+      }
+    }
+  },
+  "covLimitedAccess": "Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.",
+  "covTruncated": "Note: over 2000 photos in this window — older ones were not checked. Shorten the window for a complete answer.",
+  "covVerbLog": "Log",
+  "covVerbRetry": "Retry",
+  "covProgLogging": "Logging",
+  "covProgReanalyzing": "Re-analyzing",
+  "covProgRetrying": "Retrying",
+  "covStopped": "{label} stopped after {attempted} of {total}: analysis is unavailable right now (quota pause or missing key). The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.",
+  "@covStopped": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "remaining": {
+        "type": "int"
+      }
+    }
+  },
+  "covDone": "{label} done ({count} photos).",
+  "@covDone": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covDoneFailures": "{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).",
+  "@covDoneFailures": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "failures": {
+        "type": "int"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covDaysShort": "{days} d",
+  "@covDaysShort": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "covLoggedAsMeals": "{count} logged as meals",
+  "@covLoggedAsMeals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covNotFoodCount": "{count} not food",
+  "@covNotFoodCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covFailedCount": "{count} failed",
+  "@covFailedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "macroNoBreakdown": "No macro breakdown recorded."
 }

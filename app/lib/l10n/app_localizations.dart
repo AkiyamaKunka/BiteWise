@@ -1783,6 +1783,486 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Notifications are off — the daily summary can\'t be delivered.'**
   String get notificationsOffHint;
+
+  /// No description provided for @outcomeSavedMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Meal logged: {summary}'**
+  String outcomeSavedMsg(String summary);
+
+  /// No description provided for @outcomeLeftoverMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Leftovers deducted: {summary}'**
+  String outcomeLeftoverMsg(String summary);
+
+  /// No description provided for @outcomeNotFoodMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'No food detected in this photo.'**
+  String get outcomeNotFoodMsg;
+
+  /// No description provided for @outcomeDuplicateMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Looks like a duplicate of a photo logged minutes ago.'**
+  String get outcomeDuplicateMsg;
+
+  /// No description provided for @outcomeAlreadyTrackedMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was already logged.'**
+  String get outcomeAlreadyTrackedMsg;
+
+  /// No description provided for @errNoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No API key is set for this provider — add one in Settings.'**
+  String get errNoApiKey;
+
+  /// No description provided for @errNoServerKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No server address or upload key is set — add them in Settings.'**
+  String get errNoServerKey;
+
+  /// No description provided for @errRejectedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider rejected the API key. Check the key in Settings.'**
+  String get errRejectedKey;
+
+  /// No description provided for @errRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider is rate-limiting right now — the photo is kept and retried later.'**
+  String get errRateLimited;
+
+  /// No description provided for @errQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused: the daily quota was hit. The photo is kept and retried later.'**
+  String get errQuotaPaused;
+
+  /// No description provided for @errNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not reach the provider (network or service issue). The photo is kept and retried later.'**
+  String get errNetwork;
+
+  /// No description provided for @errBadModel.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider rejected the model — check the model name in Settings.'**
+  String get errBadModel;
+
+  /// No description provided for @errBadResponse.
+  ///
+  /// In en, this message translates to:
+  /// **'The AI answered in a form the app could not use.'**
+  String get errBadResponse;
+
+  /// No description provided for @errBadPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo could not be processed (it could not be decoded).'**
+  String get errBadPhoto;
+
+  /// No description provided for @errServerBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server is busy with another analysis — the photo is kept and retried later.'**
+  String get errServerBusy;
+
+  /// No description provided for @mealCardAutoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'🍽️ Meal logged automatically'**
+  String get mealCardAutoTitle;
+
+  /// No description provided for @dayLoadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not load this day: {error}'**
+  String dayLoadFailed(String error);
+
+  /// No description provided for @dayEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing logged on this day yet. Tap + to add a meal.'**
+  String get dayEmpty;
+
+  /// No description provided for @notFoodTag.
+  ///
+  /// In en, this message translates to:
+  /// **'not food'**
+  String get notFoodTag;
+
+  /// No description provided for @fixRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'That request failed: {error}'**
+  String fixRequestFailed(String error);
+
+  /// No description provided for @fixTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix a meal'**
+  String get fixTitle;
+
+  /// No description provided for @fixIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.'**
+  String get fixIntro;
+
+  /// No description provided for @fixNamingTip.
+  ///
+  /// In en, this message translates to:
+  /// **'Naming the food is safest — meal numbers count across the last 7 days, not just today.'**
+  String get fixNamingTip;
+
+  /// No description provided for @fixLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'What should change?'**
+  String get fixLabel;
+
+  /// No description provided for @fixHint.
+  ///
+  /// In en, this message translates to:
+  /// **'e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"'**
+  String get fixHint;
+
+  /// No description provided for @working.
+  ///
+  /// In en, this message translates to:
+  /// **'Working…'**
+  String get working;
+
+  /// No description provided for @fixApply.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply the fix'**
+  String get fixApply;
+
+  /// No description provided for @fixAppliedHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Applied this session'**
+  String get fixAppliedHeader;
+
+  /// No description provided for @editorSaveFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not save: {error}'**
+  String editorSaveFailed(String error);
+
+  /// No description provided for @editorDeleteFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not delete: {error}'**
+  String editorDeleteFailed(String error);
+
+  /// No description provided for @editorDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete this meal?'**
+  String get editorDeleteTitle;
+
+  /// No description provided for @editorDeleteBody.
+  ///
+  /// In en, this message translates to:
+  /// **'It will be removed from your history and totals. This cannot be undone.'**
+  String get editorDeleteBody;
+
+  /// No description provided for @editorTitleAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add meal'**
+  String get editorTitleAdd;
+
+  /// No description provided for @editorTitleEdit.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit meal'**
+  String get editorTitleEdit;
+
+  /// No description provided for @editorDeleteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete meal'**
+  String get editorDeleteTooltip;
+
+  /// No description provided for @editorDescriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'What was it?'**
+  String get editorDescriptionLabel;
+
+  /// No description provided for @editorTotalsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Totals'**
+  String get editorTotalsHeader;
+
+  /// No description provided for @editorCaloriesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Calories (kcal)'**
+  String get editorCaloriesLabel;
+
+  /// No description provided for @editorItemsHeader.
+  ///
+  /// In en, this message translates to:
+  /// **'Items'**
+  String get editorItemsHeader;
+
+  /// No description provided for @editorTotalsDerivedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Totals follow these items'**
+  String get editorTotalsDerivedHint;
+
+  /// No description provided for @editorAddItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Add item'**
+  String get editorAddItem;
+
+  /// No description provided for @editorAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get editorAdd;
+
+  /// No description provided for @editorItemLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Item'**
+  String get editorItemLabel;
+
+  /// No description provided for @editorRemoveItemTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove item'**
+  String get editorRemoveItemTooltip;
+
+  /// No description provided for @covPermissionRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo permission is required for the check.'**
+  String get covPermissionRequired;
+
+  /// No description provided for @covCheckFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Check failed: {error}'**
+  String covCheckFailed(String error);
+
+  /// No description provided for @covNoAnalysis.
+  ///
+  /// In en, this message translates to:
+  /// **'No analysis is possible right now — add a key for the selected provider, or wait for the quota pause to end.'**
+  String get covNoAnalysis;
+
+  /// No description provided for @covBulkTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{verb} {count, plural, =1{1 photo} other{{count} photos}}?'**
+  String covBulkTitle(String verb, int count);
+
+  /// No description provided for @covBulkBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Each photo is analyzed separately, one after another — expect roughly {minutes, plural, =1{1 minute} other{{minutes} minutes}} and {count, plural, =1{1 model call} other{{count} model calls}}. You can leave this screen; the work continues.'**
+  String covBulkBody(int minutes, int count);
+
+  /// No description provided for @covPhotoUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'That photo is no longer readable.'**
+  String get covPhotoUnreadable;
+
+  /// No description provided for @covTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo coverage'**
+  String get covTitle;
+
+  /// No description provided for @covIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
+  String covIntro(int days);
+
+  /// No description provided for @covChecking.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking…'**
+  String get covChecking;
+
+  /// No description provided for @covRun.
+  ///
+  /// In en, this message translates to:
+  /// **'Run check'**
+  String get covRun;
+
+  /// No description provided for @covNeverScanned.
+  ///
+  /// In en, this message translates to:
+  /// **'Never scanned ({count})'**
+  String covNeverScanned(int count);
+
+  /// No description provided for @covLogAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Log all'**
+  String get covLogAll;
+
+  /// No description provided for @covMoreLogAll.
+  ///
+  /// In en, this message translates to:
+  /// **'…and {count} more — \"Log all\" still covers every one.'**
+  String covMoreLogAll(int count);
+
+  /// No description provided for @covJudgedNotFood.
+  ///
+  /// In en, this message translates to:
+  /// **'Judged \"not food\" ({count})'**
+  String covJudgedNotFood(int count);
+
+  /// No description provided for @covAnalyzeAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyze again'**
+  String get covAnalyzeAgain;
+
+  /// No description provided for @covNotFoodHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'Drinks, order screenshots and unusual dishes land here. \"Analyze again\" re-asks the AI (useful after the rules improve); tap a row to enter it yourself.'**
+  String get covNotFoodHelp;
+
+  /// No description provided for @covFailedEarlier.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed earlier ({count})'**
+  String covFailedEarlier(int count);
+
+  /// No description provided for @covRetryAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get covRetryAll;
+
+  /// No description provided for @covMoreRetryAll.
+  ///
+  /// In en, this message translates to:
+  /// **'…and {count} more — \"Retry all\" still covers every one.'**
+  String covMoreRetryAll(int count);
+
+  /// No description provided for @covAllAccounted.
+  ///
+  /// In en, this message translates to:
+  /// **'All {count} photos are accounted for.'**
+  String covAllAccounted(int count);
+
+  /// No description provided for @covSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{scanned} photos checked — {missing} never scanned.'**
+  String covSummary(int scanned, int missing);
+
+  /// No description provided for @covLimitedAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.'**
+  String get covLimitedAccess;
+
+  /// No description provided for @covTruncated.
+  ///
+  /// In en, this message translates to:
+  /// **'Note: over 2000 photos in this window — older ones were not checked. Shorten the window for a complete answer.'**
+  String get covTruncated;
+
+  /// No description provided for @covVerbLog.
+  ///
+  /// In en, this message translates to:
+  /// **'Log'**
+  String get covVerbLog;
+
+  /// No description provided for @covVerbRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get covVerbRetry;
+
+  /// No description provided for @covProgLogging.
+  ///
+  /// In en, this message translates to:
+  /// **'Logging'**
+  String get covProgLogging;
+
+  /// No description provided for @covProgReanalyzing.
+  ///
+  /// In en, this message translates to:
+  /// **'Re-analyzing'**
+  String get covProgReanalyzing;
+
+  /// No description provided for @covProgRetrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying'**
+  String get covProgRetrying;
+
+  /// No description provided for @covStopped.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} stopped after {attempted} of {total}: analysis is unavailable right now (quota pause or missing key). The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.'**
+  String covStopped(String label, int attempted, int total, int remaining);
+
+  /// No description provided for @covDone.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} done ({count} photos).'**
+  String covDone(String label, int count);
+
+  /// No description provided for @covDoneFailures.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).'**
+  String covDoneFailures(String label, int failures, int count);
+
+  /// No description provided for @covDaysShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{days} d'**
+  String covDaysShort(int days);
+
+  /// No description provided for @covLoggedAsMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} logged as meals'**
+  String covLoggedAsMeals(int count);
+
+  /// No description provided for @covNotFoodCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} not food'**
+  String covNotFoodCount(int count);
+
+  /// No description provided for @covFailedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} failed'**
+  String covFailedCount(int count);
+
+  /// No description provided for @macroNoBreakdown.
+  ///
+  /// In en, this message translates to:
+  /// **'No macro breakdown recorded.'**
+  String get macroNoBreakdown;
 }
 
 class _AppLocalizationsDelegate

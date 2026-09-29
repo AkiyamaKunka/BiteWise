@@ -32,6 +32,7 @@ import '../services/report/daily_summary.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'photo_pipeline.dart';
+import 'outcome_text.dart';
 
 /// Persisted watermark: start time of the last completed background scan.
 const String backgroundWatermarkPrefsKey = 'background.last_scan_iso';
@@ -140,7 +141,10 @@ Future<bool> headlessBackfillWith({
       // must not lose the notification for an already-saved meal, nor the
       // progress the run already made.
       if (o.kind == PhotoOutcomeKind.saved) {
-        await showMealCard('🍽️ Meal logged automatically', o.message);
+        // In the app language, like the coach summary (headless, so via
+        // the saved preference rather than a BuildContext).
+        final l = localizationsFor(settings.appLanguage);
+        await showMealCard(l.mealCardAutoTitle, outcomeBody(l, o));
       }
       // The intake's safeFrontier is the ONLY persistable value: it is
       // createDate-based (the watermark's timebase), halts at transient

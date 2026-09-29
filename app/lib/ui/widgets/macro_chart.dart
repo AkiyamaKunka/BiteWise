@@ -113,7 +113,7 @@ class MacroBreakdownBar extends StatelessWidget {
     );
     final totalKcal = slices.fold<num>(0, (a, s) => a + s.kcal);
     if (totalKcal <= 0) {
-      return Text('No macro breakdown recorded.',
+      return Text(context.l10n.macroNoBreakdown,
           key: const Key('macroBarEmpty'),
           style: theme.textTheme.bodySmall
               ?.copyWith(color: theme.colorScheme.onSurfaceVariant));
