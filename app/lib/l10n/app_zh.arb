@@ -92,6 +92,7 @@
   },
   "settingsRowBackgroundScan": "后台扫描",
   "backgroundScanNever": "尚未运行",
+  "backgroundScanDisabled": "系统已关闭",
   "settingsSectionProfile": "个人资料",
   "settingsRowDietaryProfile": "饮食偏好",
   "profileSet": "已设置",

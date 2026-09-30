@@ -524,6 +524,12 @@ abstract class AppLocalizations {
   /// **'Not run yet'**
   String get backgroundScanNever;
 
+  /// No description provided for @backgroundScanDisabled.
+  ///
+  /// In en, this message translates to:
+  /// **'Off in Settings'**
+  String get backgroundScanDisabled;
+
   /// No description provided for @settingsSectionProfile.
   ///
   /// In en, this message translates to:

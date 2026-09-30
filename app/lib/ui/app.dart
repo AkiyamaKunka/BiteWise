@@ -349,6 +349,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             notificationsEnabled: s.notificationsEnabled,
             nextSummaryAt: s.nextSummaryAt,
             lastBackgroundScan: s.lastBackgroundScan,
+            backgroundRefreshEnabled: s.backgroundRefreshEnabled,
           ),
         ],
       ),

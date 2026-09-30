@@ -187,6 +187,12 @@ class AppServices {
       notificationsEnabled: notifier.notificationsEnabled,
       nextSummaryAt: notifier.scheduledDailyAt,
       lastBackgroundScan: lastBackgroundRun,
+      // BGTaskScheduler refuses every request (error 1, swallowed by the
+      // plugin) while Background App Refresh is off — without this the
+      // row would say "not run yet" forever and never say why.
+      backgroundRefreshEnabled: Platform.isIOS
+          ? () async => (await Permission.backgroundRefresh.status).isGranted
+          : null,
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },

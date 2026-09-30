@@ -258,6 +258,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundScanNever => '尚未运行';
 
   @override
+  String get backgroundScanDisabled => '系统已关闭';
+
+  @override
   String get settingsSectionProfile => '个人资料';
 
   @override

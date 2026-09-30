@@ -647,6 +647,30 @@ void planTuningTests() {
       expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
     });
 
+    testWidgets('Background App Refresh off → the row becomes the remedy',
+        (tester) async {
+      // iOS refuses every BGTask request while the system switch (or Low
+      // Power Mode) is off, and the plugin swallows the error: the row
+      // must say so instead of "not run yet" forever.
+      var opened = 0;
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => false,
+        openSystemSettings: () async => opened++,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Off in Settings'), findsOneWidget);
+      expect(find.text('Not run yet'), findsNothing);
+      await tester.tap(find.byKey(const Key('backgroundScanRow')));
+      await tester.pump();
+      expect(opened, 1);
+    });
+
     testWidgets('nothing armed → "Not scheduled"; no probe → no row',
         (tester) async {
       await tester.pumpWidget(screen(next: () async => null));

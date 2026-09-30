@@ -59,6 +59,10 @@ class SettingsScreen extends StatefulWidget {
   /// A null PROBE hides the row.
   final Future<DateTime?> Function()? lastBackgroundScan;
 
+  /// iOS Background App Refresh; false turns the background-scan row into
+  /// the remedy ("off in Settings", opens system settings).
+  final Future<bool?> Function()? backgroundRefreshEnabled;
+
   /// Coverage-audit pieces; all three null in tests → the tile is hidden.
   final CoverageAuditor? coverage;
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
@@ -82,6 +86,7 @@ class SettingsScreen extends StatefulWidget {
     this.notificationsEnabled,
     this.nextSummaryAt,
     this.lastBackgroundScan,
+    this.backgroundRefreshEnabled,
   });
 
   @override
@@ -112,6 +117,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   DateTime? _lastBackgroundScan;
   bool _lastBackgroundProbed = false;
 
+  /// True only when iOS says Background App Refresh is OFF for this app.
+  bool _backgroundRefreshOff = false;
+
   @override
   void initState() {
     super.initState();
@@ -130,8 +138,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     final probe = widget.lastBackgroundScan;
     if (probe == null) return;
     DateTime? when;
+    bool? refresh;
     try {
       when = await probe();
+      refresh = await widget.backgroundRefreshEnabled?.call();
     } catch (_) {
       return;
     }
@@ -139,6 +149,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     setState(() {
       _lastBackgroundScan = when;
       _lastBackgroundProbed = true;
+      _backgroundRefreshOff = refresh == false;
     });
   }
 
@@ -528,12 +539,22 @@ class _SettingsScreenState extends State<SettingsScreen>
               GroupedRow(
                 key: const Key('backgroundScanRow'),
                 icon: Icons.update,
-                iconColor: theme.colorScheme.secondary,
+                iconColor: _backgroundRefreshOff
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.secondary,
                 title: context.l10n.settingsRowBackgroundScan,
-                value: _lastBackgroundProbed
-                    ? _lastBackgroundLabel(_lastBackgroundScan)
-                    : '…',
-                showChevron: false,
+                // Off in iOS settings beats any timestamp: nothing can be
+                // scheduled until the user turns it back on.
+                value: _backgroundRefreshOff
+                    ? context.l10n.backgroundScanDisabled
+                    : _lastBackgroundProbed
+                        ? _lastBackgroundLabel(_lastBackgroundScan)
+                        : '…',
+                onTap: _backgroundRefreshOff && widget.openSystemSettings != null
+                    ? () => widget.openSystemSettings!()
+                    : null,
+                showChevron: _backgroundRefreshOff &&
+                    widget.openSystemSettings != null,
               ),
             if (widget.coverage != null && widget.processPhoto != null)
               GroupedRow(
