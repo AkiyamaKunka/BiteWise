@@ -164,6 +164,13 @@ class UiServices {
   /// Settings shows a "notifications are off" remedy when this is false.
   final Future<bool?> Function()? notificationsEnabled;
 
+  /// The slot the daily summary is currently armed for (null: nothing
+  /// armed) — the Settings "next summary" row. Null probe hides the row.
+  final Future<DateTime?> Function()? nextSummaryAt;
+
+  /// When the OS last launched the background photo scan (null: never).
+  final Future<DateTime?> Function()? lastBackgroundScan;
+
   /// Re-arms the OS-scheduled daily summary (iOS). The shell calls it on
   /// every lifecycle transition so the pending card is never staler than
   /// the last time the user had the app open. Null on Android (the
@@ -199,5 +206,7 @@ class UiServices {
     this.settingsChanges,
     this.refreshDailyNotification,
     this.notificationsEnabled,
+    this.nextSummaryAt,
+    this.lastBackgroundScan,
   });
 }

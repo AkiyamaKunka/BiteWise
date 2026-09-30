@@ -87,6 +87,11 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
   /// the run already answered (terminal), null = it did not say (an old
   /// server, or a configuration refusal). Overridden by ServerAnalyzer.
   bool? unavailableRetry(String body) => null;
+
+  /// A 400 the provider EXPLAINS (`{"error": code}` from the user's own
+  /// server): a terminal message carrying the code, or null for the
+  /// generic path. Vendor 400s stay generic — their bodies are prose.
+  String? rejectedMessage(String body) => null;
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens});
   String extractText(Map<String, dynamic> body);
@@ -187,6 +192,17 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
               transient: verdict != false,
               retryInPlace: verdict == true,
               verbatimMessage: true);
+        }
+      }
+      if (resp.statusCode == 400) {
+        final custom = rejectedMessage(resp.body);
+        if (custom != null) {
+          // Terminal: the REQUEST is wrong (an app/server version drift,
+          // typically), so retrying reproduces it. The bare 'HTTP 400'
+          // this used to throw left the owner's 2026-09-29 failure with
+          // no code on either end.
+          throw _ProviderException(custom,
+              transient: false, verbatimMessage: true);
         }
       }
       throw _ProviderException('HTTP ${resp.statusCode}',
@@ -654,6 +670,26 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       // fall through
     }
     return null; // old server / configuration refusal
+  }
+
+  /// The server's own 400 codes (no_image, bad_recent_meals, bad_model,
+  /// bad_effort, bad_backend, …): repeat the code so the outcome names
+  /// WHICH contract broke. Anything without a string `error` (an old
+  /// server, a proxy page) keeps the generic path.
+  @override
+  String? rejectedMessage(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['error'] is String) {
+        final code = (decoded['error'] as String).trim();
+        if (code.isNotEmpty && RegExp(r'^[a-z_]{1,40}$').hasMatch(code)) {
+          return 'The server rejected this request ($code).';
+        }
+      }
+    } on FormatException {
+      // fall through
+    }
+    return null;
   }
 
   /// The server runs a Claude CLI analysis (up to ~120 s, and up to ~240 s

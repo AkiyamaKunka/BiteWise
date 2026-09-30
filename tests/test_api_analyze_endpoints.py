@@ -481,3 +481,40 @@ def test_garmin_daily_rejects_junk_dates_and_bad_keys(monkeypatch, client):
     assert client.http.post("/api/garmin_daily",
                             headers={"X-API-Key": "wrong"},
                             json={"date": "2026-08-02"}).status_code == 401
+
+
+# ─── Every app-facing 400 leaves a journal line (2026-09-30) ────────────
+
+def test_photo_400s_are_logged_with_the_code_and_client(client, monkeypatch,
+                                                        caplog):
+    # The owner's phone got one bare `analyze_photo 400` on 2026-09-29 and
+    # the journal said nothing else — the branches never logged. Now each
+    # refusal names the code and the client platform, never the payload.
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    import logging
+    with caplog.at_level(logging.WARNING, logger="calorie_bot"):
+        resp = client.http.post(
+            "/api/analyze_photo",
+            headers={"X-API-Key": "secret-key", "X-Client-Platform": "app"},
+            json={"image_b64": "aGk=", "backend": "claude",
+                  "model": "not-a-plan-model"},
+        )
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "bad_model"
+    lines = [r.getMessage() for r in caplog.records]
+    assert any("400 bad_model" in ln and "client=app" in ln for ln in lines), lines
+    assert not any("aGk=" in ln for ln in lines), "payload must never be logged"
+
+
+def test_leftover_and_text_400s_are_logged_too(client, monkeypatch, caplog):
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    import logging
+    h = {"X-API-Key": "secret-key"}
+    with caplog.at_level(logging.WARNING, logger="calorie_bot"):
+        assert client.http.post("/api/analyze_leftover", headers=h,
+                                json={}).status_code == 400
+        assert client.http.post("/api/text_intent", headers=h,
+                                json={}).status_code == 400
+    lines = [r.getMessage() for r in caplog.records]
+    assert any(ln.startswith("analyze_leftover refused (400 ") for ln in lines), lines
+    assert any(ln.startswith("text_intent refused (400 no_prompt)") for ln in lines), lines

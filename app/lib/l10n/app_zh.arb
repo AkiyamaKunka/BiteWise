@@ -64,6 +64,34 @@
   "settingsRowCoverage": "照片覆盖检查",
   "settingsSectionReport": "报告",
   "settingsRowReportTime": "报告时间",
+  "settingsRowNextSummary": "下次总结",
+  "timeToday": "今天 {time}",
+  "@timeToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "timeTomorrow": "明天 {time}",
+  "@timeTomorrow": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "nextSummaryNone": "未安排",
+  "timeYesterday": "昨天 {time}",
+  "@timeYesterday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsRowBackgroundScan": "后台扫描",
+  "backgroundScanNever": "尚未运行",
   "settingsSectionProfile": "个人资料",
   "settingsRowDietaryProfile": "饮食偏好",
   "profileSet": "已设置",
@@ -372,5 +400,13 @@
   "serverLoginUnknown": "无法检查",
   "serverLoginChecking": "检查中…",
   "serverLoginFooter": "已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。",
-  "errServerFailed": "你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。"
+  "errServerFailed": "你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。",
+  "errServerRejected": "你的服务器拒绝了这次请求（{code}）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。",
+  "@errServerRejected": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -231,6 +231,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRowReportTime => '报告时间';
 
   @override
+  String get settingsRowNextSummary => '下次总结';
+
+  @override
+  String timeToday(String time) {
+    return '今天 $time';
+  }
+
+  @override
+  String timeTomorrow(String time) {
+    return '明天 $time';
+  }
+
+  @override
+  String get nextSummaryNone => '未安排';
+
+  @override
+  String timeYesterday(String time) {
+    return '昨天 $time';
+  }
+
+  @override
+  String get settingsRowBackgroundScan => '后台扫描';
+
+  @override
+  String get backgroundScanNever => '尚未运行';
+
+  @override
   String get settingsSectionProfile => '个人资料';
 
   @override
@@ -1296,4 +1323,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errServerFailed => '你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。';
+
+  @override
+  String errServerRejected(String code) {
+    return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
+  }
 }

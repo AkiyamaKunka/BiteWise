@@ -8,6 +8,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -544,5 +545,37 @@ void main() {
     }));
     await analyzer.textIntent('what did I eat');
     expect(paths, ['/api/text_intent']);
+  });
+
+  test('a coded 400 is TERMINAL and names the code (2026-09-29 blank 400)',
+      () async {
+    // The owner's phone got one bare `analyze_photo 400` and the outcome
+    // said "HTTP 400" — no code on either end. The server's own codes
+    // (bad_model, bad_recent_meals, …) now travel into the message.
+    final s = await serverSettings();
+    var calls = 0;
+    final analyzer = ServerAnalyzer(
+      s,
+      normalizer: (b) async => b,
+      sleep: (_) async {},
+      client: MockClient((_) async {
+        calls++;
+        return http.Response(jsonEncode({'error': 'bad_model'}), 400);
+      }),
+    );
+    final out = await analyzer.analyzePhoto(jpeg());
+    expect(calls, 1, reason: 'a wrong request reproduces itself');
+    expect(out.retryable, isFalse);
+    expect(out.error, 'The server rejected this request (bad_model).');
+    expect(classifyAnalysisError(out.error), AnalysisErrorKind.serverRejected);
+    // A 400 without a code (proxy page, old server) keeps the generic line.
+    final bare = ServerAnalyzer(
+      s,
+      normalizer: (b) async => b,
+      client: MockClient((_) async => http.Response('<html>nope</html>', 400)),
+    );
+    final bareOut = await bare.analyzePhoto(jpeg());
+    expect(bareOut.retryable, isFalse);
+    expect(bareOut.error, isNot(contains('rejected this request')));
   });
 }

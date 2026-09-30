@@ -17,6 +17,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -32,10 +33,17 @@ import '../services/report/daily_summary.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'photo_pipeline.dart';
+import 'os_summary.dart';
 import 'outcome_text.dart';
 
 /// Persisted watermark: start time of the last completed background scan.
 const String backgroundWatermarkPrefsKey = 'background.last_scan_iso';
+
+/// When the OS last LAUNCHED a background run (before any guard) — the
+/// Settings "background scan" row. On iOS this is the only visible proof
+/// that BGAppRefresh fires on a given phone; the OS decides the cadence
+/// and no debugger is needed to read this (2026-09-30).
+const String backgroundLastRunPrefsKey = 'background.last_run_iso';
 
 /// Re-scan overlap behind the watermark, absorbing camera write latency and
 /// photos created while the previous scan was running.
@@ -46,6 +54,13 @@ const Duration backgroundScanOverlap = Duration(hours: 1);
 /// nothing new was shot.
 const Duration backgroundScanFrequency = Duration(minutes: 30);
 
+/// iOS BGAppRefreshTask wall budget. The OS grants roughly 30 s and then
+/// runs the expiration handler, which cancels the run outright — a photo
+/// mid-analysis would leave a 'processing' reservation until the next
+/// launch reclaims it. Stop OFFERING photos after this much, so the last
+/// server analysis (3–10 s typical) still lands inside the grant.
+const Duration iosBackgroundBudget = Duration(seconds: 15);
+
 /// Result of one drained backfill: what happened to each photo, whether
 /// the SCAN itself completed (a scan abort means unseen photos remain),
 /// and the intake's coverage frontier (never advance a watermark past it).
@@ -53,8 +68,13 @@ class BackfillDrain {
   final List<PhotoOutcome> outcomes;
   final bool scanCompleted;
   final DateTime? frontier;
+
+  /// True when the [drainBackfill] deadline passed with photos still
+  /// unoffered — they were RELEASED (not burned), so the next run
+  /// re-offers them; the watermark stops short of them by construction.
+  final bool cutShort;
   const BackfillDrain(this.outcomes,
-      {required this.scanCompleted, this.frontier});
+      {required this.scanCompleted, this.frontier, this.cutShort = false});
 }
 
 /// Run one backfill through the pipeline with FULL backpressure: the
@@ -63,15 +83,24 @@ class BackfillDrain {
 /// ~1 GB while the first Gemini call is in flight). When [onOutcome] is
 /// set it runs per photo BEFORE the next one starts, so progress
 /// (notifications, watermark checkpoints) survives a WorkManager
-/// hard-stop mid-batch.
+/// hard-stop mid-batch. Past [deadline] (iOS's ~30 s grant) no further
+/// photo is processed: each is released back to the intake unprocessed,
+/// which halts the frontier in front of it.
 Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     {int lookbackDays = 0,
     DateTime? since,
+    DateTime? deadline,
+    DateTime Function() clock = DateTime.now,
     Future<void> Function(
             IntakePhoto photo, PhotoOutcome outcome, DateTime? safeFrontier)?
         onOutcome}) async {
   final outcomes = <PhotoOutcome>[];
+  var cutShort = false;
   intake.attachSink((p, safeFrontier) async {
+    if (deadline != null && !clock().isBefore(deadline)) {
+      cutShort = true;
+      return false; // released, not burned: the next run re-offers it
+    }
     final o = await pipeline.process(p);
     outcomes.add(o);
     if (onOutcome != null) await onOutcome(p, o, safeFrontier);
@@ -91,7 +120,7 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     intake.attachSink(null);
   }
   return BackfillDrain(outcomes,
-      scanCompleted: scanCompleted, frontier: frontier);
+      scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
 }
 
 /// The headless scan body, dependency-injected so tests can drive it with
@@ -105,7 +134,11 @@ Future<bool> headlessBackfillWith({
   required Future<PhotoPipeline> Function() pipeline,
   required Future<void> Function(String title, String body) showMealCard,
   DateTime Function() clock = DateTime.now,
+  Duration? budget,
 }) async {
+  // First, unconditionally: "the OS ran us" is what Settings reports,
+  // whatever the guards below decide.
+  await prefs.setString(backgroundLastRunPrefsKey, clock().toIso8601String());
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
   if (!settings.watcherEnabled) return true;
@@ -136,6 +169,8 @@ Future<bool> headlessBackfillWith({
     intake,
     await pipeline(),
     since: since?.subtract(backgroundScanOverlap),
+    deadline: budget == null ? null : scanStart.add(budget),
+    clock: clock,
     onOutcome: (photo, o, safeFrontier) async {
       // Per photo, BEFORE the next one: a WorkManager hard-stop mid-batch
       // must not lose the notification for an already-saved meal, nor the
@@ -168,7 +203,14 @@ Future<bool> headlessBackfillWith({
 /// EXCEPT reclaimStaleProcessing: that launch sweep assumes it owns the
 /// only pipeline, and the foreground app may be mid-analysis right now —
 /// reclaiming its 'processing' reservation here could double-log a meal.
-Future<bool> runHeadlessBackfill() async {
+///
+/// Platform split for the daily summary: Android POSTS it from this
+/// heartbeat (the durable path there); iOS instead RE-ARMS the OS card
+/// after the scan, so a meal logged while the app was closed is in the
+/// card the OS delivers at the slot — posting here too would put a second
+/// alert under the same id minutes after the OS one.
+Future<bool> runHeadlessBackfill({bool? isIOS}) async {
+  final ios = isIOS ?? Platform.isIOS;
   final settings = await AppSettings.load();
   final prefs = await SharedPreferences.getInstance();
   // Time-derived id seed: cards from successive runs stack instead of
@@ -183,8 +225,9 @@ Future<bool> runHeadlessBackfill() async {
   // the user asked for is delivered by this 30-minute heartbeat instead,
   // guarded by a per-date watermark so the live Timer cannot double-post
   // (user request 2026-08-06).
-  try {
-    await maybePostDailySummary(DailySummaryDeps(
+  if (!ios) {
+    try {
+      await maybePostDailySummary(DailySummaryDeps(
       dao: await createMealsDao(),
       reportTime: settings.reportTime,
       calorieGoal: settings.calorieGoal,
@@ -194,13 +237,14 @@ Future<bool> runHeadlessBackfill() async {
         await notifier.init();
         await notifier.showDailySummary(title, body);
       },
-      strings: coachStringsFor(settings.appLanguage),
-      now: DateTime.now,
-    ));
-  } catch (_) {
-    // A summary must never take the photo scan down with it.
+        strings: coachStringsFor(settings.appLanguage),
+        now: DateTime.now,
+      ));
+    } catch (_) {
+      // A summary must never take the photo scan down with it.
+    }
   }
-  return headlessBackfillWith(
+  final ok = await headlessBackfillWith(
     settings: settings,
     prefs: prefs,
     intake: createPhotoIntake(settings),
@@ -211,7 +255,17 @@ Future<bool> runHeadlessBackfill() async {
       await notifier.init(); // idempotent; deferred until a card exists
       await notifier.showMealCard(title, body);
     },
+    budget: ios ? iosBackgroundBudget : null,
   );
+  if (ios) {
+    try {
+      await armOsDailySummary(
+          dao: await createMealsDao(), settings: settings, notifier: notifier);
+    } catch (_) {
+      // The scan's work is saved either way; the card refreshes next open.
+    }
+  }
+  return ok;
 }
 
 /// WorkManager background entrypoint. Must stay top-level with the
@@ -228,8 +282,8 @@ void appBackgroundDispatcher() {
 }
 
 /// Reconcile the periodic job with the current settings — call at startup
-/// and whenever watcherEnabled/lookbackDays change. Android-only inside
-/// (enableBackgroundScan no-ops on iOS: share/picker only by spec §6).
+/// and whenever watcherEnabled/lookbackDays change. Android WorkManager
+/// or iOS BGAppRefresh inside (enableBackgroundScan picks).
 ///
 /// ALWAYS registered, deliberately. The job carries TWO passengers: the
 /// photo backfill and the daily coach summary. Passing watcherEnabled here
@@ -244,3 +298,11 @@ Future<void> syncBackgroundScan(AppSettings settings) =>
         lookbackDays: settings.lookbackDays,
         frequency: backgroundScanFrequency,
         dispatcher: appBackgroundDispatcher);
+
+/// The last background launch, read FRESH: the run wrote it from another
+/// isolate, and this isolate's SharedPreferences cache would not know.
+Future<DateTime?> lastBackgroundRun() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  return DateTime.tryParse(prefs.getString(backgroundLastRunPrefsKey) ?? '');
+}

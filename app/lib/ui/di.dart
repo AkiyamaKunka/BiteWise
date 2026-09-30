@@ -31,6 +31,7 @@ import '../services/report/daily_summary.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
+import 'os_summary.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 import 'refresh_signal.dart';
@@ -117,20 +118,8 @@ class AppServices {
     // next slot carrying the summary as it stands NOW, re-armed on launch,
     // on every lifecycle transition (app.dart) and on slot edits (below).
     final osSchedulesSummary = Platform.isIOS;
-    Future<void> armOsSummary() async {
-      final when = ReportNotifier.nextDailyOccurrence(
-          ReportNotifier.parseHhmm(settings.reportTime), DateTime.now());
-      // The day the card DESCRIBES is the day it fires on — after tonight's
-      // slot that is tomorrow, whose honest content is the empty-day line
-      // until something is logged and this re-runs.
-      final s = await summaryForDay(
-        dao: dao,
-        day: when,
-        calorieGoal: settings.calorieGoal,
-        strings: coachStringsFor(settings.appLanguage),
-      );
-      await notifier.scheduleDailyAt(when: when, title: s.title, body: s.body);
-    }
+    Future<void> armOsSummary() =>
+        armOsDailySummary(dao: dao, settings: settings, notifier: notifier);
     unawaited(() async {
       try {
         await notifier.init();
@@ -196,6 +185,8 @@ class AppServices {
       setupLinks: appLinks.uriLinkStream,
       initialSetupLink: appLinks.getInitialLink,
       notificationsEnabled: notifier.notificationsEnabled,
+      nextSummaryAt: notifier.scheduledDailyAt,
+      lastBackgroundScan: lastBackgroundRun,
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },

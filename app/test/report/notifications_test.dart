@@ -138,6 +138,8 @@ void main() {
         when: when, title: '今天：2,100 千卡', body: '比目标多 100 千卡');
     expect(scheduled.last.$1, ReportNotifier.dailyReportNotificationId);
     expect(scheduled.last.$2, '今天：2,100 千卡');
+    expect(notifier.nextDailyFire, when,
+        reason: 'the Settings "next summary" row reads the armed slot');
   });
 
   testWidgets('re-scheduling replaces the previous slot', (tester) async {
@@ -218,5 +220,22 @@ void main() {
     expect(fired[0].$1, isNot(fired[1].$1));
     expect(fired.map((f) => f.$1),
         isNot(contains(ReportNotifier.dailyReportNotificationId)));
+  });
+
+  test('scheduledDailyAt answers only while the OS still holds the card',
+      () async {
+    // The Settings "next summary" row: the armed slot when the OS lists
+    // id 9001 as pending, null once it fired or was never accepted.
+    var pending = <int>[];
+    final notifier = ReportNotifier(
+      scheduler: (id, title, body, when) async => pending = [id],
+      pendingIds: () async => pending,
+    );
+    expect(await notifier.scheduledDailyAt(), isNull);
+    final when = DateTime(2026, 9, 30, 21, 30);
+    await notifier.scheduleDailyAt(when: when, title: 't', body: 'b');
+    expect(await notifier.scheduledDailyAt(), when);
+    pending = []; // delivered (or dropped): nothing pending any more
+    expect(await notifier.scheduledDailyAt(), isNull);
   });
 }

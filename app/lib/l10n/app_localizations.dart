@@ -482,6 +482,48 @@ abstract class AppLocalizations {
   /// **'Report Time'**
   String get settingsRowReportTime;
 
+  /// No description provided for @settingsRowNextSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Next summary'**
+  String get settingsRowNextSummary;
+
+  /// No description provided for @timeToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today {time}'**
+  String timeToday(String time);
+
+  /// No description provided for @timeTomorrow.
+  ///
+  /// In en, this message translates to:
+  /// **'Tomorrow {time}'**
+  String timeTomorrow(String time);
+
+  /// No description provided for @nextSummaryNone.
+  ///
+  /// In en, this message translates to:
+  /// **'Not scheduled'**
+  String get nextSummaryNone;
+
+  /// No description provided for @timeYesterday.
+  ///
+  /// In en, this message translates to:
+  /// **'Yesterday {time}'**
+  String timeYesterday(String time);
+
+  /// No description provided for @settingsRowBackgroundScan.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scan'**
+  String get settingsRowBackgroundScan;
+
+  /// No description provided for @backgroundScanNever.
+  ///
+  /// In en, this message translates to:
+  /// **'Not run yet'**
+  String get backgroundScanNever;
+
   /// No description provided for @settingsSectionProfile.
   ///
   /// In en, this message translates to:
@@ -2335,6 +2377,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your server could not analyze this photo this time — it is kept and retried later.'**
   String get errServerFailed;
+
+  /// No description provided for @errServerRejected.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.'**
+  String errServerRejected(String code);
 }
 
 class _AppLocalizationsDelegate

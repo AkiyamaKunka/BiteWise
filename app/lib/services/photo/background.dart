@@ -1,5 +1,12 @@
-/// Android background backfill via workmanager (spec §6.4 — the nightly
-/// `--sync` replacement). iOS: NO-OP by spec delta (§6): share/picker only.
+/// Background backfill via workmanager (spec §6.4 — the nightly `--sync`
+/// replacement). Android: a periodic WorkManager job. iOS (since
+/// 2026-09-30): a BGAppRefreshTask — the OS grants ~30 s of background
+/// time a few times a day, at moments IT picks from the user's habits, so
+/// a photo shot with the app closed is usually logged within hours instead
+/// of waiting for the next launch. The task identifier is declared in
+/// Info.plist (BGTaskSchedulerPermittedIdentifiers) and registered
+/// natively in AppDelegate.swift before Flutter starts; both must name
+/// [photoBackfillUniqueName], or iOS silently never launches it.
 ///
 /// INTEGRATOR WIRING (read before calling `enableBackgroundScan`):
 /// WorkManager starts a FRESH background isolate at the registered
@@ -56,11 +63,20 @@ void callbackDispatcher() {
   Workmanager().executeTask(handleBackgroundTask);
 }
 
+/// Whether a task name handed to the dispatcher is our photo backfill.
+/// Android hands back the registered TASK name; iOS BGAppRefresh hands
+/// back the registered IDENTIFIER (the unique name), and a legacy
+/// background-fetch launch arrives as [Workmanager.iOSBackgroundTask].
+bool isPhotoBackfillTask(String task) =>
+    task == photoBackfillTaskName ||
+    task == photoBackfillUniqueName ||
+    task == Workmanager.iOSBackgroundTask;
+
 /// Pure task handler, separated from the isolate entrypoint so tests can
 /// drive it directly.
 Future<bool> handleBackgroundTask(
     String task, Map<String, dynamic>? inputData) async {
-  if (task != photoBackfillTaskName) return true; // not ours: don't retry
+  if (!isPhotoBackfillTask(task)) return true; // not ours: don't retry
   final lookback = lookbackDaysFromInput(inputData?['lookbackDays']);
   final runner = headlessBackfill;
   if (runner == null) return true; // unwired: succeed, never retry-storm
@@ -114,14 +130,20 @@ BackgroundScheduler? debugSchedulerOverride;
 @visibleForTesting
 bool? debugIsAndroidOverride;
 
-/// Integration-contract registration API. Android only — iOS is a no-op
-/// (spec §6 delta: share/picker only on iOS, no background scan).
+@visibleForTesting
+bool? debugIsIOSOverride;
+
+/// Integration-contract registration API. Android and iOS; anything else
+/// (desktop test hosts) is a no-op. On iOS the Dart-side frequency is
+/// advisory — the cadence is the one AppDelegate.swift registered
+/// natively, and the OS stretches it at will.
 Future<void> enableBackgroundScan(bool on,
     {int lookbackDays = 2,
     Duration frequency = const Duration(hours: 6),
     Function dispatcher = callbackDispatcher}) async {
   final isAndroid = debugIsAndroidOverride ?? Platform.isAndroid;
-  if (!isAndroid) return;
+  final isIOS = debugIsIOSOverride ?? Platform.isIOS;
+  if (!isAndroid && !isIOS) return;
   final scheduler = debugSchedulerOverride ?? WorkmanagerScheduler();
   if (!on) {
     await scheduler.cancelByUniqueName(photoBackfillUniqueName);
