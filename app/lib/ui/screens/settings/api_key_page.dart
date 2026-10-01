@@ -11,7 +11,12 @@ import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
 import 'provider_page.dart'
-    show kApiKeyChoices, kCustomModelSentinel, kKnownModels, isCuratedModel,
+    show
+        defaultModelFor,
+        kApiKeyChoices,
+        kCustomModelSentinel,
+        kKnownModels,
+        isCuratedModel,
         providerLabel;
 
 class ApiKeyProviderPage extends StatefulWidget {
@@ -61,18 +66,23 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
     });
   }
 
-  String _modelHelperText() => switch (widget.settings.provider) {
-        'openai' => 'Default: gpt-4o-mini',
-        'anthropic' => 'Default: claude-sonnet-5',
-        'qwen' => 'Default: qwen3-vl-flash. Doubles as the cheap tier — '
-            'qwen3-vl-plus is the stronger paid model.',
-        'doubao' => 'Default: doubao-seed-2-0-mini-260428. Doubao needs the '
-            'EXACT versioned ID from the Ark model list — undated names '
-            'are rejected.',
-        'glm' => 'Default: glm-4.6v-flash (free tier). glm-4.6v is the '
-            'stronger paid model.',
-        _ => 'Default: gemini-2.5-flash',
-      };
+  String _modelHelperText() {
+    final provider = widget.settings.provider;
+    final base = 'Default: ${defaultModelFor(provider)}';
+    return switch (provider) {
+      'qwen' => '$base. Doubles as the cheap tier — '
+          'qwen3-vl-plus is the stronger paid model.',
+      'doubao' => '$base. Doubao needs the '
+          'EXACT versioned ID from the Ark model list — undated names '
+          'are rejected.',
+      'glm' => '$base (free tier). glm-4.6v is the '
+          'stronger paid model.',
+      'deepseek' => '$base — the only DeepSeek model that accepts photos.',
+      'openrouter' => '$base. Any vendor/model slug from '
+          'openrouter.ai/models that accepts images works.',
+      _ => base,
+    };
+  }
 
   /// Where the key comes from — the footer's job.
   String _keyFooter(BuildContext context) =>
@@ -80,6 +90,9 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
         'qwen' => context.l10n.apiKeyFooterQwen,
         'doubao' => context.l10n.apiKeyFooterDoubao,
         'glm' => context.l10n.apiKeyFooterGlm,
+        'deepseek' => context.l10n.apiKeyFooterDeepseek,
+        'xai' => context.l10n.apiKeyFooterXai,
+        'openrouter' => context.l10n.apiKeyFooterOpenrouter,
         _ => context.l10n.apiKeyFooterDefault,
       };
 

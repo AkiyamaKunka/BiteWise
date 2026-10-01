@@ -332,6 +332,9 @@ class _AppSettingsStore implements SettingsStore {
         AiProvider.qwen => _s.setQwenApiKey(apiKey),
         AiProvider.doubao => _s.setDoubaoApiKey(apiKey),
         AiProvider.glm => _s.setGlmApiKey(apiKey),
+        AiProvider.deepseek => _s.setDeepseekApiKey(apiKey),
+        AiProvider.xai => _s.setXaiApiKey(apiKey),
+        AiProvider.openrouter => _s.setOpenrouterApiKey(apiKey),
       };
     }
     if (model != null) {
@@ -344,6 +347,9 @@ class _AppSettingsStore implements SettingsStore {
         AiProvider.qwen => _s.setQwenModel(model),
         AiProvider.doubao => _s.setDoubaoModel(model),
         AiProvider.glm => _s.setGlmModel(model),
+        AiProvider.deepseek => _s.setDeepseekModel(model),
+        AiProvider.xai => _s.setXaiModel(model),
+        AiProvider.openrouter => _s.setOpenrouterModel(model),
       };
     }
     if (lookbackDays != null) {

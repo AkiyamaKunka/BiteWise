@@ -281,7 +281,7 @@ abstract final class SharedConstants {
   static const int calorieMagnitudeLimit = 1000000000;
   static const int mealMismatchMinKcal = 100;
   static const double mealMismatchPct = 0.2;
-  static const String geminiModelDefault = 'gemini-2.5-flash';
+  static const String geminiModelDefault = 'gemini-3.8-flash';
   static const int geminiAnalysisMaxAttempts = 3;
   static const int geminiRetryDelayCapSeconds = 60;
   static const int apiLeftoverMaxChars = 4000;

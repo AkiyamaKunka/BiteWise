@@ -113,7 +113,7 @@ Edit `.env`:
 
 ```env
 GEMINI_API_KEY=replace-with-google-ai-studio-key
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.8-flash
 TELEGRAM_BOT_TOKEN=replace-with-botfather-token
 TELEGRAM_CHAT_ID=replace-with-your-numeric-chat-id
 ANDROID_API_KEY=replace-with-random-upload-api-key

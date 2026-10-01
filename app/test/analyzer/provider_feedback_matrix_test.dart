@@ -92,6 +92,12 @@ Future<AppSettings> _settingsFor(AiProvider p) async {
       await s.setDoubaoApiKey('dk');
     case AiProvider.glm:
       await s.setGlmApiKey('zk');
+    case AiProvider.deepseek:
+      await s.setDeepseekApiKey('sk');
+    case AiProvider.xai:
+      await s.setXaiApiKey('xk');
+    case AiProvider.openrouter:
+      await s.setOpenrouterApiKey('rk');
   }
   return s;
 }
@@ -113,6 +119,7 @@ OpenAiCompatAnalyzer _compat(
         modelOf: cfg.modelOf,
         supportsJsonMode: cfg.supportsJsonMode,
         extraBody: cfg.extraBody,
+        extraHeaders: cfg.extraHeaders,
         notFoundHint: cfg.notFoundHint,
         client: c,
         sleep: (_) async {},
@@ -376,6 +383,108 @@ void main() {
             429,
             '{"error":{"code":"1305","message":"当前API请求过多，请稍后重试。"}}',
             expectCalls: 1),
+        Scenario.junkReply: const Fx(200, ''),
+      },
+    ),
+    // ── Added 2026-09-30. NOT captured live (no keys on hand): the bodies
+    // below follow each vendor's published error reference, and what is
+    // pinned is the STATUS-driven classification the app relies on. ──
+    ProviderSpec(
+      name: 'DeepSeek',
+      settings: () => _settingsFor(AiProvider.deepseek),
+      make: (s, c) => _compat(createDeepseekAnalyzer(s), s, c),
+      wrapSuccess: _openaiShape,
+      fx: {
+        Scenario.auth: const Fx(
+            401,
+            '{"error":{"message":"Authentication Fails, Your api key: '
+            '****abcd is invalid","type":"authentication_error","param":'
+            'null,"code":"invalid_request_error"}}',
+            expectSays: 'key'),
+        Scenario.rateLimit: const Fx(
+            429,
+            '{"error":{"message":"Rate Limit Reached","type":'
+            '"rate_limit_error","param":null,"code":"rate_limit_reached"}}',
+            expectCalls: 1),
+        // DeepSeek's documented out-of-credit answer is HTTP 402.
+        Scenario.billing: const Fx(
+            402,
+            '{"error":{"message":"Insufficient Balance","type":'
+            '"unknown_error","param":null,"code":"invalid_request_error"}}'),
+        Scenario.modelNotFound: const Fx(
+            404,
+            '{"error":{"message":"Model Not Exist","type":'
+            '"invalid_request_error","param":null,"code":'
+            '"invalid_request_error"}}',
+            expectSays: 'model'),
+        Scenario.overloaded: const Fx(
+            503,
+            '{"error":{"message":"Server Overloaded","type":'
+            '"service_unavailable_error"}}',
+            expectCalls: 3),
+        Scenario.junkReply: const Fx(200, ''),
+      },
+    ),
+    ProviderSpec(
+      name: 'xAI',
+      settings: () => _settingsFor(AiProvider.xai),
+      make: (s, c) => _compat(createXaiAnalyzer(s), s, c),
+      wrapSuccess: _openaiShape,
+      fx: {
+        // xAI reports a bad key as HTTP 400 — the body is what marks it.
+        Scenario.auth: const Fx(
+            400,
+            '{"code":"Client specified an invalid argument","error":'
+            '"Incorrect API key provided: xa***zz. You can obtain an API '
+            'key from https://console.x.ai."}',
+            expectSays: 'key'),
+        Scenario.rateLimit: const Fx(
+            429,
+            '{"code":"Some resource has been exhausted","error":"Too many '
+            'requests: rate limit reached."}',
+            expectCalls: 1),
+        Scenario.modelNotFound: const Fx(
+            404,
+            '{"code":"Some requested entity was not found","error":"The '
+            'model grok-9 does not exist or your team does not have access '
+            'to it."}',
+            expectSays: 'model'),
+        Scenario.overloaded: const Fx(
+            503,
+            '{"code":"The service is currently unavailable","error":'
+            '"Service temporarily unavailable."}',
+            expectCalls: 3),
+        Scenario.junkReply: const Fx(200, ''),
+      },
+    ),
+    ProviderSpec(
+      name: 'OpenRouter',
+      settings: () => _settingsFor(AiProvider.openrouter),
+      make: (s, c) => _compat(createOpenRouterAnalyzer(s), s, c),
+      wrapSuccess: _openaiShape,
+      fx: {
+        Scenario.auth: const Fx(
+            401,
+            '{"error":{"message":"No auth credentials found","code":401}}',
+            expectSays: 'key'),
+        Scenario.rateLimit: const Fx(
+            429,
+            '{"error":{"message":"Rate limit exceeded: free-models-per-min",'
+            '"code":429}}',
+            expectCalls: 1),
+        Scenario.billing: const Fx(
+            402,
+            '{"error":{"message":"Insufficient credits. Add more using '
+            'https://openrouter.ai/settings/credits","code":402}}'),
+        Scenario.modelNotFound: const Fx(
+            404,
+            '{"error":{"message":"No endpoints found for nobody/nothing.",'
+            '"code":404}}',
+            expectSays: 'model'),
+        Scenario.overloaded: const Fx(
+            502,
+            '{"error":{"message":"Provider returned error","code":502}}',
+            expectCalls: 3),
         Scenario.junkReply: const Fx(200, ''),
       },
     ),

@@ -442,7 +442,7 @@ bytes in that case.)
 
 Production uses the `google-genai` SDK with `GenerateContentConfig(response_mime_type=
 "application/json")` (`GEMINI_JSON_CONFIG`, `telegram_bot.py:129`) and model `GEMINI_MODEL`
-(default `gemini-2.5-flash`, `config.py:26`). Photo calls send `[FOOD_DETECTION_PROMPT,
+(default `gemini-3.8-flash`, `config.py:26`). Photo calls send `[FOOD_DETECTION_PROMPT,
 image_part]` where the normalized JPEG rides as an inline bytes part with mime `image/jpeg`
 (`telegram_bot.py:1255-1267`). Text calls send `[prompt]` with the same JSON config
 (`telegram_bot.py:4301-4306`).
@@ -996,7 +996,7 @@ plan questions (`_maybe_answer_fitness_query`, `telegram_bot.py:3812-3839`). Pha
 
 | Setting | Default | Source | App relevance |
 |---|---|---|---|
-| Gemini model | `gemini-2.5-flash` | `config.py:26` | user-editable model string |
+| Gemini model | `gemini-3.8-flash` | `config.py:26` | user-editable model string |
 | Gemini API key | — | `config.py:25` | user-supplied, stored in secure storage |
 | Analysis max attempts (auto intake) | 3 (clamp 1–10) | `telegram_bot.py:122` | §3.3 |
 | Retry base delay | 5 s | `telegram_bot.py:123` | §3.3 |

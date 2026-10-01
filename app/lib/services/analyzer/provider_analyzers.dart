@@ -156,6 +156,9 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
               (body.contains('insufficient_quota') ||
                   body.contains('"1113"'))) ||
           (resp.statusCode == 403 && body.contains('AccountOverdue')) ||
+          // 402 Payment Required: DeepSeek "Insufficient Balance" and
+          // OpenRouter's out-of-credits answer. Never an auth failure.
+          resp.statusCode == 402 ||
           (resp.statusCode == 400 &&
               (body.contains('Arrearage') ||
                   body.contains('credit balance is too low')));
@@ -168,7 +171,10 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
             billing: true,
             verbatimMessage: true);
       }
-      if (resp.statusCode == 401 || resp.statusCode == 403) {
+      if (resp.statusCode == 401 ||
+          resp.statusCode == 403 ||
+          // xAI reports a bad key as HTTP 400 "Incorrect API key provided".
+          (resp.statusCode == 400 && body.contains('Incorrect API key'))) {
         throw const _ProviderException('key rejected',
             transient: false, auth: true);
       }
@@ -492,6 +498,7 @@ class OpenAiCompatAnalyzer extends _HttpVisionAnalyzer {
     required this.modelOf,
     this.supportsJsonMode = true,
     this.extraBody = const {},
+    this.extraHeaders = const {},
     this.notFoundHint,
     super.client,
     super.sleep,
@@ -504,6 +511,11 @@ class OpenAiCompatAnalyzer extends _HttpVisionAnalyzer {
   final String Function(AppSettings) modelOf;
   final bool supportsJsonMode;
   final Map<String, Object?> extraBody;
+
+  /// Static request headers beyond auth/content-type (OpenRouter's
+  /// attribution pair). Auth and content-type are set AFTER these, so a
+  /// config entry can never clobber the bearer.
+  final Map<String, String> extraHeaders;
 
   /// Per-provider HTTP-404 explanation (see [notFoundMessage]).
   final String? notFoundHint;
@@ -536,6 +548,7 @@ class OpenAiCompatAnalyzer extends _HttpVisionAnalyzer {
     final extras = Map<String, Object?>.of(extraBody);
     if (model.contains('thinking')) extras.remove('thinking');
     return http.Request('POST', endpoint)
+      ..headers.addAll(extraHeaders)
       ..headers['Authorization'] = 'Bearer $key'
       ..headers['Content-Type'] = 'application/json'
       // extras spread FIRST: on a key collision the computed core fields
@@ -1073,6 +1086,64 @@ OpenAiCompatAnalyzer createGlmAnalyzer(AppSettings settings,
             'Settings (glm-4.6v family; older glm-4v IDs are retired).',
         client: client);
 
+/// The providers added 2026-09-30, as [OpenAiCompatAnalyzer]
+/// configurations. Every endpoint, model id and parameter below was read
+/// from the vendor's own documentation that day.
+OpenAiCompatAnalyzer createDeepseekAnalyzer(AppSettings settings,
+        {http.Client? client}) =>
+    OpenAiCompatAnalyzer(settings,
+        endpoint: Uri.parse('https://api.deepseek.com/chat/completions'),
+        label: 'DeepSeek',
+        keyOf: (s) => s.deepseekApiKey,
+        modelOf: (s) => s.deepseekModel,
+        // response_format json_object is documented; thinking DEFAULTS to
+        // enabled and bills the reasoning as output — pointless for a
+        // fixed-schema extraction, so switch it off.
+        extraBody: const {
+          'thinking': {'type': 'disabled'}
+        },
+        notFoundHint: 'DeepSeek model not found — check the model name in '
+            'Settings. Only deepseek-flash accepts photos; '
+            'deepseek-v4-pro is text-only.',
+        client: client);
+
+OpenAiCompatAnalyzer createXaiAnalyzer(AppSettings settings,
+        {http.Client? client}) =>
+    OpenAiCompatAnalyzer(settings,
+        // xAI calls this endpoint "legacy" next to its Responses API, but
+        // documents it as supported, with image_url data URLs.
+        endpoint: Uri.parse('https://api.x.ai/v1/chat/completions'),
+        label: 'xAI',
+        keyOf: (s) => s.xaiApiKey,
+        modelOf: (s) => s.xaiModel,
+        // JSON mode on the image path is not documented: let the prompt
+        // and the fence-stripping parser carry the contract (as for
+        // Anthropic and GLM) rather than risk a 400 on every photo.
+        supportsJsonMode: false,
+        notFoundHint: 'xAI model not found — check the model name in '
+            'Settings (for example grok-4.7).',
+        client: client);
+
+OpenAiCompatAnalyzer createOpenRouterAnalyzer(AppSettings settings,
+        {http.Client? client}) =>
+    OpenAiCompatAnalyzer(settings,
+        endpoint: Uri.parse('https://openrouter.ai/api/v1/chat/completions'),
+        label: 'OpenRouter',
+        keyOf: (s) => s.openrouterApiKey,
+        modelOf: (s) => s.openrouterModel,
+        // One key fronts hundreds of models with different parameter
+        // support; json_object is not universal, so it is never sent.
+        supportsJsonMode: false,
+        // Optional attribution headers from OpenRouter's quickstart.
+        extraHeaders: const {
+          'HTTP-Referer': 'https://github.com/AkiyamaKunka/BiteWise',
+          'X-OpenRouter-Title': 'BiteWise',
+        },
+        notFoundHint: 'OpenRouter model not found — use the full slug from '
+            'openrouter.ai/models (vendor/model, for example '
+            'google/gemini-3.8-flash) and pick one that accepts images.',
+        client: client);
+
 class MultiProviderAnalyzer implements AnalyzerService {
   MultiProviderAnalyzer(this._settings, {http.Client? client})
       : _gemini = createAnalyzer(_settings, client: client),
@@ -1081,7 +1152,10 @@ class MultiProviderAnalyzer implements AnalyzerService {
         _server = ServerAnalyzer(_settings, client: client),
         _qwen = createQwenAnalyzer(_settings, client: client),
         _doubao = createDoubaoAnalyzer(_settings, client: client),
-        _glm = createGlmAnalyzer(_settings, client: client);
+        _glm = createGlmAnalyzer(_settings, client: client),
+        _deepseek = createDeepseekAnalyzer(_settings, client: client),
+        _xai = createXaiAnalyzer(_settings, client: client),
+        _openrouter = createOpenRouterAnalyzer(_settings, client: client);
 
   final AppSettings _settings;
   final AnalyzerService _gemini;
@@ -1091,6 +1165,9 @@ class MultiProviderAnalyzer implements AnalyzerService {
   final OpenAiCompatAnalyzer _qwen;
   final OpenAiCompatAnalyzer _doubao;
   final OpenAiCompatAnalyzer _glm;
+  final OpenAiCompatAnalyzer _deepseek;
+  final OpenAiCompatAnalyzer _xai;
+  final OpenAiCompatAnalyzer _openrouter;
 
   AnalyzerService get _active => switch (_settings.provider) {
         AiProvider.gemini => _gemini,
@@ -1100,6 +1177,9 @@ class MultiProviderAnalyzer implements AnalyzerService {
         AiProvider.qwen => _qwen,
         AiProvider.doubao => _doubao,
         AiProvider.glm => _glm,
+        AiProvider.deepseek => _deepseek,
+        AiProvider.xai => _xai,
+        AiProvider.openrouter => _openrouter,
       };
 
   /// Phone-side credential check BEFORE any transport. Without it a

@@ -90,7 +90,7 @@ void main() {
           'https://api.openai.com/v1/chat/completions');
       expect(req.headers['Authorization'], 'Bearer sk-oa');
       final body = jsonDecode(req.body) as Map<String, dynamic>;
-      expect(body['model'], 'gpt-4o-mini');
+      expect(body['model'], AppSettings.defaultOpenaiModel);
       expect(body['response_format'], {'type': 'json_object'});
       // max_tokens is REJECTED (400) by o-series/gpt-5 models; the newer
       // name is accepted across all current chat-completions models.
@@ -219,7 +219,7 @@ void main() {
       expect(req.headers['x-api-key'], 'sk-an');
       expect(req.headers['anthropic-version'], '2023-06-01');
       final body = jsonDecode(req.body) as Map<String, dynamic>;
-      expect(body['model'], 'claude-sonnet-5');
+      expect(body['model'], AppSettings.defaultAnthropicModel);
       final content = ((body['messages'] as List).first
           as Map<String, dynamic>)['content'] as List;
       expect((content.first as Map)['type'], 'image');
