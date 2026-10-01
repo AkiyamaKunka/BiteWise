@@ -16,7 +16,7 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
-import '../services/analyzer/normalize.dart' show makeMealThumb;
+import '../services/analyzer/platform_decode.dart';
 import '../services/photo/filename_dates.dart'
     show exifCapturedAt, validateCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
@@ -286,7 +286,7 @@ class PhotoPipeline {
       // finishing the thumb before the next photo keeps memory flat; any
       // failure must never un-save the meal.
       try {
-        final thumb = await compute(makeMealThumb, photo.bytes);
+        final thumb = await makeMealThumbAny(photo.bytes);
         if (thumb != null) await dao.saveMealThumb(id, thumb);
       } catch (_) {}
       final summary =

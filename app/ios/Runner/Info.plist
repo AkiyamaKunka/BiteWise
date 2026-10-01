@@ -4,6 +4,10 @@
 <dict>
 	<key>AppGroupId</key>
 	<string>$(CUSTOM_GROUP_ID)</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>calorietracker.photo.backfill.periodic</string>
+	</array>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDevelopmentRegion</key>
@@ -51,6 +55,10 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Bitewise reads your photo library so you can pick recent food photos and log meals from them.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -245,6 +245,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRowReportTime => 'Report Time';
 
   @override
+  String get settingsRowNextSummary => 'Next summary';
+
+  @override
+  String timeToday(String time) {
+    return 'Today $time';
+  }
+
+  @override
+  String timeTomorrow(String time) {
+    return 'Tomorrow $time';
+  }
+
+  @override
+  String get nextSummaryNone => 'Not scheduled';
+
+  @override
+  String timeYesterday(String time) {
+    return 'Yesterday $time';
+  }
+
+  @override
+  String get settingsRowBackgroundScan => 'Background scan';
+
+  @override
+  String get backgroundScanNever => 'Not run yet';
+
+  @override
+  String get backgroundScanDisabled => 'Off in Settings';
+
+  @override
   String get settingsSectionProfile => 'Profile';
 
   @override
@@ -1393,4 +1423,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get errServerFailed =>
       'Your server could not analyze this photo this time — it is kept and retried later.';
+
+  @override
+  String errServerRejected(String code) {
+    return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
+  }
 }

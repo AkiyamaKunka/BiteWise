@@ -8,11 +8,10 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show compute;
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
-import '../../services/analyzer/normalize.dart' show makeMealThumb;
+import '../../services/analyzer/platform_decode.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
@@ -254,7 +253,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
         builder: (_) => MealEditorScreen(
           dao: widget.services.dao,
           fromPhoto: deliberate,
-          makeThumb: (bytes) => compute(makeMealThumb, bytes),
+          makeThumb: makeMealThumbAny,
         ),
       ));
       if (saved == true && mounted) {

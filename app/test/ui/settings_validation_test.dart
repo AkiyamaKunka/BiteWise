@@ -596,6 +596,92 @@ void planTuningTests() {
     expect(find.byKey(const Key('planEffortRow')), findsNothing);
   });
 
+  group('next-summary row (2026-09-30)', () {
+    // A fresh key per pump: the probe runs in initState, and a same-typed
+    // widget at the same slot would otherwise keep the old State.
+    Widget screen({Future<DateTime?> Function()? next}) =>
+        _wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: FakeSettings(apiKey: 'k'),
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          nextSummaryAt: next,
+        ));
+
+    testWidgets('shows the armed slot, today or tomorrow', (tester) async {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day, 21, 30);
+      await tester.pumpWidget(screen(next: () async => today));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('nextSummaryRow')), findsOneWidget);
+      expect(find.textContaining('21:30'), findsOneWidget);
+      expect(find.textContaining('Today'), findsOneWidget);
+      final tomorrow = today.add(const Duration(days: 1));
+      await tester.pumpWidget(screen(next: () async => tomorrow));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Tomorrow'), findsOneWidget);
+    });
+
+    testWidgets('background-scan row: last OS launch, or "Not run yet"',
+        (tester) async {
+      Widget bg(Future<DateTime?> Function()? last) => _wrap(SettingsScreen(
+            key: UniqueKey(),
+            settings: FakeSettings(apiKey: 'k'),
+            analyzer: FakeAnalyzer(),
+            dao: FakeDao(),
+            requestPhotoPermission: () async => true,
+            lastBackgroundScan: last,
+          ));
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      await tester.pumpWidget(bg(() async => yesterday));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
+      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      await tester.pumpWidget(bg(() async => null));
+      await tester.pumpAndSettle();
+      expect(find.text('Not run yet'), findsOneWidget);
+      await tester.pumpWidget(bg(null));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
+    });
+
+    testWidgets('Background App Refresh off → the row becomes the remedy',
+        (tester) async {
+      // iOS refuses every BGTask request while the system switch (or Low
+      // Power Mode) is off, and the plugin swallows the error: the row
+      // must say so instead of "not run yet" forever.
+      var opened = 0;
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => false,
+        openSystemSettings: () async => opened++,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Off in Settings'), findsOneWidget);
+      expect(find.text('Not run yet'), findsNothing);
+      await tester.tap(find.byKey(const Key('backgroundScanRow')));
+      await tester.pump();
+      expect(opened, 1);
+    });
+
+    testWidgets('nothing armed → "Not scheduled"; no probe → no row',
+        (tester) async {
+      await tester.pumpWidget(screen(next: () async => null));
+      await tester.pumpAndSettle();
+      expect(find.text('Not scheduled'), findsOneWidget);
+      await tester.pumpWidget(screen());
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('nextSummaryRow')), findsNothing);
+    });
+  });
+
   group('notifications-off remedy (2026-09-28)', () {
     // On iOS a declined notification permission makes every scheduled
     // daily summary vanish with no trace. The report section must say so

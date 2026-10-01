@@ -187,6 +187,17 @@ class BaseFakeDao implements MealsDao {
   Future<void> reclaimStaleProcessing() async {}
 
   @override
+  Future<int> reofferUnsavedVerdicts({required String source}) async {
+    // The fake ledger has no source column: rows named '<source>:…' belong
+    // to that source, unprefixed rows match any.
+    final before = ledger.length;
+    ledger.removeWhere((h, s) =>
+        (s == IngestionStatus.skipped || s == IngestionStatus.failed) &&
+        (!h.contains(':') || h.startsWith('$source:')));
+    return before - ledger.length;
+  }
+
+  @override
   Future<({IngestionStatus status, int? mealId})?> photoStatus(
       String imageHash) async {
     final st = ledger[imageHash];

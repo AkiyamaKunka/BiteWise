@@ -167,6 +167,37 @@ void main() {
       expect(dao.meals, hasLength(1));
     });
 
+    test('past the deadline photos are RELEASED, not processed (iOS ~30 s)',
+        () async {
+      // The iOS refresh grant is ~30 s; a photo offered after the budget
+      // must come back next run, not be burned as failed — and the
+      // outcomes list must not claim it.
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      var now = DateTime(2026, 9, 30, 12, 0, 0);
+      final deadline = DateTime(2026, 9, 30, 12, 0, 15);
+      final drain = await drainBackfill(
+          intake, PhotoPipeline(dao: dao, analyzer: analyzer),
+          deadline: deadline,
+          clock: () => now,
+          onOutcome: (_, _, _) async {
+            now = now.add(const Duration(seconds: 10)); // each photo: 10 s
+          });
+      expect(drain.outcomes, hasLength(2), reason: '0 s and 10 s fit');
+      expect(drain.cutShort, isTrue);
+      expect(dao.meals, hasLength(2));
+      // No deadline: everything is processed (Android path unchanged).
+      final again = await drainBackfill(
+          EmittingIntake()..batch = [photo(4)],
+          PhotoPipeline(dao: dao, analyzer: analyzer));
+      expect(again.cutShort, isFalse);
+    });
+
     test('unsubscribes its listener afterwards', () async {
       final intake = EmittingIntake()..batch = [photo(1)];
       final dao = FakeDao();
@@ -219,6 +250,32 @@ void main() {
           frontierMark.toIso8601String());
     });
 
+    test('a budget turns into a deadline from the scan start', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2)];
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      var now = DateTime(2026, 9, 30, 12, 0, 0);
+      final cards = <String>[];
+      final ok = await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: analyzer),
+        showMealCard: (title, body) async {
+          cards.add(body);
+          now = now.add(const Duration(seconds: 20)); // one card blows it
+        },
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+      );
+      expect(ok, isTrue, reason: 'cut short is still success — no retry storm');
+      expect(cards, hasLength(1));
+    });
+
     test('passes the persisted watermark minus the overlap', () async {
       final settings = await settingsWith(key: 'k');
       final mark = DateTime(2026, 7, 23, 11, 0);
@@ -238,16 +295,21 @@ void main() {
     test('does nothing when the watcher toggle is off', () async {
       final settings = await settingsWith(key: 'k', watcher: false);
       final intake = EmittingIntake();
+      final launched = DateTime(2026, 9, 30, 14, 2);
       final ok = await headlessBackfillWith(
         settings: settings,
         prefs: prefs,
         intake: intake,
         pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: FakeAnalyzer()),
         showMealCard: (_, _) async {},
+        clock: () => launched,
       );
       expect(ok, isTrue); // success — never a WorkManager retry storm
       expect(intake.scans, 0);
       expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
+      // "The OS ran us" is recorded BEFORE any guard — Settings shows it.
+      expect(prefs.getString(backgroundLastRunPrefsKey),
+          launched.toIso8601String());
     });
 
     test('does nothing without an API key (photos must not burn to failed)',
