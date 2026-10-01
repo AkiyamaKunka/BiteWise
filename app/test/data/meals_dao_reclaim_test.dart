@@ -117,7 +117,7 @@ void main() {
     expect(await dao.reservePhotoHash('e' * 32, source: 'app_watch'), isFalse);
   });
 
-  test('reofferWatchVerdicts releases ONLY watcher skipped/failed rows',
+  test('reofferUnsavedVerdicts releases one source\'s skipped/failed rows',
       () async {
     // The iOS repair (2026-09-30): verdicts on unreadable HEIC uploads.
     Future<void> seed(String h, String source, IngestionStatus st) async {
@@ -128,13 +128,17 @@ void main() {
     await seed('1' * 32, 'app_watch', IngestionStatus.skipped);
     await seed('2' * 32, 'app_watch', IngestionStatus.failed);
     await seed('3' * 32, 'app_watch', IngestionStatus.saved);
-    await seed('4' * 32, 'app_share', IngestionStatus.skipped);
-    expect(await dao.reofferWatchVerdicts(), 2);
+    await seed('4' * 32, 'app_photo', IngestionStatus.skipped);
+    await seed('5' * 32, 'app_photo', IngestionStatus.deleted);
+    expect(await dao.reofferUnsavedVerdicts(source: 'app_watch'), 2);
     expect(await dao.photoStatus('1' * 32), isNull);
     expect(await dao.photoStatus('2' * 32), isNull);
     expect((await dao.photoStatus('3' * 32))?.status, IngestionStatus.saved);
     expect((await dao.photoStatus('4' * 32))?.status, IngestionStatus.skipped,
-        reason: 'a deliberate share is the user\'s own verdict to revisit');
-    expect(await dao.reofferWatchVerdicts(), 0);
+        reason: 'another source is another call');
+    expect(await dao.reofferUnsavedVerdicts(source: 'app_photo'), 1);
+    expect(await dao.photoStatus('4' * 32), isNull);
+    expect((await dao.photoStatus('5' * 32))?.status, IngestionStatus.deleted,
+        reason: 'a user deletion is never undone');
   });
 }

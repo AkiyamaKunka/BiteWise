@@ -258,12 +258,12 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
-  Future<int> reofferWatchVerdicts() => _db.delete(
+  Future<int> reofferUnsavedVerdicts({required String source}) => _db.delete(
         'photo_ingestions',
         where: 'chat_id = ? AND source = ? AND status IN (?, ?)',
         whereArgs: [
           localChatId,
-          MealSource.appWatch,
+          source,
           IngestionStatus.skipped.name,
           IngestionStatus.failed.name,
         ],

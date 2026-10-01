@@ -98,13 +98,12 @@ abstract class MealsDao {
   Future<void> releasePhotoHash(String imageHash);
   Future<void> reclaimStaleProcessing(); // launch-time sweep (spec §2 delta)
 
-  /// Forget every AUTOMATED-watch verdict that did not become a meal
-  /// (skipped / failed), so the next scan re-offers those photos. Saved,
-  /// deleted and deliberate (share / picker) rows are never touched.
-  /// Returns how many were released. One-time repair tool: verdicts
-  /// reached while the model was being sent bytes it could not read are
-  /// worthless (migrations.dart).
-  Future<int> reofferWatchVerdicts();
+  /// Forget every verdict from [source] that did not become a meal
+  /// (skipped / failed), so the next scan re-offers those photos. Saved
+  /// and user-deleted rows are never touched. Returns how many were
+  /// released. One-time repair tool: verdicts reached while the model was
+  /// being sent bytes it could not read are worthless (migrations.dart).
+  Future<int> reofferUnsavedVerdicts({required String source});
 
   /// Read-only ledger lookup for the coverage audit: the status of one
   /// photo hash (and the meal it became, when saved). Null = never seen —
