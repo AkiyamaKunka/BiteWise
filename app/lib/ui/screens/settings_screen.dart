@@ -14,9 +14,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/contracts.dart';
-import 'package:flutter/foundation.dart' show compute;
 
-import '../../services/analyzer/normalize.dart' show makeMealThumb;
+import '../../services/analyzer/platform_decode.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
 import '../photo_pipeline.dart';
@@ -578,7 +577,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           builder: (_) => MealEditorScreen(
                             dao: widget.dao,
                             fromPhoto: photo,
-                            makeThumb: (b) => compute(makeMealThumb, b),
+                            makeThumb: makeMealThumbAny,
                           ),
                         )) ==
                         true,

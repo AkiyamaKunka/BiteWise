@@ -12,6 +12,7 @@ import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show compute;
 
 import 'package:permission_handler/permission_handler.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/contracts.dart';
 import '../data/meals_dao_impl.dart';
@@ -31,6 +32,7 @@ import '../services/report/daily_summary.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
+import 'migrations.dart';
 import 'os_summary.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
@@ -58,6 +60,16 @@ class AppServices {
     // Any 'processing' ledger row at launch is a crashed run — reclaim it
     // before services start (spec §2.3 single-process simplification).
     await dao.reclaimStaleProcessing();
+    if (Platform.isIOS) {
+      try {
+        // iPhone photos are HEIC; earlier builds showed them to the model
+        // unreadable. Forget those verdicts once (migrations.dart).
+        await reofferUnreadPhotosOnce(
+            dao, await SharedPreferences.getInstance());
+      } catch (_) {
+        // A repair must never block startup.
+      }
+    }
     final analyzer = createMultiProviderAnalyzer(settings);
     // A dedicated ServerAnalyzer instance for the OAuth re-connect calls:
     // they exist regardless of the currently selected provider (the user

@@ -4974,6 +4974,22 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
         return jsonify({"error": code}), 400
 
+    def _api_jpeg_bytes(data):
+        """The bytes the analyzer may be shown, or None when unusable.
+
+        claude_analyzer labels every upload image/jpeg (its callers were
+        assumed to send normalized JPEG). The iOS app could not decode
+        HEIC and sent the raw original instead: the model, unable to read
+        it, answered is_food:false for every iPhone photo (2026-09-30 —
+        the same picture as JPEG was "food"). So any recognisable image
+        container that is NOT JPEG is converted here (PIL + pillow_heif);
+        a conversion failure is a 400, never a guess. Bytes that are not
+        recognisably an image keep the old pass-through path.
+        """
+        if data[:3] == b"\xff\xd8\xff" or not _looks_like_image(data):
+            return data
+        return _normalize_photo_for_analysis(data)
+
     def _plan_model_effort(payload, backend):
         """Validate the app's optional model/effort choice (2026-08-05).
 
@@ -5050,6 +5066,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return _api_bad_request("analyze_photo", "no_image")
         if len(data) > API_ANALYZE_MAX_BYTES:
             return jsonify({"error": "image_too_large"}), 413
+        data = _api_jpeg_bytes(data)
+        if data is None:
+            return _api_bad_request("analyze_photo", "bad_image_format")
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
             return _api_bad_request("analyze_photo", "bad_backend")
         if not claude_analyzer.backend_available(backend, for_photo=True):
@@ -5124,6 +5143,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return _api_bad_request("analyze_leftover", "no_image")
         if len(data) > API_ANALYZE_MAX_BYTES:
             return jsonify({"error": "image_too_large"}), 413
+        data = _api_jpeg_bytes(data)
+        if data is None:
+            return _api_bad_request("analyze_leftover", "bad_image_format")
         compact = compact_leftover_original(payload.get("original_analysis"))
         if compact is None:
             return _api_bad_request("analyze_leftover", "bad_original_analysis")

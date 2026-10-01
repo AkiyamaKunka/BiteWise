@@ -258,6 +258,18 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
+  Future<int> reofferWatchVerdicts() => _db.delete(
+        'photo_ingestions',
+        where: 'chat_id = ? AND source = ? AND status IN (?, ?)',
+        whereArgs: [
+          localChatId,
+          MealSource.appWatch,
+          IngestionStatus.skipped.name,
+          IngestionStatus.failed.name,
+        ],
+      );
+
+  @override
   Future<void> releasePhotoHash(String imageHash) async {
     final hash = normalizeImageHash(imageHash);
     if (hash.isEmpty) return;

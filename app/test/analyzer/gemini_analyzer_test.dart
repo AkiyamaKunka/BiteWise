@@ -325,15 +325,29 @@ void main() {
   });
 
   group('normalization fallback (spec §3.1 step 6)', () {
-    test('normalize failure with small original sends original bytes',
+    test('normalize failure with a small JPEG original sends it as-is',
         () async {
       final s = await freshSettings();
       final h = Harness(s, [ok(foodJson)], normalizer: (_) async => null);
-      final out = await h.analyzer.analyzePhoto(photo);
+      final jpegOriginal =
+          Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0, ...photo]);
+      final out = await h.analyzer.analyzePhoto(jpegOriginal);
       expect(out.isFood, isTrue);
       final data = jsonDecode(h.requests.single.body)['contents'][0]['parts']
           [1]['inline_data']['data'] as String;
-      expect(data, base64Encode(photo));
+      expect(data, base64Encode(jpegOriginal));
+    });
+
+    test('normalize failure with a NON-JPEG original sends nothing', () async {
+      // Raw HEIC labelled image/jpeg is unreadable to the model, which then
+      // answers "not food" — the owner's iPhone lost every meal that way
+      // (2026-09-30). An undecodable non-JPEG fails visibly instead.
+      final s = await freshSettings();
+      final h = Harness(s, [], normalizer: (_) async => null);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(h.requests, isEmpty);
+      expect(out.error, contains('not a JPEG'));
+      expect(out.retryable, isFalse);
     });
 
     test('normalize failure with >=5MB original fails with no HTTP call',

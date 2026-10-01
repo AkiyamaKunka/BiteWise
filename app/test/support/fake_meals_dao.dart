@@ -187,6 +187,14 @@ class BaseFakeDao implements MealsDao {
   Future<void> reclaimStaleProcessing() async {}
 
   @override
+  Future<int> reofferWatchVerdicts() async {
+    final before = ledger.length;
+    ledger.removeWhere((_, s) =>
+        s == IngestionStatus.skipped || s == IngestionStatus.failed);
+    return before - ledger.length;
+  }
+
+  @override
   Future<({IngestionStatus status, int? mealId})?> photoStatus(
       String imageHash) async {
     final st = ledger[imageHash];

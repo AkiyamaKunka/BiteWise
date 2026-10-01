@@ -13,6 +13,8 @@ this VM) instead of a metered API key. The contract they must keep:
 """
 import io
 
+import pytest
+
 
 import claude_analyzer
 import telegram_bot
@@ -518,3 +520,75 @@ def test_leftover_and_text_400s_are_logged_too(client, monkeypatch, caplog):
     lines = [r.getMessage() for r in caplog.records]
     assert any(ln.startswith("analyze_leftover refused (400 ") for ln in lines), lines
     assert any(ln.startswith("text_intent refused (400 no_prompt)") for ln in lines), lines
+
+
+# ─── Non-JPEG uploads are converted, never guessed at (2026-09-30) ──────
+
+def _png_bytes():
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30), (200, 120, 60)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_photo_non_jpeg_image_is_converted_to_jpeg_before_analysis(
+        client, monkeypatch):
+    # The analyzer labels every upload image/jpeg. The iOS app sent raw
+    # HEIC (it could not decode it), the model could not read it, and every
+    # iPhone photo came back is_food:false. Any recognisable non-JPEG image
+    # is now converted here first — pinned with PNG, which PIL always reads.
+    import base64
+    seen = {}
+
+    def fake(b, p=None, allow_file_fallback=True, backend="claude",
+             raise_on_busy=False, **kw):
+        seen["bytes"] = b
+        return dict(ANALYSIS)
+
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    monkeypatch.setattr(claude_analyzer, "analyze_food_photo", fake)
+    resp = client.http.post(
+        "/api/analyze_photo", headers={"X-API-Key": "secret-key"},
+        json={"image_b64": base64.b64encode(_png_bytes()).decode()})
+    assert resp.status_code == 200
+    assert seen["bytes"][:3] == b"\xff\xd8\xff", "the model must get a JPEG"
+
+
+def test_photo_jpeg_passes_through_untouched(client, monkeypatch):
+    import base64
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.new("RGB", (40, 30), (10, 20, 30)).save(buf, format="JPEG")
+    jpeg = buf.getvalue()
+    seen = {}
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        claude_analyzer, "analyze_food_photo",
+        lambda b, p=None, allow_file_fallback=True, backend="claude",
+        raise_on_busy=False, **kw: seen.setdefault("bytes", b) and dict(ANALYSIS))
+    resp = client.http.post(
+        "/api/analyze_photo", headers={"X-API-Key": "secret-key"},
+        json={"image_b64": base64.b64encode(jpeg).decode()})
+    assert resp.status_code == 200
+    assert seen["bytes"] == jpeg, "already-JPEG uploads are not re-encoded"
+
+
+def test_photo_unreadable_image_container_is_a_400_not_a_guess(
+        client, monkeypatch, caplog):
+    # An ISO-BMFF header (HEIC/AVIF family) with garbage behind it: nothing
+    # can decode it, so the answer is a coded refusal — and the analyzer is
+    # never asked about bytes it cannot see.
+    import base64
+    import logging
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    monkeypatch.setattr(
+        claude_analyzer, "analyze_food_photo",
+        lambda *a, **k: pytest.fail("must not analyze undecodable bytes"))
+    bogus = b"\x00\x00\x00\x18ftypheic" + b"\x00" * 64
+    with caplog.at_level(logging.WARNING, logger="calorie_bot"):
+        resp = client.http.post(
+            "/api/analyze_photo", headers={"X-API-Key": "secret-key"},
+            json={"image_b64": base64.b64encode(bogus).decode()})
+    assert resp.status_code == 400
+    assert resp.get_json()["error"] == "bad_image_format"
+    assert any("400 bad_image_format" in r.getMessage() for r in caplog.records)
