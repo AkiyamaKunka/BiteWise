@@ -23,7 +23,7 @@ def _clean_env(name: str, default: Optional[str] = None) -> Optional[str]:
 
 # ─── Gemini API Settings ──────────────────────────────────────────
 GEMINI_API_KEY = _clean_env("GEMINI_API_KEY")
-GEMINI_MODEL = _clean_env("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MODEL = _clean_env("GEMINI_MODEL", "gemini-3.8-flash")
 
 # ─── Telegram Bot Settings ────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = _clean_env("TELEGRAM_BOT_TOKEN")

@@ -35,7 +35,7 @@ flowchart LR
         DB[("Local SQLite<br/>meals · photos · history")]
         UI["Today · History · charts<br/>plain-language corrections"]
     end
-    Provider["AI provider of your choice<br/>Gemini · OpenAI · Claude<br/>Qwen · Doubao · GLM"]
+    Provider["AI provider of your choice<br/>Gemini · OpenAI · Claude · Grok<br/>DeepSeek · Qwen · Doubao · GLM<br/>or any model via OpenRouter"]
     Server["Optional: your own server<br/>subscription-billed analysis"]
     Intake --> Pipeline
     Pipeline <--> Provider
@@ -65,13 +65,16 @@ flowchart LR
 
 **Today, History, and honest charts.** Today shows running totals and a comparison against your *typical day* (a median, so under-logged days don't drag it down). History covers 30 days — and days where nothing was logged appear dimmed as *"no meals logged"* instead of silently vanishing, so a broken watcher looks broken. Meal detail draws a per-macro energy split (4/4/9 kcal per gram), live-updating as you edit.
 
-**Seven AI providers — three reachable from mainland China without a VPN.** Keys are yours, entered once, stored in the platform secure keystore; switching providers takes effect on the next photo. For scale: a month of meal photos on a pay-per-call provider typically costs well under a dollar, and the GLM route is free.
+**Ten AI providers — four reachable from mainland China without a VPN.** Keys are yours, entered once, stored in the platform secure keystore; switching providers takes effect on the next photo. For scale: a month of meal photos on a pay-per-call provider typically costs well under a dollar, and the GLM route is free.
 
 | Provider | Vision | From mainland China | Cost model |
 |---|:---:|:---:|---|
 | Google Gemini | ✅ | VPN needed | free tier (daily cap handled gracefully) |
 | OpenAI | ✅ | VPN needed | pay per call |
 | Anthropic Claude | ✅ | VPN needed | pay per call |
+| xAI Grok | ✅ | VPN needed | pay per call |
+| OpenRouter | ✅ | — | one key for GPT, Claude, Gemini, Grok, DeepSeek, Llama, Mistral and more; a few models are free |
+| DeepSeek 深度求索 | ✅ | ✅ direct | pay per call, very inexpensive |
 | Alibaba Qwen 通义千问 | ✅ | ✅ direct | pay per call, inexpensive |
 | ByteDance Doubao 豆包 | ✅ | ✅ direct | pay per call |
 | Zhipu GLM 智谱 | ✅ | ✅ direct | **default vision model is free** |
@@ -105,6 +108,16 @@ Building the shareable APK (from the repo root):
 ```bash
 bash scripts/build_share_apk.sh   # → ~21 MB arm64 APK in ~/Desktop/CalorieTracker-share/
 ```
+
+## Testing the providers
+
+Model names and endpoints change under every vendor's feet, so the repo carries a live check next to the mocked contract tests:
+
+```bash
+scripts/test_providers_live.sh
+```
+
+It sends a real photo and a real text request through the app's own analyzers to every provider that has a key in `~/.bitewise/provider_keys.env` (template: `scripts/provider_keys.env.example`; the file stays on your machine). A provider without a key is still probed: an invalid key must be refused by the live endpoint and reported by the app as a key problem — which catches a wrong URL, a retired endpoint, or a misread error. One OpenRouter key runs the whole popular-model matrix in a single pass, and OpenRouter's public catalog is checked keylessly so the curated model list cannot rot unnoticed. Inside the app, *Settings › AI service › Test AI provider* runs the same kind of staged check for whichever provider is selected.
 
 ## Subscription-powered analysis (optional, self-hosted)
 

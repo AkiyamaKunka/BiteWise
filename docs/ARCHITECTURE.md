@@ -39,7 +39,7 @@ core.
   analysis runs headless on a Claude subscription (`claude -p`, credential
   minted by `claude setup-token`); any failure — CLI absent, usage window
   exhausted, timeout, malformed output — falls back to Google Gemini
-  (`GEMINI_MODEL`, default `gemini-2.5-flash`), requested in native-JSON mode;
+  (`GEMINI_MODEL`, default `gemini-3.8-flash`), requested in native-JSON mode;
   images are downscaled before the call. Text-intent parsing (corrections,
   NL commands) stays on Gemini.
 - **Meal dating:** meals normally date to the user-local upload time, but a

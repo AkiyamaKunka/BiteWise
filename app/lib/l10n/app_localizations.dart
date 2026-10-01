@@ -671,7 +671,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiProviderFooter.
   ///
   /// In en, this message translates to:
-  /// **'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor. In mainland China choose Qwen, Doubao or GLM — the others need a VPN. 中国大陆用户请选择国内提供商。'**
+  /// **'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor. In mainland China choose DeepSeek, Qwen, Doubao or GLM — the others need a VPN. 中国大陆用户请选择国内提供商。'**
   String get apiProviderFooter;
 
   /// No description provided for @noteVpn.
@@ -733,6 +733,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'From open.bigmodel.cn (real-name verification required). The default flash model is free. Stored securely on this device only.'**
   String get apiKeyFooterGlm;
+
+  /// No description provided for @apiKeyFooterDeepseek.
+  ///
+  /// In en, this message translates to:
+  /// **'From platform.deepseek.com (API keys). Pay as you go; reachable from mainland China. Stored securely on this device only.'**
+  String get apiKeyFooterDeepseek;
+
+  /// No description provided for @apiKeyFooterXai.
+  ///
+  /// In en, this message translates to:
+  /// **'From console.x.ai (API keys). Pay as you go. Stored securely on this device only.'**
+  String get apiKeyFooterXai;
+
+  /// No description provided for @apiKeyFooterOpenrouter.
+  ///
+  /// In en, this message translates to:
+  /// **'From openrouter.ai/keys. One key reaches GPT, Claude, Gemini, Grok, DeepSeek and more; a few models are free. Stored securely on this device only.'**
+  String get apiKeyFooterOpenrouter;
 
   /// No description provided for @modelHeader.
   ///
