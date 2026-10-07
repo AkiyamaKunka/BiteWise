@@ -187,6 +187,30 @@ void main() {
     expect(find.textContaining('W 84'), findsOneWidget);
   });
 
+  testWidgets('history row girth labels follow the app language (zh 腰/胸/臀)',
+      (tester) async {
+    // The row joined literal 'W'/'C'/'H' initials in every language, so
+    // the zh history read 'W 84  ·  C 100  ·  H 98'.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final dao = FakeDao();
+    dao.measurementsByDate['2026-08-02'] = const BodyMeasurements(
+        '2026-08-02',
+        waistCm: 84,
+        chestCm: 100,
+        hipCm: 98);
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: BodyScreen(dao: dao, clock: () => clock),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('腰 84  ·  胸 100  ·  臀 98'), findsOneWidget);
+    expect(find.textContaining('W 84'), findsNothing);
+  });
+
   // ── Measurements rows at accessibility text sizes (2026-10-07) ────────
   // The row was label (fixed 64 px) + value + 'on {date}' + Spacer + delta,
   // none of which could shrink: at 1.64× (AX1) and 2× it overflowed the

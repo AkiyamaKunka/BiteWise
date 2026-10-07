@@ -163,6 +163,9 @@ void main() {
     expect(find.text('今日饮食'), findsOneWidget);
     expect(find.text('380 千卡'), findsOneWidget);
     expect(find.text('由筷拍记录'), findsOneWidget);
+    // Per-meal macro line uses the zh short labels, as the meal cards do.
+    expect(find.text('~380 千卡 · 蛋 20g · 碳 50g · 脂 10g'), findsOneWidget);
+    expect(find.textContaining('P 20g'), findsNothing);
     // Dates and clocks localize too (user-reported 2026-08-03: History
     // weekdays stayed English in zh) — the report shares the helpers.
     expect(find.text('8月2日 星期日'), findsOneWidget);

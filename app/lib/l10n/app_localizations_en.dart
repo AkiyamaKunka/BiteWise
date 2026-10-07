@@ -124,6 +124,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bodyHip => 'Hip';
 
   @override
+  String get bodyWaistShort => 'W';
+
+  @override
+  String get bodyChestShort => 'C';
+
+  @override
+  String get bodyHipShort => 'H';
+
+  @override
   String get bodyEmptyTitle => 'No body data yet.';
 
   @override

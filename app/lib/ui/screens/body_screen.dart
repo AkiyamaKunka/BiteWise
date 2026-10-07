@@ -525,13 +525,19 @@ class _HistoryRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     String girth(double cm) => _v(girthForDisplay(cm, imperial));
+    // Short labels come from the ARB (zh 腰/胸/臀) — literal 'W'/'C'/'H'
+    // put Latin initials into the Chinese UI.
+    final l = context.l10n;
     final parts = <String>[
       if (weight != null)
         '${weightForDisplay(weight!.kg, imperial).toStringAsFixed(1)} '
             '${weightUnitLabel(imperial)}',
-      if (measurements?.waistCm != null) 'W ${girth(measurements!.waistCm!)}',
-      if (measurements?.chestCm != null) 'C ${girth(measurements!.chestCm!)}',
-      if (measurements?.hipCm != null) 'H ${girth(measurements!.hipCm!)}',
+      if (measurements?.waistCm != null)
+        '${l.bodyWaistShort} ${girth(measurements!.waistCm!)}',
+      if (measurements?.chestCm != null)
+        '${l.bodyChestShort} ${girth(measurements!.chestCm!)}',
+      if (measurements?.hipCm != null)
+        '${l.bodyHipShort} ${girth(measurements!.hipCm!)}',
     ];
     final theme = Theme.of(context);
     return InkWell(

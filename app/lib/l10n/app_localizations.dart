@@ -290,6 +290,24 @@ abstract class AppLocalizations {
   /// **'Hip'**
   String get bodyHip;
 
+  /// No description provided for @bodyWaistShort.
+  ///
+  /// In en, this message translates to:
+  /// **'W'**
+  String get bodyWaistShort;
+
+  /// No description provided for @bodyChestShort.
+  ///
+  /// In en, this message translates to:
+  /// **'C'**
+  String get bodyChestShort;
+
+  /// No description provided for @bodyHipShort.
+  ///
+  /// In en, this message translates to:
+  /// **'H'**
+  String get bodyHipShort;
+
   /// No description provided for @bodyEmptyTitle.
   ///
   /// In en, this message translates to:

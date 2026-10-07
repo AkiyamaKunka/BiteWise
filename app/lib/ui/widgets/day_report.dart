@@ -234,9 +234,9 @@ class DayReportCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '~${l.kcalAmount(displayTotalCalories(a))} · '
-              'P ${displayMacro(a, 'total_protein_g')}g · '
-              'C ${displayMacro(a, 'total_carbs_g')}g · '
-              'F ${displayMacro(a, 'total_fat_g')}g',
+              '${l.macroProteinShort} ${displayMacro(a, 'total_protein_g')}g · '
+              '${l.macroCarbsShort} ${displayMacro(a, 'total_carbs_g')}g · '
+              '${l.macroFatShort} ${displayMacro(a, 'total_fat_g')}g',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
             ),

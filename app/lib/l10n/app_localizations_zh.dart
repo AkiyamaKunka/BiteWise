@@ -118,6 +118,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bodyHip => '臀围';
 
   @override
+  String get bodyWaistShort => '腰';
+
+  @override
+  String get bodyChestShort => '胸';
+
+  @override
+  String get bodyHipShort => '臀';
+
+  @override
   String get bodyEmptyTitle => '还没有身体数据。';
 
   @override
