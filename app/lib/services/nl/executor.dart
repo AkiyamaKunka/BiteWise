@@ -15,7 +15,7 @@ import '../../core/prompts.dart';
 import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/coach_strings.dart' show localizationsFor;
-import '../../ui/format.dart' show displayClock;
+import '../../ui/format.dart' show byMealClock, displayClock;
 import '../settings/app_settings.dart';
 
 /// Spec §1.2 / §8: TEXT_EDIT_WINDOW_DAYS (telegram_bot.py:161), from shared/.
@@ -239,8 +239,12 @@ String formatFoodResult(Map<String, dynamic> analysis) {
   return lines.join('\n');
 }
 
-/// meals_list prompt lines in the exact server format (spec §1.2,
-/// telegram_bot.py:4265-4281). Stored analyses are untrusted: safeFoodItems
+/// meals_list prompt lines in the server format (spec §1.2,
+/// telegram_bot.py:4265-4281) plus the stored meal clock (spec §9): photo
+/// meals are backdated and editor moves keep their timestamp, so "this
+/// morning's" / "breakfast" can only be resolved from the Time field. The
+/// raw stored hh:mm AM/PM goes in, never displayClock — the prompt must not
+/// depend on the UI locale. Stored analyses are untrusted: safeFoodItems
 /// plus stringification mean one poison row cannot break prompt building.
 String buildMealsList(List<Meal> meals) {
   if (meals.isEmpty) return 'No meals logged recently.';
@@ -252,7 +256,8 @@ String buildMealsList(List<Meal> meals) {
     final items =
         safeFoodItems(a).map((it) => '${it['name'] ?? '?'}').join(', ');
     lines.add(
-        '[$i] Date: ${meals[i].date} | Meal: $desc (~$cal kcal) — Items: $items');
+        '[$i] Date: ${meals[i].date} | Time: ${meals[i].time} | '
+        'Meal: $desc (~$cal kcal) — Items: $items');
   }
   return lines.join('\n');
 }
@@ -324,9 +329,13 @@ class DefaultNlExecutor implements NlExecutor {
     final missingKey = _missingKeyMessage();
     if (missingKey != null) return [NlReply(missingKey)];
 
-    // Snapshot: last TEXT_EDIT_WINDOW_DAYS of food meals, oldest first
-    // (spec §1.2). Every index in every action resolves against THIS list.
-    final meals = await dao.recentMeals(days: textEditWindowDays);
+    // Snapshot: last TEXT_EDIT_WINDOW_DAYS of food meals (spec §1.2) in
+    // MEAL-CLOCK order, matching every screen the owner reads; the DAO's
+    // timestamp order is server parity, but backdated photos and catch-up
+    // scans ingest out of eating order, so "第一顿" must mean the meal shown
+    // first (spec §9). Every index in every action resolves against THIS
+    // list — the prompt and executeParsed share it (spec §4.2).
+    final meals = byMealClock(await dao.recentMeals(days: textEditWindowDays));
     final prompt = buildPrompt(meals, userText, DateTime.now());
 
     final Map<String, dynamic>? result;

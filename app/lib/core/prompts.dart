@@ -16,8 +16,9 @@ export 'shared_generated.dart' show sharedLeftoverPrompt;
 /// FOOD_DETECTION_PROMPT, sent with every photo (spec §1.1).
 const String foodDetectionPrompt = sharedFoodDetectionPrompt;
 
-/// The unified text-intent prompt. [mealsList] lines use the exact server
-/// format: `[i] Date: YYYY-MM-DD | Meal: desc (~N kcal) — Items: a, b`.
+/// The unified text-intent prompt. [mealsList] lines use the server format
+/// plus the stored meal clock (spec §9):
+/// `[i] Date: YYYY-MM-DD | Time: hh:mm AM | Meal: desc (~N kcal) — Items: a, b`.
 /// [dietaryProfile], when non-empty, is appended the same way config.py
 /// appends the profile file to the photo prompt.
 String textHandlerPrompt({

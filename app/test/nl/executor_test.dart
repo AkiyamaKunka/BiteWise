@@ -649,7 +649,8 @@ void main() {
       expect(analyzer.lastPrompt,
           contains('today is $today (${weekdays[now.weekday - 1]}); yesterday was $yesterday'));
       expect(analyzer.lastPrompt,
-          contains('[0] Date: 2026-07-17 | Meal: 白粥 (~150 kcal) — Items: '));
+          contains('[0] Date: 2026-07-17 | Time: 12:00 PM | '
+              'Meal: 白粥 (~150 kcal) — Items: '));
       expect(analyzer.lastPrompt, contains('The user says: "what did I eat yesterday?"'));
       expect(dao.lastRecentDays, textEditWindowDays);
     });
@@ -670,7 +671,34 @@ void main() {
       final replies = await exec.handleText('hello');
       expect(replies.single.text, 'hi');
       expect(analyzer.lastPrompt,
-          contains('[0] Date: 2026-07-17 | Meal: Unknown (~0 kcal) — Items: ?'));
+          contains('[0] Date: 2026-07-17 | Time: 12:00 PM | '
+              'Meal: Unknown (~0 kcal) — Items: ?'));
+    });
+
+    test('snapshot is in meal-clock order, the order the screens show', () async {
+      // A catch-up scan ingests the backdated 08:00 breakfast photo AFTER
+      // the 12:30 lunch that was shared directly: timestamp order is
+      // [lunch, breakfast], but Today shows breakfast first — and "第一顿"
+      // must mean the meal the owner sees first (spec §9).
+      final lunchId = dao.seed('面条', 550, time: '12:30 PM');
+      final breakfastId = dao.seed('白粥', 150, time: '08:00 AM');
+      final dinnerYesterdayId =
+          dao.seed('米饭', 400, date: '2026-07-16', time: '07:00 PM');
+      analyzer.next = {
+        'intent': 'correction',
+        'meal_index': 1,
+        'analysis': roastDuckAnalysis,
+      };
+      await exec.handleText('第一顿其实是烧鸭饭');
+
+      final prompt = analyzer.lastPrompt!;
+      expect(prompt, contains('[0] Date: 2026-07-16 | Time: 07:00 PM | Meal: 米饭'));
+      expect(prompt, contains('[1] Date: 2026-07-17 | Time: 08:00 AM | Meal: 白粥'));
+      expect(prompt, contains('[2] Date: 2026-07-17 | Time: 12:30 PM | Meal: 面条'));
+      // The index resolves against the SAME sorted list the prompt showed.
+      expect(dao.byId(breakfastId).analysis['meal_description'], '烧鸭饭');
+      expect(dao.byId(lunchId).analysis['meal_description'], '面条');
+      expect(dao.byId(dinnerYesterdayId).analysis['meal_description'], '米饭');
     });
   });
 
