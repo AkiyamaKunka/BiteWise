@@ -547,9 +547,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               onPressed: () {
                 _harvest();
                 setState(() {
-                  final it = MealItemDraft();
-                  _draft.items.add(it);
-                  _itemCtrls.add(_controllersFor(it));
+                  // The first row is seeded from the hand-typed totals
+                  // (MealDraft.addItem), so the recompute below reproduces
+                  // them instead of wiping them.
+                  _itemCtrls.add(_controllersFor(_draft.addItem()));
                 });
                 _recomputeTotalsFromItems();
               },

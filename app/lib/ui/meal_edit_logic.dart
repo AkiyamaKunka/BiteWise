@@ -169,6 +169,22 @@ class MealDraft {
         items: [],
       );
 
+  /// Append an item row and return it. The FIRST row inherits the totals
+  /// typed above it: with no rows those totals were the only source of
+  /// truth, and the editor's derive-from-items rule would otherwise sum one
+  /// empty row and zero them the moment the user tapped "Add item" (found
+  /// 2026-10-07: a hand-entered 450 kcal meal read 0 right after the tap).
+  /// Later rows start blank — by then the totals belong to the rows, and a
+  /// seeded row would double them.
+  MealItemDraft addItem() {
+    final it = items.isEmpty
+        ? MealItemDraft(
+            calories: calories, protein: protein, carbs: carbs, fat: fat)
+        : MealItemDraft();
+    items.add(it);
+    return it;
+  }
+
   /// Sum of the item rows, for the "use item totals" action.
   ({num calories, num protein, num carbs, num fat}) itemTotals() {
     num c = 0, p = 0, cb = 0, f = 0;
