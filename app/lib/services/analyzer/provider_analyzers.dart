@@ -198,6 +198,7 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
           throw _ProviderException(custom,
               transient: verdict != false,
               retryInPlace: verdict == true,
+              serverBusy: verdict == true,
               verbatimMessage: true);
         }
       }
@@ -318,13 +319,31 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
     }
   }
 
+  /// Waits for a text request that met the server's busy verdict: 5, 10,
+  /// 15, 20, 25 and 30 s (~105 s), enough for one 20-60 s photo run plus
+  /// the gap before the pipeline uploads the next photo.
+  static const int textBusyAttempts = 7;
+
   @override
   Future<Map<String, dynamic>?> textIntent(String prompt) async {
     String text;
-    try {
-      text = await _post(prompt: prompt);
-    } on _ProviderException {
-      return null;
+    for (var attempt = 1;; attempt++) {
+      try {
+        text = await _post(prompt: prompt);
+        break;
+      } on _ProviderException catch (e) {
+        // Only the server's explicit busy verdict waits: the server answers
+        // /api/text_intent with an instant 503 {retry: true} while a photo
+        // holds its CLI lock, which the auto-scan does every time the app
+        // opens — and a single attempt turned the owner's corrections into
+        // "联系 AI 失败". Every other failure stays single-attempt (spec §4
+        // step 4: the text handler surfaces errors directly).
+        if (e.serverBusy && attempt < textBusyAttempts) {
+          await _sleep(Duration(seconds: 5 * attempt));
+          continue;
+        }
+        return null;
+      }
     }
     dynamic parsed;
     try {
@@ -415,7 +434,8 @@ class _ProviderException implements Exception {
       this.billing = false,
       this.retryInPlace = true,
       this.verbatimMessage = false,
-      this.modelError = false});
+      this.modelError = false,
+      this.serverBusy = false});
   final String message;
   final bool transient;
   final bool auth;
@@ -436,6 +456,13 @@ class _ProviderException implements Exception {
   /// key): still retryable at the OUTCOME level, but in-place sleeps are
   /// pointless.
   final bool retryInPlace;
+
+  /// The user's own server said its analyzer is BUSY (503 with a reason
+  /// and retry:true) — another run holds the CLI lock, so waiting helps.
+  /// Narrower than [retryInPlace] (which is also true for connection
+  /// errors and deadlines): only textIntent reads it, to wait out a photo
+  /// run instead of failing the user's chat request at once.
+  final bool serverBusy;
 
   /// True when [message] is already user-facing (skip the generic bucket).
   final bool verbatimMessage;

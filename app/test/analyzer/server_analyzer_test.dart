@@ -278,6 +278,101 @@ void main() {
     expect(out.retryable, isTrue);
   });
 
+  test('a text intent WAITS OUT a busy server instead of failing at once',
+      () async {
+    // The server answers /api/text_intent with an instant 503 retry:true
+    // while a photo run holds its CLI lock — which the auto-scan does every
+    // time the app opens. A single attempt turned the owner's corrections
+    // and described meals into "联系 AI 失败" exactly then.
+    final s = await serverSettings();
+    final sleeps = <Duration>[];
+    final paths = <String>[];
+    final analyzer = ServerAnalyzer(
+      s,
+      sleep: (d) async => sleeps.add(d),
+      client: MockClient((req) async {
+        paths.add(req.url.path);
+        if (paths.length <= 2) {
+          return http.Response(
+              jsonEncode({
+                'error': 'claude_unavailable',
+                'reason': 'the analyzer is busy',
+                'retry': true,
+              }),
+              503);
+        }
+        return http.Response(
+            jsonEncode({
+              'ok': true,
+              'result': {'intent': 'correction', 'meal_index': 1},
+              'analyzed_by': 'claude',
+            }),
+            200);
+      }),
+    );
+    final out = await analyzer.textIntent('make lunch 600 kcal');
+    expect(out, {'intent': 'correction', 'meal_index': 1});
+    expect(paths, List.filled(3, '/api/text_intent'));
+    expect(sleeps, [const Duration(seconds: 5), const Duration(seconds: 10)]);
+
+    // Bounded: a server that stays busy gets 7 attempts (~105 s of waits,
+    // enough for one photo run), then the caller's error, never a hang.
+    sleeps.clear();
+    var calls = 0;
+    final stuck = ServerAnalyzer(
+      s,
+      sleep: (d) async => sleeps.add(d),
+      client: MockClient((_) async {
+        calls++;
+        return http.Response(
+            jsonEncode({
+              'error': 'claude_unavailable',
+              'reason': 'the analyzer is busy',
+              'retry': true,
+            }),
+            503);
+      }),
+    );
+    expect(await stuck.textIntent('hi'), isNull);
+    expect(calls, 7);
+    expect(sleeps.fold<int>(0, (t, d) => t + d.inSeconds), 105);
+  });
+
+  test('a text intent does NOT wait on any 503 but the busy verdict',
+      () async {
+    final s = await serverSettings();
+    for (final body in [
+      // The run happened and answered: terminal.
+      jsonEncode({
+        'error': 'claude_unavailable',
+        'reason': 'the analysis ran but produced no usable result',
+        'retry': false,
+      }),
+      // "later": a closed usage window — seconds cannot reopen it.
+      jsonEncode({
+        'error': 'claude_unavailable',
+        'reason': 'You have hit your usage limit.',
+        'retry': 'later',
+      }),
+      // No verdict at all (old server / bare 503).
+      '{"error": "claude_unavailable"}',
+    ]) {
+      var calls = 0;
+      final sleeps = <Duration>[];
+      final analyzer = ServerAnalyzer(
+        s,
+        sleep: (d) async => sleeps.add(d),
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(body, 503);
+        }),
+      );
+      expect(await analyzer.textIntent('hi'), isNull, reason: body);
+      expect(calls, 1, reason: body);
+      expect(sleeps, isEmpty, reason: body);
+    }
+  });
+
   test('a "retry": "later" 503 keeps the photo WITHOUT spinning in place',
       () async {
     // Server fix 2026-10-07: a closed Claude-plan usage window and a CLI
