@@ -201,7 +201,7 @@ class ProviderDiagnostics {
       yield DiagResult(
           l.diagStageQuota, DiagStatus.warn, l.diagQuotaPaused,
           detail: until != null
-              ? l.diagQuotaPausedUntil(until.toString())
+              ? l.diagQuotaPausedUntil(_localStamp(until))
               : null,
           fix: l.diagFixQuota);
     } else {
@@ -209,4 +209,15 @@ class ProviderDiagnostics {
           l.diagStageQuota, DiagStatus.pass, l.diagQuotaOk);
     }
   }
+}
+
+/// Local 'yyyy-MM-dd HH:mm' for the quota-pause detail. It was
+/// DateTime.toString(), which printed seconds and milliseconds
+/// ('2026-10-06 23:00:00.000'). The date stays because a pause can run
+/// past midnight. Built by hand so the digits are ASCII in any locale.
+String _localStamp(DateTime t) {
+  final l = t.toLocal();
+  String two(int n) => n.toString().padLeft(2, '0');
+  return '${l.year}-${two(l.month)}-${two(l.day)} '
+      '${two(l.hour)}:${two(l.minute)}';
 }

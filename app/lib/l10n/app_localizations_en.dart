@@ -214,6 +214,15 @@ class AppLocalizationsEn extends AppLocalizations {
       'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.';
 
   @override
+  String get providerQuotaPaused =>
+      'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.';
+
+  @override
+  String providerQuotaPausedUntil(String time) {
+    return 'Analyses are paused — the daily quota was hit (until $time). New photos are kept and retried automatically; changing the key or provider resumes now.';
+  }
+
+  @override
   String get settingsAiFooter =>
       'Photos are analysed by the provider you pick — its key never leaves this phone.';
 
@@ -423,6 +432,36 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get modelCustomLabel => 'Custom model name';
+
+  @override
+  String modelHelperDefault(String model) {
+    return 'Default: $model';
+  }
+
+  @override
+  String modelHelperQwen(String model) {
+    return 'Default: $model. Doubles as the cheap tier — qwen3-vl-plus is the stronger paid model.';
+  }
+
+  @override
+  String modelHelperDoubao(String model) {
+    return 'Default: $model. Doubao needs the EXACT versioned ID from the Ark model list — undated names are rejected.';
+  }
+
+  @override
+  String modelHelperGlm(String model) {
+    return 'Default: $model (free tier). glm-4.6v is the stronger paid model.';
+  }
+
+  @override
+  String modelHelperDeepseek(String model) {
+    return 'Default: $model — the only DeepSeek model that accepts photos.';
+  }
+
+  @override
+  String modelHelperOpenrouter(String model) {
+    return 'Default: $model. Any vendor/model slug from openrouter.ai/models that accepts images works.';
+  }
 
   @override
   String get apiInactiveFooter =>

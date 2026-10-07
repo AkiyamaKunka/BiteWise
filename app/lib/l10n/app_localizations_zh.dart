@@ -208,6 +208,15 @@ class AppLocalizationsZh extends AppLocalizations {
       '分析已暂停 — 已达当日额度。新照片会保留并自动重试；在 AI 服务页更换 Key 或服务后立即恢复。';
 
   @override
+  String get providerQuotaPaused =>
+      '分析已暂停 — 已达当日额度。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+
+  @override
+  String providerQuotaPausedUntil(String time) {
+    return '分析已暂停 — 已达当日额度（$time 恢复）。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+  }
+
+  @override
   String get settingsAiFooter => '照片由你选择的服务分析 — 它的 Key 不会离开这台手机。';
 
   @override
@@ -399,6 +408,36 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get modelCustomLabel => '自定义模型名';
+
+  @override
+  String modelHelperDefault(String model) {
+    return '默认：$model';
+  }
+
+  @override
+  String modelHelperQwen(String model) {
+    return '默认：$model。它也是便宜档 — qwen3-vl-plus 是更强的付费模型。';
+  }
+
+  @override
+  String modelHelperDoubao(String model) {
+    return '默认：$model。豆包需要方舟模型列表里带日期的完整模型 ID — 不带日期的名称会被拒绝。';
+  }
+
+  @override
+  String modelHelperGlm(String model) {
+    return '默认：$model（免费档）。glm-4.6v 是更强的付费模型。';
+  }
+
+  @override
+  String modelHelperDeepseek(String model) {
+    return '默认：$model — DeepSeek 唯一能识别照片的模型。';
+  }
+
+  @override
+  String modelHelperOpenrouter(String model) {
+    return '默认：$model。openrouter.ai/models 里任何支持图片的 厂商/模型 名称都可以。';
+  }
 
   @override
   String get apiInactiveFooter => '当前使用的是订阅。在上方选择一家服务商即可切换为按张计费的 API Key。';

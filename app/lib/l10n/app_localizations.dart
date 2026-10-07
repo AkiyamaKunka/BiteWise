@@ -440,6 +440,18 @@ abstract class AppLocalizations {
   /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.'**
   String get settingsAiFooterPaused;
 
+  /// No description provided for @providerQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  String get providerQuotaPaused;
+
+  /// Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  String providerQuotaPausedUntil(String time);
+
   /// No description provided for @settingsAiFooter.
   ///
   /// In en, this message translates to:
@@ -787,6 +799,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Custom model name'**
   String get modelCustomLabel;
+
+  /// No description provided for @modelHelperDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}'**
+  String modelHelperDefault(String model);
+
+  /// No description provided for @modelHelperQwen.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}. Doubles as the cheap tier — qwen3-vl-plus is the stronger paid model.'**
+  String modelHelperQwen(String model);
+
+  /// No description provided for @modelHelperDoubao.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}. Doubao needs the EXACT versioned ID from the Ark model list — undated names are rejected.'**
+  String modelHelperDoubao(String model);
+
+  /// No description provided for @modelHelperGlm.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model} (free tier). glm-4.6v is the stronger paid model.'**
+  String modelHelperGlm(String model);
+
+  /// No description provided for @modelHelperDeepseek.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model} — the only DeepSeek model that accepts photos.'**
+  String modelHelperDeepseek(String model);
+
+  /// No description provided for @modelHelperOpenrouter.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}. Any vendor/model slug from openrouter.ai/models that accepts images works.'**
+  String modelHelperOpenrouter(String model);
 
   /// No description provided for @apiInactiveFooter.
   ///

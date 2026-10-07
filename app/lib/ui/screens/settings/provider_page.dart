@@ -209,12 +209,15 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
               color: scheme.errorContainer,
               child: Padding(
                 padding: const EdgeInsets.all(12),
+                // Its own key, not settingsAiFooterPaused: that one points
+                // the reader AT this page.
                 child: Text(
-                  'Analyses are paused — the daily quota was hit'
-                  '${settings.quotaPauseUntil != null ? ' (until '
-                      '${TimeOfDay.fromDateTime(settings.quotaPauseUntil!.toLocal()).format(context)})' : ''}. '
-                  'New photos are kept and retried automatically; changing '
-                  'the key or provider resumes now.',
+                  settings.quotaPauseUntil != null
+                      ? context.l10n.providerQuotaPausedUntil(
+                          TimeOfDay.fromDateTime(
+                                  settings.quotaPauseUntil!.toLocal())
+                              .format(context))
+                      : context.l10n.providerQuotaPaused,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: scheme.onErrorContainer),
                 ),

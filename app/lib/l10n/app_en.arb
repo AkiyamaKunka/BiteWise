@@ -150,6 +150,16 @@
   "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM's default model is free) — the other providers need a VPN. 中国大陆用户请选择国内提供商。",
   "settingsSectionAi": "AI",
   "settingsAiFooterPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.",
+  "providerQuotaPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.",
+  "providerQuotaPausedUntil": "Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.",
+  "@providerQuotaPausedUntil": {
+    "description": "Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "settingsAiFooter": "Photos are analysed by the provider you pick — its key never leaves this phone.",
   "settingsRowAiProvider": "AI Provider",
   "settingsSectionPhotos": "Photos",
@@ -250,6 +260,54 @@
   "modelHeader": "Model",
   "modelCustomRow": "Custom — type a model name…",
   "modelCustomLabel": "Custom model name",
+  "modelHelperDefault": "Default: {model}",
+  "@modelHelperDefault": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperQwen": "Default: {model}. Doubles as the cheap tier — qwen3-vl-plus is the stronger paid model.",
+  "@modelHelperQwen": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperDoubao": "Default: {model}. Doubao needs the EXACT versioned ID from the Ark model list — undated names are rejected.",
+  "@modelHelperDoubao": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperGlm": "Default: {model} (free tier). glm-4.6v is the stronger paid model.",
+  "@modelHelperGlm": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperDeepseek": "Default: {model} — the only DeepSeek model that accepts photos.",
+  "@modelHelperDeepseek": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperOpenrouter": "Default: {model}. Any vendor/model slug from openrouter.ai/models that accepts images works.",
+  "@modelHelperOpenrouter": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "apiInactiveFooter": "A subscription is currently active. Pick a provider above to switch to a pay-per-photo API key.",
   "subPageTitle": "Subscription",
   "planHeader": "Plan",
