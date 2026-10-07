@@ -1064,6 +1064,12 @@ abstract class AppLocalizations {
   /// **'Active burn: ~{burn} kcal (Garmin) · net ~{net} kcal'**
   String garminBurnLine(String burn, String net);
 
+  /// The Garmin line when the active burn is at least the day's intake: the net would be zero or negative, which is not an intake figure, so only the burn is stated.
+  ///
+  /// In en, this message translates to:
+  /// **'Active burn: ~{burn} kcal (Garmin)'**
+  String garminBurnOnlyLine(String burn);
+
   /// No description provided for @settingsRowUnits.
   ///
   /// In en, this message translates to:

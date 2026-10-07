@@ -587,6 +587,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String garminBurnOnlyLine(String burn) {
+    return 'Active burn: ~$burn kcal (Garmin)';
+  }
+
+  @override
   String get settingsRowUnits => 'Units';
 
   @override

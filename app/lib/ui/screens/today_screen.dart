@@ -397,9 +397,7 @@ class TodayScreenState extends State<TodayScreen> {
             if (_garmin != null && _garmin!.activeCalories > 0) ...[
               const SizedBox(height: 4),
               Text(
-                context.l10n.garminBurnLine(
-                    formatKcal(_garmin!.activeCalories),
-                    formatKcal(totals.cal - _garmin!.activeCalories)),
+                _garminLine(context, totals.cal, _garmin!.activeCalories),
                 key: const Key('garminBurnLine'),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant),
@@ -411,4 +409,20 @@ class TodayScreenState extends State<TodayScreen> {
     );
   }
 
+  /// The Garmin footnote. "net ~N kcal" is intake minus active burn — an
+  /// INTAKE figure, so it is only stated while it still is one. On a light
+  /// or empty day the burn exceeds what was eaten and the subtraction goes
+  /// negative ("净摄入 ~-897 千卡", testing loop 2026-10-07): that is not a
+  /// net intake, it is a countdown in disguise, and this screen reports
+  /// intake, not a countdown (owner decision 2026-08-06). The line then
+  /// states the burn alone — the eaten figure is already the hero above,
+  /// three times over. Both terms are rounded first so the net reconciles
+  /// with the rows as printed; a net of exactly 0 is dropped with the
+  /// negatives (no "~0 kcal" noise, same rule as the idle line).
+  String _garminLine(BuildContext context, num eaten, double burn) {
+    final net = eaten.round() - burn.round();
+    return net > 0
+        ? context.l10n.garminBurnLine(formatKcal(burn), formatKcal(net))
+        : context.l10n.garminBurnOnlyLine(formatKcal(burn));
+  }
 }

@@ -336,6 +336,15 @@
       }
     }
   },
+  "garminBurnOnlyLine": "Active burn: ~{burn} kcal (Garmin)",
+  "@garminBurnOnlyLine": {
+    "description": "The Garmin line when the active burn is at least the day's intake: the net would be zero or negative, which is not an intake figure, so only the burn is stated.",
+    "placeholders": {
+      "burn": {
+        "type": "String"
+      }
+    }
+  },
   "settingsRowUnits": "Units",
   "unitsMetric": "Metric",
   "unitsImperial": "Imperial",

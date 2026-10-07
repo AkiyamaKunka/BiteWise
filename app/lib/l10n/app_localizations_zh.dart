@@ -549,6 +549,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String garminBurnOnlyLine(String burn) {
+    return '活动消耗：~$burn 千卡（Garmin）';
+  }
+
+  @override
   String get settingsRowUnits => '单位';
 
   @override

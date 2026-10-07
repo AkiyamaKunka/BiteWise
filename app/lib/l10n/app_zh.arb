@@ -182,6 +182,7 @@
   "typicalDayOver": "日常：~{typical} 千卡 · 超出 ~{delta} 千卡",
   "historyDayPattern": "M月d日 EEEE",
   "garminBurnLine": "活动消耗：~{burn} 千卡（Garmin）· 净摄入 ~{net} 千卡",
+  "garminBurnOnlyLine": "活动消耗：~{burn} 千卡（Garmin）",
   "settingsRowUnits": "单位",
   "unitsMetric": "公制",
   "unitsImperial": "英制",

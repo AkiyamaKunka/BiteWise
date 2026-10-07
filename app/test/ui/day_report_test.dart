@@ -8,6 +8,8 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/l10n.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
+import 'package:calorie_tracker/ui/widgets/calorie_ring.dart'
+    show ArithmeticRow;
 import 'package:calorie_tracker/ui/widgets/day_report.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -62,7 +64,38 @@ void main() {
     expect(find.textContaining('Rice (~150 g)'), findsWidgets,
         reason: 'portion assumptions reach the coach');
     expect(find.text('+88'), findsOneWidget, reason: 'burn in the math');
+    // The eaten row is a plain positive figure. It used to read "−940" —
+    // a minus subtracting from nothing once Today dropped the "= left"
+    // row (testing loop 2026-10-07).
+    final eaten = tester
+        .widget<ArithmeticRow>(find.byKey(const Key('reportEatenRow')));
+    expect(eaten.label, 'Eaten');
+    expect(eaten.value, '940');
+    expect(find.text('−940'), findsNothing);
+    expect(find.text('-940'), findsNothing);
     expect(find.text('Logged with Bitewise'), findsOneWidget);
+  });
+
+  testWidgets('without a typical day the eaten row is the same plain figure',
+      (tester) async {
+    tester.view.physicalSize = const Size(420, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      home: SingleChildScrollView(
+        child: DayReportCard(
+          date: '2026-08-02',
+          meals: [
+            ReportMeal(meal: _meal(1, '8:05 AM', 'Soy milk and youtiao', 380)),
+          ],
+        ),
+      ),
+    ));
+    final eaten = tester
+        .widget<ArithmeticRow>(find.byKey(const Key('reportEatenRow')));
+    expect(eaten.value, '380');
+    expect(eaten.emphasized, isFalse,
+        reason: 'nothing to be the result OF without the typical context');
   });
 
   testWidgets('an empty day still renders honestly', (tester) async {
