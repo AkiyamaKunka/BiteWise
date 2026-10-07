@@ -340,7 +340,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteVpn => '需要 VPN';
 
   @override
-  String get noteFreeTierVpn => '有免费额度 · 需要 VPN';
+  String get noteFreeTierVpn => '免费额度 · VPN';
 
   @override
   String get noteDirect => '中国直连';

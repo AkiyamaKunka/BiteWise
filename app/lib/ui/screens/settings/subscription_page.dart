@@ -267,10 +267,14 @@ class _SubscriptionProviderPageState
           header: context.l10n.planHeader,
           footer: context.l10n.planFooter,
           children: [
-            for (final (backend, name, note) in kPlanChoices)
+            for (final (backend, _, note) in kPlanChoices)
               GroupedRow(
                 key: Key('planChoice-$backend'),
-                title: name,
+                title: switch (backend) {
+                  'glm' => context.l10n.planGlm,
+                  'doubao' => context.l10n.planDoubao,
+                  _ => context.l10n.planClaude,
+                },
                 value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: _planActive &&

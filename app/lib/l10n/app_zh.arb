@@ -118,7 +118,7 @@
   "apiProviderHeader": "服务商",
   "apiProviderFooter": "按张计费：Key 保存在这台手机上，每张照片都是一次由服务商计费的 API 调用。中国大陆请选择 DeepSeek、Qwen、Doubao 或 GLM — 其余需要 VPN。",
   "noteVpn": "需要 VPN",
-  "noteFreeTierVpn": "有免费额度 · 需要 VPN",
+  "noteFreeTierVpn": "免费额度 · VPN",
   "noteDirect": "中国直连",
   "noteFreeDirect": "免费 · 中国直连",
   "apiKeyHeader": "API Key",
