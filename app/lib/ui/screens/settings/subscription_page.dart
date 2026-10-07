@@ -194,10 +194,15 @@ class _SubscriptionProviderPageState
         _ => context.l10n.planChoiceDefault,
       };
 
+  /// The ROW shows the bare level, like [_modelLabel] shows 'Opus'; the
+  /// picker sheet keeps the explanatory 'High — most thorough' labels.
+  /// The long label as the row value ellipsised in English beside a
+  /// badge and chevron — 'Thinking e…  High — most thoro…' (loop find
+  /// 2026-10-07, round 3).
   String _effortLabel(BuildContext context, String v) => switch (v) {
-        'low' => context.l10n.planEffortLow,
+        'low' => context.l10n.planEffortLowShort,
         'medium' => context.l10n.planEffortMedium,
-        'high' => context.l10n.planEffortHigh,
+        'high' => context.l10n.planEffortHighShort,
         _ => context.l10n.planChoiceDefault,
       };
 

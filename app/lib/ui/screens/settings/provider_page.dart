@@ -116,6 +116,12 @@ String providerLabel(String provider) => switch (provider) {
 /// The third element is a NOTE TAG resolved by [noteLabel] — the row value
 /// is localized (the hardcoded English/hybrid notes ellipsised in the
 /// Chinese UI, loop find 2026-10-07).
+/// The mainland names carry the CJK brand but NOT the vendor prefix
+/// (same names as [providerLabel]): 'Alibaba Qwen 通义千问' and friends
+/// were 180–191 px beside a ~117 px English note and ellipsised in the
+/// English UI at the default text size (loop find 2026-10-07, round 3);
+/// the key footer still names the vendor console. Pinned at 375/390 pt
+/// with the iPhone's own font by test/ui/row_fit_layout_test.dart.
 const List<(String, String, String)> kApiKeyChoices = [
   ('gemini', 'Google Gemini', 'freeVpn'),
   ('openai', 'OpenAI', 'vpn'),
@@ -123,9 +129,9 @@ const List<(String, String, String)> kApiKeyChoices = [
   ('xai', 'xAI Grok', 'vpn'),
   ('openrouter', 'OpenRouter', 'many'),
   ('deepseek', 'DeepSeek 深度求索', 'direct'),
-  ('qwen', 'Alibaba Qwen 通义千问', 'direct'),
-  ('doubao', 'ByteDance Doubao 豆包', 'direct'),
-  ('glm', 'Zhipu GLM 智谱', 'freeDirect'),
+  ('qwen', 'Qwen 通义千问', 'direct'),
+  ('doubao', 'Doubao 豆包', 'direct'),
+  ('glm', 'GLM 智谱', 'freeDirect'),
 ];
 
 /// Localized text for a [kApiKeyChoices] / [kPlanChoices] note tag.
@@ -144,6 +150,9 @@ String noteLabel(AppLocalizations l, String tag) => switch (tag) {
 /// (backend id, name, note) — all three ride the user's server. Notes
 /// name the VENDOR, never a price: plan pricing changes under vendors'
 /// feet and a stale number reads as unprofessional (user, 2026-08-05).
+/// In English the note is the bare vendor name: 'Volcengine subscription'
+/// beside 'Doubao Agent Plan' cut BOTH to fragments (loop find
+/// 2026-10-07, round 3).
 const List<(String, String, String)> kPlanChoices = [
   ('claude', 'Claude Plan', 'claude'),
   ('glm', 'GLM Coding Plan', 'glm'),

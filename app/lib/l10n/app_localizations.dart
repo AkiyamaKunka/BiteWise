@@ -683,7 +683,7 @@ abstract class AppLocalizations {
   /// No description provided for @noteFreeTierVpn.
   ///
   /// In en, this message translates to:
-  /// **'free tier · VPN in China'**
+  /// **'free · VPN in China'**
   String get noteFreeTierVpn;
 
   /// No description provided for @noteDirect.
@@ -803,19 +803,19 @@ abstract class AppLocalizations {
   /// No description provided for @planClaudeNote.
   ///
   /// In en, this message translates to:
-  /// **'Anthropic subscription'**
+  /// **'Anthropic'**
   String get planClaudeNote;
 
   /// No description provided for @planGlmNote.
   ///
   /// In en, this message translates to:
-  /// **'Zhipu subscription'**
+  /// **'Zhipu'**
   String get planGlmNote;
 
   /// No description provided for @planDoubaoNote.
   ///
   /// In en, this message translates to:
-  /// **'Volcengine subscription'**
+  /// **'Volcengine'**
   String get planDoubaoNote;
 
   /// No description provided for @noteManyModels.
@@ -1273,6 +1273,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'High — most thorough'**
   String get planEffortHigh;
+
+  /// No description provided for @planEffortLowShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get planEffortLowShort;
+
+  /// No description provided for @planEffortHighShort.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get planEffortHighShort;
 
   /// No description provided for @planModelFable.
   ///

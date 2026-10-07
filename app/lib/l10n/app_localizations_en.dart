@@ -362,7 +362,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noteVpn => 'VPN in China';
 
   @override
-  String get noteFreeTierVpn => 'free tier · VPN in China';
+  String get noteFreeTierVpn => 'free · VPN in China';
 
   @override
   String get noteDirect => 'direct in China';
@@ -433,13 +433,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planClaude => 'Claude Plan';
 
   @override
-  String get planClaudeNote => 'Anthropic subscription';
+  String get planClaudeNote => 'Anthropic';
 
   @override
-  String get planGlmNote => 'Zhipu subscription';
+  String get planGlmNote => 'Zhipu';
 
   @override
-  String get planDoubaoNote => 'Volcengine subscription';
+  String get planDoubaoNote => 'Volcengine';
 
   @override
   String get noteManyModels => 'many models';
@@ -704,6 +704,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get planEffortHigh => 'High — most thorough';
+
+  @override
+  String get planEffortLowShort => 'Low';
+
+  @override
+  String get planEffortHighShort => 'High';
 
   @override
   String get planModelFable => 'Fable — frontier · needs credits on Pro';
