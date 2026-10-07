@@ -17,6 +17,7 @@ import 'provider_page.dart'
         kCustomModelSentinel,
         kKnownModels,
         isCuratedModel,
+        noteLabel,
         providerLabel;
 
 class ApiKeyProviderPage extends StatefulWidget {
@@ -116,7 +117,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
               GroupedRow(
                 key: Key('providerChoice-$id'),
                 title: name,
-                value: note,
+                value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: settings.provider == id
                     ? Icon(Icons.check, size: 20, color: scheme.primary)

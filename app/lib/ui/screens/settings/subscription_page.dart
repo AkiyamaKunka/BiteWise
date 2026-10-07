@@ -13,7 +13,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
-import 'provider_page.dart' show kPlanChoices;
+import 'provider_page.dart' show kPlanChoices, noteLabel;
 
 class SubscriptionProviderPage extends StatefulWidget {
   const SubscriptionProviderPage({
@@ -271,7 +271,7 @@ class _SubscriptionProviderPageState
               GroupedRow(
                 key: Key('planChoice-$backend'),
                 title: name,
-                value: note,
+                value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: _planActive &&
                         settings.serverBackend == backend

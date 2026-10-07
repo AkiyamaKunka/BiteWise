@@ -6,6 +6,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../core/contracts.dart';
+import 'l10n.dart';
 
 /// Present each reply in order. Delete confirmations block on the modal;
 /// plain replies use a snackbar (short) or dialog (long).
@@ -29,7 +30,7 @@ Future<void> presentNlReplies(
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('OK'),
+              child: Text(ctx.l10n.okButton),
             ),
           ],
         ),
@@ -49,13 +50,17 @@ Future<void> showDeleteConfirmation(
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (ctx) => AlertDialog(
-      title: const Text('Delete meals?'),
+      title: Text(ctx.l10n.nlDeleteTitle),
       content: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (reply.text.isNotEmpty)
+            // The executor's prose repeats the labels and the warning (and
+            // the model's reasoning) in English — on this modal the labels
+            // ARE the content; the prose is only a fallback when there are
+            // none (loop find 2026-10-07).
+            if (reply.pendingDeleteLabels.isEmpty && reply.text.isNotEmpty)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: Text(reply.text),
@@ -67,7 +72,7 @@ Future<void> showDeleteConfirmation(
               ),
             const SizedBox(height: 8),
             Text(
-              'This cannot be undone.',
+              ctx.l10n.nlCannotUndo,
               style: TextStyle(color: Theme.of(ctx).colorScheme.error),
             ),
           ],
@@ -77,12 +82,12 @@ Future<void> showDeleteConfirmation(
         TextButton(
           key: const Key('nlDeleteCancel'),
           onPressed: () => Navigator.of(ctx).pop(false),
-          child: const Text('Cancel'),
+          child: Text(ctx.l10n.cancel),
         ),
         FilledButton(
           key: const Key('nlDeleteConfirm'),
           onPressed: () => Navigator.of(ctx).pop(true),
-          child: const Text('Delete'),
+          child: Text(ctx.l10n.delete),
         ),
       ],
     ),

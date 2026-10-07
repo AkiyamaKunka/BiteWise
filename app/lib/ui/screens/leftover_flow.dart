@@ -323,9 +323,19 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
               GroupedRow(
                 key: Key('leftoverMeal-${m.id}'),
                 title: mealDescription(m.analysis),
-                value:
-                    '${context.friendlyDay(m.date)} ${context.clock(m.time)}'
-                    ' · ~${l.kcalAmount(formatKcal(safeCal(m)))}',
+                // Day + clock only; the calories — the number that tells
+                // two 午餐 apart — sit in the trailing slot, because a
+                // GroupedRow value is capped at ~170 px and the old
+                // three-part value ellipsised exactly there (loop find
+                // 2026-10-07). The picker only ever holds today/yesterday.
+                value: m.date == isoDate(DateTime.now())
+                    ? l.timeToday(context.clock(m.time))
+                    : l.timeYesterday(context.clock(m.time)),
+                trailing: Text(
+                  '~${l.kcalAmount(formatKcal(safeCal(m)))}',
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+                showChevron: true,
                 onTap: () => _selectMeal(m),
               ),
           ],

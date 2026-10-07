@@ -806,6 +806,36 @@ abstract class AppLocalizations {
   /// **'Anthropic subscription'**
   String get planClaudeNote;
 
+  /// No description provided for @planGlmNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Zhipu subscription'**
+  String get planGlmNote;
+
+  /// No description provided for @planDoubaoNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Volcengine subscription'**
+  String get planDoubaoNote;
+
+  /// No description provided for @noteManyModels.
+  ///
+  /// In en, this message translates to:
+  /// **'many models'**
+  String get noteManyModels;
+
+  /// No description provided for @nlDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete meals?'**
+  String get nlDeleteTitle;
+
+  /// No description provided for @nlCannotUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone.'**
+  String get nlCannotUndo;
+
   /// No description provided for @planGlm.
   ///
   /// In en, this message translates to:

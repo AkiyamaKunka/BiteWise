@@ -38,5 +38,8 @@ Future<void> armOsDailySummary({
     calorieGoal: settings.calorieGoal,
     strings: coachStringsFor(settings.appLanguage),
   );
+  // Belt and braces: a live in-process Timer must never coexist with the
+  // OS card (it would re-post the same slot at the next resume).
+  notifier.cancelDaily();
   await notifier.scheduleDailyAt(when: when, title: s.title, body: s.body);
 }

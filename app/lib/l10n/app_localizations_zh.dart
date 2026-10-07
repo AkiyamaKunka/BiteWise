@@ -411,6 +411,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planClaudeNote => 'Anthropic 订阅';
 
   @override
+  String get planGlmNote => '智谱订阅';
+
+  @override
+  String get planDoubaoNote => '火山引擎订阅';
+
+  @override
+  String get noteManyModels => '多家模型';
+
+  @override
+  String get nlDeleteTitle => '删除这些餐？';
+
+  @override
+  String get nlCannotUndo => '此操作无法撤销。';
+
+  @override
   String get planGlm => 'GLM 编程套餐';
 
   @override

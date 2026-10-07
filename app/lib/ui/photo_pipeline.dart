@@ -169,11 +169,22 @@ class PhotoPipeline {
             'This photo was already logged.');
       }
 
-      // AUTOMATIC leftover check (2026-08-05): today's meals ride along
-      // as compacts; the model may answer leftover_of instead of a new
-      // meal. The SNAPSHOT is captured here — reply indexes resolve
-      // against exactly this list (spec §4.2 snapshot rule).
-      final today = isoDate(DateTime.now());
+      // The day this photo belongs to. validateCapturedAt is NOT optional:
+      // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
+      // with a dead clock, a forward-set date), and an unvalidated value
+      // writes a meal into a random month of the user's log.
+      final when = photo.capturedAt ??
+          validateCapturedAt(exifCapturedAt(photo.bytes),
+              now: DateTime.now()) ??
+          DateTime.now();
+      // AUTOMATIC leftover check (2026-08-05): the meals of the day the
+      // photo was TAKEN ride along as compacts; the model may answer
+      // leftover_of instead of a new meal. The SNAPSHOT is captured here —
+      // reply indexes resolve against exactly this list (spec §4.2
+      // snapshot rule). The photo's own day, never "today": a backfilled or
+      // re-scanned photo from last week used to be matched against today's
+      // meals and could deduct from the wrong one (loop find 2026-10-07).
+      final today = isoDate(when);
       final candidates = byMealClock(
               (await dao.mealsBetween(today, today)).where(isFoodMeal))
           .toList();
@@ -259,14 +270,6 @@ class PhotoPipeline {
       // before intake-time dating — same validation window (§9 app-only,
       // 2026-07-31). This is what keeps a 23:50 photo shared after
       // midnight on YESTERDAY's total.
-      // validateCapturedAt is NOT optional here: EXIF is attacker- and
-      // junk-controlled (a 2015 stock photo, a camera with a dead clock,
-      // a forward-set date), and an unvalidated value writes a meal into
-      // a random month of the user's log where they will never find it.
-      final when = photo.capturedAt ??
-          validateCapturedAt(exifCapturedAt(photo.bytes),
-              now: DateTime.now()) ??
-          DateTime.now();
       final id = await dao.saveMeal(
         Meal(
           id: 0, // assigned by the DAO on insert

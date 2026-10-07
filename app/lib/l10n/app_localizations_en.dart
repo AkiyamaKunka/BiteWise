@@ -436,6 +436,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planClaudeNote => 'Anthropic subscription';
 
   @override
+  String get planGlmNote => 'Zhipu subscription';
+
+  @override
+  String get planDoubaoNote => 'Volcengine subscription';
+
+  @override
+  String get noteManyModels => 'many models';
+
+  @override
+  String get nlDeleteTitle => 'Delete meals?';
+
+  @override
+  String get nlCannotUndo => 'This cannot be undone.';
+
+  @override
   String get planGlm => 'GLM Coding Plan';
 
   @override
