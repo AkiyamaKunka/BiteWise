@@ -128,15 +128,21 @@ class DayReportCard extends StatelessWidget {
                                   label: l.rowBurn,
                                   value: '+${formatKcal(burn)}',
                                   dot: scheme.tertiary),
-                            ArithmeticRow(
-                                label: l.rowEaten,
-                                value: '−${formatKcal(totals.cal.round())}',
-                                dot: scheme.primary),
-                          ] else
-                            ArithmeticRow(
-                                label: l.rowEaten,
-                                value: formatKcal(totals.cal.round()),
-                                dot: scheme.primary),
+                          ],
+                          // Eaten is a plain positive figure — the one the
+                          // ring's center restates, emphasized like Today's.
+                          // It used to carry a leading "−" from when the
+                          // rows ended in "= left"; Today dropped that
+                          // result row (intake, not a countdown —
+                          // 2026-08-06) and the minus was left subtracting
+                          // from nothing, so a coach read "Eaten −1,200"
+                          // (testing loop 2026-10-07).
+                          ArithmeticRow(
+                              key: const Key('reportEatenRow'),
+                              label: l.rowEaten,
+                              value: formatKcal(totals.cal.round()),
+                              dot: scheme.primary,
+                              emphasized: typicalKcal != null),
                         ],
                       ),
                     ),
@@ -228,9 +234,9 @@ class DayReportCard extends StatelessWidget {
             const SizedBox(height: 6),
             Text(
               '~${l.kcalAmount(displayTotalCalories(a))} · '
-              'P ${displayMacro(a, 'total_protein_g')}g · '
-              'C ${displayMacro(a, 'total_carbs_g')}g · '
-              'F ${displayMacro(a, 'total_fat_g')}g',
+              '${l.macroProteinShort} ${displayMacro(a, 'total_protein_g')}g · '
+              '${l.macroCarbsShort} ${displayMacro(a, 'total_carbs_g')}g · '
+              '${l.macroFatShort} ${displayMacro(a, 'total_fat_g')}g',
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
             ),

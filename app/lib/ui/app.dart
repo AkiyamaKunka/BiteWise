@@ -329,8 +329,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               // The + button lives INSIDE TodayScreen (above its chat box),
               // not as a Scaffold FAB — a Scaffold FAB floats exactly over
               // the chat box's send button.
+              // The SIGNAL, not a Today-only reload: the chat fix/delete,
+              // describe, manual and leftover paths write meals directly,
+              // and on iOS the pending OS card must be re-armed with them
+              // (_onMealsChanged reloads Today + History and re-arms).
               onAdd: () => openAddFlow(context, s,
-                  onChanged: () async => _todayKey.currentState?.reload())),
+                  onChanged: () async => signalMealsChanged())),
           HistoryScreen(key: _historyKey, dao: s.dao, thumbs: s.thumbs),
           BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
           SettingsScreen(

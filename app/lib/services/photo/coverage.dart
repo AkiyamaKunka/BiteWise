@@ -13,6 +13,7 @@ library;
 
 import 'dart:typed_data';
 
+import '../../core/coerce.dart' show normalizeImageHash;
 import '../../core/contracts.dart';
 import 'filename_dates.dart';
 import 'photo_library.dart';
@@ -42,6 +43,7 @@ class CoverageReport {
     required this.scanned,
     required this.logged,
     required this.skippedNonFood,
+    required this.leftoverApplied,
     required this.failed,
     required this.deleted,
     required this.inFlight,
@@ -64,7 +66,18 @@ class CoverageReport {
   /// counted — drinks and ambiguous dishes land here routinely, and a
   /// tombstoned photo is otherwise unloggable forever (the automated path
   /// never re-offers it and a re-analysis repeats the verdict).
+  /// Leftover photos are NOT here (see [leftoverApplied]).
   final List<CoverageItem> skippedNonFood;
+
+  /// Ledgered skipped too, but the photo is the leftover photo a meal's
+  /// deduction recorded (`analysis.leftover.leftover_photo_md5`): both the
+  /// automatic leftover check and the manual flow tombstone it 'skipped',
+  /// the same status as "not food". Counted apart so the screen never calls
+  /// it "not food" or offers to re-analyze it — a re-analysis would log the
+  /// remains as a NEW meal on top of the already-reduced original. Only a
+  /// meal's LATEST leftover photo is known (a re-application overwrites the
+  /// md5); earlier ones still fall back to [skippedNonFood].
+  final int leftoverApplied;
 
   /// Ledgered failed — eligible for a deliberate retry (spec §6.5).
   final List<CoverageItem> failed;
@@ -143,7 +156,12 @@ class CoverageAuditor {
     final missing = <CoverageItem>[];
     final skipped = <CoverageItem>[];
     var deleted = 0, inFlight = 0, unreadable = 0, done = 0;
-    var tooLarge = 0;
+    var tooLarge = 0, leftovers = 0;
+    // One day before the cutoff: the manual leftover flow deducts from
+    // YESTERDAY's meals too, so a leftover photo in the window can belong
+    // to a meal dated just outside it.
+    final leftoverHashes = await _leftoverPhotoHashes(
+        DateTime(cutoff.year, cutoff.month, cutoff.day - 1), _clock());
 
     for (final asset in assets) {
       onProgress?.call(done++, assets.length);
@@ -169,7 +187,8 @@ class CoverageAuditor {
         fileName: name,
         createDate: asset.createDateTime,
       );
-      final row = await _dao.photoStatus(await _hasher(bytes));
+      final hash = await _hasher(bytes);
+      final row = await _dao.photoStatus(hash);
       if (row == null) {
         missing.add(item);
         continue;
@@ -183,7 +202,11 @@ class CoverageAuditor {
             mealId: row.mealId,
           ));
         case IngestionStatus.skipped:
-          skipped.add(item);
+          if (leftoverHashes.contains(normalizeImageHash(hash))) {
+            leftovers++;
+          } else {
+            skipped.add(item);
+          }
         case IngestionStatus.failed:
           failed.add(item);
         case IngestionStatus.deleted:
@@ -199,6 +222,7 @@ class CoverageAuditor {
       scanned: assets.length,
       logged: logged,
       skippedNonFood: skipped,
+      leftoverApplied: leftovers,
       failed: failed,
       deleted: deleted,
       inFlight: inFlight,
@@ -208,6 +232,18 @@ class CoverageAuditor {
       tooLargeToAnalyze: tooLarge,
       limitedAccess: limited,
     );
+  }
+
+  /// md5s of the leftover photos recorded on meals dated [from]..[to]
+  /// (applyLeftover stores them; core/leftover_logic.dart).
+  Future<Set<String>> _leftoverPhotoHashes(DateTime from, DateTime to) async {
+    final meals = await _dao.mealsBetween(_isoDay(from), _isoDay(to));
+    return {
+      for (final m in meals)
+        if (m.analysis['leftover'] case final Map<dynamic, dynamic> lo)
+          if (lo['leftover_photo_md5'] case final String md5)
+            if (normalizeImageHash(md5).isNotEmpty) normalizeImageHash(md5),
+    };
   }
 
   /// Re-fetch one audited photo as an [IntakePhoto] for processing —
@@ -231,3 +267,7 @@ class CoverageAuditor {
         capturedAt: capturedAt, deliberate: deliberate);
   }
 }
+
+String _isoDay(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';

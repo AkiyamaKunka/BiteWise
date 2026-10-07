@@ -5,6 +5,7 @@
 // stay collapsed. This suite shipped a day late — the feature went out
 // untested (loop debt, closed here).
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/history_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -125,5 +126,35 @@ void main() {
         .length;
     expect(tiles, 29,
         reason: '28 days ago .. today inclusive = 29 unique rows');
+  });
+
+  testWidgets('the trend chart keeps a slot per CALENDAR day — gaps stay '
+      'gaps, and tapping one opens that day', (tester) async {
+    // Fed only the logged days, two meals six days apart used to paint as
+    // two adjacent half-width bars while the rows below listed five
+    // "no meals logged" days between them.
+    final now = DateTime.now();
+    final d6 = _iso(now.subtract(const Duration(days: 6)));
+    final today = _iso(now);
+    await pump(tester, [_meal(d6, cal: 700), _meal(today, cal: 300)]);
+
+    final chart = find.byKey(const Key('calorieTrendChart'));
+    final painter = tester.widget<CustomPaint>(chart).painter as dynamic;
+    final values = (painter.values as List).cast<num>();
+    expect(values, [700, 0, 0, 0, 0, 0, 300],
+        reason: 'd-6 .. today inclusive, gap days as empty (0) slots');
+    expect(painter.average, 500,
+        reason: 'the dashed line stays the days-with-data mean the caption '
+            'prints (spec §5.3), not diluted over the gap days');
+    expect(find.text('Average: ~500 kcal / day'), findsOneWidget);
+
+    // Middle slot (index 3) = three days ago, a gap day.
+    final rect = tester.getRect(chart);
+    final slot = rect.width / values.length;
+    await tester.tapAt(Offset(rect.left + slot * 3.5, rect.center.dy));
+    await tester.pumpAndSettle();
+    expect(
+        tester.widget<DayDetailScreen>(find.byType(DayDetailScreen)).date,
+        _iso(now.subtract(const Duration(days: 3))));
   });
 }

@@ -245,5 +245,50 @@ void main() {
     expect(await maybePostDailySummary(d), isFalse);
     expect(posted, isEmpty);
   });
+
+  // ---------------------------------------------------------------------
+  // US fall-back night (2026-11-01, a 25-hour day in the owner's Central
+  // time). A 24 h step back from 23:30 lands on Nov 1 itself, so the old
+  // code posted a premature "Yesterday" card with TODAY's partial numbers
+  // and watermarked the day, suppressing the real 23:55 post; the 23:55
+  // card's baseline also included the covered day. Only reproducible on
+  // the old code under a DST zone:
+  //   TZ=America/Chicago flutter test test/report/daily_summary_test.dart
+  // With calendar arithmetic these pass in every zone.
+  // ---------------------------------------------------------------------
+
+  test('on the 25-hour fall-back day, a run before the slot does not post '
+      'today as "Yesterday"', () async {
+    dao.put(meal('2026-11-01', 900));
+    final now = DateTime(2026, 11, 1, 23, 30);
+    final d = deps(now: now, reportTime: '23:55', postedDate: '2026-10-31');
+    expect(await maybePostDailySummary(d), isFalse);
+    expect(posted, isEmpty);
+    expect(marks, isEmpty,
+        reason: 'watermarking Nov 1 now would swallow the real 23:55 post');
+  });
+
+  test('the fall-back day\'s baseline is the 7 calendar days before it',
+      () async {
+    final recording = _RangeRecordingDao();
+    await summaryForDay(
+        dao: recording,
+        day: DateTime(2026, 11, 1, 23, 55),
+        calorieGoal: 0,
+        strings: strings);
+    expect(recording.ranges, [
+      ('2026-11-01', '2026-11-01'),
+      ('2026-10-25', '2026-10-31'),
+    ]);
+  });
 }
 
+class _RangeRecordingDao extends BaseFakeDao {
+  final List<(String, String)> ranges = [];
+
+  @override
+  Future<List<Meal>> mealsBetween(String startDate, String endDate) {
+    ranges.add((startDate, endDate));
+    return super.mealsBetween(startDate, endDate);
+  }
+}

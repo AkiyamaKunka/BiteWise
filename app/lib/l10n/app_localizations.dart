@@ -290,6 +290,24 @@ abstract class AppLocalizations {
   /// **'Hip'**
   String get bodyHip;
 
+  /// No description provided for @bodyWaistShort.
+  ///
+  /// In en, this message translates to:
+  /// **'W'**
+  String get bodyWaistShort;
+
+  /// No description provided for @bodyChestShort.
+  ///
+  /// In en, this message translates to:
+  /// **'C'**
+  String get bodyChestShort;
+
+  /// No description provided for @bodyHipShort.
+  ///
+  /// In en, this message translates to:
+  /// **'H'**
+  String get bodyHipShort;
+
   /// No description provided for @bodyEmptyTitle.
   ///
   /// In en, this message translates to:
@@ -421,6 +439,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.'**
   String get settingsAiFooterPaused;
+
+  /// No description provided for @providerQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  String get providerQuotaPaused;
+
+  /// Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.
+  ///
+  /// In en, this message translates to:
+  /// **'Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  String providerQuotaPausedUntil(String time);
 
   /// No description provided for @settingsAiFooter.
   ///
@@ -683,7 +713,7 @@ abstract class AppLocalizations {
   /// No description provided for @noteFreeTierVpn.
   ///
   /// In en, this message translates to:
-  /// **'free tier · VPN in China'**
+  /// **'free · VPN in China'**
   String get noteFreeTierVpn;
 
   /// No description provided for @noteDirect.
@@ -770,6 +800,42 @@ abstract class AppLocalizations {
   /// **'Custom model name'**
   String get modelCustomLabel;
 
+  /// No description provided for @modelHelperDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}'**
+  String modelHelperDefault(String model);
+
+  /// No description provided for @modelHelperQwen.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}. Doubles as the cheap tier — qwen3-vl-plus is the stronger paid model.'**
+  String modelHelperQwen(String model);
+
+  /// No description provided for @modelHelperDoubao.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}. Doubao needs the EXACT versioned ID from the Ark model list — undated names are rejected.'**
+  String modelHelperDoubao(String model);
+
+  /// No description provided for @modelHelperGlm.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model} (free tier). glm-4.6v is the stronger paid model.'**
+  String modelHelperGlm(String model);
+
+  /// No description provided for @modelHelperDeepseek.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model} — the only DeepSeek model that accepts photos.'**
+  String modelHelperDeepseek(String model);
+
+  /// No description provided for @modelHelperOpenrouter.
+  ///
+  /// In en, this message translates to:
+  /// **'Default: {model}. Any vendor/model slug from openrouter.ai/models that accepts images works.'**
+  String modelHelperOpenrouter(String model);
+
   /// No description provided for @apiInactiveFooter.
   ///
   /// In en, this message translates to:
@@ -803,8 +869,38 @@ abstract class AppLocalizations {
   /// No description provided for @planClaudeNote.
   ///
   /// In en, this message translates to:
-  /// **'Anthropic subscription'**
+  /// **'Anthropic'**
   String get planClaudeNote;
+
+  /// No description provided for @planGlmNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Zhipu'**
+  String get planGlmNote;
+
+  /// No description provided for @planDoubaoNote.
+  ///
+  /// In en, this message translates to:
+  /// **'Volcengine'**
+  String get planDoubaoNote;
+
+  /// No description provided for @noteManyModels.
+  ///
+  /// In en, this message translates to:
+  /// **'many models'**
+  String get noteManyModels;
+
+  /// No description provided for @nlDeleteTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete meals?'**
+  String get nlDeleteTitle;
+
+  /// No description provided for @nlCannotUndo.
+  ///
+  /// In en, this message translates to:
+  /// **'This cannot be undone.'**
+  String get nlCannotUndo;
 
   /// No description provided for @planGlm.
   ///
@@ -1034,6 +1130,12 @@ abstract class AppLocalizations {
   /// **'Active burn: ~{burn} kcal (Garmin) · net ~{net} kcal'**
   String garminBurnLine(String burn, String net);
 
+  /// The Garmin line when the active burn is at least the day's intake: the net would be zero or negative, which is not an intake figure, so only the burn is stated.
+  ///
+  /// In en, this message translates to:
+  /// **'Active burn: ~{burn} kcal (Garmin)'**
+  String garminBurnOnlyLine(String burn);
+
   /// No description provided for @settingsRowUnits.
   ///
   /// In en, this message translates to:
@@ -1237,6 +1339,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'High — most thorough'**
   String get planEffortHigh;
+
+  /// No description provided for @planEffortLowShort.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get planEffortLowShort;
+
+  /// No description provided for @planEffortHighShort.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get planEffortHighShort;
 
   /// No description provided for @planModelFable.
   ///
@@ -1634,6 +1748,12 @@ abstract class AppLocalizations {
   /// **'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).'**
   String get diagFixRecopyKey;
 
+  /// No description provided for @diagModelNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The key works, but the model \"{model}\" was not found.'**
+  String diagModelNotFound(String model);
+
   /// No description provided for @diagTextOk.
   ///
   /// In en, this message translates to:
@@ -1778,6 +1898,12 @@ abstract class AppLocalizations {
   /// **'Already logged'**
   String get outcomeAlreadyTracked;
 
+  /// No description provided for @outcomeInFlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Still analyzing'**
+  String get outcomeInFlight;
+
   /// No description provided for @outcomeFailed.
   ///
   /// In en, this message translates to:
@@ -1879,6 +2005,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This photo was already logged.'**
   String get outcomeAlreadyTrackedMsg;
+
+  /// No description provided for @outcomeInFlightMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo is still being analyzed — check back in a moment.'**
+  String get outcomeInFlightMsg;
 
   /// No description provided for @errNoApiKey.
   ///
@@ -2114,6 +2246,90 @@ abstract class AppLocalizations {
   /// **'Remove item'**
   String get editorRemoveItemTooltip;
 
+  /// No description provided for @editorErrNotNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} must be a number.'**
+  String editorErrNotNumber(String label);
+
+  /// No description provided for @editorErrNegative.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} cannot be negative.'**
+  String editorErrNegative(String label);
+
+  /// No description provided for @editorErrTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} looks too large (max {max}).'**
+  String editorErrTooLarge(String label, String max);
+
+  /// No description provided for @editorErrDescTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Description is too long (max {max}).'**
+  String editorErrDescTooLong(String max);
+
+  /// No description provided for @editorErrDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date must be a real YYYY-MM-DD date.'**
+  String get editorErrDate;
+
+  /// No description provided for @editorErrTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Time must look like 07:30 PM.'**
+  String get editorErrTime;
+
+  /// No description provided for @editorErrTooManyItems.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many items (max {max}).'**
+  String editorErrTooManyItems(String max);
+
+  /// No description provided for @editorErrsNeedFixing.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} things need fixing — see the top.'**
+  String editorErrsNeedFixing(int count);
+
+  /// No description provided for @editorFieldCalories.
+  ///
+  /// In en, this message translates to:
+  /// **'Calories'**
+  String get editorFieldCalories;
+
+  /// No description provided for @editorItemFieldCalories.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} calories'**
+  String editorItemFieldCalories(int n);
+
+  /// No description provided for @editorItemFieldProtein.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} protein'**
+  String editorItemFieldProtein(int n);
+
+  /// No description provided for @editorItemFieldCarbs.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} carbs'**
+  String editorItemFieldCarbs(int n);
+
+  /// No description provided for @editorItemFieldFat.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} fat'**
+  String editorItemFieldFat(int n);
+
+  /// No description provided for @editorItemKcalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'kcal'**
+  String get editorItemKcalLabel;
+
   /// No description provided for @covPermissionRequired.
   ///
   /// In en, this message translates to:
@@ -2318,6 +2534,12 @@ abstract class AppLocalizations {
   /// **'{count} not food'**
   String covNotFoodCount(int count);
 
+  /// No description provided for @covLeftoverCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} leftover photos (deducted from their meal)'**
+  String covLeftoverCount(int count);
+
   /// No description provided for @covFailedCount.
   ///
   /// In en, this message translates to:
@@ -2407,6 +2629,306 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.'**
   String errServerRejected(String code);
+
+  /// No description provided for @watcherPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo library permission is required for automatic intake.'**
+  String get watcherPermissionDenied;
+
+  /// No description provided for @watcherOnQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching is on, but analyses are paused by the daily quota — new photos will wait.'**
+  String get watcherOnQuotaPaused;
+
+  /// No description provided for @watcherOnNoKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching is on, but photos won\'t be analyzed until a working API key is set above.'**
+  String get watcherOnNoKey;
+
+  /// No description provided for @watcherLimitedAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
+  String get watcherLimitedAccess;
+
+  /// No description provided for @fixAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get fixAction;
+
+  /// No description provided for @importDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import exported data'**
+  String get importDialogTitle;
+
+  /// No description provided for @importDialogBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.'**
+  String get importDialogBody;
+
+  /// No description provided for @importAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get importAction;
+
+  /// No description provided for @importNothingNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing new to import — everything in that file is already here.'**
+  String get importNothingNew;
+
+  /// No description provided for @importDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).'**
+  String importDone(int meals, int rows);
+
+  /// No description provided for @importDoneKept.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.'**
+  String importDoneKept(int meals, int rows, int kept);
+
+  /// No description provided for @importFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String importFailed(String error);
+
+  /// No description provided for @exportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String exportFailed(String error);
+
+  /// No description provided for @exportShareSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'CalorieTracker data export'**
+  String get exportShareSubject;
+
+  /// No description provided for @importErrNotJson.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not JSON.'**
+  String get importErrNotJson;
+
+  /// No description provided for @importErrNotExport.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not a CalorieTracker export.'**
+  String get importErrNotExport;
+
+  /// No description provided for @importErrWrongFormatTag.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not a CalorieTracker export (wrong format tag).'**
+  String get importErrWrongFormatTag;
+
+  /// No description provided for @importErrBadVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'That export has an unusable version tag.'**
+  String get importErrBadVersion;
+
+  /// No description provided for @importErrNoTables.
+  ///
+  /// In en, this message translates to:
+  /// **'That export has no tables section.'**
+  String get importErrNoTables;
+
+  /// No description provided for @nlSomethingWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Something went wrong handling that message. Please try again.'**
+  String get nlSomethingWrong;
+
+  /// No description provided for @nlMissingServer.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ No server is configured — set your server address and upload key in Settings first.'**
+  String get nlMissingServer;
+
+  /// No description provided for @nlMissingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ No {provider} API key yet — add one in Settings to use text logging.'**
+  String nlMissingKey(String provider);
+
+  /// No description provided for @nlTypeFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Type what you ate first.'**
+  String get nlTypeFirst;
+
+  /// No description provided for @nlErrorContactingAi.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Error contacting AI. Please try again.'**
+  String get nlErrorContactingAi;
+
+  /// No description provided for @nlNoFoodDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'🚫 I couldn\'t detect food in that description.'**
+  String get nlNoFoodDetected;
+
+  /// shown is the model's raw meal_index, already truncated to 40 chars.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Invalid meal index ({shown}). You have {count} recent meals.'**
+  String nlInvalidMealIndex(String shown, int count);
+
+  /// No description provided for @nlCorrectedMeal.
+  ///
+  /// In en, this message translates to:
+  /// **'✏️ Corrected meal {n}!'**
+  String nlCorrectedMeal(int n);
+
+  /// oldKcal/newKcal are already kcalAmount-formatted; diff is the signed delta.
+  ///
+  /// In en, this message translates to:
+  /// **'🔥 {oldKcal} → {newKcal} ({diff})'**
+  String nlKcalChange(String oldKcal, String newKcal, String diff);
+
+  /// No description provided for @nlDeleteAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'🗑️ Delete {count} meal(s)?'**
+  String nlDeleteAsk(int count);
+
+  /// No description provided for @nlDeleteCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'👍 Cancelled — nothing was deleted.'**
+  String get nlDeleteCancelled;
+
+  /// No description provided for @nlDeletedMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'🗑️ Deleted {count} meal(s):'**
+  String nlDeletedMeals(int count);
+
+  /// No description provided for @nlAddedManualMeal.
+  ///
+  /// In en, this message translates to:
+  /// **'✅ Added new manual meal:'**
+  String get nlAddedManualMeal;
+
+  /// One staged-delete line. time is already in the locale clock; kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'{desc} ({date} {time}, ~{kcal})'**
+  String nlMealLabel(String desc, String date, String time, String kcal);
+
+  /// No description provided for @nlNoActions.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.'**
+  String get nlNoActions;
+
+  /// No description provided for @nlRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ That request failed. Please try again.'**
+  String get nlRequestFailed;
+
+  /// Every action in a compound request failed; must never claim partial success.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ All {count} requested actions failed. Please try again.'**
+  String nlAllActionsFailed(int count);
+
+  /// No description provided for @nlSomeActionsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ {failed} of {total} requested action(s) failed — the rest were applied.'**
+  String nlSomeActionsFailed(int failed, int total);
+
+  /// No description provided for @nlCannotCorrectNoMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Cannot correct because no meals are logged recently.'**
+  String get nlCannotCorrectNoMeals;
+
+  /// Silent-delete guard: an empty or non-food analysis would hide the meal without the delete confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.'**
+  String get nlCorrectionUnusable;
+
+  /// No description provided for @nlCannotDeleteNoMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Cannot delete because no meals are logged recently.'**
+  String get nlCannotDeleteNoMeals;
+
+  /// No description provided for @nlDeleteWhich.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Didn\'t catch which meals to delete. Try being more specific.'**
+  String get nlDeleteWhich;
+
+  /// No description provided for @nlDeleteNoMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Couldn\'t match those meals to the recent list.'**
+  String get nlDeleteNoMatch;
+
+  /// No description provided for @nlDescribedMultiple.
+  ///
+  /// In en, this message translates to:
+  /// **'That described {count} meals — only the first is shown. Describe the others one at a time.'**
+  String nlDescribedMultiple(int count);
+
+  /// No description provided for @nlWeightUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'⚖️ I couldn\'t read a valid body weight (30–300 kg). Try “I weigh 72.5 kg”.'**
+  String get nlWeightUnreadable;
+
+  /// kg is already %g-formatted (72.5, 80); date is ISO yyyy-MM-dd.
+  ///
+  /// In en, this message translates to:
+  /// **'⚖️ Logged {kg} kg for {date}.'**
+  String nlWeightLogged(String kg, String date);
+
+  /// No description provided for @nlActivityUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'🏃 I couldn\'t find any activity numbers to log. Try “burned 450 kcal running 5 km”.'**
+  String get nlActivityUnreadable;
+
+  /// bits is the ' · '-joined list of kcalAmount / nlStepsAmount / nlKmAmount parts that were non-zero.
+  ///
+  /// In en, this message translates to:
+  /// **'🏃 Logged activity: {bits} ({date}).'**
+  String nlActivityLogged(String bits, String date);
+
+  /// steps is already thousands-grouped (8,000).
+  ///
+  /// In en, this message translates to:
+  /// **'{steps} steps'**
+  String nlStepsAmount(String steps);
+
+  /// No description provided for @nlKmAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'{km} km'**
+  String nlKmAmount(String km);
+
+  /// No description provided for @nlChatFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m not sure what you mean. Try describing a meal or correction!'**
+  String get nlChatFallback;
 }
 
 class _AppLocalizationsDelegate

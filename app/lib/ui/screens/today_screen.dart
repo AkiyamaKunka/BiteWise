@@ -21,6 +21,7 @@ import '../widgets/day_report.dart';
 import '../widgets/grouped.dart' show GroupedCard;
 import '../widgets/macro_chart.dart' show MacroPalette;
 import '../meal_thumbs.dart';
+import '../refresh_signal.dart';
 import '../widgets/meal_card.dart';
 import 'meal_editor_screen.dart';
 
@@ -84,8 +85,10 @@ class TodayScreenState extends State<TodayScreen> {
           byMealClock(await widget.dao.mealsBetween(today, today));
       // Typical-day window: prior 7 local days EXCLUDING today (spec §5.1).
       final prior = await widget.dao.mealsBetween(
-        isoDate(now.subtract(const Duration(days: 7))),
-        isoDate(now.subtract(const Duration(days: 1))),
+        // Calendar days, matching summaryForDay — a 24 h step goes wrong
+        // across a DST change.
+        isoDate(DateTime(now.year, now.month, now.day - 7)),
+        isoDate(DateTime(now.year, now.month, now.day - 1)),
       );
       if (!mounted) return;
       setState(() {
@@ -110,6 +113,9 @@ class TodayScreenState extends State<TodayScreen> {
       builder: (_) => MealEditorScreen(dao: widget.dao, meal: meal),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie
+    // An edit or delete changes the summary the iOS OS card carries; the
+    // shell's listener re-arms it (and refreshes History).
+    signalMealsChanged();
     if (mounted) await reload();
   }
 
@@ -239,7 +245,7 @@ class TodayScreenState extends State<TodayScreen> {
               children: [
                 Text(_error!, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                FilledButton(onPressed: reload, child: const Text('Retry')),
+                FilledButton(onPressed: reload, child: Text(context.l10n.retry)),
               ],
             ),
           ),
@@ -397,9 +403,7 @@ class TodayScreenState extends State<TodayScreen> {
             if (_garmin != null && _garmin!.activeCalories > 0) ...[
               const SizedBox(height: 4),
               Text(
-                context.l10n.garminBurnLine(
-                    formatKcal(_garmin!.activeCalories),
-                    formatKcal(totals.cal - _garmin!.activeCalories)),
+                _garminLine(context, totals.cal, _garmin!.activeCalories),
                 key: const Key('garminBurnLine'),
                 style: theme.textTheme.bodySmall
                     ?.copyWith(color: scheme.onSurfaceVariant),
@@ -411,4 +415,20 @@ class TodayScreenState extends State<TodayScreen> {
     );
   }
 
+  /// The Garmin footnote. "net ~N kcal" is intake minus active burn — an
+  /// INTAKE figure, so it is only stated while it still is one. On a light
+  /// or empty day the burn exceeds what was eaten and the subtraction goes
+  /// negative ("净摄入 ~-897 千卡", testing loop 2026-10-07): that is not a
+  /// net intake, it is a countdown in disguise, and this screen reports
+  /// intake, not a countdown (owner decision 2026-08-06). The line then
+  /// states the burn alone — the eaten figure is already the hero above,
+  /// three times over. Both terms are rounded first so the net reconciles
+  /// with the rows as printed; a net of exactly 0 is dropped with the
+  /// negatives (no "~0 kcal" noise, same rule as the idle line).
+  String _garminLine(BuildContext context, num eaten, double burn) {
+    final net = eaten.round() - burn.round();
+    return net > 0
+        ? context.l10n.garminBurnLine(formatKcal(burn), formatKcal(net))
+        : context.l10n.garminBurnOnlyLine(formatKcal(burn));
+  }
 }

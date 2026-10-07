@@ -88,6 +88,11 @@ enum ReserveDecision {
   /// Hash already claimed (meals-table backstop or unreclaimable ledger row).
   refuse,
 
+  /// A FRESH 'processing' row is in the way: another run holds the photo
+  /// right now (or did, until iOS cut it off). Refused like [refuse], but
+  /// the caller must NOT treat the photo as handled (2026-10-07).
+  refuseInFlight,
+
   /// Existing ledger row flips back to 'processing' (stale or reclaimable).
   reclaim,
 
@@ -118,12 +123,15 @@ ReserveDecision decideReservation({
   if (ledgerStatus == null) return ReserveDecision.insert;
   // §2.3 step 3a: stale 'processing' rows are reclaimable. An unparseable
   // last_seen_at reads as stale — a corrupt row must not block forever.
+  // A FRESH one is somebody's live analysis: refused, but as IN FLIGHT,
+  // so the automated paths wait in front of the photo instead of counting
+  // it covered. (Only here — the backstop above is a real verdict.)
   if (ledgerStatus == IngestionStatus.processing.name) {
     final last = ledgerLastSeenAt;
     final stale = last == null ||
         now.difference(last) >
             const Duration(seconds: photoReservationStaleSeconds);
-    return stale ? ReserveDecision.reclaim : ReserveDecision.refuse;
+    return stale ? ReserveDecision.reclaim : ReserveDecision.refuseInFlight;
   }
   // §2.3 step 3b: deliberate re-send may re-log failed/skipped/deleted.
   const deliberateReclaim = {'failed', 'skipped', 'deleted'};
@@ -179,27 +187,33 @@ class ParsedExport {
 /// Strictly validate an export payload — a wrong file is the ONE case
 /// where import must refuse loudly, since the alternative is silently
 /// writing a stranger's (or a random JSON's) rows into the food log.
+/// Each refusal is an [ExportFormatException] with its [ExportRefusal], so
+/// the UI can say why in the user's language.
 ParsedExport parseExportEnvelope(String json) {
   final Object? decoded;
   try {
     decoded = jsonDecode(json);
   } on FormatException {
-    throw const FormatException('That file is not JSON.');
+    throw const ExportFormatException(
+        ExportRefusal.notJson, 'That file is not JSON.');
   }
   if (decoded is! Map) {
-    throw const FormatException('That file is not a CalorieTracker export.');
+    throw const ExportFormatException(ExportRefusal.notExport,
+        'That file is not a CalorieTracker export.');
   }
   if (decoded['format'] != kExportFormat) {
-    throw const FormatException(
+    throw const ExportFormatException(ExportRefusal.wrongFormatTag,
         'That file is not a CalorieTracker export (wrong format tag).');
   }
   final version = decoded['version'];
   if (version is! int || version < 1) {
-    throw const FormatException('That export has an unusable version tag.');
+    throw const ExportFormatException(ExportRefusal.badVersion,
+        'That export has an unusable version tag.');
   }
   final rawTables = decoded['tables'];
   if (rawTables is! Map) {
-    throw const FormatException('That export has no tables section.');
+    throw const ExportFormatException(
+        ExportRefusal.noTables, 'That export has no tables section.');
   }
   final tables = <String, List<Map<String, Object?>>>{};
   rawTables.forEach((key, value) {

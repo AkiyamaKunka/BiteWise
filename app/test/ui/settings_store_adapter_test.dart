@@ -6,6 +6,7 @@
 // adapter wrote a Qwen key into the Gemini slot. The comment in
 // widget_test.dart claimed this was "exercised at integration time" — but
 // the E2E needs a live key and never runs in CI (review 2026-07-31).
+import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/di.dart';
 import 'package:calorie_tracker/ui/services.dart';
@@ -98,5 +99,30 @@ void main() {
     expect(settings.serverBackend, 'doubao');
     await store.update(serverBackend: 'gpt');
     expect(store.serverBackend, 'claude');
+  });
+
+  test('reportTime: iOS re-arms the OS card and NEVER the in-process Timer '
+      '(loop find 2026-10-07)', () async {
+    // Both armed at once made a suspended iPhone app wake the next morning
+    // and post a second, stale 昨天 card on top of the OS one.
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: MemoryKeyStore());
+    final notifier = ReportNotifier(presenter: (_, _, _) async {});
+    var rearmed = 0;
+    final ios = createSettingsStore(settings,
+        notifier: notifier, onReportTimeChanged: () async => rearmed++);
+    await ios.update(reportTime: '23:55');
+    expect(settings.reportTime, '23:55');
+    expect(rearmed, 1);
+    expect(notifier.nextDailyFire, isNull,
+        reason: 'no Timer on the OS path');
+
+    // Android (no OS hook) keeps the Timer path.
+    final android = createSettingsStore(settings, notifier: notifier);
+    await android.update(reportTime: '22:00');
+    expect(notifier.nextDailyFire, isNotNull);
+    notifier.cancelDaily();
   });
 }

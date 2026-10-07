@@ -17,6 +17,7 @@ import 'provider_page.dart'
         kCustomModelSentinel,
         kKnownModels,
         isCuratedModel,
+        noteLabel,
         providerLabel;
 
 class ApiKeyProviderPage extends StatefulWidget {
@@ -66,21 +67,17 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
     });
   }
 
-  String _modelHelperText() {
+  String _modelHelperText(BuildContext context) {
     final provider = widget.settings.provider;
-    final base = 'Default: ${defaultModelFor(provider)}';
+    final model = defaultModelFor(provider);
+    final l = context.l10n;
     return switch (provider) {
-      'qwen' => '$base. Doubles as the cheap tier — '
-          'qwen3-vl-plus is the stronger paid model.',
-      'doubao' => '$base. Doubao needs the '
-          'EXACT versioned ID from the Ark model list — undated names '
-          'are rejected.',
-      'glm' => '$base (free tier). glm-4.6v is the '
-          'stronger paid model.',
-      'deepseek' => '$base — the only DeepSeek model that accepts photos.',
-      'openrouter' => '$base. Any vendor/model slug from '
-          'openrouter.ai/models that accepts images works.',
-      _ => base,
+      'qwen' => l.modelHelperQwen(model),
+      'doubao' => l.modelHelperDoubao(model),
+      'glm' => l.modelHelperGlm(model),
+      'deepseek' => l.modelHelperDeepseek(model),
+      'openrouter' => l.modelHelperOpenrouter(model),
+      _ => l.modelHelperDefault(model),
     };
   }
 
@@ -116,7 +113,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
               GroupedRow(
                 key: Key('providerChoice-$id'),
                 title: name,
-                value: note,
+                value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: settings.provider == id
                     ? Icon(Icons.check, size: 20, color: scheme.primary)
@@ -151,7 +148,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
           ),
           GroupedSection(
             header: context.l10n.modelHeader,
-            footer: _customModel ? _modelHelperText() : null,
+            footer: _customModel ? _modelHelperText(context) : null,
             children: [
               _cellField(KeyedSubtree(
                 key: ValueKey('modelPicker-${settings.provider}'),

@@ -118,6 +118,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bodyHip => '臀围';
 
   @override
+  String get bodyWaistShort => '腰';
+
+  @override
+  String get bodyChestShort => '胸';
+
+  @override
+  String get bodyHipShort => '臀';
+
+  @override
   String get bodyEmptyTitle => '还没有身体数据。';
 
   @override
@@ -197,6 +206,15 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get settingsAiFooterPaused =>
       '分析已暂停 — 已达当日额度。新照片会保留并自动重试；在 AI 服务页更换 Key 或服务后立即恢复。';
+
+  @override
+  String get providerQuotaPaused =>
+      '分析已暂停 — 已达当日额度。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+
+  @override
+  String providerQuotaPausedUntil(String time) {
+    return '分析已暂停 — 已达当日额度（$time 恢复）。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+  }
 
   @override
   String get settingsAiFooter => '照片由你选择的服务分析 — 它的 Key 不会离开这台手机。';
@@ -340,7 +358,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noteVpn => '需要 VPN';
 
   @override
-  String get noteFreeTierVpn => '有免费额度 · 需要 VPN';
+  String get noteFreeTierVpn => '免费额度 · VPN';
 
   @override
   String get noteDirect => '中国直连';
@@ -392,6 +410,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modelCustomLabel => '自定义模型名';
 
   @override
+  String modelHelperDefault(String model) {
+    return '默认：$model';
+  }
+
+  @override
+  String modelHelperQwen(String model) {
+    return '默认：$model。它也是便宜档 — qwen3-vl-plus 是更强的付费模型。';
+  }
+
+  @override
+  String modelHelperDoubao(String model) {
+    return '默认：$model。豆包需要方舟模型列表里带日期的完整模型 ID — 不带日期的名称会被拒绝。';
+  }
+
+  @override
+  String modelHelperGlm(String model) {
+    return '默认：$model（免费档）。glm-4.6v 是更强的付费模型。';
+  }
+
+  @override
+  String modelHelperDeepseek(String model) {
+    return '默认：$model — DeepSeek 唯一能识别照片的模型。';
+  }
+
+  @override
+  String modelHelperOpenrouter(String model) {
+    return '默认：$model。openrouter.ai/models 里任何支持图片的 厂商/模型 名称都可以。';
+  }
+
+  @override
   String get apiInactiveFooter => '当前使用的是订阅。在上方选择一家服务商即可切换为按张计费的 API Key。';
 
   @override
@@ -409,6 +457,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planClaudeNote => 'Anthropic 订阅';
+
+  @override
+  String get planGlmNote => '智谱订阅';
+
+  @override
+  String get planDoubaoNote => '火山引擎订阅';
+
+  @override
+  String get noteManyModels => '多家模型';
+
+  @override
+  String get nlDeleteTitle => '删除这些餐？';
+
+  @override
+  String get nlCannotUndo => '此操作无法撤销。';
 
   @override
   String get planGlm => 'GLM 编程套餐';
@@ -534,6 +597,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String garminBurnOnlyLine(String burn) {
+    return '活动消耗：~$burn 千卡（Garmin）';
+  }
+
+  @override
   String get settingsRowUnits => '单位';
 
   @override
@@ -642,6 +710,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planEffortHigh => '高 — 最仔细';
+
+  @override
+  String get planEffortLowShort => '低';
+
+  @override
+  String get planEffortHighShort => '高';
 
   @override
   String get planModelFable => 'Fable — 旗舰 · Pro 需另购额度';
@@ -876,6 +950,11 @@ class AppLocalizationsZh extends AppLocalizations {
       '从服务商控制台重新复制 Key —— 并确认它属于当前这个服务（不同服务的 Key 不能混用）。';
 
   @override
+  String diagModelNotFound(String model) {
+    return 'Key 有效，但找不到模型“$model”。';
+  }
+
+  @override
   String get diagTextOk => '模型返回了 JSON —— 对话纠正和“描述一餐”都可用。';
 
   @override
@@ -952,6 +1031,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outcomeAlreadyTracked => '已经记录过';
 
   @override
+  String get outcomeInFlight => '正在分析';
+
+  @override
   String get outcomeFailed => '分析失败';
 
   @override
@@ -1006,6 +1088,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get outcomeAlreadyTrackedMsg => '这张照片已经记录过了。';
+
+  @override
+  String get outcomeInFlightMsg => '这张照片还在分析中，稍等片刻再看。';
 
   @override
   String get errNoApiKey => '当前服务还没有设置 API Key —— 请在设置里添加。';
@@ -1132,6 +1217,68 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get editorRemoveItemTooltip => '移除';
+
+  @override
+  String editorErrNotNumber(String label) {
+    return '$label必须是数字。';
+  }
+
+  @override
+  String editorErrNegative(String label) {
+    return '$label不能为负数。';
+  }
+
+  @override
+  String editorErrTooLarge(String label, String max) {
+    return '$label太大了（上限 $max）。';
+  }
+
+  @override
+  String editorErrDescTooLong(String max) {
+    return '描述太长了（上限 $max 字）。';
+  }
+
+  @override
+  String get editorErrDate => '日期必须是真实存在的 YYYY-MM-DD 日期。';
+
+  @override
+  String get editorErrTime => '时间格式应类似 07:30 PM。';
+
+  @override
+  String editorErrTooManyItems(String max) {
+    return '食物太多了（上限 $max 项）。';
+  }
+
+  @override
+  String editorErrsNeedFixing(int count) {
+    return '有 $count 处需要修改，请看顶部。';
+  }
+
+  @override
+  String get editorFieldCalories => '热量';
+
+  @override
+  String editorItemFieldCalories(int n) {
+    return '第 $n 项食物的热量';
+  }
+
+  @override
+  String editorItemFieldProtein(int n) {
+    return '第 $n 项食物的蛋白质';
+  }
+
+  @override
+  String editorItemFieldCarbs(int n) {
+    return '第 $n 项食物的碳水';
+  }
+
+  @override
+  String editorItemFieldFat(int n) {
+    return '第 $n 项食物的脂肪';
+  }
+
+  @override
+  String get editorItemKcalLabel => '千卡';
 
   @override
   String get covPermissionRequired => '检查需要照片权限。';
@@ -1292,6 +1439,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covLeftoverCount(int count) {
+    return '$count 张剩菜照片（已从原餐扣除）';
+  }
+
+  @override
   String covFailedCount(int count) {
     return '$count 张失败';
   }
@@ -1342,4 +1494,192 @@ class AppLocalizationsZh extends AppLocalizations {
   String errServerRejected(String code) {
     return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
   }
+
+  @override
+  String get watcherPermissionDenied => '自动记录需要相册访问权限。';
+
+  @override
+  String get watcherOnQuotaPaused => '监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。';
+
+  @override
+  String get watcherOnNoKey => '监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。';
+
+  @override
+  String get watcherLimitedAccess =>
+      '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
+
+  @override
+  String get fixAction => '去修复';
+
+  @override
+  String get importDialogTitle => '导入已导出的数据';
+
+  @override
+  String get importDialogBody => '粘贴导出的 JSON 文件内容。已有的餐会保留，只会添加新的。';
+
+  @override
+  String get importAction => '导入';
+
+  @override
+  String get importNothingNew => '没有可导入的新内容 —— 那个文件里的记录这里都已经有了。';
+
+  @override
+  String importDone(int meals, int rows) {
+    return '已导入 $meals 餐（共 $rows 行）。';
+  }
+
+  @override
+  String importDoneKept(int meals, int rows, int kept) {
+    return '已导入 $meals 餐（共 $rows 行）；$kept 条已存在。';
+  }
+
+  @override
+  String importFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get exportShareSubject => '筷拍数据导出';
+
+  @override
+  String get importErrNotJson => '这个文件不是 JSON。';
+
+  @override
+  String get importErrNotExport => '这个文件不是筷拍的导出文件。';
+
+  @override
+  String get importErrWrongFormatTag => '这个文件不是筷拍的导出文件（格式标记不对）。';
+
+  @override
+  String get importErrBadVersion => '这份导出文件的版本标记无法使用。';
+
+  @override
+  String get importErrNoTables => '这份导出文件没有 tables 部分。';
+
+  @override
+  String get nlSomethingWrong => '❌ 处理这条消息时出了点问题，请重试。';
+
+  @override
+  String get nlMissingServer => '❌ 还没有配置服务器——请先在「设置」里填写服务器地址和上传密钥。';
+
+  @override
+  String nlMissingKey(String provider) {
+    return '❌ 还没有 $provider 的 API 密钥——请先在「设置」里添加，才能用文字记录。';
+  }
+
+  @override
+  String get nlTypeFirst => '先输入你吃了什么。';
+
+  @override
+  String get nlErrorContactingAi => '❌ 联系 AI 失败，请重试。';
+
+  @override
+  String get nlNoFoodDetected => '🚫 这段描述里没有识别出食物。';
+
+  @override
+  String nlInvalidMealIndex(String shown, int count) {
+    return '❌ 餐次编号无效（$shown）。你最近有 $count 顿餐。';
+  }
+
+  @override
+  String nlCorrectedMeal(int n) {
+    return '✏️ 已修正第 $n 顿餐！';
+  }
+
+  @override
+  String nlKcalChange(String oldKcal, String newKcal, String diff) {
+    return '🔥 $oldKcal → $newKcal（$diff）';
+  }
+
+  @override
+  String nlDeleteAsk(int count) {
+    return '🗑️ 删除 $count 顿餐？';
+  }
+
+  @override
+  String get nlDeleteCancelled => '👍 已取消——没有删除任何记录。';
+
+  @override
+  String nlDeletedMeals(int count) {
+    return '🗑️ 已删除 $count 顿餐：';
+  }
+
+  @override
+  String get nlAddedManualMeal => '✅ 已添加手动记录的一餐：';
+
+  @override
+  String nlMealLabel(String desc, String date, String time, String kcal) {
+    return '$desc（$date $time，~$kcal）';
+  }
+
+  @override
+  String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';
+
+  @override
+  String get nlRequestFailed => '❌ 这个请求失败了，请重试。';
+
+  @override
+  String nlAllActionsFailed(int count) {
+    return '❌ 请求的 $count 项操作全部失败，请重试。';
+  }
+
+  @override
+  String nlSomeActionsFailed(int failed, int total) {
+    return '⚠️ 请求的 $total 项操作中有 $failed 项失败——其余已生效。';
+  }
+
+  @override
+  String get nlCannotCorrectNoMeals => '❌ 最近没有记录任何餐，无法修正。';
+
+  @override
+  String get nlCorrectionUnusable =>
+      '❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「第 2 顿是烧鸭饭，大约 780 千卡」。';
+
+  @override
+  String get nlCannotDeleteNoMeals => '❌ 最近没有记录任何餐，无法删除。';
+
+  @override
+  String get nlDeleteWhich => '❌ 没听清要删除哪几顿餐，请说得具体一点。';
+
+  @override
+  String get nlDeleteNoMatch => '❌ 在最近的记录里没有找到对应的餐。';
+
+  @override
+  String nlDescribedMultiple(int count) {
+    return '这段描述包含 $count 顿餐——这里只显示第一顿。其余的请一次描述一顿。';
+  }
+
+  @override
+  String get nlWeightUnreadable => '⚖️ 没有读到有效的体重（30–300 公斤）。试试「我今天 72.5 公斤」。';
+
+  @override
+  String nlWeightLogged(String kg, String date) {
+    return '⚖️ 已记录 $date 的体重：$kg 公斤。';
+  }
+
+  @override
+  String get nlActivityUnreadable => '🏃 没有找到可记录的运动数据。试试「跑了 5 公里，消耗 450 千卡」。';
+
+  @override
+  String nlActivityLogged(String bits, String date) {
+    return '🏃 已记录活动：$bits（$date）。';
+  }
+
+  @override
+  String nlStepsAmount(String steps) {
+    return '$steps 步';
+  }
+
+  @override
+  String nlKmAmount(String km) {
+    return '$km 公里';
+  }
+
+  @override
+  String get nlChatFallback => '我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！';
 }

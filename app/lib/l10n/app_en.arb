@@ -74,6 +74,9 @@
   "bodyWaist": "Waist",
   "bodyChest": "Chest",
   "bodyHip": "Hip",
+  "bodyWaistShort": "W",
+  "bodyChestShort": "C",
+  "bodyHipShort": "H",
   "bodyEmptyTitle": "No body data yet.",
   "bodyEmptyHint": "Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.",
   "bodySheetLogTitle": "Log body · {date}",
@@ -147,6 +150,16 @@
   "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM's default model is free) — the other providers need a VPN. 中国大陆用户请选择国内提供商。",
   "settingsSectionAi": "AI",
   "settingsAiFooterPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.",
+  "providerQuotaPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.",
+  "providerQuotaPausedUntil": "Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.",
+  "@providerQuotaPausedUntil": {
+    "description": "Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "settingsAiFooter": "Photos are analysed by the provider you pick — its key never leaves this phone.",
   "settingsRowAiProvider": "AI Provider",
   "settingsSectionPhotos": "Photos",
@@ -225,7 +238,7 @@
   "apiProviderHeader": "Provider",
   "apiProviderFooter": "Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor. In mainland China choose DeepSeek, Qwen, Doubao or GLM — the others need a VPN. 中国大陆用户请选择国内提供商。",
   "noteVpn": "VPN in China",
-  "noteFreeTierVpn": "free tier · VPN in China",
+  "noteFreeTierVpn": "free · VPN in China",
   "noteDirect": "direct in China",
   "noteFreeDirect": "free · direct in China",
   "apiKeyHeader": "API key",
@@ -247,12 +260,65 @@
   "modelHeader": "Model",
   "modelCustomRow": "Custom — type a model name…",
   "modelCustomLabel": "Custom model name",
+  "modelHelperDefault": "Default: {model}",
+  "@modelHelperDefault": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperQwen": "Default: {model}. Doubles as the cheap tier — qwen3-vl-plus is the stronger paid model.",
+  "@modelHelperQwen": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperDoubao": "Default: {model}. Doubao needs the EXACT versioned ID from the Ark model list — undated names are rejected.",
+  "@modelHelperDoubao": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperGlm": "Default: {model} (free tier). glm-4.6v is the stronger paid model.",
+  "@modelHelperGlm": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperDeepseek": "Default: {model} — the only DeepSeek model that accepts photos.",
+  "@modelHelperDeepseek": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
+  "modelHelperOpenrouter": "Default: {model}. Any vendor/model slug from openrouter.ai/models that accepts images works.",
+  "@modelHelperOpenrouter": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "apiInactiveFooter": "A subscription is currently active. Pick a provider above to switch to a pay-per-photo API key.",
   "subPageTitle": "Subscription",
   "planHeader": "Plan",
   "planFooter": "Flat-rate: your own cloud machine signs in to ONE plan and analyses photos under it — each photo costs nothing extra. Plan credentials stay on that machine.",
   "planClaude": "Claude Plan",
-  "planClaudeNote": "Anthropic subscription",
+  "planClaudeNote": "Anthropic",
+  "planGlmNote": "Zhipu",
+  "planDoubaoNote": "Volcengine",
+  "noteManyModels": "many models",
+  "nlDeleteTitle": "Delete meals?",
+  "nlCannotUndo": "This cannot be undone.",
   "planGlm": "GLM Coding Plan",
   "planDoubao": "Doubao Agent Plan",
   "serverHeader": "Your server",
@@ -331,6 +397,15 @@
       }
     }
   },
+  "garminBurnOnlyLine": "Active burn: ~{burn} kcal (Garmin)",
+  "@garminBurnOnlyLine": {
+    "description": "The Garmin line when the active burn is at least the day's intake: the net would be zero or negative, which is not an intake figure, so only the burn is stated.",
+    "placeholders": {
+      "burn": {
+        "type": "String"
+      }
+    }
+  },
   "settingsRowUnits": "Units",
   "unitsMetric": "Metric",
   "unitsImperial": "Imperial",
@@ -395,6 +470,8 @@
   "planEffortLow": "Low — fastest",
   "planEffortMedium": "Medium",
   "planEffortHigh": "High — most thorough",
+  "planEffortLowShort": "Low",
+  "planEffortHighShort": "High",
   "planModelFable": "Fable — frontier · needs credits on Pro",
   "typicalDayOnly": "Typical day: ~{typical} kcal",
   "@typicalDayOnly": {
@@ -559,6 +636,14 @@
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
   "diagFixRecopyKey": "Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).",
+  "diagModelNotFound": "The key works, but the model \"{model}\" was not found.",
+  "@diagModelNotFound": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "diagTextOk": "The model answered JSON — chat fixes and \"describe a meal\" work.",
   "diagTextBad": "The model did not return usable JSON for a text request.",
   "diagTextBadDetail": "Chat fixes and \"describe a meal\" may fail; photo analysis can still work.",
@@ -597,6 +682,7 @@
   "outcomeSkipped": "No food detected",
   "outcomeDuplicate": "Duplicate photo",
   "outcomeAlreadyTracked": "Already logged",
+  "outcomeInFlight": "Still analyzing",
   "outcomeFailed": "Analysis failed",
   "outcomeLeftoverApplied": "Leftovers deducted",
   "outcomeLogManuallyHint": "If this IS food, log it yourself — the photo stays attached to the meal.",
@@ -628,6 +714,7 @@
   "outcomeNotFoodMsg": "No food detected in this photo.",
   "outcomeDuplicateMsg": "Looks like a duplicate of a photo logged minutes ago.",
   "outcomeAlreadyTrackedMsg": "This photo was already logged.",
+  "outcomeInFlightMsg": "This photo is still being analyzed — check back in a moment.",
   "errNoApiKey": "No API key is set for this provider — add one in Settings.",
   "errNoServerKey": "No server address or upload key is set — add them in Settings.",
   "errRejectedKey": "The provider rejected the API key. Check the key in Settings.",
@@ -695,6 +782,93 @@
   "editorAdd": "Add",
   "editorItemLabel": "Item",
   "editorRemoveItemTooltip": "Remove item",
+  "editorErrNotNumber": "{label} must be a number.",
+  "@editorErrNotNumber": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrNegative": "{label} cannot be negative.",
+  "@editorErrNegative": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrTooLarge": "{label} looks too large (max {max}).",
+  "@editorErrTooLarge": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrDescTooLong": "Description is too long (max {max}).",
+  "@editorErrDescTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrDate": "Date must be a real YYYY-MM-DD date.",
+  "editorErrTime": "Time must look like 07:30 PM.",
+  "editorErrTooManyItems": "Too many items (max {max}).",
+  "@editorErrTooManyItems": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrsNeedFixing": "{count} things need fixing — see the top.",
+  "@editorErrsNeedFixing": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "editorFieldCalories": "Calories",
+  "editorItemFieldCalories": "Item {n} calories",
+  "@editorItemFieldCalories": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemFieldProtein": "Item {n} protein",
+  "@editorItemFieldProtein": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemFieldCarbs": "Item {n} carbs",
+  "@editorItemFieldCarbs": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemFieldFat": "Item {n} fat",
+  "@editorItemFieldFat": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemKcalLabel": "kcal",
   "covPermissionRequired": "Photo permission is required for the check.",
   "covCheckFailed": "Check failed: {error}",
   "@covCheckFailed": {
@@ -875,6 +1049,14 @@
       }
     }
   },
+  "covLeftoverCount": "{count} leftover photos (deducted from their meal)",
+  "@covLeftoverCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "covFailedCount": "{count} failed",
   "@covFailedCount": {
     "placeholders": {
@@ -916,5 +1098,227 @@
         "type": "String"
       }
     }
-  }
+  },
+  "watcherPermissionDenied": "Photo library permission is required for automatic intake.",
+  "watcherOnQuotaPaused": "Watching is on, but analyses are paused by the daily quota — new photos will wait.",
+  "watcherOnNoKey": "Watching is on, but photos won't be analyzed until a working API key is set above.",
+  "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
+  "fixAction": "Fix",
+  "importDialogTitle": "Import exported data",
+  "importDialogBody": "Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.",
+  "importAction": "Import",
+  "importNothingNew": "Nothing new to import — everything in that file is already here.",
+  "importDone": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).",
+  "@importDone": {
+    "placeholders": {
+      "meals": {
+        "type": "int"
+      },
+      "rows": {
+        "type": "int"
+      }
+    }
+  },
+  "importDoneKept": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.",
+  "@importDoneKept": {
+    "placeholders": {
+      "meals": {
+        "type": "int"
+      },
+      "rows": {
+        "type": "int"
+      },
+      "kept": {
+        "type": "int"
+      }
+    }
+  },
+  "importFailed": "Import failed: {error}",
+  "@importFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportFailed": "Export failed: {error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportShareSubject": "CalorieTracker data export",
+  "importErrNotJson": "That file is not JSON.",
+  "importErrNotExport": "That file is not a CalorieTracker export.",
+  "importErrWrongFormatTag": "That file is not a CalorieTracker export (wrong format tag).",
+  "importErrBadVersion": "That export has an unusable version tag.",
+  "importErrNoTables": "That export has no tables section.",
+  "nlSomethingWrong": "❌ Something went wrong handling that message. Please try again.",
+  "nlMissingServer": "❌ No server is configured — set your server address and upload key in Settings first.",
+  "nlMissingKey": "❌ No {provider} API key yet — add one in Settings to use text logging.",
+  "@nlMissingKey": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "nlTypeFirst": "Type what you ate first.",
+  "nlErrorContactingAi": "❌ Error contacting AI. Please try again.",
+  "nlNoFoodDetected": "🚫 I couldn't detect food in that description.",
+  "nlInvalidMealIndex": "❌ Invalid meal index ({shown}). You have {count} recent meals.",
+  "@nlInvalidMealIndex": {
+    "description": "shown is the model's raw meal_index, already truncated to 40 chars.",
+    "placeholders": {
+      "shown": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlCorrectedMeal": "✏️ Corrected meal {n}!",
+  "@nlCorrectedMeal": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "nlKcalChange": "🔥 {oldKcal} → {newKcal} ({diff})",
+  "@nlKcalChange": {
+    "description": "oldKcal/newKcal are already kcalAmount-formatted; diff is the signed delta.",
+    "placeholders": {
+      "oldKcal": {
+        "type": "String"
+      },
+      "newKcal": {
+        "type": "String"
+      },
+      "diff": {
+        "type": "String"
+      }
+    }
+  },
+  "nlDeleteAsk": "🗑️ Delete {count} meal(s)?",
+  "@nlDeleteAsk": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlDeleteCancelled": "👍 Cancelled — nothing was deleted.",
+  "nlDeletedMeals": "🗑️ Deleted {count} meal(s):",
+  "@nlDeletedMeals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlAddedManualMeal": "✅ Added new manual meal:",
+  "nlMealLabel": "{desc} ({date} {time}, ~{kcal})",
+  "@nlMealLabel": {
+    "description": "One staged-delete line. time is already in the locale clock; kcal is already kcalAmount-formatted.",
+    "placeholders": {
+      "desc": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
+  "nlRequestFailed": "❌ That request failed. Please try again.",
+  "nlAllActionsFailed": "❌ All {count} requested actions failed. Please try again.",
+  "@nlAllActionsFailed": {
+    "description": "Every action in a compound request failed; must never claim partial success.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlSomeActionsFailed": "⚠️ {failed} of {total} requested action(s) failed — the rest were applied.",
+  "@nlSomeActionsFailed": {
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "nlCannotCorrectNoMeals": "❌ Cannot correct because no meals are logged recently.",
+  "nlCorrectionUnusable": "❌ That correction didn't include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.",
+  "@nlCorrectionUnusable": {
+    "description": "Silent-delete guard: an empty or non-food analysis would hide the meal without the delete confirmation."
+  },
+  "nlCannotDeleteNoMeals": "❌ Cannot delete because no meals are logged recently.",
+  "nlDeleteWhich": "❌ Didn't catch which meals to delete. Try being more specific.",
+  "nlDeleteNoMatch": "❌ Couldn't match those meals to the recent list.",
+  "nlDescribedMultiple": "That described {count} meals — only the first is shown. Describe the others one at a time.",
+  "@nlDescribedMultiple": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlWeightUnreadable": "⚖️ I couldn't read a valid body weight (30–300 kg). Try “I weigh 72.5 kg”.",
+  "nlWeightLogged": "⚖️ Logged {kg} kg for {date}.",
+  "@nlWeightLogged": {
+    "description": "kg is already %g-formatted (72.5, 80); date is ISO yyyy-MM-dd.",
+    "placeholders": {
+      "kg": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "nlActivityUnreadable": "🏃 I couldn't find any activity numbers to log. Try “burned 450 kcal running 5 km”.",
+  "nlActivityLogged": "🏃 Logged activity: {bits} ({date}).",
+  "@nlActivityLogged": {
+    "description": "bits is the ' · '-joined list of kcalAmount / nlStepsAmount / nlKmAmount parts that were non-zero.",
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "nlStepsAmount": "{steps} steps",
+  "@nlStepsAmount": {
+    "description": "steps is already thousands-grouped (8,000).",
+    "placeholders": {
+      "steps": {
+        "type": "String"
+      }
+    }
+  },
+  "nlKmAmount": "{km} km",
+  "@nlKmAmount": {
+    "placeholders": {
+      "km": {
+        "type": "String"
+      }
+    }
+  },
+  "nlChatFallback": "I'm not sure what you mean. Try describing a meal or correction!"
 }

@@ -466,6 +466,10 @@ class _SummaryCard extends StatelessWidget {
               [
                 context.l10n.covLoggedAsMeals(report.logged.length),
                 context.l10n.covNotFoodCount(report.skippedNonFood.length),
+                // Read-only: the deduction already lives on the meal, and a
+                // re-analysis would log the remains as a second meal.
+                if (report.leftoverApplied > 0)
+                    context.l10n.covLeftoverCount(report.leftoverApplied),
                 if (report.failed.isNotEmpty)
                     context.l10n.covFailedCount(report.failed.length),
                 if (report.deleted > 0) '${report.deleted} deleted by you',

@@ -4974,6 +4974,35 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
         return jsonify({"error": code}), 400
 
+    def _api_come_back_later(reason):
+        """503 for a TEMPORARY refusal: the plan's closed usage window, a
+        CLI timeout. "retry": "later" is deliberately NOT a bool.
+
+        The installed app's ServerAnalyzer.unavailableRetry accepts bools
+        only, so a non-bool lands on its "no verdict" branch: the photo
+        stays retryable (the watcher offers it again next scan) but the
+        app does not spin three in-place attempts — seconds cannot reopen
+        a usage window or speed up a slow model. True would spin; False
+        was what these cases answered until 2026-10-07, and the app then
+        burned the photo for good while its UI promised an automatic
+        retry. Backward compatible with every shipped app build.
+        """
+        return jsonify({"error": "claude_unavailable",
+                        "reason": reason,
+                        "retry": "later"}), 503
+
+    def _api_plan_refused(refusal):
+        """The plan itself said no. Credits (a model this plan does not
+        include) are terminal — retrying reproduces it exactly, so hand
+        the user the CLI's own words so they can switch models. A closed
+        usage window is not: it reopens on its own, and the photo must
+        survive until then."""
+        if refusal.terminal:
+            return jsonify({"error": "claude_unavailable",
+                            "reason": refusal.reason,
+                            "retry": False}), 503
+        return _api_come_back_later(refusal.reason)
+
     def _api_jpeg_bytes(data):
         """The bytes the analyzer may be shown, or None when unusable.
 
@@ -5095,17 +5124,17 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                                       "photo",
                             "retry": True}), 503
         except claude_analyzer.PlanRefused as refusal:
-            # The plan itself said no (usage window, or a model this plan
-            # does not include). Retrying reproduces it — hand the user
-            # the CLI's own words so they can switch models.
-            return jsonify({"error": "claude_unavailable",
-                            "reason": refusal.reason,
-                            "retry": False}), 503
+            return _api_plan_refused(refusal)
+        except claude_analyzer.AnalyzerTimeout as timeout:
+            # The model never answered — a slow run, not a verdict on the
+            # photo. Not retry:True either: an immediate re-run meets the
+            # same slow model and spends another full CLI limit.
+            return _api_come_back_later(timeout.reason)
         if not analysis:
-            # The run HAPPENED and failed: timeout, a reply that broke the
-            # is_food contract, or a blind GLM run. Retrying spends another
-            # full CLI run (up to 120 s of the subscription) on a request
-            # that already answered — say so, so the app stops at one.
+            # The run HAPPENED and failed: a reply that broke the is_food
+            # contract, or a blind GLM run. Retrying spends another full
+            # CLI run (up to 120 s of the subscription) on a request that
+            # already answered — say so, so the app stops at one.
             return jsonify({"error": "claude_unavailable",
                             "reason": "the analysis ran but produced no "
                                       "usable result",
@@ -5173,9 +5202,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                                       "photo",
                             "retry": True}), 503
         except claude_analyzer.PlanRefused as refusal:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": refusal.reason,
-                            "retry": False}), 503
+            return _api_plan_refused(refusal)
+        except claude_analyzer.AnalyzerTimeout as timeout:
+            return _api_come_back_later(timeout.reason)
         if not leftover:
             return jsonify({"error": "claude_unavailable",
                             "reason": "the estimation ran but produced no "
@@ -5219,9 +5248,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                             "reason": "the analyzer is busy",
                             "retry": True}), 503
         except claude_analyzer.PlanRefused as refusal:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": refusal.reason,
-                            "retry": False}), 503
+            return _api_plan_refused(refusal)
+        except claude_analyzer.AnalyzerTimeout as timeout:
+            return _api_come_back_later(timeout.reason)
         if not out:
             return jsonify({"error": "claude_unavailable",
                             "reason": "the analysis ran but produced no "

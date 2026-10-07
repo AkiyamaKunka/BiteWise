@@ -2,9 +2,15 @@
 // the page's contract: latest values with honest deltas, a chart only when
 // there is a trend to draw, prefilled edit (so the full-row upsert can't
 // eat data), validation on the SHARED weight bounds, and delete confirm.
+import 'dart:io';
+import 'dart:typed_data';
+
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -180,4 +186,129 @@ void main() {
         reason: 'newest first');
     expect(find.textContaining('W 84'), findsOneWidget);
   });
+
+  testWidgets('history row girth labels follow the app language (zh 腰/胸/臀)',
+      (tester) async {
+    // The row joined literal 'W'/'C'/'H' initials in every language, so
+    // the zh history read 'W 84  ·  C 100  ·  H 98'.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final dao = FakeDao();
+    dao.measurementsByDate['2026-08-02'] = const BodyMeasurements(
+        '2026-08-02',
+        waistCm: 84,
+        chestCm: 100,
+        hipCm: 98);
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: BodyScreen(dao: dao, clock: () => clock),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.text('腰 84  ·  胸 100  ·  臀 98'), findsOneWidget);
+    expect(find.textContaining('W 84'), findsNothing);
+  });
+
+  // ── Measurements rows at accessibility text sizes (2026-10-07) ────────
+  // The row was label (fixed 64 px) + value + 'on {date}' + Spacer + delta,
+  // none of which could shrink: at 1.64× (AX1) and 2× it overflowed the
+  // card, clipping the ▲/▼ delta, and 'Waist' broke mid-word in its box.
+  // Whether text fits depends on the glyphs (the test font is a full em
+  // per glyph, far wider than the phone's), so this loads the iPhone's own
+  // system fonts — macOS only, skipped elsewhere, as row_fit_layout_test.
+  const sfPath = '/System/Library/Fonts/SFNS.ttf';
+  const cjkPath = '/System/Library/Fonts/Hiragino Sans GB.ttc';
+  final haveIphoneFonts =
+      File(sfPath).existsSync() && File(cjkPath).existsSync();
+
+  Future<void> loadFont(String family, String path) async {
+    final loader = FontLoader(family)
+      ..addFont(Future.value(
+          ByteData.sublistView(File(path).readAsBytesSync())));
+    await loader.load();
+  }
+
+  group('measurements rows fit at large text sizes (SF + Hiragino)', () {
+    setUpAll(() async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      await loadFont('BodySF', sfPath);
+      await loadFont('BodyHiragino', cjkPath);
+    });
+
+    for (final lang in const ['en', 'zh']) {
+      for (final width in const [375.0, 390.0]) {
+        for (final scale in const [1.64, 2.0]) {
+          testWidgets('$lang at ${scale}x on a $width pt phone',
+              (tester) async {
+            tester.view.physicalSize = Size(width, 2400);
+            tester.view.devicePixelRatio = 1.0;
+            addTearDown(tester.view.reset);
+            tester.platformDispatcher.textScaleFactorTestValue = scale;
+            addTearDown(
+                tester.platformDispatcher.clearTextScaleFactorTestValue);
+            final dao = FakeDao();
+            for (final m in const [
+              BodyMeasurements('2026-07-30',
+                  waistCm: 84, chestCm: 100, hipCm: 98),
+              BodyMeasurements('2026-08-02',
+                  waistCm: 83.5, chestCm: 101.5, hipCm: 97.5),
+            ]) {
+              dao.measurementsByDate[m.date] = m;
+            }
+            await tester.pumpWidget(MaterialApp(
+              locale: Locale(lang),
+              theme: ThemeData(
+                  fontFamily: 'BodySF',
+                  fontFamilyFallback: const ['BodyHiragino']),
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: BodyScreen(dao: dao, clock: () => clock),
+            ));
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull,
+                reason: 'the old row overflowed the card at this size');
+
+            final card = find.ancestor(
+                of: find.byKey(const Key('bodyWaistLatest')),
+                matching: find.byType(Card));
+            final cardRect = tester.getRect(card);
+            for (final (key, value, delta) in const [
+              ('bodyWaistLatest', '83.5 cm', '▼ 0.5'),
+              ('bodyChestLatest', '101.5 cm', '▲ +1.5'),
+              ('bodyHipLatest', '97.5 cm', '▼ 0.5'),
+            ]) {
+              final valueFinder = find.byKey(Key(key));
+              expect(tester.widget<Text>(valueFinder).data, value);
+              final row = find.ancestor(
+                      of: valueFinder, matching: find.byType(Row))
+                  .first;
+              final deltaFinder =
+                  find.descendant(of: row, matching: find.text(delta));
+              expect(deltaFinder, findsOneWidget,
+                  reason: '$key keeps its direction glyph');
+              final deltaRect = tester.getRect(deltaFinder);
+              expect(deltaRect.right, lessThanOrEqualTo(cardRect.right),
+                  reason: '$key: the delta stays inside the card');
+              // Only the date may give way; the label, value and delta
+              // read in full.
+              for (final p in tester.renderObjectList<RenderParagraph>(
+                  find.descendant(of: row, matching: find.byType(RichText)))) {
+                final text = p.text.toPlainText();
+                if (text.contains('2026')) continue;
+                expect(p.didExceedMaxLines, isFalse,
+                    reason: '"$text" must not be cut');
+                expect(p.size.width,
+                    greaterThanOrEqualTo(p.getMaxIntrinsicWidth(
+                            double.infinity) -
+                        0.5),
+                    reason: '"$text" must not wrap mid-word');
+              }
+            }
+          });
+        }
+      }
+    }
+  }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');
 }

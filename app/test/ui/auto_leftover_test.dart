@@ -151,4 +151,41 @@ void main() {
         '[0] 08:05 AM — Soy milk (~110 kcal): '
         'Soy milk (~250 mL) (~110 kcal)');
   });
+
+  test("candidates come from the PHOTO's day, never from today (loop find "
+      '2026-10-07)', () async {
+    // A backfilled / re-scanned photo from yesterday used to be offered
+    // TODAY's meals as leftover candidates and could deduct from the wrong
+    // one. The HEIC repair re-offered ~70 old photos exactly this way.
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    final today = _meal(1, '01:34 PM', 965);
+    final old = Meal(
+      id: 2,
+      date: isoDate(yesterday),
+      time: '12:10 PM',
+      timestamp: '${isoDate(yesterday)}T12:10:00',
+      source: 'app_watch',
+      imageHash: 'orig-2',
+      analysis: {
+        ...today.analysis,
+        'meal_description': 'Yesterday tray',
+      },
+    );
+    dao.put(today);
+    dao.put(old);
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(confidence: 0.4), // falls through to save
+        isFood: true,
+        wall: Duration.zero);
+    final shotYesterday = IntakePhoto(Uint8List.fromList([7]), 'w2', 'y.jpg',
+        capturedAt: DateTime(
+            yesterday.year, yesterday.month, yesterday.day, 13, 0));
+    final out = await pipeline.process(shotYesterday);
+    expect(out.kind, PhotoOutcomeKind.saved);
+    expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
+        ['Yesterday tray'],
+        reason: "only the photo's own day rides along");
+    // And the saved meal lands on that day too.
+    expect(dao.meals.last.date, isoDate(yesterday));
+  });
 }

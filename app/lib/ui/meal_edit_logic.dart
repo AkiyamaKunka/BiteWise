@@ -16,6 +16,8 @@ library;
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/app_localizations_en.dart';
 import 'format.dart' show isoDate;
 
 /// UI bounds. Deliberately generous — the point is to reject typos and
@@ -36,16 +38,21 @@ class FieldParse {
 }
 
 /// Parse a user-typed number: blank → null (caller treats as 0), negative /
-/// non-numeric / over-max → an error message naming the field.
+/// non-numeric / over-max → an error message naming the field, in the app
+/// language when the screen passes [l] (the zh UI showed English rejections;
+/// found 2026-10-07). The English default is byte-identical to the old
+/// literals, so callers and tests without a locale read exactly as before.
 FieldParse parseNumberField(String raw,
-    {required String label, required num max}) {
+    {required String label, required num max, AppLocalizations? l}) {
   final t = raw.trim();
   if (t.isEmpty) return const FieldParse(null, null);
   final v = num.tryParse(t);
-  if (v == null) return FieldParse(null, '$label must be a number.');
-  if (v.isNaN || v.isInfinite) return FieldParse(null, '$label must be a number.');
-  if (v < 0) return FieldParse(null, '$label cannot be negative.');
-  if (v > max) return FieldParse(null, '$label looks too large (max $max).');
+  final msg = l ?? AppLocalizationsEn();
+  if (v == null || v.isNaN || v.isInfinite) {
+    return FieldParse(null, msg.editorErrNotNumber(label));
+  }
+  if (v < 0) return FieldParse(null, msg.editorErrNegative(label));
+  if (v > max) return FieldParse(null, msg.editorErrTooLarge(label, '$max'));
   return FieldParse(v, null);
 }
 
@@ -169,6 +176,22 @@ class MealDraft {
         items: [],
       );
 
+  /// Append an item row and return it. The FIRST row inherits the totals
+  /// typed above it: with no rows those totals were the only source of
+  /// truth, and the editor's derive-from-items rule would otherwise sum one
+  /// empty row and zero them the moment the user tapped "Add item" (found
+  /// 2026-10-07: a hand-entered 450 kcal meal read 0 right after the tap).
+  /// Later rows start blank — by then the totals belong to the rows, and a
+  /// seeded row would double them.
+  MealItemDraft addItem() {
+    final it = items.isEmpty
+        ? MealItemDraft(
+            calories: calories, protein: protein, carbs: carbs, fat: fat)
+        : MealItemDraft();
+    items.add(it);
+    return it;
+  }
+
   /// Sum of the item rows, for the "use item totals" action.
   ({num calories, num protein, num carbs, num fat}) itemTotals() {
     num c = 0, p = 0, cb = 0, f = 0;
@@ -187,29 +210,31 @@ class MealDraft {
     );
   }
 
-  /// Every problem the user must fix before saving, in field order.
-  List<String> validate() {
+  /// Every problem the user must fix before saving, in field order, in the
+  /// app language when the screen passes [l] (English otherwise).
+  List<String> validate([AppLocalizations? l]) {
+    final msg = l ?? AppLocalizationsEn();
     final errors = <String>[];
     if (description.trim().length > maxDescriptionChars) {
-      errors.add('Description is too long (max $maxDescriptionChars).');
+      errors.add(msg.editorErrDescTooLong('$maxDescriptionChars'));
     }
     if (!isRealIsoDate(dateIso)) {
-      errors.add('Date must be a real YYYY-MM-DD date.');
+      errors.add(msg.editorErrDate);
     }
     if (parseClock(time) == null) {
-      errors.add('Time must look like 07:30 PM.');
+      errors.add(msg.editorErrTime);
     }
     for (final f in [
-      (calories, 'Calories', maxMealCalories),
-      (protein, 'Protein', maxMacroGrams),
-      (carbs, 'Carbs', maxMacroGrams),
-      (fat, 'Fat', maxMacroGrams),
+      (calories, msg.editorFieldCalories, maxMealCalories),
+      (protein, msg.macroProtein, maxMacroGrams),
+      (carbs, msg.macroCarbs, maxMacroGrams),
+      (fat, msg.macroFat, maxMacroGrams),
     ]) {
-      final p = parseNumberField(f.$1, label: f.$2, max: f.$3);
+      final p = parseNumberField(f.$1, label: f.$2, max: f.$3, l: msg);
       if (!p.ok) errors.add(p.error!);
     }
     if (items.where((i) => !i.isBlank).length > maxItemsPerMeal) {
-      errors.add('Too many items (max $maxItemsPerMeal).');
+      errors.add(msg.editorErrTooManyItems('$maxItemsPerMeal'));
     }
     // Number by the row position on SCREEN (blank rows included) — numbering
     // only the filled ones points the user at the wrong row.
@@ -218,12 +243,12 @@ class MealDraft {
       if (it.isBlank) continue;
       final n = i + 1;
       for (final f in [
-        (it.calories, 'Item $n calories', maxMealCalories),
-        (it.protein, 'Item $n protein', maxMacroGrams),
-        (it.carbs, 'Item $n carbs', maxMacroGrams),
-        (it.fat, 'Item $n fat', maxMacroGrams),
+        (it.calories, msg.editorItemFieldCalories(n), maxMealCalories),
+        (it.protein, msg.editorItemFieldProtein(n), maxMacroGrams),
+        (it.carbs, msg.editorItemFieldCarbs(n), maxMacroGrams),
+        (it.fat, msg.editorItemFieldFat(n), maxMacroGrams),
       ]) {
-        final p = parseNumberField(f.$1, label: f.$2, max: f.$3);
+        final p = parseNumberField(f.$1, label: f.$2, max: f.$3, l: msg);
         if (!p.ok) errors.add(p.error!);
       }
     }

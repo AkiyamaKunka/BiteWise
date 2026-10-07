@@ -73,6 +73,16 @@ class BaseFakeDao implements MealsDao {
 
   @override
   Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) async {
+    // Mirrors the real DAO's save-time meals-table backstop (2026-10-07):
+    // a 'saved' mark for a hash that already has a meal returns that meal
+    // instead of inserting a second one.
+    if (markStatus == IngestionStatus.saved && meal.imageHash.isNotEmpty) {
+      final existing = meals.where((m) => m.imageHash == meal.imageHash);
+      if (existing.isNotEmpty) {
+        ledger[meal.imageHash] = IngestionStatus.saved;
+        return existing.first.id;
+      }
+    }
     saved.add(meal);
     final id = put(Meal(
       id: 0,
@@ -151,12 +161,17 @@ class BaseFakeDao implements MealsDao {
   Future<bool> isDuplicatePhoto(String imageHash) async => duplicatePhoto;
 
   @override
-  Future<bool> reservePhotoHash(String imageHash,
+  Future<PhotoReservation> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false}) async {
     final existing = ledger[imageHash];
     if (existing == null) {
       ledger[imageHash] = IngestionStatus.processing;
-      return true;
+      return PhotoReservation.reserved;
+    }
+    // No last_seen_at here, so every 'processing' row reads as FRESH —
+    // another run's live reservation (the real DAO reclaims after 6 h).
+    if (existing == IngestionStatus.processing) {
+      return PhotoReservation.inFlight;
     }
     if (reclaimDeliberate &&
         const {
@@ -165,9 +180,9 @@ class BaseFakeDao implements MealsDao {
           IngestionStatus.deleted
         }.contains(existing)) {
       ledger[imageHash] = IngestionStatus.processing;
-      return true;
+      return PhotoReservation.reserved;
     }
-    return false;
+    return PhotoReservation.claimed;
   }
 
   @override

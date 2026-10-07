@@ -113,25 +113,50 @@ String providerLabel(String provider) => switch (provider) {
 /// The two CONNECTION TYPES: an API key is pay-per-photo with the key on
 /// this phone; an Agent/Coding plan is a flat-rate subscription the
 /// user's own server signs into. The note carries the one deciding fact.
+/// The third element is a NOTE TAG resolved by [noteLabel] — the row value
+/// is localized (the hardcoded English/hybrid notes ellipsised in the
+/// Chinese UI, loop find 2026-10-07).
+/// The mainland names carry the CJK brand but NOT the vendor prefix
+/// (same names as [providerLabel]): 'Alibaba Qwen 通义千问' and friends
+/// were 180–191 px beside a ~117 px English note and ellipsised in the
+/// English UI at the default text size (loop find 2026-10-07, round 3);
+/// the key footer still names the vendor console. Pinned at 375/390 pt
+/// with the iPhone's own font by test/ui/row_fit_layout_test.dart.
 const List<(String, String, String)> kApiKeyChoices = [
-  ('gemini', 'Google Gemini', 'free tier · VPN in China'),
-  ('openai', 'OpenAI', 'VPN in China'),
-  ('anthropic', 'Anthropic Claude', 'VPN in China'),
-  ('xai', 'xAI Grok', 'VPN in China'),
-  ('openrouter', 'OpenRouter', 'many models'),
-  ('deepseek', 'DeepSeek 深度求索', '中国直连'),
-  ('qwen', 'Alibaba Qwen 通义千问', '中国直连'),
-  ('doubao', 'ByteDance Doubao 豆包', '中国直连'),
-  ('glm', 'Zhipu GLM 智谱', 'free 免费 · 中国直连'),
+  ('gemini', 'Google Gemini', 'freeVpn'),
+  ('openai', 'OpenAI', 'vpn'),
+  ('anthropic', 'Anthropic Claude', 'vpn'),
+  ('xai', 'xAI Grok', 'vpn'),
+  ('openrouter', 'OpenRouter', 'many'),
+  ('deepseek', 'DeepSeek 深度求索', 'direct'),
+  ('qwen', 'Qwen 通义千问', 'direct'),
+  ('doubao', 'Doubao 豆包', 'direct'),
+  ('glm', 'GLM 智谱', 'freeDirect'),
 ];
+
+/// Localized text for a [kApiKeyChoices] / [kPlanChoices] note tag.
+String noteLabel(AppLocalizations l, String tag) => switch (tag) {
+      'vpn' => l.noteVpn,
+      'freeVpn' => l.noteFreeTierVpn,
+      'direct' => l.noteDirect,
+      'freeDirect' => l.noteFreeDirect,
+      'many' => l.noteManyModels,
+      'claude' => l.planClaudeNote,
+      'glm' => l.planGlmNote,
+      'doubao' => l.planDoubaoNote,
+      _ => tag,
+    };
 
 /// (backend id, name, note) — all three ride the user's server. Notes
 /// name the VENDOR, never a price: plan pricing changes under vendors'
 /// feet and a stale number reads as unprofessional (user, 2026-08-05).
+/// In English the note is the bare vendor name: 'Volcengine subscription'
+/// beside 'Doubao Agent Plan' cut BOTH to fragments (loop find
+/// 2026-10-07, round 3).
 const List<(String, String, String)> kPlanChoices = [
-  ('claude', 'Claude Plan', 'Anthropic subscription'),
-  ('glm', 'GLM Coding Plan', 'Zhipu subscription'),
-  ('doubao', 'Doubao Agent Plan', 'Volcengine subscription'),
+  ('claude', 'Claude Plan', 'claude'),
+  ('glm', 'GLM Coding Plan', 'glm'),
+  ('doubao', 'Doubao Agent Plan', 'doubao'),
 ];
 
 /// Root-row display: the concrete plan name, never an opaque 'My server'.
@@ -184,12 +209,15 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
               color: scheme.errorContainer,
               child: Padding(
                 padding: const EdgeInsets.all(12),
+                // Its own key, not settingsAiFooterPaused: that one points
+                // the reader AT this page.
                 child: Text(
-                  'Analyses are paused — the daily quota was hit'
-                  '${settings.quotaPauseUntil != null ? ' (until '
-                      '${TimeOfDay.fromDateTime(settings.quotaPauseUntil!.toLocal()).format(context)})' : ''}. '
-                  'New photos are kept and retried automatically; changing '
-                  'the key or provider resumes now.',
+                  settings.quotaPauseUntil != null
+                      ? context.l10n.providerQuotaPausedUntil(
+                          TimeOfDay.fromDateTime(
+                                  settings.quotaPauseUntil!.toLocal())
+                              .format(context))
+                      : context.l10n.providerQuotaPaused,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: scheme.onErrorContainer),
                 ),

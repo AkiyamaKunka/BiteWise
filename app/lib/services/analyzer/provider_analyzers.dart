@@ -181,7 +181,7 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
       final notFound = notFoundMessage;
       if (resp.statusCode == 404 && notFound != null) {
         throw _ProviderException(notFound,
-            transient: false, verbatimMessage: true);
+            transient: false, verbatimMessage: true, modelError: true);
       }
       if (resp.statusCode == 503) {
         final custom = unavailableMessage(resp.body);
@@ -198,6 +198,7 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
           throw _ProviderException(custom,
               transient: verdict != false,
               retryInPlace: verdict == true,
+              serverBusy: verdict == true,
               verbatimMessage: true);
         }
       }
@@ -211,10 +212,28 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
           throw _ProviderException(custom,
               transient: false, verbatimMessage: true);
         }
+        // A wrong / retired model id answered as a 400, not a 404: Zhipu
+        // GLM code "1211" (模型不存在). Matched on the documented code
+        // only, like "1113" above — the vendor's prose never reaches the
+        // message.
+        if (body.contains('"1211"')) {
+          throw _ProviderException(
+              notFound ??
+                  '$providerLabel model not found — check the model name '
+                      'in Settings.',
+              transient: false,
+              verbatimMessage: true,
+              modelError: true);
+        }
       }
       throw _ProviderException('HTTP ${resp.statusCode}',
           transient: _isTransientStatus(resp.statusCode),
-          quotaClass: resp.statusCode == 429);
+          quotaClass: resp.statusCode == 429,
+          // OpenAI / Anthropic post to one fixed endpoint, so a bare 404
+          // there is the MODEL (OpenAI model_not_found, Anthropic
+          // not_found_error "model: …"). ServerAnalyzer overrides probeKey,
+          // the only reader of this flag.
+          modelError: resp.statusCode == 404);
     }
     if (!extract) return '';
     try {
@@ -300,13 +319,31 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
     }
   }
 
+  /// Waits for a text request that met the server's busy verdict: 5, 10,
+  /// 15, 20, 25 and 30 s (~105 s), enough for one 20-60 s photo run plus
+  /// the gap before the pipeline uploads the next photo.
+  static const int textBusyAttempts = 7;
+
   @override
   Future<Map<String, dynamic>?> textIntent(String prompt) async {
     String text;
-    try {
-      text = await _post(prompt: prompt);
-    } on _ProviderException {
-      return null;
+    for (var attempt = 1;; attempt++) {
+      try {
+        text = await _post(prompt: prompt);
+        break;
+      } on _ProviderException catch (e) {
+        // Only the server's explicit busy verdict waits: the server answers
+        // /api/text_intent with an instant 503 {retry: true} while a photo
+        // holds its CLI lock, which the auto-scan does every time the app
+        // opens — and a single attempt turned the owner's corrections into
+        // "联系 AI 失败". Every other failure stays single-attempt (spec §4
+        // step 4: the text handler surfaces errors directly).
+        if (e.serverBusy && attempt < textBusyAttempts) {
+          await _sleep(Duration(seconds: 5 * attempt));
+          continue;
+        }
+        return null;
+      }
     }
     dynamic parsed;
     try {
@@ -379,6 +416,11 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
       if (e.quotaClass || (e.transient && !e.auth)) {
         return KeyProbe(KeyProbeResult.rateLimited, message: e.userMessage);
       }
+      // A wrong / retired model id is not a rejected key either: the
+      // "re-copy the key" fix sent users to regenerate a key that worked.
+      if (e.modelError) {
+        return KeyProbe(KeyProbeResult.modelNotFound, message: e.userMessage);
+      }
       return KeyProbe(KeyProbeResult.rejected, message: e.userMessage);
     }
   }
@@ -391,11 +433,19 @@ class _ProviderException implements Exception {
       this.quotaClass = false,
       this.billing = false,
       this.retryInPlace = true,
-      this.verbatimMessage = false});
+      this.verbatimMessage = false,
+      this.modelError = false,
+      this.serverBusy = false});
   final String message;
   final bool transient;
   final bool auth;
   final bool quotaClass;
+
+  /// The provider answered, but about the MODEL id (not found, retired,
+  /// not activated) — never about the key. Permanent like any other
+  /// non-transient failure; only probeKey reads it, to keep diagnostics
+  /// from calling a model problem a rejected key.
+  final bool modelError;
 
   /// The key authenticated but the ACCOUNT cannot pay. A subset of
   /// [quotaClass] (both accept the key) with a completely different
@@ -406,6 +456,13 @@ class _ProviderException implements Exception {
   /// key): still retryable at the OUTCOME level, but in-place sleeps are
   /// pointless.
   final bool retryInPlace;
+
+  /// The user's own server said its analyzer is BUSY (503 with a reason
+  /// and retry:true) — another run holds the CLI lock, so waiting helps.
+  /// Narrower than [retryInPlace] (which is also true for connection
+  /// errors and deadlines): only textIntent reads it, to wait out a photo
+  /// run instead of failing the user's chat request at once.
+  final bool serverBusy;
 
   /// True when [message] is already user-facing (skip the generic bucket).
   final bool verbatimMessage;
@@ -682,13 +739,18 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   bool? unavailableRetry(String body) {
     try {
       final decoded = jsonDecode(body);
+      // Bools only, ON PURPOSE. The server's "retry": "later" (a closed
+      // Claude-plan usage window, a CLI timeout — 2026-10-07) lands on
+      // the null branch below: keep the photo for the next scan, but do
+      // not spend three in-place attempts on a window that is still
+      // closed. Server-side fix; this reader needed no change.
       if (decoded is Map && decoded['retry'] is bool) {
         return decoded['retry'] as bool;
       }
     } on FormatException {
       // fall through
     }
-    return null; // old server / configuration refusal
+    return null; // old server / configuration refusal / "later"
   }
 
   /// The server's own 400 codes (no_image, bad_recent_meals, bad_model,

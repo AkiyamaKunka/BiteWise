@@ -35,6 +35,32 @@ class SqfliteMealsDao implements MealsDao {
     // Spec §2.3: the meal INSERT and the ledger mark are ONE transaction
     // (database.py:158-189, the atomic save).
     return _db.transaction((txn) async {
+      // Spec §2.3 app simplification (3) — the meals-table backstop — is
+      // mirrored here at SAVE time, not only in reservePhotoHash. The
+      // reservation runs BEFORE the 10–60 s analysis, and that await sits
+      // outside any transaction, so an import (Settings ▸ 导入数据, right
+      // below 监控相册) can land the exported meal for this very hash in
+      // the gap: importJson sees no meals row and inserts one, and skips
+      // the exported ledger row because our 'processing' row exists.
+      // Without this check the pipeline's saveMeal(markStatus: saved)
+      // then inserted a SECOND meal for the hash (2026-10-07). Two meals
+      // rows per (chat, hash) is never legitimate; deleteMeal removes the
+      // row before tombstoning, so a deliberate re-add still inserts. Only
+      // the 'saved' mark takes this path — a null markStatus is a plain
+      // insert (the reclaim suite seeds a row beside a stray ledger entry).
+      if (hash.isNotEmpty && markStatus == IngestionStatus.saved) {
+        final existing = await txn.query('meals',
+            columns: const ['id'],
+            where: 'chat_id = ? AND image_hash = ?',
+            whereArgs: [meal.chatId, hash],
+            limit: 1);
+        if (existing.isNotEmpty) {
+          final existingId = existing.first['id'] as int;
+          await _upsertLedger(txn, hash, IngestionStatus.saved,
+              mealId: existingId, source: meal.source);
+          return existingId;
+        }
+      }
       final id = await txn.insert('meals', {
         'chat_id': meal.chatId,
         'date': meal.date,
@@ -179,11 +205,11 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
-  Future<bool> reservePhotoHash(String imageHash,
+  Future<PhotoReservation> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false}) {
     final hash = normalizeImageHash(imageHash);
     // Spec §2.3 step 1: empty hash → nothing to reserve.
-    if (hash.isEmpty) return Future.value(true);
+    if (hash.isEmpty) return Future.value(PhotoReservation.reserved);
     // One transaction stands in for the server's row-locked decision tree —
     // sufficient in a single-process app (spec §2.3 app simplification).
     return _db.transaction((txn) async {
@@ -215,9 +241,11 @@ class SqfliteMealsDao implements MealsDao {
       );
       switch (decision) {
         case ReserveDecision.allowNoop:
-          return true;
+          return PhotoReservation.reserved;
         case ReserveDecision.refuse:
-          return false;
+          return PhotoReservation.claimed;
+        case ReserveDecision.refuseInFlight:
+          return PhotoReservation.inFlight;
         case ReserveDecision.reclaim:
           // database.py:242-254: row → processing, meal_id=NULL,
           // last_seen_at=now, source updated.
@@ -232,7 +260,7 @@ class SqfliteMealsDao implements MealsDao {
             where: 'chat_id = ? AND image_hash = ?',
             whereArgs: [localChatId, hash],
           );
-          return true;
+          return PhotoReservation.reserved;
         case ReserveDecision.insert:
           // database.py:259-265: fresh reservation.
           await txn.insert('photo_ingestions', {
@@ -244,7 +272,7 @@ class SqfliteMealsDao implements MealsDao {
             'status': IngestionStatus.processing.name,
             'meal_id': null,
           });
-          return true;
+          return PhotoReservation.reserved;
       }
     });
   }
@@ -598,17 +626,27 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     // it and an old backup re-imported the stale copy as a second meal
     // (pressure-test find, 2026-08-03). Every edit path sets corrected=1
     // and never touches timestamp, so a corrected row sharing this row's
-    // ingestion timestamp IS this meal, post-edit. The analysis-based
-    // check stays first: it distinguishes two DIFFERENT same-second
-    // text meals (server timestamps are second-resolution).
+    // ingestion timestamp IS this meal, post-edit — and that proof reads
+    // BOTH ways: the first version asked only whether the TARGET held the
+    // corrected copy, so importing backups oldest-first (pre-edit copy
+    // lands, then the edited export arrives corrected=1 with new analysis
+    // text) still doubled the lunch (2026-10-07). Either side corrected is
+    // enough. Two uncorrected same-timestamp text meals never take this
+    // branch, so the analysis-based identity below still keeps a coffee
+    // and a sandwich logged in the same second distinct (app timestamps
+    // are microsecond ISO strings; the collapse is theoretical).
     if (table == 'meals' &&
         !(((row['image_hash'] as String?)?.isNotEmpty ?? false)) &&
         row['timestamp'] != null) {
+      // Export rows carry corrected as 0/1; tolerate a bool just in case.
+      final incomingCorrected =
+          (row['corrected'] == 1 || row['corrected'] == true) ? 1 : 0;
       final edited = await txn.query('meals',
           columns: const ['id'],
           where: 'chat_id = ? AND timestamp = ? AND '
-              'IFNULL(image_hash, \'\') = \'\' AND corrected = 1',
-          whereArgs: [row['chat_id'], row['timestamp']],
+              'IFNULL(image_hash, \'\') = \'\' AND '
+              '(corrected = 1 OR ? = 1)',
+          whereArgs: [row['chat_id'], row['timestamp'], incomingCorrected],
           limit: 1);
       if (edited.isNotEmpty) return true;
     }
