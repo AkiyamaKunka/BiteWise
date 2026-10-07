@@ -175,7 +175,13 @@ class BodyScreenState extends State<BodyScreen> {
       body: empty
           ? CustomScrollView(slivers: [
               SliverAppBar.large(title: Text(context.l10n.tabBody)),
+              // hasScrollBody: false lets the sliver grow to the empty
+              // state's height: the default pinned it to the remaining
+              // viewport, so at the largest text sizes the ~8-line hint
+              // overflowed (RenderFlex, 142 px) and no scroll reached its
+              // end. It still fills and centers when it fits.
               SliverFillRemaining(
+                  hasScrollBody: false,
                   child: Center(
               child: Padding(
                 padding: const EdgeInsets.all(32),

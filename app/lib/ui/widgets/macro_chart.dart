@@ -139,6 +139,7 @@ class MacroBreakdownBar extends StatelessWidget {
         // Legend + direct labels in one row: identity never rests on colour,
         // and the numbers wear text tokens rather than the series colour.
         Wrap(
+          key: const Key('macroLegend'),
           spacing: 14,
           runSpacing: 4,
           children: [
@@ -176,9 +177,15 @@ class _LegendEntry extends StatelessWidget {
               BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
         ),
         const SizedBox(width: 6),
-        Text(text,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        // Flexible: the Wrap caps each entry at its own width, but an
+        // unflexed Text ignored that, so at the largest text sizes an entry
+        // wider than the card ran its percentage past the edge (RenderFlex
+        // overflow). Now that one entry wraps onto a second line instead.
+        Flexible(
+          child: Text(text,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
       ],
     );
   }

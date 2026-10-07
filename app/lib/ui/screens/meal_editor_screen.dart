@@ -517,11 +517,18 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             fatG: _num(_fat.text),
           ),
           const SizedBox(height: 24),
-          Row(
+          // A Wrap, not a Row: the unflexed hint took the whole width at
+          // the largest text sizes, drawing 'Items' one glyph per line and
+          // overflowing the row. Side by side when both fit, the hint drops
+          // under the header (and wraps there) when they don't.
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 2,
             children: [
-              Expanded(
-                  child:
-                      Text(context.l10n.editorItemsHeader, style: theme.textTheme.titleSmall)),
+              Text(context.l10n.editorItemsHeader,
+                  style: theme.textTheme.titleSmall),
               if (_totalsDerived)
                 Text(context.l10n.editorTotalsDerivedHint,
                     key: const Key('totalsDerivedHint'),
