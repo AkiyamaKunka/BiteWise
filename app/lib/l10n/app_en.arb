@@ -1072,5 +1072,87 @@
         "type": "String"
       }
     }
-  }
+  },
+  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
+  "nlRequestFailed": "❌ That request failed. Please try again.",
+  "nlAllActionsFailed": "❌ All {count} requested actions failed. Please try again.",
+  "@nlAllActionsFailed": {
+    "description": "Every action in a compound request failed; must never claim partial success.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlSomeActionsFailed": "⚠️ {failed} of {total} requested action(s) failed — the rest were applied.",
+  "@nlSomeActionsFailed": {
+    "placeholders": {
+      "failed": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "nlCannotCorrectNoMeals": "❌ Cannot correct because no meals are logged recently.",
+  "nlCorrectionUnusable": "❌ That correction didn't include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.",
+  "@nlCorrectionUnusable": {
+    "description": "Silent-delete guard: an empty or non-food analysis would hide the meal without the delete confirmation."
+  },
+  "nlCannotDeleteNoMeals": "❌ Cannot delete because no meals are logged recently.",
+  "nlDeleteWhich": "❌ Didn't catch which meals to delete. Try being more specific.",
+  "nlDeleteNoMatch": "❌ Couldn't match those meals to the recent list.",
+  "nlDescribedMultiple": "That described {count} meals — only the first is shown. Describe the others one at a time.",
+  "@nlDescribedMultiple": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlWeightUnreadable": "⚖️ I couldn't read a valid body weight (30–300 kg). Try “I weigh 72.5 kg”.",
+  "nlWeightLogged": "⚖️ Logged {kg} kg for {date}.",
+  "@nlWeightLogged": {
+    "description": "kg is already %g-formatted (72.5, 80); date is ISO yyyy-MM-dd.",
+    "placeholders": {
+      "kg": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "nlActivityUnreadable": "🏃 I couldn't find any activity numbers to log. Try “burned 450 kcal running 5 km”.",
+  "nlActivityLogged": "🏃 Logged activity: {bits} ({date}).",
+  "@nlActivityLogged": {
+    "description": "bits is the ' · '-joined list of kcalAmount / nlStepsAmount / nlKmAmount parts that were non-zero.",
+    "placeholders": {
+      "bits": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "nlStepsAmount": "{steps} steps",
+  "@nlStepsAmount": {
+    "description": "steps is already thousands-grouped (8,000).",
+    "placeholders": {
+      "steps": {
+        "type": "String"
+      }
+    }
+  },
+  "nlKmAmount": "{km} km",
+  "@nlKmAmount": {
+    "placeholders": {
+      "km": {
+        "type": "String"
+      }
+    }
+  },
+  "nlChatFallback": "I'm not sure what you mean. Try describing a meal or correction!"
 }

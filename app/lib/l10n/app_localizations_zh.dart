@@ -1490,4 +1490,70 @@ class AppLocalizationsZh extends AppLocalizations {
   String nlMealLabel(String desc, String date, String time, String kcal) {
     return '$desc（$date $time，~$kcal）';
   }
+
+  @override
+  String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';
+
+  @override
+  String get nlRequestFailed => '❌ 这个请求失败了，请重试。';
+
+  @override
+  String nlAllActionsFailed(int count) {
+    return '❌ 请求的 $count 项操作全部失败，请重试。';
+  }
+
+  @override
+  String nlSomeActionsFailed(int failed, int total) {
+    return '⚠️ 请求的 $total 项操作中有 $failed 项失败——其余已生效。';
+  }
+
+  @override
+  String get nlCannotCorrectNoMeals => '❌ 最近没有记录任何餐，无法修正。';
+
+  @override
+  String get nlCorrectionUnusable =>
+      '❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「第 2 顿是烧鸭饭，大约 780 千卡」。';
+
+  @override
+  String get nlCannotDeleteNoMeals => '❌ 最近没有记录任何餐，无法删除。';
+
+  @override
+  String get nlDeleteWhich => '❌ 没听清要删除哪几顿餐，请说得具体一点。';
+
+  @override
+  String get nlDeleteNoMatch => '❌ 在最近的记录里没有找到对应的餐。';
+
+  @override
+  String nlDescribedMultiple(int count) {
+    return '这段描述包含 $count 顿餐——这里只显示第一顿。其余的请一次描述一顿。';
+  }
+
+  @override
+  String get nlWeightUnreadable => '⚖️ 没有读到有效的体重（30–300 公斤）。试试「我今天 72.5 公斤」。';
+
+  @override
+  String nlWeightLogged(String kg, String date) {
+    return '⚖️ 已记录 $date 的体重：$kg 公斤。';
+  }
+
+  @override
+  String get nlActivityUnreadable => '🏃 没有找到可记录的运动数据。试试「跑了 5 公里，消耗 450 千卡」。';
+
+  @override
+  String nlActivityLogged(String bits, String date) {
+    return '🏃 已记录活动：$bits（$date）。';
+  }
+
+  @override
+  String nlStepsAmount(String steps) {
+    return '$steps 步';
+  }
+
+  @override
+  String nlKmAmount(String km) {
+    return '$km 公里';
+  }
+
+  @override
+  String get nlChatFallback => '我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！';
 }

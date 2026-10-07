@@ -2,10 +2,13 @@
 /// 2026-10-07): every reply template the executor authors itself — the
 /// missing-key refusal, "type something first", the AI-error line, the
 /// no-food line, the invalid-index line, the correction summary, the delete
-/// staging/confirmation/cancel lines and the "added" line — comes from the
-/// ARB, and the staged-delete meal label uses the locale clock (24-hour in
-/// Chinese) and 千卡. Model-authored text (chat replies, 💬 reason) is passed
-/// through untouched. The English values are pinned byte-identical by
+/// staging/confirmation/cancel lines, the "added" line, and (second pass,
+/// same loop) the delete/correction refusals, the silent-delete guard, the
+/// weight and activity lines, the no-action and failure-tally lines, the
+/// blank-chat fallback and the describe-meal multi-meal warning — comes from
+/// the ARB, and the staged-delete meal label uses the locale clock (24-hour
+/// in Chinese) and 千卡. Model-authored text (chat replies, 💬 reason) is
+/// passed through untouched. The English values are pinned byte-identical by
 /// executor_test.dart / delete_confirmation_test.dart; this file pins zh.
 library;
 
@@ -135,5 +138,112 @@ void main() {
     await settings.setAppLanguage('zh'); // switched at runtime, same executor
     expect((await live.executeParsed(action, 'x', snapshot)).single.text,
         '❌ 餐次编号无效（9）。你最近有 1 顿餐。');
+  });
+  test('delete refusals are Chinese: no meals, no indices, no match', () async {
+    final noMeals = await exec.executeParsed(
+        [{'intent': 'delete', 'meal_indices': [0]}], '删除', const []);
+    expect(noMeals.single.text, '❌ 最近没有记录任何餐，无法删除。');
+
+    dao.seed('白粥', 150);
+    final snapshot = await dao.recentMeals();
+    final which = await exec.executeParsed([{'intent': 'delete'}], '删除', snapshot);
+    expect(which.single.text, '❌ 没听清要删除哪几顿餐，请说得具体一点。');
+    expect(which.single.needsDeleteConfirmation, isFalse);
+
+    final noMatch = await exec.executeParsed(
+        [{'intent': 'delete', 'meal_indices': [7]}], '删除', snapshot);
+    expect(noMatch.single.text, '❌ 在最近的记录里没有找到对应的餐。');
+    expect(dao.deletedIds, isEmpty);
+  });
+
+  test('correction refusals are Chinese: no meals, silent-delete guard',
+      () async {
+    final noMeals = await exec.executeParsed(
+        [{'intent': 'correction', 'meal_index': 0, 'analysis': roastDuckAnalysis}],
+        '改', const []);
+    expect(noMeals.single.text, '❌ 最近没有记录任何餐，无法修正。');
+
+    dao.seed('白粥', 150);
+    final snapshot = await dao.recentMeals();
+    final guarded = await exec.executeParsed(
+        [{'intent': 'correction', 'meal_index': 0, 'analysis': {'is_food': false}}],
+        '改', snapshot);
+    expect(guarded.single.text, startsWith('❌ 这次修正没有给出可用的新分析'));
+    expect(guarded.single.text, contains('780 千卡'));
+    expect(guarded.single.text, isNot(contains('kcal')));
+    expect(dao.updates, isEmpty, reason: 'the guard refuses, it does not write');
+  });
+
+  test('weight and activity replies are Chinese with 公斤 / 步 / 公里', () async {
+    final weight = await exec.executeParsed(
+        [{'intent': 'log_weight', 'weight_kg': 72.5}], '记一下体重', const []);
+    expect(dao.savedWeights.single.$2, 72.5);
+    expect(weight.single.text, startsWith('⚖️ 已记录 '));
+    expect(weight.single.text, endsWith(' 的体重：72.5 公斤。'));
+    expect(weight.single.text, isNot(contains('kg')));
+
+    final badWeight = await exec.executeParsed(
+        [{'intent': 'log_weight', 'weight_kg': '72.5'}], '记一下体重', const []);
+    expect(badWeight.single.text,
+        '⚖️ 没有读到有效的体重（30–300 公斤）。试试「我今天 72.5 公斤」。');
+
+    final activity = await exec.executeParsed([
+      {'intent': 'log_activity', 'active_calories': 450, 'steps': 8000, 'distance_km': 5},
+    ], '跑步', const []);
+    expect(dao.savedActivities.single['steps'], 8000);
+    expect(activity.single.text,
+        startsWith('🏃 已记录活动：450 千卡 · 8,000 步 · 5 公里（'));
+    expect(activity.single.text, endsWith('）。'));
+    expect(activity.single.text, isNot(contains('kcal')));
+    expect(activity.single.text, isNot(contains('steps')));
+    expect(activity.single.text, isNot(contains('km')));
+
+    final noActivity = await exec.executeParsed(
+        [{'intent': 'log_activity', 'steps': 'many'}], '跑步', const []);
+    expect(noActivity.single.text,
+        '🏃 没有找到可记录的运动数据。试试「跑了 5 公里，消耗 450 千卡」。');
+  });
+
+  test('no-action, failure-tally and blank-chat lines are Chinese', () async {
+    final nothing = await exec.executeParsed('just a string', 'x', const []);
+    expect(nothing.single.text, startsWith('❌ 我没弄明白该做什么。'));
+
+    dao.seed('白粥', 150);
+    dao.seed('面条', 550);
+    final snapshot = await dao.recentMeals();
+    dao.throwOnUpdate = true;
+    final one = await exec.executeParsed(
+        [{'intent': 'correction', 'meal_index': 0, 'analysis': roastDuckAnalysis}],
+        'x', snapshot);
+    expect(one.single.text, '❌ 这个请求失败了，请重试。');
+
+    final all = await exec.executeParsed([
+      {'intent': 'correction', 'meal_index': 0, 'analysis': roastDuckAnalysis},
+      {'intent': 'correction', 'meal_index': 1, 'analysis': roastDuckAnalysis},
+    ], 'x', snapshot);
+    expect(all.single.text, '❌ 请求的 2 项操作全部失败，请重试。');
+
+    final some = await exec.executeParsed([
+      {'intent': 'correction', 'meal_index': 0, 'analysis': roastDuckAnalysis},
+      {'intent': 'chat', 'reply': '还在'},
+    ], 'x', snapshot);
+    expect(some.first.text, '还在', reason: 'model-authored chat passes through');
+    expect(some.last.text, '⚠️ 请求的 2 项操作中有 1 项失败——其余已生效。');
+
+    final blank =
+        await exec.executeParsed({'intent': 'chat', 'reply': '  '}, 'x', const []);
+    expect(blank.single.text, '我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！');
+  });
+
+  test('describe-meal multi-meal warning is Chinese', () async {
+    analyzer.next = {
+      'actions': [
+        {'intent': 'new_meal', 'analysis': roastDuckAnalysis},
+        {'intent': 'new_meal', 'analysis': roastDuckAnalysis},
+      ],
+    };
+    final out = await exec.describeMeal('烧鸭饭和一碗粥');
+    expect(out.ok, isTrue);
+    expect(out.warning, '这段描述包含 2 顿餐——这里只显示第一顿。其余的请一次描述一顿。');
   });
 }

@@ -396,10 +396,8 @@ class DefaultNlExecutor implements NlExecutor {
     }
     return DescribeOutcome(
       analysis: meals.first,
-      warning: meals.length > 1
-          ? 'That described ${meals.length} meals — only the first is shown. '
-              'Describe the others one at a time.'
-          : null,
+      warning:
+          meals.length > 1 ? _l.nlDescribedMultiple(meals.length) : null,
     );
   }
 
@@ -427,10 +425,7 @@ class DefaultNlExecutor implements NlExecutor {
       dynamic result, String userText, List<Meal> snapshot) async {
     final actions = normalizeActions(result);
     if (actions.isEmpty) {
-      return const [
-        NlReply("❌ I couldn't work out what to do with that. "
-            'Try one request at a time, e.g. “change meal 2 to roast duck rice”.')
-      ];
+      return [NlReply(_l.nlNoActions)];
     }
 
     final replies = <NlReply>[];
@@ -446,11 +441,10 @@ class DefaultNlExecutor implements NlExecutor {
     if (failures == actions.length) {
       // The wording must never claim partial success (spec §4.9).
       replies.add(NlReply(failures == 1
-          ? '❌ That request failed. Please try again.'
-          : '❌ All $failures requested actions failed. Please try again.'));
+          ? _l.nlRequestFailed
+          : _l.nlAllActionsFailed(failures)));
     } else if (failures > 0) {
-      replies.add(NlReply(
-          '⚠️ $failures of ${actions.length} requested action(s) failed — the rest were applied.'));
+      replies.add(NlReply(_l.nlSomeActionsFailed(failures, actions.length)));
     }
     return replies;
   }
@@ -483,8 +477,7 @@ class DefaultNlExecutor implements NlExecutor {
     final dynamic reason = action['reason'] ?? '';
 
     if (meals.isEmpty) {
-      return const NlReply(
-          '❌ Cannot correct because no meals are logged recently.');
+      return NlReply(_l.nlCannotCorrectNoMeals);
     }
     if (mealIndex == null || mealIndex < 0 || mealIndex >= meals.length) {
       // meal_index is raw model output: truncate to 40 chars so hallucinated
@@ -498,9 +491,7 @@ class DefaultNlExecutor implements NlExecutor {
     // overwrite the meal into a row every is_food view filters out — a
     // delete that skipped the delete confirmation. Refuse it.
     if (newAnalysis is! Map || !isTruthy(newAnalysis['is_food'])) {
-      return const NlReply(
-          "❌ That correction didn't include a usable updated analysis, so I left "
-          'the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.');
+      return NlReply(_l.nlCorrectionUnusable);
     }
 
     final sanitized = <String, dynamic>{
@@ -559,14 +550,8 @@ class DefaultNlExecutor implements NlExecutor {
     }
     final dynamic reason = action['reason'] ?? '';
 
-    if (meals.isEmpty) {
-      return const NlReply(
-          '❌ Cannot delete because no meals are logged recently.');
-    }
-    if (mealIndices.isEmpty) {
-      return const NlReply(
-          "❌ Didn't catch which meals to delete. Try being more specific.");
-    }
+    if (meals.isEmpty) return NlReply(_l.nlCannotDeleteNoMeals);
+    if (mealIndices.isEmpty) return NlReply(_l.nlDeleteWhich);
 
     // Coerce, de-duplicate, ascending, in-range only (spec §4.5.3); resolve
     // ids and labels from the SNAPSHOT the model indexed.
@@ -589,9 +574,7 @@ class DefaultNlExecutor implements NlExecutor {
             _kcal(_orElse(a['total_calories'], 0))));
       }
     }
-    if (ids.isEmpty) {
-      return const NlReply("❌ Couldn't match those meals to the recent list.");
-    }
+    if (ids.isEmpty) return NlReply(_l.nlDeleteNoMatch);
 
     // One pending slot per chat (spec §4.5.4): staging a new delete
     // supersedes any older pending set.
@@ -665,14 +648,11 @@ class DefaultNlExecutor implements NlExecutor {
       final field = safeNumber(action['weight_kg']);
       if (field >= minWeightKg && field <= maxWeightKg) kg = _round1(field);
     }
-    if (kg == null) {
-      return const NlReply("⚖️ I couldn't read a valid body weight (30–300 kg). "
-          'Try “I weigh 72.5 kg”.');
-    }
+    if (kg == null) return NlReply(_l.nlWeightUnreadable);
     final date = _isoDate(DateTime.now());
     // Upsert-by-day (spec §2.1 body_weight: re-log overwrites).
     await dao.saveBodyWeight(date, kg);
-    return NlReply('⚖️ Logged ${_g(kg)} kg for $date.');
+    return NlReply(_l.nlWeightLogged(_g(kg), date));
   }
 
   /// _nl_log_activity (spec §4.8, telegram_bot.py:4131-4158).
@@ -682,8 +662,7 @@ class DefaultNlExecutor implements NlExecutor {
         _clamp(safeNumber(action['steps']), 0, activityStepsMax).round();
     final km = _clamp(safeNumber(action['distance_km']), 0, activityKmMax);
     if (kcal <= 0 && steps <= 0 && km <= 0) {
-      return const NlReply("🏃 I couldn't find any activity numbers to log. "
-          'Try “burned 450 kcal running 5 km”.');
+      return NlReply(_l.nlActivityUnreadable);
     }
     final date = _isoDate(DateTime.now());
     // Zeros store as null; steps ride in raw={"steps": n} inside the DAO.
@@ -692,11 +671,11 @@ class DefaultNlExecutor implements NlExecutor {
         steps: steps > 0 ? steps : null,
         distanceKm: km > 0 ? km.toDouble() : null);
     final bits = <String>[
-      if (kcal > 0) '${_comma(kcal.round())} kcal',
-      if (steps > 0) '${_comma(steps)} steps',
-      if (km > 0) '${_g(km)} km',
+      if (kcal > 0) _kcal(_comma(kcal.round())),
+      if (steps > 0) _l.nlStepsAmount(_comma(steps)),
+      if (km > 0) _l.nlKmAmount(_g(km)),
     ];
-    return NlReply('🏃 Logged activity: ${bits.join(' · ')} ($date).');
+    return NlReply(_l.nlActivityLogged(bits.join(' · '), date));
   }
 
   /// _nl_chat (spec §4.9, telegram_bot.py:4161-4168): a null/non-string/blank
@@ -704,8 +683,7 @@ class DefaultNlExecutor implements NlExecutor {
   Future<NlReply> _chat(Map action) async {
     final reply = action['reply'];
     if (reply is String && reply.trim().isNotEmpty) return NlReply(reply);
-    return const NlReply(
-        "I'm not sure what you mean. Try describing a meal or correction!");
+    return NlReply(_l.nlChatFallback);
   }
 }
 

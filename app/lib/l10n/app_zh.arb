@@ -453,5 +453,22 @@
   "nlDeleteCancelled": "👍 已取消——没有删除任何记录。",
   "nlDeletedMeals": "🗑️ 已删除 {count} 顿餐：",
   "nlAddedManualMeal": "✅ 已添加手动记录的一餐：",
-  "nlMealLabel": "{desc}（{date} {time}，~{kcal}）"
+  "nlMealLabel": "{desc}（{date} {time}，~{kcal}）",
+  "nlNoActions": "❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。",
+  "nlRequestFailed": "❌ 这个请求失败了，请重试。",
+  "nlAllActionsFailed": "❌ 请求的 {count} 项操作全部失败，请重试。",
+  "nlSomeActionsFailed": "⚠️ 请求的 {total} 项操作中有 {failed} 项失败——其余已生效。",
+  "nlCannotCorrectNoMeals": "❌ 最近没有记录任何餐，无法修正。",
+  "nlCorrectionUnusable": "❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「第 2 顿是烧鸭饭，大约 780 千卡」。",
+  "nlCannotDeleteNoMeals": "❌ 最近没有记录任何餐，无法删除。",
+  "nlDeleteWhich": "❌ 没听清要删除哪几顿餐，请说得具体一点。",
+  "nlDeleteNoMatch": "❌ 在最近的记录里没有找到对应的餐。",
+  "nlDescribedMultiple": "这段描述包含 {count} 顿餐——这里只显示第一顿。其余的请一次描述一顿。",
+  "nlWeightUnreadable": "⚖️ 没有读到有效的体重（30–300 公斤）。试试「我今天 72.5 公斤」。",
+  "nlWeightLogged": "⚖️ 已记录 {date} 的体重：{kg} 公斤。",
+  "nlActivityUnreadable": "🏃 没有找到可记录的运动数据。试试「跑了 5 公里，消耗 450 千卡」。",
+  "nlActivityLogged": "🏃 已记录活动：{bits}（{date}）。",
+  "nlStepsAmount": "{steps} 步",
+  "nlKmAmount": "{km} 公里",
+  "nlChatFallback": "我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！"
 }

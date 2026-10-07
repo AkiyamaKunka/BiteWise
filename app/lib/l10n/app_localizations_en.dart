@@ -1610,4 +1610,78 @@ class AppLocalizationsEn extends AppLocalizations {
   String nlMealLabel(String desc, String date, String time, String kcal) {
     return '$desc ($date $time, ~$kcal)';
   }
+
+  @override
+  String get nlNoActions =>
+      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
+
+  @override
+  String get nlRequestFailed => '❌ That request failed. Please try again.';
+
+  @override
+  String nlAllActionsFailed(int count) {
+    return '❌ All $count requested actions failed. Please try again.';
+  }
+
+  @override
+  String nlSomeActionsFailed(int failed, int total) {
+    return '⚠️ $failed of $total requested action(s) failed — the rest were applied.';
+  }
+
+  @override
+  String get nlCannotCorrectNoMeals =>
+      '❌ Cannot correct because no meals are logged recently.';
+
+  @override
+  String get nlCorrectionUnusable =>
+      '❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.';
+
+  @override
+  String get nlCannotDeleteNoMeals =>
+      '❌ Cannot delete because no meals are logged recently.';
+
+  @override
+  String get nlDeleteWhich =>
+      '❌ Didn\'t catch which meals to delete. Try being more specific.';
+
+  @override
+  String get nlDeleteNoMatch =>
+      '❌ Couldn\'t match those meals to the recent list.';
+
+  @override
+  String nlDescribedMultiple(int count) {
+    return 'That described $count meals — only the first is shown. Describe the others one at a time.';
+  }
+
+  @override
+  String get nlWeightUnreadable =>
+      '⚖️ I couldn\'t read a valid body weight (30–300 kg). Try “I weigh 72.5 kg”.';
+
+  @override
+  String nlWeightLogged(String kg, String date) {
+    return '⚖️ Logged $kg kg for $date.';
+  }
+
+  @override
+  String get nlActivityUnreadable =>
+      '🏃 I couldn\'t find any activity numbers to log. Try “burned 450 kcal running 5 km”.';
+
+  @override
+  String nlActivityLogged(String bits, String date) {
+    return '🏃 Logged activity: $bits ($date).';
+  }
+
+  @override
+  String nlStepsAmount(String steps) {
+    return '$steps steps';
+  }
+
+  @override
+  String nlKmAmount(String km) {
+    return '$km km';
+  }
+
+  @override
+  String get nlChatFallback =>
+      'I\'m not sure what you mean. Try describing a meal or correction!';
 }

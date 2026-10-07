@@ -2653,6 +2653,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{desc} ({date} {time}, ~{kcal})'**
   String nlMealLabel(String desc, String date, String time, String kcal);
+
+  /// No description provided for @nlNoActions.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.'**
+  String get nlNoActions;
+
+  /// No description provided for @nlRequestFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ That request failed. Please try again.'**
+  String get nlRequestFailed;
+
+  /// Every action in a compound request failed; must never claim partial success.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ All {count} requested actions failed. Please try again.'**
+  String nlAllActionsFailed(int count);
+
+  /// No description provided for @nlSomeActionsFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ {failed} of {total} requested action(s) failed — the rest were applied.'**
+  String nlSomeActionsFailed(int failed, int total);
+
+  /// No description provided for @nlCannotCorrectNoMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Cannot correct because no meals are logged recently.'**
+  String get nlCannotCorrectNoMeals;
+
+  /// Silent-delete guard: an empty or non-food analysis would hide the meal without the delete confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.'**
+  String get nlCorrectionUnusable;
+
+  /// No description provided for @nlCannotDeleteNoMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Cannot delete because no meals are logged recently.'**
+  String get nlCannotDeleteNoMeals;
+
+  /// No description provided for @nlDeleteWhich.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Didn\'t catch which meals to delete. Try being more specific.'**
+  String get nlDeleteWhich;
+
+  /// No description provided for @nlDeleteNoMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Couldn\'t match those meals to the recent list.'**
+  String get nlDeleteNoMatch;
+
+  /// No description provided for @nlDescribedMultiple.
+  ///
+  /// In en, this message translates to:
+  /// **'That described {count} meals — only the first is shown. Describe the others one at a time.'**
+  String nlDescribedMultiple(int count);
+
+  /// No description provided for @nlWeightUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'⚖️ I couldn\'t read a valid body weight (30–300 kg). Try “I weigh 72.5 kg”.'**
+  String get nlWeightUnreadable;
+
+  /// kg is already %g-formatted (72.5, 80); date is ISO yyyy-MM-dd.
+  ///
+  /// In en, this message translates to:
+  /// **'⚖️ Logged {kg} kg for {date}.'**
+  String nlWeightLogged(String kg, String date);
+
+  /// No description provided for @nlActivityUnreadable.
+  ///
+  /// In en, this message translates to:
+  /// **'🏃 I couldn\'t find any activity numbers to log. Try “burned 450 kcal running 5 km”.'**
+  String get nlActivityUnreadable;
+
+  /// bits is the ' · '-joined list of kcalAmount / nlStepsAmount / nlKmAmount parts that were non-zero.
+  ///
+  /// In en, this message translates to:
+  /// **'🏃 Logged activity: {bits} ({date}).'**
+  String nlActivityLogged(String bits, String date);
+
+  /// steps is already thousands-grouped (8,000).
+  ///
+  /// In en, this message translates to:
+  /// **'{steps} steps'**
+  String nlStepsAmount(String steps);
+
+  /// No description provided for @nlKmAmount.
+  ///
+  /// In en, this message translates to:
+  /// **'{km} km'**
+  String nlKmAmount(String km);
+
+  /// No description provided for @nlChatFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'I\'m not sure what you mean. Try describing a meal or correction!'**
+  String get nlChatFallback;
 }
 
 class _AppLocalizationsDelegate
