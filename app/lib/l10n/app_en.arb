@@ -988,5 +988,89 @@
   "importErrNotExport": "That file is not a CalorieTracker export.",
   "importErrWrongFormatTag": "That file is not a CalorieTracker export (wrong format tag).",
   "importErrBadVersion": "That export has an unusable version tag.",
-  "importErrNoTables": "That export has no tables section."
+  "importErrNoTables": "That export has no tables section.",
+  "nlSomethingWrong": "❌ Something went wrong handling that message. Please try again.",
+  "nlMissingServer": "❌ No server is configured — set your server address and upload key in Settings first.",
+  "nlMissingKey": "❌ No {provider} API key yet — add one in Settings to use text logging.",
+  "@nlMissingKey": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "nlTypeFirst": "Type what you ate first.",
+  "nlErrorContactingAi": "❌ Error contacting AI. Please try again.",
+  "nlNoFoodDetected": "🚫 I couldn't detect food in that description.",
+  "nlInvalidMealIndex": "❌ Invalid meal index ({shown}). You have {count} recent meals.",
+  "@nlInvalidMealIndex": {
+    "description": "shown is the model's raw meal_index, already truncated to 40 chars.",
+    "placeholders": {
+      "shown": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlCorrectedMeal": "✏️ Corrected meal {n}!",
+  "@nlCorrectedMeal": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "nlKcalChange": "🔥 {oldKcal} → {newKcal} ({diff})",
+  "@nlKcalChange": {
+    "description": "oldKcal/newKcal are already kcalAmount-formatted; diff is the signed delta.",
+    "placeholders": {
+      "oldKcal": {
+        "type": "String"
+      },
+      "newKcal": {
+        "type": "String"
+      },
+      "diff": {
+        "type": "String"
+      }
+    }
+  },
+  "nlDeleteAsk": "🗑️ Delete {count} meal(s)?",
+  "@nlDeleteAsk": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlDeleteCancelled": "👍 Cancelled — nothing was deleted.",
+  "nlDeletedMeals": "🗑️ Deleted {count} meal(s):",
+  "@nlDeletedMeals": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "nlAddedManualMeal": "✅ Added new manual meal:",
+  "nlMealLabel": "{desc} ({date} {time}, ~{kcal})",
+  "@nlMealLabel": {
+    "description": "One staged-delete line. time is already in the locale clock; kcal is already kcalAmount-formatted.",
+    "placeholders": {
+      "desc": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  }
 }

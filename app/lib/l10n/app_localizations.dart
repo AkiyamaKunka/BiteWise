@@ -2569,6 +2569,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'That export has no tables section.'**
   String get importErrNoTables;
+
+  /// No description provided for @nlSomethingWrong.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Something went wrong handling that message. Please try again.'**
+  String get nlSomethingWrong;
+
+  /// No description provided for @nlMissingServer.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ No server is configured — set your server address and upload key in Settings first.'**
+  String get nlMissingServer;
+
+  /// No description provided for @nlMissingKey.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ No {provider} API key yet — add one in Settings to use text logging.'**
+  String nlMissingKey(String provider);
+
+  /// No description provided for @nlTypeFirst.
+  ///
+  /// In en, this message translates to:
+  /// **'Type what you ate first.'**
+  String get nlTypeFirst;
+
+  /// No description provided for @nlErrorContactingAi.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Error contacting AI. Please try again.'**
+  String get nlErrorContactingAi;
+
+  /// No description provided for @nlNoFoodDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'🚫 I couldn\'t detect food in that description.'**
+  String get nlNoFoodDetected;
+
+  /// shown is the model's raw meal_index, already truncated to 40 chars.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Invalid meal index ({shown}). You have {count} recent meals.'**
+  String nlInvalidMealIndex(String shown, int count);
+
+  /// No description provided for @nlCorrectedMeal.
+  ///
+  /// In en, this message translates to:
+  /// **'✏️ Corrected meal {n}!'**
+  String nlCorrectedMeal(int n);
+
+  /// oldKcal/newKcal are already kcalAmount-formatted; diff is the signed delta.
+  ///
+  /// In en, this message translates to:
+  /// **'🔥 {oldKcal} → {newKcal} ({diff})'**
+  String nlKcalChange(String oldKcal, String newKcal, String diff);
+
+  /// No description provided for @nlDeleteAsk.
+  ///
+  /// In en, this message translates to:
+  /// **'🗑️ Delete {count} meal(s)?'**
+  String nlDeleteAsk(int count);
+
+  /// No description provided for @nlDeleteCancelled.
+  ///
+  /// In en, this message translates to:
+  /// **'👍 Cancelled — nothing was deleted.'**
+  String get nlDeleteCancelled;
+
+  /// No description provided for @nlDeletedMeals.
+  ///
+  /// In en, this message translates to:
+  /// **'🗑️ Deleted {count} meal(s):'**
+  String nlDeletedMeals(int count);
+
+  /// No description provided for @nlAddedManualMeal.
+  ///
+  /// In en, this message translates to:
+  /// **'✅ Added new manual meal:'**
+  String get nlAddedManualMeal;
+
+  /// One staged-delete line. time is already in the locale clock; kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'{desc} ({date} {time}, ~{kcal})'**
+  String nlMealLabel(String desc, String date, String time, String kcal);
 }
 
 class _AppLocalizationsDelegate

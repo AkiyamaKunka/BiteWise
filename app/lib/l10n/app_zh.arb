@@ -439,5 +439,19 @@
   "importErrNotExport": "这个文件不是筷拍的导出文件。",
   "importErrWrongFormatTag": "这个文件不是筷拍的导出文件（格式标记不对）。",
   "importErrBadVersion": "这份导出文件的版本标记无法使用。",
-  "importErrNoTables": "这份导出文件没有 tables 部分。"
+  "importErrNoTables": "这份导出文件没有 tables 部分。",
+  "nlSomethingWrong": "❌ 处理这条消息时出了点问题，请重试。",
+  "nlMissingServer": "❌ 还没有配置服务器——请先在「设置」里填写服务器地址和上传密钥。",
+  "nlMissingKey": "❌ 还没有 {provider} 的 API 密钥——请先在「设置」里添加，才能用文字记录。",
+  "nlTypeFirst": "先输入你吃了什么。",
+  "nlErrorContactingAi": "❌ 联系 AI 失败，请重试。",
+  "nlNoFoodDetected": "🚫 这段描述里没有识别出食物。",
+  "nlInvalidMealIndex": "❌ 餐次编号无效（{shown}）。你最近有 {count} 顿餐。",
+  "nlCorrectedMeal": "✏️ 已修正第 {n} 顿餐！",
+  "nlKcalChange": "🔥 {oldKcal} → {newKcal}（{diff}）",
+  "nlDeleteAsk": "🗑️ 删除 {count} 顿餐？",
+  "nlDeleteCancelled": "👍 已取消——没有删除任何记录。",
+  "nlDeletedMeals": "🗑️ 已删除 {count} 顿餐：",
+  "nlAddedManualMeal": "✅ 已添加手动记录的一餐：",
+  "nlMealLabel": "{desc}（{date} {time}，~{kcal}）"
 }

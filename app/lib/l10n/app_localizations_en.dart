@@ -1551,4 +1551,63 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importErrNoTables => 'That export has no tables section.';
+
+  @override
+  String get nlSomethingWrong =>
+      '❌ Something went wrong handling that message. Please try again.';
+
+  @override
+  String get nlMissingServer =>
+      '❌ No server is configured — set your server address and upload key in Settings first.';
+
+  @override
+  String nlMissingKey(String provider) {
+    return '❌ No $provider API key yet — add one in Settings to use text logging.';
+  }
+
+  @override
+  String get nlTypeFirst => 'Type what you ate first.';
+
+  @override
+  String get nlErrorContactingAi => '❌ Error contacting AI. Please try again.';
+
+  @override
+  String get nlNoFoodDetected =>
+      '🚫 I couldn\'t detect food in that description.';
+
+  @override
+  String nlInvalidMealIndex(String shown, int count) {
+    return '❌ Invalid meal index ($shown). You have $count recent meals.';
+  }
+
+  @override
+  String nlCorrectedMeal(int n) {
+    return '✏️ Corrected meal $n!';
+  }
+
+  @override
+  String nlKcalChange(String oldKcal, String newKcal, String diff) {
+    return '🔥 $oldKcal → $newKcal ($diff)';
+  }
+
+  @override
+  String nlDeleteAsk(int count) {
+    return '🗑️ Delete $count meal(s)?';
+  }
+
+  @override
+  String get nlDeleteCancelled => '👍 Cancelled — nothing was deleted.';
+
+  @override
+  String nlDeletedMeals(int count) {
+    return '🗑️ Deleted $count meal(s):';
+  }
+
+  @override
+  String get nlAddedManualMeal => '✅ Added new manual meal:';
+
+  @override
+  String nlMealLabel(String desc, String date, String time, String kcal) {
+    return '$desc ($date $time, ~$kcal)';
+  }
 }

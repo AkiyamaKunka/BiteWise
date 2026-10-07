@@ -1434,4 +1434,60 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importErrNoTables => '这份导出文件没有 tables 部分。';
+
+  @override
+  String get nlSomethingWrong => '❌ 处理这条消息时出了点问题，请重试。';
+
+  @override
+  String get nlMissingServer => '❌ 还没有配置服务器——请先在「设置」里填写服务器地址和上传密钥。';
+
+  @override
+  String nlMissingKey(String provider) {
+    return '❌ 还没有 $provider 的 API 密钥——请先在「设置」里添加，才能用文字记录。';
+  }
+
+  @override
+  String get nlTypeFirst => '先输入你吃了什么。';
+
+  @override
+  String get nlErrorContactingAi => '❌ 联系 AI 失败，请重试。';
+
+  @override
+  String get nlNoFoodDetected => '🚫 这段描述里没有识别出食物。';
+
+  @override
+  String nlInvalidMealIndex(String shown, int count) {
+    return '❌ 餐次编号无效（$shown）。你最近有 $count 顿餐。';
+  }
+
+  @override
+  String nlCorrectedMeal(int n) {
+    return '✏️ 已修正第 $n 顿餐！';
+  }
+
+  @override
+  String nlKcalChange(String oldKcal, String newKcal, String diff) {
+    return '🔥 $oldKcal → $newKcal（$diff）';
+  }
+
+  @override
+  String nlDeleteAsk(int count) {
+    return '🗑️ 删除 $count 顿餐？';
+  }
+
+  @override
+  String get nlDeleteCancelled => '👍 已取消——没有删除任何记录。';
+
+  @override
+  String nlDeletedMeals(int count) {
+    return '🗑️ 已删除 $count 顿餐：';
+  }
+
+  @override
+  String get nlAddedManualMeal => '✅ 已添加手动记录的一餐：';
+
+  @override
+  String nlMealLabel(String desc, String date, String time, String kcal) {
+    return '$desc（$date $time，~$kcal）';
+  }
 }
