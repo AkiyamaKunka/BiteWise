@@ -383,8 +383,36 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         child: FutureBuilder<List<RecentAsset>>(
           future: _assets,
           builder: (context, snap) {
+            // A denial is NOT an empty camera roll: 'No recent photos
+            // found.' here was the same permanent dead end AddPhotoScreen
+            // already fixed (once the OS stops re-prompting, the request
+            // above is a silent no-op) — say what is wrong and offer the
+            // only way back (loop find 2026-10-07).
             if (_permissionDenied) {
-              return Center(child: Text(l.addNoPhotos));
+              final open = widget.services.openSystemSettings;
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        l.photoPermissionDenied,
+                        key: const Key('leftoverPhotoPermissionDenied'),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (open != null) ...[
+                        const SizedBox(height: 12),
+                        FilledButton.tonal(
+                          key: const Key('leftoverOpenSystemSettings'),
+                          onPressed: () => open(),
+                          child: Text(l.openSystemSettings),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
             }
             if (!snap.hasData) {
               return const Center(child: CircularProgressIndicator());
