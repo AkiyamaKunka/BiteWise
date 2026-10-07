@@ -21,6 +21,7 @@ import '../widgets/day_report.dart';
 import '../widgets/grouped.dart' show GroupedCard;
 import '../widgets/macro_chart.dart' show MacroPalette;
 import '../meal_thumbs.dart';
+import '../refresh_signal.dart';
 import '../widgets/meal_card.dart';
 import 'meal_editor_screen.dart';
 
@@ -112,6 +113,9 @@ class TodayScreenState extends State<TodayScreen> {
       builder: (_) => MealEditorScreen(dao: widget.dao, meal: meal),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie
+    // An edit or delete changes the summary the iOS OS card carries; the
+    // shell's listener re-arms it (and refreshes History).
+    signalMealsChanged();
     if (mounted) await reload();
   }
 

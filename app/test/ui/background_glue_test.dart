@@ -555,6 +555,74 @@ void main() {
       expect(calls, 1);
     });
 
+    // The chat (修改或删除某餐), describe, manual and leftover paths write
+    // meals straight through the DAO — not the photo pipeline that fires
+    // the signal — so the add flow's return used to reload Today only: a
+    // meal deleted at 23:40 with the app left open was still in the 23:55
+    // card (loop find 2026-10-07).
+    testWidgets('closing a Meals-sheet screen (chat fix) re-arms',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(services: services(() async => calls++))));
+      await tester.pumpAndSettle();
+      final before = calls;
+      await tester.tap(find.byKey(const Key('addMealFab')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('addFixMeal')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('fixMealField')), findsOneWidget);
+      expect(calls, before, reason: 'nothing changed yet');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(calls, before + 1);
+    });
+
+    testWidgets('closing the editor opened from a Today meal re-arms',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final now = DateTime.now();
+      final dao = FakeDao()
+        ..seed(Meal(
+          id: 1,
+          date: now.toIso8601String().substring(0, 10),
+          time: '12:30 PM',
+          timestamp: now.toIso8601String(),
+          source: 'manual_text',
+          analysis: const {
+            'is_food': true,
+            'meal_description': 'Noodles',
+            'total_calories': 500,
+          },
+        ));
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(
+              services: UiServices(
+        dao: dao,
+        analyzer: FakeAnalyzer(),
+        executor: FakeExecutor(),
+        settings: FakeSettings(watcherEnabled: false),
+        picker: FakePicker(),
+        requestPhotoPermission: () async => true,
+        reports: FakeReports(),
+        refreshDailyNotification: () async => calls++,
+      ))));
+      await tester.pumpAndSettle();
+      final before = calls;
+      await tester.tap(find.byKey(const ValueKey('meal1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('saveMealButton')), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(calls, before + 1);
+    });
+
     testWidgets('Android (no hook) is untouched', (tester) async {
       final intake = FakeIntake();
       await tester.pumpWidget(MaterialApp(

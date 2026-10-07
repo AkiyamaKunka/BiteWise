@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../format.dart';
 import '../meal_thumbs.dart';
+import '../refresh_signal.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart'
     show GroupedCard, cellBackground, kGroupInset;
@@ -69,6 +70,9 @@ class HistoryScreenState extends State<HistoryScreen> {
       builder: (_) =>
           DayDetailScreen(dao: widget.dao, date: date, thumbs: widget.thumbs),
     ));
+    // Same reason for the signal: today's meals edited from here must
+    // reach Today and the iOS OS card, not only this list.
+    signalMealsChanged();
     if (mounted) await reload();
   }
 
