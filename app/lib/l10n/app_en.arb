@@ -713,6 +713,93 @@
   "editorAdd": "Add",
   "editorItemLabel": "Item",
   "editorRemoveItemTooltip": "Remove item",
+  "editorErrNotNumber": "{label} must be a number.",
+  "@editorErrNotNumber": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrNegative": "{label} cannot be negative.",
+  "@editorErrNegative": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrTooLarge": "{label} looks too large (max {max}).",
+  "@editorErrTooLarge": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrDescTooLong": "Description is too long (max {max}).",
+  "@editorErrDescTooLong": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrDate": "Date must be a real YYYY-MM-DD date.",
+  "editorErrTime": "Time must look like 07:30 PM.",
+  "editorErrTooManyItems": "Too many items (max {max}).",
+  "@editorErrTooManyItems": {
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
+  "editorErrsNeedFixing": "{count} things need fixing — see the top.",
+  "@editorErrsNeedFixing": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "editorFieldCalories": "Calories",
+  "editorItemFieldCalories": "Item {n} calories",
+  "@editorItemFieldCalories": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemFieldProtein": "Item {n} protein",
+  "@editorItemFieldProtein": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemFieldCarbs": "Item {n} carbs",
+  "@editorItemFieldCarbs": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemFieldFat": "Item {n} fat",
+  "@editorItemFieldFat": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "editorItemKcalLabel": "kcal",
   "covPermissionRequired": "Photo permission is required for the check.",
   "covCheckFailed": "Check failed: {error}",
   "@covCheckFailed": {

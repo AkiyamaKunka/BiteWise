@@ -2174,6 +2174,90 @@ abstract class AppLocalizations {
   /// **'Remove item'**
   String get editorRemoveItemTooltip;
 
+  /// No description provided for @editorErrNotNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} must be a number.'**
+  String editorErrNotNumber(String label);
+
+  /// No description provided for @editorErrNegative.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} cannot be negative.'**
+  String editorErrNegative(String label);
+
+  /// No description provided for @editorErrTooLarge.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} looks too large (max {max}).'**
+  String editorErrTooLarge(String label, String max);
+
+  /// No description provided for @editorErrDescTooLong.
+  ///
+  /// In en, this message translates to:
+  /// **'Description is too long (max {max}).'**
+  String editorErrDescTooLong(String max);
+
+  /// No description provided for @editorErrDate.
+  ///
+  /// In en, this message translates to:
+  /// **'Date must be a real YYYY-MM-DD date.'**
+  String get editorErrDate;
+
+  /// No description provided for @editorErrTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Time must look like 07:30 PM.'**
+  String get editorErrTime;
+
+  /// No description provided for @editorErrTooManyItems.
+  ///
+  /// In en, this message translates to:
+  /// **'Too many items (max {max}).'**
+  String editorErrTooManyItems(String max);
+
+  /// No description provided for @editorErrsNeedFixing.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} things need fixing — see the top.'**
+  String editorErrsNeedFixing(int count);
+
+  /// No description provided for @editorFieldCalories.
+  ///
+  /// In en, this message translates to:
+  /// **'Calories'**
+  String get editorFieldCalories;
+
+  /// No description provided for @editorItemFieldCalories.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} calories'**
+  String editorItemFieldCalories(int n);
+
+  /// No description provided for @editorItemFieldProtein.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} protein'**
+  String editorItemFieldProtein(int n);
+
+  /// No description provided for @editorItemFieldCarbs.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} carbs'**
+  String editorItemFieldCarbs(int n);
+
+  /// No description provided for @editorItemFieldFat.
+  ///
+  /// In en, this message translates to:
+  /// **'Item {n} fat'**
+  String editorItemFieldFat(int n);
+
+  /// No description provided for @editorItemKcalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'kcal'**
+  String get editorItemKcalLabel;
+
   /// No description provided for @covPermissionRequired.
   ///
   /// In en, this message translates to:

@@ -237,7 +237,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   Future<void> _save() async {
     if (_saving) return;
     _harvest();
-    final errors = _draft.validate();
+    final errors = _draft.validate(context.l10n);
     if (errors.isNotEmpty) {
       setState(() => _errors = errors);
       // The error card is the FIRST list child while Save is a pinned FAB:
@@ -246,7 +246,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(errors.length == 1
               ? errors.single
-              : '${errors.length} things need fixing — see the top.')));
+              : context.l10n.editorErrsNeedFixing(errors.length))));
       if (_scroll.hasClients) {
         await _scroll.animateTo(0,
             duration: const Duration(milliseconds: 250),
@@ -647,25 +647,25 @@ class _ItemRow extends StatelessWidget {
                     child: _NumberField(
                         fieldKey: Key('itemCal$index'),
                         controller: ctrls.cal,
-                        label: 'kcal')),
+                        label: context.l10n.editorItemKcalLabel)),
                 const SizedBox(width: 6),
                 Expanded(
                     child: _NumberField(
                         fieldKey: Key('itemPro$index'),
                         controller: ctrls.pro,
-                        label: 'P g')),
+                        label: '${context.l10n.macroProteinShort} g')),
                 const SizedBox(width: 6),
                 Expanded(
                     child: _NumberField(
                         fieldKey: Key('itemCarb$index'),
                         controller: ctrls.carb,
-                        label: 'C g')),
+                        label: '${context.l10n.macroCarbsShort} g')),
                 const SizedBox(width: 6),
                 Expanded(
                     child: _NumberField(
                         fieldKey: Key('itemFat$index'),
                         controller: ctrls.fat,
-                        label: 'F g')),
+                        label: '${context.l10n.macroFatShort} g')),
               ],
             ),
           ],

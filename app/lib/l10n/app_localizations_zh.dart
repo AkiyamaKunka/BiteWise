@@ -1166,6 +1166,68 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorRemoveItemTooltip => '移除';
 
   @override
+  String editorErrNotNumber(String label) {
+    return '$label必须是数字。';
+  }
+
+  @override
+  String editorErrNegative(String label) {
+    return '$label不能为负数。';
+  }
+
+  @override
+  String editorErrTooLarge(String label, String max) {
+    return '$label太大了（上限 $max）。';
+  }
+
+  @override
+  String editorErrDescTooLong(String max) {
+    return '描述太长了（上限 $max 字）。';
+  }
+
+  @override
+  String get editorErrDate => '日期必须是真实存在的 YYYY-MM-DD 日期。';
+
+  @override
+  String get editorErrTime => '时间格式应类似 07:30 PM。';
+
+  @override
+  String editorErrTooManyItems(String max) {
+    return '食物太多了（上限 $max 项）。';
+  }
+
+  @override
+  String editorErrsNeedFixing(int count) {
+    return '有 $count 处需要修改，请看顶部。';
+  }
+
+  @override
+  String get editorFieldCalories => '热量';
+
+  @override
+  String editorItemFieldCalories(int n) {
+    return '第 $n 项食物的热量';
+  }
+
+  @override
+  String editorItemFieldProtein(int n) {
+    return '第 $n 项食物的蛋白质';
+  }
+
+  @override
+  String editorItemFieldCarbs(int n) {
+    return '第 $n 项食物的碳水';
+  }
+
+  @override
+  String editorItemFieldFat(int n) {
+    return '第 $n 项食物的脂肪';
+  }
+
+  @override
+  String get editorItemKcalLabel => '千卡';
+
+  @override
   String get covPermissionRequired => '检查需要照片权限。';
 
   @override

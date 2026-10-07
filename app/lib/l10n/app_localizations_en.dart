@@ -1256,6 +1256,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorRemoveItemTooltip => 'Remove item';
 
   @override
+  String editorErrNotNumber(String label) {
+    return '$label must be a number.';
+  }
+
+  @override
+  String editorErrNegative(String label) {
+    return '$label cannot be negative.';
+  }
+
+  @override
+  String editorErrTooLarge(String label, String max) {
+    return '$label looks too large (max $max).';
+  }
+
+  @override
+  String editorErrDescTooLong(String max) {
+    return 'Description is too long (max $max).';
+  }
+
+  @override
+  String get editorErrDate => 'Date must be a real YYYY-MM-DD date.';
+
+  @override
+  String get editorErrTime => 'Time must look like 07:30 PM.';
+
+  @override
+  String editorErrTooManyItems(String max) {
+    return 'Too many items (max $max).';
+  }
+
+  @override
+  String editorErrsNeedFixing(int count) {
+    return '$count things need fixing — see the top.';
+  }
+
+  @override
+  String get editorFieldCalories => 'Calories';
+
+  @override
+  String editorItemFieldCalories(int n) {
+    return 'Item $n calories';
+  }
+
+  @override
+  String editorItemFieldProtein(int n) {
+    return 'Item $n protein';
+  }
+
+  @override
+  String editorItemFieldCarbs(int n) {
+    return 'Item $n carbs';
+  }
+
+  @override
+  String editorItemFieldFat(int n) {
+    return 'Item $n fat';
+  }
+
+  @override
+  String get editorItemKcalLabel => 'kcal';
+
+  @override
   String get covPermissionRequired =>
       'Photo permission is required for the check.';
 

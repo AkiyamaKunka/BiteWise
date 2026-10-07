@@ -245,7 +245,7 @@ class TodayScreenState extends State<TodayScreen> {
               children: [
                 Text(_error!, textAlign: TextAlign.center),
                 const SizedBox(height: 12),
-                FilledButton(onPressed: reload, child: const Text('Retry')),
+                FilledButton(onPressed: reload, child: Text(context.l10n.retry)),
               ],
             ),
           ),
