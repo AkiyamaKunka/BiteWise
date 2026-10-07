@@ -278,6 +278,48 @@ void main() {
     expect(out.retryable, isTrue);
   });
 
+  test('a "retry": "later" 503 keeps the photo WITHOUT spinning in place',
+      () async {
+    // Server fix 2026-10-07: a closed Claude-plan usage window and a CLI
+    // timeout used to answer retry:false, and the photo was burned for
+    // good while the UI promised an automatic retry. The server now sends
+    // the NON-BOOL "later" for those, which this already-installed reader
+    // takes as "no verdict": the outcome stays retryable (the watcher
+    // offers the photo again next scan) and there is no in-place retry
+    // (seconds cannot reopen a usage window). Pinned here so the reader
+    // never "helpfully" starts treating a string as true or false.
+    final s = await serverSettings();
+    for (final reason in [
+      'You have hit your usage limit. It resets at 3pm.',
+      'the analysis timed out after 120 s',
+    ]) {
+      var calls = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        sleep: (_) async {},
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(
+              jsonEncode({
+                'error': 'claude_unavailable',
+                'reason': reason,
+                'retry': 'later',
+              }),
+              503);
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(calls, 1,
+          reason: '"later" must not spin in place ($reason)');
+      expect(out.retryable, isTrue,
+          reason: 'the photo must survive until the window reopens '
+              '($reason)');
+      expect(out.error, contains(reason),
+          reason: 'the server said why — repeat it');
+    }
+  });
+
   test('probeKey uses the FREE auth_check — never a CLI run — and keeps '
       'the readiness verdicts', () async {
     // The regression this pins (caught 2026-07-31, same day it shipped):

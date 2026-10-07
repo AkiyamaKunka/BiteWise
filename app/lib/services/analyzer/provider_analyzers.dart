@@ -682,13 +682,18 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   bool? unavailableRetry(String body) {
     try {
       final decoded = jsonDecode(body);
+      // Bools only, ON PURPOSE. The server's "retry": "later" (a closed
+      // Claude-plan usage window, a CLI timeout — 2026-10-07) lands on
+      // the null branch below: keep the photo for the next scan, but do
+      // not spend three in-place attempts on a window that is still
+      // closed. Server-side fix; this reader needed no change.
       if (decoded is Map && decoded['retry'] is bool) {
         return decoded['retry'] as bool;
       }
     } on FormatException {
       // fall through
     }
-    return null; // old server / configuration refusal
+    return null; // old server / configuration refusal / "later"
   }
 
   /// The server's own 400 codes (no_image, bad_recent_meals, bad_model,

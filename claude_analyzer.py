@@ -77,10 +77,30 @@ class AnalyzerBusy(Exception):
     """Another photo owns the single-flight CLI right now.
 
     Distinct from a None return, which means the run HAPPENED and failed
-    (timeout, junk reply, blind GLM run) — those are terminal for this
-    photo, and the app must not spend three more 120 s CLI runs on them.
-    The endpoints map busy → retryable 503, terminal → non-retryable.
+    (junk reply, blind GLM run) — those are terminal for this photo, and
+    the app must not spend three more 120 s CLI runs on them. A timeout
+    is neither: see AnalyzerTimeout. The endpoints map busy → retryable
+    503, terminal → non-retryable, timeout → "come back later".
     """
+
+
+class AnalyzerTimeout(Exception):
+    """The CLI run hit the wall-clock limit before the model answered.
+
+    Distinct from None (the model ANSWERED, with junk — terminal) and
+    from PlanRefused (the plan said no). Nothing about the photo caused
+    it — a slow model or a loaded VM did — and the same photo analyzes
+    fine an hour later. Until 2026-10-07 this surfaced as the terminal
+    "produced no usable result" and the app burned the photo for good
+    while its UI promised an automatic retry. Raised ONLY to API callers
+    (raise_on_busy=True); the Telegram path keeps its documented
+    "None → use Gemini" contract.
+    """
+
+    def __init__(self, seconds: int):
+        super().__init__(f"the analysis timed out after {seconds} s")
+        self.seconds = seconds
+        self.reason = f"the analysis timed out after {seconds} s"
 
 
 # The CLI is a full Node process (hundreds of MB RSS). Single-flight: only
@@ -348,26 +368,40 @@ class PlanRefused(Exception):
     AnalyzerBusy (contention). The model is simply not served by this
     subscription right now: a usage window is exhausted, or the chosen
     model needs purchased credits the plan does not include (Fable 5 on
-    a Pro plan, verified live 2026-08-06). Retrying — in place OR via the
-    file path — reproduces it exactly, so callers must surface the REASON
-    to the user instead of a generic 'no usable result'.
+    a Pro plan, verified live 2026-08-06). Retrying NOW — in place OR via
+    the file path — reproduces it exactly, so callers must surface the
+    REASON to the user instead of a generic 'no usable result'.
+
+    [terminal] separates the two refusals, because only one of them is
+    forever (2026-10-07): a model that needs credits stays refused until
+    the user switches models, but a closed usage window reopens on its
+    own schedule and the photo must survive until then. The API endpoints
+    answer "retry": False for the first and "retry": "later" for the
+    second; the installed app burned photos on False.
     """
 
-    def __init__(self, reason: str):
+    def __init__(self, reason: str, terminal: bool = False):
         super().__init__(reason)
         self.reason = reason
+        self.terminal = terminal
 
 
-def _plan_refusal(stdout: str) -> Optional[str]:
-    """A user-facing reason when the stream output shows a PLAN refusal.
+def _plan_refusal(stdout: str) -> Optional[PlanRefused]:
+    """The PlanRefused (not raised) a stream output describes, or None.
 
     The CLI reports these as a terminal result envelope carrying
     is_error with an api_error_status (429), and/or a rate_limit_event
     whose errorCode is credits_required. Its own `result` text is already
     written for a human ("Fable 5 requires usage credits."), so it is
     preferred verbatim over anything we could invent.
+
+    terminal is True only for the credits case — the errorCode says
+    credits_required, or the CLI's sentence says credits. A bare 429 or a
+    rejected rate_limit_info without that code is the plan's usage
+    window: closed now, open later.
     """
     refused = False
+    terminal = False
     message = None
     for line in (stdout or "").splitlines():
         line = line.strip()
@@ -381,23 +415,27 @@ def _plan_refusal(stdout: str) -> Optional[str]:
             continue
         if event.get("type") == "rate_limit_event":
             info = event.get("rate_limit_info")
-            if isinstance(info, dict) and (
-                info.get("status") == "rejected"
-                or info.get("errorCode") == "credits_required"
-            ):
-                refused = True
+            if isinstance(info, dict):
+                if info.get("errorCode") == "credits_required":
+                    refused = True
+                    terminal = True
+                elif info.get("status") == "rejected":
+                    refused = True
         if event.get("type") == "result" and event.get("is_error"):
             status = event.get("api_error_status")
             text = event.get("result")
-            if status == 429 or (
-                isinstance(text, str) and "credit" in text.lower()
-            ):
+            says_credits = isinstance(text, str) and "credit" in text.lower()
+            if status == 429 or says_credits:
                 refused = True
+            if says_credits:
+                terminal = True
             if isinstance(text, str) and text.strip():
                 message = text.strip()
     if not refused:
         return None
-    return message or "this plan cannot serve the selected model right now"
+    return PlanRefused(
+        message or "this plan cannot serve the selected model right now",
+        terminal=terminal)
 
 
 def _log_cli_exit(proc) -> None:
@@ -478,9 +516,11 @@ def _attempt_stream(
 
     Returns (analysis, retry_via_file). retry_via_file is True only for
     CLI-shape failures — nonzero exit, no result line, unusable envelope —
-    the cases an older CLI without stream-json support produces. A timeout
-    or a model that answered junk is terminal: retrying would double-spend
-    the wall clock / subscription for the same photo.
+    the cases an older CLI without stream-json support produces. A model
+    that answered junk is terminal (None, False): retrying would
+    double-spend the subscription for the same photo. A timeout raises
+    AnalyzerTimeout — never a file-path retry either (it would double the
+    wall clock for one photo), but the photo is fine to try again LATER.
     """
     cmd = [
         cli, "-p",
@@ -508,8 +548,11 @@ def _attempt_stream(
             # 2026-08-06).
             refusal = _plan_refusal(proc.stdout)
             if refusal:
-                log.warning(f"Claude plan refused the run: {refusal}")
-                raise PlanRefused(refusal)
+                log.warning(
+                    f"Claude plan refused the run "
+                    f"({'terminal' if refusal.terminal else 'usage window'})"
+                    f": {refusal.reason}")
+                raise refusal
             _log_cli_exit(proc)
             return None, True
         envelope = _parse_stream_result(proc.stdout)
@@ -524,7 +567,9 @@ def _attempt_stream(
                                 require_is_food=require_is_food), False
     except subprocess.TimeoutExpired:
         log.warning(f"Claude CLI timed out after {_timeout_seconds()}s.")
-        return None, False
+        # Raised from inside the handler, so the catch-all below does not
+        # see it (sibling clauses never catch each other's raises).
+        raise AnalyzerTimeout(_timeout_seconds())
     except PlanRefused:
         # Must reach the caller: the catch-all below would turn an
         # actionable "this plan cannot serve that model" into a silent
@@ -646,7 +691,7 @@ def _attempt_glm_vision(
                                 require_is_food=require_is_food)
     except subprocess.TimeoutExpired:
         log.warning(f"GLM CLI timed out after {_timeout_seconds()}s.")
-        return None
+        raise AnalyzerTimeout(_timeout_seconds())
     except (json.JSONDecodeError, ValueError) as e:
         log.warning(f"Could not parse GLM CLI output: {e}")
         return None
@@ -712,7 +757,7 @@ def _attempt_file(
         return _finish_analysis(envelope, text, start)
     except subprocess.TimeoutExpired:
         log.warning(f"Claude CLI timed out after {_timeout_seconds()}s.")
-        return None
+        raise AnalyzerTimeout(_timeout_seconds())
     except (json.JSONDecodeError, ValueError) as e:
         log.warning(f"Could not parse Claude CLI output: {e}")
         return None
@@ -789,6 +834,8 @@ def analyze_text_prompt(prompt: str, backend: str = "claude",
         return {"result": parsed}
     except subprocess.TimeoutExpired:
         log.warning(f"Claude CLI text intent timed out after {_timeout_seconds()}s.")
+        if raise_on_busy:
+            raise AnalyzerTimeout(_timeout_seconds())
         return None
     except Exception as e:
         log.warning(f"Claude text intent failed: {type(e).__name__}: {e}")
@@ -842,6 +889,12 @@ def analyze_leftover_photo(
                 raise
             return None
         return analysis
+    except AnalyzerTimeout:
+        # Same opt-in as PlanRefused: only the API endpoints want the
+        # distinct signal; every other caller keeps None.
+        if raise_on_busy:
+            raise
+        return None
     finally:
         _CLI_LOCK.release()
 
@@ -940,5 +993,14 @@ def analyze_food_photo(
             )
         return _attempt_file(cli, image_bytes, env, start, prompt,
                              model=model, effort=effort)
+    except AnalyzerTimeout:
+        # Every dispatch (stream, file, GLM vision) raises this on the
+        # wall-clock limit. Only API callers want it as a signal — the
+        # Telegram path keeps "None -> fall back to Gemini" — and no
+        # dispatch is retried after it: the lock was held for the full
+        # limit already.
+        if raise_on_busy:
+            raise
+        return None
     finally:
         _CLI_LOCK.release()

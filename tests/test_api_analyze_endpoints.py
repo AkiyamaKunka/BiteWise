@@ -352,6 +352,54 @@ def test_busy_and_terminal_503s_are_distinguishable(client, monkeypatch):
     assert resp.get_json()["retry"] is False
 
 
+def test_a_timeout_is_come_back_later_not_never(client, monkeypatch):
+    """Three kinds of 503 now (2026-10-07): busy (retry True — seconds
+    fix it), terminal (retry False — the model ANSWERED junk, or the plan
+    needs credits), and come-back-later (retry "later" — the CLI hit its
+    wall clock, or the plan's usage window is closed). The third used to
+    be reported as the second, and the app burned the photo for good
+    while its UI promised an automatic retry."""
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    monkeypatch.setattr(claude_analyzer, "backend_available",
+                        lambda b, for_photo=False: True)
+
+    def slow(*a, **kw):
+        raise claude_analyzer.AnalyzerTimeout(120)
+
+    monkeypatch.setattr(claude_analyzer, "analyze_food_photo", slow)
+    resp = client.http.post("/api/analyze_photo",
+                            headers={"X-API-Key": "secret-key"},
+                            data=b"jpeg", content_type="image/jpeg")
+    assert resp.status_code == 503
+    body = resp.get_json()
+    assert body["error"] == "claude_unavailable"
+    assert body["retry"] == "later"
+    assert not isinstance(body["retry"], bool), (
+        "ServerAnalyzer.unavailableRetry takes bools only — a non-bool is "
+        "the installed app's keep-but-do-not-spin branch, which is exactly "
+        "the behaviour wanted and needs no app update")
+    assert "timed out" in body["reason"] and "120" in body["reason"]
+
+    monkeypatch.setattr(claude_analyzer, "analyze_text_prompt", slow)
+    resp = client.http.post("/api/text_intent",
+                            headers={"X-API-Key": "secret-key"},
+                            json={"prompt": "fix meal 2"})
+    assert resp.status_code == 503
+    assert resp.get_json()["retry"] == "later"
+
+    # The terminal 503 is unchanged: a plan that needs credits.
+    def credits(*a, **kw):
+        raise claude_analyzer.PlanRefused("needs usage credits",
+                                          terminal=True)
+
+    monkeypatch.setattr(claude_analyzer, "analyze_text_prompt", credits)
+    resp = client.http.post("/api/text_intent",
+                            headers={"X-API-Key": "secret-key"},
+                            json={"prompt": "fix meal 2"})
+    assert resp.status_code == 503
+    assert resp.get_json()["retry"] is False
+
+
 def test_the_endpoints_ask_the_analyzer_to_raise_on_busy(client, monkeypatch):
     # The Telegram path must keep its None-means-fallback contract, so the
     # busy signal is OPT-IN — the endpoints are the only opters.
