@@ -930,5 +930,61 @@
         "type": "String"
       }
     }
-  }
+  },
+  "watcherPermissionDenied": "Photo library permission is required for automatic intake.",
+  "watcherOnQuotaPaused": "Watching is on, but analyses are paused by the daily quota — new photos will wait.",
+  "watcherOnNoKey": "Watching is on, but photos won't be analyzed until a working API key is set above.",
+  "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
+  "fixAction": "Fix",
+  "importDialogTitle": "Import exported data",
+  "importDialogBody": "Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.",
+  "importAction": "Import",
+  "importNothingNew": "Nothing new to import — everything in that file is already here.",
+  "importDone": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).",
+  "@importDone": {
+    "placeholders": {
+      "meals": {
+        "type": "int"
+      },
+      "rows": {
+        "type": "int"
+      }
+    }
+  },
+  "importDoneKept": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.",
+  "@importDoneKept": {
+    "placeholders": {
+      "meals": {
+        "type": "int"
+      },
+      "rows": {
+        "type": "int"
+      },
+      "kept": {
+        "type": "int"
+      }
+    }
+  },
+  "importFailed": "Import failed: {error}",
+  "@importFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportFailed": "Export failed: {error}",
+  "@exportFailed": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "exportShareSubject": "CalorieTracker data export",
+  "importErrNotJson": "That file is not JSON.",
+  "importErrNotExport": "That file is not a CalorieTracker export.",
+  "importErrWrongFormatTag": "That file is not a CalorieTracker export (wrong format tag).",
+  "importErrBadVersion": "That export has an unusable version tag.",
+  "importErrNoTables": "That export has no tables section."
 }

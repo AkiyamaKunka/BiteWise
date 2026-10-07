@@ -179,27 +179,33 @@ class ParsedExport {
 /// Strictly validate an export payload — a wrong file is the ONE case
 /// where import must refuse loudly, since the alternative is silently
 /// writing a stranger's (or a random JSON's) rows into the food log.
+/// Each refusal is an [ExportFormatException] with its [ExportRefusal], so
+/// the UI can say why in the user's language.
 ParsedExport parseExportEnvelope(String json) {
   final Object? decoded;
   try {
     decoded = jsonDecode(json);
   } on FormatException {
-    throw const FormatException('That file is not JSON.');
+    throw const ExportFormatException(
+        ExportRefusal.notJson, 'That file is not JSON.');
   }
   if (decoded is! Map) {
-    throw const FormatException('That file is not a CalorieTracker export.');
+    throw const ExportFormatException(ExportRefusal.notExport,
+        'That file is not a CalorieTracker export.');
   }
   if (decoded['format'] != kExportFormat) {
-    throw const FormatException(
+    throw const ExportFormatException(ExportRefusal.wrongFormatTag,
         'That file is not a CalorieTracker export (wrong format tag).');
   }
   final version = decoded['version'];
   if (version is! int || version < 1) {
-    throw const FormatException('That export has an unusable version tag.');
+    throw const ExportFormatException(ExportRefusal.badVersion,
+        'That export has an unusable version tag.');
   }
   final rawTables = decoded['tables'];
   if (rawTables is! Map) {
-    throw const FormatException('That export has no tables section.');
+    throw const ExportFormatException(
+        ExportRefusal.noTables, 'That export has no tables section.');
   }
   final tables = <String, List<Map<String, Object?>>>{};
   rawTables.forEach((key, value) {

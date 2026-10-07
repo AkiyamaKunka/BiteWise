@@ -418,5 +418,24 @@
         "type": "String"
       }
     }
-  }
+  },
+  "watcherPermissionDenied": "自动记录需要相册访问权限。",
+  "watcherOnQuotaPaused": "监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。",
+  "watcherOnNoKey": "监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。",
+  "watcherLimitedAccess": "目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。",
+  "fixAction": "去修复",
+  "importDialogTitle": "导入已导出的数据",
+  "importDialogBody": "粘贴导出的 JSON 文件内容。已有的餐会保留，只会添加新的。",
+  "importAction": "导入",
+  "importNothingNew": "没有可导入的新内容 —— 那个文件里的记录这里都已经有了。",
+  "importDone": "已导入 {meals} 餐（共 {rows} 行）。",
+  "importDoneKept": "已导入 {meals} 餐（共 {rows} 行）；{kept} 条已存在。",
+  "importFailed": "导入失败：{error}",
+  "exportFailed": "导出失败：{error}",
+  "exportShareSubject": "筷拍数据导出",
+  "importErrNotJson": "这个文件不是 JSON。",
+  "importErrNotExport": "这个文件不是筷拍的导出文件。",
+  "importErrWrongFormatTag": "这个文件不是筷拍的导出文件（格式标记不对）。",
+  "importErrBadVersion": "这份导出文件的版本标记无法使用。",
+  "importErrNoTables": "这份导出文件没有 tables 部分。"
 }

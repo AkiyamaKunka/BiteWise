@@ -1362,4 +1362,70 @@ class AppLocalizationsZh extends AppLocalizations {
   String errServerRejected(String code) {
     return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
   }
+
+  @override
+  String get watcherPermissionDenied => '自动记录需要相册访问权限。';
+
+  @override
+  String get watcherOnQuotaPaused => '监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。';
+
+  @override
+  String get watcherOnNoKey => '监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。';
+
+  @override
+  String get watcherLimitedAccess =>
+      '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
+
+  @override
+  String get fixAction => '去修复';
+
+  @override
+  String get importDialogTitle => '导入已导出的数据';
+
+  @override
+  String get importDialogBody => '粘贴导出的 JSON 文件内容。已有的餐会保留，只会添加新的。';
+
+  @override
+  String get importAction => '导入';
+
+  @override
+  String get importNothingNew => '没有可导入的新内容 —— 那个文件里的记录这里都已经有了。';
+
+  @override
+  String importDone(int meals, int rows) {
+    return '已导入 $meals 餐（共 $rows 行）。';
+  }
+
+  @override
+  String importDoneKept(int meals, int rows, int kept) {
+    return '已导入 $meals 餐（共 $rows 行）；$kept 条已存在。';
+  }
+
+  @override
+  String importFailed(String error) {
+    return '导入失败：$error';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return '导出失败：$error';
+  }
+
+  @override
+  String get exportShareSubject => '筷拍数据导出';
+
+  @override
+  String get importErrNotJson => '这个文件不是 JSON。';
+
+  @override
+  String get importErrNotExport => '这个文件不是筷拍的导出文件。';
+
+  @override
+  String get importErrWrongFormatTag => '这个文件不是筷拍的导出文件（格式标记不对）。';
+
+  @override
+  String get importErrBadVersion => '这份导出文件的版本标记无法使用。';
+
+  @override
+  String get importErrNoTables => '这份导出文件没有 tables 部分。';
 }

@@ -179,6 +179,20 @@ class ImportSummary {
   int get totalSkipped => skipped.values.fold(0, (a, b) => a + b);
 }
 
+/// Why [MealsDao.importJson] refused a payload. The settings screen maps
+/// each reason to a sentence in the user's language; the English
+/// [ExportFormatException.message] is for logs and tests.
+enum ExportRefusal { notJson, notExport, wrongFormatTag, badVersion, noTables }
+
+/// The import parser's refusal — still a [FormatException], so every
+/// `on FormatException` catcher and `throwsA(isA<FormatException>())` test
+/// keeps working, but one that says WHY. Until 2026-10-07 the UI echoed
+/// this English message straight into the Chinese UI.
+class ExportFormatException extends FormatException {
+  const ExportFormatException(this.refusal, String message) : super(message);
+  final ExportRefusal refusal;
+}
+
 /// Result of one photo analysis (spec §3).
 class AnalysisOutcome {
   final Map<String, dynamic>? analysis; // null = failed (kept for retry)

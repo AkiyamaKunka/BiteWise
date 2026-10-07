@@ -256,6 +256,42 @@ void main() {
     });
   });
 
+  group('parseExportEnvelope refusals carry WHY (2026-10-07)', () {
+    // The settings screen maps each ExportRefusal to a sentence in the
+    // user's language; the English message stays for logs and for the
+    // conformance suite's isA<FormatException>() checks.
+    ExportFormatException refusal(String json) {
+      try {
+        parseExportEnvelope(json);
+      } on ExportFormatException catch (e) {
+        return e;
+      }
+      fail('expected a refusal for $json');
+    }
+
+    test('each refusal has its kind and its English message', () {
+      expect(refusal('hello').refusal, ExportRefusal.notJson);
+      expect(refusal('hello').message, 'That file is not JSON.');
+      expect(refusal('[1,2]').refusal, ExportRefusal.notExport);
+      expect(refusal('{"format":"someone_elses_app"}').refusal,
+          ExportRefusal.wrongFormatTag);
+      expect(
+          refusal('{"format":"$kExportFormat","version":"v1","tables":{}}')
+              .refusal,
+          ExportRefusal.badVersion);
+      expect(
+          refusal('{"format":"$kExportFormat","version":1,"tables":"nope"}')
+              .refusal,
+          ExportRefusal.noTables);
+    });
+
+    test('a refusal is still a FormatException for every existing catcher',
+        () {
+      expect(() => parseExportEnvelope('hello'),
+          throwsA(isA<FormatException>()));
+    });
+  });
+
   group('constants pinned by the spec', () {
     test('spec §2.3 / §2 values', () {
       expect(localChatId, 1);

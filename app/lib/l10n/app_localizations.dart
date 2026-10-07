@@ -2443,6 +2443,120 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.'**
   String errServerRejected(String code);
+
+  /// No description provided for @watcherPermissionDenied.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo library permission is required for automatic intake.'**
+  String get watcherPermissionDenied;
+
+  /// No description provided for @watcherOnQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching is on, but analyses are paused by the daily quota — new photos will wait.'**
+  String get watcherOnQuotaPaused;
+
+  /// No description provided for @watcherOnNoKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Watching is on, but photos won\'t be analyzed until a working API key is set above.'**
+  String get watcherOnNoKey;
+
+  /// No description provided for @watcherLimitedAccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
+  String get watcherLimitedAccess;
+
+  /// No description provided for @fixAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get fixAction;
+
+  /// No description provided for @importDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Import exported data'**
+  String get importDialogTitle;
+
+  /// No description provided for @importDialogBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.'**
+  String get importDialogBody;
+
+  /// No description provided for @importAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get importAction;
+
+  /// No description provided for @importNothingNew.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing new to import — everything in that file is already here.'**
+  String get importNothingNew;
+
+  /// No description provided for @importDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).'**
+  String importDone(int meals, int rows);
+
+  /// No description provided for @importDoneKept.
+  ///
+  /// In en, this message translates to:
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.'**
+  String importDoneKept(int meals, int rows, int kept);
+
+  /// No description provided for @importFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Import failed: {error}'**
+  String importFailed(String error);
+
+  /// No description provided for @exportFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed: {error}'**
+  String exportFailed(String error);
+
+  /// No description provided for @exportShareSubject.
+  ///
+  /// In en, this message translates to:
+  /// **'CalorieTracker data export'**
+  String get exportShareSubject;
+
+  /// No description provided for @importErrNotJson.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not JSON.'**
+  String get importErrNotJson;
+
+  /// No description provided for @importErrNotExport.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not a CalorieTracker export.'**
+  String get importErrNotExport;
+
+  /// No description provided for @importErrWrongFormatTag.
+  ///
+  /// In en, this message translates to:
+  /// **'That file is not a CalorieTracker export (wrong format tag).'**
+  String get importErrWrongFormatTag;
+
+  /// No description provided for @importErrBadVersion.
+  ///
+  /// In en, this message translates to:
+  /// **'That export has an unusable version tag.'**
+  String get importErrBadVersion;
+
+  /// No description provided for @importErrNoTables.
+  ///
+  /// In en, this message translates to:
+  /// **'That export has no tables section.'**
+  String get importErrNoTables;
 }
 
 class _AppLocalizationsDelegate

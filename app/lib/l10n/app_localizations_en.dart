@@ -1460,4 +1460,88 @@ class AppLocalizationsEn extends AppLocalizations {
   String errServerRejected(String code) {
     return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
   }
+
+  @override
+  String get watcherPermissionDenied =>
+      'Photo library permission is required for automatic intake.';
+
+  @override
+  String get watcherOnQuotaPaused =>
+      'Watching is on, but analyses are paused by the daily quota — new photos will wait.';
+
+  @override
+  String get watcherOnNoKey =>
+      'Watching is on, but photos won\'t be analyzed until a working API key is set above.';
+
+  @override
+  String get watcherLimitedAccess =>
+      'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
+
+  @override
+  String get fixAction => 'Fix';
+
+  @override
+  String get importDialogTitle => 'Import exported data';
+
+  @override
+  String get importDialogBody =>
+      'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.';
+
+  @override
+  String get importAction => 'Import';
+
+  @override
+  String get importNothingNew =>
+      'Nothing new to import — everything in that file is already here.';
+
+  @override
+  String importDone(int meals, int rows) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'Imported $_temp0 ($rows rows total).';
+  }
+
+  @override
+  String importDoneKept(int meals, int rows, int kept) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'Imported $_temp0 ($rows rows total); $kept already here.';
+  }
+
+  @override
+  String importFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get exportShareSubject => 'CalorieTracker data export';
+
+  @override
+  String get importErrNotJson => 'That file is not JSON.';
+
+  @override
+  String get importErrNotExport => 'That file is not a CalorieTracker export.';
+
+  @override
+  String get importErrWrongFormatTag =>
+      'That file is not a CalorieTracker export (wrong format tag).';
+
+  @override
+  String get importErrBadVersion => 'That export has an unusable version tag.';
+
+  @override
+  String get importErrNoTables => 'That export has no tables section.';
 }
