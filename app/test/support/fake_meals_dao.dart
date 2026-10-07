@@ -73,6 +73,16 @@ class BaseFakeDao implements MealsDao {
 
   @override
   Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) async {
+    // Mirrors the real DAO's save-time meals-table backstop (2026-10-07):
+    // a 'saved' mark for a hash that already has a meal returns that meal
+    // instead of inserting a second one.
+    if (markStatus == IngestionStatus.saved && meal.imageHash.isNotEmpty) {
+      final existing = meals.where((m) => m.imageHash == meal.imageHash);
+      if (existing.isNotEmpty) {
+        ledger[meal.imageHash] = IngestionStatus.saved;
+        return existing.first.id;
+      }
+    }
     saved.add(meal);
     final id = put(Meal(
       id: 0,
