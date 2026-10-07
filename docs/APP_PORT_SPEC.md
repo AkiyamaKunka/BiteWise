@@ -630,6 +630,9 @@ null; anything else null. (`test_nl_correction_hostile_index_never_crashes`,
 6. Update by the snapshot row's DB id (`telegram_bot.py:4018-4021`); reply shows
    `old_desc → new_desc`, `old_cal kcal → new_cal kcal (±diff)` (diff formatted with an explicit
    `+` when positive), plus the model's `reason` if present. All interpolations escaped.
+   App addition: a `📅 {date} {time}` line under the headline names the rewritten row (snapshot
+   row, computed before the write, locale clock) — corrections have no confirmation step, so a
+   wrong-day hit on a recurring dish would otherwise be invisible.
 
 ### 4.5 `delete` (`_nl_delete`, `telegram_bot.py:4035-4094` + confirm flow `4412-4451`)
 

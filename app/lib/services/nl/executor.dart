@@ -516,21 +516,29 @@ class DefaultNlExecutor implements NlExecutor {
     // hallucinated string calorie can no longer throw after
     // updateMealAnalysis already ran (the user would be told "failed" for a
     // change that happened — spec §4.4.5).
-    final old = meals[mealIndex].analysis;
+    final target = meals[mealIndex];
+    final old = target.analysis;
     final oldCal = safeNumber(old['total_calories']);
     final newCal = safeNumber(sanitized['total_calories']);
     final oldDesc = '${old['meal_description'] ?? 'Unknown'}';
     final newDesc = '${sanitized['meal_description'] ?? oldDesc}';
     final diff = newCal - oldCal;
     final diffStr = diff > 0 ? '+$diff' : '$diff';
+    // Which day's row was rewritten. A correction has no confirmation step
+    // (unlike delete, whose modal lists date and time), and over the
+    // seven-day window the same dish recurs — without this line the owner
+    // could not tell whether today's or Tuesday's 白粥 changed. From the
+    // snapshot row, so it names the row the write targets (spec §4.4.6).
+    final when = '${target.date} ${_clock(target.time)}';
 
     // Update by the snapshot row's DB id, so a meal logged mid-conversation
     // cannot shift the target (spec §4.4.6). The DAO sets corrected=1
     // unconditionally (spec §2.4).
-    await dao.updateMealAnalysis(meals[mealIndex].id, sanitized);
+    await dao.updateMealAnalysis(target.id, sanitized);
 
     final lines = <String>[
       _l.nlCorrectedMeal(mealIndex + 1),
+      '📅 $when',
       '',
       '$oldDesc → $newDesc',
       _l.nlKcalChange(_kcal(oldCal), _kcal(newCal), diffStr),

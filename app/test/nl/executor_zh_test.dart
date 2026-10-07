@@ -76,7 +76,8 @@ void main() {
       {'intent': 'correction', 'meal_index': 1, 'reason': '第二顿改为烧鸭饭', 'analysis': roastDuckAnalysis},
     ], '第二顿是烧鸭饭', snapshot);
     final text = replies.single.text;
-    expect(text, startsWith('✏️ 已修正第 2 顿餐！'));
+    expect(text, startsWith('✏️ 已修正第 2 顿餐！\n📅 2026-07-17 12:30\n'),
+        reason: 'the rewritten row\'s date and 24-hour clock');
     expect(text, contains('面条 → 烧鸭饭'));
     expect(text, contains('🔥 550 千卡 → 780 千卡（+230）'));
     expect(text, contains('💬 第二顿改为烧鸭饭'));

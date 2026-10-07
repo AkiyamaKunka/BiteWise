@@ -398,8 +398,25 @@ void main() {
       final replies = await exec.executeParsed(
           {'intent': 'correction', 'meal_index': 1, 'analysis': roastDuckAnalysis, 'reason': '改为烧鸭饭'},
           'fix', await dao.recentMeals());
-      expect(replies.single.text, '✏️ Corrected meal 2!\n\n'
+      expect(replies.single.text, '✏️ Corrected meal 2!\n📅 2026-07-17 12:30 PM\n\n'
           '面条 → 烧鸭饭\n🔥 550 kcal → 780 kcal (+230)\n\n💬 改为烧鸭饭');
+    });
+
+    test('reply names the rewritten row\'s day when the dish recurs', () async {
+      // Corrections have no confirmation step, and over the seven-day window
+      // the same dish recurs: the reply must say WHICH day's row changed
+      // (from the snapshot row the write targets), or a wrong-day hit is
+      // invisible.
+      final olderId = dao.seed('白粥', 150, date: '2026-07-15', time: '08:00 AM');
+      dao.seed('白粥', 150, date: '2026-07-17', time: '08:30 AM');
+      final replies = await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': 0,
+        'analysis': {'is_food': true, 'meal_description': '小米粥', 'total_calories': 120},
+      }, 'fix the porridge', await dao.recentMeals());
+      expect(dao.updates.single.$1, olderId);
+      expect(replies.single.text, contains('📅 2026-07-15 08:00 AM'));
+      expect(replies.single.text, isNot(contains('2026-07-17')));
     });
   });
 
