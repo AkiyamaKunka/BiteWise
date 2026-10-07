@@ -10,15 +10,22 @@ import 'l10n.dart';
 
 /// Present each reply in order. Delete confirmations block on the modal;
 /// plain replies use a snackbar (short) or dialog (long).
-Future<void> presentNlReplies(
+///
+/// Returns whether anything was actually changed: a reply the executor
+/// marked [NlReply.applied], or a delete the user confirmed. A refusal, an
+/// error, chat, or a cancelled delete changes nothing.
+Future<bool> presentNlReplies(
   BuildContext context,
   NlExecutor executor,
   List<NlReply> replies,
 ) async {
+  var changed = replies.any((r) => r.applied);
   for (final reply in replies) {
-    if (!context.mounted) return;
+    if (!context.mounted) return changed;
     if (reply.needsDeleteConfirmation) {
-      await showDeleteConfirmation(context, executor, reply);
+      if (await showDeleteConfirmation(context, executor, reply)) {
+        changed = true;
+      }
     } else if (reply.text.length <= 120) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(reply.text)));
@@ -37,12 +44,14 @@ Future<void> presentNlReplies(
       );
     }
   }
+  return changed;
 }
 
 /// The modal delete confirmation (spec §4.5): lists every staged meal label,
 /// warns "This cannot be undone.", and only the Delete button triggers
-/// confirmPendingDelete. Cancel (or dismissing) deletes nothing.
-Future<void> showDeleteConfirmation(
+/// confirmPendingDelete. Cancel (or dismissing) deletes nothing. Returns
+/// whether the delete ran.
+Future<bool> showDeleteConfirmation(
   BuildContext context,
   NlExecutor executor,
   NlReply reply,
@@ -92,8 +101,13 @@ Future<void> showDeleteConfirmation(
       ],
     ),
   );
-  if (confirmed != true) return; // cancel/dismiss must not delete (spec §4.5)
+  // cancel/dismiss must not delete (spec §4.5)
+  if (confirmed != true) return false;
   final result = await executor.confirmPendingDelete(reply.pendingDeleteIds);
-  if (!context.mounted) return;
-  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+  if (context.mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(result)));
+  }
+  // confirmPendingDelete with no ids deletes nothing (it answers
+  // "cancelled"); the executor never stages an empty set, but stay honest.
+  return reply.pendingDeleteIds.isNotEmpty;
 }

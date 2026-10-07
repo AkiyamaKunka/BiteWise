@@ -305,10 +305,19 @@ class NlReply {
   final bool needsDeleteConfirmation;
   final List<int> pendingDeleteIds; // meal ids awaiting the modal confirm
   final List<String> pendingDeleteLabels;
+
+  /// True only when this reply reports a change the executor already wrote
+  /// (a correction, a new meal, a weight or an activity). Refusals, errors,
+  /// chat and a STAGED delete are false — a delete applies only once the
+  /// modal confirms. The fix screen's "Applied this session" list used to
+  /// record every request, so a cancelled delete or an "invalid meal index"
+  /// refusal was shown as applied (loop find 2026-10-07).
+  final bool applied;
   const NlReply(this.text,
       {this.needsDeleteConfirmation = false,
       this.pendingDeleteIds = const [],
-      this.pendingDeleteLabels = const []});
+      this.pendingDeleteLabels = const [],
+      this.applied = false});
 }
 
 /// Result of describing a meal in free text: [analysis] on success (the

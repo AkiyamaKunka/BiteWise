@@ -527,7 +527,7 @@ class DefaultNlExecutor implements NlExecutor {
       _l.nlKcalChange(_kcal(oldCal), _kcal(newCal), diffStr),
     ];
     if (isTruthy(reason)) lines.add('\n💬 $reason');
-    return NlReply(lines.join('\n'));
+    return NlReply(lines.join('\n'), applied: true);
   }
 
   /// _nl_delete (spec §4.5, telegram_bot.py:4035-4094). Stages ids + labels
@@ -636,7 +636,8 @@ class DefaultNlExecutor implements NlExecutor {
       analysis: sanitized,
     ));
     return NlReply(
-        '${_l.nlAddedManualMeal}\n\n${formatFoodResult(sanitized)}');
+        '${_l.nlAddedManualMeal}\n\n${formatFoodResult(sanitized)}',
+        applied: true);
   }
 
   /// _nl_log_weight (spec §4.7, telegram_bot.py:4112-4128): deterministic
@@ -652,7 +653,7 @@ class DefaultNlExecutor implements NlExecutor {
     final date = _isoDate(DateTime.now());
     // Upsert-by-day (spec §2.1 body_weight: re-log overwrites).
     await dao.saveBodyWeight(date, kg);
-    return NlReply(_l.nlWeightLogged(_g(kg), date));
+    return NlReply(_l.nlWeightLogged(_g(kg), date), applied: true);
   }
 
   /// _nl_log_activity (spec §4.8, telegram_bot.py:4131-4158).
@@ -675,7 +676,8 @@ class DefaultNlExecutor implements NlExecutor {
       if (steps > 0) _l.nlStepsAmount(_comma(steps)),
       if (km > 0) _l.nlKmAmount(_g(km)),
     ];
-    return NlReply(_l.nlActivityLogged(bits.join(' · '), date));
+    return NlReply(_l.nlActivityLogged(bits.join(' · '), date),
+        applied: true);
   }
 
   /// _nl_chat (spec §4.9, telegram_bot.py:4161-4168): a null/non-string/blank

@@ -706,6 +706,51 @@ void main() {
       expect(analyzer.lastPrompt, isNull); // NO model call during the pause
     });
   });
+
+  // NlReply.applied drives the fix screen's "Applied this session" list: it
+  // must be true ONLY for a change already written (loop find 2026-10-07).
+  group('applied flag', () {
+    Future<NlReply> one(dynamic action, String text) async =>
+        (await exec.executeParsed(action, text, await dao.recentMeals())).single;
+
+    test('true for every write the executor performs', () async {
+      seedThreeMeals();
+      expect(
+          (await one({'intent': 'correction', 'meal_index': 1, 'analysis': roastDuckAnalysis},
+                  '第二顿是烧鸭饭'))
+              .applied,
+          isTrue);
+      expect(
+          (await one({'intent': 'new_meal', 'analysis': roastDuckAnalysis}, 'roast duck'))
+              .applied,
+          isTrue);
+      expect((await one({'intent': 'log_weight'}, 'I weigh 72.5 kg')).applied, isTrue);
+      expect(
+          (await one({'intent': 'log_activity', 'steps': 8000}, '8000 steps')).applied,
+          isTrue);
+    });
+
+    test('false for refusals, chat and a delete that is only staged', () async {
+      seedThreeMeals();
+      final notApplied = <NlReply>[
+        await one({'intent': 'correction', 'meal_index': 9, 'analysis': roastDuckAnalysis},
+            'fix meal 9'),
+        await one({'intent': 'correction', 'meal_index': 0, 'analysis': {}}, 'fix it'),
+        await one({'intent': 'delete'}, 'delete'),
+        await one({'intent': 'delete', 'meal_indices': [99]}, 'delete'),
+        await one({'intent': 'delete', 'meal_indices': [0]}, 'delete the porridge'),
+        await one({'intent': 'new_meal', 'analysis': {'is_food': false}}, 'a rock'),
+        await one({'intent': 'log_weight'}, 'weigh me'),
+        await one({'intent': 'log_activity'}, 'I moved'),
+        await one({'intent': 'chat', 'reply': 'hi'}, 'hello'),
+      ];
+      expect(notApplied.map((r) => r.applied), everyElement(isFalse));
+      expect(dao.deletedIds, isEmpty);
+
+      analyzer.next = null;
+      expect((await exec.handleText('anything')).single.applied, isFalse);
+    });
+  });
 }
 
 class _ExplodingDao extends FakeDao {
