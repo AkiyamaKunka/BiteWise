@@ -89,7 +89,10 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   } else {
     // Today's slot is still ahead. Yesterday's may have been missed by a
     // throttled heartbeat — catch it up while it is still worth saying.
-    final yesterday = now.subtract(const Duration(days: 1));
+    // Calendar arithmetic, not 24 h: on the fall-back night (25 h day) a
+    // 24 h step from 23:30 lands on the SAME date, and a premature
+    // "Yesterday" card would post today's partial numbers.
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
     if (now.difference(slotOn(yesterday)) > kSummaryGraceWindow) return false;
     coveredDay = yesterday;
     late = true;
@@ -140,8 +143,10 @@ Future<CoachSummary> summaryForDay({
   // Typical day = the median of the prior 7 days, the same number Today
   // shows — anchored to the day being REPORTED, never to the clock, or the
   // covered day lands inside its own baseline.
-  final priorFrom = isoDate(day.subtract(const Duration(days: 7)));
-  final priorTo = isoDate(day.subtract(const Duration(days: 1)));
+  // Calendar days (DateTime normalises day underflow), not 24 h steps,
+  // which a 25 h DST day would leave on the covered date itself.
+  final priorFrom = isoDate(DateTime(day.year, day.month, day.day - 7));
+  final priorTo = isoDate(DateTime(day.year, day.month, day.day - 1));
   final prior = await dao.mealsBetween(priorFrom, priorTo);
   final typical = typicalDayKcal(dailyCalorieTotals(prior));
 
