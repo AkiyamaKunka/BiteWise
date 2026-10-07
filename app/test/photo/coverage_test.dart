@@ -78,6 +78,59 @@ void main() {
     expect(report.missing, isEmpty);
   });
 
+  Meal leftoverMeal(int id, String date, String md5) => Meal(
+        id: id,
+        date: date,
+        time: '12:00 PM',
+        timestamp: 'x',
+        source: 'app_watch',
+        analysis: {
+          'is_food': true,
+          'total_calories': 300,
+          'leftover': {'leftover_photo_md5': md5, 'applied_total': 300},
+        },
+      );
+
+  test('a leftover photo is NOT "not food": its own count, no re-analysis',
+      () async {
+    // Both leftover paths tombstone the photo 'skipped' — the same status as
+    // the model's "not food" verdict. Listed under not-food, its re-analyze
+    // button logged the remains as a NEW meal on top of the original that
+    // had already been reduced (double count).
+    library.assets = [asset(2), asset(3)];
+    dao.ledger['h2'] = IngestionStatus.skipped; // leftover of meal 7
+    dao.ledger['h3'] = IngestionStatus.skipped; // plain "not food"
+    dao.seed(leftoverMeal(7, '2026-07-26', 'H2')); // case-insensitive md5
+
+    final report = await auditor.audit(lookbackDays: 2);
+    expect(report.leftoverApplied, 1);
+    expect(report.skippedNonFood.single.assetId, 'a3',
+        reason: 'a real not-food verdict still gets the re-analyze offer');
+    expect(report.fullyCovered, isTrue);
+  });
+
+  test("a leftover deducted from YESTERDAY's meal is recognised at the "
+      'window edge', () async {
+    // The manual flow offers yesterday's meals; a 1-day window starts today.
+    library.assets = [asset(2)];
+    dao.ledger['h2'] = IngestionStatus.skipped;
+    dao.seed(leftoverMeal(7, '2026-07-25', 'h2'));
+    final report = await auditor.audit(lookbackDays: 1);
+    expect(report.leftoverApplied, 1);
+    expect(report.skippedNonFood, isEmpty);
+  });
+
+  test('a leftover md5 only reclassifies SKIPPED rows', () async {
+    // The manual flow may record a photo that is some meal's own saved
+    // photo; that row stays "logged".
+    library.assets = [asset(1)];
+    dao.ledger['h1'] = IngestionStatus.saved;
+    dao.seed(leftoverMeal(7, '2026-07-26', 'h1'));
+    final report = await auditor.audit(lookbackDays: 2);
+    expect(report.logged, hasLength(1));
+    expect(report.leftoverApplied, 0);
+  });
+
   test('unreadable bytes are counted, not crashed on, not "missing"',
       () async {
     library.assets = [

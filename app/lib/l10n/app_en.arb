@@ -893,6 +893,14 @@
       }
     }
   },
+  "covLeftoverCount": "{count} leftover photos (deducted from their meal)",
+  "@covLeftoverCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "covFailedCount": "{count} failed",
   "@covFailedCount": {
     "placeholders": {

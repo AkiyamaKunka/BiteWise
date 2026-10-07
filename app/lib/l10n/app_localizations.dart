@@ -2378,6 +2378,12 @@ abstract class AppLocalizations {
   /// **'{count} not food'**
   String covNotFoodCount(int count);
 
+  /// No description provided for @covLeftoverCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} leftover photos (deducted from their meal)'**
+  String covLeftoverCount(int count);
+
   /// No description provided for @covFailedCount.
   ///
   /// In en, this message translates to:

@@ -401,6 +401,7 @@
   "covDaysShort": "{days} 天",
   "covLoggedAsMeals": "已记录 {count} 餐",
   "covNotFoodCount": "{count} 张非食物",
+  "covLeftoverCount": "{count} 张剩菜照片（已从原餐扣除）",
   "covFailedCount": "{count} 张失败",
   "macroNoBreakdown": "没有记录营养素分布。",
   "setupLinkTitle": "通过这个链接配置服务器？",

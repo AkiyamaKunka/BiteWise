@@ -1324,6 +1324,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covLeftoverCount(int count) {
+    return '$count 张剩菜照片（已从原餐扣除）';
+  }
+
+  @override
   String covFailedCount(int count) {
     return '$count 张失败';
   }

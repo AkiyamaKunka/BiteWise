@@ -1421,6 +1421,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covLeftoverCount(int count) {
+    return '$count leftover photos (deducted from their meal)';
+  }
+
+  @override
   String covFailedCount(int count) {
     return '$count failed';
   }
