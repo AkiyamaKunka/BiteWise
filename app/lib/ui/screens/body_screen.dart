@@ -420,6 +420,17 @@ class _MeasurementsCard extends StatelessWidget {
     );
   }
 
+  /// The metric name column: at least 64 px so the values line up at the
+  /// default size, but never narrower than the word itself — a fixed 64 px
+  /// box broke 'Waist' mid-word at 2× text.
+  Widget _label(String label) => Padding(
+        padding: const EdgeInsets.only(right: 8),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minWidth: 56),
+          child: Text(label, maxLines: 1, softWrap: false),
+        ),
+      );
+
   Widget _metricRow(BuildContext context, String label,
       double? Function(BodyMeasurements) pick, Key key) {
     final theme = Theme.of(context);
@@ -434,7 +445,7 @@ class _MeasurementsCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 6),
         child: Row(
           children: [
-            SizedBox(width: 64, child: Text(label)),
+            _label(label),
             Text('—',
                 style: TextStyle(color: theme.colorScheme.onSurfaceVariant)),
           ],
@@ -451,24 +462,42 @@ class _MeasurementsCard extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
         children: [
-          SizedBox(width: 64, child: Text(label)),
+          _label(label),
           Text(
               '${fmtBodyValue(girthForDisplay(latest.$2, imperial))} '
               '${girthUnitLabel(imperial)}',
               key: key, style: theme.textTheme.titleMedium),
-          const SizedBox(width: 8),
-          Text(context.l10n.bodyOnDate(latest.$1),
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-          const Spacer(),
+          // The date is the one part that may give way: at accessibility
+          // text sizes the old unflexed date + Spacer pushed the row past
+          // the card (RenderFlex overflow, the ▲/▼ delta clipped). Expanded
+          // — not Flexible beside a Spacer, which would hand the Spacer
+          // half the room and cut the date even at 1.0× — still pushes the
+          // delta to the right edge, and ellipsises the date instead. Its
+          // 8 px lead sits INSIDE so it collapses with the date at 2×.
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(left: 8),
+              child: Text(context.l10n.bodyOnDate(latest.$1),
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+            ),
+          ),
           // Display-precision gate: a sub-0.05 delta must not render the
           // self-contradictory '▲ +0.0' (same rule as the weight chip).
-          if (delta != null && delta.abs().toStringAsFixed(1) != '0.0')
+          // Never flexed: the ▲/▼ carries the direction in text, so it is
+          // the last thing that may be cut. The 4 px keeps an ellipsised
+          // date off the glyph.
+          if (delta != null && delta.abs().toStringAsFixed(1) != '0.0') ...[
+            const SizedBox(width: 4),
             Text(
               '${delta > 0 ? '▲ +' : '▼ '}${delta.abs().toStringAsFixed(1)}',
               style: theme.textTheme.labelMedium
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
             ),
+          ],
         ],
       ),
     );
