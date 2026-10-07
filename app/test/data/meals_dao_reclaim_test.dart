@@ -45,7 +45,7 @@ void main() {
     await dao.reclaimStaleProcessing();
     // Released row = re-reservable by the strict automated path.
     final again = await dao.reservePhotoHash('a' * 32, source: 'app_watch');
-    expect(again, isTrue,
+    expect(again, PhotoReservation.reserved,
         reason: 'released watch rows must be re-offerable — burning them '
             'permanently dropped interrupted photos (live bug 2026-07-23)');
   });
@@ -56,12 +56,12 @@ void main() {
         age: const Duration(minutes: 30));
     await dao.reclaimStaleProcessing();
     // failed → strict path refuses, deliberate re-add reclaims (spec §2.3).
-    expect(
-        await dao.reservePhotoHash('b' * 32, source: 'app_watch'), isFalse);
+    expect(await dao.reservePhotoHash('b' * 32, source: 'app_watch'),
+        PhotoReservation.claimed);
     expect(
         await dao.reservePhotoHash('b' * 32,
             source: 'app_photo', reclaimDeliberate: true),
-        isTrue);
+        PhotoReservation.reserved);
   });
 
   test('FRESH processing rows are untouched — the other isolate may own them',
@@ -69,10 +69,60 @@ void main() {
     await seedProcessing('c' * 32, 'app_watch',
         age: const Duration(minutes: 5)); // < 15-min staleness threshold
     await dao.reclaimStaleProcessing();
-    // Still reserved: neither released nor failed.
-    expect(await dao.reservePhotoHash('c' * 32, source: 'app_watch'), isFalse,
+    // Still reserved: neither released nor failed — and the refusal names
+    // the reason, so the caller waits instead of counting the photo done.
+    expect(await dao.reservePhotoHash('c' * 32, source: 'app_watch'),
+        PhotoReservation.inFlight,
         reason: 'a live background run\'s reservation must survive the '
             'launch sweep (double-log race otherwise)');
+  });
+
+  test('a FRESH processing row is IN FLIGHT for both paths until released',
+      () async {
+    // The iOS case (2026-10-07): BGAppRefresh expired mid-analysis, the
+    // row it reserved is still 'processing'. Neither the next background
+    // run nor a user picking the same photo may read that as "already
+    // logged" — and neither may steal the analysis.
+    await dao.reservePhotoHash('f' * 32, source: 'app_watch');
+    expect(await dao.reservePhotoHash('f' * 32, source: 'app_watch'),
+        PhotoReservation.inFlight);
+    expect(
+        await dao.reservePhotoHash('f' * 32,
+            source: 'app_photo', reclaimDeliberate: true),
+        PhotoReservation.inFlight,
+        reason: 'deliberate reclaim covers failed/skipped/deleted, never a '
+            'live reservation (spec §2.3)');
+    // Once the owner releases it (or the launch sweep does), it is simply
+    // free again.
+    await dao.releasePhotoHash('f' * 32);
+    expect(await dao.reservePhotoHash('f' * 32, source: 'app_watch'),
+        PhotoReservation.reserved);
+  });
+
+  test('the meals-table backstop is CLAIMED even beside a stray processing '
+      'row', () async {
+    // Ledger/meal divergence (a crash between the two writes, an import):
+    // the meal exists, so the photo IS logged. Reading the leftover
+    // 'processing' row as in flight would park the background frontier in
+    // front of this photo until the row aged out.
+    await dao.reservePhotoHash('g' * 32, source: 'app_watch');
+    await dao.saveMeal(Meal(
+      id: 0,
+      date: '2026-07-24',
+      time: '12:00 PM',
+      timestamp: now.toIso8601String(),
+      source: 'app_watch',
+      imageHash: 'g' * 32,
+      analysis: const {'is_food': true},
+    )); // no markStatus: the ledger row stays 'processing'
+    expect((await dao.photoStatus('g' * 32))?.status,
+        IngestionStatus.processing);
+    expect(await dao.reservePhotoHash('g' * 32, source: 'app_watch'),
+        PhotoReservation.claimed);
+    expect(
+        await dao.reservePhotoHash('g' * 32,
+            source: 'app_photo', reclaimDeliberate: true),
+        PhotoReservation.claimed);
   });
 
   test('meal_thumbs: round-trip, replace, delete cascade (spec §9)', () async {
@@ -114,7 +164,8 @@ void main() {
     expect(row!.status, IngestionStatus.saved);
     expect(row.mealId, id);
     // Reading must not have created/altered ledger state.
-    expect(await dao.reservePhotoHash('e' * 32, source: 'app_watch'), isFalse);
+    expect(await dao.reservePhotoHash('e' * 32, source: 'app_watch'),
+        PhotoReservation.claimed);
   });
 
   test('reofferUnsavedVerdicts releases one source\'s skipped/failed rows',

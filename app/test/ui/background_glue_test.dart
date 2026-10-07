@@ -6,6 +6,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
@@ -365,6 +367,46 @@ void main() {
       // NOT scanStart: released photos must stay ahead of the watermark.
       expect(prefs.getString(backgroundWatermarkPrefsKey),
           frontierMark.toIso8601String());
+    });
+
+    test('a photo another run is still analyzing holds the watermark in '
+        'front of it', () async {
+      // iOS expired the PREVIOUS run's grant mid-analysis: its 'processing'
+      // row for photo 2 is still in the ledger (the launch sweep has not
+      // run). This run must not checkpoint past photo 2 — the old
+      // alreadyTracked reading did exactly that, and the photo was never
+      // offered again (2026-10-07).
+      final settings = await settingsWith(key: 'k');
+      final afterPhoto1 = DateTime(2026, 7, 24, 1, 0);
+      final afterPhoto2 = DateTime(2026, 7, 24, 2, 0);
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [afterPhoto1, afterPhoto2]
+        ..frontier = afterPhoto1; // the real intake halts where photo 2 is released
+      final dao = FakeDao();
+      final hash2 = md5.convert(photo(2).bytes).toString();
+      dao.ledger[hash2] = IngestionStatus.processing;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: dao, analyzer: analyzer),
+        showMealCard: (_, _) async {},
+        clock: () => DateTime(2026, 7, 24, 5, 0),
+      );
+      // Photo 1 landed and checkpointed; photo 2's per-photo checkpoint
+      // must NOT have advanced the watermark to afterPhoto2.
+      expect(prefs.getString(backgroundWatermarkPrefsKey),
+          afterPhoto1.toIso8601String());
+      expect(dao.meals, hasLength(1));
+      expect(dao.ledger[hash2], IngestionStatus.processing,
+          reason: 'the other run\'s reservation is left for it, or the '
+              'launch sweep, to finish');
     });
 
     test('per-photo checkpoints persist the intake safeFrontier as they go',

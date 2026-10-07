@@ -32,6 +32,13 @@ enum PhotoOutcomeKind {
   duplicate,
   alreadyTracked,
 
+  /// Another run holds a FRESH 'processing' reservation for this photo:
+  /// it is being analyzed right now, or was until iOS expired that run's
+  /// background grant (2026-10-07). Always [PhotoOutcome.retryable], so the
+  /// frontier halts in front of it, the watcher forgets it was seen, and
+  /// the add flow says "still analyzing" rather than "already logged".
+  inFlight,
+
   /// The photo was the REMAINS of an earlier meal (2026-08-05): no new
   /// row — the original meal's totals shrank and the photo's hash is
   /// tombstoned so no scan re-offers it.
@@ -42,9 +49,10 @@ class PhotoOutcome {
   final PhotoOutcomeKind kind;
   final Map<String, dynamic>? analysis; // present when kind == saved
 
-  /// True when the failure was transient and the RESERVATION WAS RELEASED —
-  /// the photo stays eligible and a later scan re-offers it. Consumers use
-  /// this to hold watermarks/seen-sets open instead of marking coverage.
+  /// True when the photo stays ELIGIBLE: a transient failure whose
+  /// reservation was released, or a reservation that was never ours
+  /// ([PhotoOutcomeKind.inFlight]) — a later scan re-offers it. Consumers
+  /// use this to hold watermarks/seen-sets open instead of marking coverage.
   final bool retryable;
   final String message; // user-facing summary (English, parity-pinned)
 
@@ -162,11 +170,23 @@ class PhotoPipeline {
       // automated watch intake is strict (spec §2.3 caller policies).
       final source =
           photo.deliberate ? MealSource.appPhoto : MealSource.appWatch;
-      reserved = await dao.reservePhotoHash(hash,
-          source: source, reclaimDeliberate: photo.deliberate);
-      if (!reserved) {
-        return const PhotoOutcome(PhotoOutcomeKind.alreadyTracked,
-            'This photo was already logged.');
+      switch (await dao.reservePhotoHash(hash,
+          source: source, reclaimDeliberate: photo.deliberate)) {
+        case PhotoReservation.claimed:
+          return const PhotoOutcome(PhotoOutcomeKind.alreadyTracked,
+              'This photo was already logged.');
+        case PhotoReservation.inFlight:
+          // Not ours and not a verdict: another run is mid-analysis, or
+          // iOS killed one mid-analysis and the launch sweep has not
+          // released its row yet (up to 15 min). RETRYABLE, and the row is
+          // left alone: reporting this as alreadyTracked let the background
+          // watermark and the watcher's seen-set march past a photo nobody
+          // had analyzed (2026-10-07).
+          return const PhotoOutcome(PhotoOutcomeKind.inFlight,
+              'This photo is still being analyzed — check back in a moment.',
+              retryable: true);
+        case PhotoReservation.reserved:
+          reserved = true;
       }
 
       // The day this photo belongs to. validateCapturedAt is NOT optional:

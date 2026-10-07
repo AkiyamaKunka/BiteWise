@@ -72,6 +72,29 @@ class Meal {
 /// but not by the automatic watcher.
 enum IngestionStatus { processing, saved, skipped, failed, deleted }
 
+/// Answer to [MealsDao.reservePhotoHash].
+///
+/// Two refusals, told apart on purpose (2026-10-07): a row another run is
+/// STILL WORKING ON is not a verdict. iOS can expire the ~30 s background
+/// grant mid-analysis, which leaves that run's 'processing' row behind
+/// until the launch sweep releases it (up to 15 min); until then both
+/// automated paths read the refusal as "already logged", marched the
+/// watermark / seen-set past the photo, and never offered it again.
+enum PhotoReservation {
+  /// The hash is ours: analyze, then end the row saved/skipped/failed —
+  /// or release it (spec §6 ledger rule).
+  reserved,
+
+  /// Claimed for good: a saved meal, or a verdict this caller's policy may
+  /// not reclaim. Terminal — coverage may pass over the photo.
+  claimed,
+
+  /// A FRESH 'processing' row belongs to another run (the foreground app,
+  /// a background isolate, or one iOS cut off mid-analysis). Not terminal:
+  /// the photo must be offered again once that row is saved or released.
+  inFlight,
+}
+
 /// Persistence seam (spec §2, §5 read shapes).
 abstract class MealsDao {
   Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus});
@@ -88,10 +111,10 @@ abstract class MealsDao {
   Future<List<Meal>> mealsBetween(String startDate, String endDate);
   Future<List<Meal>> recentMeals({int days = 7}); // food-only, oldest-first
   Future<bool> isDuplicatePhoto(String imageHash); // 5-min same-hash window
-  /// Reserve the hash before analysis; false = already claimed. Set
+  /// Reserve the hash before analysis (see [PhotoReservation]). Set
   /// [reclaimDeliberate] on user-initiated adds (reclaims failed/skipped/
   /// deleted rows, the "deliberate re-send" rule).
-  Future<bool> reservePhotoHash(String imageHash,
+  Future<PhotoReservation> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false});
   Future<void> markPhotoHash(String imageHash, IngestionStatus status,
       {int? mealId});

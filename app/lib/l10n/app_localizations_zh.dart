@@ -972,6 +972,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outcomeAlreadyTracked => '已经记录过';
 
   @override
+  String get outcomeInFlight => '正在分析';
+
+  @override
   String get outcomeFailed => '分析失败';
 
   @override
@@ -1026,6 +1029,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get outcomeAlreadyTrackedMsg => '这张照片已经记录过了。';
+
+  @override
+  String get outcomeInFlightMsg => '这张照片还在分析中，稍等片刻再看。';
 
   @override
   String get errNoApiKey => '当前服务还没有设置 API Key —— 请在设置里添加。';

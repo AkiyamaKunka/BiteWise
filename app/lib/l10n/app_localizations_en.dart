@@ -1044,6 +1044,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get outcomeAlreadyTracked => 'Already logged';
 
   @override
+  String get outcomeInFlight => 'Still analyzing';
+
+  @override
   String get outcomeFailed => 'Analysis failed';
 
   @override
@@ -1102,6 +1105,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get outcomeAlreadyTrackedMsg => 'This photo was already logged.';
+
+  @override
+  String get outcomeInFlightMsg =>
+      'This photo is still being analyzed — check back in a moment.';
 
   @override
   String get errNoApiKey =>

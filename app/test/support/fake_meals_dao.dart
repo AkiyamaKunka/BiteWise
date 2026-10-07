@@ -151,12 +151,17 @@ class BaseFakeDao implements MealsDao {
   Future<bool> isDuplicatePhoto(String imageHash) async => duplicatePhoto;
 
   @override
-  Future<bool> reservePhotoHash(String imageHash,
+  Future<PhotoReservation> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false}) async {
     final existing = ledger[imageHash];
     if (existing == null) {
       ledger[imageHash] = IngestionStatus.processing;
-      return true;
+      return PhotoReservation.reserved;
+    }
+    // No last_seen_at here, so every 'processing' row reads as FRESH —
+    // another run's live reservation (the real DAO reclaims after 6 h).
+    if (existing == IngestionStatus.processing) {
+      return PhotoReservation.inFlight;
     }
     if (reclaimDeliberate &&
         const {
@@ -165,9 +170,9 @@ class BaseFakeDao implements MealsDao {
           IngestionStatus.deleted
         }.contains(existing)) {
       ledger[imageHash] = IngestionStatus.processing;
-      return true;
+      return PhotoReservation.reserved;
     }
-    return false;
+    return PhotoReservation.claimed;
   }
 
   @override

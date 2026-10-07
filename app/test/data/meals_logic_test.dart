@@ -46,22 +46,36 @@ void main() {
               ledgerStatus: 'failed',
               reclaimDeliberate: true),
           ReserveDecision.refuse);
+      // And a stray 'processing' row beside a real meal is a VERDICT, not
+      // an analysis in flight — reading it as in flight would park the
+      // background frontier in front of that photo forever.
+      expect(
+          decide(
+              mealRowExists: true,
+              ledgerStatus: 'processing',
+              lastSeen: now.subtract(const Duration(minutes: 5))),
+          ReserveDecision.refuse);
     });
 
     test('no ledger row inserts a fresh processing reservation', () {
       expect(decide(), ReserveDecision.insert);
     });
 
-    test('fresh processing row blocks everyone, deliberate or not', () {
+    test('fresh processing row blocks everyone, deliberate or not — as IN '
+        'FLIGHT, never as a verdict', () {
+      // iOS can expire a background run mid-analysis; its row then stays
+      // 'processing' until the launch sweep. Both callers are refused, but
+      // the refusal must say "somebody is on it" so nothing passes over the
+      // photo (2026-10-07).
       final fresh = now.subtract(const Duration(minutes: 5));
       expect(decide(ledgerStatus: 'processing', lastSeen: fresh),
-          ReserveDecision.refuse);
+          ReserveDecision.refuseInFlight);
       expect(
           decide(
               ledgerStatus: 'processing',
               lastSeen: fresh,
               reclaimDeliberate: true),
-          ReserveDecision.refuse);
+          ReserveDecision.refuseInFlight);
     });
 
     test('processing goes stale strictly after 6 hours', () {
@@ -70,7 +84,7 @@ void main() {
       final over6h = now.subtract(
           const Duration(seconds: photoReservationStaleSeconds + 1));
       expect(decide(ledgerStatus: 'processing', lastSeen: exactly6h),
-          ReserveDecision.refuse);
+          ReserveDecision.refuseInFlight);
       expect(decide(ledgerStatus: 'processing', lastSeen: over6h),
           ReserveDecision.reclaim);
     });

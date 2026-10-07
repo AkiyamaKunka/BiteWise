@@ -1814,6 +1814,12 @@ abstract class AppLocalizations {
   /// **'Already logged'**
   String get outcomeAlreadyTracked;
 
+  /// No description provided for @outcomeInFlight.
+  ///
+  /// In en, this message translates to:
+  /// **'Still analyzing'**
+  String get outcomeInFlight;
+
   /// No description provided for @outcomeFailed.
   ///
   /// In en, this message translates to:
@@ -1915,6 +1921,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This photo was already logged.'**
   String get outcomeAlreadyTrackedMsg;
+
+  /// No description provided for @outcomeInFlightMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo is still being analyzed — check back in a moment.'**
+  String get outcomeInFlightMsg;
 
   /// No description provided for @errNoApiKey.
   ///

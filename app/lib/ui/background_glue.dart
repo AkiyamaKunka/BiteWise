@@ -58,7 +58,11 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// runs the expiration handler, which cancels the run outright — a photo
 /// mid-analysis would leave a 'processing' reservation until the next
 /// launch reclaims it. Stop OFFERING photos after this much, so the last
-/// server analysis (3–10 s typical) still lands inside the grant.
+/// server analysis (3–10 s typical) still lands inside the grant. When the
+/// grant expires mid-analysis anyway, that orphaned row answers later runs
+/// as [PhotoReservation.inFlight] — a retryable outcome — so the frontier
+/// below waits in front of the photo instead of passing over it
+/// (2026-10-07).
 const Duration iosBackgroundBudget = Duration(seconds: 15);
 
 /// Result of one drained backfill: what happened to each photo, whether

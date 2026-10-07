@@ -179,11 +179,11 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
-  Future<bool> reservePhotoHash(String imageHash,
+  Future<PhotoReservation> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false}) {
     final hash = normalizeImageHash(imageHash);
     // Spec §2.3 step 1: empty hash → nothing to reserve.
-    if (hash.isEmpty) return Future.value(true);
+    if (hash.isEmpty) return Future.value(PhotoReservation.reserved);
     // One transaction stands in for the server's row-locked decision tree —
     // sufficient in a single-process app (spec §2.3 app simplification).
     return _db.transaction((txn) async {
@@ -215,9 +215,11 @@ class SqfliteMealsDao implements MealsDao {
       );
       switch (decision) {
         case ReserveDecision.allowNoop:
-          return true;
+          return PhotoReservation.reserved;
         case ReserveDecision.refuse:
-          return false;
+          return PhotoReservation.claimed;
+        case ReserveDecision.refuseInFlight:
+          return PhotoReservation.inFlight;
         case ReserveDecision.reclaim:
           // database.py:242-254: row → processing, meal_id=NULL,
           // last_seen_at=now, source updated.
@@ -232,7 +234,7 @@ class SqfliteMealsDao implements MealsDao {
             where: 'chat_id = ? AND image_hash = ?',
             whereArgs: [localChatId, hash],
           );
-          return true;
+          return PhotoReservation.reserved;
         case ReserveDecision.insert:
           // database.py:259-265: fresh reservation.
           await txn.insert('photo_ingestions', {
@@ -244,7 +246,7 @@ class SqfliteMealsDao implements MealsDao {
             'status': IngestionStatus.processing.name,
             'meal_id': null,
           });
-          return true;
+          return PhotoReservation.reserved;
       }
     });
   }
