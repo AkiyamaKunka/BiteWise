@@ -181,7 +181,7 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
       final notFound = notFoundMessage;
       if (resp.statusCode == 404 && notFound != null) {
         throw _ProviderException(notFound,
-            transient: false, verbatimMessage: true);
+            transient: false, verbatimMessage: true, modelError: true);
       }
       if (resp.statusCode == 503) {
         final custom = unavailableMessage(resp.body);
@@ -211,10 +211,28 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
           throw _ProviderException(custom,
               transient: false, verbatimMessage: true);
         }
+        // A wrong / retired model id answered as a 400, not a 404: Zhipu
+        // GLM code "1211" (模型不存在). Matched on the documented code
+        // only, like "1113" above — the vendor's prose never reaches the
+        // message.
+        if (body.contains('"1211"')) {
+          throw _ProviderException(
+              notFound ??
+                  '$providerLabel model not found — check the model name '
+                      'in Settings.',
+              transient: false,
+              verbatimMessage: true,
+              modelError: true);
+        }
       }
       throw _ProviderException('HTTP ${resp.statusCode}',
           transient: _isTransientStatus(resp.statusCode),
-          quotaClass: resp.statusCode == 429);
+          quotaClass: resp.statusCode == 429,
+          // OpenAI / Anthropic post to one fixed endpoint, so a bare 404
+          // there is the MODEL (OpenAI model_not_found, Anthropic
+          // not_found_error "model: …"). ServerAnalyzer overrides probeKey,
+          // the only reader of this flag.
+          modelError: resp.statusCode == 404);
     }
     if (!extract) return '';
     try {
@@ -379,6 +397,11 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
       if (e.quotaClass || (e.transient && !e.auth)) {
         return KeyProbe(KeyProbeResult.rateLimited, message: e.userMessage);
       }
+      // A wrong / retired model id is not a rejected key either: the
+      // "re-copy the key" fix sent users to regenerate a key that worked.
+      if (e.modelError) {
+        return KeyProbe(KeyProbeResult.modelNotFound, message: e.userMessage);
+      }
       return KeyProbe(KeyProbeResult.rejected, message: e.userMessage);
     }
   }
@@ -391,11 +414,18 @@ class _ProviderException implements Exception {
       this.quotaClass = false,
       this.billing = false,
       this.retryInPlace = true,
-      this.verbatimMessage = false});
+      this.verbatimMessage = false,
+      this.modelError = false});
   final String message;
   final bool transient;
   final bool auth;
   final bool quotaClass;
+
+  /// The provider answered, but about the MODEL id (not found, retired,
+  /// not activated) — never about the key. Permanent like any other
+  /// non-transient failure; only probeKey reads it, to keep diagnostics
+  /// from calling a model problem a rejected key.
+  final bool modelError;
 
   /// The key authenticated but the ACCOUNT cannot pay. A subset of
   /// [quotaClass] (both accept the key) with a completely different

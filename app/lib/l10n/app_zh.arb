@@ -285,6 +285,7 @@
   "diagFixWaitRateLimit": "等一分钟再试；期间照片会被保留并自动重试。",
   "diagKeyRejected": "Key 未被接受。",
   "diagFixRecopyKey": "从服务商控制台重新复制 Key —— 并确认它属于当前这个服务（不同服务的 Key 不能混用）。",
+  "diagModelNotFound": "Key 有效，但找不到模型“{model}”。",
   "diagTextOk": "模型返回了 JSON —— 对话纠正和“描述一餐”都可用。",
   "diagTextBad": "模型没有为文字请求返回可用的 JSON。",
   "diagTextBadDetail": "对话纠正和“描述一餐”可能失败；照片分析仍然可以正常工作。",

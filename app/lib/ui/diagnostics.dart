@@ -155,6 +155,13 @@ class ProviderDiagnostics {
         yield DiagResult(
             l.diagStageAuth, DiagStatus.warn, l.diagRateLimited,
             detail: probe.message, fix: l.diagFixWaitRateLimit);
+      case KeyProbeResult.modelNotFound:
+        // The key is fine; the text and photo stages would fail on the
+        // same model id, so stop here with the one fix that helps.
+        yield DiagResult(l.diagStageAuth, DiagStatus.fail,
+            l.diagModelNotFound(settings.model),
+            detail: probe.message, fix: l.diagFixPickModel);
+        return;
       case KeyProbeResult.rejected:
         yield DiagResult(
             l.diagStageAuth, DiagStatus.fail, l.diagKeyRejected,

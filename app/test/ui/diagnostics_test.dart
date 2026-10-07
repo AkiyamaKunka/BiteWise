@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
 import 'package:flutter/material.dart';
@@ -111,6 +112,32 @@ void main() {
     expect(auth.summary, contains('rate-limiting'));
     expect(auth.fix, contains('Wait'),
         reason: 'waiting fixes a rate limit; it never fixes a dead balance');
+  });
+
+  test('a wrong model id stops at Authentication naming the MODEL, never '
+      '"re-copy the key"', () async {
+    // A retired or mistyped model id used to read "The key was not
+    // accepted" with a re-copy-the-key fix — for a key that worked.
+    final badModel = _okAnalyzer()
+      ..onProbeKey = (_) async => const KeyProbe(
+          KeyProbeResult.modelNotFound,
+          message: 'GLM model not found — check the model name in '
+              'Settings.');
+    final results = await _diag(
+            settings: FakeSettings(model: 'gemini-9.9-nope'),
+            analyzer: badModel)
+        .run()
+        .toList();
+    expect(results.last.stage, 'Authentication');
+    expect(results.last.status, DiagStatus.fail);
+    expect(results.last.summary, contains('"gemini-9.9-nope"'));
+    expect(results.last.summary, isNot(contains('not accepted')));
+    expect(results.last.detail, contains('model not found'));
+    expect(results.last.fix, AppLocalizationsEn().diagFixPickModel);
+    expect(results.last.fix, isNot(contains('Re-copy')));
+    // The owner reads the Chinese page.
+    expect(AppLocalizationsZh().diagModelNotFound('gemini-9.9-nope'),
+        allOf(contains('找不到模型'), isNot(contains('未被接受'))));
   });
 
   testWidgets('a stage that THROWS is reported, never silently green',

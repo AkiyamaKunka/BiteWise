@@ -470,8 +470,12 @@ class GeminiAnalyzer implements AnalyzerService {
           // rejected key — do not send the user to regenerate a fine key.
           return KeyProbe(KeyProbeResult.rateLimited,
               message: _userMessageFor(e.message));
-        case GeminiErrorClass.auth:
+        // A wrong model name is not a rejected key: classifyGeminiError
+        // tests API_KEY/401/403 first, so every key complaint is `auth`.
         case GeminiErrorClass.modelError:
+          return KeyProbe(KeyProbeResult.modelNotFound,
+              message: _userMessageFor(e.message));
+        case GeminiErrorClass.auth:
         case GeminiErrorClass.unknown:
           return KeyProbe(KeyProbeResult.rejected,
               message: _userMessageFor(e.message));

@@ -376,9 +376,11 @@ void main() {
             429,
             '{"error":{"code":"1113","message":"余额不足或无可用资源包，请充值'
             '后重试。"}}'),
+        // A 400, not a 404 — code "1211" is what marks it as the model.
         Scenario.modelNotFound: const Fx(
             400,
-            '{"error":{"code":"1211","message":"模型不存在，请检查模型代码。"}}'),
+            '{"error":{"code":"1211","message":"模型不存在，请检查模型代码。"}}',
+            expectSays: 'model'),
         Scenario.overloaded: const Fx(
             429,
             '{"error":{"code":"1305","message":"当前API请求过多，请稍后重试。"}}',
@@ -594,6 +596,30 @@ void main() {
             expect(calls, fx.expectCalls, reason: why);
           }
         });
+
+        // The Test page's Authentication stage reads probeKey, not the
+        // outcome above. A wrong / retired model id there used to come
+        // back `rejected` — "Key 未被接受, re-copy the key" — for a key
+        // that worked (GLM's 400 code 1211 and the bare OpenAI/Anthropic
+        // 404s included). The server probes its own auth_check instead.
+        if (p.name != 'Server' &&
+            (scenario == Scenario.modelNotFound ||
+                scenario == Scenario.auth)) {
+          test('${scenario.name}: probeKey on HTTP ${fx.status}', () async {
+            final s = await p.settings();
+            final a = p.make(
+                s,
+                MockClient((_) async =>
+                    http.Response(fx.body, fx.status, headers: _utf8Json)));
+            final probe = await a.probeKey('k');
+            expect(
+                probe.result,
+                scenario == Scenario.auth
+                    ? KeyProbeResult.rejected
+                    : KeyProbeResult.modelNotFound,
+                reason: '${p.name}/${scenario.name}: ${probe.message}');
+          });
+        }
       }
     });
   }

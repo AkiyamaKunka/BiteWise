@@ -960,6 +960,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).';
 
   @override
+  String diagModelNotFound(String model) {
+    return 'The key works, but the model \"$model\" was not found.';
+  }
+
+  @override
   String get diagTextOk =>
       'The model answered JSON — chat fixes and \"describe a meal\" work.';
 

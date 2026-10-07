@@ -289,6 +289,11 @@ enum KeyProbeResult {
   /// The key authenticated but the provider is rate-limiting right now.
   rateLimited,
 
+  /// The key was not refused; the MODEL id is wrong, retired or not
+  /// activated. Picking a model is the fix, NOT a new key — reporting
+  /// this as [rejected] sent users to re-copy a key that worked.
+  modelNotFound,
+
   /// The provider refused the credential, or the request could not be made.
   rejected,
 }

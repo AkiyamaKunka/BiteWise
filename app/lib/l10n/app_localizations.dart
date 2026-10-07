@@ -1682,6 +1682,12 @@ abstract class AppLocalizations {
   /// **'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).'**
   String get diagFixRecopyKey;
 
+  /// No description provided for @diagModelNotFound.
+  ///
+  /// In en, this message translates to:
+  /// **'The key works, but the model \"{model}\" was not found.'**
+  String diagModelNotFound(String model);
+
   /// No description provided for @diagTextOk.
   ///
   /// In en, this message translates to:

@@ -575,6 +575,14 @@
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
   "diagFixRecopyKey": "Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).",
+  "diagModelNotFound": "The key works, but the model \"{model}\" was not found.",
+  "@diagModelNotFound": {
+    "placeholders": {
+      "model": {
+        "type": "String"
+      }
+    }
+  },
   "diagTextOk": "The model answered JSON — chat fixes and \"describe a meal\" work.",
   "diagTextBad": "The model did not return usable JSON for a text request.",
   "diagTextBadDetail": "Chat fixes and \"describe a meal\" may fail; photo analysis can still work.",

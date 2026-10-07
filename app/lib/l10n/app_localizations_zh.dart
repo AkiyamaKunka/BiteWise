@@ -902,6 +902,11 @@ class AppLocalizationsZh extends AppLocalizations {
       '从服务商控制台重新复制 Key —— 并确认它属于当前这个服务（不同服务的 Key 不能混用）。';
 
   @override
+  String diagModelNotFound(String model) {
+    return 'Key 有效，但找不到模型“$model”。';
+  }
+
+  @override
   String get diagTextOk => '模型返回了 JSON —— 对话纠正和“描述一餐”都可用。';
 
   @override
