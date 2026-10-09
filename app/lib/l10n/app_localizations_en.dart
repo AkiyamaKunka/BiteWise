@@ -1233,7 +1233,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fixIntro =>
-      'Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.';
+      'Say what to change or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language. To move a meal to another day or time, tap it on Today or in History and change its date or time.';
 
   @override
   String get fixNamingTip =>
