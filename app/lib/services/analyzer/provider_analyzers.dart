@@ -806,21 +806,41 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         unprocessedFallback(originalBytes,
             maxBytes: _HttpVisionAnalyzer.maxOriginalFallbackBytes);
     if (sendBytes == null) return null;
+    final body = jsonEncode({
+      'image_b64': base64Encode(sendBytes),
+      'original_analysis': originalCompact,
+      'backend': settings.serverBackend,
+      ..._planChoice(),
+    });
     try {
-      final resp = await client
-          .post(_uri('/api/analyze_leftover'),
-              headers: {
-                'content-type': 'application/json',
-                'X-API-Key': key,
-                'X-Client-Platform': 'app',
-              },
-              body: jsonEncode({
-                'image_b64': base64Encode(sendBytes),
-                'original_analysis': originalCompact,
-                'backend': settings.serverBackend,
-                ..._planChoice(),
-              }))
-          .timeout(deadline);
+      http.Response resp;
+      for (var attempt = 1;; attempt++) {
+        resp = await client
+            .post(_uri('/api/analyze_leftover'),
+                headers: {
+                  'content-type': 'application/json',
+                  'X-API-Key': key,
+                  'X-Client-Platform': 'app',
+                },
+                body: body)
+            .timeout(deadline);
+        // Same busy wait as textIntent: the server answers an instant 503
+        // {reason, retry: true} while a photo run holds its CLI lock — the
+        // auto-scan's run on every app open — and one attempt showed the
+        // leftover screen's "couldn't estimate" error exactly then. Only
+        // that verdict waits (the screen's spinner is up and its re-entry
+        // guard blocks a second tap); retry: false (the run happened) and
+        // "later" (a closed usage window) stay single-attempt, like every
+        // other non-200.
+        if (resp.statusCode == 503 &&
+            unavailableMessage(resp.body) != null &&
+            unavailableRetry(resp.body) == true &&
+            attempt < _HttpVisionAnalyzer.textBusyAttempts) {
+          await _sleep(Duration(seconds: 5 * attempt));
+          continue;
+        }
+        break;
+      }
       if (resp.statusCode != 200) return null;
       final decoded = jsonDecode(resp.body);
       if (decoded is Map && decoded['leftover'] is Map) {
