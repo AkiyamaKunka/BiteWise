@@ -1449,6 +1449,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covDeletedCount(int count) {
+    return '$count 张已被你删除';
+  }
+
+  @override
+  String covInFlightCount(int count) {
+    return '$count 张分析中';
+  }
+
+  @override
+  String covUnreadableCount(int count) {
+    return '$count 张无法读取';
+  }
+
+  @override
+  String covTooLargeCount(int count) {
+    return '$count 张过大无法分析';
+  }
+
+  @override
   String get macroNoBreakdown => '没有记录营养素分布。';
 
   @override

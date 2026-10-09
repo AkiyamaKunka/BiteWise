@@ -1065,6 +1065,38 @@
       }
     }
   },
+  "covDeletedCount": "{count} deleted by you",
+  "@covDeletedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covInFlightCount": "{count} in progress",
+  "@covInFlightCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covUnreadableCount": "{count} unreadable",
+  "@covUnreadableCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covTooLargeCount": "{count} too large to analyze",
+  "@covTooLargeCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "macroNoBreakdown": "No macro breakdown recorded.",
   "setupLinkTitle": "Set up server from this link?",
   "setupLinkBody": "Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.",

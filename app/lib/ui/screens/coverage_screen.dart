@@ -472,12 +472,14 @@ class _SummaryCard extends StatelessWidget {
                     context.l10n.covLeftoverCount(report.leftoverApplied),
                 if (report.failed.isNotEmpty)
                     context.l10n.covFailedCount(report.failed.length),
-                if (report.deleted > 0) '${report.deleted} deleted by you',
-                if (report.inFlight > 0) '${report.inFlight} in progress',
+                if (report.deleted > 0)
+                    context.l10n.covDeletedCount(report.deleted),
+                if (report.inFlight > 0)
+                    context.l10n.covInFlightCount(report.inFlight),
                 if (report.unreadable > 0)
-                    '${report.unreadable} unreadable',
+                    context.l10n.covUnreadableCount(report.unreadable),
                 if (report.tooLargeToAnalyze > 0)
-                    '${report.tooLargeToAnalyze} too large to analyze',
+                    context.l10n.covTooLargeCount(report.tooLargeToAnalyze),
               ].join(' · '),
               style: theme.textTheme.bodySmall,
             ),

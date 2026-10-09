@@ -1,6 +1,7 @@
 // Coverage screen flow: run check → summary; "Log all" pushes each missing
 // photo through the injected pipeline callback and re-audits.
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/photo/coverage.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/screens/coverage_screen.dart';
@@ -262,6 +263,66 @@ void main() {
     expect(find.textContaining('0 not food'), findsOneWidget);
     expect(find.byKey(const Key('reanalyzeAllSkipped')), findsNothing);
     expect(find.text('IMG_8.jpg'), findsNothing);
+  });
+
+  // The deleted / in-flight / unreadable / too-large fragments were English
+  // literals glued onto an otherwise localized line, so the Chinese UI read
+  // "已记录 0 餐 · 0 张非食物 · 1 deleted by you · 1 in progress".
+  Future<void> auditDeletedInFlightUnreadable(
+      WidgetTester tester, Locale locale) async {
+    library.assets = [
+      FakeAsset('d1', 'IMG_D.jpg', DateTime(2026, 7, 26, 8), bytesOf(1)),
+      FakeAsset('p2', 'IMG_P.jpg', DateTime(2026, 7, 26, 9), bytesOf(2)),
+      FakeAsset('u3', 'IMG_U.jpg', DateTime(2026, 7, 26, 10), null),
+    ];
+    dao.ledger['h1'] = IngestionStatus.deleted;
+    dao.ledger['h2'] = IngestionStatus.processing;
+    await tester.pumpWidget(MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: CoverageScreen(
+        auditor: auditor,
+        processPhoto: (p) async =>
+            const PhotoOutcome(PhotoOutcomeKind.saved, 'ok'),
+        requestPhotoPermission: () async => true,
+        initialLookbackDays: 2,
+        library: library,
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('the Chinese summary counts are Chinese, not English fragments',
+      (tester) async {
+    await auditDeletedInFlightUnreadable(tester, const Locale('zh'));
+    expect(
+        find.text('已记录 0 餐 · 0 张非食物 · 1 张已被你删除 · 1 张分析中 · '
+            '1 张无法读取'),
+        findsOneWidget);
+    expect(find.textContaining('deleted by you'), findsNothing);
+    expect(find.textContaining('in progress'), findsNothing);
+    expect(find.textContaining('unreadable'), findsNothing);
+  });
+
+  testWidgets('the English summary counts read exactly as before',
+      (tester) async {
+    await auditDeletedInFlightUnreadable(tester, const Locale('en'));
+    expect(
+        find.textContaining(
+            '1 deleted by you · 1 in progress · 1 unreadable'),
+        findsOneWidget);
+  });
+
+  test('every summary count has a Chinese string', () {
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    expect(zh.covDeletedCount(2), '2 张已被你删除');
+    expect(zh.covInFlightCount(2), '2 张分析中');
+    expect(zh.covUnreadableCount(2), '2 张无法读取');
+    expect(zh.covTooLargeCount(2), '2 张过大无法分析');
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect(en.covTooLargeCount(2), '2 too large to analyze');
   });
 
   testWidgets('failed photos get a Retry all that goes through the pipeline',

@@ -1546,6 +1546,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covDeletedCount(int count) {
+    return '$count deleted by you';
+  }
+
+  @override
+  String covInFlightCount(int count) {
+    return '$count in progress';
+  }
+
+  @override
+  String covUnreadableCount(int count) {
+    return '$count unreadable';
+  }
+
+  @override
+  String covTooLargeCount(int count) {
+    return '$count too large to analyze';
+  }
+
+  @override
   String get macroNoBreakdown => 'No macro breakdown recorded.';
 
   @override

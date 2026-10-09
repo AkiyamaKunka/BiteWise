@@ -2546,6 +2546,30 @@ abstract class AppLocalizations {
   /// **'{count} failed'**
   String covFailedCount(int count);
 
+  /// No description provided for @covDeletedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} deleted by you'**
+  String covDeletedCount(int count);
+
+  /// No description provided for @covInFlightCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} in progress'**
+  String covInFlightCount(int count);
+
+  /// No description provided for @covUnreadableCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unreadable'**
+  String covUnreadableCount(int count);
+
+  /// No description provided for @covTooLargeCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} too large to analyze'**
+  String covTooLargeCount(int count);
+
   /// No description provided for @macroNoBreakdown.
   ///
   /// In en, this message translates to:
