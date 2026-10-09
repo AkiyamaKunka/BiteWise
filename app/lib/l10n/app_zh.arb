@@ -414,6 +414,7 @@
   "covNotFoodHelp": "饮品、订单截图和少见的菜会落在这里。\"重新分析\" 会再问一次 AI（规则改进后很有用）；点某一行可以手动录入。",
   "covFailedEarlier": "之前失败（{count}）",
   "covRetryAll": "全部重试",
+  "covFailedHelp": "\"全部重试\" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。",
   "covMoreRetryAll": "…还有 {count} 张 —— \"全部重试\" 会覆盖全部。",
   "covAllAccounted": "全部 {count} 张照片都已记录。",
   "covSummary": "已检查 {scanned} 张 —— {missing} 张从未扫描。",

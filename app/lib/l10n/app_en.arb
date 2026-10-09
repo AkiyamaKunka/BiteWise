@@ -952,6 +952,7 @@
     }
   },
   "covRetryAll": "Retry all",
+  "covFailedHelp": "\"Retry all\" asks the AI again (the same error often comes back); tap a row to enter it yourself.",
   "covMoreRetryAll": "…and {count} more — \"Retry all\" still covers every one.",
   "@covMoreRetryAll": {
     "placeholders": {

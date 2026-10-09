@@ -1474,6 +1474,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get covRetryAll => 'Retry all';
 
   @override
+  String get covFailedHelp =>
+      '\"Retry all\" asks the AI again (the same error often comes back); tap a row to enter it yourself.';
+
+  @override
   String covMoreRetryAll(int count) {
     return '…and $count more — \"Retry all\" still covers every one.';
   }

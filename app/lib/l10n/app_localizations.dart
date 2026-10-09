@@ -2456,6 +2456,12 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get covRetryAll;
 
+  /// No description provided for @covFailedHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'\"Retry all\" asks the AI again (the same error often comes back); tap a row to enter it yourself.'**
+  String get covFailedHelp;
+
   /// No description provided for @covMoreRetryAll.
   ///
   /// In en, this message translates to:

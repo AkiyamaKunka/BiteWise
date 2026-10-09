@@ -1377,6 +1377,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get covRetryAll => '全部重试';
 
   @override
+  String get covFailedHelp => '\"全部重试\" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。';
+
+  @override
   String covMoreRetryAll(int count) {
     return '…还有 $count 张 —— \"全部重试\" 会覆盖全部。';
   }

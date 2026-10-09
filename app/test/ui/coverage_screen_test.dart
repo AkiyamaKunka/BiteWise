@@ -343,4 +343,70 @@ void main() {
     expect(processed.single.assetId, 'a3');
     expect(find.textContaining('accounted for'), findsOneWidget);
   });
+
+  testWidgets('a failed photo can be LOGGED MANUALLY, not only retried',
+      (tester) async {
+    // Failed tiles had no onTap: a permanent failure (decode error, coded
+    // 400, "no usable result") left Retry all as the only action, which
+    // repeats the verdict at another model call each time. The add flow
+    // already offers manual logging for failed as well as skipped.
+    library.assets = [
+      FakeAsset('a3', 'IMG_3.jpg', DateTime(2026, 7, 26, 8), bytesOf(3)),
+    ];
+    dao.ledger['h3'] = IngestionStatus.failed;
+    final manual = <IntakePhoto>[];
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: CoverageScreen(
+        auditor: auditor,
+        processPhoto: (photo) async {
+          processed.add(photo);
+          return const PhotoOutcome(PhotoOutcomeKind.saved, 'ok');
+        },
+        requestPhotoPermission: () async => true,
+        initialLookbackDays: 2,
+        library: library,
+        logManually: (photo) async {
+          manual.add(photo);
+          // What the meal editor's save does to the ledger.
+          dao.ledger[await testHash(photo.bytes)] = IngestionStatus.saved;
+          return true;
+        },
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('retryAllFailed')), findsOneWidget);
+    expect(find.text('"全部重试" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。'),
+        findsOneWidget);
+    final tile = find.ancestor(
+        of: find.text('IMG_3.jpg'), matching: find.byType(ListTile));
+    expect(
+        find.descendant(of: tile, matching: find.byIcon(Icons.edit_outlined)),
+        findsOneWidget);
+
+    await tester.tap(find.text('IMG_3.jpg'));
+    await tester.pumpAndSettle();
+    expect(manual.single.assetId, 'a3');
+    expect(processed, isEmpty,
+        reason: 'manual entry must not spend another model call');
+    // Re-audited after the save: the photo is accounted for.
+    expect(find.byKey(const Key('retryAllFailed')), findsNothing);
+  });
+
+  testWidgets('without a manual editor, failed tiles stay inert',
+      (tester) async {
+    library.assets = [
+      FakeAsset('a3', 'IMG_3.jpg', DateTime(2026, 7, 26, 8), bytesOf(3)),
+    ];
+    dao.ledger['h3'] = IngestionStatus.failed;
+    await tester.pumpWidget(host());
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+    expect(find.byIcon(Icons.edit_outlined), findsNothing);
+    expect(
+        find.textContaining('"Retry all" asks the AI again'), findsOneWidget);
+  });
 }

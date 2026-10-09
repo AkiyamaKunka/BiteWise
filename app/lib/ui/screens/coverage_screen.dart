@@ -45,8 +45,8 @@ class CoverageScreen extends StatefulWidget {
   /// For missing-photo thumbnails; null degrades to icons.
   final PhotoLibrary? library;
 
-  /// Open the manual editor for a photo the model refused. Null hides the
-  /// action (tests / no editor context).
+  /// Open the manual editor for a photo the model refused or failed on for
+  /// good. Null hides the action (tests / no editor context).
   final Future<bool> Function(IntakePhoto photo)? logManually;
 
   @override
@@ -212,8 +212,9 @@ class _CoverageScreenState extends State<CoverageScreen> {
     await _runAudit();
   }
 
-  /// A "not food" tombstone is otherwise permanent: re-analysis repeats the
-  /// verdict, so the only real remedy is letting the user enter the meal.
+  /// A "not food" tombstone or a permanent failure is otherwise a dead end:
+  /// re-analysis repeats the verdict, so the only real remedy is letting the
+  /// user enter the meal (the add flow offers the same for both).
   Future<void> _logManually(CoverageItem item) async {
     final open = widget.logManually;
     if (open == null) return;
@@ -407,8 +408,23 @@ class _CoverageScreenState extends State<CoverageScreen> {
                   ),
                 ],
               ),
+              Text(
+                  context.l10n.covFailedHelp,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              // A ledgered 'failed' is a NON-retryable verdict (decode
+              // failure, oversize, a coded 400, "no usable result"), so
+              // Retry all usually repeats it at another model call each
+              // time. Same escape hatch as the add flow's
+              // canLogManually = skipped || failed.
               for (final item in report.failed.take(_maxTiles))
-                _PhotoTile(item: item, thumb: _thumbFor(item)),
+                _PhotoTile(
+                  item: item,
+                  thumb: _thumbFor(item),
+                  onTap: widget.logManually == null
+                      ? null
+                      : () => _logManually(item),
+                ),
               if (report.failed.length > _maxTiles)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
