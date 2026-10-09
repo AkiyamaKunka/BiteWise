@@ -121,7 +121,7 @@ int parseRetryDelaySeconds(String errorText, {int fallback = 5}) {
   return seconds.ceil().clamp(1, 60);
 }
 
-class GeminiAnalyzer implements AnalyzerService {
+class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
   GeminiAnalyzer(
     this._settings, {
     http.Client? client,
@@ -378,7 +378,13 @@ class GeminiAnalyzer implements AnalyzerService {
   }
 
   @override
-  Future<Map<String, dynamic>?> textIntent(String prompt) async {
+  Future<Map<String, dynamic>?> textIntent(String prompt) async =>
+      (await textIntentOutcome(prompt)).json;
+
+  /// [textIntent] plus the photo path's wording for the failure
+  /// ([_userMessageFor]), so the chat can name a rejected key or model.
+  @override
+  Future<TextIntentOutcome> textIntentOutcome(String prompt) async {
     // Single attempt: spec §3.3's retry loop is the photo path; the text
     // handler surfaces transport errors to the user directly (spec §4 step 4).
     String text;
@@ -393,21 +399,23 @@ class GeminiAnalyzer implements AnalyzerService {
             .setQuotaPauseUntil(DateTime.now().add(dailyQuotaCooldown),
                   forProvider: AiProvider.gemini);
       }
-      return null;
+      return TextIntentOutcome(null, error: _userMessageFor(e.message));
     }
     dynamic parsed;
     try {
       parsed = parseAiJson(text);
     } on FormatException {
-      return null;
+      return const TextIntentOutcome(null);
     }
-    if (parsed is Map) return Map<String, dynamic>.from(parsed);
+    if (parsed is Map) {
+      return TextIntentOutcome(Map<String, dynamic>.from(parsed));
+    }
     // Spec §4.1: real models emit bare JSON arrays despite the prompt. The
     // Map-typed seam carries them as {'actions': [...]}: the NL normalizer
     // treats a map with no recognized single intent and a non-empty actions
     // list exactly like a bare array.
-    if (parsed is List) return {'actions': parsed};
-    return null; // scalar JSON: unusable response
+    if (parsed is List) return TextIntentOutcome({'actions': parsed});
+    return const TextIntentOutcome(null); // scalar JSON: unusable response
   }
 
   @override

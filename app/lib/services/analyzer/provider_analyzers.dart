@@ -37,7 +37,8 @@ Future<Uint8List?> _computeNormalize(Uint8List bytes) =>
 /// Common skeleton: subclasses supply the endpoint request and reply-text
 /// extraction; everything else (normalize, retries, coercion, validate
 /// semantics) is identical across providers.
-abstract class _HttpVisionAnalyzer implements AnalyzerService {
+abstract class _HttpVisionAnalyzer
+    implements AnalyzerService, TextIntentExplainer {
   _HttpVisionAnalyzer(
     this.settings, {
     http.Client? client,
@@ -325,7 +326,13 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
   static const int textBusyAttempts = 7;
 
   @override
-  Future<Map<String, dynamic>?> textIntent(String prompt) async {
+  Future<Map<String, dynamic>?> textIntent(String prompt) async =>
+      (await textIntentOutcome(prompt)).json;
+
+  /// [textIntent] plus the failure's [_ProviderException.userMessage], so
+  /// the chat can name a rejected key or model instead of "retry".
+  @override
+  Future<TextIntentOutcome> textIntentOutcome(String prompt) async {
     String text;
     for (var attempt = 1;; attempt++) {
       try {
@@ -342,18 +349,22 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
           await _sleep(Duration(seconds: 5 * attempt));
           continue;
         }
-        return null;
+        return TextIntentOutcome(null, error: e.userMessage);
       }
     }
     dynamic parsed;
     try {
       parsed = parseAiJson(text);
     } on FormatException {
-      return null;
+      return const TextIntentOutcome(null);
     }
-    if (parsed is Map) return Map<String, dynamic>.from(parsed);
-    if (parsed is List) return {'actions': parsed}; // §4.1 bare-array rule
-    return null;
+    if (parsed is Map) {
+      return TextIntentOutcome(Map<String, dynamic>.from(parsed));
+    }
+    if (parsed is List) {
+      return TextIntentOutcome({'actions': parsed}); // §4.1 bare-array rule
+    }
+    return const TextIntentOutcome(null);
   }
 
   @override
@@ -1226,7 +1237,7 @@ OpenAiCompatAnalyzer createOpenRouterAnalyzer(AppSettings settings,
             'google/gemini-3.8-flash) and pick one that accepts images.',
         client: client);
 
-class MultiProviderAnalyzer implements AnalyzerService {
+class MultiProviderAnalyzer implements AnalyzerService, TextIntentExplainer {
   MultiProviderAnalyzer(this._settings, {http.Client? client})
       : _gemini = createAnalyzer(_settings, client: client),
         _openai = OpenAiAnalyzer(_settings, client: client),
@@ -1290,6 +1301,12 @@ class MultiProviderAnalyzer implements AnalyzerService {
   @override
   Future<Map<String, dynamic>?> textIntent(String prompt) =>
       _active.textIntent(prompt);
+
+  /// Forwarded, or the executor would only ever see the reason-less
+  /// fallback and keep telling a rejected key to "retry".
+  @override
+  Future<TextIntentOutcome> textIntentOutcome(String prompt) =>
+      askTextIntent(_active, prompt);
 
   @override
   Future<Map<String, dynamic>?> leftoverIntent(
