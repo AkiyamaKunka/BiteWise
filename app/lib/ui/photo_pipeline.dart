@@ -66,11 +66,22 @@ class PhotoOutcome {
   /// failed. Null means "nothing beyond the kind" — the UI then falls back
   /// to [message] verbatim.
   final String? detail;
+
+  /// [PhotoOutcomeKind.leftoverApplied] only: the meal that was cut, its
+  /// day, and its analysis as it stood just BEFORE this deduction — what
+  /// the add flow's "not leftovers" undo writes back (revertedLeftover).
+  /// [analysis] is then the deducted analysis this run stored.
+  final int? mealId;
+  final String? mealDate;
+  final Map<String, dynamic>? previousAnalysis;
   const PhotoOutcome(this.kind, this.message,
       {this.analysis,
       this.retryable = false,
       this.errorKind = AnalysisErrorKind.none,
-      this.detail});
+      this.detail,
+      this.mealId,
+      this.mealDate,
+      this.previousAnalysis});
 }
 
 class PhotoPipeline {
@@ -289,7 +300,14 @@ class PhotoPipeline {
               'kcal, now ~$newKcal kcal';
           final leftover = PhotoOutcome(
               PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
-              analysis: applied.adjusted, detail: summary);
+              analysis: applied.adjusted,
+              detail: summary,
+              mealId: original.id,
+              mealDate: original.date,
+              // The row as THIS application found it, not
+              // leftover.original: undoing a wrong second deduction
+              // must keep an earlier, correct one.
+              previousAnalysis: original.analysis);
           try {
             notify?.call(leftover);
             onMealSaved?.call();

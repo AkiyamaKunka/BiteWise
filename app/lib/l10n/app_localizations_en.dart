@@ -1142,6 +1142,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'If this IS food, log it yourself — the photo stays attached to the meal.';
 
   @override
+  String get outcomeUndoLeftover => 'Not leftovers, log as a new meal';
+
+  @override
+  String get outcomeUndoLeftoverDone =>
+      'Deduction undone — the earlier meal is back as it was.';
+
+  @override
+  String get outcomeUndoLeftoverStale =>
+      'That meal was changed or deleted since, so it was left as it is.';
+
+  @override
   String get okButton => 'OK';
 
   @override

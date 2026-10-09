@@ -11,6 +11,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
+import '../../core/leftover_logic.dart' show revertedLeftover;
 import '../../services/analyzer/platform_decode.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
@@ -218,6 +219,14 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // repeats the same verdict.
     final canLogManually = outcome.kind == PhotoOutcomeKind.skipped ||
         outcome.kind == PhotoOutcomeKind.failed;
+    // A WRONG automatic leftover verdict was a dead end too: the earlier
+    // meal stayed cut, and re-picking the photo repeats the verdict. The
+    // escape puts that meal back and logs the photo as its own meal.
+    final canUndoLeftover =
+        outcome.kind == PhotoOutcomeKind.leftoverApplied &&
+            outcome.mealId != null &&
+            outcome.previousAnalysis != null &&
+            outcome.analysis != null;
     final l = context.l10n;
     final choice = await showDialog<String>(
       context: context,
@@ -245,11 +254,25 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
               onPressed: () => Navigator.of(ctx).pop('manual'),
               child: Text(l.logManually),
             ),
+          if (canUndoLeftover)
+            FilledButton(
+              key: const Key('undoLeftoverButton'),
+              onPressed: () => Navigator.of(ctx).pop('undoLeftover'),
+              child: Text(l.outcomeUndoLeftover),
+            ),
         ],
       ),
     );
     if (!mounted) return;
-    if (choice == 'manual') {
+    if (choice == 'undoLeftover') {
+      final undone = await _undoLeftover(outcome);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(undone
+              ? l.outcomeUndoLeftoverDone
+              : l.outcomeUndoLeftoverStale)));
+    }
+    if (choice == 'manual' || choice == 'undoLeftover') {
       final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => MealEditorScreen(
           dao: widget.services.dao,
@@ -265,6 +288,28 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     if (outcome.kind == PhotoOutcomeKind.saved && mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  /// Puts the cut meal back as it was before THIS deduction. Re-reads the
+  /// row first and writes only while it still shows that deduction
+  /// (revertedLeftover) — a deleted meal or a later fix is left alone.
+  /// updateMealAnalysis keeps corrected=1 (spec §2.4); the photo's ledger
+  /// row stays 'skipped', which the editor's photo save turns into
+  /// 'saved'.
+  Future<bool> _undoLeftover(PhotoOutcome outcome) async {
+    final dao = widget.services.dao;
+    final id = outcome.mealId!;
+    final date = outcome.mealDate;
+    final rows = date == null
+        ? const <Meal>[]
+        : await dao.mealsBetween(date, date);
+    final current = rows.where((m) => m.id == id).firstOrNull;
+    if (current == null) return false;
+    final restored = revertedLeftover(current.analysis,
+        applied: outcome.analysis!, before: outcome.previousAnalysis!);
+    if (restored == null) return false;
+    await dao.updateMealAnalysis(id, restored);
+    return true;
   }
 
   @override

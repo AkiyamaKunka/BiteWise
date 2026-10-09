@@ -1958,6 +1958,24 @@ abstract class AppLocalizations {
   /// **'If this IS food, log it yourself — the photo stays attached to the meal.'**
   String get outcomeLogManuallyHint;
 
+  /// No description provided for @outcomeUndoLeftover.
+  ///
+  /// In en, this message translates to:
+  /// **'Not leftovers, log as a new meal'**
+  String get outcomeUndoLeftover;
+
+  /// No description provided for @outcomeUndoLeftoverDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Deduction undone — the earlier meal is back as it was.'**
+  String get outcomeUndoLeftoverDone;
+
+  /// No description provided for @outcomeUndoLeftoverStale.
+  ///
+  /// In en, this message translates to:
+  /// **'That meal was changed or deleted since, so it was left as it is.'**
+  String get outcomeUndoLeftoverStale;
+
   /// No description provided for @okButton.
   ///
   /// In en, this message translates to:

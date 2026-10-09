@@ -1066,6 +1066,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outcomeLogManuallyHint => '如果这确实是食物，可以手动记录 —— 照片会附在这一餐上。';
 
   @override
+  String get outcomeUndoLeftover => '不是剩菜，记为新的一餐';
+
+  @override
+  String get outcomeUndoLeftoverDone => '已撤销扣除，之前那一餐已恢复原样。';
+
+  @override
+  String get outcomeUndoLeftoverStale => '那一餐之后被修改或删除了，所以没有改动它。';
+
+  @override
   String get okButton => '好';
 
   @override
