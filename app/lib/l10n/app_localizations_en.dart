@@ -1527,6 +1527,31 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covStoppedBecause(
+    String label,
+    int attempted,
+    int total,
+    String reason,
+    int remaining,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining photos were',
+      one: '1 photo was',
+    );
+    return '$label stopped after $attempted of $total: $reason The remaining $_temp0 not touched — run this again later.';
+  }
+
+  @override
+  String covMoreNotFood(int count) {
+    return '…and $count more.';
+  }
+
+  @override
+  String get covUnnamedPhoto => '(unnamed photo)';
+
+  @override
   String covDone(String label, int count) {
     return '$label done ($count photos).';
   }

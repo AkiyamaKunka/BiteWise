@@ -2528,6 +2528,30 @@ abstract class AppLocalizations {
   /// **'{label} stopped after {attempted} of {total}: analysis is unavailable right now (quota pause or missing key). The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.'**
   String covStopped(String label, int attempted, int total, int remaining);
 
+  /// No description provided for @covStoppedBecause.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} stopped after {attempted} of {total}: {reason} The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.'**
+  String covStoppedBecause(
+    String label,
+    int attempted,
+    int total,
+    String reason,
+    int remaining,
+  );
+
+  /// No description provided for @covMoreNotFood.
+  ///
+  /// In en, this message translates to:
+  /// **'…and {count} more.'**
+  String covMoreNotFood(int count);
+
+  /// No description provided for @covUnnamedPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'(unnamed photo)'**
+  String get covUnnamedPhoto;
+
   /// No description provided for @covDone.
   ///
   /// In en, this message translates to:

@@ -1004,6 +1004,35 @@
       }
     }
   },
+  "covStoppedBecause": "{label} stopped after {attempted} of {total}: {reason} The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.",
+  "@covStoppedBecause": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "int"
+      }
+    }
+  },
+  "covMoreNotFood": "…and {count} more.",
+  "@covMoreNotFood": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covUnnamedPhoto": "(unnamed photo)",
   "covDone": "{label} done ({count} photos).",
   "@covDone": {
     "placeholders": {

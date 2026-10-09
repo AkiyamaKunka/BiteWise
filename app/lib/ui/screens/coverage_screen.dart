@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
+import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
 
@@ -162,6 +163,12 @@ class _CoverageScreenState extends State<CoverageScreen> {
     var failures = 0;
     var attempted = 0;
     var stopped = false;
+    // The failure that ended the run, when one did. The canAnalyze() stop
+    // really is "quota pause or missing key"; a retryable failure is not —
+    // on the Claude Plan it is usually a busy or unreachable server — so
+    // that stop names its own reason instead of sending the user to a key
+    // that is fine.
+    PhotoOutcome? stopOutcome;
     for (final item in items) {
       // Re-checked EVERY iteration, not once up front: photo 1's daily-quota
       // 429 arms the pause latch mid-batch, and every photo pushed after
@@ -185,6 +192,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
           // was released, not burned, so this photo's tombstone is already
           // gone. Cap the damage at one row.
           if (outcome.retryable) {
+            stopOutcome = outcome;
             stopped = true;
             if (mounted) setState(() => _progressDone = attempted);
             break;
@@ -204,9 +212,12 @@ class _CoverageScreenState extends State<CoverageScreen> {
     if (!mounted) return;
     final remaining = items.length - attempted;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(stopped
-            ? l.covStopped(label, attempted, items.length, remaining)
-            : failures == 0
+        content: Text(stopOutcome != null
+            ? l.covStoppedBecause(label, attempted, items.length,
+                outcomeBody(l, stopOutcome), remaining)
+            : stopped
+                ? l.covStopped(label, attempted, items.length, remaining)
+                : failures == 0
                 ? l.covDone(label, items.length)
                 : l.covDoneFailures(label, failures, items.length))));
     await _runAudit();
@@ -380,7 +391,8 @@ class _CoverageScreenState extends State<CoverageScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                      '…and ${report.skippedNonFood.length - _maxTiles} more.',
+                      context.l10n.covMoreNotFood(
+                          report.skippedNonFood.length - _maxTiles),
                       style: theme.textTheme.bodySmall),
                 ),
             ],
@@ -562,7 +574,8 @@ class _PhotoTile extends StatelessWidget {
           );
         },
       ),
-      title: Text(item.fileName.isEmpty ? '(unnamed photo)' : item.fileName,
+      title: Text(
+          item.fileName.isEmpty ? context.l10n.covUnnamedPhoto : item.fileName,
           style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
       subtitle: Text(
           '${item.createDate.year}-'

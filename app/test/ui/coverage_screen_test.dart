@@ -1,6 +1,7 @@
 // Coverage screen flow: run check → summary; "Log all" pushes each missing
 // photo through the injected pipeline callback and re-audits.
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/photo/coverage.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
@@ -160,6 +161,61 @@ void main() {
         reason: 'tombstone 3 survives the aborted run');
     expect(find.textContaining('stopped after 1 of 3'), findsOneWidget);
     expect(find.textContaining('not touched'), findsOneWidget);
+  });
+
+  // A retryable failure that is NOT a quota/key problem — on the Claude Plan
+  // usually an unreachable or busy server — used to end in covStopped,
+  // which blamed "quota pause or missing key" and sent the owner to check a
+  // key that was fine. The stop now names the failure that caused it.
+  Future<void> stopOnNetworkFailure(WidgetTester tester, Locale locale) async {
+    library.assets = [
+      FakeAsset('n1', 'N1.jpg', DateTime(2026, 7, 26, 8), bytesOf(1)),
+      FakeAsset('n2', 'N2.jpg', DateTime(2026, 7, 26, 9), bytesOf(2)),
+    ];
+    dao.ledger['h1'] = IngestionStatus.skipped;
+    dao.ledger['h2'] = IngestionStatus.skipped;
+    await tester.pumpWidget(MaterialApp(
+      locale: locale,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: CoverageScreen(
+        auditor: auditor,
+        processPhoto: (photo) async {
+          processed.add(photo);
+          return const PhotoOutcome(PhotoOutcomeKind.failed, 'offline',
+              retryable: true, errorKind: AnalysisErrorKind.network);
+        },
+        requestPhotoPermission: () async => true,
+        initialLookbackDays: 2,
+        library: library,
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reanalyzeAllSkipped')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmBulkAction')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a network stop names the network, not a missing key',
+      (tester) async {
+    await stopOnNetworkFailure(tester, const Locale('en'));
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect(processed, hasLength(1), reason: 'still stops after one photo');
+    expect(find.textContaining('stopped after 1 of 2'), findsOneWidget);
+    expect(find.textContaining(en.errNetwork), findsOneWidget);
+    expect(find.textContaining('not touched'), findsOneWidget);
+    expect(find.textContaining('missing key'), findsNothing);
+  });
+
+  testWidgets('the Chinese network stop names the network, not 额度/Key',
+      (tester) async {
+    await stopOnNetworkFailure(tester, const Locale('zh'));
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    expect(find.textContaining(zh.errNetwork), findsOneWidget);
+    expect(find.textContaining('在第 1/2 张后停止'), findsOneWidget);
+    expect(find.textContaining('缺少 Key'), findsNothing);
   });
 
   testWidgets('cancelling the bulk confirmation spends nothing', (tester) async {
@@ -323,6 +379,10 @@ void main() {
     expect(zh.covTooLargeCount(2), '2 张过大无法分析');
     final en = lookupAppLocalizations(const Locale('en'));
     expect(en.covTooLargeCount(2), '2 too large to analyze');
+    expect(zh.covMoreNotFood(3), '…还有 3 张。');
+    expect(zh.covUnnamedPhoto, '（未命名照片）');
+    expect(en.covMoreNotFood(3), '…and 3 more.');
+    expect(en.covUnnamedPhoto, '(unnamed photo)');
   });
 
   testWidgets('failed photos get a Retry all that goes through the pipeline',

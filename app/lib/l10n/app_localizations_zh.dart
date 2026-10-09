@@ -1427,6 +1427,30 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covStoppedBecause(
+    String label,
+    int attempted,
+    int total,
+    String reason,
+    int remaining,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining 张',
+    );
+    return '$label在第 $attempted/$total 张后停止：$reason剩下的 $_temp0没有处理 —— 稍后再运行一次。';
+  }
+
+  @override
+  String covMoreNotFood(int count) {
+    return '…还有 $count 张。';
+  }
+
+  @override
+  String get covUnnamedPhoto => '（未命名照片）';
+
+  @override
   String covDone(String label, int count) {
     return '$label完成（$count 张照片）。';
   }
