@@ -143,6 +143,22 @@ void main() {
     expect(s.quotaPauseUntil, isNull);
   });
 
+  test('the summary watermark is read fresh, so a write from the '
+      'heartbeat isolate is seen past this isolate\'s cache', () async {
+    final (s, prefs, _) = await freshSettings();
+    expect(await s.freshSummaryPostedDate(), '');
+    await s.markSummaryPosted('2026-10-07');
+    expect(await s.freshSummaryPostedDate(), '2026-10-07');
+
+    // Another engine (the WorkManager run) writes the native store; this
+    // isolate's cached SharedPreferences does not see it on its own.
+    SharedPreferences.setMockInitialValues(
+        {'settings.summary_posted_date': '2026-10-08'});
+    expect(prefs.getString('settings.summary_posted_date'), '2026-10-07',
+        reason: 'precondition: the cache is stale');
+    expect(await s.freshSummaryPostedDate(), '2026-10-08');
+  });
+
   test('setters notify listeners', () async {
     final (s, _, _) = await freshSettings();
     var notifications = 0;

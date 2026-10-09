@@ -100,12 +100,15 @@ class AppServices {
     // one sentence and two numbers, not a full meal table. Both firing
     // paths — this Timer and the WorkManager heartbeat in
     // background_glue — call the SAME builder behind the SAME per-date
-    // watermark, so whichever runs first wins and the other no-ops.
-    Future<void> postSummary() => maybePostDailySummary(DailySummaryDeps(
+    // watermark, so whichever runs first wins and the other no-ops. The
+    // watermark is read FRESH at fire time: the heartbeat writes it from
+    // another isolate, which this isolate's prefs cache would never see.
+    Future<void> postSummary() async =>
+        maybePostDailySummary(DailySummaryDeps(
           dao: dao,
           reportTime: settings.reportTime,
           calorieGoal: settings.calorieGoal,
-          postedDate: settings.summaryPostedDate,
+          postedDate: await settings.freshSummaryPostedDate(),
           markPosted: settings.markSummaryPosted,
           present: notifier.showDailySummary,
           strings: coachStringsFor(settings.appLanguage),

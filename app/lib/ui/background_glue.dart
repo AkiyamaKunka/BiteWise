@@ -227,15 +227,15 @@ Future<bool> runHeadlessBackfill({bool? isIOS}) async {
   // The DURABLE daily-summary path. ReportNotifier's in-process Timer
   // dies with the app, and EMUI kills aggressively — so the notification
   // the user asked for is delivered by this 30-minute heartbeat instead,
-  // guarded by a per-date watermark so the live Timer cannot double-post
-  // (user request 2026-08-06).
+  // guarded by a freshly read per-date watermark so the live Timer does
+  // not double-post (user request 2026-08-06).
   if (!ios) {
     try {
       await maybePostDailySummary(DailySummaryDeps(
       dao: await createMealsDao(),
       reportTime: settings.reportTime,
       calorieGoal: settings.calorieGoal,
-      postedDate: settings.summaryPostedDate,
+      postedDate: await settings.freshSummaryPostedDate(),
       markPosted: settings.markSummaryPosted,
       present: (title, body) async {
         await notifier.init();

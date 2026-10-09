@@ -571,9 +571,19 @@ class AppSettings extends ChangeNotifier {
   }
 
   /// Watermark: the last date whose summary was already posted, so the
-  /// Timer path and the WorkManager catch-up can never double-notify.
-  String get summaryPostedDate =>
-      _prefs.getString(_kSummaryPostedDate) ?? '';
+  /// Timer path and the WorkManager catch-up do not double-notify.
+  ///
+  /// Read FRESH, and deliberately no synchronous getter: the WorkManager
+  /// heartbeat posts from another isolate (same process, new engine), and
+  /// this isolate's SharedPreferences cache never sees its write. On
+  /// Android the freezer can hold the overdue Timer until the heartbeat
+  /// thaws the process, so a cached read let the Timer post the summary
+  /// the heartbeat had just posted — a second alert sound for the same
+  /// card. Same rule as lastBackgroundRun() in background_glue.
+  Future<String> freshSummaryPostedDate() async {
+    await _prefs.reload();
+    return _prefs.getString(_kSummaryPostedDate) ?? '';
+  }
 
   Future<void> markSummaryPosted(String isoDate) =>
       _prefs.setString(_kSummaryPostedDate, isoDate);
