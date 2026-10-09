@@ -57,6 +57,46 @@ void main() {
     }
   });
 
+  test('a catch-up summary never calls the day it covers today/tomorrow',
+      () {
+    // The empty branch got emptyYesterday (2026-08-18), but the other
+    // lines said 今天…明天继续 under a 昨天 title: a 07:10 catch-up for the
+    // missed 23:30 slot called the new, empty day "today" and the current
+    // one "tomorrow". The coach lines are day-neutral so every branch
+    // reads right on both the same-day and the catch-up card.
+    for (final lang in ['zh', 'en']) {
+      CoachSummary catchUp({int? goal, int? typical, num eaten = 2000}) =>
+          buildCoachSummary(
+            eatenKcal: eaten,
+            mealCount: 3,
+            proteinG: 95,
+            goalKcal: goal,
+            typicalKcal: typical,
+            strings: coachStringsFor(lang),
+            formatKcal: (v) => v.round().toString(),
+            forYesterday: true,
+          );
+      final cases = {
+        'under goal': catchUp(goal: 2000, eaten: 1500),
+        'on goal': catchUp(goal: 2000, eaten: 2000),
+        'over goal': catchUp(goal: 2000, eaten: 2600),
+        'under typical': catchUp(typical: 2000, eaten: 1500),
+        'on typical': catchUp(typical: 2000, eaten: 2000),
+        'over typical': catchUp(typical: 2000, eaten: 2600),
+        'no reference': catchUp(),
+      };
+      for (final MapEntry(key: branch, value: s) in cases.entries) {
+        expect(s.title, contains(lang == 'zh' ? '昨天' : 'Yesterday'));
+        final body = s.body.toLowerCase();
+        for (final word in ['今天', '明天', '今日', '明日', 'today', 'tomorrow']) {
+          expect(body, isNot(contains(word)),
+              reason: '$lang $branch catch-up body names the wrong day: '
+                  '${s.body}');
+        }
+      }
+    }
+  });
+
   test('an unknown/system language still produces a usable notification',
       () {
     for (final tag in ['system', '', 'fr']) {

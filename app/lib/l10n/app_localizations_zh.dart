@@ -751,24 +751,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String coachUnderTypical(String delta) {
-    return '比你平时少 $delta 千卡。今天很棒，这样的一天才是真正有效的。';
+    return '比你平时少 $delta 千卡。很棒，这样的一天才是真正有效的。';
   }
 
   @override
-  String get coachOnTarget => '今天正好达标。稳定比猛冲更重要，继续保持。';
+  String get coachOnTarget => '正好达标。稳定比猛冲更重要，继续保持。';
 
   @override
   String coachOverGoal(String delta) {
-    return '今天比目标多 $delta 千卡。一天不会毁掉一周，明天继续。';
+    return '比目标多 $delta 千卡。一天不会毁掉一周，接着来就好。';
   }
 
   @override
   String coachOverTypical(String delta) {
-    return '今天比平时多 $delta 千卡。知道就好，不用焦虑 —— 明天重新开始。';
+    return '比平时多 $delta 千卡。知道就好，不用焦虑 —— 下一餐重新开始。';
   }
 
   @override
-  String get coachNoReference => '已记录。再积累几天，我就能告诉你今天和平时比如何了。';
+  String get coachNoReference => '已记录。再积累几天，我就能告诉你和平时比如何了。';
 
   @override
   String coachDetail(String meals, String protein) {

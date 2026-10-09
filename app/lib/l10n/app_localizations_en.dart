@@ -801,21 +801,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get coachOnTarget =>
-      'Right on target today. Consistency beats intensity — keep stacking days like this.';
+      'Right on target. Consistency beats intensity — keep stacking days like this.';
 
   @override
   String coachOverGoal(String delta) {
-    return '$delta kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.';
+    return '$delta kcal over your goal. One day doesn\'t undo a week — just keep going.';
   }
 
   @override
   String coachOverTypical(String delta) {
-    return '$delta kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.';
+    return '$delta kcal above your usual. Worth knowing, not worth worrying about — the next meal\'s a clean slate.';
   }
 
   @override
   String get coachNoReference =>
-      'Logged and counted. A few more days and I can tell you how today compares.';
+      'Logged and counted. A few more days and I can tell you how this compares to your usual.';
 
   @override
   String coachDetail(String meals, String protein) {

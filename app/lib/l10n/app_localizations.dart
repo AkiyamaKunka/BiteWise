@@ -1409,25 +1409,25 @@ abstract class AppLocalizations {
   /// No description provided for @coachOnTarget.
   ///
   /// In en, this message translates to:
-  /// **'Right on target today. Consistency beats intensity — keep stacking days like this.'**
+  /// **'Right on target. Consistency beats intensity — keep stacking days like this.'**
   String get coachOnTarget;
 
   /// No description provided for @coachOverGoal.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.'**
+  /// **'{delta} kcal over your goal. One day doesn\'t undo a week — just keep going.'**
   String coachOverGoal(String delta);
 
   /// No description provided for @coachOverTypical.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.'**
+  /// **'{delta} kcal above your usual. Worth knowing, not worth worrying about — the next meal\'s a clean slate.'**
   String coachOverTypical(String delta);
 
   /// No description provided for @coachNoReference.
   ///
   /// In en, this message translates to:
-  /// **'Logged and counted. A few more days and I can tell you how today compares.'**
+  /// **'Logged and counted. A few more days and I can tell you how this compares to your usual.'**
   String get coachNoReference;
 
   /// No description provided for @coachDetail.
