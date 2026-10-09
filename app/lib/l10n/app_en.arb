@@ -517,6 +517,24 @@
       }
     }
   },
+  "coachPartialGoal": "{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.",
+  "@coachPartialGoal": {
+    "description": "Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachPartialTypical": "{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.",
+  "@coachPartialTypical": {
+    "description": "Coach line for a day logged far below the usual day: more likely missing meals than a real cut.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
   "coachOnTarget": "Right on target. Consistency beats intensity — keep stacking days like this.",
   "coachOverGoal": "{delta} kcal over your goal. One day doesn't undo a week — just keep going.",
   "@coachOverGoal": {

@@ -23,6 +23,8 @@ CoachStrings coachStringsFor(String appLanguage) {
     emptyYesterday: l.coachEmptyYesterday,
     underGoal: l.coachUnderGoal,
     underTypical: l.coachUnderTypical,
+    partialGoal: l.coachPartialGoal,
+    partialTypical: l.coachPartialTypical,
     onTarget: l.coachOnTarget,
     overGoal: l.coachOverGoal,
     overTypical: l.coachOverTypical,

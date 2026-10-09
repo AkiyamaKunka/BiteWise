@@ -800,6 +800,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String coachPartialGoal(String delta) {
+    return '$delta kcal under your goal — any meals not logged yet? Add them in BiteWise.';
+  }
+
+  @override
+  String coachPartialTypical(String delta) {
+    return '$delta kcal below your usual day — any meals not logged yet? Add them in BiteWise.';
+  }
+
+  @override
   String get coachOnTarget =>
       'Right on target. Consistency beats intensity — keep stacking days like this.';
 

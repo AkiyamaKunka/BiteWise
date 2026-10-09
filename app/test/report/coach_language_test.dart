@@ -41,12 +41,15 @@ void main() {
     // under, on-target, over, empty, and no-reference all get real
     // Chinese, not a half-localized message.
     expect(summaryIn('zh', eaten: 1600).body, contains('比目标少'));
+    expect(summaryIn('zh', eaten: 180, meals: 1).body,
+        contains('没记上的餐'));
     expect(summaryIn('zh', eaten: 2000).body, contains('达标'));
     expect(summaryIn('zh', eaten: 2600).body, contains('比目标多'));
     expect(summaryIn('zh', meals: 0).body, contains('还没有记录'));
     expect(summaryIn('zh', goal: 0).body, contains('已记录'));
     for (final s in [
       summaryIn('zh', eaten: 1600),
+      summaryIn('zh', eaten: 180, meals: 1),
       summaryIn('zh', eaten: 2000),
       summaryIn('zh', eaten: 2600),
       summaryIn('zh', meals: 0),
@@ -78,9 +81,11 @@ void main() {
           );
       final cases = {
         'under goal': catchUp(goal: 2000, eaten: 1500),
+        'partial goal': catchUp(goal: 2000, eaten: 300),
         'on goal': catchUp(goal: 2000, eaten: 2000),
         'over goal': catchUp(goal: 2000, eaten: 2600),
         'under typical': catchUp(typical: 2000, eaten: 1500),
+        'partial typical': catchUp(typical: 2000, eaten: 300),
         'on typical': catchUp(typical: 2000, eaten: 2000),
         'over typical': catchUp(typical: 2000, eaten: 2600),
         'no reference': catchUp(),
@@ -91,6 +96,33 @@ void main() {
         for (final word in ['今天', '明天', '今日', '明日', 'today', 'tomorrow']) {
           expect(body, isNot(contains(word)),
               reason: '$lang $branch catch-up body names the wrong day: '
+                  '${s.body}');
+        }
+      }
+    }
+  });
+
+  test('a mostly-unlogged day gets no deficit praise in either language',
+      () {
+    // A lunch-only or snack-only day is missing meals, not a cut: the real
+    // lines must not celebrate it (tone contract: neutral, never shaming).
+    for (final lang in ['zh', 'en']) {
+      for (final typical in [false, true]) {
+        final s = buildCoachSummary(
+          eatenKcal: 180,
+          mealCount: 1,
+          proteinG: 4,
+          goalKcal: typical ? null : 2000,
+          typicalKcal: typical ? 2000 : null,
+          strings: coachStringsFor(lang),
+          formatKcal: (v) => v.round().toString(),
+        );
+        expect(s.body, contains('1820'));
+        for (final praise in [
+          '自律', '很棒', '有效', '💪', 'real cut', 'discipline', 'strong work',
+        ]) {
+          expect(s.body.toLowerCase(), isNot(contains(praise)),
+              reason: '$lang typical=$typical praises a partial day: '
                   '${s.body}');
         }
       }

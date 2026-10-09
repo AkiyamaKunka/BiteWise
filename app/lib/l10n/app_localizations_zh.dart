@@ -755,6 +755,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String coachPartialGoal(String delta) {
+    return '比目标少 $delta 千卡 —— 还有没记上的餐吗？在筷拍里补上就好。';
+  }
+
+  @override
+  String coachPartialTypical(String delta) {
+    return '比平时少 $delta 千卡 —— 还有没记上的餐吗？在筷拍里补上就好。';
+  }
+
+  @override
   String get coachOnTarget => '正好达标。稳定比猛冲更重要，继续保持。';
 
   @override

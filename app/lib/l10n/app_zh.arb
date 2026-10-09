@@ -239,6 +239,8 @@
   "coachEmptyYesterday": "昨天没有记录。拍下一餐，它会自动出现在这里。",
   "coachUnderGoal": "比目标少 {delta} 千卡 —— 实打实的缺口，这种自律会累积成结果。💪",
   "coachUnderTypical": "比你平时少 {delta} 千卡。很棒，这样的一天才是真正有效的。",
+  "coachPartialGoal": "比目标少 {delta} 千卡 —— 还有没记上的餐吗？在筷拍里补上就好。",
+  "coachPartialTypical": "比平时少 {delta} 千卡 —— 还有没记上的餐吗？在筷拍里补上就好。",
   "coachOnTarget": "正好达标。稳定比猛冲更重要，继续保持。",
   "coachOverGoal": "比目标多 {delta} 千卡。一天不会毁掉一周，接着来就好。",
   "coachOverTypical": "比平时多 {delta} 千卡。知道就好，不用焦虑 —— 下一餐重新开始。",

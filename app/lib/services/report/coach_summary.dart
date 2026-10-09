@@ -41,6 +41,8 @@ class CoachStrings {
     required this.emptyYesterday,
     required this.underGoal,
     required this.underTypical,
+    required this.partialGoal,
+    required this.partialTypical,
     required this.onTarget,
     required this.overGoal,
     required this.overTypical,
@@ -66,6 +68,13 @@ class CoachStrings {
   /// (delta) → the coach line for a day under the reference.
   final String Function(String delta) underGoal;
   final String Function(String delta) underTypical;
+
+  /// (delta) → the line for a day far under the reference (see
+  /// [kPartialDayFraction]): neutral, it invites the missing meals instead
+  /// of praising a "cut". Day-neutral, so the 昨天 catch-up card reads
+  /// right too.
+  final String Function(String delta) partialGoal;
+  final String Function(String delta) partialTypical;
   final String onTarget;
   final String Function(String delta) overGoal;
   final String Function(String delta) overTypical;
@@ -80,6 +89,14 @@ class CoachStrings {
 /// Anything inside this band reads as "on target" — a 40 kcal miss is
 /// noise in an estimate, and calling it a deficit would be theatre.
 const int kOnTargetBandKcal = 100;
+
+/// A day logged below this share of the reference is far more likely to
+/// be missing meals (a lunch-only day, a snack, meals with no estimate)
+/// than a real cut, so it gets the neutral "missed a meal?" line instead
+/// of deficit praise. One 180 kcal snack against a 2,000 goal used to read
+/// "1,820 kcal under — that's a real cut", the same day the empty branch
+/// refuses to call a 2,000 kcal cut.
+const double kPartialDayFraction = 0.5;
 
 /// Build the notification. [goalKcal] 0/null = unset; [typicalKcal] null
 /// until the median exists (≥2 prior days).
@@ -135,9 +152,14 @@ CoachSummary buildCoachSummary({
     line = strings.onTarget;
   } else if (delta < 0) {
     final under = formatKcal(-delta);
-    line = kind == CoachReference.goal
-        ? strings.underGoal(under)
-        : strings.underTypical(under);
+    final goalRef = kind == CoachReference.goal;
+    if (eaten < reference * kPartialDayFraction) {
+      line = goalRef
+          ? strings.partialGoal(under)
+          : strings.partialTypical(under);
+    } else {
+      line = goalRef ? strings.underGoal(under) : strings.underTypical(under);
+    }
   } else {
     final over = formatKcal(delta);
     line = kind == CoachReference.goal

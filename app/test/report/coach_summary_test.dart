@@ -18,6 +18,8 @@ final strings = CoachStrings(
   emptyYesterday: 'Nothing logged yesterday.',
   underGoal: (d) => '$d kcal under your goal',
   underTypical: (d) => '$d kcal below your usual day',
+  partialGoal: (d) => '$d kcal under your goal — missed a meal?',
+  partialTypical: (d) => '$d kcal below your usual day — missed a meal?',
   onTarget: 'Right on target today.',
   overGoal: (d) => '$d kcal over your goal today',
   overTypical: (d) => '$d kcal above your usual today',
@@ -82,6 +84,33 @@ void main() {
     expect(s.body, 'Nothing logged today.');
     expect(s.deltaKcal, 0,
         reason: 'an unlogged day is not a 2,000 kcal cut');
+  });
+
+  test('a mostly-unlogged day is not praised as a cut', () {
+    // One 180 kcal snack against a 2,000 goal used to read "1,820 kcal
+    // under your goal — that's a real cut": the very day the empty branch
+    // refuses to invent a deficit for. Far under the reference is far
+    // more likely missing meals, so the line asks instead of praising.
+    final snack = build(eaten: 180, meals: 1, goal: 2000);
+    expect(snack.body,
+        contains('1,820 kcal under your goal — missed a meal?'));
+    expect(snack.deltaKcal, -1820, reason: 'the number itself is honest');
+    // Meals logged with no calorie estimate total 0 kcal.
+    final unknown = build(eaten: 0, meals: 2, goal: 2000);
+    expect(unknown.body,
+        contains('2,000 kcal under your goal — missed a meal?'));
+    expect(build(eaten: 400, typical: 2000).body,
+        contains('1,600 kcal below your usual day — missed a meal?'));
+    // A real cut above half the reference keeps the normal line.
+    expect(build(eaten: 1100, goal: 2000).body,
+        allOf(contains('900 kcal under your goal'),
+            isNot(contains('missed a meal'))));
+    expect(build(eaten: 1600, goal: 2000).body,
+        allOf(contains('400 kcal under your goal'),
+            isNot(contains('missed a meal'))));
+    // Exactly half is not "far under".
+    expect(build(eaten: 1000, goal: 2000).body,
+        isNot(contains('missed a meal')));
   });
 
   test('no goal and no median yet: honest, still useful', () {

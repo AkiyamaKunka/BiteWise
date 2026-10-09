@@ -1406,6 +1406,18 @@ abstract class AppLocalizations {
   /// **'{delta} kcal below your usual day. Strong work — that\'s the kind of day that moves the needle.'**
   String coachUnderTypical(String delta);
 
+  /// Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.'**
+  String coachPartialGoal(String delta);
+
+  /// Coach line for a day logged far below the usual day: more likely missing meals than a real cut.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.'**
+  String coachPartialTypical(String delta);
+
   /// No description provided for @coachOnTarget.
   ///
   /// In en, this message translates to:

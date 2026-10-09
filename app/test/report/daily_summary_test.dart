@@ -18,6 +18,8 @@ final strings = CoachStrings(
   emptyYesterday: 'Nothing logged yesterday.',
   underGoal: (d) => '$d under goal',
   underTypical: (d) => '$d below usual',
+  partialGoal: (d) => '$d under goal, meals missing?',
+  partialTypical: (d) => '$d below usual, meals missing?',
   onTarget: 'On target.',
   overGoal: (d) => '$d over goal',
   overTypical: (d) => '$d above usual',
