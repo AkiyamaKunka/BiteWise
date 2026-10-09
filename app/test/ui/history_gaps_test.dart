@@ -9,6 +9,7 @@ import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/history_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -191,5 +192,34 @@ void main() {
     expect(
         tester.widget<DayDetailScreen>(find.byType(DayDetailScreen)).date,
         _iso(now.subtract(const Duration(days: 3))));
+  });
+
+  testWidgets('a screen reader gets no tap on the chart or the average '
+      'caption — it used to open the middle day, not a chosen one',
+      (tester) async {
+    // The chart's GestureDetector exported a semantic tap that merged into
+    // the caption: VoiceOver read the average as a button, and a double
+    // tap ran onTapUp at the chart's CENTRE (the middle slot's day). The
+    // day rows are the accessible drill-down; sighted taps are pinned by
+    // the test above.
+    final handle = tester.ensureSemantics();
+    final now = DateTime.now();
+    final meals = [
+      for (final back in [0, 2, 4, 6, 8])
+        _meal(_iso(now.subtract(Duration(days: back))), cal: 500 + back),
+    ];
+    await pump(tester, meals);
+
+    for (final key in const ['historyAverage', 'calorieTrendChart']) {
+      final data = tester.getSemantics(find.byKey(Key(key))).getSemanticsData();
+      expect(data.hasAction(SemanticsAction.tap), isFalse,
+          reason: '$key must not be activatable by a screen reader');
+    }
+    // The rows still are.
+    final row = tester
+        .getSemantics(find.byKey(Key('historyDay${_iso(now)}')))
+        .getSemanticsData();
+    expect(row.hasAction(SemanticsAction.tap), isTrue);
+    handle.dispose();
   });
 }

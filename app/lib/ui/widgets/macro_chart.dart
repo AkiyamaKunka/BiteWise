@@ -279,6 +279,13 @@ class CalorieTrendChart extends StatelessWidget {
       builder: (context, constraints) {
         final width = constraints.maxWidth;
         return GestureDetector(
+          // Sighted taps only. A screen reader's tap is synthesized at the
+          // box CENTRE, so it opened whichever day sat in the middle slot —
+          // and the action merged into the caption below, making
+          // "平均：约 … 千卡 / 天" an activatable element that opened an
+          // arbitrary day. The day rows under the chart are the accessible
+          // drill-down.
+          excludeFromSemantics: true,
           onTapUp: onDayTap == null
               ? null
               : (details) {
