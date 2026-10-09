@@ -6,9 +6,11 @@
 // that is hundreds of MB for a screen that ends up using exactly ONE
 // photo. These tests pin the new shape: list assets, thumbnail per cell,
 // original bytes only for the tapped photo.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
@@ -353,6 +355,80 @@ void main() {
 
       expect(find.byKey(const Key('addPhotosLimited')), findsOneWidget);
       expect(find.byKey(const Key('addPhotosLimitedSettings')), findsNothing);
+    });
+  });
+
+  // VoiceOver/TalkBack read the grid as thirty identical unlabeled
+  // 'image's, so a blind user could not find the photo of a given meal,
+  // and the '分析中…' overlay was silent (a11y find 2026-10-08).
+  group('screen reader', () {
+    Future<FakePicker> pumpGrid(WidgetTester tester,
+        {Locale? locale, Future<PhotoOutcome> Function(IntakePhoto)? process}) async {
+      final picker = FakePicker()
+        ..photos = [
+          for (var i = 0; i < 3; i++)
+            IntakePhoto(Uint8List.fromList(List.filled(16, 3)), 'a$i',
+                'a$i.jpg',
+                capturedAt: DateTime(2026, 7, 30, 12 + i, 5)),
+        ];
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: locale == null
+              ? const [Locale('en', 'US')]
+              : AppLocalizations.supportedLocales,
+          home: AddPhotoScreen(
+              services: makeServices(
+                  picker: picker,
+                  processPhoto: process ??
+                      (_) async =>
+                          const PhotoOutcome(PhotoOutcomeKind.saved, 'ok')))));
+      await tester.pumpAndSettle();
+      return picker;
+    }
+
+    testWidgets('zh: each cell names its position and shot time, and that '
+        'labeled node is the one a double-tap picks', (tester) async {
+      final handle = tester.ensureSemantics();
+      final picker = await pumpGrid(tester, locale: const Locale('zh'));
+
+      final second = find.semantics.byLabel('第 2/3 张照片，7月30日 星期四 13:05');
+      expect(second, findsOne);
+      expect(second.evaluate().single,
+          isSemantics(isImage: true, hasTapAction: true));
+      await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+      tester.semantics.tap(second);
+      await tester.pumpAndSettle();
+      expect(picker.loadedOriginals, ['a1'],
+          reason: 'the label sits on the tappable node, not beside it');
+      handle.dispose();
+    });
+
+    testWidgets('en: the same label in English', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpGrid(tester);
+      expect(find.semantics.byLabel('Photo 1 of 3, Thursday, Jul 30 12:05 PM'),
+          findsOne);
+      expect(find.semantics.byLabel('Photo 3 of 3, Thursday, Jul 30 02:05 PM'),
+          findsOne);
+      handle.dispose();
+    });
+
+    testWidgets('the analyzing overlay is a live region', (tester) async {
+      final handle = tester.ensureSemantics();
+      final gate = Completer<PhotoOutcome>();
+      await pumpGrid(tester, process: (_) => gate.future);
+      await tester.tap(find.byKey(const Key('recentPhoto0')));
+      await tester.pump();
+
+      expect(
+          tester.getSemantics(find.byKey(const Key('photoAnalyzingText'))),
+          isSemantics(label: 'Analyzing…', isLiveRegion: true));
+      gate.complete(const PhotoOutcome(PhotoOutcomeKind.saved, 'ok'));
+      await tester.pumpAndSettle();
+      handle.dispose();
     });
   });
 }

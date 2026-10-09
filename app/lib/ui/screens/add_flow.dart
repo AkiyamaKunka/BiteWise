@@ -465,22 +465,34 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                 itemBuilder: (context, i) => GestureDetector(
                   key: Key('recentPhoto$i'),
                   onTap: _analyzing ? null : () => _pick(assets[i]),
-                  child: FutureBuilder<Uint8List?>(
-                    future: _thumbFor(assets[i].id),
-                    builder: (context, snap) {
-                      final bytes = snap.data;
-                      if (bytes == null || bytes.isEmpty) {
-                        return Container(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest);
-                      }
-                      // cacheWidth: decode at cell size, not 12 MP.
-                      return Image.memory(bytes,
-                          fit: BoxFit.cover,
-                          cacheWidth: 320,
-                          gaplessPlayback: true);
-                    },
+                  // VoiceOver/TalkBack read thirty identical unlabeled
+                  // 'image's — no way to find the photo of a given meal.
+                  // Position + shot time name the cell; the label sits
+                  // INSIDE the gesture widget so the tap action stays on
+                  // the same node, and covers the placeholder too.
+                  child: Semantics(
+                    image: true,
+                    label: context.l10n.photoCellLabel(i + 1, assets.length,
+                        context.photoTakenAt(assets[i].createdAt)),
+                    child: ExcludeSemantics(
+                      child: FutureBuilder<Uint8List?>(
+                        future: _thumbFor(assets[i].id),
+                        builder: (context, snap) {
+                          final bytes = snap.data;
+                          if (bytes == null || bytes.isEmpty) {
+                            return Container(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest);
+                          }
+                          // cacheWidth: decode at cell size, not 12 MP.
+                          return Image.memory(bytes,
+                              fit: BoxFit.cover,
+                              cacheWidth: 320,
+                              gaplessPlayback: true);
+                        },
+                      ),
+                    ),
                   ),
                 ),
               )),
@@ -497,8 +509,14 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                     const CircularProgressIndicator(
                         key: Key('photoAnalyzing')),
                     const SizedBox(height: 12),
-                    Text(context.l10n.analyzing,
-                        style: const TextStyle(color: Colors.white)),
+                    // Live region: a slow round-trip is otherwise silent
+                    // to a screen reader until the outcome dialog.
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(context.l10n.analyzing,
+                          key: const Key('photoAnalyzingText'),
+                          style: const TextStyle(color: Colors.white)),
+                    ),
                   ],
                 ),
               ),

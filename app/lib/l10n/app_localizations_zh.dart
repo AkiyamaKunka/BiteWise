@@ -1039,6 +1039,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String photoCellLabel(int n, int total, String when) {
+    return '第 $n/$total 张照片，$when';
+  }
+
+  @override
   String get photoPermissionDenied => '筷拍没有获得访问照片的权限。';
 
   @override

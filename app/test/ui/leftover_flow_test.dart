@@ -101,6 +101,29 @@ void main() {
         reason: 'the watcher must never log the leftover photo as food');
   });
 
+  // The photo picker was a grid of unlabeled 'image's to VoiceOver/
+  // TalkBack — the leftover flow could not be finished without sight
+  // (a11y find 2026-10-08).
+  testWidgets('screen reader: each photo cell names its position and shot '
+      'time, and that node is the one a double-tap picks', (tester) async {
+    final handle = tester.ensureSemantics();
+    dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+    await pump(tester);
+    await tester.tap(find.byKey(const Key('leftoverMeal-1')));
+    await tester.pumpAndSettle();
+
+    // FakePicker dates an undated photo 2026-07-31 00:00.
+    final cell = find.semantics.byLabel('Photo 1 of 1, Friday, Jul 31 12:00 AM');
+    expect(cell, findsOne);
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+
+    tester.semantics.tap(cell);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget,
+        reason: 'the labeled node carries the tap');
+    handle.dispose();
+  });
+
   testWidgets("yesterday's incident: the watcher-logged duplicate is "
       'removed in the same confirmation', (tester) async {
     dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));

@@ -699,6 +699,21 @@
       }
     }
   },
+  "photoCellLabel": "Photo {n} of {total}, {when}",
+  "@photoCellLabel": {
+    "description": "Screen-reader label of one recent-photo grid cell; {when} is the day and clock the photo was taken.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "photoPermissionDenied": "Bitewise isn't allowed to see your photos.",
   "openSystemSettings": "Open system settings",
   "outcomeSaved": "Meal logged",

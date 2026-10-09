@@ -431,19 +431,30 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
                 return InkWell(
                   key: Key('leftoverPhoto-${asset.id}'),
                   onTap: () => _pickPhoto(asset),
-                  child: FutureBuilder<Uint8List?>(
-                    future: _thumbFor(asset.id),
-                    builder: (context, thumb) => thumb.data == null
-                        ? Container(
-                            color: theme.colorScheme.surfaceContainerHighest)
-                        : Image.memory(thumb.data!,
-                            fit: BoxFit.cover,
-                            // A corrupt thumbnail must stay a tappable
-                            // tile, never an error spray.
-                            errorBuilder: (_, _, _) => Container(
-                                color: theme
-                                    .colorScheme.surfaceContainerHighest,
-                                child: const Icon(Icons.image_outlined))),
+                  // Same screen-reader label as the add grid: position +
+                  // shot time, inside the InkWell so its tap stays on the
+                  // node.
+                  child: Semantics(
+                    image: true,
+                    label: context.l10n.photoCellLabel(i + 1, assets.length,
+                        context.photoTakenAt(asset.createdAt)),
+                    child: ExcludeSemantics(
+                      child: FutureBuilder<Uint8List?>(
+                        future: _thumbFor(asset.id),
+                        builder: (context, thumb) => thumb.data == null
+                            ? Container(
+                                color:
+                                    theme.colorScheme.surfaceContainerHighest)
+                            : Image.memory(thumb.data!,
+                                fit: BoxFit.cover,
+                                // A corrupt thumbnail must stay a tappable
+                                // tile, never an error spray.
+                                errorBuilder: (_, _, _) => Container(
+                                    color: theme
+                                        .colorScheme.surfaceContainerHighest,
+                                    child: const Icon(Icons.image_outlined))),
+                      ),
+                    ),
                   ),
                 );
               },

@@ -1904,6 +1904,12 @@ abstract class AppLocalizations {
   /// **'Could not load photos: {error}'**
   String addPhotosLoadFailed(String error);
 
+  /// Screen-reader label of one recent-photo grid cell; {when} is the day and clock the photo was taken.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo {n} of {total}, {when}'**
+  String photoCellLabel(int n, int total, String when);
+
   /// No description provided for @photoPermissionDenied.
   ///
   /// In en, this message translates to:

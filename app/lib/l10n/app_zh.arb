@@ -322,6 +322,7 @@
   "addPhotosTitle": "最近照片",
   "addPhotoUnreadable": "无法读取这张照片（太大或已被删除）。",
   "addPhotosLoadFailed": "无法加载照片：{error}",
+  "photoCellLabel": "第 {n}/{total} 张照片，{when}",
   "photoPermissionDenied": "筷拍没有获得访问照片的权限。",
   "openSystemSettings": "打开系统设置",
   "outcomeSaved": "已记录一餐",

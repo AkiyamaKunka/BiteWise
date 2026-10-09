@@ -1114,6 +1114,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String photoCellLabel(int n, int total, String when) {
+    return 'Photo $n of $total, $when';
+  }
+
+  @override
   String get photoPermissionDenied =>
       'Bitewise isn\'t allowed to see your photos.';
 
