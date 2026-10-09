@@ -10,6 +10,7 @@
 /// a photo the model refused.
 library;
 
+import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -19,6 +20,7 @@ import '../../core/coerce.dart' show normalizeImageHash;
 import '../../core/contracts.dart';
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
+import '../large_text.dart';
 import '../meal_edit_logic.dart';
 import '../widgets/macro_chart.dart';
 
@@ -451,25 +453,24 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('editorDateButton'),
-                  onPressed: _pickDate,
-                  icon: const Icon(Icons.event_outlined, size: 18),
-                  label: Text(_draft.dateIso),
-                ),
+          // At large text the two pills stack: side by side, the date
+          // wrapped onto two lines.
+          _fieldGrid(
+            perRow: isLargeText(context) ? 1 : 2,
+            gap: 8,
+            [
+              OutlinedButton.icon(
+                key: const Key('editorDateButton'),
+                onPressed: _pickDate,
+                icon: const Icon(Icons.event_outlined, size: 18),
+                label: Text(_draft.dateIso),
               ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: OutlinedButton.icon(
-                  key: const Key('editorTimeButton'),
-                  onPressed: _pickTime,
-                  icon: const Icon(Icons.schedule_outlined, size: 18),
-                  // Locale clock (24h in zh), like every other time in the UI.
-                  label: Text(context.clock(_draft.time)),
-                ),
+              OutlinedButton.icon(
+                key: const Key('editorTimeButton'),
+                onPressed: _pickTime,
+                icon: const Icon(Icons.schedule_outlined, size: 18),
+                // Locale clock (24h in zh), like every other time in the UI.
+                label: Text(context.clock(_draft.time)),
               ),
             ],
           ),
@@ -482,28 +483,25 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             label: context.l10n.editorCaloriesLabel,
           ),
           const SizedBox(height: 8),
-          Row(
-            children: [
-              Expanded(
-                child: _NumberField(
-                    fieldKey: const Key('editorProtein'),
-                    controller: _pro,
-                    label: context.l10n.editorProteinLabel),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _NumberField(
-                    fieldKey: const Key('editorCarbs'),
-                    controller: _carb,
-                    label: context.l10n.editorCarbsLabel),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: _NumberField(
-                    fieldKey: const Key('editorFat'),
-                    controller: _fat,
-                    label: context.l10n.editorFatLabel),
-              ),
+          // At large text each macro field takes the full width, like
+          // Calories: a third of the row cut 'Protein (g)' / '蛋白质（克）'
+          // to 'Pr…'.
+          _fieldGrid(
+            perRow: isLargeText(context) ? 1 : 3,
+            gap: 8,
+            [
+              _NumberField(
+                  fieldKey: const Key('editorProtein'),
+                  controller: _pro,
+                  label: context.l10n.editorProteinLabel),
+              _NumberField(
+                  fieldKey: const Key('editorCarbs'),
+                  controller: _carb,
+                  label: context.l10n.editorCarbsLabel),
+              _NumberField(
+                  fieldKey: const Key('editorFat'),
+                  controller: _fat,
+                  label: context.l10n.editorFatLabel),
             ],
           ),
           const SizedBox(height: 16),
@@ -583,6 +581,25 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       parseNumberField(raw, label: 'x', max: maxMacroGrams).value ?? 0;
 }
 
+/// [children] [perRow] to a row, sharing each row's width equally, [gap]
+/// apart both ways. With every child in one row it is exactly the plain
+/// Row of Expanded children the editor used before large-text stacking.
+Widget _fieldGrid(List<Widget> children,
+    {required int perRow, required double gap}) {
+  final rows = <Widget>[];
+  for (var i = 0; i < children.length; i += perRow) {
+    final chunk = children.sublist(i, min(i + perRow, children.length));
+    if (rows.isNotEmpty) rows.add(SizedBox(height: gap));
+    rows.add(Row(children: [
+      for (var j = 0; j < chunk.length; j++) ...[
+        if (j > 0) SizedBox(width: gap),
+        Expanded(child: chunk[j]),
+      ],
+    ]));
+  }
+  return rows.length == 1 ? rows.single : Column(children: rows);
+}
+
 class _NumberField extends StatelessWidget {
   const _NumberField({
     required this.fieldKey,
@@ -648,31 +665,28 @@ class _ItemRow extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Row(
-              children: [
-                Expanded(
-                    child: _NumberField(
-                        fieldKey: Key('itemCal$index'),
-                        controller: ctrls.cal,
-                        label: context.l10n.editorItemKcalLabel)),
-                const SizedBox(width: 6),
-                Expanded(
-                    child: _NumberField(
-                        fieldKey: Key('itemPro$index'),
-                        controller: ctrls.pro,
-                        label: '${context.l10n.macroProteinShort} g')),
-                const SizedBox(width: 6),
-                Expanded(
-                    child: _NumberField(
-                        fieldKey: Key('itemCarb$index'),
-                        controller: ctrls.carb,
-                        label: '${context.l10n.macroCarbsShort} g')),
-                const SizedBox(width: 6),
-                Expanded(
-                    child: _NumberField(
-                        fieldKey: Key('itemFat$index'),
-                        controller: ctrls.fat,
-                        label: '${context.l10n.macroFatShort} g')),
+            // At large text a 2x2 grid: a quarter of the row cut 'kcal'
+            // to 'k…'. The labels are short enough for half.
+            _fieldGrid(
+              perRow: isLargeText(context) ? 2 : 4,
+              gap: 6,
+              [
+                _NumberField(
+                    fieldKey: Key('itemCal$index'),
+                    controller: ctrls.cal,
+                    label: context.l10n.editorItemKcalLabel),
+                _NumberField(
+                    fieldKey: Key('itemPro$index'),
+                    controller: ctrls.pro,
+                    label: '${context.l10n.macroProteinShort} g'),
+                _NumberField(
+                    fieldKey: Key('itemCarb$index'),
+                    controller: ctrls.carb,
+                    label: '${context.l10n.macroCarbsShort} g'),
+                _NumberField(
+                    fieldKey: Key('itemFat$index'),
+                    controller: ctrls.fat,
+                    label: '${context.l10n.macroFatShort} g'),
               ],
             ),
           ],
