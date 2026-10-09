@@ -9,7 +9,7 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:image/image.dart' show decodeJpgExif;
+import 'package:image/image.dart' show ExifData, InputBuffer, decodeJpgExif;
 
 import '../../core/shared_generated.dart';
 
@@ -130,22 +130,108 @@ DateTime? exifCapturedAt(Uint8List jpegBytes) {
   try {
     final exif = decodeJpgExif(jpegBytes);
     if (exif == null) return null;
-    final raw = (exif.exifIfd['DateTimeOriginal'] ??
-            exif.imageIfd['DateTime'])
-        ?.toString();
-    if (raw == null) return null;
-    final m = _exifDateTimeRe.firstMatch(raw.trim());
-    if (m == null) return null;
-    final parts = [for (var i = 1; i <= 6; i++) int.parse(m.group(i)!)];
-    final dt = DateTime(
-        parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]);
-    // DateTime() normalizes overflow (month 13 → next year); a normalized
-    // value means the EXIF was junk, not a date.
-    if (dt.month != parts[1] || dt.day != parts[2] || dt.hour != parts[3]) {
-      return null;
-    }
-    return dt;
+    return _parseExifDateTime(
+        (exif.exifIfd['DateTimeOriginal'] ?? exif.imageIfd['DateTime'])
+            ?.toString());
   } catch (_) {
     return null;
   }
+}
+
+/// An EXIF 'YYYY:MM:DD HH:MM:SS' as a local-component wall clock, or null.
+DateTime? _parseExifDateTime(String? raw) {
+  if (raw == null) return null;
+  final m = _exifDateTimeRe.firstMatch(raw.trim());
+  if (m == null) return null;
+  final parts = [for (var i = 1; i <= 6; i++) int.parse(m.group(i)!)];
+  final dt =
+      DateTime(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]);
+  // DateTime() normalizes overflow (month 13 → next year); a normalized
+  // value means the EXIF was junk, not a date.
+  if (dt.month != parts[1] || dt.day != parts[2] || dt.hour != parts[3]) {
+    return null;
+  }
+  return dt;
+}
+
+/// EXIF OffsetTimeOriginal (tag 0x9011, written by iPhones): '±HH:MM'.
+final RegExp _exifOffsetRe = RegExp(r'^([+-])(\d{2}):(\d{2})');
+
+/// The shutter's wall clock AND the zone it was in: EXIF DateTimeOriginal
+/// plus OffsetTimeOriginal, from a JPEG or a HEIC/HEIF original. Null when
+/// either tag is missing or malformed. Never throws: hostile bytes return
+/// null.
+({DateTime wall, Duration offset})? exifWallAndOffset(Uint8List bytes) {
+  try {
+    final isJpeg = bytes.length >= 2 && bytes[0] == 0xff && bytes[1] == 0xd8;
+    final exif = isJpeg ? decodeJpgExif(bytes) : _embeddedExif(bytes);
+    if (exif == null) return null;
+    final wall =
+        _parseExifDateTime(exif.exifIfd['DateTimeOriginal']?.toString());
+    final rawOffset = exif.exifIfd['OffsetTimeOriginal']?.toString();
+    if (wall == null || rawOffset == null) return null;
+    final m = _exifOffsetRe.firstMatch(rawOffset.trim());
+    if (m == null) return null;
+    final hours = int.parse(m.group(2)!);
+    final minutes = int.parse(m.group(3)!);
+    if (hours > 14 || minutes > 59) return null; // no such zone
+    final sign = m.group(1) == '-' ? -1 : 1;
+    return (
+      wall: wall,
+      offset: Duration(minutes: sign * (hours * 60 + minutes)),
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/// The EXIF block of a non-JPEG original (HEIC/HEIF): decodeJpgExif
+/// refuses anything without a JPEG SOI. A HEIF Exif item's payload is
+/// 'Exif\0\0' followed by a TIFF header ('MM\0*' or 'II*\0'); requiring the
+/// TIFF header skips the iinf box's 'Exif' item-type name, which is followed
+/// by the next box header instead. The whole buffer is scanned: where the
+/// writer puts the Exif item inside mdat is not fixed, and a few MB is
+/// cheap.
+ExifData? _embeddedExif(Uint8List b) {
+  for (var i = 0; i + 10 <= b.length; i++) {
+    if (b[i] != 0x45 || // E
+        b[i + 1] != 0x78 || // x
+        b[i + 2] != 0x69 || // i
+        b[i + 3] != 0x66 || // f
+        b[i + 4] != 0 ||
+        b[i + 5] != 0) {
+      continue;
+    }
+    final t = i + 6;
+    final bigEndianTiff =
+        b[t] == 0x4d && b[t + 1] == 0x4d && b[t + 2] == 0 && b[t + 3] == 0x2a;
+    final littleEndianTiff =
+        b[t] == 0x49 && b[t + 1] == 0x49 && b[t + 2] == 0x2a && b[t + 3] == 0;
+    if (!bigEndianTiff && !littleEndianTiff) continue;
+    return ExifData.fromInputBuffer(
+        InputBuffer(Uint8List.sublistView(b, t), bigEndian: true));
+  }
+  return null;
+}
+
+/// The meal-dating clock for a photo whose [capturedAt] is an INSTANT shown
+/// in the phone's CURRENT zone (iOS: the asset's createDateTime — the
+/// filename carries no timestamp). A photo taken in Chicago and first
+/// scanned after landing in Shanghai was dated by Shanghai's clock: a 19:10
+/// dinner became 08:10 the next morning (2026-10-08). When the EXIF shutter
+/// stamp minus its own zone offset is the SAME instant (±2 min), the
+/// camera's wall clock in the zone where the photo was taken wins — the
+/// clock the meal was eaten by, and what Android's filename timestamps
+/// already give. Otherwise [capturedAt] is returned unchanged: a filename
+/// wall clock read in a different zone, or EXIF without an offset, never
+/// re-dates a meal.
+DateTime captureWallClock(
+    DateTime capturedAt, ({DateTime wall, Duration offset})? exif) {
+  if (exif == null) return capturedAt;
+  final w = exif.wall;
+  final shutter =
+      DateTime.utc(w.year, w.month, w.day, w.hour, w.minute, w.second)
+          .subtract(exif.offset);
+  final drift = shutter.difference(capturedAt.toUtc()).abs();
+  return drift <= const Duration(minutes: 2) ? w : capturedAt;
 }

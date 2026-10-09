@@ -11,7 +11,8 @@
 ///     hide the meal the user just typed numbers into.
 ///   - blank means ZERO, not "unknown": a blank protein field on a meal the
 ///     user is explicitly curating should read 0 g in totals, and the
-///     display helpers render 0 for falsy anyway.
+///     display helpers render a stored 0 as 0 (calories included — see
+///     format.displayTotalCalories), so card and day total agree.
 library;
 
 import '../core/coerce.dart';

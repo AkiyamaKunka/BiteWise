@@ -4,6 +4,8 @@
 /// (2026-07-31) — the diagnostics page answers strictly more.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -324,6 +326,31 @@ void main() {
     expect(find.byKey(const Key('quotaPauseBanner')), findsOneWidget);
   });
 
+  testWidgets('the watcher toggle is ONE screen-reader stop: its name and '
+      'its on/off state together', (tester) async {
+    // Unmerged, VoiceOver stopped on 'Watch Camera Roll' and then on an
+    // unnamed switch — the state was never read with its name.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      photoIntake: FakeIntake(),
+      requestPhotoPermission: () async => true,
+    )));
+    await tester.pumpAndSettle();
+    final node = tester.getSemantics(find.byKey(const Key('watcherToggle')));
+    expect(node.label, contains('Watch Camera Roll'));
+    expect(node, isSemantics(hasToggledState: true, isToggled: true));
+    expect(find.bySemanticsLabel('Watch Camera Roll'), findsOneWidget,
+        reason: 'one node, not a title node plus a nameless switch');
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    handle.dispose();
+  });
+
   testWidgets('watcher toggle stays off when permission is denied',
       (tester) async {
     final settings = FakeSettings(watcherEnabled: false);
@@ -624,6 +651,29 @@ void planTuningTests() {
       expect(find.textContaining('Tomorrow'), findsOneWidget);
     });
 
+    // 2026-10-09: on a first run the startup arm sits behind the
+    // notification-permission dialog; di.dart makes the probe wait for the
+    // arm, so the row must stay a neutral '…' while it is pending — never a
+    // red 'Not scheduled' — and settle on the slot once the arm completes.
+    testWidgets('a probe still waiting on the startup arm shows …, then slot',
+        (tester) async {
+      final now = DateTime.now();
+      final slot = DateTime(now.year, now.month, now.day + 1, 21, 30);
+      final armed = Completer<DateTime?>();
+      await tester.pumpWidget(screen(next: () => armed.future));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const Key('nextSummaryRow')), findsOneWidget);
+      expect(find.text('…'), findsOneWidget);
+      expect(find.textContaining('Not scheduled'), findsNothing);
+      armed.complete(slot);
+      await tester.pumpAndSettle();
+      expect(find.text('…'), findsNothing);
+      expect(find.textContaining('Not scheduled'), findsNothing);
+      expect(find.textContaining('Tomorrow'), findsOneWidget);
+      expect(find.textContaining('21:30'), findsOneWidget);
+    });
+
     testWidgets('background-scan row: last OS launch, or "Not run yet"',
         (tester) async {
       Widget bg(Future<DateTime?> Function()? last) => _wrap(SettingsScreen(
@@ -665,7 +715,9 @@ void planTuningTests() {
         openSystemSettings: () async => opened++,
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Off in Settings'), findsOneWidget);
+      // Bare 'Off' (the red icon and chevron point to the remedy): 'Off in
+      // Settings' cut the 'Background scan' title (row_fit_layout_test).
+      expect(find.text('Off'), findsOneWidget);
       expect(find.text('Not run yet'), findsNothing);
       await tester.tap(find.byKey(const Key('backgroundScanRow')));
       await tester.pump();

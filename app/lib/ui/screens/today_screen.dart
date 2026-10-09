@@ -209,7 +209,7 @@ class TodayScreenState extends State<TodayScreen> {
       if (!mounted) return;
       await SharePlus.instance.share(ShareParams(
         files: [XFile(file.path, mimeType: 'image/png')],
-        subject: 'Daily intake $today',
+        subject: '${context.l10n.reportTitle} $today',
       ));
     } catch (e) {
       if (mounted) {

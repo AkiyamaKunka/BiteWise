@@ -5,9 +5,11 @@
 // stay collapsed. This suite shipped a day late — the feature went out
 // untested (loop debt, closed here).
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/history_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -98,6 +100,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('addMealToDay')), findsOneWidget,
         reason: 'DayDetail with its + FAB is the fix for a missed day');
+    // The '+' read as just 'button' to a screen reader: every tap target
+    // on the day must carry a name.
+    expect(find.byTooltip('Add a meal to this day'), findsOneWidget);
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+  });
+
+  testWidgets('zh day detail: the + and the corrected mark are named in '
+      'Chinese', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final handle = tester.ensureSemantics();
+    final dao = FakeDao();
+    final today = _iso(DateTime.now());
+    dao.meals.add(Meal(
+        id: 1,
+        date: today,
+        time: '12:00 PM',
+        timestamp: '${today}T12:00:00.000',
+        source: 'app_watch',
+        imageHash: 'h1',
+        corrected: true,
+        analysis: {'is_food': true, 'total_calories': 500}));
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DayDetailScreen(dao: dao, date: today)));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('给这一天加一餐'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('已修正')), findsOneWidget,
+        reason: 'the pencil on a corrected meal was silent');
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    handle.dispose();
   });
 
   testWidgets('a hand-edited FUTURE meal stays OUT of History — the §5.3 '
@@ -156,5 +192,34 @@ void main() {
     expect(
         tester.widget<DayDetailScreen>(find.byType(DayDetailScreen)).date,
         _iso(now.subtract(const Duration(days: 3))));
+  });
+
+  testWidgets('a screen reader gets no tap on the chart or the average '
+      'caption — it used to open the middle day, not a chosen one',
+      (tester) async {
+    // The chart's GestureDetector exported a semantic tap that merged into
+    // the caption: VoiceOver read the average as a button, and a double
+    // tap ran onTapUp at the chart's CENTRE (the middle slot's day). The
+    // day rows are the accessible drill-down; sighted taps are pinned by
+    // the test above.
+    final handle = tester.ensureSemantics();
+    final now = DateTime.now();
+    final meals = [
+      for (final back in [0, 2, 4, 6, 8])
+        _meal(_iso(now.subtract(Duration(days: back))), cal: 500 + back),
+    ];
+    await pump(tester, meals);
+
+    for (final key in const ['historyAverage', 'calorieTrendChart']) {
+      final data = tester.getSemantics(find.byKey(Key(key))).getSemanticsData();
+      expect(data.hasAction(SemanticsAction.tap), isFalse,
+          reason: '$key must not be activatable by a screen reader');
+    }
+    // The rows still are.
+    final row = tester
+        .getSemantics(find.byKey(Key('historyDay${_iso(now)}')))
+        .getSemanticsData();
+    expect(row.hasAction(SemanticsAction.tap), isTrue);
+    handle.dispose();
   });
 }

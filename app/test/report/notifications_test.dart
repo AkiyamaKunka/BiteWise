@@ -4,7 +4,37 @@
 library;
 
 import 'package:calorie_tracker/services/report/notifications.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Records what ReportNotifier hands the real plugin. Everything else
+/// (the permission request) hits Fake's throwing noSuchMethod, which init
+/// already treats as non-fatal.
+class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
+  InitializationSettings? settings;
+  final shown = <NotificationDetails?>[];
+
+  @override
+  Future<bool?> initialize({
+    required InitializationSettings settings,
+    DidReceiveNotificationResponseCallback? onDidReceiveNotificationResponse,
+    DidReceiveBackgroundNotificationResponseCallback?
+        onDidReceiveBackgroundNotificationResponse,
+  }) async {
+    this.settings = settings;
+    return true;
+  }
+
+  @override
+  Future<void> show({
+    required int id,
+    String? title,
+    String? body,
+    NotificationDetails? notificationDetails,
+    String? payload,
+  }) async =>
+      shown.add(notificationDetails);
+}
 
 void main() {
   group('parseHhmm', () {
@@ -220,6 +250,25 @@ void main() {
     expect(fired[0].$1, isNot(fired[1].$1));
     expect(fired.map((f) => f.$1),
         isNot(contains(ReportNotifier.dailyReportNotificationId)));
+  });
+
+  // Android draws the small icon from its alpha channel only: the
+  // full-colour launcher art ('@mipmap/ic_launcher') came out as a blank
+  // circle in the status bar and the shade header. Both the plugin default
+  // and every card name the white-on-transparent mark instead.
+  test('Android notifications use the monochrome mark, not the launcher art',
+      () async {
+    final plugin = _RecordingPlugin();
+    final notifier = ReportNotifier(plugin: plugin);
+    await notifier.init();
+    expect(plugin.settings!.android!.defaultIcon,
+        '@drawable/${ReportNotifier.androidSmallIcon}');
+    await notifier.showMealCard('Meal logged', '~450 kcal');
+    await notifier.showDailySummary('Today', '1800 kcal');
+    expect(plugin.shown, hasLength(2));
+    for (final details in plugin.shown) {
+      expect(details!.android!.icon, ReportNotifier.androidSmallIcon);
+    }
   });
 
   test('scheduledDailyAt answers only while the OS still holds the card',

@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
+import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
 
@@ -45,8 +46,8 @@ class CoverageScreen extends StatefulWidget {
   /// For missing-photo thumbnails; null degrades to icons.
   final PhotoLibrary? library;
 
-  /// Open the manual editor for a photo the model refused. Null hides the
-  /// action (tests / no editor context).
+  /// Open the manual editor for a photo the model refused or failed on for
+  /// good. Null hides the action (tests / no editor context).
   final Future<bool> Function(IntakePhoto photo)? logManually;
 
   @override
@@ -162,6 +163,12 @@ class _CoverageScreenState extends State<CoverageScreen> {
     var failures = 0;
     var attempted = 0;
     var stopped = false;
+    // The failure that ended the run, when one did. The canAnalyze() stop
+    // really is "quota pause or missing key"; a retryable failure is not —
+    // on the Claude Plan it is usually a busy or unreachable server — so
+    // that stop names its own reason instead of sending the user to a key
+    // that is fine.
+    PhotoOutcome? stopOutcome;
     for (final item in items) {
       // Re-checked EVERY iteration, not once up front: photo 1's daily-quota
       // 429 arms the pause latch mid-batch, and every photo pushed after
@@ -185,6 +192,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
           // was released, not burned, so this photo's tombstone is already
           // gone. Cap the damage at one row.
           if (outcome.retryable) {
+            stopOutcome = outcome;
             stopped = true;
             if (mounted) setState(() => _progressDone = attempted);
             break;
@@ -204,16 +212,20 @@ class _CoverageScreenState extends State<CoverageScreen> {
     if (!mounted) return;
     final remaining = items.length - attempted;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(stopped
-            ? l.covStopped(label, attempted, items.length, remaining)
-            : failures == 0
+        content: Text(stopOutcome != null
+            ? l.covStoppedBecause(label, attempted, items.length,
+                outcomeBody(l, stopOutcome), remaining)
+            : stopped
+                ? l.covStopped(label, attempted, items.length, remaining)
+                : failures == 0
                 ? l.covDone(label, items.length)
                 : l.covDoneFailures(label, failures, items.length))));
     await _runAudit();
   }
 
-  /// A "not food" tombstone is otherwise permanent: re-analysis repeats the
-  /// verdict, so the only real remedy is letting the user enter the meal.
+  /// A "not food" tombstone or a permanent failure is otherwise a dead end:
+  /// re-analysis repeats the verdict, so the only real remedy is letting the
+  /// user enter the meal (the add flow offers the same for both).
   Future<void> _logManually(CoverageItem item) async {
     final open = widget.logManually;
     if (open == null) return;
@@ -379,7 +391,8 @@ class _CoverageScreenState extends State<CoverageScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
                   child: Text(
-                      '…and ${report.skippedNonFood.length - _maxTiles} more.',
+                      context.l10n.covMoreNotFood(
+                          report.skippedNonFood.length - _maxTiles),
                       style: theme.textTheme.bodySmall),
                 ),
             ],
@@ -407,8 +420,23 @@ class _CoverageScreenState extends State<CoverageScreen> {
                   ),
                 ],
               ),
+              Text(
+                  context.l10n.covFailedHelp,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              // A ledgered 'failed' is a NON-retryable verdict (decode
+              // failure, oversize, a coded 400, "no usable result"), so
+              // Retry all usually repeats it at another model call each
+              // time. Same escape hatch as the add flow's
+              // canLogManually = skipped || failed.
               for (final item in report.failed.take(_maxTiles))
-                _PhotoTile(item: item, thumb: _thumbFor(item)),
+                _PhotoTile(
+                  item: item,
+                  thumb: _thumbFor(item),
+                  onTap: widget.logManually == null
+                      ? null
+                      : () => _logManually(item),
+                ),
               if (report.failed.length > _maxTiles)
                 Padding(
                   padding: const EdgeInsets.symmetric(vertical: 8),
@@ -472,12 +500,14 @@ class _SummaryCard extends StatelessWidget {
                     context.l10n.covLeftoverCount(report.leftoverApplied),
                 if (report.failed.isNotEmpty)
                     context.l10n.covFailedCount(report.failed.length),
-                if (report.deleted > 0) '${report.deleted} deleted by you',
-                if (report.inFlight > 0) '${report.inFlight} in progress',
+                if (report.deleted > 0)
+                    context.l10n.covDeletedCount(report.deleted),
+                if (report.inFlight > 0)
+                    context.l10n.covInFlightCount(report.inFlight),
                 if (report.unreadable > 0)
-                    '${report.unreadable} unreadable',
+                    context.l10n.covUnreadableCount(report.unreadable),
                 if (report.tooLargeToAnalyze > 0)
-                    '${report.tooLargeToAnalyze} too large to analyze',
+                    context.l10n.covTooLargeCount(report.tooLargeToAnalyze),
               ].join(' · '),
               style: theme.textTheme.bodySmall,
             ),
@@ -544,7 +574,8 @@ class _PhotoTile extends StatelessWidget {
           );
         },
       ),
-      title: Text(item.fileName.isEmpty ? '(unnamed photo)' : item.fileName,
+      title: Text(
+          item.fileName.isEmpty ? context.l10n.covUnnamedPhoto : item.fileName,
           style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
       subtitle: Text(
           '${item.createDate.year}-'

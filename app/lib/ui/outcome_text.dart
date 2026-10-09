@@ -46,6 +46,17 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
   }
 }
 
+/// The snackbar line for a pipeline `notify`, which fires only for a save,
+/// a leftover deduction or a PERMANENT failure (kept in 之前失败 for a
+/// deliberate retry; transient failures are released silently). English is
+/// byte-identical to the strings the pipeline used to hand the snackbar.
+String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
+  final body = outcomeBody(l, o);
+  return o.kind == PhotoOutcomeKind.failed
+      ? l.outcomeFailedKeptMsg(body)
+      : body;
+}
+
 /// The `(code)` a server rejection carries, e.g. `bad_model` out of
 /// "The server rejected this request (bad_model)."; '?' when absent.
 String rejectionCode(String message) =>

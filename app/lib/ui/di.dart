@@ -4,7 +4,7 @@
 /// time, the integrator fixes THIS file alone.
 library;
 
-import 'dart:async' show unawaited;
+import 'dart:async' show Completer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
@@ -33,6 +33,7 @@ import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
 import 'migrations.dart';
+import 'outcome_text.dart' show outcomeSnackbar;
 import 'os_summary.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
@@ -100,12 +101,15 @@ class AppServices {
     // one sentence and two numbers, not a full meal table. Both firing
     // paths — this Timer and the WorkManager heartbeat in
     // background_glue — call the SAME builder behind the SAME per-date
-    // watermark, so whichever runs first wins and the other no-ops.
-    Future<void> postSummary() => maybePostDailySummary(DailySummaryDeps(
+    // watermark, so whichever runs first wins and the other no-ops. The
+    // watermark is read FRESH at fire time: the heartbeat writes it from
+    // another isolate, which this isolate's prefs cache would never see.
+    Future<void> postSummary() async =>
+        maybePostDailySummary(DailySummaryDeps(
           dao: dao,
           reportTime: settings.reportTime,
           calorieGoal: settings.calorieGoal,
-          postedDate: settings.summaryPostedDate,
+          postedDate: await settings.freshSummaryPostedDate(),
           markPosted: settings.markSummaryPosted,
           present: notifier.showDailySummary,
           strings: coachStringsFor(settings.appLanguage),
@@ -132,19 +136,30 @@ class AppServices {
     final osSchedulesSummary = Platform.isIOS;
     Future<void> armOsSummary() =>
         armOsDailySummary(dao: dao, settings: settings, notifier: notifier);
+    // Settings' 下次总结 probe waits on this: on a first run init() sits
+    // behind the notification-permission dialog, and a probe answered
+    // before the arm read null and painted a red 'Not scheduled' over a
+    // summary armed seconds later. Completed right after the arm (not after
+    // the catch-up) and in `finally`, so a denial or a junk hh:mm resolves
+    // the probe instead of leaving it pending.
+    final summaryArmed = Completer<void>();
     unawaited(() async {
       try {
         await notifier.init();
         if (osSchedulesSummary) {
           await armOsSummary();
+          if (!summaryArmed.isCompleted) summaryArmed.complete();
         } else {
           await notifier.scheduleDaily(settings.reportTime);
+          if (!summaryArmed.isCompleted) summaryArmed.complete();
           // Catch-up at launch: if the slot passed while the app was dead
           // and no background run has happened yet, say it now.
           await postSummary();
         }
       } catch (_) {
         // Permission denial / corrupt hh:mm must never break startup.
+      } finally {
+        if (!summaryArmed.isCompleted) summaryArmed.complete();
       }
     }());
 
@@ -153,7 +168,13 @@ class AppServices {
     final pipeline = PhotoPipeline(
         dao: dao,
         analyzer: analyzer,
-        notify: notify,
+        // Worded HERE, in the app language read live at each call, so a
+        // language switch applies to the next snackbar; main.dart stays a
+        // plain String sink.
+        notify: notify == null
+            ? null
+            : (o) => notify(
+                outcomeSnackbar(localizationsFor(settings.appLanguage), o)),
         // Open screens re-query instead of showing pre-save data.
         onMealSaved: signalMealsChanged);
 
@@ -197,7 +218,10 @@ class AppServices {
       setupLinks: appLinks.uriLinkStream,
       initialSetupLink: appLinks.getInitialLink,
       notificationsEnabled: notifier.notificationsEnabled,
-      nextSummaryAt: notifier.scheduledDailyAt,
+      nextSummaryAt: () async {
+        await summaryArmed.future;
+        return notifier.scheduledDailyAt();
+      },
       lastBackgroundScan: lastBackgroundRun,
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the
@@ -224,8 +248,8 @@ class AppServices {
           // Truncation must not vanish silently: >2000 window images means
           // the catch-up cannot promise full coverage.
           if (e is BackfillWindowTruncated) {
-            notify?.call('Photo library backlog is very large — some older '
-                'photos may need to be added manually.');
+            notify?.call(localizationsFor(settings.appLanguage)
+                .backlogTruncatedWarning);
           }
         }));
       }

@@ -9,6 +9,13 @@
 //     line (RIGHT OVERFLOWED BY 75 PIXELS).
 //   - Macro legend (day detail + editor): one entry wider than the card
 //     could not wrap inside its Row, so the percentage ran past the edge.
+// Not overflows but still unreadable at that size (2026-10-08), so above
+// 1.5x (ui/large_text.dart) these layouts stack instead of shrinking text:
+//   - Day detail meal row: the clock beside the title squeezed a Chinese
+//     title to ~2 glyphs a line; the clock now sits under the title.
+//   - Meal editor: the date pill wrapped and the number-field labels were
+//     cut ('Pr…', 'k…'); date/time and the total macros take a row each,
+//     the item fields a 2x2 grid. Normal text keeps the one-row layout.
 // Whether text fits depends on the glyphs (the test font is a full em per
 // glyph, far wider than the phone's), so this loads the iPhone's own system
 // fonts — macOS only, skipped elsewhere, as body_screen_test does.
@@ -63,10 +70,63 @@ Meal itemizedMeal() => Meal(
   },
 );
 
+/// A generic dish name (not anyone's real meal) long enough to wrap.
+Meal titledMeal(String title) => Meal(
+  id: 1,
+  date: '2026-07-24',
+  time: '01:30 PM',
+  timestamp: '2026-07-24T13:30:00.000',
+  source: 'app_photo',
+  imageHash: 'h1',
+  analysis: {
+    'is_food': true,
+    'meal_description': title,
+    'total_calories': 450,
+    'total_protein_g': 50,
+    'total_carbs_g': 12,
+    'total_fat_g': 22,
+  },
+);
+
+/// Every label paragraph inside [field] shows in full (no '…').
+void expectLabelsUncut(WidgetTester tester, Finder field) {
+  final paragraphs = tester.renderObjectList<RenderParagraph>(
+    find.descendant(of: field, matching: find.byType(RichText)),
+  );
+  expect(paragraphs, isNotEmpty);
+  for (final p in paragraphs) {
+    expect(
+      p.didExceedMaxLines,
+      isFalse,
+      reason: '"${p.text.toPlainText()}" is cut to an ellipsis',
+    );
+  }
+}
+
+/// [finder]'s last paragraph (a button's label comes after its icon,
+/// itself a RichText) reads on one line.
+void expectOneLine(WidgetTester tester, Finder finder) {
+  final p = tester
+      .renderObjectList<RenderParagraph>(
+        find.descendant(of: finder, matching: find.byType(RichText)),
+      )
+      .last;
+  expect(
+    p.size.width,
+    greaterThanOrEqualTo(p.getMaxIntrinsicWidth(double.infinity) - 0.5),
+    reason: '"${p.text.toPlainText()}" must not wrap',
+  );
+}
+
 void main() {
   DateTime clock() => DateTime(2026, 7, 24, 19, 5);
 
-  Future<void> pumpAt(WidgetTester tester, String lang, Widget home) async {
+  Future<void> pumpAt(
+    WidgetTester tester,
+    String lang,
+    Widget home, {
+    double scale = 3.1,
+  }) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -82,7 +142,7 @@ void main() {
         builder: (context, child) => MediaQuery(
           data: MediaQuery.of(
             context,
-          ).copyWith(textScaler: const TextScaler.linear(3.1)),
+          ).copyWith(textScaler: TextScaler.linear(scale)),
           child: child!,
         ),
         home: home,
@@ -218,6 +278,110 @@ void main() {
               reason: '"${p.text.toPlainText()}" stays inside the card',
             );
           }
+        });
+
+        testWidgets('$lang: day detail meal title gets the row, clock below', (
+          tester,
+        ) async {
+          final dao = FakeDao()
+            ..seed(titledMeal(lang == 'zh' ? '番茄炒蛋配米饭和青菜' : 'Tomato egg rice'));
+          await pumpAt(
+            tester,
+            lang,
+            DayDetailScreen(dao: dao, date: '2026-07-24', now: clock),
+          );
+          expect(tester.takeException(), isNull);
+          final row = find.byKey(const Key('mealRow1'));
+          final title = find.descendant(
+            of: row,
+            matching: find.byKey(const Key('mealRowTitle')),
+          );
+          final time = find.descendant(
+            of: row,
+            matching: find.byKey(const Key('mealRowTime')),
+          );
+          await tester.scrollUntilVisible(
+            time,
+            200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          await tester.pumpAndSettle();
+          // The clock sits under the title instead of taking a fixed slice
+          // of its line, so the title is not squeezed to ~2 glyphs a line.
+          expect(
+            tester.getRect(time).top,
+            greaterThanOrEqualTo(tester.getRect(title).bottom - 0.5),
+          );
+          expect(
+            tester.getRect(title).width,
+            greaterThanOrEqualTo(tester.getRect(row).width / 2),
+          );
+          expectOneLine(tester, time);
+        });
+
+        testWidgets('$lang: meal editor number labels and date read in full', (
+          tester,
+        ) async {
+          final dao = FakeDao()..seed(itemizedMeal());
+          await pumpAt(
+            tester,
+            lang,
+            MealEditorScreen(dao: dao, meal: dao.meals.first, now: clock),
+          );
+          expect(tester.takeException(), isNull);
+          final scrollable = find.byType(Scrollable).first;
+          expectOneLine(tester, find.byKey(const Key('editorDateButton')));
+          expectOneLine(tester, find.byKey(const Key('editorTimeButton')));
+          for (final k in const [
+            'editorCalories',
+            'editorProtein',
+            'editorCarbs',
+            'editorFat',
+            'itemCal0',
+            'itemPro0',
+            'itemCarb0',
+            'itemFat0',
+          ]) {
+            final field = find.byKey(Key(k));
+            await tester.scrollUntilVisible(field, 200, scrollable: scrollable);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expectLabelsUncut(tester, field);
+          }
+        });
+
+        testWidgets('$lang: normal text keeps the one-row field layout', (
+          tester,
+        ) async {
+          final dao = FakeDao()..seed(itemizedMeal());
+          await pumpAt(
+            tester,
+            lang,
+            MealEditorScreen(dao: dao, meal: dao.meals.first, now: clock),
+            scale: 1.0,
+          );
+          expect(tester.takeException(), isNull);
+          double top(String k) => tester.getRect(find.byKey(Key(k))).top;
+          expect(top('editorTimeButton'), top('editorDateButton'));
+          expect(top('editorCarbs'), top('editorProtein'));
+          expect(top('editorFat'), top('editorProtein'));
+          expect(top('itemPro0'), top('itemCal0'));
+          expect(top('itemFat0'), top('itemCal0'));
+
+          await pumpAt(
+            tester,
+            lang,
+            DayDetailScreen(dao: dao, date: '2026-07-24', now: clock),
+            scale: 1.0,
+          );
+          expect(tester.takeException(), isNull);
+          // The clock stays beside the title.
+          expect(
+            tester.getRect(find.byKey(const Key('mealRowTime'))).left,
+            greaterThanOrEqualTo(
+              tester.getRect(find.byKey(const Key('mealRowTitle'))).right,
+            ),
+          );
         });
       }
     },

@@ -198,4 +198,90 @@ void main() {
       expect(find.text('• 删除披萨这一餐'), findsOneWidget);
     });
   });
+
+  // The field used to be cleared as soon as the executor returned, so an
+  // AI-contact error ("please try again") left nothing to try again with
+  // (loop find 2026-10-08). It now clears only when something changed —
+  // the same condition as "Applied this session".
+  group('the typed request survives a reply that changed nothing', () {
+    String fieldText(WidgetTester tester) => tester
+        .widget<TextField>(find.byKey(const Key('fixMealField')))
+        .controller!
+        .text;
+
+    testWidgets('an AI-contact error keeps the text for a retry',
+        (tester) async {
+      final executor = FakeExecutor()
+        ..nextReplies = [
+          const NlReply('❌ Error contacting AI. Please try again.'),
+        ];
+
+      await _pumpTodayAndSend(tester, executor, 'delete the first meal');
+
+      expect(find.text('❌ Error contacting AI. Please try again.'),
+          findsOneWidget);
+      expect(fieldText(tester), 'delete the first meal');
+
+      // Retrying sends the same request again without retyping it.
+      executor.nextReplies = [
+        const NlReply('Corrected meal #1', applied: true),
+      ];
+      await tester.tap(find.byKey(const Key('fixMealSend')));
+      await tester.pumpAndSettle();
+      expect(executor.handledTexts,
+          ['delete the first meal', 'delete the first meal']);
+      expect(fieldText(tester), isEmpty);
+    });
+
+    testWidgets('an applied reply clears the field', (tester) async {
+      final executor = FakeExecutor()
+        ..nextReplies = [
+          const NlReply('Logged 72.5 kg for 2026-07-17.', applied: true),
+        ];
+
+      await _pumpTodayAndSend(tester, executor, 'I weigh 72.5 kg');
+
+      expect(fieldText(tester), isEmpty);
+    });
+
+    testWidgets('a cancelled delete keeps the text; a confirmed one clears it',
+        (tester) async {
+      final executor = FakeExecutor()..nextReplies = [stagedReply];
+
+      await _pumpTodayAndSend(tester, executor, 'delete the pizza');
+      await tester.tap(find.byKey(const Key('nlDeleteCancel')));
+      await tester.pumpAndSettle();
+      expect(fieldText(tester), 'delete the pizza');
+
+      await tester.tap(find.byKey(const Key('fixMealSend')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('nlDeleteConfirm')));
+      await tester.pumpAndSettle();
+      expect(executor.confirmedDeletes, [
+        [7, 9]
+      ]);
+      expect(fieldText(tester), isEmpty);
+    });
+
+    testWidgets('zh: 联系 AI 失败 keeps the typed correction', (tester) async {
+      final executor = FakeExecutor()
+        ..nextReplies = [const NlReply('❌ 联系 AI 失败，请重试。')];
+
+      await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: FixMealScreen(executor: executor),
+      ));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+          find.byKey(const Key('fixMealField')), '午饭的米饭只吃了一半');
+      await tester.tap(find.byKey(const Key('fixMealSend')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('❌ 联系 AI 失败，请重试。'), findsOneWidget);
+      expect(fieldText(tester), '午饭的米饭只吃了一半');
+      expect(find.text('本次已应用'), findsNothing);
+    });
+  });
 }

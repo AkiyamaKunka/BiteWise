@@ -128,7 +128,7 @@ void main() {
     final analyzer = FakeAnalyzer()
       ..nextPhotoOutcome = AnalysisOutcome(
           analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
-    final notes = <String>[];
+    final notes = <PhotoOutcome>[];
     final pipeline =
         PhotoPipeline(dao: dao, analyzer: analyzer, notify: notes.add);
 
@@ -144,6 +144,9 @@ void main() {
     ]);
     expect(dao.ledger[_hash], IngestionStatus.saved);
     expect(notes, hasLength(1)); // notification-style snackbar on save
+    // The snackbar gets the OUTCOME (worded in the app language by
+    // di.dart), the very one process() returns.
+    expect(notes.single, same(out));
   });
 
   test('non-food photo → skipped tombstone, no meal', () async {
@@ -169,6 +172,29 @@ void main() {
     expect(out.kind, PhotoOutcomeKind.failed);
     expect(dao.ledger[_hash], IngestionStatus.failed);
     expect(dao.meals, isEmpty);
+  });
+
+  test('a throwing snackbar on a PERMANENT failure keeps the real verdict',
+      () async {
+    // The failure notify used to sit outside any shield: a throw fell into
+    // the outer catch and the user read "Photo intake failed: …" instead of
+    // why the analysis failed.
+    final dao = FakeDao();
+    final analyzer = FakeAnalyzer()
+      ..nextPhotoOutcome =
+          const AnalysisOutcome(error: 'bad key', wall: Duration.zero);
+    final seen = <PhotoOutcome>[];
+    final out = await PhotoPipeline(
+        dao: dao,
+        analyzer: analyzer,
+        notify: (o) {
+          seen.add(o);
+          throw StateError('snackbar died');
+        }).process(_photo());
+    expect(out.kind, PhotoOutcomeKind.failed);
+    expect(out.message, 'bad key');
+    expect(seen.single, same(out));
+    expect(dao.ledger[_hash], IngestionStatus.failed);
   });
 
   test('RETRYABLE failed analysis → reservation released, not burned',

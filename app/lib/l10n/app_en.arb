@@ -29,6 +29,39 @@
   "ringLeftToday": "left today",
   "ringAboveTypical": "above typical",
   "ringKcalToday": "kcal today",
+  "ringSemantics": "{kcal} kcal eaten today",
+  "@ringSemantics": {
+    "description": "Screen-reader sentence for the Today ring when there is no typical day yet.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "ringSemanticsTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day",
+  "@ringSemanticsTypical": {
+    "description": "Screen-reader sentence for the Today ring at or under the typical day.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      },
+      "typical": {
+        "type": "String"
+      }
+    }
+  },
+  "ringSemanticsAboveTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)",
+  "@ringSemanticsAboveTypical": {
+    "description": "Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      },
+      "typical": {
+        "type": "String"
+      }
+    }
+  },
   "todayEmptyTitle": "No meals logged yet today.",
   "todayEmptyHint": "Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.",
   "fabLog": "Log",
@@ -147,7 +180,7 @@
   "cancel": "Cancel",
   "delete": "Delete",
   "settingsWelcomeTitle": "Welcome — one step to start logging",
-  "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM's default model is free) — the other providers need a VPN. 中国大陆用户请选择国内提供商。",
+  "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM's default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。",
   "settingsSectionAi": "AI",
   "settingsAiFooterPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.",
   "providerQuotaPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.",
@@ -205,7 +238,7 @@
   },
   "settingsRowBackgroundScan": "Background scan",
   "backgroundScanNever": "Not run yet",
-  "backgroundScanDisabled": "Off in Settings",
+  "backgroundScanDisabled": "Off",
   "settingsSectionProfile": "Profile",
   "settingsRowDietaryProfile": "Dietary Profile",
   "profileSet": "Set",
@@ -321,6 +354,9 @@
   "nlCannotUndo": "This cannot be undone.",
   "planGlm": "GLM Coding Plan",
   "planDoubao": "Doubao Agent Plan",
+  "planShortClaude": "Claude Plan",
+  "planShortGlm": "GLM Plan",
+  "planShortDoubao": "Doubao Plan",
   "serverHeader": "Your server",
   "serverFooter": "The cloud machine that holds your plan sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that machine.",
   "serverAddressLabel": "Server address",
@@ -348,6 +384,7 @@
   "addFixFooter": "\"meal 2 was roast duck\" · \"删除第一餐\"",
   "addPhotosTip": "Tip: chopsticks or a hand in the shot helps the AI judge portion sizes.",
   "addNoPhotos": "No recent photos found.",
+  "addPhotosLimited": "Only the photos you allowed are shown — photos you take later won't appear here. Allow access to all photos in system settings.",
   "analyzing": "Analyzing…",
   "reportTitle": "Daily intake",
   "reportMeals": "{count, plural, =1{1 meal} other{{count} meals}}",
@@ -517,8 +554,27 @@
       }
     }
   },
-  "coachOnTarget": "Right on target today. Consistency beats intensity — keep stacking days like this.",
-  "coachOverGoal": "{delta} kcal over your goal today. One day doesn't undo a week — you're back at it tomorrow.",
+  "coachPartialGoal": "{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.",
+  "@coachPartialGoal": {
+    "description": "Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachPartialTypical": "{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.",
+  "@coachPartialTypical": {
+    "description": "Coach line for a day logged far below the usual day: more likely missing meals than a real cut.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "coachOnTarget": "Right on target. Consistency beats intensity — keep stacking days like this.",
+  "coachOnTypical": "Right around your usual day. Consistency beats intensity — keep stacking days like this.",
+  "coachOverGoal": "{delta} kcal over your goal. One day doesn't undo a week — just keep going.",
   "@coachOverGoal": {
     "placeholders": {
       "delta": {
@@ -526,7 +582,7 @@
       }
     }
   },
-  "coachOverTypical": "{delta} kcal above your usual today. Worth knowing, not worth worrying about — tomorrow's a clean slate.",
+  "coachOverTypical": "{delta} kcal above your usual. Worth knowing, not worth worrying about — the next meal's a clean slate.",
   "@coachOverTypical": {
     "placeholders": {
       "delta": {
@@ -534,7 +590,7 @@
       }
     }
   },
-  "coachNoReference": "Logged and counted. A few more days and I can tell you how today compares.",
+  "coachNoReference": "Logged and counted. A few more days and I can tell you how this compares to your usual.",
   "coachDetail": "{meals} meals · {protein} g protein",
   "@coachDetail": {
     "placeholders": {
@@ -558,9 +614,10 @@
   "macroProteinShort": "P",
   "macroCarbsShort": "C",
   "macroFatShort": "F",
-  "editorProteinLabel": "Protein (g)",
-  "editorCarbsLabel": "Carbs (g)",
-  "editorFatLabel": "Fat (g)",
+  "editorProteinLabel": "Protein",
+  "editorCarbsLabel": "Carbs",
+  "editorFatLabel": "Fat",
+  "editorGramsSuffix": "g",
   "diagTitle": "Test AI provider",
   "diagIntro": "Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.",
   "diagRunning": "Testing…",
@@ -626,7 +683,7 @@
       }
     }
   },
-  "diagFixVpn": "This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).",
+  "diagFixVpn": "This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).",
   "diagFixServerUnreachable": "Check the server address, that the server is running, and your network.",
   "diagFixNetwork": "Check your network connection and try again.",
   "diagKeyAccepted": "The provider accepted your key.",
@@ -645,9 +702,12 @@
     }
   },
   "diagTextOk": "The model answered JSON — chat fixes and \"describe a meal\" work.",
-  "diagTextBad": "The model did not return usable JSON for a text request.",
+  "diagTextBad": "The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).",
   "diagTextBadDetail": "Chat fixes and \"describe a meal\" may fail; photo analysis can still work.",
   "diagFixPickModel": "If this persists, pick a different model in Settings.",
+  "diagTextBadPhotoAlsoFailed": "Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.",
+  "diagFixTextPickModel": "If photo analysis works but this keeps failing, pick a different model in Settings.",
+  "diagFixTextFollowPhoto": "Follow the fix on the photo row, then run the test again.",
   "diagPhotoOk": "The model analyzed a test image and answered the meal format.",
   "diagPhotoThoughtFood": "It even thought the test disc was food.",
   "diagPhotoNotFood": "Verdict \"not food\" — correct for the test image.",
@@ -676,6 +736,21 @@
       }
     }
   },
+  "photoCellLabel": "Photo {n} of {total}, {when}",
+  "@photoCellLabel": {
+    "description": "Screen-reader label of one recent-photo grid cell; {when} is the day and clock the photo was taken.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "when": {
+        "type": "String"
+      }
+    }
+  },
   "photoPermissionDenied": "Bitewise isn't allowed to see your photos.",
   "openSystemSettings": "Open system settings",
   "outcomeSaved": "Meal logged",
@@ -686,6 +761,9 @@
   "outcomeFailed": "Analysis failed",
   "outcomeLeftoverApplied": "Leftovers deducted",
   "outcomeLogManuallyHint": "If this IS food, log it yourself — the photo stays attached to the meal.",
+  "outcomeUndoLeftover": "Not leftovers, log as a new meal",
+  "outcomeUndoLeftoverDone": "Deduction undone — the earlier meal is back as it was.",
+  "outcomeUndoLeftoverStale": "That meal was changed or deleted since, so it was left as it is.",
   "okButton": "OK",
   "logManually": "Log manually",
   "describeTitle": "Describe a meal",
@@ -711,6 +789,15 @@
       }
     }
   },
+  "outcomeFailedKeptMsg": "Photo analysis failed — kept for retry. {reason}",
+  "@outcomeFailedKeptMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "backlogTruncatedWarning": "Photo library backlog is very large — some older photos may need to be added manually.",
   "outcomeNotFoodMsg": "No food detected in this photo.",
   "outcomeDuplicateMsg": "Looks like a duplicate of a photo logged minutes ago.",
   "outcomeAlreadyTrackedMsg": "This photo was already logged.",
@@ -735,7 +822,12 @@
     }
   },
   "dayEmpty": "Nothing logged on this day yet. Tap + to add a meal.",
+  "dayAddMealTooltip": "Add a meal to this day",
   "notFoodTag": "not food",
+  "correctedBadge": "Corrected",
+  "@correctedBadge": {
+    "description": "Tooltip and screen-reader name of the pencil mark on a meal the user corrected."
+  },
   "fixRequestFailed": "That request failed: {error}",
   "@fixRequestFailed": {
     "placeholders": {
@@ -745,7 +837,7 @@
     }
   },
   "fixTitle": "Fix a meal",
-  "fixIntro": "Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.",
+  "fixIntro": "Say what to change or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language. To move a meal to another day or time, tap it on Today or in History and change its date or time.",
   "fixNamingTip": "Naming the food is safest — meal numbers count across the last 7 days, not just today.",
   "fixLabel": "What should change?",
   "fixHint": "e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"",
@@ -949,6 +1041,7 @@
     }
   },
   "covRetryAll": "Retry all",
+  "covFailedHelp": "\"Retry all\" asks the AI again (the same error often comes back); tap a row to enter it yourself.",
   "covMoreRetryAll": "…and {count} more — \"Retry all\" still covers every one.",
   "@covMoreRetryAll": {
     "placeholders": {
@@ -1000,6 +1093,35 @@
       }
     }
   },
+  "covStoppedBecause": "{label} stopped after {attempted} of {total}: {reason} The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.",
+  "@covStoppedBecause": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "int"
+      }
+    }
+  },
+  "covMoreNotFood": "…and {count} more.",
+  "@covMoreNotFood": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covUnnamedPhoto": "(unnamed photo)",
   "covDone": "{label} done ({count} photos).",
   "@covDone": {
     "placeholders": {
@@ -1059,6 +1181,38 @@
   },
   "covFailedCount": "{count} failed",
   "@covFailedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covDeletedCount": "{count} deleted by you",
+  "@covDeletedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covInFlightCount": "{count} in progress",
+  "@covInFlightCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covUnreadableCount": "{count} unreadable",
+  "@covUnreadableCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "covTooLargeCount": "{count} too large to analyze",
+  "@covTooLargeCount": {
     "placeholders": {
       "count": {
         "type": "int"

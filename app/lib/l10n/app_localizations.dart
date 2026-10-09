@@ -188,6 +188,24 @@ abstract class AppLocalizations {
   /// **'kcal today'**
   String get ringKcalToday;
 
+  /// Screen-reader sentence for the Today ring when there is no typical day yet.
+  ///
+  /// In en, this message translates to:
+  /// **'{kcal} kcal eaten today'**
+  String ringSemantics(String kcal);
+
+  /// Screen-reader sentence for the Today ring at or under the typical day.
+  ///
+  /// In en, this message translates to:
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day'**
+  String ringSemanticsTypical(String kcal, String typical);
+
+  /// Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.
+  ///
+  /// In en, this message translates to:
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)'**
+  String ringSemanticsAboveTypical(String kcal, String typical);
+
   /// No description provided for @todayEmptyTitle.
   ///
   /// In en, this message translates to:
@@ -425,7 +443,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWelcomeBody.
   ///
   /// In en, this message translates to:
-  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — the other providers need a VPN. 中国大陆用户请选择国内提供商。'**
+  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。'**
   String get settingsWelcomeBody;
 
   /// No description provided for @settingsSectionAi.
@@ -557,7 +575,7 @@ abstract class AppLocalizations {
   /// No description provided for @backgroundScanDisabled.
   ///
   /// In en, this message translates to:
-  /// **'Off in Settings'**
+  /// **'Off'**
   String get backgroundScanDisabled;
 
   /// No description provided for @settingsSectionProfile.
@@ -914,6 +932,24 @@ abstract class AppLocalizations {
   /// **'Doubao Agent Plan'**
   String get planDoubao;
 
+  /// No description provided for @planShortClaude.
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Plan'**
+  String get planShortClaude;
+
+  /// No description provided for @planShortGlm.
+  ///
+  /// In en, this message translates to:
+  /// **'GLM Plan'**
+  String get planShortGlm;
+
+  /// No description provided for @planShortDoubao.
+  ///
+  /// In en, this message translates to:
+  /// **'Doubao Plan'**
+  String get planShortDoubao;
+
   /// No description provided for @serverHeader.
   ///
   /// In en, this message translates to:
@@ -1075,6 +1111,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No recent photos found.'**
   String get addNoPhotos;
+
+  /// No description provided for @addPhotosLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the photos you allowed are shown — photos you take later won\'t appear here. Allow access to all photos in system settings.'**
+  String get addPhotosLimited;
 
   /// No description provided for @analyzing.
   ///
@@ -1406,28 +1448,46 @@ abstract class AppLocalizations {
   /// **'{delta} kcal below your usual day. Strong work — that\'s the kind of day that moves the needle.'**
   String coachUnderTypical(String delta);
 
+  /// Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.'**
+  String coachPartialGoal(String delta);
+
+  /// Coach line for a day logged far below the usual day: more likely missing meals than a real cut.
+  ///
+  /// In en, this message translates to:
+  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.'**
+  String coachPartialTypical(String delta);
+
   /// No description provided for @coachOnTarget.
   ///
   /// In en, this message translates to:
-  /// **'Right on target today. Consistency beats intensity — keep stacking days like this.'**
+  /// **'Right on target. Consistency beats intensity — keep stacking days like this.'**
   String get coachOnTarget;
+
+  /// No description provided for @coachOnTypical.
+  ///
+  /// In en, this message translates to:
+  /// **'Right around your usual day. Consistency beats intensity — keep stacking days like this.'**
+  String get coachOnTypical;
 
   /// No description provided for @coachOverGoal.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.'**
+  /// **'{delta} kcal over your goal. One day doesn\'t undo a week — just keep going.'**
   String coachOverGoal(String delta);
 
   /// No description provided for @coachOverTypical.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.'**
+  /// **'{delta} kcal above your usual. Worth knowing, not worth worrying about — the next meal\'s a clean slate.'**
   String coachOverTypical(String delta);
 
   /// No description provided for @coachNoReference.
   ///
   /// In en, this message translates to:
-  /// **'Logged and counted. A few more days and I can tell you how today compares.'**
+  /// **'Logged and counted. A few more days and I can tell you how this compares to your usual.'**
   String get coachNoReference;
 
   /// No description provided for @coachDetail.
@@ -1511,20 +1571,26 @@ abstract class AppLocalizations {
   /// No description provided for @editorProteinLabel.
   ///
   /// In en, this message translates to:
-  /// **'Protein (g)'**
+  /// **'Protein'**
   String get editorProteinLabel;
 
   /// No description provided for @editorCarbsLabel.
   ///
   /// In en, this message translates to:
-  /// **'Carbs (g)'**
+  /// **'Carbs'**
   String get editorCarbsLabel;
 
   /// No description provided for @editorFatLabel.
   ///
   /// In en, this message translates to:
-  /// **'Fat (g)'**
+  /// **'Fat'**
   String get editorFatLabel;
+
+  /// No description provided for @editorGramsSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'g'**
+  String get editorGramsSuffix;
 
   /// No description provided for @diagTitle.
   ///
@@ -1691,7 +1757,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixVpn.
   ///
   /// In en, this message translates to:
-  /// **'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).'**
+  /// **'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).'**
   String get diagFixVpn;
 
   /// No description provided for @diagFixServerUnreachable.
@@ -1763,7 +1829,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextBad.
   ///
   /// In en, this message translates to:
-  /// **'The model did not return usable JSON for a text request.'**
+  /// **'The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).'**
   String get diagTextBad;
 
   /// No description provided for @diagTextBadDetail.
@@ -1777,6 +1843,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this persists, pick a different model in Settings.'**
   String get diagFixPickModel;
+
+  /// No description provided for @diagTextBadPhotoAlsoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.'**
+  String get diagTextBadPhotoAlsoFailed;
+
+  /// No description provided for @diagFixTextPickModel.
+  ///
+  /// In en, this message translates to:
+  /// **'If photo analysis works but this keeps failing, pick a different model in Settings.'**
+  String get diagFixTextPickModel;
+
+  /// No description provided for @diagFixTextFollowPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow the fix on the photo row, then run the test again.'**
+  String get diagFixTextFollowPhoto;
 
   /// No description provided for @diagPhotoOk.
   ///
@@ -1862,6 +1946,12 @@ abstract class AppLocalizations {
   /// **'Could not load photos: {error}'**
   String addPhotosLoadFailed(String error);
 
+  /// Screen-reader label of one recent-photo grid cell; {when} is the day and clock the photo was taken.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo {n} of {total}, {when}'**
+  String photoCellLabel(int n, int total, String when);
+
   /// No description provided for @photoPermissionDenied.
   ///
   /// In en, this message translates to:
@@ -1921,6 +2011,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this IS food, log it yourself — the photo stays attached to the meal.'**
   String get outcomeLogManuallyHint;
+
+  /// No description provided for @outcomeUndoLeftover.
+  ///
+  /// In en, this message translates to:
+  /// **'Not leftovers, log as a new meal'**
+  String get outcomeUndoLeftover;
+
+  /// No description provided for @outcomeUndoLeftoverDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Deduction undone — the earlier meal is back as it was.'**
+  String get outcomeUndoLeftoverDone;
+
+  /// No description provided for @outcomeUndoLeftoverStale.
+  ///
+  /// In en, this message translates to:
+  /// **'That meal was changed or deleted since, so it was left as it is.'**
+  String get outcomeUndoLeftoverStale;
 
   /// No description provided for @okButton.
   ///
@@ -1987,6 +2095,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Leftovers deducted: {summary}'**
   String outcomeLeftoverMsg(String summary);
+
+  /// No description provided for @outcomeFailedKeptMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo analysis failed — kept for retry. {reason}'**
+  String outcomeFailedKeptMsg(String reason);
+
+  /// No description provided for @backlogTruncatedWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo library backlog is very large — some older photos may need to be added manually.'**
+  String get backlogTruncatedWarning;
 
   /// No description provided for @outcomeNotFoodMsg.
   ///
@@ -2090,11 +2210,23 @@ abstract class AppLocalizations {
   /// **'Nothing logged on this day yet. Tap + to add a meal.'**
   String get dayEmpty;
 
+  /// No description provided for @dayAddMealTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a meal to this day'**
+  String get dayAddMealTooltip;
+
   /// No description provided for @notFoodTag.
   ///
   /// In en, this message translates to:
   /// **'not food'**
   String get notFoodTag;
+
+  /// Tooltip and screen-reader name of the pencil mark on a meal the user corrected.
+  ///
+  /// In en, this message translates to:
+  /// **'Corrected'**
+  String get correctedBadge;
 
   /// No description provided for @fixRequestFailed.
   ///
@@ -2111,7 +2243,7 @@ abstract class AppLocalizations {
   /// No description provided for @fixIntro.
   ///
   /// In en, this message translates to:
-  /// **'Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.'**
+  /// **'Say what to change or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language. To move a meal to another day or time, tap it on Today or in History and change its date or time.'**
   String get fixIntro;
 
   /// No description provided for @fixNamingTip.
@@ -2438,6 +2570,12 @@ abstract class AppLocalizations {
   /// **'Retry all'**
   String get covRetryAll;
 
+  /// No description provided for @covFailedHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'\"Retry all\" asks the AI again (the same error often comes back); tap a row to enter it yourself.'**
+  String get covFailedHelp;
+
   /// No description provided for @covMoreRetryAll.
   ///
   /// In en, this message translates to:
@@ -2504,6 +2642,30 @@ abstract class AppLocalizations {
   /// **'{label} stopped after {attempted} of {total}: analysis is unavailable right now (quota pause or missing key). The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.'**
   String covStopped(String label, int attempted, int total, int remaining);
 
+  /// No description provided for @covStoppedBecause.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} stopped after {attempted} of {total}: {reason} The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.'**
+  String covStoppedBecause(
+    String label,
+    int attempted,
+    int total,
+    String reason,
+    int remaining,
+  );
+
+  /// No description provided for @covMoreNotFood.
+  ///
+  /// In en, this message translates to:
+  /// **'…and {count} more.'**
+  String covMoreNotFood(int count);
+
+  /// No description provided for @covUnnamedPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'(unnamed photo)'**
+  String get covUnnamedPhoto;
+
   /// No description provided for @covDone.
   ///
   /// In en, this message translates to:
@@ -2545,6 +2707,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count} failed'**
   String covFailedCount(int count);
+
+  /// No description provided for @covDeletedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} deleted by you'**
+  String covDeletedCount(int count);
+
+  /// No description provided for @covInFlightCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} in progress'**
+  String covInFlightCount(int count);
+
+  /// No description provided for @covUnreadableCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} unreadable'**
+  String covUnreadableCount(int count);
+
+  /// No description provided for @covTooLargeCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} too large to analyze'**
+  String covTooLargeCount(int count);
 
   /// No description provided for @macroNoBreakdown.
   ///

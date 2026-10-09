@@ -15,10 +15,13 @@ import '../../../core/contracts.dart';
 import '../../diagnostics.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
+import '../../provider_names.dart';
 import '../../widgets/grouped.dart';
 import '../diagnostics_screen.dart';
 import 'api_key_page.dart';
 import 'subscription_page.dart';
+
+export '../../provider_names.dart';
 
 /// Sentinel value for the model picker's "type it yourself" row.
 const String kCustomModelSentinel = '__custom__';
@@ -96,20 +99,6 @@ String defaultModelFor(String provider) =>
 bool isCuratedModel(String provider, String model) =>
     (kKnownModels[provider] ?? const []).any((m) => m.$1 == model);
 
-/// Short display name for an API provider id.
-String providerLabel(String provider) => switch (provider) {
-      'openai' => 'OpenAI',
-      'anthropic' => 'Claude',
-      'server' => 'My server',
-      'qwen' => 'Qwen 通义千问',
-      'doubao' => 'Doubao 豆包',
-      'glm' => 'GLM 智谱',
-      'deepseek' => 'DeepSeek',
-      'xai' => 'Grok',
-      'openrouter' => 'OpenRouter',
-      _ => 'Gemini',
-    };
-
 /// The two CONNECTION TYPES: an API key is pay-per-photo with the key on
 /// this phone; an Agent/Coding plan is a flat-rate subscription the
 /// user's own server signs into. The note carries the one deciding fact.
@@ -158,16 +147,6 @@ const List<(String, String, String)> kPlanChoices = [
   ('glm', 'GLM Coding Plan', 'glm'),
   ('doubao', 'Doubao Agent Plan', 'doubao'),
 ];
-
-/// Root-row display: the concrete plan name, never an opaque 'My server'.
-String providerDisplayLabel(String provider, String serverBackend) =>
-    provider == 'server'
-        ? switch (serverBackend) {
-            'glm' => 'GLM Coding Plan',
-            'doubao' => 'Doubao Agent Plan',
-            _ => 'Claude Plan',
-          }
-        : providerLabel(provider);
 
 class ProviderSettingsPage extends StatefulWidget {
   const ProviderSettingsPage({
@@ -254,7 +233,8 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
               iconColor: scheme.tertiary,
               title: context.l10n.typeSubscription,
               value: planActive
-                  ? providerDisplayLabel('server', settings.serverBackend)
+                  ? providerDisplayLabel(
+                      context.l10n, 'server', settings.serverBackend)
                   : null,
               trailing: planActive
                   ? Icon(Icons.check, size: 20, color: scheme.primary)

@@ -11,6 +11,7 @@ import 'dart:math' as math;
 
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
+import '../../core/outcome_kind.dart';
 import '../../core/prompts.dart';
 import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
@@ -338,19 +339,32 @@ class DefaultNlExecutor implements NlExecutor {
     final meals = byMealClock(await dao.recentMeals(days: textEditWindowDays));
     final prompt = buildPrompt(meals, userText, DateTime.now());
 
-    final Map<String, dynamic>? result;
+    final TextIntentOutcome reply;
     try {
-      result = await analyzer.textIntent(prompt);
+      reply = await askTextIntent(analyzer, prompt);
     } catch (_) {
       return [NlReply(_l.nlErrorContactingAi)];
     }
+    final result = reply.json;
     if (result == null) {
       // The analyzer seam folds parse + transport failures into null
-      // (contract: textIntent never throws); spec §4 step 4 wording.
-      return [NlReply(_l.nlErrorContactingAi)];
+      // (contract: textIntent never throws); spec §4 step 4 wording,
+      // except for the causes a retry cannot fix.
+      return [NlReply(_textFailure(reply.error))];
     }
     return executeParsed(result, userText, meals);
   }
+
+  /// The failed-text-request line. Spec §4 step 4's "Error contacting AI.
+  /// Please try again." stays for network, busy, rate-limit, parse and
+  /// unknown failures — a retry can fix those. A rejected key or model
+  /// cannot be retried away: say so in the photo path's words, or a friend
+  /// with a wrong key is told to retry forever (loop find 2026-10-08).
+  String _textFailure(String? error) => switch (classifyAnalysisError(error)) {
+        AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
+        AnalysisErrorKind.badModel => '❌ ${_l.errBadModel}',
+        _ => _l.nlErrorContactingAi,
+      };
 
   /// Describe-only path (app-only, spec §9): analyze [text] as a brand-new
   /// meal and hand the analysis back for preview. NOTHING is saved.
@@ -373,14 +387,15 @@ class DefaultNlExecutor implements NlExecutor {
     final missingKey = _missingKeyMessage();
     if (missingKey != null) return DescribeOutcome(error: missingKey);
     final prompt = buildPrompt(const [], userText, DateTime.now());
-    final Map<String, dynamic>? result;
+    final TextIntentOutcome reply;
     try {
-      result = await analyzer.textIntent(prompt);
+      reply = await askTextIntent(analyzer, prompt);
     } catch (_) {
       return DescribeOutcome(error: _l.nlErrorContactingAi);
     }
+    final result = reply.json;
     if (result == null) {
-      return DescribeOutcome(error: _l.nlErrorContactingAi);
+      return DescribeOutcome(error: _textFailure(reply.error));
     }
     // Reuse the hardened normalization: bare arrays, {actions:[...]},
     // single objects and junk all collapse to a list of actions (§4.1).

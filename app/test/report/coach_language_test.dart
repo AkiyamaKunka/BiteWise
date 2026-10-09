@@ -7,12 +7,13 @@ import 'package:calorie_tracker/ui/coach_strings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 CoachSummary summaryIn(String language,
-        {num eaten = 1600, int goal = 2000, int meals = 3}) =>
+        {num eaten = 1600, int goal = 2000, int meals = 3, int? typical}) =>
     buildCoachSummary(
       eatenKcal: eaten,
       mealCount: meals,
       proteinG: 100,
       goalKcal: goal,
+      typicalKcal: typical,
       strings: coachStringsFor(language),
       formatKcal: (v) => v.round().toString(),
     );
@@ -41,12 +42,15 @@ void main() {
     // under, on-target, over, empty, and no-reference all get real
     // Chinese, not a half-localized message.
     expect(summaryIn('zh', eaten: 1600).body, contains('比目标少'));
+    expect(summaryIn('zh', eaten: 180, meals: 1).body,
+        contains('没记上的餐'));
     expect(summaryIn('zh', eaten: 2000).body, contains('达标'));
     expect(summaryIn('zh', eaten: 2600).body, contains('比目标多'));
     expect(summaryIn('zh', meals: 0).body, contains('还没有记录'));
     expect(summaryIn('zh', goal: 0).body, contains('已记录'));
     for (final s in [
       summaryIn('zh', eaten: 1600),
+      summaryIn('zh', eaten: 180, meals: 1),
       summaryIn('zh', eaten: 2000),
       summaryIn('zh', eaten: 2600),
       summaryIn('zh', meals: 0),
@@ -54,6 +58,90 @@ void main() {
     ]) {
       expect(RegExp(r'[a-zA-Z]{4,}').hasMatch(s.body), isFalse,
           reason: 'no English words should survive in: ${s.body}');
+    }
+  });
+
+  test('an in-band day with no goal set never says 达标 / on target', () {
+    // Leaving the goal empty means "compare me with my usual day"; telling
+    // that user 达标 credits a target they never set.
+    final zh = summaryIn('zh', goal: 0, typical: 2000, eaten: 1950).body;
+    expect(zh, isNot(contains('达标')));
+    expect(zh, contains('平时'));
+    expect(RegExp(r'[a-zA-Z]{4,}').hasMatch(zh), isFalse, reason: zh);
+    final en = summaryIn('en', goal: 0, typical: 2000, eaten: 1950).body;
+    expect(en.toLowerCase(), isNot(contains('target')));
+    expect(en, contains('usual'));
+    // A real goal still reads 达标.
+    expect(summaryIn('zh', goal: 2000, typical: 2000, eaten: 1950).body,
+        contains('达标'));
+  });
+
+  test('a catch-up summary never calls the day it covers today/tomorrow',
+      () {
+    // The empty branch got emptyYesterday (2026-08-18), but the other
+    // lines said 今天…明天继续 under a 昨天 title: a 07:10 catch-up for the
+    // missed 23:30 slot called the new, empty day "today" and the current
+    // one "tomorrow". The coach lines are day-neutral so every branch
+    // reads right on both the same-day and the catch-up card.
+    for (final lang in ['zh', 'en']) {
+      CoachSummary catchUp({int? goal, int? typical, num eaten = 2000}) =>
+          buildCoachSummary(
+            eatenKcal: eaten,
+            mealCount: 3,
+            proteinG: 95,
+            goalKcal: goal,
+            typicalKcal: typical,
+            strings: coachStringsFor(lang),
+            formatKcal: (v) => v.round().toString(),
+            forYesterday: true,
+          );
+      final cases = {
+        'under goal': catchUp(goal: 2000, eaten: 1500),
+        'partial goal': catchUp(goal: 2000, eaten: 300),
+        'on goal': catchUp(goal: 2000, eaten: 2000),
+        'over goal': catchUp(goal: 2000, eaten: 2600),
+        'under typical': catchUp(typical: 2000, eaten: 1500),
+        'partial typical': catchUp(typical: 2000, eaten: 300),
+        'on typical': catchUp(typical: 2000, eaten: 2000),
+        'over typical': catchUp(typical: 2000, eaten: 2600),
+        'no reference': catchUp(),
+      };
+      for (final MapEntry(key: branch, value: s) in cases.entries) {
+        expect(s.title, contains(lang == 'zh' ? '昨天' : 'Yesterday'));
+        final body = s.body.toLowerCase();
+        for (final word in ['今天', '明天', '今日', '明日', 'today', 'tomorrow']) {
+          expect(body, isNot(contains(word)),
+              reason: '$lang $branch catch-up body names the wrong day: '
+                  '${s.body}');
+        }
+      }
+    }
+  });
+
+  test('a mostly-unlogged day gets no deficit praise in either language',
+      () {
+    // A lunch-only or snack-only day is missing meals, not a cut: the real
+    // lines must not celebrate it (tone contract: neutral, never shaming).
+    for (final lang in ['zh', 'en']) {
+      for (final typical in [false, true]) {
+        final s = buildCoachSummary(
+          eatenKcal: 180,
+          mealCount: 1,
+          proteinG: 4,
+          goalKcal: typical ? null : 2000,
+          typicalKcal: typical ? 2000 : null,
+          strings: coachStringsFor(lang),
+          formatKcal: (v) => v.round().toString(),
+        );
+        expect(s.body, contains('1820'));
+        for (final praise in [
+          '自律', '很棒', '有效', '💪', 'real cut', 'discipline', 'strong work',
+        ]) {
+          expect(s.body.toLowerCase(), isNot(contains(praise)),
+              reason: '$lang typical=$typical praises a partial day: '
+                  '${s.body}');
+        }
+      }
     }
   });
 

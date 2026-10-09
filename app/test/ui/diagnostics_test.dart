@@ -9,6 +9,7 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
+import 'package:calorie_tracker/ui/provider_names.dart';
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -176,6 +177,47 @@ void main() {
         reason: 'the provider-specific message must reach the user');
   });
 
+  test('a failed text request never claims photos work when the photo '
+      'request failed too, and only then suggests a model change',
+      () async {
+    // textIntent returns null for every failure (busy server, closed
+    // Claude window, timeout, junk reply). On a closed window the photo
+    // row failed for the same reason while this row still said "photo
+    // analysis can still work" and prescribed a model change.
+    final en = AppLocalizationsEn();
+    final bothDown = _okAnalyzer()
+      ..nextTextIntent = null
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          error: 'Claude usage window is closed — try again later.',
+          retryable: true,
+          wall: Duration.zero);
+    var results = await _diag(analyzer: bothDown).run().toList();
+    expect(results, hasLength(6));
+    expect(results.map((r) => r.stage).toList().sublist(3, 5),
+        ['Text analysis', 'Photo analysis'],
+        reason: 'the text row still comes before the photo row');
+    var text = results.firstWhere((r) => r.stage == 'Text analysis');
+    expect(text.status, DiagStatus.warn);
+    expect(text.summary, isNot(contains('did not return usable JSON')),
+        reason: 'a busy or closed server is not the model\'s JSON');
+    expect(text.detail, isNot(contains('can still work')));
+    expect(text.detail, en.diagTextBadPhotoAlsoFailed);
+    expect(text.fix, isNot(contains('pick a different model')));
+    expect(text.fix, en.diagFixTextFollowPhoto);
+    final zh = AppLocalizationsZh();
+    expect(zh.diagTextBadPhotoAlsoFailed, isNot(contains('仍然可以')));
+    expect(zh.diagTextBad, isNot(startsWith('模型没有')));
+
+    // Photo fine, text broken: the model's text output is the suspect,
+    // so the conditional model-change fix stays.
+    final textOnly = _okAnalyzer()..nextTextIntent = null;
+    results = await _diag(analyzer: textOnly).run().toList();
+    text = results.firstWhere((r) => r.stage == 'Text analysis');
+    expect(text.detail, en.diagTextBadDetail);
+    expect(text.fix, en.diagFixTextPickModel);
+    expect(zh.diagFixTextPickModel, contains('照片分析正常'));
+  });
+
   test('quota pause surfaces as a warning with the until-time', () async {
     final settings = FakeSettings()
       ..isQuotaPaused = true
@@ -184,6 +226,96 @@ void main() {
     final quota = results.firstWhere((r) => r.stage == 'Quota');
     expect(quota.status, DiagStatus.warn);
     expect(quota.detail, contains('2026-07-31'));
+  });
+
+  test('the Chinese page names the provider and plan as the settings do, '
+      'never by raw id', () async {
+    // The owner's 测试 AI 服务 read '服务“qwen”已配置 Key' and 'qwen的接口有
+    // 响应' while every other screen says 'Qwen 通义千问'; the server row
+    // read '后端：claude' beside a Settings row that says 'Claude 订阅'.
+    final zh = AppLocalizationsZh();
+    final qwen = FakeSettings()
+      ..provider = 'qwen'
+      ..apiKey = 'k';
+    var results = await ProviderDiagnostics(
+      settings: qwen,
+      analyzer: _okAnalyzer(),
+      l10n: zh,
+      client: MockClient((_) async => http.Response('ok', 404)),
+      testImage: _img,
+    ).run().take(2).toList();
+    expect(results[0].summary, contains('Qwen 通义千问'));
+    expect(results[1].summary, contains('Qwen 通义千问'));
+    for (final r in results) {
+      expect(r.summary, isNot(contains('“qwen”')));
+      expect(r.summary, isNot(startsWith('qwen')));
+    }
+
+    results = await ProviderDiagnostics(
+      settings: qwen,
+      analyzer: _okAnalyzer(),
+      l10n: zh,
+      client: MockClient((_) async => throw Exception('network is down')),
+      testImage: _img,
+    ).run().toList();
+    expect(results.last.summary, zh.diagEndpointUnreachable('Qwen 通义千问'));
+
+    final plan = FakeSettings()
+      ..provider = 'server'
+      ..apiKey = 'k'
+      ..serverBaseUrl = 'https://example.invalid'
+      ..serverBackend = 'claude';
+    results = await ProviderDiagnostics(
+      settings: plan,
+      analyzer: _okAnalyzer(),
+      l10n: zh,
+      client: MockClient((_) async => http.Response('ok', 404)),
+      testImage: _img,
+    ).run().take(1).toList();
+    expect(results.single.summary, contains('Claude 订阅'));
+    expect(results.single.summary, isNot(contains('：claude')));
+  });
+
+  test('a rejected key with no evidence shows no English detail line',
+      () async {
+    // probeKey now leaves a genuine auth refusal message-less; the card
+    // under 'Key 未被接受' used to repeat it in English.
+    final rejected = _okAnalyzer()
+      ..onProbeKey = (_) async => const KeyProbe(KeyProbeResult.rejected);
+    final results = await _diag(analyzer: rejected).run().toList();
+    expect(results.last.stage, 'Authentication');
+    expect(results.last.status, DiagStatus.fail);
+    expect(results.last.detail, isNull);
+    expect(results.last.fix, AppLocalizationsEn().diagFixRecopyKey);
+  });
+
+  test('plan row values: English unchanged, Chinese matches the picker',
+      () {
+    final en = AppLocalizationsEn();
+    final zh = AppLocalizationsZh();
+    // English widths are pinned by row_fit_layout_test (loop find
+    // 2026-10-08) — these stay byte-identical.
+    expect(providerDisplayLabel(en, 'server', 'claude'), 'Claude Plan');
+    expect(providerDisplayLabel(en, 'server', 'glm'), 'GLM Plan');
+    expect(providerDisplayLabel(en, 'server', 'doubao'), 'Doubao Plan');
+    expect(providerDisplayLabel(zh, 'server', 'claude'), zh.planClaude);
+    expect(providerDisplayLabel(zh, 'server', 'glm'), 'GLM 套餐');
+    expect(providerDisplayLabel(zh, 'server', 'doubao'), '豆包套餐');
+    expect(providerDisplayLabel(zh, 'qwen', 'claude'), 'Qwen 通义千问');
+  });
+
+  test('the welcome card and the VPN fix list DeepSeek as mainland-direct',
+      () {
+    // The API Key page tags DeepSeek 中国直连 and lists it first in its
+    // footer; the welcome card one tap earlier still said only Qwen,
+    // Doubao or GLM work without a VPN (stale since DeepSeek landed).
+    for (final l in [AppLocalizationsEn(), AppLocalizationsZh()]) {
+      expect(l.settingsWelcomeBody, contains('DeepSeek'));
+      expect(l.diagFixVpn, contains('DeepSeek'));
+      // OpenRouter is not VPN-tagged, so the card must not lump it in.
+      expect(l.settingsWelcomeBody, isNot(contains('其余服务')));
+      expect(l.settingsWelcomeBody, isNot(contains('the other providers')));
+    }
   });
 
   testWidgets('the screen streams results and renders the verdict',

@@ -5,7 +5,9 @@
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/report/coach_summary.dart';
 import 'package:calorie_tracker/services/report/daily_summary.dart';
+import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/fake_meals_dao.dart';
 
@@ -16,7 +18,10 @@ final strings = CoachStrings(
   emptyYesterday: 'Nothing logged yesterday.',
   underGoal: (d) => '$d under goal',
   underTypical: (d) => '$d below usual',
+  partialGoal: (d) => '$d under goal, meals missing?',
+  partialTypical: (d) => '$d below usual, meals missing?',
   onTarget: 'On target.',
+  onTypical: 'About usual.',
   overGoal: (d) => '$d over goal',
   overTypical: (d) => '$d above usual',
   noReference: 'Logged.',
@@ -268,6 +273,53 @@ void main() {
         reason: 'watermarking Nov 1 now would swallow the real 23:55 post');
   });
 
+  // ---------------------------------------------------------------------
+  // The two posters live in DIFFERENT isolates: the live Timer in the app's
+  // engine, the heartbeat in the WorkManager's own engine in the same
+  // process. Each has its own SharedPreferences cache, so the watermark
+  // the heartbeat writes never reaches the Timer's cache. On Android the
+  // freezer can hold an overdue Timer until the heartbeat thaws the
+  // process; the Timer then fired right after the heartbeat posted and,
+  // reading its stale cache, posted again — a second alert for one card.
+  // ---------------------------------------------------------------------
+
+  test('a Timer firing after the heartbeat posted does not post again, '
+      'though its isolate\'s prefs cache never saw the watermark', () async {
+    TestWidgetsFlutterBinding.ensureInitialized();
+    final now = DateTime(2026, 8, 6, 21, 31);
+    dao.put(meal(iso(now), 1800));
+
+    // The app isolate: settings loaded at launch, prefs cache warm.
+    SharedPreferences.setMockInitialValues({});
+    final appPrefs = await SharedPreferences.getInstance();
+    final live =
+        await AppSettings.load(prefs: appPrefs, keyStore: _NoKeys());
+
+    // The heartbeat isolate posts and writes the watermark to the native
+    // store — behind the app isolate's cache, as a separate engine does.
+    final heartbeat = DailySummaryDeps(
+      dao: dao,
+      reportTime: '21:30',
+      calorieGoal: 0,
+      postedDate: '',
+      markPosted: (d) async => SharedPreferences.setMockInitialValues(
+          {'settings.summary_posted_date': d}),
+      present: (t, b) async => posted.add((t, b)),
+      strings: strings,
+      now: () => now,
+    );
+    expect(await maybePostDailySummary(heartbeat), isTrue);
+    expect(appPrefs.getString('settings.summary_posted_date'), isNull,
+        reason: 'precondition: the app isolate\'s cache is stale');
+
+    // The thawed Timer fires: postSummary in di.dart reads the watermark
+    // through freshSummaryPostedDate().
+    final timer =
+        deps(now: now, postedDate: await live.freshSummaryPostedDate());
+    expect(await maybePostDailySummary(timer), isFalse);
+    expect(posted, hasLength(1), reason: 'one summary, one alert');
+  });
+
   test('the fall-back day\'s baseline is the 7 calendar days before it',
       () async {
     final recording = _RangeRecordingDao();
@@ -291,4 +343,13 @@ class _RangeRecordingDao extends BaseFakeDao {
     ranges.add((startDate, endDate));
     return super.mealsBetween(startDate, endDate);
   }
+}
+
+class _NoKeys implements SecureKeyStore {
+  @override
+  Future<String?> read(String key) async => null;
+  @override
+  Future<void> write(String key, String value) async {}
+  @override
+  Future<void> delete(String key) async {}
 }

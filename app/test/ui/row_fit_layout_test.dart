@@ -8,6 +8,11 @@
 ///   the Gemini note; the English subscription page cut 'Doubao Agent
 ///   Plan' / 'Volcengine subscription' and 'Thinking effort' / 'High —
 ///   most thorough' to fragments.
+/// - Round 4 (2026-10-08): with GLM or Doubao active, the English AI
+///   provider page cut its 'Subscription' title to 'Subscri…' beside 'GLM
+///   Coding Plan' / 'Doubao Agent Plan', and 'Off in Settings' cut the
+///   'Background scan' title. The row values are now 'GLM Plan' /
+///   'Doubao Plan' and 'Off'.
 ///
 /// Both locales, at real phone widths. The picker checks are layout
 /// invariants that hold under the test font (the description owns the
@@ -28,10 +33,12 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
+import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/settings/api_key_page.dart';
 import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
-    show kApiKeyChoices, kPlanChoices;
+    show ProviderSettingsPage, kApiKeyChoices, kPlanChoices;
 import 'package:calorie_tracker/ui/screens/settings/subscription_page.dart';
+import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 
 import 'fakes.dart';
 
@@ -197,6 +204,103 @@ void main() {
             expect(tester.takeException(), isNull);
           });
         }
+
+        // The ROW TITLE is the casualty here: GroupedRow gives the value up
+        // to 170 pt and the title only what is left. 'Doubao Agent Plan'
+        // cut 'Subscription' to 'Subscri…'; 'Off in Settings' cut
+        // 'Background scan' (loop find 2026-10-08).
+        for (final backend in [for (final (b, _, _) in kPlanChoices) b]) {
+          testWidgets('active plan "$backend" on the AI provider page and '
+              'the root row, $lang at $width pt', (tester) async {
+            _phone(tester, width);
+            final settings = FakeSettings()
+              ..provider = 'server'
+              ..serverBackend = backend;
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                ProviderSettingsPage(
+                    settings: settings, analyzer: FakeAnalyzer()),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            for (final key in ['subscriptionTypeRow', 'apiKeyTypeRow']) {
+              expect(_ellipsised(tester, find.byKey(Key(key))), isEmpty,
+                  reason: '$key must read in full');
+            }
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                SettingsScreen(
+                  settings: settings,
+                  analyzer: FakeAnalyzer(),
+                  dao: FakeDao(),
+                  requestPhotoPermission: () async => true,
+                ),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            expect(_ellipsised(tester, find.byKey(const Key('aiProviderRow'))),
+                isEmpty,
+                reason: 'the root AI provider row must read in full');
+            expect(tester.takeException(), isNull);
+          });
+        }
+
+        for (final refreshOn in const [false, true]) {
+          testWidgets(
+              'background scan row (refresh ${refreshOn ? 'on' : 'off'}), '
+              '$lang at $width pt', (tester) async {
+            _phone(tester, width);
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                SettingsScreen(
+                  settings: FakeSettings(apiKey: 'k'),
+                  analyzer: FakeAnalyzer(),
+                  dao: FakeDao(),
+                  requestPhotoPermission: () async => true,
+                  lastBackgroundScan: () async => null,
+                  backgroundRefreshEnabled: () async => refreshOn,
+                  openSystemSettings: () async {},
+                ),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            final row = find.byKey(const Key('backgroundScanRow'));
+            await tester.ensureVisible(row);
+            await tester.pumpAndSettle();
+            expect(_ellipsised(tester, row), isEmpty,
+                reason: 'the background scan row must read in full');
+            expect(tester.takeException(), isNull);
+          });
+        }
+
+        // Round 4b (2026-10-08): a NEW meal's empty macro fields show
+        // their labels resting inside a third of the row, and
+        // '蛋白质（克）' was cut to '蛋白质（…'. A filled meal floats the
+        // labels and never showed it.
+        testWidgets('new meal macro labels, $lang at $width pt',
+            (tester) async {
+          _phone(tester, width);
+          await tester.pumpWidget(_app(
+              Locale(lang), MealEditorScreen(dao: FakeDao()),
+              theme: iphoneTheme));
+          await tester.pumpAndSettle();
+          for (final key in const [
+            'editorProtein',
+            'editorCarbs',
+            'editorFat',
+          ]) {
+            expect(_ellipsised(tester, find.byKey(Key(key))), isEmpty,
+                reason: '$key label must read in full');
+          }
+          // The unit moved to a suffix: it shows once there is a number.
+          final protein = find.byKey(const Key('editorProtein'));
+          await tester.enterText(protein, '125.5');
+          await tester.pumpAndSettle();
+          expect(
+              find.descendant(
+                  of: protein,
+                  matching: find.text(lang == 'zh' ? '克' : 'g')),
+              findsOneWidget);
+          expect(_ellipsised(tester, protein), isEmpty);
+          expect(tester.takeException(), isNull);
+        });
       }
     }
   }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');

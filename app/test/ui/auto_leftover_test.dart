@@ -51,7 +51,7 @@ void main() {
   late FakeDao dao;
   late FakeAnalyzer analyzer;
   late PhotoPipeline pipeline;
-  final notifications = <String>[];
+  final notifications = <PhotoOutcome>[];
 
   setUp(() {
     dao = FakeDao();
@@ -79,7 +79,8 @@ void main() {
     expect(updated.analysis['total_calories'], 665); // pork eaten, rice left
     expect(updated.analysis['leftover']['original']['total_calories'], 965);
     expect(dao.ledger['leftover-hash-1'], IngestionStatus.skipped);
-    expect(notifications.single, contains('Leftovers deducted'));
+    expect(notifications.single.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(notifications.single.message, contains('Leftovers deducted'));
     // The prompt data really carried the candidate.
     expect(analyzer.lastRecentMeals, hasLength(1));
     expect(analyzer.lastRecentMeals!.single['meal_description'],
@@ -187,5 +188,111 @@ void main() {
         reason: "only the photo's own day rides along");
     // And the saved meal lands on that day too.
     expect(dao.meals.last.date, isoDate(yesterday));
+  });
+  // UNDO (2026-10-09): a wrong automatic verdict used to be permanent —
+  // the earlier meal stayed cut until its numbers were retyped, and
+  // re-picking the photo repeated the verdict.
+  test('the leftoverApplied outcome names the meal and its analysis as '
+      'it stood BEFORE the deduction', () async {
+    dao.put(_meal(1, '01:34 PM', 965));
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    final out = await pipeline.process(photo());
+    expect(out.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(out.mealId, 1);
+    expect(out.mealDate, isoDate(DateTime.now()));
+    expect(out.previousAnalysis!['total_calories'], 965);
+    expect(out.previousAnalysis!.containsKey('leftover'), isFalse);
+    expect(out.analysis!['leftover']['leftover_photo_md5'],
+        'leftover-hash-1');
+  });
+
+  test('undo restores the meal, keeps corrected=1, and keeps an EARLIER '
+      'correct deduction', () async {
+    dao.put(_meal(1, '01:34 PM', 965));
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    final first = await pipeline.process(photo());
+    expect(dao.byId(1).analysis['total_calories'], 665);
+
+    // A SECOND photo the model wrongly calls leftovers of the same meal.
+    final second = PhotoPipeline(
+        dao: dao, analyzer: analyzer, hasher: (_) async => 'leftover-hash-2');
+    analyzer.nextPhotoOutcome = AnalysisOutcome(analysis: {
+      ..._leftoverReply(),
+      'items': [
+        {'name': 'Rice (~200 g)', 'left_fraction': 0.0},
+        {'name': 'Pork (~150 g)', 'left_fraction': 0.5},
+      ],
+    }, isFood: true, wall: Duration.zero);
+    final wrong = await second.process(
+        IntakePhoto(Uint8List.fromList([8]), 'w2', 'IMG_8.jpg'));
+    expect(wrong.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(dao.byId(1).analysis['total_calories'], isNot(665));
+
+    final restored = revertedLeftover(dao.byId(1).analysis,
+        applied: wrong.analysis!, before: wrong.previousAnalysis!);
+    expect(restored, isNotNull);
+    await dao.updateMealAnalysis(1, restored!);
+    final meal = dao.byId(1);
+    expect(meal.analysis['total_calories'], 665,
+        reason: 'only the wrong deduction is undone');
+    expect(meal.analysis['leftover']['leftover_photo_md5'], 'leftover-hash-1');
+    expect(meal.analysis['leftover']['applied_at'],
+        first.analysis!['leftover']['applied_at']);
+    expect(meal.corrected, isTrue,
+        reason: 'spec §2.4: every analysis rewrite sets corrected=1');
+  });
+
+  test('undo is refused once the meal was fixed after the deduction, or '
+      'for a different deduction', () async {
+    dao.put(_meal(1, '01:34 PM', 965));
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    final out = await pipeline.process(photo());
+    final deducted = dao.byId(1).analysis;
+
+    // A chat or editor fix after the deduction is the user's newer truth.
+    final fixed = {...deducted, 'total_calories': 700};
+    expect(
+        revertedLeftover(fixed,
+            applied: out.analysis!, before: out.previousAnalysis!),
+        isNull);
+
+    // Another photo's deduction (or a re-application) is not this one.
+    final other = {
+      ...out.analysis!,
+      'leftover': {
+        ...(out.analysis!['leftover'] as Map),
+        'leftover_photo_md5': 'someone-else',
+      },
+    };
+    expect(
+        revertedLeftover(deducted,
+            applied: other, before: out.previousAnalysis!),
+        isNull);
+    final reapplied = {
+      ...deducted,
+      'leftover': {
+        ...(deducted['leftover'] as Map),
+        'applied_at': '2099-01-01T00:00:00',
+      },
+    };
+    expect(
+        revertedLeftover(reapplied,
+            applied: out.analysis!, before: out.previousAnalysis!),
+        isNull);
+    // A meal with no deduction at all.
+    expect(
+        revertedLeftover(out.previousAnalysis!,
+            applied: out.analysis!, before: out.previousAnalysis!),
+        isNull);
+
+    // Untouched since: allowed.
+    expect(
+        revertedLeftover(deducted,
+            applied: out.analysis!,
+            before: out.previousAnalysis!)!['total_calories'],
+        965);
   });
 }

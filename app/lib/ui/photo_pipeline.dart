@@ -18,7 +18,8 @@ import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
 import '../services/analyzer/platform_decode.dart';
 import '../services/photo/filename_dates.dart'
-    show exifCapturedAt, validateCapturedAt;
+    show captureWallClock, exifCapturedAt, exifWallAndOffset,
+        validateCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
 
@@ -65,19 +66,34 @@ class PhotoOutcome {
   /// failed. Null means "nothing beyond the kind" — the UI then falls back
   /// to [message] verbatim.
   final String? detail;
+
+  /// [PhotoOutcomeKind.leftoverApplied] only: the meal that was cut, its
+  /// day, and its analysis as it stood just BEFORE this deduction — what
+  /// the add flow's "not leftovers" undo writes back (revertedLeftover).
+  /// [analysis] is then the deducted analysis this run stored.
+  final int? mealId;
+  final String? mealDate;
+  final Map<String, dynamic>? previousAnalysis;
   const PhotoOutcome(this.kind, this.message,
       {this.analysis,
       this.retryable = false,
       this.errorKind = AnalysisErrorKind.none,
-      this.detail});
+      this.detail,
+      this.mealId,
+      this.mealDate,
+      this.previousAnalysis});
 }
 
 class PhotoPipeline {
   final MealsDao dao;
   final AnalyzerService analyzer;
 
-  /// Notification-style surface (snackbar) for background saves.
-  final void Function(String message)? notify;
+  /// Notification-style surface (snackbar) for background saves. Handed
+  /// the OUTCOME, not a sentence: the caller words it in the app language
+  /// (di.dart via outcomeSnackbar). Passing [PhotoOutcome.message] here put
+  /// English snackbars ("Meal logged: …") in front of the Chinese UI every
+  /// time the automatic scan saved a photo with the app open (2026-10-08).
+  final void Function(PhotoOutcome outcome)? notify;
 
   /// Called after a meal row lands, so open screens can re-query. Separate
   /// from [notify] on purpose: notify also fires for failures, and only a
@@ -193,7 +209,16 @@ class PhotoPipeline {
       // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
       // with a dead clock, a forward-set date), and an unvalidated value
       // writes a meal into a random month of the user's log.
-      final when = photo.capturedAt ??
+      // A capturedAt is re-expressed in the zone the photo was TAKEN in
+      // when the EXIF shutter stamp names that zone and the same instant
+      // (captureWallClock): iOS's createDateTime is an instant shown in the
+      // CURRENT zone, so a photo first scanned after a flight was dated by
+      // the destination's clock. Not re-validated against local now — the
+      // instant already was, and a westbound wall clock can sit "ahead".
+      final captured = photo.capturedAt;
+      final when = (captured == null
+              ? null
+              : captureWallClock(captured, exifWallAndOffset(photo.bytes))) ??
           validateCapturedAt(exifCapturedAt(photo.bytes),
               now: DateTime.now()) ??
           DateTime.now();
@@ -234,9 +259,15 @@ class PhotoPipeline {
         // Permanent failure: kept as status failed for deliberate retry
         // (spec §6.5).
         await dao.markPhotoHash(hash, IngestionStatus.failed);
-        notify?.call('Photo analysis failed — kept for retry. $why');
-        return PhotoOutcome(PhotoOutcomeKind.failed, why,
+        final failed = PhotoOutcome(PhotoOutcomeKind.failed, why,
             errorKind: classifyAnalysisError(outcome.error), detail: why);
+        // Shielded like the save paths below: the failed mark is already
+        // committed, and a throwing snackbar must not turn this verdict
+        // into the outer catch's "Photo intake failed".
+        try {
+          notify?.call(failed);
+        } catch (_) {}
+        return failed;
       }
       if (!outcome.isFood) {
         // Tombstone so backfill never re-analyzes it (spec §6.4).
@@ -267,13 +298,21 @@ class PhotoPipeline {
           final summary =
               '${mealDescription(original.analysis)} — −${applied.deductedKcal} '
               'kcal, now ~$newKcal kcal';
+          final leftover = PhotoOutcome(
+              PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
+              analysis: applied.adjusted,
+              detail: summary,
+              mealId: original.id,
+              mealDate: original.date,
+              // The row as THIS application found it, not
+              // leftover.original: undoing a wrong second deduction
+              // must keep an earlier, correct one.
+              previousAnalysis: original.analysis);
           try {
-            notify?.call('Leftovers deducted: $summary');
+            notify?.call(leftover);
             onMealSaved?.call();
           } catch (_) {}
-          return PhotoOutcome(
-              PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
-              analysis: applied.adjusted, detail: summary);
+          return leftover;
         }
       }
 
@@ -314,19 +353,20 @@ class PhotoPipeline {
       } catch (_) {}
       final summary =
           '${mealDescription(analysis)} — ~${displayTotalCalories(analysis)} kcal';
+      // No row id in the copy: the chat flow numbers meals by LIST position
+      // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
+      // a number that is guaranteed to miss.
+      final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
+          analysis: analysis, detail: summary);
       // Same shield as the thumbnail: these run AFTER the commit, so a
       // throwing callback must not fall into the outer catch — that
       // flipped the committed ledger row saved→failed and told the user
       // the intake failed (pressure-test find, 2026-08-03).
       try {
-        notify?.call('Meal logged: $summary');
+        notify?.call(saved);
         onMealSaved?.call();
       } catch (_) {}
-      // No row id in the copy: the chat flow numbers meals by LIST position
-      // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
-      // a number that is guaranteed to miss.
-      return PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-          analysis: analysis, detail: summary);
+      return saved;
     } catch (e) {
       // Containment: never rethrow (spec §6). Mark failed ONLY if we hold
       // the reservation — a pre-reservation throw (e.g. the duplicate
