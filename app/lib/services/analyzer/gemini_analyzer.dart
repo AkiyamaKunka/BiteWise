@@ -483,7 +483,11 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
         case GeminiErrorClass.modelError:
           return KeyProbe(KeyProbeResult.modelNotFound,
               message: _userMessageFor(e.message));
+        // No message for a genuine auth refusal: the diagnostics page
+        // shows it as raw evidence, and the generic English sentence only
+        // restated the localized summary (loop find 2026-10-08).
         case GeminiErrorClass.auth:
+          return const KeyProbe(KeyProbeResult.rejected);
         case GeminiErrorClass.unknown:
           return KeyProbe(KeyProbeResult.rejected,
               message: _userMessageFor(e.message));

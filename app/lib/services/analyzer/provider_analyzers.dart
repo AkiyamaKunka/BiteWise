@@ -432,7 +432,13 @@ abstract class _HttpVisionAnalyzer
       if (e.modelError) {
         return KeyProbe(KeyProbeResult.modelNotFound, message: e.userMessage);
       }
-      return KeyProbe(KeyProbeResult.rejected, message: e.userMessage);
+      // A genuine auth refusal carries no message: the diagnostics page
+      // shows the message as its raw-evidence line, and the generic English
+      // 'The provider rejected the API key' only restated the localized
+      // summary under it (loop find 2026-10-08). Any other permanent
+      // failure keeps its verbatim evidence.
+      return KeyProbe(KeyProbeResult.rejected,
+          message: e.auth ? null : e.userMessage);
     }
   }
 }

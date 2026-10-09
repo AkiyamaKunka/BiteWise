@@ -443,7 +443,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWelcomeBody.
   ///
   /// In en, this message translates to:
-  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — the other providers need a VPN. 中国大陆用户请选择国内提供商。'**
+  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。'**
   String get settingsWelcomeBody;
 
   /// No description provided for @settingsSectionAi.
@@ -931,6 +931,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Doubao Agent Plan'**
   String get planDoubao;
+
+  /// No description provided for @planShortClaude.
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Plan'**
+  String get planShortClaude;
+
+  /// No description provided for @planShortGlm.
+  ///
+  /// In en, this message translates to:
+  /// **'GLM Plan'**
+  String get planShortGlm;
+
+  /// No description provided for @planShortDoubao.
+  ///
+  /// In en, this message translates to:
+  /// **'Doubao Plan'**
+  String get planShortDoubao;
 
   /// No description provided for @serverHeader.
   ///
@@ -1733,7 +1751,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixVpn.
   ///
   /// In en, this message translates to:
-  /// **'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).'**
+  /// **'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).'**
   String get diagFixVpn;
 
   /// No description provided for @diagFixServerUnreachable.

@@ -213,7 +213,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      '点击下方\"AI 服务\"，选择一家并粘贴它的 API Key（输入即保存），然后\"测试当前服务\"。\n之后打开\"监控相册\"，新的食物照片会自动记录。\n中国大陆用户请选择 Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——其余服务需要 VPN。';
+      '点击下方\"AI 服务\"，选择一家并粘贴它的 API Key（输入即保存），然后\"测试当前服务\"。\n之后打开\"监控相册\"，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
 
   @override
   String get settingsSectionAi => 'AI';
@@ -493,6 +493,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planDoubao => '豆包 Agent 套餐';
+
+  @override
+  String get planShortClaude => 'Claude 订阅';
+
+  @override
+  String get planShortGlm => 'GLM 套餐';
+
+  @override
+  String get planShortDoubao => '豆包套餐';
 
   @override
   String get serverHeader => '你的服务器';
@@ -950,7 +959,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagFixVpn =>
-      '这个服务在中国大陆需要 VPN 才能访问。请打开 VPN，或改用通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+      '这个服务在中国大陆需要 VPN 才能访问。请打开 VPN，或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
 
   @override
   String get diagFixServerUnreachable => '检查服务器地址、服务器是否在运行，以及你的网络。';

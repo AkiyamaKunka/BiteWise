@@ -16,6 +16,7 @@ import 'package:image/image.dart' as img;
 
 import '../core/contracts.dart';
 import '../l10n/app_localizations.dart';
+import 'provider_names.dart';
 import 'services.dart';
 
 enum DiagStatus { pass, warn, fail }
@@ -102,8 +103,12 @@ class ProviderDiagnostics {
         l.diagStageConfiguration,
         DiagStatus.pass,
         isServer
-            ? l.diagServerConfigured(settings.serverBackend)
-            : l.diagProviderConfigured(provider, settings.model));
+            // Display names, never the raw ids: the Chinese page read
+            // '服务“qwen”' and '后端：claude' (loop find 2026-10-08).
+            ? l.diagServerConfigured(
+                providerDisplayLabel(l, 'server', settings.serverBackend))
+            : l.diagProviderConfigured(
+                providerLabel(provider), settings.model));
 
     // 2 ── Endpoint reachability ────────────────────────────────────────
     final probeUrl =
@@ -119,14 +124,14 @@ class ProviderDiagnostics {
             l.diagStageEndpoint,
             DiagStatus.pass,
             l.diagEndpointAnswered(
-                isServer ? l.diagTargetServer : provider),
+                isServer ? l.diagTargetServer : providerLabel(provider)),
             detail: probeUrl);
       } catch (e) {
         yield DiagResult(
             l.diagStageEndpoint,
             DiagStatus.fail,
             l.diagEndpointUnreachable(
-                isServer ? l.diagTargetYourServer : provider),
+                isServer ? l.diagTargetYourServer : providerLabel(provider)),
             detail: '$probeUrl — $e',
             fix: _vpnNeeded.contains(provider)
                 ? l.diagFixVpn
