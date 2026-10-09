@@ -4,7 +4,7 @@
 /// time, the integrator fixes THIS file alone.
 library;
 
-import 'dart:async' show unawaited;
+import 'dart:async' show Completer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
@@ -136,19 +136,30 @@ class AppServices {
     final osSchedulesSummary = Platform.isIOS;
     Future<void> armOsSummary() =>
         armOsDailySummary(dao: dao, settings: settings, notifier: notifier);
+    // Settings' 下次总结 probe waits on this: on a first run init() sits
+    // behind the notification-permission dialog, and a probe answered
+    // before the arm read null and painted a red 'Not scheduled' over a
+    // summary armed seconds later. Completed right after the arm (not after
+    // the catch-up) and in `finally`, so a denial or a junk hh:mm resolves
+    // the probe instead of leaving it pending.
+    final summaryArmed = Completer<void>();
     unawaited(() async {
       try {
         await notifier.init();
         if (osSchedulesSummary) {
           await armOsSummary();
+          if (!summaryArmed.isCompleted) summaryArmed.complete();
         } else {
           await notifier.scheduleDaily(settings.reportTime);
+          if (!summaryArmed.isCompleted) summaryArmed.complete();
           // Catch-up at launch: if the slot passed while the app was dead
           // and no background run has happened yet, say it now.
           await postSummary();
         }
       } catch (_) {
         // Permission denial / corrupt hh:mm must never break startup.
+      } finally {
+        if (!summaryArmed.isCompleted) summaryArmed.complete();
       }
     }());
 
@@ -207,7 +218,10 @@ class AppServices {
       setupLinks: appLinks.uriLinkStream,
       initialSetupLink: appLinks.getInitialLink,
       notificationsEnabled: notifier.notificationsEnabled,
-      nextSummaryAt: notifier.scheduledDailyAt,
+      nextSummaryAt: () async {
+        await summaryArmed.future;
+        return notifier.scheduledDailyAt();
+      },
       lastBackgroundScan: lastBackgroundRun,
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the

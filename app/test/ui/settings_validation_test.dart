@@ -4,6 +4,8 @@
 /// (2026-07-31) — the diagnostics page answers strictly more.
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -647,6 +649,29 @@ void planTuningTests() {
       await tester.pumpWidget(screen(next: () async => tomorrow));
       await tester.pumpAndSettle();
       expect(find.textContaining('Tomorrow'), findsOneWidget);
+    });
+
+    // 2026-10-09: on a first run the startup arm sits behind the
+    // notification-permission dialog; di.dart makes the probe wait for the
+    // arm, so the row must stay a neutral '…' while it is pending — never a
+    // red 'Not scheduled' — and settle on the slot once the arm completes.
+    testWidgets('a probe still waiting on the startup arm shows …, then slot',
+        (tester) async {
+      final now = DateTime.now();
+      final slot = DateTime(now.year, now.month, now.day + 1, 21, 30);
+      final armed = Completer<DateTime?>();
+      await tester.pumpWidget(screen(next: () => armed.future));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(find.byKey(const Key('nextSummaryRow')), findsOneWidget);
+      expect(find.text('…'), findsOneWidget);
+      expect(find.textContaining('Not scheduled'), findsNothing);
+      armed.complete(slot);
+      await tester.pumpAndSettle();
+      expect(find.text('…'), findsNothing);
+      expect(find.textContaining('Not scheduled'), findsNothing);
+      expect(find.textContaining('Tomorrow'), findsOneWidget);
+      expect(find.textContaining('21:30'), findsOneWidget);
     });
 
     testWidgets('background-scan row: last OS launch, or "Not run yet"',
