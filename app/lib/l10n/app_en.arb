@@ -205,7 +205,7 @@
   },
   "settingsRowBackgroundScan": "Background scan",
   "backgroundScanNever": "Not run yet",
-  "backgroundScanDisabled": "Off in Settings",
+  "backgroundScanDisabled": "Off",
   "settingsSectionProfile": "Profile",
   "settingsRowDietaryProfile": "Dietary Profile",
   "profileSet": "Set",

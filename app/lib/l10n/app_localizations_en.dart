@@ -290,7 +290,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundScanNever => 'Not run yet';
 
   @override
-  String get backgroundScanDisabled => 'Off in Settings';
+  String get backgroundScanDisabled => 'Off';
 
   @override
   String get settingsSectionProfile => 'Profile';

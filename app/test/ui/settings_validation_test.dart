@@ -665,7 +665,9 @@ void planTuningTests() {
         openSystemSettings: () async => opened++,
       )));
       await tester.pumpAndSettle();
-      expect(find.text('Off in Settings'), findsOneWidget);
+      // Bare 'Off' (the red icon and chevron point to the remedy): 'Off in
+      // Settings' cut the 'Background scan' title (row_fit_layout_test).
+      expect(find.text('Off'), findsOneWidget);
       expect(find.text('Not run yet'), findsNothing);
       await tester.tap(find.byKey(const Key('backgroundScanRow')));
       await tester.pump();

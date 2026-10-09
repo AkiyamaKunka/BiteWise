@@ -159,12 +159,17 @@ const List<(String, String, String)> kPlanChoices = [
   ('doubao', 'Doubao Agent Plan', 'doubao'),
 ];
 
-/// Root-row display: the concrete plan name, never an opaque 'My server'.
+/// Row-value display: the concrete plan name, never an opaque 'My server'.
+/// Short ('Doubao Plan', not 'Doubao Agent Plan'): beside the check and
+/// chevron of the AI provider page's Subscription row the full names cut
+/// the TITLE to 'Subscri…' in English at 375/390 pt (loop find
+/// 2026-10-08); the picker one tap further keeps the full names. Pinned
+/// with the iPhone's own font by test/ui/row_fit_layout_test.dart.
 String providerDisplayLabel(String provider, String serverBackend) =>
     provider == 'server'
         ? switch (serverBackend) {
-            'glm' => 'GLM Coding Plan',
-            'doubao' => 'Doubao Agent Plan',
+            'glm' => 'GLM Plan',
+            'doubao' => 'Doubao Plan',
             _ => 'Claude Plan',
           }
         : providerLabel(provider);
