@@ -594,6 +594,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addNoPhotos => 'No recent photos found.';
 
   @override
+  String get addPhotosLimited =>
+      'Only the photos you allowed are shown — photos you take later won\'t appear here. Allow access to all photos in system settings.';
+
+  @override
   String get analyzing => 'Analyzing…';
 
   @override

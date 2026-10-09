@@ -148,6 +148,11 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   late Future<List<RecentAsset>> _assets;
   bool _analyzing = false;
   bool _permissionDenied = false;
+  // iOS "limited" / Android "selected photos": the grid holds only the
+  // photos picked in that one system dialog, so a meal shot later never
+  // appears here. Settings warns when the watcher is switched on; this
+  // screen said nothing (2026-10-09).
+  bool _limited = false;
   // Future-cached per asset: dedupes in-flight fetches across rebuilds
   // (the same rule the coverage screen learned).
   final Map<String, Future<Uint8List?>> _thumbs = {};
@@ -174,7 +179,62 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       setState(() => _permissionDenied = true);
       return const [];
     }
+    // Unknown counts as full, the same rule as hasFullAccess itself: the
+    // note is advisory, and a false "limited" would nag a full grant.
+    var full = true;
+    final lib = widget.services.photoLibrary;
+    if (lib != null) {
+      try {
+        full = await lib.hasFullAccess();
+      } catch (_) {}
+      if (!mounted) return const [];
+    }
+    _limited = !full;
     return widget.services.picker.recentAssets();
+  }
+
+  /// Says why photos are missing and where to grant the rest. Shown above
+  /// the grid AND in place of "no recent photos": a limited grant with
+  /// nothing selected is not an empty camera roll.
+  Widget _limitedNote(BuildContext context) {
+    final open = widget.services.openSystemSettings;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        key: const Key('addPhotosLimited'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.photo_library_outlined, size: 16, color: muted),
+          const SizedBox(width: 8),
+          // Button UNDER the text, not beside it: at large text sizes a
+          // side-by-side button would squeeze the sentence to nothing.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.addPhotosLimited,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: muted),
+                ),
+                if (open != null)
+                  TextButton(
+                    key: const Key('addPhotosLimitedSettings'),
+                    style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact),
+                    onPressed: () => open(),
+                    child: Text(context.l10n.openSystemSettings),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<Uint8List?> _thumbFor(String assetId) => _thumbs.putIfAbsent(
@@ -359,10 +419,16 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                 );
               }
               if (assets.isEmpty) {
+                if (_limited) {
+                  return Align(
+                      alignment: Alignment.topCenter,
+                      child: _limitedNote(context));
+                }
                 return Center(
                     child: Text(context.l10n.addNoPhotos));
               }
               return Column(children: [
+                if (_limited) _limitedNote(context),
                 // Portion accuracy is the model's weakest link, and a scale
                 // reference in frame is the cheapest fix the USER controls.
                 Padding(

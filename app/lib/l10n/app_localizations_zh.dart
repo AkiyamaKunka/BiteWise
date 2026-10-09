@@ -562,6 +562,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addNoPhotos => '没有找到最近的照片。';
 
   @override
+  String get addPhotosLimited => '只显示你允许访问的照片，之后拍的照片不会出现在这里。请在系统设置里允许访问所有照片。';
+
+  @override
   String get analyzing => '分析中…';
 
   @override

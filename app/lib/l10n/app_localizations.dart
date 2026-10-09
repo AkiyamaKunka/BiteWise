@@ -1076,6 +1076,12 @@ abstract class AppLocalizations {
   /// **'No recent photos found.'**
   String get addNoPhotos;
 
+  /// No description provided for @addPhotosLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'Only the photos you allowed are shown — photos you take later won\'t appear here. Allow access to all photos in system settings.'**
+  String get addPhotosLimited;
+
   /// No description provided for @analyzing.
   ///
   /// In en, this message translates to:

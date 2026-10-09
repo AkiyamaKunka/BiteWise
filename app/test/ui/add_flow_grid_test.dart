@@ -9,6 +9,7 @@
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/screens/add_flow.dart';
@@ -18,6 +19,35 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
+
+/// Only the access check is reachable from the grid; everything else says
+/// so loudly if that changes.
+class _AccessLibrary implements PhotoLibrary {
+  _AccessLibrary({required this.full});
+  final bool full;
+  @override
+  Future<bool> hasFullAccess() async => full;
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<Uint8List?> thumbnailByAssetId(String assetId, {int size = 160}) =>
+      throw UnimplementedError();
+  @override
+  Future<Uint8List?> originBytesByAssetId(String assetId) =>
+      throw UnimplementedError();
+  @override
+  Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
+          {int limit = 500}) =>
+      throw UnimplementedError();
+  @override
+  Future<List<LibraryAsset>> recentImages(int limit) =>
+      throw UnimplementedError();
+  @override
+  Future<void> startChangeNotify(void Function() onChange) =>
+      throw UnimplementedError();
+  @override
+  Future<void> stopChangeNotify() => throw UnimplementedError();
+}
 
 IntakePhoto _photo(String id) => IntakePhoto(
     Uint8List.fromList(List.filled(16, 3)), id, '$id.jpg',
@@ -258,6 +288,71 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Meal logged'), findsOneWidget);
       expect(find.byKey(const Key('undoLeftoverButton')), findsNothing);
+    });
+  });
+
+  group('a limited ("selected photos") grant (2026-10-09)', () {
+    // The grid showed only the photos picked in that one system dialog,
+    // with nothing saying others exist — a meal shot later never appeared
+    // and the screen offered no way to grant the rest.
+    testWidgets('says so above the grid, with a way to system settings',
+        (tester) async {
+      var opened = 0;
+      final services = makeServices(
+          picker: FakePicker()..photos = [_photo('a0')],
+          photoLibrary: _AccessLibrary(full: false),
+          openSystemSettings: () async => opened++);
+      await tester.pumpWidget(
+          MaterialApp(home: AddPhotoScreen(services: services)));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('addPhotosLimited')), findsOneWidget);
+      expect(find.textContaining('Only the photos you allowed'),
+          findsOneWidget);
+      expect(find.byKey(const Key('recentPhoto0')), findsOneWidget,
+          reason: 'the allowed photos stay pickable');
+      await tester.tap(find.byKey(const Key('addPhotosLimitedSettings')));
+      await tester.pumpAndSettle();
+      expect(opened, 1);
+    });
+
+    testWidgets('nothing selected is not "no recent photos"', (tester) async {
+      final services = makeServices(
+          picker: FakePicker()..photos = const [],
+          photoLibrary: _AccessLibrary(full: false),
+          openSystemSettings: () async {});
+      await tester.pumpWidget(
+          MaterialApp(home: AddPhotoScreen(services: services)));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('addPhotosLimited')), findsOneWidget);
+      expect(find.text('No recent photos found.'), findsNothing);
+    });
+
+    testWidgets('full access shows no note', (tester) async {
+      final services = makeServices(
+          picker: FakePicker()..photos = [_photo('a0')],
+          photoLibrary: _AccessLibrary(full: true),
+          openSystemSettings: () async {});
+      await tester.pumpWidget(
+          MaterialApp(home: AddPhotoScreen(services: services)));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('addPhotosLimited')), findsNothing);
+      expect(find.byKey(const Key('scaleReferenceTip')), findsOneWidget);
+    });
+
+    testWidgets('no settings opener: the note still shows, without a dead '
+        'button', (tester) async {
+      final services = makeServices(
+          picker: FakePicker()..photos = [_photo('a0')],
+          photoLibrary: _AccessLibrary(full: false));
+      await tester.pumpWidget(
+          MaterialApp(home: AddPhotoScreen(services: services)));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('addPhotosLimited')), findsOneWidget);
+      expect(find.byKey(const Key('addPhotosLimitedSettings')), findsNothing);
     });
   });
 }

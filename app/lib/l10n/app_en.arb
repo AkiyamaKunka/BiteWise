@@ -348,6 +348,7 @@
   "addFixFooter": "\"meal 2 was roast duck\" · \"删除第一餐\"",
   "addPhotosTip": "Tip: chopsticks or a hand in the shot helps the AI judge portion sizes.",
   "addNoPhotos": "No recent photos found.",
+  "addPhotosLimited": "Only the photos you allowed are shown — photos you take later won't appear here. Allow access to all photos in system settings.",
   "analyzing": "Analyzing…",
   "reportTitle": "Daily intake",
   "reportMeals": "{count, plural, =1{1 meal} other{{count} meals}}",

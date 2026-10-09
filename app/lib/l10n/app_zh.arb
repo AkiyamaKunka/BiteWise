@@ -184,6 +184,7 @@
   "addFixFooter": "\"第二餐是烤鸭\" · \"删除第一餐\"",
   "addPhotosTip": "小提示：照片里带上筷子或手，AI 估算分量更准。",
   "addNoPhotos": "没有找到最近的照片。",
+  "addPhotosLimited": "只显示你允许访问的照片，之后拍的照片不会出现在这里。请在系统设置里允许访问所有照片。",
   "analyzing": "分析中…",
   "reportTitle": "今日饮食",
   "reportMeals": "{count} 餐",
