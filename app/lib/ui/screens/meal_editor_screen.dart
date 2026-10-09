@@ -18,6 +18,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/coerce.dart' show normalizeImageHash;
 import '../../core/contracts.dart';
+import '../../services/photo/filename_dates.dart'
+    show captureWallClock, exifWallAndOffset;
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
 import '../large_text.dart';
@@ -95,6 +97,13 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     final meal = widget.meal;
     final photo = widget.fromPhoto;
     final prefill = widget.initialAnalysis;
+    // The photo's capture moment in the zone it was TAKEN in — the same
+    // clock the automatic pipeline dates by, so a manual log of a photo
+    // from before a flight agrees with an automatic one.
+    final captured = photo?.capturedAt;
+    final shot = (photo == null || captured == null)
+        ? null
+        : captureWallClock(captured, exifWallAndOffset(photo.bytes));
     _draft = meal != null
         ? MealDraft.fromMeal(meal)
         : (prefill != null
@@ -103,23 +112,21 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             // widget.meal stays null, so saving INSERTS.
             ? MealDraft.fromMeal(Meal(
                 id: 0,
-                date: photo?.capturedAt != null
-                    ? isoDate(photo!.capturedAt!)
+                date: shot != null
+                    ? isoDate(shot)
                     : (widget.initialDate ?? isoDate(clock())),
-                time: photo?.capturedAt != null
-                    ? formatClock(photo!.capturedAt!)
-                    : formatClock(clock()),
+                time: shot != null ? formatClock(shot) : formatClock(clock()),
                 timestamp: clock().toIso8601String(),
                 source: widget.newMealSource,
                 analysis: prefill,
               ))
             : (MealDraft.blank(clock())
               // A photo's own capture moment beats "now" for a manual log.
-              ..dateIso = photo?.capturedAt != null
-                  ? isoDate(photo!.capturedAt!)
+              ..dateIso = shot != null
+                  ? isoDate(shot)
                   : (widget.initialDate ?? MealDraft.blank(clock()).dateIso)
-              ..time = photo?.capturedAt != null
-                  ? formatClock(photo!.capturedAt!)
+              ..time = shot != null
+                  ? formatClock(shot)
                   : MealDraft.blank(clock()).time));
     _desc = TextEditingController(text: _draft.description);
     _cal = TextEditingController(text: _draft.calories);

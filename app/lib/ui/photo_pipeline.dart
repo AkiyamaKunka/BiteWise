@@ -18,7 +18,8 @@ import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
 import '../services/analyzer/platform_decode.dart';
 import '../services/photo/filename_dates.dart'
-    show exifCapturedAt, validateCapturedAt;
+    show captureWallClock, exifCapturedAt, exifWallAndOffset,
+        validateCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
 
@@ -197,7 +198,16 @@ class PhotoPipeline {
       // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
       // with a dead clock, a forward-set date), and an unvalidated value
       // writes a meal into a random month of the user's log.
-      final when = photo.capturedAt ??
+      // A capturedAt is re-expressed in the zone the photo was TAKEN in
+      // when the EXIF shutter stamp names that zone and the same instant
+      // (captureWallClock): iOS's createDateTime is an instant shown in the
+      // CURRENT zone, so a photo first scanned after a flight was dated by
+      // the destination's clock. Not re-validated against local now — the
+      // instant already was, and a westbound wall clock can sit "ahead".
+      final captured = photo.capturedAt;
+      final when = (captured == null
+              ? null
+              : captureWallClock(captured, exifWallAndOffset(photo.bytes))) ??
           validateCapturedAt(exifCapturedAt(photo.bytes),
               now: DateTime.now()) ??
           DateTime.now();
