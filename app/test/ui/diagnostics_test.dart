@@ -176,6 +176,47 @@ void main() {
         reason: 'the provider-specific message must reach the user');
   });
 
+  test('a failed text request never claims photos work when the photo '
+      'request failed too, and only then suggests a model change',
+      () async {
+    // textIntent returns null for every failure (busy server, closed
+    // Claude window, timeout, junk reply). On a closed window the photo
+    // row failed for the same reason while this row still said "photo
+    // analysis can still work" and prescribed a model change.
+    final en = AppLocalizationsEn();
+    final bothDown = _okAnalyzer()
+      ..nextTextIntent = null
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          error: 'Claude usage window is closed — try again later.',
+          retryable: true,
+          wall: Duration.zero);
+    var results = await _diag(analyzer: bothDown).run().toList();
+    expect(results, hasLength(6));
+    expect(results.map((r) => r.stage).toList().sublist(3, 5),
+        ['Text analysis', 'Photo analysis'],
+        reason: 'the text row still comes before the photo row');
+    var text = results.firstWhere((r) => r.stage == 'Text analysis');
+    expect(text.status, DiagStatus.warn);
+    expect(text.summary, isNot(contains('did not return usable JSON')),
+        reason: 'a busy or closed server is not the model\'s JSON');
+    expect(text.detail, isNot(contains('can still work')));
+    expect(text.detail, en.diagTextBadPhotoAlsoFailed);
+    expect(text.fix, isNot(contains('pick a different model')));
+    expect(text.fix, en.diagFixTextFollowPhoto);
+    final zh = AppLocalizationsZh();
+    expect(zh.diagTextBadPhotoAlsoFailed, isNot(contains('仍然可以')));
+    expect(zh.diagTextBad, isNot(startsWith('模型没有')));
+
+    // Photo fine, text broken: the model's text output is the suspect,
+    // so the conditional model-change fix stays.
+    final textOnly = _okAnalyzer()..nextTextIntent = null;
+    results = await _diag(analyzer: textOnly).run().toList();
+    text = results.firstWhere((r) => r.stage == 'Text analysis');
+    expect(text.detail, en.diagTextBadDetail);
+    expect(text.fix, en.diagFixTextPickModel);
+    expect(zh.diagFixTextPickModel, contains('照片分析正常'));
+  });
+
   test('quota pause surfaces as a warning with the until-time', () async {
     final settings = FakeSettings()
       ..isQuotaPaused = true

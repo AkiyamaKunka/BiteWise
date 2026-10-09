@@ -1763,7 +1763,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextBad.
   ///
   /// In en, this message translates to:
-  /// **'The model did not return usable JSON for a text request.'**
+  /// **'The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).'**
   String get diagTextBad;
 
   /// No description provided for @diagTextBadDetail.
@@ -1777,6 +1777,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this persists, pick a different model in Settings.'**
   String get diagFixPickModel;
+
+  /// No description provided for @diagTextBadPhotoAlsoFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.'**
+  String get diagTextBadPhotoAlsoFailed;
+
+  /// No description provided for @diagFixTextPickModel.
+  ///
+  /// In en, this message translates to:
+  /// **'If photo analysis works but this keeps failing, pick a different model in Settings.'**
+  String get diagFixTextPickModel;
+
+  /// No description provided for @diagFixTextFollowPhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'Follow the fix on the photo row, then run the test again.'**
+  String get diagFixTextFollowPhoto;
 
   /// No description provided for @diagPhotoOk.
   ///

@@ -1018,7 +1018,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextBad =>
-      'The model did not return usable JSON for a text request.';
+      'The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).';
 
   @override
   String get diagTextBadDetail =>
@@ -1027,6 +1027,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get diagFixPickModel =>
       'If this persists, pick a different model in Settings.';
+
+  @override
+  String get diagTextBadPhotoAlsoFailed =>
+      'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.';
+
+  @override
+  String get diagFixTextPickModel =>
+      'If photo analysis works but this keeps failing, pick a different model in Settings.';
+
+  @override
+  String get diagFixTextFollowPhoto =>
+      'Follow the fix on the photo row, then run the test again.';
 
   @override
   String get diagPhotoOk =>

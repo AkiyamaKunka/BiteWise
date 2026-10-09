@@ -645,9 +645,12 @@
     }
   },
   "diagTextOk": "The model answered JSON — chat fixes and \"describe a meal\" work.",
-  "diagTextBad": "The model did not return usable JSON for a text request.",
+  "diagTextBad": "The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).",
   "diagTextBadDetail": "Chat fixes and \"describe a meal\" may fail; photo analysis can still work.",
   "diagFixPickModel": "If this persists, pick a different model in Settings.",
+  "diagTextBadPhotoAlsoFailed": "Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.",
+  "diagFixTextPickModel": "If photo analysis works but this keeps failing, pick a different model in Settings.",
+  "diagFixTextFollowPhoto": "Follow the fix on the photo row, then run the test again.",
   "diagPhotoOk": "The model analyzed a test image and answered the meal format.",
   "diagPhotoThoughtFood": "It even thought the test disc was food.",
   "diagPhotoNotFood": "Verdict \"not food\" — correct for the test image.",
