@@ -82,26 +82,44 @@ class MigratingKeyStore implements SecureKeyStore {
   final SecureKeyStore primary;
   final SecureKeyStore legacy;
 
+  /// Where a key sits (in the new class) while it is being moved, so an
+  /// app kill between deleting the old copy and writing the new one cannot
+  /// lose it. A different account name: never collides with the item.
+  static String stagingKey(String key) => '$key.migrating';
+
   @override
   Future<String?> read(String key) async {
     final current = await primary.read(key);
     if (current != null) return current;
-    final String? old;
-    try {
-      old = await legacy.read(key);
-    } catch (_) {
-      // A locked phone cannot read an `unlocked` item (the background scan
-      // case). Report it missing for this run and touch nothing: the next
-      // read with the phone unlocked migrates it.
-      return null;
+    // A locked phone cannot read an `unlocked` item. That failure MUST
+    // propagate. Reporting the key as missing made a locked first launch
+    // look like "no key": the UI then showed an empty key field whose next
+    // save deleted the still-stored item (review 2026-10-09). The
+    // background run already survives a failed load (background_glue).
+    final old = await legacy.read(key);
+    if (old == null) {
+      // Another engine (UI vs background, one process, separate plugin
+      // queues) may have migrated it between our two reads.
+      final again = await primary.read(key);
+      if (again != null) return again;
+      // A move interrupted after the delete left the value staged.
+      final staged = await primary.read(stagingKey(key));
+      if (staged == null) return null;
+      await primary.write(key, staged);
+      await _dropStage(key);
+      return staged;
     }
-    if (old == null) return null;
     try {
-      // Delete FIRST: a first_unlock add next to the `unlocked` item would
-      // be rejected as a duplicate. ([primary] just read null, so the old
-      // copy is the only one.)
+      await primary.write(stagingKey(key), old);
+    } catch (_) {
+      return old; // nothing moved; the old copy is intact for later
+    }
+    try {
+      // Delete before the real write: a first_unlock add next to the
+      // `unlocked` item would be rejected as a duplicate.
       await legacy.delete(key);
     } catch (_) {
+      await _dropStage(key);
       return old; // the old copy is intact; migrate on a later read
     }
     try {
@@ -111,26 +129,43 @@ class MigratingKeyStore implements SecureKeyStore {
         // Never lose a key: put it back exactly as it was stored.
         await legacy.write(key, old);
       } catch (_) {
-        // Nothing left to try; this session still has the value.
+        return old; // the staged copy stays; the next read finishes the move
       }
     }
+    await _dropStage(key);
     return old;
   }
 
-  /// Any copy under the old class is deleted first, or the new item would
-  /// be a duplicate of it.
+  /// Try the plugin's in-place update first: once migrated it is atomic,
+  /// so a key is never absent between keystrokes. Only an old-class copy
+  /// makes the add fail (duplicate) — then clear every copy and add.
   @override
   Future<void> write(String key, String value) async {
-    await _deleteBoth(key);
-    await primary.write(key, value);
+    try {
+      await primary.write(key, value);
+    } catch (_) {
+      await _deleteBoth(key);
+      await primary.write(key, value);
+    }
   }
 
   @override
-  Future<void> delete(String key) => _deleteBoth(key);
+  Future<void> delete(String key) async {
+    await _deleteBoth(key);
+    await _dropStage(key); // a stale stage must not resurrect the key
+  }
 
   Future<void> _deleteBoth(String key) async {
     await legacy.delete(key);
     await primary.delete(key);
+  }
+
+  Future<void> _dropStage(String key) async {
+    try {
+      await primary.delete(stagingKey(key));
+    } catch (_) {
+      // Harmless: a stage is only consulted when both classes are empty.
+    }
   }
 }
 

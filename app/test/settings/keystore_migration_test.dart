@@ -20,18 +20,31 @@ class FakeStore implements SecureKeyStore {
   bool throwOnRead = false;
   bool throwOnWrite = false;
   bool throwOnDelete = false;
+  /// Writes of these keys fail (e.g. a duplicate of an old-class item).
+  final Set<String> failWriteKeys = {};
+  /// Writes fail this many more times, then succeed.
+  int failNextWrites = 0;
+  /// Runs after a read is logged — lets a test interleave another engine.
+  Future<void> Function()? onRead;
 
   @override
   Future<String?> read(String key) async {
     log.add('$name.read');
     if (throwOnRead) throw PlatformException(code: '-25308');
+    await onRead?.call();
     return data[key];
   }
 
   @override
   Future<void> write(String key, String value) async {
     log.add('$name.write');
-    if (throwOnWrite) throw PlatformException(code: '-25299');
+    if (throwOnWrite || failWriteKeys.contains(key)) {
+      throw PlatformException(code: '-25299');
+    }
+    if (failNextWrites > 0) {
+      failNextWrites--;
+      throw PlatformException(code: '-25299');
+    }
     data[key] = value;
   }
 
@@ -107,7 +120,9 @@ void main() {
     test('fresh install: a missing key reads null and nothing is touched',
         () async {
       expect(await store.read('k'), isNull);
-      expect(log, ['primary.read', 'legacy.read']);
+      // Re-reads the new class (another engine may have migrated it) and
+      // the staging slot (an interrupted move); writes nothing.
+      expect(log, ['primary.read', 'legacy.read', 'primary.read', 'primary.read']);
     });
 
     test('a key in the new class is read straight from it', () async {
@@ -120,8 +135,13 @@ void main() {
         () async {
       legacy.data['k'] = 'v';
       expect(await store.read('k'), 'v');
-      expect(log,
-          ['primary.read', 'legacy.read', 'legacy.delete', 'primary.write']);
+      expect(log, [
+        'primary.read', 'legacy.read',
+        'primary.write', // stage
+        'legacy.delete',
+        'primary.write', // the real item
+        'primary.delete', // drop the stage
+      ]);
       expect(primary.data, {'k': 'v'});
       expect(legacy.data, isEmpty);
 
@@ -130,12 +150,14 @@ void main() {
       expect(log, ['primary.read'], reason: 'migrated for good');
     });
 
-    test('locked phone: the old copy is unreadable -> null, nothing deleted',
-        () async {
+    test('locked phone: the old copy is unreadable -> the read FAILS, '
+        'nothing deleted (never "missing")', () async {
+      // Reporting null here let the UI show an empty key field whose next
+      // save deleted the stored key (review 2026-10-09).
       legacy
         ..data['k'] = 'v'
         ..throwOnRead = true;
-      expect(await store.read('k'), isNull);
+      await expectLater(store.read('k'), throwsA(isA<PlatformException>()));
       expect(log, ['primary.read', 'legacy.read']);
       expect(legacy.data, {'k': 'v'});
       expect(primary.data, isEmpty);
@@ -146,14 +168,49 @@ void main() {
       expect(primary.data, {'k': 'v'});
     });
 
-    test('a failed new-class write puts the key back in the old class',
-        () async {
+    test('a failed stage write moves nothing', () async {
       legacy.data['k'] = 'v';
       primary.throwOnWrite = true;
       expect(await store.read('k'), 'v');
       expect(legacy.data, {'k': 'v'}, reason: 'never lose a key');
       expect(primary.data, isEmpty);
-      expect(log.last, 'legacy.write');
+      expect(log, isNot(contains('legacy.delete')));
+    });
+
+    test('a failed new-class write puts the key back in the old class',
+        () async {
+      legacy.data['k'] = 'v';
+      primary.failWriteKeys.add('k');
+      expect(await store.read('k'), 'v');
+      expect(legacy.data, {'k': 'v'}, reason: 'never lose a key');
+      expect(primary.data, isEmpty, reason: 'stage dropped after restore');
+    });
+
+    test('a move interrupted after the delete is finished from the stage',
+        () async {
+      // The new write AND the restore fail (or the app dies in between):
+      // only the staged copy holds the key.
+      legacy.data['k'] = 'v';
+      primary.failWriteKeys.add('k');
+      legacy.throwOnWrite = true;
+      expect(await store.read('k'), 'v');
+      expect(legacy.data, isEmpty);
+      expect(primary.data, {MigratingKeyStore.stagingKey('k'): 'v'});
+
+      primary.failWriteKeys.clear();
+      expect(await store.read('k'), 'v');
+      expect(primary.data, {'k': 'v'}, reason: 'moved, stage gone');
+    });
+
+    test('another engine migrating between the two reads is not "missing"',
+        () async {
+      legacy.data['k'] = 'v';
+      legacy.onRead = () async {
+        // The other engine finished the move just now.
+        legacy.data.remove('k');
+        primary.data['k'] = 'v';
+      };
+      expect(await store.read('k'), 'v');
     });
 
     test('a failed delete of the old copy leaves it intact for later',
@@ -163,16 +220,24 @@ void main() {
         ..throwOnDelete = true;
       expect(await store.read('k'), 'v');
       expect(legacy.data, {'k': 'v'});
-      expect(log, isNot(contains('primary.write')));
+      expect(primary.data, isEmpty, reason: 'stage dropped, no new copy');
     });
 
     test('write replaces an old-class copy with a new-class one', () async {
       legacy.data['k'] = 'old';
+      primary.failNextWrites = 1; // the add collides with the old item
       await store.write('k', 'new');
       expect(legacy.data, isEmpty);
       expect(primary.data, {'k': 'new'});
-      expect(log.last, 'primary.write', reason: 'delete first, then write');
+      expect(log.last, 'primary.write', reason: 'clear, then write');
       expect(await store.read('k'), 'new');
+    });
+
+    test('write of a migrated key is one in-place write (atomic)', () async {
+      primary.data['k'] = 'a';
+      await store.write('k', 'b');
+      expect(log, ['primary.write']);
+      expect(primary.data, {'k': 'b'});
     });
 
     test('delete clears both classes', () async {
@@ -213,10 +278,11 @@ void main() {
       // Saved by an earlier build under the plugin default.
       keychain.items['server_api_key'] = ('sk-test', 'unlocked');
 
-      // Background run before the app was opened unlocked: no throw (the
-      // run used to die here), the key reads missing, and stays stored.
+      // Locked before the app was opened unlocked: the load FAILS (never
+      // "no key" — the UI would offer to overwrite it) and the item stays.
+      // The background runner survives a failed load (background_glue).
       keychain.locked = true;
-      expect((await load()).serverApiKey, isNull);
+      await expectLater(load(), throwsA(isA<PlatformException>()));
       expect(keychain.items['server_api_key'], ('sk-test', 'unlocked'));
 
       // Foreground, unlocked: read and migrated.
