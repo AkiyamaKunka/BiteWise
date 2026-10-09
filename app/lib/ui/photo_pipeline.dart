@@ -76,8 +76,12 @@ class PhotoPipeline {
   final MealsDao dao;
   final AnalyzerService analyzer;
 
-  /// Notification-style surface (snackbar) for background saves.
-  final void Function(String message)? notify;
+  /// Notification-style surface (snackbar) for background saves. Handed
+  /// the OUTCOME, not a sentence: the caller words it in the app language
+  /// (di.dart via outcomeSnackbar). Passing [PhotoOutcome.message] here put
+  /// English snackbars ("Meal logged: …") in front of the Chinese UI every
+  /// time the automatic scan saved a photo with the app open (2026-10-08).
+  final void Function(PhotoOutcome outcome)? notify;
 
   /// Called after a meal row lands, so open screens can re-query. Separate
   /// from [notify] on purpose: notify also fires for failures, and only a
@@ -234,9 +238,15 @@ class PhotoPipeline {
         // Permanent failure: kept as status failed for deliberate retry
         // (spec §6.5).
         await dao.markPhotoHash(hash, IngestionStatus.failed);
-        notify?.call('Photo analysis failed — kept for retry. $why');
-        return PhotoOutcome(PhotoOutcomeKind.failed, why,
+        final failed = PhotoOutcome(PhotoOutcomeKind.failed, why,
             errorKind: classifyAnalysisError(outcome.error), detail: why);
+        // Shielded like the save paths below: the failed mark is already
+        // committed, and a throwing snackbar must not turn this verdict
+        // into the outer catch's "Photo intake failed".
+        try {
+          notify?.call(failed);
+        } catch (_) {}
+        return failed;
       }
       if (!outcome.isFood) {
         // Tombstone so backfill never re-analyzes it (spec §6.4).
@@ -267,13 +277,14 @@ class PhotoPipeline {
           final summary =
               '${mealDescription(original.analysis)} — −${applied.deductedKcal} '
               'kcal, now ~$newKcal kcal';
-          try {
-            notify?.call('Leftovers deducted: $summary');
-            onMealSaved?.call();
-          } catch (_) {}
-          return PhotoOutcome(
+          final leftover = PhotoOutcome(
               PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
               analysis: applied.adjusted, detail: summary);
+          try {
+            notify?.call(leftover);
+            onMealSaved?.call();
+          } catch (_) {}
+          return leftover;
         }
       }
 
@@ -314,19 +325,20 @@ class PhotoPipeline {
       } catch (_) {}
       final summary =
           '${mealDescription(analysis)} — ~${displayTotalCalories(analysis)} kcal';
+      // No row id in the copy: the chat flow numbers meals by LIST position
+      // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
+      // a number that is guaranteed to miss.
+      final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
+          analysis: analysis, detail: summary);
       // Same shield as the thumbnail: these run AFTER the commit, so a
       // throwing callback must not fall into the outer catch — that
       // flipped the committed ledger row saved→failed and told the user
       // the intake failed (pressure-test find, 2026-08-03).
       try {
-        notify?.call('Meal logged: $summary');
+        notify?.call(saved);
         onMealSaved?.call();
       } catch (_) {}
-      // No row id in the copy: the chat flow numbers meals by LIST position
-      // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
-      // a number that is guaranteed to miss.
-      return PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-          analysis: analysis, detail: summary);
+      return saved;
     } catch (e) {
       // Containment: never rethrow (spec §6). Mark failed ONLY if we hold
       // the reservation — a pre-reservation throw (e.g. the duplicate

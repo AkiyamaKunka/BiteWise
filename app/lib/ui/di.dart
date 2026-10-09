@@ -33,6 +33,7 @@ import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
 import 'migrations.dart';
+import 'outcome_text.dart' show outcomeSnackbar;
 import 'os_summary.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
@@ -156,7 +157,13 @@ class AppServices {
     final pipeline = PhotoPipeline(
         dao: dao,
         analyzer: analyzer,
-        notify: notify,
+        // Worded HERE, in the app language read live at each call, so a
+        // language switch applies to the next snackbar; main.dart stays a
+        // plain String sink.
+        notify: notify == null
+            ? null
+            : (o) => notify(
+                outcomeSnackbar(localizationsFor(settings.appLanguage), o)),
         // Open screens re-query instead of showing pre-save data.
         onMealSaved: signalMealsChanged);
 
@@ -227,8 +234,8 @@ class AppServices {
           // Truncation must not vanish silently: >2000 window images means
           // the catch-up cannot promise full coverage.
           if (e is BackfillWindowTruncated) {
-            notify?.call('Photo library backlog is very large — some older '
-                'photos may need to be added manually.');
+            notify?.call(localizationsFor(settings.appLanguage)
+                .backlogTruncatedWarning);
           }
         }));
       }

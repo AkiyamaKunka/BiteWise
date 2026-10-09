@@ -1168,6 +1168,15 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String outcomeFailedKeptMsg(String reason) {
+    return 'Photo analysis failed — kept for retry. $reason';
+  }
+
+  @override
+  String get backlogTruncatedWarning =>
+      'Photo library backlog is very large — some older photos may need to be added manually.';
+
+  @override
   String get outcomeNotFoodMsg => 'No food detected in this photo.';
 
   @override

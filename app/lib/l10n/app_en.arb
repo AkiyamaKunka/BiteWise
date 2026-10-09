@@ -714,6 +714,15 @@
       }
     }
   },
+  "outcomeFailedKeptMsg": "Photo analysis failed — kept for retry. {reason}",
+  "@outcomeFailedKeptMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "backlogTruncatedWarning": "Photo library backlog is very large — some older photos may need to be added manually.",
   "outcomeNotFoodMsg": "No food detected in this photo.",
   "outcomeDuplicateMsg": "Looks like a duplicate of a photo logged minutes ago.",
   "outcomeAlreadyTrackedMsg": "This photo was already logged.",

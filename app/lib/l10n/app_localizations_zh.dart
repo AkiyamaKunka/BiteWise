@@ -1091,6 +1091,14 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String outcomeFailedKeptMsg(String reason) {
+    return '照片分析失败，已保留以便重试。$reason';
+  }
+
+  @override
+  String get backlogTruncatedWarning => '相册里待处理的照片太多 —— 一些较早的照片可能需要手动添加。';
+
+  @override
   String get outcomeNotFoodMsg => '这张照片里没有识别到食物。';
 
   @override

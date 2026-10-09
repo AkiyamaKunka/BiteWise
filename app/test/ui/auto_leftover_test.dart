@@ -51,7 +51,7 @@ void main() {
   late FakeDao dao;
   late FakeAnalyzer analyzer;
   late PhotoPipeline pipeline;
-  final notifications = <String>[];
+  final notifications = <PhotoOutcome>[];
 
   setUp(() {
     dao = FakeDao();
@@ -79,7 +79,8 @@ void main() {
     expect(updated.analysis['total_calories'], 665); // pork eaten, rice left
     expect(updated.analysis['leftover']['original']['total_calories'], 965);
     expect(dao.ledger['leftover-hash-1'], IngestionStatus.skipped);
-    expect(notifications.single, contains('Leftovers deducted'));
+    expect(notifications.single.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(notifications.single.message, contains('Leftovers deducted'));
     // The prompt data really carried the candidate.
     expect(analyzer.lastRecentMeals, hasLength(1));
     expect(analyzer.lastRecentMeals!.single['meal_description'],

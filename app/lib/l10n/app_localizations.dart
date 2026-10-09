@@ -2006,6 +2006,18 @@ abstract class AppLocalizations {
   /// **'Leftovers deducted: {summary}'**
   String outcomeLeftoverMsg(String summary);
 
+  /// No description provided for @outcomeFailedKeptMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo analysis failed — kept for retry. {reason}'**
+  String outcomeFailedKeptMsg(String reason);
+
+  /// No description provided for @backlogTruncatedWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo library backlog is very large — some older photos may need to be added manually.'**
+  String get backlogTruncatedWarning;
+
   /// No description provided for @outcomeNotFoodMsg.
   ///
   /// In en, this message translates to:

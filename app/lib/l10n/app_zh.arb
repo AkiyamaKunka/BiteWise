@@ -339,6 +339,8 @@
   "notificationsOffHint": "通知已关闭 —— 每日总结无法送达。",
   "outcomeSavedMsg": "已记录：{summary}",
   "outcomeLeftoverMsg": "已扣除剩菜：{summary}",
+  "outcomeFailedKeptMsg": "照片分析失败，已保留以便重试。{reason}",
+  "backlogTruncatedWarning": "相册里待处理的照片太多 —— 一些较早的照片可能需要手动添加。",
   "outcomeNotFoodMsg": "这张照片里没有识别到食物。",
   "outcomeDuplicateMsg": "看起来和几分钟前记录的一张照片重复了。",
   "outcomeAlreadyTrackedMsg": "这张照片已经记录过了。",
