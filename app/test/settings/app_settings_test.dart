@@ -59,6 +59,20 @@ void main() {
     expect(again.quotaPauseUntil, pause);
   });
 
+  test('the quota pause is stored as a UTC instant and read back local',
+      () async {
+    // Zone-less, a pause armed in Shanghai re-parsed in Chicago and lasted
+    // 13 hours longer after the flight.
+    final (s, prefs, keys) = await freshSettings();
+    final pause = DateTime(2026, 10, 20, 11, 30);
+    await s.setQuotaPauseUntil(pause);
+    final stored = prefs.getString('settings.quota_pause_until')!;
+    expect(stored, endsWith('Z'));
+    expect(DateTime.parse(stored).isAtSameMomentAs(pause), isTrue);
+    final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+    expect(again.quotaPauseUntil, pause); // same instant, local again
+  });
+
   test('CHANGING the key clears the quota-pause latch; re-saving it does not',
       () async {
     final (s, prefs, keys) = await freshSettings();

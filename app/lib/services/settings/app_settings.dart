@@ -260,7 +260,12 @@ class AppSettings extends ChangeNotifier {
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
-    s._quotaPauseUntil = DateTime.tryParse(p.getString(_kQuotaPauseUntil) ?? '');
+    // Written as UTC, read back local: a zone-less string would re-parse
+    // in the zone the phone is in NOW, so a pause armed in Shanghai lasted
+    // 13 hours longer after landing in Chicago. A pre-fix zone-less value
+    // still parses as local, exactly as before.
+    s._quotaPauseUntil =
+        DateTime.tryParse(p.getString(_kQuotaPauseUntil) ?? '')?.toLocal();
     return s;
   }
 
@@ -669,7 +674,8 @@ class AppSettings extends ChangeNotifier {
       await _prefs.remove(_kQuotaPauseUntil);
       await _prefs.remove(_kQuotaPauseProvider);
     } else {
-      await _prefs.setString(_kQuotaPauseUntil, value.toIso8601String());
+      await _prefs.setString(
+          _kQuotaPauseUntil, value.toUtc().toIso8601String());
       await _prefs.setString(
           _kQuotaPauseProvider, (forProvider ?? _provider).name);
     }

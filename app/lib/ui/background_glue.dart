@@ -37,6 +37,7 @@ import 'os_summary.dart';
 import 'outcome_text.dart';
 
 /// Persisted watermark: start time of the last completed background scan.
+/// Stored as a UTC instant (see [readStoredInstant]).
 const String backgroundWatermarkPrefsKey = 'background.last_scan_iso';
 
 /// When the OS last LAUNCHED a background run (before any guard) — the
@@ -44,6 +45,18 @@ const String backgroundWatermarkPrefsKey = 'background.last_scan_iso';
 /// that BGAppRefresh fires on a given phone; the OS decides the cadence
 /// and no debugger is needed to read this (2026-09-30).
 const String backgroundLastRunPrefsKey = 'background.last_run_iso';
+
+/// Reads an instant stored by this file. Both keys are WRITTEN as UTC
+/// ('…Z'): a zone-less local string is read back in whatever zone the
+/// phone is in NOW, so a Shanghai → Chicago flight moved the watermark
+/// 13 hours into the future and the scan skipped every photo taken in
+/// between — the airport and in-flight meals (2026-10-08). Read back as
+/// local, because Settings formats `.hour` directly. A pre-fix zone-less
+/// value still parses as local, exactly as before, and the next forward
+/// checkpoint rewrites it as UTC.
+@visibleForTesting
+DateTime? readStoredInstant(String? stored) =>
+    DateTime.tryParse(stored ?? '')?.toLocal();
 
 /// Re-scan overlap behind the watermark, absorbing camera write latency and
 /// photos created while the previous scan was running.
@@ -142,7 +155,8 @@ Future<bool> headlessBackfillWith({
 }) async {
   // First, unconditionally: "the OS ran us" is what Settings reports,
   // whatever the guards below decide.
-  await prefs.setString(backgroundLastRunPrefsKey, clock().toIso8601String());
+  await prefs.setString(
+      backgroundLastRunPrefsKey, clock().toUtc().toIso8601String());
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
   if (!settings.watcherEnabled) return true;
@@ -152,17 +166,15 @@ Future<bool> headlessBackfillWith({
   if (!settings.canAnalyze) return true;
 
   final scanStart = clock();
-  final since =
-      DateTime.tryParse(prefs.getString(backgroundWatermarkPrefsKey) ?? '');
+  final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
 
   Future<void> checkpoint(DateTime mark) async {
     // Monotonic forward only, never past this scan's start.
     final capped = mark.isAfter(scanStart) ? scanStart : mark;
-    final cur =
-        DateTime.tryParse(prefs.getString(backgroundWatermarkPrefsKey) ?? '');
+    final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
     if (cur == null || capped.isAfter(cur)) {
       await prefs.setString(
-          backgroundWatermarkPrefsKey, capped.toIso8601String());
+          backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
     }
   }
 
@@ -308,5 +320,5 @@ Future<void> syncBackgroundScan(AppSettings settings) =>
 Future<DateTime?> lastBackgroundRun() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
-  return DateTime.tryParse(prefs.getString(backgroundLastRunPrefsKey) ?? '');
+  return readStoredInstant(prefs.getString(backgroundLastRunPrefsKey));
 }
