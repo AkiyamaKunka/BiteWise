@@ -324,6 +324,31 @@ void main() {
     expect(find.byKey(const Key('quotaPauseBanner')), findsOneWidget);
   });
 
+  testWidgets('the watcher toggle is ONE screen-reader stop: its name and '
+      'its on/off state together', (tester) async {
+    // Unmerged, VoiceOver stopped on 'Watch Camera Roll' and then on an
+    // unnamed switch — the state was never read with its name.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final handle = tester.ensureSemantics();
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      photoIntake: FakeIntake(),
+      requestPhotoPermission: () async => true,
+    )));
+    await tester.pumpAndSettle();
+    final node = tester.getSemantics(find.byKey(const Key('watcherToggle')));
+    expect(node.label, contains('Watch Camera Roll'));
+    expect(node, isSemantics(hasToggledState: true, isToggled: true));
+    expect(find.bySemanticsLabel('Watch Camera Roll'), findsOneWidget,
+        reason: 'one node, not a title node plus a nameless switch');
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    handle.dispose();
+  });
+
   testWidgets('watcher toggle stays off when permission is denied',
       (tester) async {
     final settings = FakeSettings(watcherEnabled: false);

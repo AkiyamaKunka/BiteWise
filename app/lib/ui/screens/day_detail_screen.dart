@@ -164,6 +164,10 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
                   ),
         floatingActionButton: FloatingActionButton(
           key: const Key('addMealToDay'),
+          // A bare '+' read as just 'button' to a screen reader; the
+          // tooltip names it (and shows on long-press). Stays the round
+          // FAB: the list's bottom padding is sized for it.
+          tooltip: context.l10n.dayAddMealTooltip,
           onPressed: () => _openEditor(),
           child: const Icon(Icons.add),
         ),
@@ -230,6 +234,7 @@ class _MealRow extends StatelessWidget {
                   if (meal.corrected) ...[
                     const SizedBox(width: 8),
                     Icon(Icons.edit_outlined,
+                        semanticLabel: context.l10n.correctedBadge,
                         size: 13, color: theme.colorScheme.onSurfaceVariant),
                   ],
                   if (!food) ...[

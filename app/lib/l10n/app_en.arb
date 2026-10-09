@@ -29,6 +29,39 @@
   "ringLeftToday": "left today",
   "ringAboveTypical": "above typical",
   "ringKcalToday": "kcal today",
+  "ringSemantics": "{kcal} kcal eaten today",
+  "@ringSemantics": {
+    "description": "Screen-reader sentence for the Today ring when there is no typical day yet.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "ringSemanticsTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day",
+  "@ringSemanticsTypical": {
+    "description": "Screen-reader sentence for the Today ring at or under the typical day.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      },
+      "typical": {
+        "type": "String"
+      }
+    }
+  },
+  "ringSemanticsAboveTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)",
+  "@ringSemanticsAboveTypical": {
+    "description": "Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      },
+      "typical": {
+        "type": "String"
+      }
+    }
+  },
   "todayEmptyTitle": "No meals logged yet today.",
   "todayEmptyHint": "Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.",
   "fabLog": "Log",
@@ -785,7 +818,12 @@
     }
   },
   "dayEmpty": "Nothing logged on this day yet. Tap + to add a meal.",
+  "dayAddMealTooltip": "Add a meal to this day",
   "notFoodTag": "not food",
+  "correctedBadge": "Corrected",
+  "@correctedBadge": {
+    "description": "Tooltip and screen-reader name of the pencil mark on a meal the user corrected."
+  },
   "fixRequestFailed": "That request failed: {error}",
   "@fixRequestFailed": {
     "placeholders": {

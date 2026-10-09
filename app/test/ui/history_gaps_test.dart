@@ -5,6 +5,7 @@
 // stay collapsed. This suite shipped a day late — the feature went out
 // untested (loop debt, closed here).
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/history_screen.dart';
 import 'package:flutter/material.dart';
@@ -98,6 +99,40 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('addMealToDay')), findsOneWidget,
         reason: 'DayDetail with its + FAB is the fix for a missed day');
+    // The '+' read as just 'button' to a screen reader: every tap target
+    // on the day must carry a name.
+    expect(find.byTooltip('Add a meal to this day'), findsOneWidget);
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+  });
+
+  testWidgets('zh day detail: the + and the corrected mark are named in '
+      'Chinese', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final handle = tester.ensureSemantics();
+    final dao = FakeDao();
+    final today = _iso(DateTime.now());
+    dao.meals.add(Meal(
+        id: 1,
+        date: today,
+        time: '12:00 PM',
+        timestamp: '${today}T12:00:00.000',
+        source: 'app_watch',
+        imageHash: 'h1',
+        corrected: true,
+        analysis: {'is_food': true, 'total_calories': 500}));
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: DayDetailScreen(dao: dao, date: today)));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('给这一天加一餐'), findsOneWidget);
+    expect(find.bySemanticsLabel(RegExp('已修正')), findsOneWidget,
+        reason: 'the pencil on a corrected meal was silent');
+    await expectLater(tester, meetsGuideline(labeledTapTargetGuideline));
+    handle.dispose();
   });
 
   testWidgets('a hand-edited FUTURE meal stays OUT of History — the §5.3 '

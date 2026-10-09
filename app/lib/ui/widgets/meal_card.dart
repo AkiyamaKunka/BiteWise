@@ -70,7 +70,7 @@ class MealCard extends StatelessWidget {
                     padding: const EdgeInsets.only(left: 6),
                     // ✏️ corrected marker (spec §2.2 / §5.2).
                     child: Tooltip(
-                      message: 'Corrected',
+                      message: context.l10n.correctedBadge,
                       child: Icon(Icons.edit,
                           key: const Key('correctedBadge'),
                           size: 16,

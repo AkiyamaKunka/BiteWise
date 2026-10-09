@@ -64,6 +64,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ringKcalToday => 'kcal today';
 
   @override
+  String ringSemantics(String kcal) {
+    return '$kcal kcal eaten today';
+  }
+
+  @override
+  String ringSemanticsTypical(String kcal, String typical) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day';
+  }
+
+  @override
+  String ringSemanticsAboveTypical(String kcal, String typical) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day (above typical)';
+  }
+
+  @override
   String get todayEmptyTitle => 'No meals logged yet today.';
 
   @override
@@ -1276,7 +1291,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dayEmpty => 'Nothing logged on this day yet. Tap + to add a meal.';
 
   @override
+  String get dayAddMealTooltip => 'Add a meal to this day';
+
+  @override
   String get notFoodTag => 'not food';
+
+  @override
+  String get correctedBadge => 'Corrected';
 
   @override
   String fixRequestFailed(String error) {

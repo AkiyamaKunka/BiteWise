@@ -188,6 +188,24 @@ abstract class AppLocalizations {
   /// **'kcal today'**
   String get ringKcalToday;
 
+  /// Screen-reader sentence for the Today ring when there is no typical day yet.
+  ///
+  /// In en, this message translates to:
+  /// **'{kcal} kcal eaten today'**
+  String ringSemantics(String kcal);
+
+  /// Screen-reader sentence for the Today ring at or under the typical day.
+  ///
+  /// In en, this message translates to:
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day'**
+  String ringSemanticsTypical(String kcal, String typical);
+
+  /// Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.
+  ///
+  /// In en, this message translates to:
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)'**
+  String ringSemanticsAboveTypical(String kcal, String typical);
+
   /// No description provided for @todayEmptyTitle.
   ///
   /// In en, this message translates to:
@@ -2168,11 +2186,23 @@ abstract class AppLocalizations {
   /// **'Nothing logged on this day yet. Tap + to add a meal.'**
   String get dayEmpty;
 
+  /// No description provided for @dayAddMealTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a meal to this day'**
+  String get dayAddMealTooltip;
+
   /// No description provided for @notFoodTag.
   ///
   /// In en, this message translates to:
   /// **'not food'**
   String get notFoodTag;
+
+  /// Tooltip and screen-reader name of the pencil mark on a meal the user corrected.
+  ///
+  /// In en, this message translates to:
+  /// **'Corrected'**
+  String get correctedBadge;
 
   /// No description provided for @fixRequestFailed.
   ///

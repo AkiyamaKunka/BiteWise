@@ -58,6 +58,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ringKcalToday => '千卡';
 
   @override
+  String ringSemantics(String kcal) {
+    return '今天已摄入 $kcal 千卡';
+  }
+
+  @override
+  String ringSemanticsTypical(String kcal, String typical) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡';
+  }
+
+  @override
+  String ringSemanticsAboveTypical(String kcal, String typical) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡（高于日常）';
+  }
+
+  @override
   String get todayEmptyTitle => '今天还没有记录。';
 
   @override
@@ -1182,7 +1197,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dayEmpty => '这一天还没有记录。点 + 添加一餐。';
 
   @override
+  String get dayAddMealTooltip => '给这一天加一餐';
+
+  @override
   String get notFoodTag => '非食物';
+
+  @override
+  String get correctedBadge => '已修正';
 
   @override
   String fixRequestFailed(String error) {
