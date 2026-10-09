@@ -3,6 +3,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 
 import 'ui/app.dart';
 import 'ui/di.dart';
@@ -31,6 +32,10 @@ Future<void> _boot() async {
     runApp(CalorieTrackerApp(services: services.ui, messengerKey: messengerKey));
   } catch (e) {
     // Startup must never leave a blank screen; surface the failure.
-    runApp(StartupErrorApp(error: '$e', onRetry: _boot));
+    // Only a keychain failure (PlatformException from the settings load,
+    // init's first step) is retried: it clears once the phone unlocks. A
+    // later step failing would re-run init's side effects on every resume.
+    runApp(StartupErrorApp(
+        error: '$e', onRetry: e is PlatformException ? _boot : null));
   }
 }

@@ -22,16 +22,18 @@ class FakeStore implements SecureKeyStore {
   bool throwOnDelete = false;
   /// Writes of these keys fail (e.g. a duplicate of an old-class item).
   final Set<String> failWriteKeys = {};
-  /// Writes fail this many more times, then succeed.
+  /// Writes fail this many more times (as duplicates), then succeed.
   int failNextWrites = 0;
+  /// The next write throws exactly this.
+  PlatformException? nextWriteError;
   /// Runs after a read is logged — lets a test interleave another engine.
-  Future<void> Function()? onRead;
+  Future<void> Function(String key)? onRead;
 
   @override
   Future<String?> read(String key) async {
     log.add('$name.read');
     if (throwOnRead) throw PlatformException(code: '-25308');
-    await onRead?.call();
+    await onRead?.call(key);
     return data[key];
   }
 
@@ -39,11 +41,16 @@ class FakeStore implements SecureKeyStore {
   Future<void> write(String key, String value) async {
     log.add('$name.write');
     if (throwOnWrite || failWriteKeys.contains(key)) {
-      throw PlatformException(code: '-25299');
+      throw PlatformException(code: 'x', details: -25299);
     }
     if (failNextWrites > 0) {
       failNextWrites--;
-      throw PlatformException(code: '-25299');
+      throw PlatformException(code: 'x', details: -25299);
+    }
+    final err = nextWriteError;
+    if (err != null) {
+      nextWriteError = null;
+      throw err;
     }
     data[key] = value;
   }
@@ -87,7 +94,9 @@ class KeychainModel {
         }
         if (item != null && item.$2 != acc) {
           // Accessibility is not part of the item's identity.
-          throw PlatformException(code: '-25299'); // DuplicateItem
+          throw PlatformException(
+              code: 'Unexpected security result code',
+              details: -25299); // errSecDuplicateItem, as the plugin reports
         }
         items[key!] = (value, acc);
         return null;
@@ -205,12 +214,52 @@ void main() {
     test('another engine migrating between the two reads is not "missing"',
         () async {
       legacy.data['k'] = 'v';
-      legacy.onRead = () async {
+      legacy.onRead = (_) async {
         // The other engine finished the move just now.
         legacy.data.remove('k');
         primary.data['k'] = 'v';
       };
       expect(await store.read('k'), 'v');
+    });
+
+    test('the other engine finishing the move between our stage and item '
+        'reads is still not "missing" (re-review 2026-10-09)', () async {
+      // Old copy already deleted by the other engine, stage present.
+      primary.data[MigratingKeyStore.stagingKey('k')] = 'v';
+      primary.onRead = (key) async {
+        if (key == MigratingKeyStore.stagingKey('k')) {
+          // Right after our stage read: the other engine writes the item
+          // and drops the stage.
+          primary.data['k'] = 'v';
+          primary.data.remove(MigratingKeyStore.stagingKey('k'));
+        }
+      };
+      expect(await store.read('k'), 'v');
+    });
+
+    test('read-only store (background engine) never writes or deletes',
+        () async {
+      final ro = MigratingKeyStore(
+          primary: primary, legacy: legacy, migrate: false);
+      legacy.data['a'] = 'old';
+      primary.data[MigratingKeyStore.stagingKey('b')] = 'staged';
+      expect(await ro.read('a'), 'old');
+      expect(await ro.read('b'), 'staged');
+      legacy.throwOnRead = true;
+      expect(await ro.read('a'), isNull,
+          reason: 'locked old copy: absent for this run — safe, no writes');
+      expect(log.where((e) => e.endsWith('.write') || e.endsWith('.delete')),
+          isEmpty);
+      expect(legacy.data, {'a': 'old'});
+    });
+
+    test('a non-duplicate write failure keeps the stored key and rethrows',
+        () async {
+      primary.data['k'] = 'a';
+      primary.nextWriteError =
+          PlatformException(code: 'x', details: -34018);
+      await expectLater(store.write('k', 'b'), throwsA(isA<PlatformException>()));
+      expect(primary.data, {'k': 'a'}, reason: 'nothing deleted');
     });
 
     test('a failed delete of the old copy leaves it intact for later',

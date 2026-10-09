@@ -253,7 +253,10 @@ Future<bool> runHeadlessBackfill({
   await recordBackgroundLaunch(prefs, clock);
   final AppSettings settings;
   try {
-    settings = await (loadSettings ?? AppSettings.load)();
+    // Read-only key store: only the UI engine moves keys between keychain
+    // classes, so the two engines can never race on the one-time move.
+    settings = await (loadSettings ??
+        () => AppSettings.load(keyStore: platformKeyStore(migrate: false)))();
   } catch (_) {
     // Success, not a retry: the next scheduled run tries again, and a
     // WorkManager retry storm helps nobody (background.dart's rule).

@@ -8,6 +8,7 @@
 /// it survives restarts. A simple [ChangeNotifier] so UI can listen.
 library;
 
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,12 +54,17 @@ const IOSOptions keychainIOSOptions =
 /// [MigratingKeyStore] over the first_unlock keychain class, carrying the
 /// keys earlier builds saved under the plugin default; every other
 /// platform keeps the plain store, unchanged.
-SecureKeyStore platformKeyStore() =>
+///
+/// [migrate] false is the BACKGROUND engine's store: it only reads (it
+/// never writes keys), so the one-time move has a single, sequential
+/// mover — the UI engine — and two engines can never race on it.
+SecureKeyStore platformKeyStore({bool migrate = true}) =>
     defaultTargetPlatform == TargetPlatform.iOS
-        ? const MigratingKeyStore(
-            primary: FlutterSecureKeyStore(
+        ? MigratingKeyStore(
+            primary: const FlutterSecureKeyStore(
                 FlutterSecureStorage(iOptions: keychainIOSOptions)),
-            legacy: FlutterSecureKeyStore(),
+            legacy: const FlutterSecureKeyStore(),
+            migrate: migrate,
           )
         : const FlutterSecureKeyStore();
 
@@ -78,9 +84,15 @@ SecureKeyStore platformKeyStore() =>
 /// Pure over two seams so the order is unit-testable with in-memory fakes;
 /// it does not assume the seams share storage (it deletes through both).
 class MigratingKeyStore implements SecureKeyStore {
-  const MigratingKeyStore({required this.primary, required this.legacy});
+  const MigratingKeyStore(
+      {required this.primary, required this.legacy, this.migrate = true});
   final SecureKeyStore primary;
   final SecureKeyStore legacy;
+
+  /// False: read-only (the background engine). Finds a key in either class
+  /// or in a stage, never moves anything — and, because it never writes,
+  /// may treat an unreadable old copy as absent for this run.
+  final bool migrate;
 
   /// Where a key sits (in the new class) while it is being moved, so an
   /// app kill between deleting the old copy and writing the new one cannot
@@ -91,6 +103,18 @@ class MigratingKeyStore implements SecureKeyStore {
   Future<String?> read(String key) async {
     final current = await primary.read(key);
     if (current != null) return current;
+    if (!migrate) {
+      String? old;
+      try {
+        old = await legacy.read(key);
+      } catch (_) {
+        // Locked phone, old class: absent FOR THIS RUN. Safe only because
+        // this store never writes; the UI engine migrates it when unlocked.
+      }
+      if (old != null) return old;
+      final staged = await primary.read(stagingKey(key));
+      return await primary.read(key) ?? staged;
+    }
     // A locked phone cannot read an `unlocked` item. That failure MUST
     // propagate. Reporting the key as missing made a locked first launch
     // look like "no key": the UI then showed an empty key field whose next
@@ -98,12 +122,15 @@ class MigratingKeyStore implements SecureKeyStore {
     // background run already survives a failed load (background_glue).
     final old = await legacy.read(key);
     if (old == null) {
-      // Another engine (UI vs background, one process, separate plugin
-      // queues) may have migrated it between our two reads.
+      // The move runs: stage written → old deleted → new written → stage
+      // dropped. A null old copy means we are past "old deleted", so read
+      // the STAGE FIRST and the item second: either the stage is still
+      // there, or it was dropped after the new item was written and the
+      // item read below sees it. (Item first, stage second let a move
+      // finishing in between read as "missing" — review 2026-10-09.)
+      final staged = await primary.read(stagingKey(key));
       final again = await primary.read(key);
       if (again != null) return again;
-      // A move interrupted after the delete left the value staged.
-      final staged = await primary.read(stagingKey(key));
       if (staged == null) return null;
       await primary.write(key, staged);
       await _dropStage(key);
@@ -143,11 +170,18 @@ class MigratingKeyStore implements SecureKeyStore {
   Future<void> write(String key, String value) async {
     try {
       await primary.write(key, value);
-    } catch (_) {
+    } on PlatformException catch (e) {
+      // ONLY a duplicate (an old-class copy) justifies clearing every copy;
+      // any other failure must leave the stored key alone. The plugin puts
+      // the OSStatus in `details`.
+      if ('${e.details}' != '$errSecDuplicateItem') rethrow;
       await _deleteBoth(key);
       await primary.write(key, value);
     }
   }
+
+  /// OSStatus errSecDuplicateItem.
+  static const int errSecDuplicateItem = -25299;
 
   @override
   Future<void> delete(String key) async {
