@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Directory _appRoot() {
@@ -44,6 +45,39 @@ void main() {
           reason: '$permission missing from the MAIN manifest — debug/profile '
               'builds get it auto-injected, release does not.');
     }
+  });
+
+  // The notification small icon is only ever named from Dart, which the
+  // release resource shrinker cannot see. A drawable stripped from the
+  // release APK makes initialize() fail with invalid_icon, the callers'
+  // catch blocks swallow it, and Android notifications silently stop in
+  // release only. Android also renders the small icon from its alpha
+  // channel, so any colour other than white would just be lost.
+  test('the notification small icon is white-only and kept in release', () {
+    final res = '${_appRoot().path}/android/app/src/main/res';
+    final icon = File('$res/drawable/${ReportNotifier.androidSmallIcon}.xml');
+    expect(icon.existsSync(), isTrue, reason: '${icon.path} missing');
+    final xml = icon.readAsStringSync();
+    final colours = RegExp(r'android:(?:fill|stroke)Color="([^"]+)"')
+        .allMatches(xml)
+        .map((m) => m.group(1)!.toUpperCase())
+        .toSet();
+    expect(colours, isNotEmpty);
+    expect(colours.difference({'#FFFFFFFF', '#FFFFFF', '#FFF'}), isEmpty,
+        reason: 'small icons are alpha masks; found $colours');
+
+    final keep = File('$res/raw/keep.xml');
+    expect(keep.existsSync(), isTrue,
+        reason: 'res/raw/keep.xml missing: release shrinking strips the icon');
+    final kept = RegExp(r'tools:keep="([^"]*)"')
+        .firstMatch(keep.readAsStringSync())
+        ?.group(1)
+        ?.split(',')
+        .map((e) => e.trim());
+    expect(
+        kept,
+        anyOf(contains('@drawable/${ReportNotifier.androidSmallIcon}'),
+            contains('@drawable/*')));
   });
 
   // The tab screens are laid out portrait-first and do not apply side

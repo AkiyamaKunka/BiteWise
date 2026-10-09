@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Notification small icon: the app mark (progress ring + three dots) as a
+     white-on-transparent silhouette. Android draws a small icon from its
+     alpha channel only, so the full-colour launcher art came out as a blank
+     circle in the status bar and the shade header. The unfilled track is
+     kept at partial alpha so the ring still reads as a ring. Referenced only
+     by name from Dart (notifications.dart), so res/raw/keep.xml keeps it
+     through release resource shrinking. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillAlpha="0.35"
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M3.16,13.70 A9.00,9.00 0 0,1 12.00,3.00 L12.00,5.55 A6.45,6.45 0 0,0 5.67,13.22 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M12.00,3.00 A9.00,9.00 0 1,1 3.16,13.70 L5.67,13.22 A6.45,6.45 0 1,0 12.00,5.55 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M10.74,3.00 a1.26,1.26 0 1,0 2.52,0 a1.26,1.26 0 1,0 -2.52,0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M1.90,13.70 a1.26,1.26 0 1,0 2.52,0 a1.26,1.26 0 1,0 -2.52,0 Z" />
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M8.10,12.00 a1.10,1.10 0 1,0 2.20,0 a1.10,1.10 0 1,0 -2.20,0 Z M10.90,12.00 a1.10,1.10 0 1,0 2.20,0 a1.10,1.10 0 1,0 -2.20,0 Z M13.70,12.00 a1.10,1.10 0 1,0 2.20,0 a1.10,1.10 0 1,0 -2.20,0 Z" />
+</vector>
