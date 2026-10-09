@@ -33,6 +33,7 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
+import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/settings/api_key_page.dart';
 import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
     show ProviderSettingsPage, kApiKeyChoices, kPlanChoices;
@@ -268,6 +269,38 @@ void main() {
             expect(tester.takeException(), isNull);
           });
         }
+
+        // Round 4b (2026-10-08): a NEW meal's empty macro fields show
+        // their labels resting inside a third of the row, and
+        // '蛋白质（克）' was cut to '蛋白质（…'. A filled meal floats the
+        // labels and never showed it.
+        testWidgets('new meal macro labels, $lang at $width pt',
+            (tester) async {
+          _phone(tester, width);
+          await tester.pumpWidget(_app(
+              Locale(lang), MealEditorScreen(dao: FakeDao()),
+              theme: iphoneTheme));
+          await tester.pumpAndSettle();
+          for (final key in const [
+            'editorProtein',
+            'editorCarbs',
+            'editorFat',
+          ]) {
+            expect(_ellipsised(tester, find.byKey(Key(key))), isEmpty,
+                reason: '$key label must read in full');
+          }
+          // The unit moved to a suffix: it shows once there is a number.
+          final protein = find.byKey(const Key('editorProtein'));
+          await tester.enterText(protein, '125.5');
+          await tester.pumpAndSettle();
+          expect(
+              find.descendant(
+                  of: protein,
+                  matching: find.text(lang == 'zh' ? '克' : 'g')),
+              findsOneWidget);
+          expect(_ellipsised(tester, protein), isEmpty);
+          expect(tester.takeException(), isNull);
+        });
       }
     }
   }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');

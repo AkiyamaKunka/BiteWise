@@ -492,7 +492,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           const SizedBox(height: 8),
           // At large text each macro field takes the full width, like
           // Calories: a third of the row cut 'Protein (g)' / '蛋白质（克）'
-          // to 'Pr…'.
+          // to 'Pr…'. At the default size a NEW meal's empty fields rest
+          // their labels inside that third, and on a 375–411 pt phone
+          // 'Protein (g)' / '蛋白质（克）' (and even '蛋白（克）') still cut,
+          // so the label is the bare name and the unit is a suffix — shown
+          // once the field is focused or filled, i.e. once the label has
+          // floated, so the unit is never out of sight while typing.
           _fieldGrid(
             perRow: isLargeText(context) ? 1 : 3,
             gap: 8,
@@ -500,15 +505,18 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               _NumberField(
                   fieldKey: const Key('editorProtein'),
                   controller: _pro,
-                  label: context.l10n.editorProteinLabel),
+                  label: context.l10n.editorProteinLabel,
+                  suffixText: context.l10n.editorGramsSuffix),
               _NumberField(
                   fieldKey: const Key('editorCarbs'),
                   controller: _carb,
-                  label: context.l10n.editorCarbsLabel),
+                  label: context.l10n.editorCarbsLabel,
+                  suffixText: context.l10n.editorGramsSuffix),
               _NumberField(
                   fieldKey: const Key('editorFat'),
                   controller: _fat,
-                  label: context.l10n.editorFatLabel),
+                  label: context.l10n.editorFatLabel,
+                  suffixText: context.l10n.editorGramsSuffix),
             ],
           ),
           const SizedBox(height: 16),
@@ -612,11 +620,15 @@ class _NumberField extends StatelessWidget {
     required this.fieldKey,
     required this.controller,
     required this.label,
+    this.suffixText,
   });
 
   final Key fieldKey;
   final TextEditingController controller;
   final String label;
+
+  /// The unit, kept out of [label] where a third of the row can't hold it.
+  final String? suffixText;
 
   @override
   Widget build(BuildContext context) => TextField(
@@ -625,6 +637,7 @@ class _NumberField extends StatelessWidget {
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
           labelText: label,
+          suffixText: suffixText,
           border: const OutlineInputBorder(),
           isDense: true,
         ),

@@ -852,13 +852,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get macroFatShort => '脂';
 
   @override
-  String get editorProteinLabel => '蛋白质（克）';
+  String get editorProteinLabel => '蛋白质';
 
   @override
-  String get editorCarbsLabel => '碳水（克）';
+  String get editorCarbsLabel => '碳水';
 
   @override
-  String get editorFatLabel => '脂肪（克）';
+  String get editorFatLabel => '脂肪';
+
+  @override
+  String get editorGramsSuffix => '克';
 
   @override
   String get diagTitle => '测试 AI 服务';

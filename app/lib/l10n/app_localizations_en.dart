@@ -902,13 +902,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get macroFatShort => 'F';
 
   @override
-  String get editorProteinLabel => 'Protein (g)';
+  String get editorProteinLabel => 'Protein';
 
   @override
-  String get editorCarbsLabel => 'Carbs (g)';
+  String get editorCarbsLabel => 'Carbs';
 
   @override
-  String get editorFatLabel => 'Fat (g)';
+  String get editorFatLabel => 'Fat';
+
+  @override
+  String get editorGramsSuffix => 'g';
 
   @override
   String get diagTitle => 'Test AI provider';

@@ -1571,20 +1571,26 @@ abstract class AppLocalizations {
   /// No description provided for @editorProteinLabel.
   ///
   /// In en, this message translates to:
-  /// **'Protein (g)'**
+  /// **'Protein'**
   String get editorProteinLabel;
 
   /// No description provided for @editorCarbsLabel.
   ///
   /// In en, this message translates to:
-  /// **'Carbs (g)'**
+  /// **'Carbs'**
   String get editorCarbsLabel;
 
   /// No description provided for @editorFatLabel.
   ///
   /// In en, this message translates to:
-  /// **'Fat (g)'**
+  /// **'Fat'**
   String get editorFatLabel;
+
+  /// No description provided for @editorGramsSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'g'**
+  String get editorGramsSuffix;
 
   /// No description provided for @diagTitle.
   ///
