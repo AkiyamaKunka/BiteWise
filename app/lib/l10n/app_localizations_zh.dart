@@ -768,6 +768,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coachOnTarget => '正好达标。稳定比猛冲更重要，继续保持。';
 
   @override
+  String get coachOnTypical => '和你平时差不多。稳定比猛冲更重要，继续保持。';
+
+  @override
   String coachOverGoal(String delta) {
     return '比目标多 $delta 千卡。一天不会毁掉一周，接着来就好。';
   }

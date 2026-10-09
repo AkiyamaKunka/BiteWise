@@ -21,6 +21,7 @@ final strings = CoachStrings(
   partialGoal: (d) => '$d kcal under your goal — missed a meal?',
   partialTypical: (d) => '$d kcal below your usual day — missed a meal?',
   onTarget: 'Right on target today.',
+  onTypical: 'Right around your usual day.',
   overGoal: (d) => '$d kcal over your goal today',
   overTypical: (d) => '$d kcal above your usual today',
   noReference: 'Logged and counted.',
@@ -77,6 +78,20 @@ void main() {
         contains('Right on target'));
     // Just outside it is a real difference again.
     expect(build(eaten: 1850, goal: 2000).body, contains('under your goal'));
+  });
+
+  test('an in-band day with NO goal never claims a target was hit', () {
+    // A user who left the goal empty is measured against their usual day;
+    // "on target" would credit them with a target they never set.
+    for (final eaten in [1950, 2000, 2080]) {
+      final s = build(eaten: eaten, typical: 2000);
+      expect(s.reference, CoachReference.typical);
+      expect(s.body, contains('Right around your usual day'));
+      expect(s.body.toLowerCase(), isNot(contains('target')));
+    }
+    // With a goal the same day still reads as on target.
+    expect(build(eaten: 1950, goal: 2000, typical: 2000).body,
+        contains('Right on target'));
   });
 
   test('a day with no meals says so and never invents a deficit', () {

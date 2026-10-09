@@ -1424,6 +1424,12 @@ abstract class AppLocalizations {
   /// **'Right on target. Consistency beats intensity — keep stacking days like this.'**
   String get coachOnTarget;
 
+  /// No description provided for @coachOnTypical.
+  ///
+  /// In en, this message translates to:
+  /// **'Right around your usual day. Consistency beats intensity — keep stacking days like this.'**
+  String get coachOnTypical;
+
   /// No description provided for @coachOverGoal.
   ///
   /// In en, this message translates to:

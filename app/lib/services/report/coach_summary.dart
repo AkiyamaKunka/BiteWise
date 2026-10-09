@@ -44,6 +44,7 @@ class CoachStrings {
     required this.partialGoal,
     required this.partialTypical,
     required this.onTarget,
+    required this.onTypical,
     required this.overGoal,
     required this.overTypical,
     required this.noReference,
@@ -75,7 +76,13 @@ class CoachStrings {
   /// right too.
   final String Function(String delta) partialGoal;
   final String Function(String delta) partialTypical;
+  /// The in-band line when measured against the GOAL ("on target").
   final String onTarget;
+
+  /// The in-band line when measured against the typical-day median. A user
+  /// who left the goal empty never set a target, so 达标/"on target" would
+  /// claim a promise they never made — this one says "about your usual".
+  final String onTypical;
   final String Function(String delta) overGoal;
   final String Function(String delta) overTypical;
 
@@ -149,7 +156,8 @@ CoachSummary buildCoachSummary({
   final delta = eaten - reference;
   final String line;
   if (delta.abs() <= kOnTargetBandKcal) {
-    line = strings.onTarget;
+    line =
+        kind == CoachReference.goal ? strings.onTarget : strings.onTypical;
   } else if (delta < 0) {
     final under = formatKcal(-delta);
     final goalRef = kind == CoachReference.goal;

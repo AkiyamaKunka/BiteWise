@@ -814,6 +814,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Right on target. Consistency beats intensity — keep stacking days like this.';
 
   @override
+  String get coachOnTypical =>
+      'Right around your usual day. Consistency beats intensity — keep stacking days like this.';
+
+  @override
   String coachOverGoal(String delta) {
     return '$delta kcal over your goal. One day doesn\'t undo a week — just keep going.';
   }

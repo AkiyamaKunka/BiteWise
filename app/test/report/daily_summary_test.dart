@@ -21,6 +21,7 @@ final strings = CoachStrings(
   partialGoal: (d) => '$d under goal, meals missing?',
   partialTypical: (d) => '$d below usual, meals missing?',
   onTarget: 'On target.',
+  onTypical: 'About usual.',
   overGoal: (d) => '$d over goal',
   overTypical: (d) => '$d above usual',
   noReference: 'Logged.',

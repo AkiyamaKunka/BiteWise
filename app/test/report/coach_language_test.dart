@@ -7,12 +7,13 @@ import 'package:calorie_tracker/ui/coach_strings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 CoachSummary summaryIn(String language,
-        {num eaten = 1600, int goal = 2000, int meals = 3}) =>
+        {num eaten = 1600, int goal = 2000, int meals = 3, int? typical}) =>
     buildCoachSummary(
       eatenKcal: eaten,
       mealCount: meals,
       proteinG: 100,
       goalKcal: goal,
+      typicalKcal: typical,
       strings: coachStringsFor(language),
       formatKcal: (v) => v.round().toString(),
     );
@@ -58,6 +59,21 @@ void main() {
       expect(RegExp(r'[a-zA-Z]{4,}').hasMatch(s.body), isFalse,
           reason: 'no English words should survive in: ${s.body}');
     }
+  });
+
+  test('an in-band day with no goal set never says 达标 / on target', () {
+    // Leaving the goal empty means "compare me with my usual day"; telling
+    // that user 达标 credits a target they never set.
+    final zh = summaryIn('zh', goal: 0, typical: 2000, eaten: 1950).body;
+    expect(zh, isNot(contains('达标')));
+    expect(zh, contains('平时'));
+    expect(RegExp(r'[a-zA-Z]{4,}').hasMatch(zh), isFalse, reason: zh);
+    final en = summaryIn('en', goal: 0, typical: 2000, eaten: 1950).body;
+    expect(en.toLowerCase(), isNot(contains('target')));
+    expect(en, contains('usual'));
+    // A real goal still reads 达标.
+    expect(summaryIn('zh', goal: 2000, typical: 2000, eaten: 1950).body,
+        contains('达标'));
   });
 
   test('a catch-up summary never calls the day it covers today/tomorrow',

@@ -536,6 +536,7 @@
     }
   },
   "coachOnTarget": "Right on target. Consistency beats intensity — keep stacking days like this.",
+  "coachOnTypical": "Right around your usual day. Consistency beats intensity — keep stacking days like this.",
   "coachOverGoal": "{delta} kcal over your goal. One day doesn't undo a week — just keep going.",
   "@coachOverGoal": {
     "placeholders": {

@@ -26,6 +26,7 @@ CoachStrings coachStringsFor(String appLanguage) {
     partialGoal: l.coachPartialGoal,
     partialTypical: l.coachPartialTypical,
     onTarget: l.coachOnTarget,
+    onTypical: l.coachOnTypical,
     overGoal: l.coachOverGoal,
     overTypical: l.coachOverTypical,
     noReference: l.coachNoReference,
