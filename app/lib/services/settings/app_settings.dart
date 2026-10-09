@@ -36,6 +36,104 @@ class FlutterSecureKeyStore implements SecureKeyStore {
   Future<void> delete(String key) => _storage.delete(key: key);
 }
 
+/// iOS keychain class for every credential: readable from the first unlock
+/// after a reboot onward, locked screen included. The BGAppRefresh photo
+/// scan usually runs in a pocket with the screen locked, and under the
+/// plugin default (`unlocked`, kSecAttrAccessibleWhenUnlocked) its very
+/// first key read failed, so the whole run died before scanning anything
+/// (2026-10-09). Deliberately NOT `first_unlock_this_device`: a
+/// this-device item never leaves the phone, so a backup restored onto a
+/// new iPhone would come back without its keys; plain first_unlock
+/// restores exactly like `unlocked` always did. iOS-only — the plugin
+/// reads iOptions on iOS alone, so Android is untouched.
+const IOSOptions keychainIOSOptions =
+    IOSOptions(accessibility: KeychainAccessibility.first_unlock);
+
+/// The store [AppSettings.load] uses when none is injected. On iOS it is
+/// [MigratingKeyStore] over the first_unlock keychain class, carrying the
+/// keys earlier builds saved under the plugin default; every other
+/// platform keeps the plain store, unchanged.
+SecureKeyStore platformKeyStore() =>
+    defaultTargetPlatform == TargetPlatform.iOS
+        ? const MigratingKeyStore(
+            primary: FlutterSecureKeyStore(
+                FlutterSecureStorage(iOptions: keychainIOSOptions)),
+            legacy: FlutterSecureKeyStore(),
+          )
+        : const FlutterSecureKeyStore();
+
+/// Moves each key saved under the old keychain class ([legacy]) into the
+/// new one ([primary]) the first time it is read, without ever losing it.
+///
+/// Why not simply switch the options: the plugin puts kSecAttrAccessible
+/// into EVERY query, reads included, so a first_unlock read never sees an
+/// item stored as `unlocked` — every upgraded phone's keys would read as
+/// missing. And accessibility is NOT part of a keychain item's identity,
+/// so adding a first_unlock item while the `unlocked` one exists fails as
+/// a duplicate. The plugin's delete, though, matches every accessibility,
+/// so either seam's delete clears both copies. Hence the order in [read]:
+/// read the old copy, delete it, write the new one, and if that write
+/// fails put the old copy back.
+///
+/// Pure over two seams so the order is unit-testable with in-memory fakes;
+/// it does not assume the seams share storage (it deletes through both).
+class MigratingKeyStore implements SecureKeyStore {
+  const MigratingKeyStore({required this.primary, required this.legacy});
+  final SecureKeyStore primary;
+  final SecureKeyStore legacy;
+
+  @override
+  Future<String?> read(String key) async {
+    final current = await primary.read(key);
+    if (current != null) return current;
+    final String? old;
+    try {
+      old = await legacy.read(key);
+    } catch (_) {
+      // A locked phone cannot read an `unlocked` item (the background scan
+      // case). Report it missing for this run and touch nothing: the next
+      // read with the phone unlocked migrates it.
+      return null;
+    }
+    if (old == null) return null;
+    try {
+      // Delete FIRST: a first_unlock add next to the `unlocked` item would
+      // be rejected as a duplicate. ([primary] just read null, so the old
+      // copy is the only one.)
+      await legacy.delete(key);
+    } catch (_) {
+      return old; // the old copy is intact; migrate on a later read
+    }
+    try {
+      await primary.write(key, old);
+    } catch (_) {
+      try {
+        // Never lose a key: put it back exactly as it was stored.
+        await legacy.write(key, old);
+      } catch (_) {
+        // Nothing left to try; this session still has the value.
+      }
+    }
+    return old;
+  }
+
+  /// Any copy under the old class is deleted first, or the new item would
+  /// be a duplicate of it.
+  @override
+  Future<void> write(String key, String value) async {
+    await _deleteBoth(key);
+    await primary.write(key, value);
+  }
+
+  @override
+  Future<void> delete(String key) => _deleteBoth(key);
+
+  Future<void> _deleteBoth(String key) async {
+    await legacy.delete(key);
+    await primary.delete(key);
+  }
+}
+
 /// AI providers the analyzer can call. Gemini is the original and default;
 /// OpenAI/Anthropic are BYO-key alternatives (also the escape hatch from
 /// Gemini's free-tier daily cap).
@@ -193,7 +291,7 @@ class AppSettings extends ChangeNotifier {
   static Future<AppSettings> load(
       {SharedPreferences? prefs, SecureKeyStore? keyStore}) async {
     final p = prefs ?? await SharedPreferences.getInstance();
-    final k = keyStore ?? const FlutterSecureKeyStore();
+    final k = keyStore ?? platformKeyStore();
     final s = AppSettings._(p, k);
     final storedKey = (await k.read(_kApiKey))?.trim();
     s._geminiApiKey = (storedKey == null || storedKey.isEmpty) ? null : storedKey;

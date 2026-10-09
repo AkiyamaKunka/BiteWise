@@ -17,6 +17,7 @@ import 'package:calorie_tracker/ui/background_glue.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -365,6 +366,49 @@ void main() {
       // "The OS ran us" is recorded BEFORE any guard — Settings shows it.
       expect(prefs.getString(backgroundLastRunPrefsKey),
           launched.toUtc().toIso8601String());
+    });
+
+    test('keeps the launch stamp the production runner already wrote',
+        () async {
+      final settings = await settingsWith(key: 'k', watcher: false);
+      final launched = DateTime.utc(2026, 10, 9, 6, 0);
+      await recordBackgroundLaunch(prefs, () => launched);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: EmittingIntake(),
+        pipeline: () async =>
+            PhotoPipeline(dao: FakeDao(), analyzer: FakeAnalyzer()),
+        showMealCard: (_, _) async {},
+        clock: () => launched.add(const Duration(milliseconds: 40)),
+        launchRecorded: true,
+      );
+      // One launch, one stamp — not a second, later one.
+      expect(prefs.getString(backgroundLastRunPrefsKey),
+          launched.toIso8601String());
+    });
+
+    test(
+        'runHeadlessBackfill stamps the launch BEFORE loading settings, and '
+        'a failed load (locked iPhone keychain) still ends as success',
+        () async {
+      final launched = DateTime.utc(2026, 10, 9, 3, 15);
+      String? stampSeenByLoad;
+      final ok = await runHeadlessBackfill(
+        isIOS: true,
+        loadPrefs: () async => prefs,
+        clock: () => launched,
+        loadSettings: () async {
+          stampSeenByLoad = prefs.getString(backgroundLastRunPrefsKey);
+          throw PlatformException(code: '-25308'); // InteractionNotAllowed
+        },
+      );
+      expect(ok, isTrue, reason: 'no WorkManager retry storm');
+      expect(stampSeenByLoad, launched.toIso8601String());
+      // The 后台扫描 row shows iOS ran the task, keys readable or not.
+      expect(prefs.getString(backgroundLastRunPrefsKey),
+          launched.toIso8601String());
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
     });
 
     test('does nothing without an API key (photos must not burn to failed)',

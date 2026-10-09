@@ -140,6 +140,13 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
       scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
 }
 
+/// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
+/// Written as UTC (see [readStoredInstant]).
+Future<void> recordBackgroundLaunch(
+        SharedPreferences prefs, DateTime Function() clock) =>
+    prefs.setString(
+        backgroundLastRunPrefsKey, clock().toUtc().toIso8601String());
+
 /// The headless scan body, dependency-injected so tests can drive it with
 /// fakes. Returns WorkManager success (true) in every recoverable state —
 /// background.dart's no-retry-storm rule.
@@ -152,11 +159,12 @@ Future<bool> headlessBackfillWith({
   required Future<void> Function(String title, String body) showMealCard,
   DateTime Function() clock = DateTime.now,
   Duration? budget,
+  bool launchRecorded = false,
 }) async {
   // First, unconditionally: "the OS ran us" is what Settings reports,
-  // whatever the guards below decide.
-  await prefs.setString(
-      backgroundLastRunPrefsKey, clock().toUtc().toIso8601String());
+  // whatever the guards below decide. Skipped when [runHeadlessBackfill]
+  // already wrote it before loading the settings — one launch, one stamp.
+  if (!launchRecorded) await recordBackgroundLaunch(prefs, clock);
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
   if (!settings.watcherEnabled) return true;
@@ -225,10 +233,32 @@ Future<bool> headlessBackfillWith({
 /// after the scan, so a meal logged while the app was closed is in the
 /// card the OS delivers at the slot — posting here too would put a second
 /// alert under the same id minutes after the OS one.
-Future<bool> runHeadlessBackfill({bool? isIOS}) async {
+///
+/// The launch marker is written BEFORE the settings load, and a failed load
+/// ends the run as a success. Loading reads every key from the keychain;
+/// on a locked iPhone that read threw (keys were stored under a class
+/// readable only while unlocked), the run died silently, and the 后台扫描
+/// row read as if iOS had never run the task (2026-10-09). The keystore
+/// now survives a locked phone (MigratingKeyStore), and should a load
+/// still fail — say before the first unlock after a reboot — the row
+/// shows that iOS did run the task. The seams exist for that test.
+Future<bool> runHeadlessBackfill({
+  bool? isIOS,
+  Future<AppSettings> Function()? loadSettings,
+  Future<SharedPreferences> Function()? loadPrefs,
+  DateTime Function() clock = DateTime.now,
+}) async {
   final ios = isIOS ?? Platform.isIOS;
-  final settings = await AppSettings.load();
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+  await recordBackgroundLaunch(prefs, clock);
+  final AppSettings settings;
+  try {
+    settings = await (loadSettings ?? AppSettings.load)();
+  } catch (_) {
+    // Success, not a retry: the next scheduled run tries again, and a
+    // WorkManager retry storm helps nobody (background.dart's rule).
+    return true;
+  }
   // Time-derived id seed: cards from successive runs stack instead of
   // overwriting each other. Base 10000 keeps the whole range clear of the
   // fixed daily-report id 9001 (a colliding meal card would silently
@@ -272,6 +302,7 @@ Future<bool> runHeadlessBackfill({bool? isIOS}) async {
       await notifier.showMealCard(title, body);
     },
     budget: ios ? iosBackgroundBudget : null,
+    launchRecorded: true,
   );
   if (ios) {
     try {
