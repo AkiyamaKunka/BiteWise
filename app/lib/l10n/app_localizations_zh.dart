@@ -1593,7 +1593,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get macroNoBreakdown => '没有记录营养素分布。';
 
   @override
-  String get setupLinkTitle => '通过这个链接配置服务器？';
+  String get setupLinkTitle => '用此链接配置服务器？';
 
   @override
   String setupLinkBody(String server, String backend, String keyTail) {

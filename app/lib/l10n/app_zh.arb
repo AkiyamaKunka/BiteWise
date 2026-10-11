@@ -464,7 +464,7 @@
   "covUnreadableCount": "{count} 张无法读取",
   "covTooLargeCount": "{count} 张过大无法分析",
   "macroNoBreakdown": "没有记录营养素分布。",
-  "setupLinkTitle": "通过这个链接配置服务器？",
+  "setupLinkTitle": "用此链接配置服务器？",
   "setupLinkBody": "服务器：{server}\n套餐：{backend}\n上传密钥：••••{keyTail}\n\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。",
   "setupLinkConfirm": "使用这台服务器",
   "setupLinkDone": "服务器已配置 —— 照片将通过你的套餐分析。",

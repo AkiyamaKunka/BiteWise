@@ -239,8 +239,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.l10n.setupLinkTitle),
-        content: Text(ctx.l10n
-            .setupLinkBody(link.server, link.backend, link.keyTail)),
+        // The plan is named with the same words the Settings row shows
+        // after confirming (Claude 订阅 / Claude Plan), not the raw id
+        // 'claude' the link carries; the id itself is what gets saved.
+        content: Text(ctx.l10n.setupLinkBody(
+            link.server,
+            providerDisplayLabel(ctx.l10n, 'server', link.backend),
+            link.keyTail)),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
