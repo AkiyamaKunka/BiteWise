@@ -699,6 +699,77 @@ void main() {
     });
   });
 
+  group('reply-shape permanence (the other half of the captive-portal rule)',
+      () {
+    // A 200 that is NOT JSON is an interception (portal / proxy page) and
+    // transient — see the feedback matrix. A 200 that IS JSON but lacks
+    // the expected keys is the vendor's own answer and must stay
+    // PERMANENT: the model answered, a retry re-spends for the same
+    // shape, and the watcher would do so on every scan.
+    test('Anthropic: a reply with no text block (thinking only) is '
+        'permanent', () async {
+      final s = await settingsWith(provider: 'anthropic');
+      var calls = 0;
+      final a = AnthropicAnalyzer(s,
+          client: MockClient((r) async {
+            calls++;
+            return http.Response(
+                jsonEncode({
+                  'content': [
+                    {'type': 'thinking', 'thinking': '...'}
+                  ]
+                }),
+                200,
+                headers: {'content-type': 'application/json'});
+          }),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      final out = await a.analyzePhoto(photo);
+      expect(out.analysis, isNull);
+      expect(out.retryable, isFalse);
+      expect(out.error, contains('unexpected response shape'));
+      expect(calls, 1);
+    });
+
+    test('OpenAI: a reply with no choices is permanent', () async {
+      final s = await settingsWith();
+      var calls = 0;
+      final a = OpenAiAnalyzer(s,
+          client: MockClient((r) async {
+            calls++;
+            return http.Response('{"choices": []}', 200,
+                headers: {'content-type': 'application/json'});
+          }),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      final out = await a.analyzePhoto(photo);
+      expect(out.analysis, isNull);
+      expect(out.retryable, isFalse);
+      expect(out.error, contains('unexpected response shape'));
+      expect(calls, 1);
+    });
+
+    test('a non-JSON 200 is transient for a direct provider too, and '
+        'validateKey no longer accepts it as proof of a key', () async {
+      final s = await settingsWith();
+      var calls = 0;
+      final a = OpenAiAnalyzer(s,
+          client: MockClient((r) async {
+            calls++;
+            return http.Response('<html>Sign in to Wi-Fi</html>', 200,
+                headers: {'content-type': 'text/html'});
+          }),
+          sleep: (_) async => fail('no in-place sleep on a portal page'),
+          normalizer: (b) async => b);
+      final out = await a.analyzePhoto(photo);
+      expect(out.retryable, isTrue);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.network);
+      expect(calls, 1);
+      expect(await a.validateKey('candidate'), isNotNull,
+          reason: 'extract:false skips the SHAPE check, not the JSON check');
+    });
+  });
+
   group('MultiProviderAnalyzer delegation', () {
     test('routes by settings.provider PER CALL — switch needs no rewiring',
         () async {

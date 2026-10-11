@@ -861,4 +861,111 @@ void main() {
     expect(out.retryable, isFalse);
     expect(classifyAnalysisError(out.error), AnalysisErrorKind.badPhoto);
   });
+
+  // Hotel / airport / campus Wi-Fi before sign-in: the portal intercepts
+  // port 80 — the owner's plain-HTTP server — and answers every POST with
+  // its login page (200 text/html) or a redirect to it (302/307).
+  Map<String, http.Response Function()> captivePortal() => {
+        'HTML 200': () => http.Response(
+            '<!DOCTYPE html><html><body><h1>Welcome to Hotel Wi-Fi</h1>'
+            '<form action="/login"><button>Connect</button></form>'
+            '</body></html>',
+            200,
+            headers: {'content-type': 'text/html; charset=utf-8'}),
+        '302': () => http.Response('', 302,
+            headers: {'location': 'http://portal.example/login'}),
+        '307': () => http.Response('<html>Redirecting</html>', 307,
+            headers: {'location': 'http://portal.example/login'}),
+      };
+
+  test('a captive portal answering for the server (HTML 200, 302, 307) is '
+      'TRANSIENT: one call, no in-place sleep, the photo survives', () async {
+    // The app read the portal's answer as the SERVER's verdict — permanent
+    // 'unexpected response shape' / 'HTTP 302' — so each backlog photo was
+    // tombstoned 'failed' in seconds, with a raw English snackbar, and the
+    // automatic scan never reclaims 'failed' (loop find 2026-10-10). The
+    // server was never reached: nothing was spent, nothing was answered.
+    final s = await serverSettings();
+    for (final entry in captivePortal().entries) {
+      var calls = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        sleep: (_) async => fail('${entry.key}: a login page does not '
+            'change in 15 s — in-place sleeps would only eat the iOS '
+            'background-refresh budget'),
+        client: MockClient((_) async {
+          calls++;
+          return entry.value();
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(out.analysis, isNull, reason: entry.key);
+      expect(out.retryable, isTrue,
+          reason: '${entry.key}: the server was never reached — the photo '
+              'must stay eligible for the next scan, not burn');
+      expect(calls, 1, reason: entry.key);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.network,
+          reason: '${entry.key}: ${out.error} — the localized errNetwork '
+              'line, not raw English');
+      // A chat correction on the same Wi-Fi: same class, still one call.
+      final text = await analyzer.textIntentOutcome('改成两碗');
+      expect(text.json, isNull, reason: entry.key);
+      expect(classifyAnalysisError(text.error), AnalysisErrorKind.network,
+          reason: '${entry.key}: ${text.error}');
+      expect(calls, 2, reason: entry.key);
+    }
+  });
+
+  test('测试 AI 服务 on a captive portal names the portal — never "key OK", '
+      'never "key rejected"', () async {
+    // Same interception on /api/auth_check: an HTML 200 used to validate
+    // the key (null) while every photo failed, and a 302 was 'Server
+    // answered HTTP 302.' → rejected → "re-copy the key" for a key that
+    // was never looked at.
+    final s = await serverSettings();
+    for (final entry in captivePortal().entries) {
+      final analyzer = ServerAnalyzer(s,
+          client: MockClient((_) async => entry.value()));
+      final msg = await analyzer.validateKey('upload-key');
+      expect(msg, isNotNull, reason: '${entry.key}: a portal page proves '
+          'nothing about the server');
+      expect(msg, contains('portal'), reason: entry.key);
+      expect(msg, isNot(contains('Could not reach')), reason: entry.key);
+      final probe = await analyzer.probeKey('upload-key');
+      expect(probe.result, isNot(KeyProbeResult.ok), reason: entry.key);
+      expect(probe.result, isNot(KeyProbeResult.rejected),
+          reason: '${entry.key}: ${probe.message} — the upload key was '
+              'never evaluated; "re-copy the key" is the wrong fix');
+      expect(probe.message, msg, reason: entry.key);
+    }
+  });
+
+  test('a JSON 200 WITHOUT a payload stays PERMANENT — only a non-JSON '
+      'body is an interception', () async {
+    // The other half of the rule: these ARE the server's answers (version
+    // drift, a wrong path that still speaks JSON). A retry re-spends a
+    // full CLI run of the subscription for the same answer, and the
+    // watcher would do so on every scan.
+    final s = await serverSettings();
+    for (final body in ['{"ok": true}', '{}', '[]', '"ok"']) {
+      var calls = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        sleep: (_) async {},
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(body, 200,
+              headers: {'content-type': 'application/json'});
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(out.analysis, isNull, reason: body);
+      expect(out.retryable, isFalse,
+          reason: '$body: the server ANSWERED; a retry re-spends a CLI run');
+      expect(out.error, contains('unexpected response shape'), reason: body);
+      expect(calls, 1, reason: body);
+    }
+  });
 }
