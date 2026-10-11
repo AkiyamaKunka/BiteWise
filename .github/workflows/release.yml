@@ -1,0 +1,722 @@
+# BiteWise release lane: signed iOS build to TestFlight, signed Android app
+# bundle to the Google Play internal track, and a GitHub Release carrying the
+# arm64 APK for the friends who sideload. The owner's step-by-step (enrolment,
+# certificates, how to make every secret below) is docs/RELEASING.md. The
+# unsigned PR smoke build is mobile-build.yml.
+#
+# TRIGGERS
+#   tag push  v<major>.<minor>.<patch>[+<build>]  -> both lanes; the TestFlight build
+#                                                    may go to external testers / App Review
+#   "Run workflow" (workflow_dispatch)            -> the chosen lane; the TestFlight build is
+#                                                    internal-only unless you untick the box
+#   Never on pull_request: the repo is public and these jobs hold signing secrets.
+#
+# VERSION AND BUILD NUMBER
+#   build name   = x.y.z from the tag, which MUST equal `version:` in app/pubspec.yaml
+#                  (the run stops otherwise); on workflow_dispatch it is pubspec's x.y.z.
+#   build number = the tag's +N when the tag carries one, otherwise
+#                  BUILD_NUMBER_OFFSET + github.run_number. App Store Connect and Google
+#                  Play both refuse a number they have already seen; run_number only ever
+#                  grows, and the offset keeps CI above the hand-built era (pubspec +7).
+#                  Never lower the offset.
+#
+# SECRETS  (repo Settings -> Secrets and variables -> Actions -> Secrets, or inside the
+# `release` environment, which GitHub creates on the first run; add a required reviewer
+# there if you want a manual gate). Values never appear in logs. A lane whose secrets are
+# missing is SKIPPED with a warning that names the missing secret(s); it is not a failure.
+#
+#   iOS lane
+#     IOS_DIST_P12_BASE64           Apple Distribution certificate + private key, exported as .p12, base64
+#     IOS_DIST_P12_PASSWORD         the password chosen when exporting the .p12
+#     IOS_PROFILE_RUNNER_BASE64     App Store provisioning profile for dev.calorietracker.calorieTracker, base64
+#     IOS_PROFILE_SHAREEXT_BASE64   App Store provisioning profile for dev.calorietracker.calorieTracker.ShareExtension, base64
+#     ASC_KEY_ID                    App Store Connect API key ID (team key, App Manager role)
+#     ASC_ISSUER_ID                 App Store Connect API issuer ID (a UUID)
+#     ASC_API_KEY_P8_BASE64         the AuthKey_<KEYID>.p8 file, base64
+#   Android lane
+#     ANDROID_UPLOAD_KEYSTORE_BASE64  upload-keystore.jks, base64
+#     ANDROID_KEYSTORE_PASSWORD       keystore password
+#     ANDROID_KEY_PASSWORD            key password (keytool -genkey makes it the same as the keystore password)
+#     PLAY_SERVICE_ACCOUNT_JSON       the Play Console service account's JSON key, pasted whole.
+#                                     Optional: without it the signed .aab is built and kept as an
+#                                     artifact (for the first, manual Play upload) but not uploaded.
+#
+# VARIABLES (Settings -> Secrets and variables -> Actions -> Variables; plain text, optional)
+#     ANDROID_KEY_ALIAS   alias inside the keystore (default: upload)
+#     ASC_APP_APPLE_ID    the app's numeric Apple ID from App Store Connect; only the altool fallback uses it
+#
+# iOS UPLOAD TRANSPORT: IOS_UPLOAD_TRANSPORT (env below) is `xcodebuild` (xcodebuild
+# -exportArchive with destination=upload + the API key; Apple-documented since Xcode 15)
+# or `altool` (xcrun altool --upload-app). Flip it if the first TestFlight run fails in
+# the upload step; docs/RELEASING.md § Troubleshooting lists the known altool quirks.
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      lane:
+        description: Which store lane to run
+        type: choice
+        options:
+          - both
+          - testflight
+          - play
+        default: both
+      testflight_internal_only:
+        description: Mark the iOS build TestFlight-internal-only (it can then never reach external testers or App Review)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: "3.44.2"      # keep equal to mobile-build.yml
+  XCODE_VERSION: "26.2"          # "" = the macos-26 image default
+  BUILD_NUMBER_OFFSET: 100       # see "VERSION AND BUILD NUMBER" above; never lower it
+  IOS_UPLOAD_TRANSPORT: xcodebuild   # xcodebuild | altool
+  IOS_BUNDLE_ID: dev.calorietracker.calorieTracker
+  IOS_SHAREEXT_BUNDLE_ID: dev.calorietracker.calorieTracker.ShareExtension
+  IOS_APP_GROUP: group.dev.calorietracker.calorieTracker
+  ANDROID_PACKAGE: dev.calorietracker.calorie_tracker
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  plan:
+    name: Version and lanes
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build_name: ${{ steps.plan.outputs.build_name }}
+      build_number: ${{ steps.plan.outputs.build_number }}
+      is_tag: ${{ steps.plan.outputs.is_tag }}
+      internal_only: ${{ steps.plan.outputs.internal_only }}
+      run_ios: ${{ steps.plan.outputs.run_ios }}
+      run_android: ${{ steps.plan.outputs.run_android }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Work out the build name, build number and lanes
+        id: plan
+        env:
+          LANE: ${{ github.event.inputs.lane || 'both' }}
+          INTERNAL_ONLY_INPUT: ${{ inputs.testflight_internal_only }}
+        run: |
+          set -euo pipefail
+          pubspec_version=$(sed -n 's/^version:[[:space:]]*//p' app/pubspec.yaml | tr -d '[:space:]')
+          pub_name=${pubspec_version%%+*}
+          offset=$BUILD_NUMBER_OFFSET
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            is_tag=true
+            tag=${GITHUB_REF#refs/tags/v}
+            name=${tag%%+*}
+            if [[ "$tag" == *+* ]]; then
+              number=${tag#*+}; source="the tag"
+            else
+              number=$((offset + GITHUB_RUN_NUMBER)); source="BUILD_NUMBER_OFFSET + run_number"
+            fi
+            if [[ "$name" != "$pub_name" ]]; then
+              echo "::error::tag v$tag says $name but app/pubspec.yaml says $pub_name. Bump pubspec first (docs/RELEASING.md § Versioning), then tag that commit."
+              exit 1
+            fi
+            internal_only=false
+          else
+            is_tag=false
+            name=$pub_name
+            number=$((offset + GITHUB_RUN_NUMBER)); source="BUILD_NUMBER_OFFSET + run_number"
+            internal_only=${INTERNAL_ONLY_INPUT:-true}
+          fi
+          [[ "$name" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::build name '$name' is not x.y.z"; exit 1; }
+          [[ "$number" =~ ^[0-9]+$ ]] || { echo "::error::build number '$number' is not an integer"; exit 1; }
+          case "$LANE" in
+            both)       run_ios=true;  run_android=true ;;
+            testflight) run_ios=true;  run_android=false ;;
+            play)       run_ios=false; run_android=true ;;
+            *) echo "::error::unknown lane '$LANE'"; exit 1 ;;
+          esac
+          {
+            echo "build_name=$name"
+            echo "build_number=$number"
+            echo "is_tag=$is_tag"
+            echo "internal_only=$internal_only"
+            echo "run_ios=$run_ios"
+            echo "run_android=$run_android"
+          } >> "$GITHUB_OUTPUT"
+          {
+            echo "## Release plan"
+            echo "- build name **$name**, build number **$number** (from $source)"
+            echo "- lanes: iOS=$run_ios, Android=$run_android; TestFlight internal-only=$internal_only"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  ios:
+    name: iOS → TestFlight
+    needs: plan
+    if: needs.plan.outputs.run_ios == 'true'
+    runs-on: macos-26
+    environment: release
+    timeout-minutes: 90
+    outputs:
+      built: ${{ steps.secrets.outputs.ready }}
+    env:
+      BUILD_NAME: ${{ needs.plan.outputs.build_name }}
+      BUILD_NUMBER: ${{ needs.plan.outputs.build_number }}
+      INTERNAL_ONLY: ${{ needs.plan.outputs.internal_only }}
+      # KEYCHAIN_PATH, SIGNING_DIR, ASC_DIR, EXPORT_OPTIONS and
+      # EXPORT_OPTIONS_UPLOAD come from the "Scratch paths" step: the
+      # `runner` context is not available in a job-level env, and GitHub
+      # rejects the whole workflow file when it is used here.
+      FASTLANE_SKIP_UPDATE_CHECK: "1"
+      FASTLANE_OPT_OUT_USAGE: "1"
+      LC_ALL: en_US.UTF-8
+      LANG: en_US.UTF-8
+    steps:
+      # First, so that the always() cleanup step at the end sees the paths
+      # whatever fails in between. $RUNNER_TEMP is wiped after the job.
+      - name: Scratch paths
+        run: |
+          {
+            echo "KEYCHAIN_PATH=$RUNNER_TEMP/bitewise-signing.keychain-db"
+            echo "SIGNING_DIR=$RUNNER_TEMP/signing"
+            echo "ASC_DIR=$RUNNER_TEMP/asc"
+            echo "EXPORT_OPTIONS=$RUNNER_TEMP/ExportOptions.plist"
+            echo "EXPORT_OPTIONS_UPLOAD=$RUNNER_TEMP/ExportOptionsUpload.plist"
+          } >> "$GITHUB_ENV"
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check the iOS secrets are configured
+        id: secrets
+        env:
+          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_PROFILE_RUNNER_BASE64: ${{ secrets.IOS_PROFILE_RUNNER_BASE64 }}
+          IOS_PROFILE_SHAREEXT_BASE64: ${{ secrets.IOS_PROFILE_SHAREEXT_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          set -eo pipefail
+          missing=""
+          for name in IOS_DIST_P12_BASE64 IOS_DIST_P12_PASSWORD IOS_PROFILE_RUNNER_BASE64 \
+                      IOS_PROFILE_SHAREEXT_BASE64 ASC_KEY_ID ASC_ISSUER_ID ASC_API_KEY_P8_BASE64; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            msg="iOS lane skipped: GitHub secret(s) not configured:${missing}. See docs/RELEASING.md § GitHub secrets."
+            echo "::warning::$msg"
+            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "all iOS secrets present"
+          fi
+
+      - name: Select Xcode
+        if: steps.secrets.outputs.ready == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "$XCODE_VERSION" ] && [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          elif [ -n "$XCODE_VERSION" ]; then
+            echo "::warning::Xcode ${XCODE_VERSION} is not on this runner image any more; using $(xcode-select -p)."
+          fi
+          xcodebuild -version
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # GitHub's documented recipe: a throw-away keychain holding the
+      # distribution identity, profiles copied where both Xcode 16+ and Flutter
+      # look for them. The keychain password is random and lives only in this
+      # step; nothing from the secrets is printed.
+      - name: Install the distribution certificate and both profiles
+        id: signing
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          IOS_DIST_P12_BASE64: ${{ secrets.IOS_DIST_P12_BASE64 }}
+          IOS_DIST_P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+          IOS_PROFILE_RUNNER_BASE64: ${{ secrets.IOS_PROFILE_RUNNER_BASE64 }}
+          IOS_PROFILE_SHAREEXT_BASE64: ${{ secrets.IOS_PROFILE_SHAREEXT_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$SIGNING_DIR"
+          printf '%s' "$IOS_DIST_P12_BASE64" | base64 --decode > "$SIGNING_DIR/dist.p12"
+          printf '%s' "$IOS_PROFILE_RUNNER_BASE64" | base64 --decode > "$SIGNING_DIR/runner.mobileprovision"
+          printf '%s' "$IOS_PROFILE_SHAREEXT_BASE64" | base64 --decode > "$SIGNING_DIR/shareext.mobileprovision"
+
+          keychain_password=$(openssl rand -hex 24)
+          security create-keychain -p "$keychain_password" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$keychain_password" "$KEYCHAIN_PATH"
+          security import "$SIGNING_DIR/dist.p12" -P "$IOS_DIST_P12_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH" > /dev/null
+          security set-key-partition-list -S apple-tool:,apple: -k "$keychain_password" "$KEYCHAIN_PATH" > /dev/null
+          security list-keychain -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          rm -f "$SIGNING_DIR/dist.p12"
+
+          # An expired certificate also yields zero valid identities below;
+          # name the real cause first. (-a: an old and a new certificate may
+          # both be in the .p12; one unexpired is enough.)
+          security find-certificate -a -c "Apple Distribution" -p "$KEYCHAIN_PATH" > "$SIGNING_DIR/dist-certs.pem" 2>/dev/null || true
+          if ! grep -q 'BEGIN CERTIFICATE' "$SIGNING_DIR/dist-certs.pem"; then
+            echo "::error::no 'Apple Distribution' certificate in IOS_DIST_P12_BASE64 (was a development or an old 'iPhone Distribution' certificate exported?). See docs/RELEASING.md § 1.6."
+            exit 1
+          fi
+          awk -v dir="$SIGNING_DIR" '/BEGIN CERTIFICATE/{n++} {print > (dir "/dist-cert-" n ".pem")}' "$SIGNING_DIR/dist-certs.pem"
+          unexpired=0; expiry_list=""
+          for pem in "$SIGNING_DIR"/dist-cert-*.pem; do
+            ends=$(openssl x509 -noout -enddate -in "$pem" | cut -d= -f2)
+            expiry_list="$expiry_list $ends;"
+            openssl x509 -noout -checkend 0 -in "$pem" > /dev/null && unexpired=$((unexpired + 1))
+          done
+          if [ "$unexpired" -eq 0 ]; then
+            echo "::error::the Apple Distribution certificate in IOS_DIST_P12_BASE64 expired on${expiry_list} Create a new one, re-export the .p12 and regenerate both profiles (docs/RELEASING.md § 10)."
+            exit 1
+          fi
+          echo "Apple Distribution certificate valid, expires:$expiry_list"
+
+          identities=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -c 'Apple Distribution' || true)
+          if [ "$identities" -ne 1 ]; then
+            echo "::error::expected exactly one valid 'Apple Distribution' identity in IOS_DIST_P12_BASE64, found $identities. Export the certificate WITH its private key from Keychain Access (docs/RELEASING.md § 1.6), or the certificate has expired (docs § 10)."
+            exit 1
+          fi
+
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          install_profile() { # <file> <expected bundle id> <output prefix>
+            local file=$1 bundle=$2 prefix=$3 plist="$SIGNING_DIR/$3.plist"
+            security cms -D -i "$file" > "$plist"
+            local uuid name appid team expires
+            uuid=$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$plist")
+            name=$(/usr/libexec/PlistBuddy -c 'Print :Name' "$plist")
+            appid=$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:application-identifier' "$plist")
+            team=$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$plist")
+            expires=$(plutil -extract ExpirationDate raw -o - "$plist")
+            if [ "$appid" != "$team.$bundle" ]; then
+              echo "::error::profile '$name' is for $appid, expected $team.$bundle. Check which profile went into which secret."
+              exit 1
+            fi
+            if [[ "$expires" < "$now" ]]; then
+              echo "::error::profile '$name' expired on $expires. Regenerate it and update the secret (docs/RELEASING.md § Certificates)."
+              exit 1
+            fi
+            local dir
+            for dir in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+              mkdir -p "$dir"
+              cp "$file" "$dir/$uuid.mobileprovision"
+            done
+            echo "${prefix}_name=$name" >> "$GITHUB_OUTPUT"
+            last_team=$team
+            echo "installed profile '$name' ($uuid) for $appid, expires $expires"
+          }
+          install_profile "$SIGNING_DIR/runner.mobileprovision" "$IOS_BUNDLE_ID" runner
+          runner_team=$last_team
+          install_profile "$SIGNING_DIR/shareext.mobileprovision" "$IOS_SHAREEXT_BUNDLE_ID" shareext
+          shareext_team=$last_team
+          if [ "$runner_team" != "$shareext_team" ]; then
+            echo "::error::the two profiles belong to different teams ($runner_team vs $shareext_team)."
+            exit 1
+          fi
+          echo "team_id=$runner_team" >> "$GITHUB_OUTPUT"
+
+      # The committed project is Automatic/free-team (so `flutter run` on the
+      # owner's phone keeps working). Only the Release configuration is flipped
+      # to manual signing, on the runner, never committed. Flutter cannot pass
+      # per-target xcodebuild overrides and the ShareExtension's base xcconfig
+      # is the regenerated Generated.xcconfig, so the pbxproj is the only lever.
+      - name: Point the Release configuration at the distribution profiles
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        env:
+          TEAM_ID: ${{ steps.signing.outputs.team_id }}
+          RUNNER_PROFILE: ${{ steps.signing.outputs.runner_name }}
+          SHAREEXT_PROFILE: ${{ steps.signing.outputs.shareext_name }}
+        run: |
+          set -euo pipefail
+          if ! command -v fastlane > /dev/null; then
+            echo "::error::fastlane is not on this runner image (it is preinstalled on macos-26). Add a 'sudo gem install fastlane' step before this one."
+            exit 1
+          fi
+          fastlane run update_code_signing_settings \
+            path:ios/Runner.xcodeproj use_automatic_signing:false sdk:"iphoneos*" \
+            team_id:"$TEAM_ID" code_sign_identity:"Apple Distribution" \
+            build_configurations:Release targets:Runner profile_name:"$RUNNER_PROFILE"
+          fastlane run update_code_signing_settings \
+            path:ios/Runner.xcodeproj use_automatic_signing:false sdk:"iphoneos*" \
+            team_id:"$TEAM_ID" code_sign_identity:"Apple Distribution" \
+            build_configurations:Release targets:ShareExtension profile_name:"$SHAREEXT_PROFILE"
+          pbxproj=ios/Runner.xcodeproj/project.pbxproj
+          grep -Fq "$RUNNER_PROFILE" "$pbxproj" && grep -Fq "$SHAREEXT_PROFILE" "$pbxproj" \
+            || { echo "::error::the pbxproj does not name both profiles after update_code_signing_settings"; exit 1; }
+          echo "Release configs now sign manually with team $TEAM_ID"
+
+      - name: Write ExportOptions.plist with the real team and profile names
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        env:
+          TEAM_ID: ${{ steps.signing.outputs.team_id }}
+          RUNNER_PROFILE: ${{ steps.signing.outputs.runner_name }}
+          SHAREEXT_PROFILE: ${{ steps.signing.outputs.shareext_name }}
+        run: |
+          set -euo pipefail
+          cp ios/ExportOptions.plist "$EXPORT_OPTIONS"
+          plutil -replace teamID -string "$TEAM_ID" "$EXPORT_OPTIONS"
+          plutil -replace provisioningProfiles -json \
+            "$(printf '{"%s":"%s","%s":"%s"}' "$IOS_BUNDLE_ID" "$RUNNER_PROFILE" "$IOS_SHAREEXT_BUNDLE_ID" "$SHAREEXT_PROFILE")" \
+            "$EXPORT_OPTIONS"
+          plutil -lint "$EXPORT_OPTIONS"
+          plutil -p "$EXPORT_OPTIONS"
+
+      - name: Pub get
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        run: flutter pub get
+
+      # --split-debug-info keeps Dart symbols out of the binary (smaller app;
+      # `flutter symbolize` needs the files, kept as an artifact below).
+      # No --obfuscate: the source is public, obfuscation would buy nothing.
+      - name: Build and export the signed IPA
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        run: |
+          set -euo pipefail
+          flutter build ipa --release \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER" \
+            --export-options-plist "$EXPORT_OPTIONS" \
+            --split-debug-info=build/ios/symbols
+          ls -la build/ios/ipa/
+
+      - name: Verify signature, entitlements and versions in the archive
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        run: |
+          set -euo pipefail
+          app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+          for bundle in "$app" "$app/PlugIns/ShareExtension.appex"; do
+            label=$(basename "$bundle")
+            codesign -dvv "$bundle" 2>&1 | grep -q 'Authority=Apple Distribution' \
+              || { echo "::error::$label is not signed with an Apple Distribution certificate"; exit 1; }
+            codesign -d --entitlements - --xml "$bundle" 2>/dev/null | grep -q "$IOS_APP_GROUP" \
+              || { echo "::error::$label lost the $IOS_APP_GROUP entitlement (ITMS-90078 would follow)"; exit 1; }
+            v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Info.plist")
+            b=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bundle/Info.plist")
+            [ "$v" = "$BUILD_NAME" ] && [ "$b" = "$BUILD_NUMBER" ] \
+              || { echo "::error::$label is $v ($b), expected $BUILD_NAME ($BUILD_NUMBER)"; exit 1; }
+            echo "$label: Apple Distribution, app group present, $v ($b)"
+          done
+
+      - name: Write the App Store Connect API key
+        if: steps.secrets.outputs.ready == 'true'
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_API_KEY_P8_BASE64: ${{ secrets.ASC_API_KEY_P8_BASE64 }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$ASC_DIR"
+          printf '%s' "$ASC_API_KEY_P8_BASE64" | base64 --decode > "$ASC_DIR/AuthKey_${ASC_KEY_ID}.p8"
+          grep -q 'BEGIN PRIVATE KEY' "$ASC_DIR/AuthKey_${ASC_KEY_ID}.p8" \
+            || { echo "::error::ASC_API_KEY_P8_BASE64 does not decode to a .p8 private key"; exit 1; }
+
+      # PRIMARY transport. Re-exports the same archive with destination=upload
+      # and authenticates with the API key (no Apple ID signed in anywhere).
+      - name: Upload to TestFlight (xcodebuild -exportArchive)
+        if: steps.secrets.outputs.ready == 'true' && env.IOS_UPLOAD_TRANSPORT == 'xcodebuild'
+        working-directory: app
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          set -euo pipefail
+          cp "$EXPORT_OPTIONS" "$EXPORT_OPTIONS_UPLOAD"
+          plutil -replace destination -string upload "$EXPORT_OPTIONS_UPLOAD"
+          plutil -replace testFlightInternalTestingOnly -bool "$INTERNAL_ONLY" "$EXPORT_OPTIONS_UPLOAD"
+          plutil -lint "$EXPORT_OPTIONS_UPLOAD"
+          xcodebuild -exportArchive \
+            -archivePath build/ios/archive/Runner.xcarchive \
+            -exportOptionsPlist "$EXPORT_OPTIONS_UPLOAD" \
+            -exportPath build/ios/upload \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$ASC_DIR/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+          echo "uploaded $BUILD_NAME ($BUILD_NUMBER) to App Store Connect; it appears in TestFlight after processing (a few minutes)" >> "$GITHUB_STEP_SUMMARY"
+
+      # FALLBACK transport (set IOS_UPLOAD_TRANSPORT: altool). Xcode 26's altool
+      # may pick the wrong app when the account has several bundle IDs, hence
+      # --apple-id from the ASC_APP_APPLE_ID variable, and third parties report
+      # exit code 0 on failure, hence the grep over its output.
+      - name: Upload to TestFlight (altool)
+        if: steps.secrets.outputs.ready == 'true' && env.IOS_UPLOAD_TRANSPORT == 'altool'
+        working-directory: app
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_APP_APPLE_ID: ${{ vars.ASC_APP_APPLE_ID }}
+          API_PRIVATE_KEYS_DIR: ${{ env.ASC_DIR }}
+        run: |
+          set -eo pipefail
+          ipa=$(ls build/ios/ipa/*.ipa | head -n 1)
+          apple_id_flag=""
+          [ -n "$ASC_APP_APPLE_ID" ] && apple_id_flag="--apple-id $ASC_APP_APPLE_ID"
+          xcrun altool --upload-app --type ios -f "$ipa" \
+            --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" $apple_id_flag \
+            2>&1 | tee "$RUNNER_TEMP/altool.log"
+          if grep -q -E '(^|[^A-Za-z])ERROR([^A-Za-z]|$)|\*\*\* Error' "$RUNNER_TEMP/altool.log"; then
+            echo "::error::altool reported an error (see the log above)"
+            exit 1
+          fi
+          echo "uploaded $BUILD_NAME ($BUILD_NUMBER) with altool" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep the IPA, dSYMs and Dart symbols
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-${{ env.BUILD_NAME }}-${{ env.BUILD_NUMBER }}
+          path: |
+            app/build/ios/ipa/*.ipa
+            app/build/ios/archive/Runner.xcarchive/dSYMs
+            app/build/ios/symbols
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Remove signing material from the runner
+        if: always()
+        run: |
+          security delete-keychain "$KEYCHAIN_PATH" 2>/dev/null || true
+          rm -rf "$ASC_DIR" "$SIGNING_DIR" "$EXPORT_OPTIONS" "$EXPORT_OPTIONS_UPLOAD"
+          rm -f "$HOME/Library/MobileDevice/Provisioning Profiles/"*.mobileprovision \
+                "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/"*.mobileprovision
+          true
+
+  # ---------------------------------------------------------------------------
+  android:
+    name: Android → Play internal track
+    needs: plan
+    if: needs.plan.outputs.run_android == 'true'
+    runs-on: ubuntu-latest
+    environment: release
+    timeout-minutes: 60
+    outputs:
+      built: ${{ steps.secrets.outputs.ready }}
+    env:
+      BUILD_NAME: ${{ needs.plan.outputs.build_name }}
+      BUILD_NUMBER: ${{ needs.plan.outputs.build_number }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Check the Android secrets are configured
+        id: secrets
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          PLAY_SERVICE_ACCOUNT_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+        run: |
+          set -eo pipefail
+          missing=""
+          for name in ANDROID_UPLOAD_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_PASSWORD; do
+            [ -n "${!name}" ] || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "play=false" >> "$GITHUB_OUTPUT"
+            msg="Android lane skipped: GitHub secret(s) not configured:${missing}. See docs/RELEASING.md § GitHub secrets."
+            echo "::warning::$msg"
+            echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            if [ -n "$PLAY_SERVICE_ACCOUNT_JSON" ]; then
+              echo "play=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "play=false" >> "$GITHUB_OUTPUT"
+              msg="PLAY_SERVICE_ACCOUNT_JSON is not configured: the signed bundle is built and attached as an artifact but NOT uploaded to Play (upload it by hand for the first release; docs/RELEASING.md § Google Play)."
+              echo "::warning::$msg"
+              echo "$msg" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        if: steps.secrets.outputs.ready == 'true'
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      # android/key.properties is what app/build.gradle.kts reads; storeFile is
+      # resolved relative to app/android/. Both files are git-ignored and
+      # deleted in the last step. Nothing is echoed.
+      - name: Install the upload keystore
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        env:
+          ANDROID_UPLOAD_KEYSTORE_BASE64: ${{ secrets.ANDROID_UPLOAD_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'upload' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          printf '%s' "$ANDROID_UPLOAD_KEYSTORE_BASE64" | base64 --decode > android/upload-keystore.jks
+          # printf + sed, not a shell heredoc: a password holding $, a
+          # backtick or a backslash must reach the file verbatim, with
+          # backslashes doubled because key.properties is a Java properties
+          # file. (sed rather than ${var//\\/\\\\}: bash 5.2 changed how
+          # backslashes in a replacement string are read.)
+          props_escape() { printf '%s' "${!1}" | sed 's/\\/\\\\/g'; }
+          {
+            printf 'storeFile=upload-keystore.jks\n'
+            printf 'storePassword=%s\n' "$(props_escape ANDROID_KEYSTORE_PASSWORD)"
+            printf 'keyPassword=%s\n'   "$(props_escape ANDROID_KEY_PASSWORD)"
+            printf 'keyAlias=%s\n'      "$ANDROID_KEY_ALIAS"
+          } > android/key.properties
+          # Both passwords and the alias are checked here, else Gradle fails
+          # ten minutes later with a less helpful message. keytool's output
+          # (never a password) is discarded; the exit code is what counts.
+          keytool -list -keystore android/upload-keystore.jks \
+              -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" > /dev/null 2>&1 \
+            || { echo "::error::ANDROID_KEYSTORE_PASSWORD does not open the keystore, or alias '$ANDROID_KEY_ALIAS' is not in it (variable ANDROID_KEY_ALIAS)."; exit 1; }
+          keytool -importkeystore -srckeystore android/upload-keystore.jks \
+              -srcstorepass:env ANDROID_KEYSTORE_PASSWORD -srcalias "$ANDROID_KEY_ALIAS" \
+              -srckeypass:env ANDROID_KEY_PASSWORD \
+              -destkeystore "$RUNNER_TEMP/probe.p12" -deststoretype PKCS12 \
+              -deststorepass:env ANDROID_KEYSTORE_PASSWORD > /dev/null 2>&1 \
+            || { echo "::error::ANDROID_KEY_PASSWORD does not unlock key '$ANDROID_KEY_ALIAS' (the keystore password itself is fine)."; exit 1; }
+          rm -f "$RUNNER_TEMP/probe.p12"
+          echo "keystore installed, alias '$ANDROID_KEY_ALIAS' present, both passwords verified"
+
+      - name: Pub get
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        run: flutter pub get
+
+      - name: Build the signed app bundle and the arm64 APK
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        run: |
+          set -euo pipefail
+          flutter build appbundle --release \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER" \
+            --split-debug-info=build/android/symbols
+          # The APK is for the friends who sideload (scripts/build_share_apk.sh
+          # rationale: arm64 only, a third of the size of the fat APK).
+          flutter build apk --release --split-per-abi \
+            --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER" \
+            --split-debug-info=build/android/symbols
+          ls -la build/app/outputs/bundle/release/ build/app/outputs/flutter-apk/
+
+      - name: Verify the bundle is signed with the upload key, not the debug key
+        id: artifacts
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        run: |
+          set -euo pipefail
+          aab=build/app/outputs/bundle/release/app-release.aab
+          keytool -printcert -jarfile "$aab" > "$RUNNER_TEMP/aab-cert.txt"
+          if grep -q 'CN=Android Debug' "$RUNNER_TEMP/aab-cert.txt"; then
+            echo "::error::app-release.aab is signed with the DEBUG key; android/key.properties was not picked up by app/build.gradle.kts"
+            exit 1
+          fi
+          grep -E '^Owner:|SHA256:' "$RUNNER_TEMP/aab-cert.txt" | head -n 2
+          mapping=build/app/outputs/mapping/release/mapping.txt
+          [ -f "$mapping" ] && echo "mapping=app/$mapping" >> "$GITHUB_OUTPUT" || echo "::warning::no R8 mapping.txt at $mapping"
+          # No native-debug-symbols.zip is produced: build.gradle.kts does not
+          # set ndk.debugSymbolLevel because that needs Flutter's NDK (28.2)
+          # on the runner and the Ubuntu image ships 27.3/29/30. Play's
+          # "you've not uploaded debug symbols" note is informational.
+          true
+
+      - name: Upload to the Play internal track
+        if: steps.secrets.outputs.ready == 'true' && steps.secrets.outputs.play == 'true'
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ env.ANDROID_PACKAGE }}
+          releaseFiles: app/build/app/outputs/bundle/release/app-release.aab
+          tracks: internal
+          status: completed
+          mappingFile: ${{ steps.artifacts.outputs.mapping }}
+          whatsNewDirectory: app/android/whatsnew
+
+      - name: Keep the bundle, APKs, mapping and symbols
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-${{ env.BUILD_NAME }}-${{ env.BUILD_NUMBER }}
+          path: |
+            app/build/app/outputs/bundle/release/app-release.aab
+            app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            app/build/app/outputs/mapping/release/mapping.txt
+            app/build/android/symbols
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Remove signing material from the runner
+        if: always()
+        run: rm -f app/android/key.properties app/android/upload-keystore.jks
+
+  # ---------------------------------------------------------------------------
+  # Tags only: the arm64 APK goes on a GitHub Release so the WeChat/APK channel
+  # the friends already use keeps working (plus auto-generated notes).
+  github-release:
+    name: GitHub Release (APK)
+    needs: [plan, android]
+    if: needs.plan.outputs.is_tag == 'true' && needs.android.outputs.built == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      BUILD_NAME: ${{ needs.plan.outputs.build_name }}
+      BUILD_NUMBER: ${{ needs.plan.outputs.build_number }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: android-${{ env.BUILD_NAME }}-${{ env.BUILD_NUMBER }}
+          path: dist
+
+      - name: Create or update the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          apk=$(find dist -name 'app-arm64-v8a-release.apk' | head -n 1)
+          [ -n "$apk" ] || { echo "::error::arm64 APK missing from the android artifact"; exit 1; }
+          # From the build name, not $TAG: a v1.5.0+7 tag has a '+', which is
+          # not a legal release-asset character (GitHub rewrites it).
+          asset="BiteWise-v${BUILD_NAME}-b${BUILD_NUMBER}-arm64-v8a.apk"
+          cp "$apk" "$asset"
+          cat > notes.md <<EOF
+          **Android (sideload):** install \`$asset\` (arm64, every phone since ~2017). Builds before v1.5.0 were signed with a debug key, so Android refuses to upgrade over them: uninstall the old BiteWise once (export your log first: Settings → Export), then install this one. Installed from Google Play? Update there, not with this file: the Play build and this APK can carry different signatures, and switching between them needs an uninstall (export your log first).
+
+          **iOS:** TestFlight / App Store build $BUILD_NAME ($BUILD_NUMBER).
+          EOF
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release upload "$TAG" "$asset" --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "BiteWise $TAG" --notes-file notes.md --generate-notes
+          fi

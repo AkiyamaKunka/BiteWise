@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!--
+  Export options for the App Store / TestFlight build, passed to
+  `flutter build ipa` through its export-options-plist flag (see
+  .github/workflows/release.yml for the exact command).
+
+  Keys are documented by `xcodebuild -help` (section "Available keys for
+  -exportOptionsPlist"). This app has TWO signed executables, so the
+  provisioningProfiles map must name a profile for BOTH bundle ids; Flutter's
+  auto-generated plist only covers the main one.
+
+  Placeholders:
+    teamID                  WLQB3YB22M is the current (free, personal) team in
+                            Runner.xcodeproj. After enrolling in the Apple
+                            Developer Program check Membership details; if the
+                            paid team has a different ID, update it here and in
+                            Runner.xcodeproj (docs/RELEASING.md § Apple one-time setup).
+    provisioningProfiles    the NAMES of the two App Store provisioning
+                            profiles created in Certificates, Identifiers &
+                            Profiles (a UUID also works). .github/workflows/release.yml
+                            overwrites both values with the names read from the
+                            profiles in the secrets, so a rename there needs no edit.
+
+  destination=export writes the IPA to build/ios/ipa/. The upload step in
+  release.yml copies this file and sets destination=upload (plus
+  testFlightInternalTestingOnly for non-tag builds).
+-->
+<dict>
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>export</string>
+	<key>signingStyle</key>
+	<string>manual</string>
+	<key>teamID</key>
+	<string>WLQB3YB22M</string>
+	<key>signingCertificate</key>
+	<string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>dev.calorietracker.calorieTracker</key>
+		<string>BiteWise AppStore</string>
+		<key>dev.calorietracker.calorieTracker.ShareExtension</key>
+		<string>BiteWise ShareExtension AppStore</string>
+	</dict>
+	<key>uploadSymbols</key>
+	<true/>
+	<key>stripSwiftSymbols</key>
+	<true/>
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

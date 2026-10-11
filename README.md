@@ -210,6 +210,7 @@ app/                    Flutter app (iOS + Android) — start here
 shared/                 constants, prompts, and golden vectors both sides compile from
 docs/APP_PORT_SPEC.md   the behavioral spec that keeps server and app identical
 docs/SERVER.md          running the server: subscription analysis, Telegram bot, app API
+docs/RELEASING.md       TestFlight / App Store / Google Play: the signed release lane and the owner's checklist
 telegram_bot.py         the server: Flask API for the app + Telegram interface
 scripts/                parity sync, vector generation, APK build, safety gate
 tests/                  Python suite   ·   app/test/   Dart suite
