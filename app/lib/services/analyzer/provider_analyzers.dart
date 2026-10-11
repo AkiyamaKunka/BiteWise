@@ -230,10 +230,10 @@ abstract class _HttpVisionAnalyzer
       throw _ProviderException('HTTP ${resp.statusCode}',
           transient: _isTransientStatus(resp.statusCode),
           quotaClass: resp.statusCode == 429,
-          // OpenAI / Anthropic post to one fixed endpoint, so a bare 404
-          // there is the MODEL (OpenAI model_not_found, Anthropic
-          // not_found_error "model: …"). ServerAnalyzer overrides probeKey,
-          // the only reader of this flag.
+          // Every direct provider now explains its 404 via notFoundMessage
+          // above; a bare 404 reaches here only from ServerAnalyzer (a
+          // wrong server path), which overrides probeKey, the only reader
+          // of this flag.
           modelError: resp.statusCode == 404);
     }
     if (!extract) return '';
@@ -512,6 +512,15 @@ class OpenAiAnalyzer extends _HttpVisionAnalyzer {
   @override
   String get providerLabel => 'OpenAI';
 
+  /// One fixed endpoint, so a 404 is the MODEL (`model_not_found`): a typed
+  /// id persists across upgrades and OpenAI retires ids. The generic
+  /// 'HTTP 404' classified as unknown, so the Chinese UI showed the raw
+  /// English line with no pointer at Settings (loop find 2026-10-10).
+  @override
+  String? get notFoundMessage =>
+      'OpenAI model "$model" not found (unknown or retired) — check the '
+      'model name in Settings.';
+
   @override
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
@@ -659,6 +668,14 @@ class AnthropicAnalyzer extends _HttpVisionAnalyzer {
   String get model => settings.anthropicModel;
   @override
   String get providerLabel => 'Anthropic';
+
+  /// One fixed endpoint, so a 404 is the MODEL (`not_found_error`
+  /// "model: …"): claude-3-5-sonnet-* and claude-3-opus answer this today.
+  /// Same gap as OpenAI above (loop find 2026-10-10).
+  @override
+  String? get notFoundMessage =>
+      'Anthropic model "$model" not found (unknown or retired) — check the '
+      'model name in Settings.';
 
   @override
   http.Request buildRequest(String key,

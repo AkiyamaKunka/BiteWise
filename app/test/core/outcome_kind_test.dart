@@ -27,6 +27,12 @@ void main() {
         AnalysisErrorKind.network,
     'Gemini model error — check the model name in Settings.':
         AnalysisErrorKind.badModel,
+    'OpenAI model "gpt-4o-mini" not found (unknown or retired) — check the '
+            'model name in Settings.':
+        AnalysisErrorKind.badModel,
+    'Anthropic model "claude-3-opus-20240229" not found (unknown or '
+            'retired) — check the model name in Settings.':
+        AnalysisErrorKind.badModel,
     "Couldn't understand the AI response.": AnalysisErrorKind.badResponse,
     'The AI returned an unusable analysis.': AnalysisErrorKind.badResponse,
     'Could not process this photo (decode failed and it is not a JPEG).':

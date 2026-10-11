@@ -205,7 +205,8 @@ void main() {
             404,
             '{"error": {"message": "The model \'gpt-nope\' does not exist '
             'or you do not have access to it.", "type": '
-            '"invalid_request_error", "code": "model_not_found"}}'),
+            '"invalid_request_error", "code": "model_not_found"}}',
+            expectSays: 'model'),
         Scenario.overloaded: const Fx(
             500,
             '{"error": {"message": "The server had an error while '
@@ -248,7 +249,8 @@ void main() {
         Scenario.modelNotFound: const Fx(
             404,
             '{"type": "error", "error": {"type": "not_found_error", '
-            '"message": "model: claude-nope-1"}}'),
+            '"message": "model: claude-nope-1"}}',
+            expectSays: 'model'),
         Scenario.overloaded: const Fx(
             529,
             '{"type": "error", "error": {"type": "overloaded_error", '

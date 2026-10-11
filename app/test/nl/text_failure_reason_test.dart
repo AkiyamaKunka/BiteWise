@@ -44,6 +44,10 @@ Future<AppSettings> _settings(AiProvider provider) async {
   switch (provider) {
     case AiProvider.qwen:
       await s.setQwenApiKey('sk-test-123');
+    case AiProvider.openai:
+      await s.setOpenaiApiKey('sk-test-123');
+    case AiProvider.anthropic:
+      await s.setAnthropicApiKey('sk-test-123');
     case AiProvider.gemini:
       await s.setGeminiApiKey('test-key');
     case AiProvider.server:
@@ -153,6 +157,34 @@ void main() {
       final out = await a.textIntentOutcome('p');
       expect(out.json, isNull);
       expect(classifyAnalysisError(out.error), AnalysisErrorKind.rejectedKey);
+    });
+
+    test('OpenAI / Anthropic: a retired model id names the model, so the '
+        'executor stops saying "try again"', () async {
+      // Both post to one fixed endpoint, so a 404 is the model id. The bare
+      // 'Provider request failed: HTTP 404' classified as unknown, which
+      // the executor maps to nlErrorContactingAi — forever (2026-10-10).
+      final oa = await _settings(AiProvider.openai);
+      final oaOut = await OpenAiAnalyzer(oa,
+              client: MockClient((_) async => http.Response(
+                  '{"error": {"message": "The model `gpt-4o-mini` does not '
+                  'exist or you do not have access to it.", "type": '
+                  '"invalid_request_error", "code": "model_not_found"}}',
+                  404)))
+          .textIntentOutcome('p');
+      expect(oaOut.json, isNull);
+      expect(classifyAnalysisError(oaOut.error), AnalysisErrorKind.badModel,
+          reason: '${oaOut.error}');
+      final an = await _settings(AiProvider.anthropic);
+      final anOut = await AnthropicAnalyzer(an,
+              client: MockClient((_) async => http.Response(
+                  '{"type": "error", "error": {"type": "not_found_error", '
+                  '"message": "model: claude-3-5-sonnet-20241022"}}',
+                  404)))
+          .textIntentOutcome('p');
+      expect(anOut.json, isNull);
+      expect(classifyAnalysisError(anOut.error), AnalysisErrorKind.badModel,
+          reason: '${anOut.error}');
     });
 
     test('Gemini: 401 names the key, 404 names the model, daily quota '
