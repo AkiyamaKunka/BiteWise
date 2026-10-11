@@ -298,6 +298,7 @@ Future<bool> runHeadlessBackfill({
   // fixed daily-report id 9001 (a colliding meal card would silently
   // REPLACE an unread daily report).
   final notifier = ReportNotifier(
+      channelStrings: () => notificationChannelFor(settings.appLanguage),
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
   // The DURABLE daily-summary path. ReportNotifier's in-process Timer

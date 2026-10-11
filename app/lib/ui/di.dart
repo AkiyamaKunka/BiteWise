@@ -117,15 +117,21 @@ class AppServices {
           strings: coachStringsFor(settings.appLanguage),
           now: DateTime.now,
         ));
-    notifier = ReportNotifier(dailyBody: (slotDate) async {
-      await postSummary();
-      // NULL, not '': postSummary has ALREADY presented the coach summary
-      // through showDailySummary, which uses the same notification id.
-      // Returning a string makes the notifier present again over the top —
-      // and '' produced the English "📊 Daily Calorie Report" with a blank
-      // body that the user actually saw on 2026-08-16. Null means "handled".
-      return null;
-    });
+    notifier = ReportNotifier(
+      // Read per post: the channel name Android shows in its Settings
+      // follows a language switch without a restart.
+      channelStrings: () => notificationChannelFor(settings.appLanguage),
+      dailyBody: (slotDate) async {
+        await postSummary();
+        // NULL, not '': postSummary has ALREADY presented the coach summary
+        // through showDailySummary, which uses the same notification id.
+        // Returning a string makes the notifier present again over the top
+        // — and '' produced the English "📊 Daily Calorie Report" with a
+        // blank body that the user actually saw on 2026-08-16. Null means
+        // "handled".
+        return null;
+      },
+    );
     // iOS has NO background execution in this app (spec §6: share/picker
     // only, enableBackgroundScan no-ops, no BGTask ids) and suspends the
     // process seconds after backgrounding — so the Timer that scheduleDaily

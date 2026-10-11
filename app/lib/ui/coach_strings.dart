@@ -34,6 +34,18 @@ CoachStrings coachStringsFor(String appLanguage) {
   );
 }
 
+/// The Android notification channel's name/description in the app
+/// language — Android shows them in its own Settings and in a card's
+/// long-press menu, and never translates them itself.
+({String name, String description}) notificationChannelFor(
+    String appLanguage) {
+  final l = localizationsFor(appLanguage);
+  return (
+    name: l.notificationChannelName,
+    description: l.notificationChannelDescription,
+  );
+}
+
 AppLocalizations localizationsFor(String appLanguage) {
   if (appLanguage == 'zh') return AppLocalizationsZh();
   if (appLanguage == 'en') return AppLocalizationsEn();

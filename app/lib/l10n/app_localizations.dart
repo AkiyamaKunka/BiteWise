@@ -2222,6 +2222,18 @@ abstract class AppLocalizations {
   /// **'🍽️ Meal logged automatically'**
   String get mealCardAutoTitle;
 
+  /// Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
+  ///
+  /// In en, this message translates to:
+  /// **'Reports & meals'**
+  String get notificationChannelName;
+
+  /// Android notification channel description, shown under the channel name in the system notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily calorie reports and auto-logged meal cards'**
+  String get notificationChannelDescription;
+
   /// No description provided for @dayLoadFailed.
   ///
   /// In en, this message translates to:

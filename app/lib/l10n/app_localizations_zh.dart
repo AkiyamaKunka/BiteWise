@@ -1214,6 +1214,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mealCardAutoTitle => '🍽️ 已自动记录一餐';
 
   @override
+  String get notificationChannelName => '总结与餐食';
+
+  @override
+  String get notificationChannelDescription => '每日热量总结和自动记录的餐食卡片';
+
+  @override
   String dayLoadFailed(String error) {
     return '无法加载这一天：$error';
   }

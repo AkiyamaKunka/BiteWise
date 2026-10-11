@@ -1308,6 +1308,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mealCardAutoTitle => '🍽️ Meal logged automatically';
 
   @override
+  String get notificationChannelName => 'Reports & meals';
+
+  @override
+  String get notificationChannelDescription =>
+      'Daily calorie reports and auto-logged meal cards';
+
+  @override
   String dayLoadFailed(String error) {
     return 'Could not load this day: $error';
   }

@@ -145,6 +145,17 @@ void main() {
     }
   });
 
+  test('the Android channel name follows the app language too', () {
+    // 设置 › 应用 › 筷拍 › 通知 showed "Reports & meals" under a Chinese app.
+    final zh = notificationChannelFor('zh');
+    expect(zh.name, '总结与餐食');
+    expect(zh.description, '每日热量总结和自动记录的餐食卡片');
+    expect(RegExp(r'[a-zA-Z]').hasMatch(zh.name + zh.description), isFalse);
+    final en = notificationChannelFor('en');
+    expect(en.name, 'Reports & meals');
+    expect(en.description, 'Daily calorie reports and auto-logged meal cards');
+  });
+
   test('an unknown/system language still produces a usable notification',
       () {
     for (final tag in ['system', '', 'fr']) {

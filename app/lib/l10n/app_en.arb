@@ -817,6 +817,14 @@
   "errBadPhoto": "This photo could not be processed (it could not be decoded).",
   "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
   "mealCardAutoTitle": "🍽️ Meal logged automatically",
+  "notificationChannelName": "Reports & meals",
+  "@notificationChannelName": {
+    "description": "Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
+  },
+  "notificationChannelDescription": "Daily calorie reports and auto-logged meal cards",
+  "@notificationChannelDescription": {
+    "description": "Android notification channel description, shown under the channel name in the system notification settings."
+  },
   "dayLoadFailed": "Could not load this day: {error}",
   "@dayLoadFailed": {
     "placeholders": {

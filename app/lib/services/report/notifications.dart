@@ -35,6 +35,7 @@ class ReportNotifier {
     Future<bool?> Function()? enabledProbe,
     Future<List<int>> Function()? pendingIds,
     Future<String?> Function(DateTime slotDate)? dailyBody,
+    ({String name, String description}) Function()? channelStrings,
     int? mealCardIdSeed,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
         _clock = clock ?? DateTime.now,
@@ -49,7 +50,9 @@ class ReportNotifier {
         // ignore: prefer_initializing_formals
         _pendingIds = pendingIds,
         // ignore: prefer_initializing_formals
-        _dailyBody = dailyBody {
+        _dailyBody = dailyBody,
+        // ignore: prefer_initializing_formals
+        _channelStrings = channelStrings {
     // Each background run constructs a FRESH notifier; a fixed 100-base
     // would make every run overwrite the previous run's unread meal cards.
     // Headless callers pass a time-derived seed so ids keep advancing.
@@ -81,18 +84,44 @@ class ReportNotifier {
   /// Test seam for [scheduledDailyAt]: the ids the OS still holds pending.
   final Future<List<int>> Function()? _pendingIds;
 
-  static const NotificationDetails _details = NotificationDetails(
-    android: AndroidNotificationDetails(
-      _channelId,
-      'Reports & meals',
-      channelDescription: 'Daily calorie reports and auto-logged meal cards',
-      icon: androidSmallIcon,
-      importance: Importance.defaultImportance,
-      priority: Priority.defaultPriority,
-    ),
-    iOS: DarwinNotificationDetails(),
-    macOS: DarwinNotificationDetails(),
+  /// Android channel name/description in the app language, read at post
+  /// time so a language switch shows on the very next card. Injected by
+  /// the ui/ callers (localizationsFor) so services/ stays free of ui/;
+  /// null keeps the English pair for tests and createSettingsStore's bare
+  /// fallback notifier.
+  final ({String name, String description}) Function()? _channelStrings;
+
+  static const ({String name, String description}) _englishChannel = (
+    name: 'Reports & meals',
+    description: 'Daily calorie reports and auto-logged meal cards',
   );
+
+  /// Built per post, not const. Android shows the channel name under
+  /// 设置 › 应用 › 筷拍 › 通知 and in every card's long-press menu, and it was
+  /// a compile-time English constant — the one English line in an
+  /// otherwise Chinese install (API 35 zh-CN emulator, 2026-10-11).
+  /// channelAction `update` is REQUIRED: with the default createIfNotExists
+  /// the plugin never touches an existing channel, so friends' APKs that
+  /// already registered the English one would keep it forever. For an
+  /// existing channel Android only takes the name/description from this
+  /// (same importance; sound/vibration/badge edits are ignored), so the
+  /// user's own per-channel settings survive.
+  NotificationDetails _details() {
+    final channel = _channelStrings?.call() ?? _englishChannel;
+    return NotificationDetails(
+      android: AndroidNotificationDetails(
+        _channelId,
+        channel.name,
+        channelDescription: channel.description,
+        icon: androidSmallIcon,
+        importance: Importance.defaultImportance,
+        priority: Priority.defaultPriority,
+        channelAction: AndroidNotificationChannelAction.update,
+      ),
+      iOS: const DarwinNotificationDetails(),
+      macOS: const DarwinNotificationDetails(),
+    );
+  }
 
   /// Body provider for the scheduled notification, given the DATE the slot
   /// was armed for — a Timer that fires late (overnight iOS suspension
@@ -321,7 +350,7 @@ class ReportNotifier {
       // platform timezone lookup are needed. (A location would only matter
       // for a repeating wall-clock trigger, which this is not.)
       scheduledDate: tz.TZDateTime.from(when, tz.UTC),
-      notificationDetails: _details,
+      notificationDetails: _details(),
       // Ignored on iOS. Inexact so that if Android ever opts in this cannot
       // throw for a missing SCHEDULE_EXACT_ALARM grant.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
@@ -345,6 +374,6 @@ class ReportNotifier {
     final presenter = _presenter;
     if (presenter != null) return presenter(id, title, body);
     await _plugin.show(
-        id: id, title: title, body: body, notificationDetails: _details);
+        id: id, title: title, body: body, notificationDetails: _details());
   }
 }

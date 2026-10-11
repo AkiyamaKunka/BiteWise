@@ -276,6 +276,49 @@ void main() {
     }
   });
 
+  // Android shows the channel name under 设置 › 应用 › 筷拍 › 通知 and in a
+  // card's long-press menu; it was a compile-time English constant, the one
+  // English line in a Chinese install (API 35 zh-CN emulator, 2026-10-11).
+  test('the Android channel is named in the app language on every post',
+      () async {
+    final plugin = _RecordingPlugin();
+    var language = 'zh';
+    final notifier = ReportNotifier(
+      plugin: plugin,
+      channelStrings: () => language == 'zh'
+          ? (name: '总结与餐食', description: '每日热量总结和自动记录的餐食卡片')
+          : (name: 'Reports & meals', description: 'Daily reports'),
+    );
+    await notifier.init();
+    await notifier.showMealCard('🍽️ 已自动记录一餐', '约 450 千卡');
+    final zh = plugin.shown.single!.android!;
+    expect(zh.channelName, '总结与餐食');
+    expect(zh.channelDescription, '每日热量总结和自动记录的餐食卡片');
+    // Friends' installs already hold the English channel, and the plugin
+    // leaves an existing channel alone unless told to update it.
+    expect(zh.channelAction, AndroidNotificationChannelAction.update);
+    expect(zh.channelId, 'calorietracker_reports',
+        reason: 'a new id would orphan the old channel and its toggles');
+    expect(zh.icon, ReportNotifier.androidSmallIcon);
+
+    // Read at post time: switching 语言 flips the next card, no restart.
+    language = 'en';
+    await notifier.showDailySummary('Today', '1800 kcal');
+    expect(plugin.shown.last!.android!.channelName, 'Reports & meals');
+  });
+
+  test('without channel strings the channel keeps its English name',
+      () async {
+    final plugin = _RecordingPlugin();
+    final notifier = ReportNotifier(plugin: plugin);
+    await notifier.init();
+    await notifier.showMealCard('Meal logged', '~450 kcal');
+    final android = plugin.shown.single!.android!;
+    expect(android.channelName, 'Reports & meals');
+    expect(android.channelDescription,
+        'Daily calorie reports and auto-logged meal cards');
+  });
+
   test('scheduledDailyAt answers only while the OS still holds the card',
       () async {
     // The Settings "next summary" row: the armed slot when the OS lists
