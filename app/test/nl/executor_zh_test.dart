@@ -84,6 +84,53 @@ void main() {
     expect(text, isNot(contains('kcal')));
   });
 
+  test('a food meal with no meal_description is 未命名的一餐, not "Unknown meal"',
+      () async {
+    // A direct-provider photo reply or a partial chat correction can leave a
+    // stored food row with the key missing or blank; the delete modal, the
+    // post-delete snackbar and the correction line must not fall back to
+    // English inside a Chinese sentence.
+    final nameless = dao.seed('', 400, time: '12:30 PM', analysis: {
+      'is_food': true,
+      'total_calories': 400,
+      'food_items': <Map<String, dynamic>>[],
+    });
+    final blank = dao.seed('', 250, time: '06:00 PM', analysis: {
+      'is_food': true,
+      'meal_description': '   ',
+      'total_calories': 250,
+    });
+    final snapshot = await dao.recentMeals();
+
+    final staged = await exec.executeParsed([
+      {'intent': 'delete', 'meal_indices': [0, 1]},
+    ], '删掉这两顿', snapshot);
+    final r = staged.single;
+    expect(r.pendingDeleteIds, [nameless, blank]);
+    expect(r.pendingDeleteLabels[0], '未命名的一餐（2026-07-17 12:30，~400 千卡）');
+    expect(r.pendingDeleteLabels[1], '未命名的一餐（2026-07-17 18:00，~250 千卡）');
+    expect(r.text, isNot(contains('Unknown')));
+    final done = await exec.confirmPendingDelete([nameless]);
+    expect(done, contains('• 未命名的一餐（2026-07-17 12:30，~400 千卡）'));
+    expect(done, isNot(contains('Unknown')));
+
+    final fixed = await exec.executeParsed([
+      {
+        'intent': 'correction',
+        'meal_index': 0,
+        'analysis': {'is_food': true, 'total_calories': 600, 'meal_description': '牛肉面'},
+      },
+    ], '第一顿是牛肉面', snapshot);
+    expect(fixed.single.text, contains('未命名的一餐 → 牛肉面'));
+    expect(fixed.single.text, isNot(contains('Unknown')));
+
+    final added = await exec.executeParsed([
+      {'intent': 'new_meal', 'analysis': {'is_food': true, 'total_calories': 300}},
+    ], '我吃了点东西', const []);
+    expect(added.single.text, startsWith('✅ 已添加手动记录的一餐：\n\n🍽️ 未命名的一餐\n'));
+    expect(added.single.text, isNot(contains('Unknown')));
+  });
+
   test('invalid index, no food, type-first and AI-error lines are Chinese',
       () async {
     dao.seed('白粥', 150);

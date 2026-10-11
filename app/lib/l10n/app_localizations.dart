@@ -3032,6 +3032,12 @@ abstract class AppLocalizations {
   /// **'{desc} ({date} {time}, ~{kcal})'**
   String nlMealLabel(String desc, String date, String time, String kcal);
 
+  /// Stands in for meal_description in chat replies (delete labels, the correction line, the added-meal card) when the stored analysis has no name.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed meal'**
+  String get nlUnnamedMeal;
+
   /// No description provided for @nlNoActions.
   ///
   /// In en, this message translates to:

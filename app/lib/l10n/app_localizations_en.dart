@@ -1885,6 +1885,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get nlUnnamedMeal => 'Unnamed meal';
+
+  @override
   String get nlNoActions =>
       '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
 

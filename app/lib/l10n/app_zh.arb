@@ -516,6 +516,7 @@
   "nlDeletedMeals": "🗑️ 已删除 {count} 顿餐：",
   "nlAddedManualMeal": "✅ 已添加手动记录的一餐：",
   "nlMealLabel": "{desc}（{date} {time}，~{kcal}）",
+  "nlUnnamedMeal": "未命名的一餐",
   "nlNoActions": "❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。",
   "nlRequestFailed": "❌ 这个请求失败了，请重试。",
   "nlAllActionsFailed": "❌ 请求的 {count} 项操作全部失败，请重试。",

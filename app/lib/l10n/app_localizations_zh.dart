@@ -1756,6 +1756,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get nlUnnamedMeal => '未命名的一餐';
+
+  @override
   String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';
 
   @override

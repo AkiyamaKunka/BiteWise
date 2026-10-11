@@ -1396,6 +1396,10 @@
       }
     }
   },
+  "nlUnnamedMeal": "Unnamed meal",
+  "@nlUnnamedMeal": {
+    "description": "Stands in for meal_description in chat replies (delete labels, the correction line, the added-meal card) when the stored analysis has no name."
+  },
   "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
   "nlRequestFailed": "❌ That request failed. Please try again.",
   "nlAllActionsFailed": "❌ All {count} requested actions failed. Please try again.",
