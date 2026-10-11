@@ -27,7 +27,12 @@ val keystoreProperties = Properties().apply {
         keystorePropertiesFile.inputStream().use { load(it) }
     }
 }
-if (!hasUploadKeystore) {
+// Only a release build is affected, so only a release build gets the notice:
+// `flutter build apk --debug` / `flutter run` request assembleDebug and
+// would otherwise print it on every developer build.
+val releaseRequested =
+    gradle.startParameter.taskNames.any { it.contains("Release", ignoreCase = true) }
+if (!hasUploadKeystore && releaseRequested) {
     // logger.quiet, not warn: `flutter build` runs Gradle with -q, which
     // hides WARN-level output; QUIET is the one level that still reaches
     // the terminal.
@@ -64,12 +69,18 @@ android {
     signingConfigs {
         if (hasUploadKeystore) {
             create("release") {
-                fun required(name: String): String =
-                    keystoreProperties.getProperty(name)?.trim()?.takeIf { it.isNotEmpty() }
+                // The path and the alias are trimmed (a stray space after
+                // them is never intended); the passwords are used verbatim,
+                // since trailing whitespace can be part of a password and
+                // trimming it would make the keystore silently un-openable.
+                fun required(name: String, trim: Boolean): String =
+                    keystoreProperties.getProperty(name)
+                        ?.let { if (trim) it.trim() else it }
+                        ?.takeIf { it.isNotEmpty() }
                         ?: throw GradleException(
                             "android/key.properties exists but has no '$name' (see docs/RELEASING.md § Google Play)",
                         )
-                val store = rootProject.file(required("storeFile"))
+                val store = rootProject.file(required("storeFile", trim = true))
                 if (!store.exists()) {
                     throw GradleException(
                         "android/key.properties: storeFile '${store.path}' does not exist " +
@@ -77,9 +88,9 @@ android {
                     )
                 }
                 storeFile = store
-                storePassword = required("storePassword")
-                keyAlias = required("keyAlias")
-                keyPassword = required("keyPassword")
+                storePassword = required("storePassword", trim = false)
+                keyAlias = required("keyAlias", trim = true)
+                keyPassword = required("keyPassword", trim = false)
             }
         }
     }

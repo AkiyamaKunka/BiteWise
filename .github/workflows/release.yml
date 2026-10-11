@@ -290,9 +290,23 @@ jobs:
           fi
           echo "Apple Distribution certificate valid, expires:$expiry_list"
 
+          # `find-identity -v` counts only identities whose chain validates,
+          # and the runner's System keychain does not carry every WWDR
+          # intermediate Apple issues distribution certificates from (G3 is
+          # the classic one; newer certificates come from G4..G8). Put them
+          # all in the throw-away keychain so a good certificate is not
+          # reported as "0 valid identities". Each one is best effort: a
+          # failed download (curl -S still logs it) or an already-present
+          # certificate must not fail the step.
+          for g in G3 G4 G5 G6 G7 G8; do
+            curl -fsSL "https://www.apple.com/certificateauthority/AppleWWDRCA$g.cer" -o "$SIGNING_DIR/wwdr-$g.cer" \
+              && security import "$SIGNING_DIR/wwdr-$g.cer" -k "$KEYCHAIN_PATH" -T /usr/bin/codesign -T /usr/bin/security > /dev/null 2>&1 \
+              || true
+          done
+
           identities=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | grep -c 'Apple Distribution' || true)
           if [ "$identities" -ne 1 ]; then
-            echo "::error::expected exactly one valid 'Apple Distribution' identity in IOS_DIST_P12_BASE64, found $identities. Export the certificate WITH its private key from Keychain Access (docs/RELEASING.md § 1.6), or the certificate has expired (docs § 10)."
+            echo "::error::expected exactly one valid 'Apple Distribution' identity in IOS_DIST_P12_BASE64, found $identities. Export the certificate WITH its private key from Keychain Access (docs/RELEASING.md § 1.6), or the certificate has expired (docs § 10), or the WWDR intermediate that issued it is not installed (this step imports AppleWWDRCAG3..G8 from apple.com; a failed download is logged above)."
             exit 1
           fi
 
@@ -619,6 +633,16 @@ jobs:
           flutter build appbundle --release \
             --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER" \
             --split-debug-info=build/android/symbols
+          # The APK build below runs R8 again and overwrites mapping.txt in
+          # place. Keep the bundle's own mapping for the Play upload: the
+          # mapping Play deobfuscates with must come from the same R8 run as
+          # the .aab it is attached to.
+          mapping=build/app/outputs/mapping/release/mapping.txt
+          if [ -f "$mapping" ]; then
+            cp "$mapping" "$RUNNER_TEMP/aab-mapping.txt"
+          else
+            echo "::warning::no R8 mapping.txt at $mapping after the app bundle build"
+          fi
           # The APK is for the friends who sideload (scripts/build_share_apk.sh
           # rationale: arm64 only, a third of the size of the fat APK).
           flutter build apk --release --split-per-abi \
@@ -639,8 +663,16 @@ jobs:
             exit 1
           fi
           grep -E '^Owner:|SHA256:' "$RUNNER_TEMP/aab-cert.txt" | head -n 2
-          mapping=build/app/outputs/mapping/release/mapping.txt
-          [ -f "$mapping" ] && echo "mapping=app/$mapping" >> "$GITHUB_OUTPUT" || echo "::warning::no R8 mapping.txt at $mapping"
+          # The bundle's mapping is the copy taken right after the appbundle
+          # build (the APK build has since overwritten
+          # build/app/outputs/mapping/release/mapping.txt with its own). Play
+          # gets that copy; a second copy goes next to the .aab so the kept
+          # artifact carries both mappings (aab-mapping.txt for the bundle,
+          # mapping.txt for the sideload APKs).
+          if [ -f "$RUNNER_TEMP/aab-mapping.txt" ]; then
+            echo "mapping=$RUNNER_TEMP/aab-mapping.txt" >> "$GITHUB_OUTPUT"
+            cp "$RUNNER_TEMP/aab-mapping.txt" build/app/outputs/bundle/release/aab-mapping.txt
+          fi
           # No native-debug-symbols.zip is produced: build.gradle.kts does not
           # set ndk.debugSymbolLevel because that needs Flutter's NDK (28.2)
           # on the runner and the Ubuntu image ships 27.3/29/30. Play's
@@ -666,6 +698,7 @@ jobs:
           name: android-${{ env.BUILD_NAME }}-${{ env.BUILD_NUMBER }}
           path: |
             app/build/app/outputs/bundle/release/app-release.aab
+            app/build/app/outputs/bundle/release/aab-mapping.txt
             app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
             app/build/app/outputs/mapping/release/mapping.txt

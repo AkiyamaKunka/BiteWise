@@ -554,8 +554,9 @@ git tag v1.5.1 && git push origin v1.5.1     # iOS + Android lanes, external-eli
 ```
 
 Artifacts kept 90 days on the run page: the IPA + dSYMs + Dart symbols
-(`flutter symbolize -d app.ios-arm64.symbols` for crash reports), the AAB,
-the two APKs, `mapping.txt`, the Android Dart symbols.
+(`flutter symbolize -d app.ios-arm64.symbols` for crash reports), the AAB
+with its own R8 mapping as `aab-mapping.txt` (the one Play received), the
+two APKs with theirs as `mapping.txt`, the Android Dart symbols.
 
 ---
 
@@ -569,7 +570,10 @@ to add.
 was exported without its private key, or the password secret is wrong
 (`security import` fails earlier in that case). Re-export both rows (§ 1.6
 step 3). Two identities = an old certificate is still in the keychain you
-exported from; export only the current one.
+exported from; export only the current one. Zero with a valid, unexpired
+certificate = the WWDR intermediate that issued it is missing; the step
+imports Apple's `AppleWWDRCAG3`…`G8` into its keychain first, so look for a
+failed download in the log just above the error.
 
 **"the Apple Distribution certificate in IOS_DIST_P12_BASE64 expired on …"**
 — the yearly chore in § 10: new certificate, new `.p12`, both profiles
@@ -621,9 +625,14 @@ the Mac to match.
 Fastlane 2.238; if it disappears add `sudo gem install fastlane --no-document`
 before the "Point the Release configuration…" step.
 
-**Flutter "version solving failed" on CI** — the pinned `FLUTTER_VERSION`
-moved on the Mac but not in the workflows (or vice versa); keep the three
-equal (`flutter --version`, `mobile-build.yml`, `release.yml`).
+**Flutter "version solving failed" on CI** — four places name the Flutter
+version: `flutter --version` on the Mac, `FLUTTER_VERSION` in
+`mobile-build.yml`, `FLUTTER_VERSION` in `release.yml`, and
+`python-tests.yml`. Keep the first three equal (the pin moved on the Mac but
+not in the workflows, or vice versa). `python-tests.yml` deliberately floats
+on channel `stable` with no pin: it is the early warning that the next
+stable breaks `flutter analyze` / `flutter test` before the pin is moved, so
+a failure there alone means "the newest stable", not a mismatch.
 
 **Android: "app-release.aab is signed with the DEBUG key"** — the keystore
 step did not run (secrets missing) or `key.properties` was not written next
@@ -678,5 +687,5 @@ raw file instead of its base64 text. Re-create it with `base64 -i <file>`.
 | Every year (Apple emails 30 days ahead) | New Apple Distribution certificate → new `.p12` → regenerate both profiles → update the four `IOS_*` secrets. The expired certificate does not affect the published app. |
 | Every year | Apple Developer Program renewal (auto-renew is available). |
 | When GitHub rotates the macOS image | `XCODE_VERSION` in both workflows; pin a new one or float. |
-| When Flutter is upgraded on the Mac | `FLUTTER_VERSION` in both workflows, in the same PR as the `pubspec.lock` change. |
+| When Flutter is upgraded on the Mac | `FLUTTER_VERSION` in `mobile-build.yml` and `release.yml`, in the same PR as the `pubspec.lock` change (`python-tests.yml` floats on `stable` and needs nothing). |
 | Never, unless compromised | The ASC API key, the Play service account key, the upload keystore (if lost: § 6.3 key reset). |
