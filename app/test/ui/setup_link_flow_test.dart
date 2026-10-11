@@ -95,4 +95,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
   });
+
+  // iOS share sheet: receive_sharing_intent bounces the extension to the
+  // host app by opening `ShareMedia-<bundle>:share`, and app_links forwards
+  // that URL to us too. It is not a setup link; it must not produce the
+  // "not valid" snackbar (seen on every share before this test existed).
+  final shareBounce =
+      Uri.parse('ShareMedia-dev.calorietracker.calorieTracker:share');
+
+  testWidgets('the share-extension bounce URL is ignored silently (warm)',
+      (tester) async {
+    final (services, settings, links) = rig();
+    await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+    links.add(shareBounce);
+    await tester.pumpAndSettle();
+    expect(find.text('That setup link is not valid.'), findsNothing);
+    expect(find.byKey(const Key('setupLinkConfirm')), findsNothing);
+    expect(settings.apiKey, 'old');
+    await links.close();
+  });
+
+  testWidgets('the share-extension bounce URL is ignored silently (cold)',
+      (tester) async {
+    final settings = FakeSettings(apiKey: 'old', watcherEnabled: false);
+    final services = UiServices(
+      dao: FakeDao(),
+      analyzer: FakeAnalyzer(),
+      executor: FakeExecutor(),
+      settings: settings,
+      picker: FakePicker(),
+      requestPhotoPermission: () async => true,
+      reports: FakeReports(),
+      initialSetupLink: () async => shareBounce,
+    );
+    await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+    await tester.pumpAndSettle();
+    expect(find.text('That setup link is not valid.'), findsNothing);
+    expect(find.byKey(const Key('setupLinkConfirm')), findsNothing);
+    expect(settings.apiKey, 'old');
+  });
 }

@@ -224,6 +224,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// point every future photo upload at a stranger's server, so the user
   /// sees exactly what it names and confirms with one tap.
   Future<void> _onSetupLink(Uri uri) async {
+    // Not ours at all — e.g. the share extension's ShareMedia-<bundle>:share
+    // bounce on iOS, which app_links also forwards — is ignored silently.
+    // Only a malformed bitewise:// link earns the "not valid" message.
+    if (!isSetupLinkScheme(uri)) return;
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {
