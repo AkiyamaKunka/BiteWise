@@ -484,10 +484,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           const SizedBox(height: 20),
           Text(context.l10n.editorTotalsHeader, style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
+          // Bare name + unit suffix, like the macro fields below: at the
+          // largest iOS text size a NEW meal's empty field rested
+          // 'Calories (kcal)' at the full 3.1x and cut it to 'Calories (kc…'
+          // until tapped (a filled meal floats the label at 0.75x and fits).
           _NumberField(
             fieldKey: const Key('editorCalories'),
             controller: _cal,
             label: context.l10n.editorCaloriesLabel,
+            suffixText: context.l10n.editorKcalSuffix,
           ),
           const SizedBox(height: 8),
           // At large text each macro field takes the full width, like

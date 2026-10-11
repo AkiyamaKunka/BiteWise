@@ -301,6 +301,7 @@ void main() {
               theme: iphoneTheme));
           await tester.pumpAndSettle();
           for (final key in const [
+            'editorCalories',
             'editorProtein',
             'editorCarbs',
             'editorFat',
@@ -318,6 +319,16 @@ void main() {
                   matching: find.text(lang == 'zh' ? '克' : 'g')),
               findsOneWidget);
           expect(_ellipsised(tester, protein), isEmpty);
+          // Calories too (2026-10-10): 'Calories (kcal)' was cut at AX5.
+          final calories = find.byKey(const Key('editorCalories'));
+          await tester.enterText(calories, '450');
+          await tester.pumpAndSettle();
+          expect(
+              find.descendant(
+                  of: calories,
+                  matching: find.text(lang == 'zh' ? '千卡' : 'kcal')),
+              findsOneWidget);
+          expect(_ellipsised(tester, calories), isEmpty);
           expect(tester.takeException(), isNull);
         });
       }

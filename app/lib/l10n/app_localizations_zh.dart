@@ -874,6 +874,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorGramsSuffix => '克';
 
   @override
+  String get editorKcalSuffix => '千卡';
+
+  @override
   String get diagTitle => '测试 AI 服务';
 
   @override
@@ -1289,7 +1292,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorTotalsHeader => '总计';
 
   @override
-  String get editorCaloriesLabel => '热量（千卡）';
+  String get editorCaloriesLabel => '热量';
 
   @override
   String get editorItemsHeader => '食物';

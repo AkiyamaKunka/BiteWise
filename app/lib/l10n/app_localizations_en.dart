@@ -924,6 +924,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorGramsSuffix => 'g';
 
   @override
+  String get editorKcalSuffix => 'kcal';
+
+  @override
   String get diagTitle => 'Test AI provider';
 
   @override
@@ -1386,7 +1389,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorTotalsHeader => 'Totals';
 
   @override
-  String get editorCaloriesLabel => 'Calories (kcal)';
+  String get editorCaloriesLabel => 'Calories';
 
   @override
   String get editorItemsHeader => 'Items';

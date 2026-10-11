@@ -1610,6 +1610,12 @@ abstract class AppLocalizations {
   /// **'g'**
   String get editorGramsSuffix;
 
+  /// No description provided for @editorKcalSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'kcal'**
+  String get editorKcalSuffix;
+
   /// No description provided for @diagTitle.
   ///
   /// In en, this message translates to:
@@ -2357,7 +2363,7 @@ abstract class AppLocalizations {
   /// No description provided for @editorCaloriesLabel.
   ///
   /// In en, this message translates to:
-  /// **'Calories (kcal)'**
+  /// **'Calories'**
   String get editorCaloriesLabel;
 
   /// No description provided for @editorItemsHeader.

@@ -357,6 +357,49 @@ void main() {
           }
         });
 
+        // The test above seeds a filled meal, whose labels float at 0.75x.
+        // A NEW meal's empty fields rest their labels at the full 3.1x, and
+        // in English 'Calories (kcal)' read 'Calories (kc…' until tapped
+        // (2026-10-10). The unit is a suffix now, like the macro fields' g.
+        testWidgets('$lang: new meal number labels rest uncut, unit as suffix', (
+          tester,
+        ) async {
+          await pumpAt(
+            tester,
+            lang,
+            MealEditorScreen(dao: FakeDao(), now: clock),
+          );
+          expect(tester.takeException(), isNull);
+          final scrollable = find.byType(Scrollable).first;
+          for (final k in const [
+            'editorDescription',
+            'editorCalories',
+            'editorProtein',
+            'editorCarbs',
+            'editorFat',
+          ]) {
+            final field = find.byKey(Key(k));
+            await tester.scrollUntilVisible(field, 200, scrollable: scrollable);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expectLabelsUncut(tester, field);
+            if (k != 'editorCalories') continue;
+            // Typed, the label floats and the unit shows beside the number
+            // (checked here, while the lazy list still has the field).
+            await tester.enterText(field, '1234');
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expect(
+              find.descendant(
+                of: field,
+                matching: find.text(lang == 'zh' ? '千卡' : 'kcal'),
+              ),
+              findsOneWidget,
+            );
+            expectLabelsUncut(tester, field);
+          }
+        });
+
         testWidgets('$lang: normal text keeps the one-row field layout', (
           tester,
         ) async {
