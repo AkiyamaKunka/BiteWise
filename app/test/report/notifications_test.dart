@@ -13,6 +13,11 @@ import 'package:flutter_test/flutter_test.dart';
 class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
   InitializationSettings? settings;
   final shown = <NotificationDetails?>[];
+  final cancelled = <int>[];
+
+  @override
+  Future<void> cancel({required int id, String? tag}) async =>
+      cancelled.add(id);
 
   @override
   Future<bool?> initialize({
@@ -287,4 +292,39 @@ void main() {
     pending = []; // delivered (or dropped): nothing pending any more
     expect(await notifier.scheduledDailyAt(), isNull);
   });
+
+  // The daily summary off switch (2026-10-10): cancelDaily only stops this
+  // process's Timer; the card already handed to the OS (iOS one-shot, or
+  // an unread Android card) has to be withdrawn by id.
+  test('cancelPendingDaily withdraws id 9001 from the OS', () async {
+    final plugin = _RecordingPlugin();
+    final notifier = ReportNotifier(plugin: plugin);
+    await notifier.cancelPendingDaily();
+    expect(plugin.cancelled, [ReportNotifier.dailyReportNotificationId]);
+    expect(await notifier.scheduledDailyAt(), isNull);
+  });
+
+  test('cancelPendingDaily after an OS arm leaves nothing armed', () async {
+    var pending = <int>[];
+    final notifier = ReportNotifier(
+      scheduler: (id, title, body, when) async => pending = [id],
+      canceller: (id) async => pending.remove(id),
+      pendingIds: () async => pending,
+    );
+    await notifier.scheduleDailyAt(
+        when: DateTime(2026, 10, 10, 21, 30), title: 't', body: 'b');
+    expect(await notifier.scheduledDailyAt(), isNotNull);
+    await notifier.cancelPendingDaily();
+    expect(pending, isEmpty);
+    expect(await notifier.scheduledDailyAt(), isNull);
+  });
+
+  test('cancelPendingDaily never throws without a platform plugin', () async {
+    final notifier = ReportNotifier(plugin: _BarePlugin());
+    await expectLater(notifier.cancelPendingDaily(), completes);
+  });
 }
+
+/// Every call hits Fake's throwing noSuchMethod — a plugin with no
+/// platform behind it.
+class _BarePlugin extends Fake implements FlutterLocalNotificationsPlugin {}

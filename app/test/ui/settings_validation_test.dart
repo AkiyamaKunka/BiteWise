@@ -624,6 +624,66 @@ void planTuningTests() {
     expect(find.byKey(const Key('planEffortRow')), findsNothing);
   });
 
+  group('daily summary switch (2026-10-10)', () {
+    // Friends on the pre-08-16 APKs got a nightly card they never opted
+    // into and could not stop short of muting the whole notification
+    // channel (meal cards included) — which this screen then painted as a
+    // fault with the red notifications-off remedy.
+    Widget screen(FakeSettings settings) => _wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          notificationsEnabled: () async => false,
+          nextSummaryAt: () async => null,
+          openSystemSettings: () async {},
+        ));
+
+    testWidgets(
+        'off persists through the store and hides the time row, the '
+        'armed-slot row and the notifications-off remedy', (tester) async {
+      final settings = FakeSettings(apiKey: 'k');
+      await tester.pumpWidget(screen(settings));
+      await tester.pumpAndSettle();
+      final toggle = find.byKey(const Key('summaryToggle'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      expect(toggle, findsOneWidget);
+      expect(find.byKey(const Key('reportTimeTile')), findsOneWidget);
+      expect(find.byKey(const Key('nextSummaryRow')), findsOneWidget);
+      expect(find.byKey(const Key('notificationsOffHint')), findsOneWidget);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(settings.summaryEnabled, isFalse, reason: 'persisted via update');
+      expect(find.byKey(const Key('reportTimeTile')), findsNothing);
+      expect(find.byKey(const Key('nextSummaryRow')), findsNothing);
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing,
+          reason: 'off is a choice, not a fault');
+      expect(find.byKey(const Key('calorieGoalTile')), findsOneWidget,
+          reason: 'the goal still drives the Today ring');
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(settings.summaryEnabled, isTrue);
+      expect(find.byKey(const Key('reportTimeTile')), findsOneWidget);
+    });
+
+    testWidgets('a stored off shows the switch off from the first frame',
+        (tester) async {
+      await tester.pumpWidget(
+          screen(FakeSettings(apiKey: 'k', summaryEnabled: false)));
+      await tester.pumpAndSettle();
+      final toggle = find.byKey(const Key('summaryToggle'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+      expect(find.byKey(const Key('reportTimeTile')), findsNothing);
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+    });
+  });
+
   group('next-summary row (2026-09-30)', () {
     // A fresh key per pump: the probe runs in initState, and a same-typed
     // widget at the same slot would otherwise keep the old State.

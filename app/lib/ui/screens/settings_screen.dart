@@ -98,6 +98,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   final TextEditingController _importController = TextEditingController();
   late int _lookbackDays;
   late String _reportTime;
+  late bool _summaryEnabled;
   late bool _watcherEnabled;
   bool _exporting = false;
   bool _importing = false;
@@ -126,6 +127,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _profileController = TextEditingController(text: s.dietaryProfile);
     _lookbackDays = s.lookbackDays.clamp(1, 30); // spec §6.4 range
     _reportTime = s.reportTime.isEmpty ? '21:00' : s.reportTime;
+    _summaryEnabled = s.summaryEnabled;
     _watcherEnabled = s.watcherEnabled;
     WidgetsBinding.instance.addObserver(this);
     _probeNotifications();
@@ -308,6 +310,16 @@ class _SettingsScreenState extends State<SettingsScreen>
     setState(() => _reportTime = formatted);
     await widget.settings.update(reportTime: formatted);
     await _probeNextSummary(); // the store re-armed the card for the new slot
+  }
+
+  /// The off switch for the nightly card (friend-cohort finding
+  /// 2026-10-10): before it, the only way to stop the summary was muting
+  /// the whole notification channel, which silenced meal cards too — and
+  /// this screen then painted that choice as a fault.
+  Future<void> _toggleSummary(bool enable) async {
+    setState(() => _summaryEnabled = enable);
+    await widget.settings.update(summaryEnabled: enable);
+    if (enable) await _probeNextSummary(); // the store re-armed the card
   }
 
   /// Import via PASTE, deliberately: adding a file-picker plugin for a
@@ -651,32 +663,46 @@ class _SettingsScreenState extends State<SettingsScreen>
     await widget.settings.update(lookbackDays: picked);
   }
 
-  /// Daily-report time.
+  /// Daily summary on/off, its time, the goal.
   List<Widget> _reportSection(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionReport,
           footer: context.l10n.goalFooter,
           children: [
-            GroupedRow(
-              key: const Key('reportTimeTile'),
-              icon: Icons.schedule,
+            GroupedToggleRow(
+              switchKey: const Key('summaryToggle'),
+              icon: Icons.notifications_outlined,
               iconColor: theme.colorScheme.primary,
-              title: context.l10n.settingsRowReportTime,
-              value: _reportTime,
-              onTap: _pickReportTime,
+              title: context.l10n.settingsRowDailySummary,
+              value: _summaryEnabled,
+              onChanged: (v) => _toggleSummary(v),
             ),
-            if (_notificationsOff) _notificationsOffRow(theme),
-            if (widget.nextSummaryAt != null)
+            // Off is a choice, not a fault: the slot, the armed-slot row
+            // and the notifications-off remedy all describe a delivery the
+            // user just declined, so they hide with it.
+            if (_summaryEnabled) ...[
               GroupedRow(
-                key: const Key('nextSummaryRow'),
-                icon: Icons.notifications_active_outlined,
-                iconColor: _nextSummaryProbed && _nextSummary == null
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.primary,
-                title: context.l10n.settingsRowNextSummary,
-                value: _nextSummaryProbed ? _nextSummaryLabel(_nextSummary) : '…',
-                showChevron: false,
+                key: const Key('reportTimeTile'),
+                icon: Icons.schedule,
+                iconColor: theme.colorScheme.primary,
+                title: context.l10n.settingsRowReportTime,
+                value: _reportTime,
+                onTap: _pickReportTime,
               ),
+              if (_notificationsOff) _notificationsOffRow(theme),
+              if (widget.nextSummaryAt != null)
+                GroupedRow(
+                  key: const Key('nextSummaryRow'),
+                  icon: Icons.notifications_active_outlined,
+                  iconColor: _nextSummaryProbed && _nextSummary == null
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.primary,
+                  title: context.l10n.settingsRowNextSummary,
+                  value:
+                      _nextSummaryProbed ? _nextSummaryLabel(_nextSummary) : '…',
+                  showChevron: false,
+                ),
+            ],
             GroupedRow(
               key: const Key('calorieGoalTile'),
               icon: Icons.flag_outlined,

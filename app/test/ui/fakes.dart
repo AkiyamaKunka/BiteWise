@@ -145,6 +145,8 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   @override
   String reportTime;
   @override
+  bool summaryEnabled;
+  @override
   bool watcherEnabled;
   @override
   String dietaryProfile;
@@ -161,6 +163,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     Map<String, String>? models,
     this.lookbackDays = 2,
     this.reportTime = '21:00',
+    this.summaryEnabled = true,
     this.watcherEnabled = false,
     this.dietaryProfile = '',
   })  : keysByProvider = keys ?? {'gemini': apiKey},
@@ -197,6 +200,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     String? model,
     int? lookbackDays,
     String? reportTime,
+    bool? summaryEnabled,
     bool? watcherEnabled,
     String? dietaryProfile,
     String? serverBaseUrl,
@@ -218,6 +222,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     if (model != null) this.model = model;
     if (lookbackDays != null) this.lookbackDays = lookbackDays;
     if (reportTime != null) this.reportTime = reportTime;
+    if (summaryEnabled != null) this.summaryEnabled = summaryEnabled;
     if (watcherEnabled != null) this.watcherEnabled = watcherEnabled;
     if (dietaryProfile != null) this.dietaryProfile = dietaryProfile;
     if (serverBaseUrl != null) this.serverBaseUrl = serverBaseUrl;

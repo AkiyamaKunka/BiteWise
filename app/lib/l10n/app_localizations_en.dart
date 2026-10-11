@@ -275,6 +275,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionReport => 'Report';
 
   @override
+  String get settingsRowDailySummary => 'Daily summary';
+
+  @override
   String get settingsRowReportTime => 'Report Time';
 
   @override

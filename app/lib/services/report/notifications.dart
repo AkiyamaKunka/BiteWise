@@ -31,6 +31,7 @@ class ReportNotifier {
     DateTime Function()? clock,
     NotificationPresenter? presenter,
     NotificationScheduler? scheduler,
+    Future<void> Function(int id)? canceller,
     Future<bool?> Function()? enabledProbe,
     Future<List<int>> Function()? pendingIds,
     Future<String?> Function(DateTime slotDate)? dailyBody,
@@ -41,6 +42,8 @@ class ReportNotifier {
         _presenter = presenter,
         // ignore: prefer_initializing_formals
         _scheduler = scheduler,
+        // ignore: prefer_initializing_formals
+        _canceller = canceller,
         // ignore: prefer_initializing_formals
         _enabledProbe = enabledProbe,
         // ignore: prefer_initializing_formals
@@ -70,6 +73,9 @@ class ReportNotifier {
   final DateTime Function() _clock;
   final NotificationPresenter? _presenter;
   final NotificationScheduler? _scheduler;
+
+  /// Test seam for [cancelPendingDaily]: the OS-side cancel by id.
+  final Future<void> Function(int id)? _canceller;
   final Future<bool?> Function()? _enabledProbe;
 
   /// Test seam for [scheduledDailyAt]: the ids the OS still holds pending.
@@ -178,6 +184,22 @@ class ReportNotifier {
     _dailyTimer = null;
     _dailyTime = null;
     _nextDailyFire = null;
+  }
+
+  /// Withdraw the daily card the OS itself holds — the pending iOS one-shot
+  /// from [scheduleDailyAt], or an unread card in the Android shade — for
+  /// the user switching the summary off. [cancelDaily] only stops this
+  /// process's Timer; a card already handed to the OS would still fire
+  /// tonight. Never throws: nothing pending is the common case.
+  Future<void> cancelPendingDaily() async {
+    if (_dailyTimer == null) _nextDailyFire = null; // nothing armed anywhere
+    final cancel = _canceller;
+    if (cancel != null) return cancel(dailyReportNotificationId);
+    try {
+      await _plugin.cancel(id: dailyReportNotificationId);
+    } catch (_) {
+      // No platform plugin (tests) or nothing to withdraw.
+    }
   }
 
   void _armDailyTimer() {

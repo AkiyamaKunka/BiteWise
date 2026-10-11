@@ -146,7 +146,12 @@ class AppServices {
     unawaited(() async {
       try {
         await notifier.init();
-        if (osSchedulesSummary) {
+        if (!settings.summaryEnabled) {
+          // Switched off in Settings: nothing armed, no launch catch-up.
+          // The OS card is withdrawn here too, in case the process died
+          // between the toggle's prefs write and its own cancel.
+          await notifier.cancelPendingDaily();
+        } else if (osSchedulesSummary) {
           await armOsSummary();
           if (!summaryArmed.isCompleted) summaryArmed.complete();
         } else {
@@ -281,8 +286,23 @@ class _AppSettingsStore implements SettingsStore {
   final ReportNotifier _notifier;
   _AppSettingsStore(this._s, this._notifier, {this.onReportTimeChanged});
 
-  /// iOS: re-arm the OS-scheduled summary card when the slot moves.
+  /// iOS: re-arm the OS-scheduled summary card when the slot moves or the
+  /// summary is switched back on. Null = Android, the in-process Timer.
   final Future<void> Function()? onReportTimeChanged;
+
+  /// Arm the summary for the current slot on this platform's delivery path.
+  Future<void> _rearmSummary() async {
+    final rearmOs = onReportTimeChanged;
+    if (rearmOs != null) {
+      // iOS: the OS card is the ONLY delivery. Arming the in-process
+      // Timer here too made a suspended app wake the next morning and
+      // post a second, stale 昨天 card on top of the OS one (loop find
+      // 2026-10-07).
+      await rearmOs();
+    } else {
+      await _notifier.scheduleDaily(_s.reportTime); // Android: re-arm
+    }
+  }
 
   @override
   String get apiKey => _s.activeApiKey ?? '';
@@ -300,6 +320,8 @@ class _AppSettingsStore implements SettingsStore {
   int get lookbackDays => _s.lookbackDays;
   @override
   String get reportTime => _s.reportTime;
+  @override
+  bool get summaryEnabled => _s.summaryEnabled;
   @override
   bool get watcherEnabled => _s.watcherEnabled;
   @override
@@ -326,6 +348,7 @@ class _AppSettingsStore implements SettingsStore {
     String? model,
     int? lookbackDays,
     String? reportTime,
+    bool? summaryEnabled,
     bool? watcherEnabled,
     String? dietaryProfile,
     String? serverBaseUrl,
@@ -383,18 +406,21 @@ class _AppSettingsStore implements SettingsStore {
     if (reportTime != null) {
       try {
         await _s.setReportTime(reportTime); // validates HH:mm, throws on junk
-        final rearmOs = onReportTimeChanged;
-        if (rearmOs != null) {
-          // iOS: the OS card is the ONLY delivery. Arming the in-process
-          // Timer here too made a suspended app wake the next morning and
-          // post a second, stale 昨天 card on top of the OS one (loop find
-          // 2026-10-07).
-          await rearmOs();
-        } else {
-          await _notifier.scheduleDaily(_s.reportTime); // Android: re-arm
-        }
+        // A slot edit while the summary is off must arm nothing.
+        if (_s.summaryEnabled) await _rearmSummary();
       } on ArgumentError {
         // UI always sends zero-padded HH:mm; a junk value keeps the default.
+      }
+    }
+    if (summaryEnabled != null) {
+      await _s.setSummaryEnabled(summaryEnabled);
+      if (summaryEnabled) {
+        await _rearmSummary();
+      } else {
+        // Both halves: this process's Timer AND the card the OS already
+        // holds (the iOS one-shot) — else tonight's card still fires.
+        _notifier.cancelDaily();
+        await _notifier.cancelPendingDaily();
       }
     }
     if (watcherEnabled != null) {

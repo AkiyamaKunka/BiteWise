@@ -209,6 +209,7 @@
   },
   "settingsRowCoverage": "Photo Coverage",
   "settingsSectionReport": "Report",
+  "settingsRowDailySummary": "Daily summary",
   "settingsRowReportTime": "Report Time",
   "settingsRowNextSummary": "Next summary",
   "timeToday": "Today {time}",

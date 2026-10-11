@@ -45,6 +45,10 @@ abstract class SettingsStore {
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time
+
+  /// Whether the daily summary notification is delivered at all (default
+  /// true). Off cancels every delivery path; the time row hides with it.
+  bool get summaryEnabled;
   bool get watcherEnabled;
   String get dietaryProfile; // spec §1.3 photo-prompt appendix
 
@@ -77,6 +81,7 @@ abstract class SettingsStore {
     String? model,
     int? lookbackDays,
     String? reportTime,
+    bool? summaryEnabled,
     bool? watcherEnabled,
     String? dietaryProfile,
     String? serverBaseUrl,

@@ -261,6 +261,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionReport => '报告';
 
   @override
+  String get settingsRowDailySummary => '每日总结';
+
+  @override
   String get settingsRowReportTime => '报告时间';
 
   @override

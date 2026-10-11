@@ -524,6 +524,12 @@ abstract class AppLocalizations {
   /// **'Report'**
   String get settingsSectionReport;
 
+  /// No description provided for @settingsRowDailySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily summary'**
+  String get settingsRowDailySummary;
+
   /// No description provided for @settingsRowReportTime.
   ///
   /// In en, this message translates to:

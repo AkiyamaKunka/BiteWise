@@ -71,6 +71,7 @@
   "lookbackDays": "{count} 天",
   "settingsRowCoverage": "照片覆盖检查",
   "settingsSectionReport": "报告",
+  "settingsRowDailySummary": "每日总结",
   "settingsRowReportTime": "报告时间",
   "settingsRowNextSummary": "下次总结",
   "timeToday": "今天 {time}",

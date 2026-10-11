@@ -125,4 +125,50 @@ void main() {
     expect(notifier.nextDailyFire, isNotNull);
     notifier.cancelDaily();
   });
+
+  test('summaryEnabled off cancels BOTH the Timer and the OS card, a slot '
+      'edit while off arms nothing, on re-arms (2026-10-10)', () async {
+    // Friends on the pre-08-16 APKs got a nightly card with no off
+    // switch; muting the OS channel was the only escape and silenced meal
+    // cards too.
+    SharedPreferences.setMockInitialValues({});
+    final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: MemoryKeyStore());
+    final cancelled = <int>[];
+    final notifier = ReportNotifier(
+        presenter: (_, _, _) async {},
+        canceller: (id) async => cancelled.add(id));
+
+    // Android: the in-process Timer path.
+    final android = createSettingsStore(settings, notifier: notifier);
+    expect(android.summaryEnabled, isTrue, reason: 'default on');
+    await android.update(reportTime: '22:00');
+    expect(notifier.nextDailyFire, isNotNull);
+    await android.update(summaryEnabled: false);
+    expect(settings.summaryEnabled, isFalse);
+    expect(android.summaryEnabled, isFalse);
+    expect(notifier.nextDailyFire, isNull, reason: 'the Timer is cancelled');
+    expect(cancelled, [ReportNotifier.dailyReportNotificationId],
+        reason: 'and the card the OS holds is withdrawn');
+    await android.update(reportTime: '23:00');
+    expect(settings.reportTime, '23:00');
+    expect(notifier.nextDailyFire, isNull,
+        reason: 'a slot edit while off must arm nothing');
+    await android.update(summaryEnabled: true);
+    expect(notifier.nextDailyFire, isNotNull, reason: 'on re-arms');
+    notifier.cancelDaily();
+
+    // iOS: the OS hook, never the Timer.
+    var rearmed = 0;
+    final ios = createSettingsStore(settings,
+        notifier: notifier, onReportTimeChanged: () async => rearmed++);
+    await ios.update(summaryEnabled: false);
+    await ios.update(reportTime: '21:00');
+    expect(rearmed, 0, reason: 'off: no re-arm, not even for a slot edit');
+    expect(cancelled, hasLength(2));
+    await ios.update(summaryEnabled: true);
+    expect(rearmed, 1);
+    expect(notifier.nextDailyFire, isNull, reason: 'no Timer on the OS path');
+  });
 }
