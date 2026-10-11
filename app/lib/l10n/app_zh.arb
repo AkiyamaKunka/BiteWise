@@ -103,6 +103,7 @@
   "backgroundScanNever": "尚未运行",
   "backgroundScanDisabled": "系统已关闭",
   "backgroundScanRestricted": "电池受限",
+  "backgroundScanIosHint": "后台扫描由 iOS 决定何时运行（通常一天几次）。在多任务界面上滑关闭筷拍后，后台扫描会停止，直到下次打开筷拍；期间拍的照片会在打开时补扫。",
   "settingsSectionProfile": "个人资料",
   "settingsRowDietaryProfile": "饮食偏好",
   "profileSet": "已设置",

@@ -300,6 +300,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backgroundScanRestricted => '电池受限';
 
   @override
+  String get backgroundScanIosHint =>
+      '后台扫描由 iOS 决定何时运行（通常一天几次）。在多任务界面上滑关闭筷拍后，后台扫描会停止，直到下次打开筷拍；期间拍的照片会在打开时补扫。';
+
+  @override
   String get settingsSectionProfile => '个人资料';
 
   @override

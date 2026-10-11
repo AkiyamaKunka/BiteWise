@@ -758,6 +758,71 @@ void planTuningTests() {
       expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
     });
 
+    // 2026-10-10: iOS alone decides when BGAppRefresh launches the scan (a
+    // few times a day), and swiping the app away in the app switcher stops
+    // every launch until the next open — so a 后台扫描 time that stopped
+    // advancing looked exactly like a bug. The Photos footer now says so:
+    // on iOS only (Android's WorkManager survives a swipe-away), only
+    // while the row is there, and not over the Off remedy.
+    testWidgets('iOS: the Photos footer explains the OS cadence and force-quit',
+        (tester) async {
+      Widget bg({
+        Future<DateTime?> Function()? last,
+        bool refreshOn = true,
+      }) =>
+          _wrap(SettingsScreen(
+            key: UniqueKey(),
+            settings: FakeSettings(apiKey: 'k'),
+            analyzer: FakeAnalyzer(),
+            dao: FakeDao(),
+            requestPhotoPermission: () async => true,
+            lastBackgroundScan: last,
+            backgroundRefreshEnabled: () async => refreshOn,
+            openSystemSettings: () async {},
+          ));
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      await tester.pumpWidget(bg(last: () async => yesterday));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('iOS decides when the background scan runs'),
+          findsOneWidget);
+      expect(find.textContaining('app switcher'), findsOneWidget);
+      // The generic watcher sentence is still there, in the same footer.
+      expect(find.textContaining('lookback window'), findsOneWidget);
+      // Refresh off: the red 'Off' remedy is the explanation.
+      await tester.pumpWidget(bg(last: () async => null, refreshOn: false));
+      await tester.pumpAndSettle();
+      expect(find.text('Off'), findsOneWidget);
+      expect(find.textContaining('app switcher'), findsNothing);
+      // No probe → no row → nothing to explain.
+      await tester.pumpWidget(bg());
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
+      expect(find.textContaining('app switcher'), findsNothing);
+      expect(find.textContaining('lookback window'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Android: no force-quit note — WorkManager survives a swipe',
+        (tester) async {
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => yesterday,
+        backgroundRefreshEnabled: () async => true,
+        openSystemSettings: () async {},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('app switcher'), findsNothing);
+      expect(find.textContaining('iOS decides'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
     testWidgets('Background App Refresh off → the row becomes the remedy',
         (tester) async {
       // iOS refuses every BGTask request while the system switch (or Low

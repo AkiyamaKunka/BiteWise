@@ -590,6 +590,12 @@ abstract class AppLocalizations {
   /// **'Restricted'**
   String get backgroundScanRestricted;
 
+  /// No description provided for @backgroundScanIosHint.
+  ///
+  /// In en, this message translates to:
+  /// **'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.'**
+  String get backgroundScanIosHint;
+
   /// No description provided for @settingsSectionProfile.
   ///
   /// In en, this message translates to:

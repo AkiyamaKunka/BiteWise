@@ -550,11 +550,29 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
   ];
 
+  /// The Photos footer, plus on iOS why the 后台扫描 time is what it is:
+  /// iOS alone picks when BGAppRefresh launches the scan (a few times a
+  /// day, AppDelegate.swift), and a swipe-away in the app switcher stops
+  /// every launch until the next open — so a time that stopped advancing
+  /// looked exactly like the real bug run 4 chased through this row.
+  /// Said under the group, Apple-style, so the row value stays short
+  /// (d5458ca title fit). Not over the Off remedy, which already says what
+  /// to do, and not on Android: WorkManager survives a swipe-away there.
+  String _photosFooter() {
+    final l10n = context.l10n;
+    final explainIos = widget.lastBackgroundScan != null &&
+        !_backgroundRefreshOff &&
+        defaultTargetPlatform == TargetPlatform.iOS;
+    return explainIos
+        ? '${l10n.settingsPhotosFooter}\n${l10n.backgroundScanIosHint}'
+        : l10n.settingsPhotosFooter;
+  }
+
   /// Camera-roll watching, coverage audit, backfill window.
   List<Widget> _photoSection(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionPhotos,
-          footer: context.l10n.settingsPhotosFooter,
+          footer: _photosFooter(),
           children: [
             GroupedToggleRow(
               switchKey: const Key('watcherToggle'),
