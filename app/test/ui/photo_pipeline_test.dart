@@ -338,6 +338,172 @@ void main() {
     expect(out.kind, PhotoOutcomeKind.failed); // contained, no throw (spec §6)
     expect(dao.ledger[_hash], IngestionStatus.failed);
   });
+
+  group('bindStream (share sheet) announces the verdicts nobody awaits', () {
+    // A shared photo has no awaiting caller — the add flow awaits enqueue()
+    // and shows a dialog, the watcher is meant to stay quiet — so a share
+    // that ended not-food / duplicate / already logged / still analyzing
+    // gave NO feedback at all, indistinguishable from a share that silently
+    // failed (simulator, 2026-10-10).
+    const notFood = AnalysisOutcome(
+        analysis: {'is_food': false}, isFood: false, wall: Duration.zero);
+
+    /// Shares [photos] through a bound stream and returns what notify saw
+    /// once [done] holds (plus a beat, to catch a late second snackbar).
+    Future<List<PhotoOutcome>> share(FakeDao dao, FakeAnalyzer analyzer,
+        List<IntakePhoto> photos, bool Function(FakeDao dao) done,
+        {void Function(PhotoOutcome)? onNotify}) async {
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: analyzer,
+          notify: (o) {
+            notes.add(o);
+            onNotify?.call(o);
+          });
+      final stream = StreamController<IntakePhoto>();
+      pipeline.bindStream(stream.stream);
+      photos.forEach(stream.add);
+      await stream.close();
+      await _until(() => done(dao));
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      await pipeline.dispose();
+      return notes;
+    }
+
+    test('not food → exactly one snackbar, kind skipped', () async {
+      final dao = FakeDao();
+      final notes = await share(
+          dao,
+          FakeAnalyzer()..nextPhotoOutcome = notFood,
+          [_photo(deliberate: true)],
+          (d) => d.ledger[_hash] == IngestionStatus.skipped);
+      expect(notes.map((o) => o.kind), [PhotoOutcomeKind.skipped]);
+    });
+
+    for (final (what, dao, kind) in [
+      (
+        'a duplicate inside the 5-minute window',
+        FakeDao()..duplicatePhoto = true,
+        PhotoOutcomeKind.duplicate
+      ),
+      (
+        'an already logged photo',
+        FakeDao()..ledger[_hash] = IngestionStatus.saved,
+        PhotoOutcomeKind.alreadyTracked
+      ),
+      (
+        'a photo another run is still analyzing',
+        FakeDao()..ledger[_hash] = IngestionStatus.processing,
+        PhotoOutcomeKind.inFlight
+      ),
+    ]) {
+      test('$what → exactly one snackbar, kind ${kind.name}', () async {
+        final seen = <PhotoOutcome>[];
+        final notes = await share(dao, FakeAnalyzer(), [_photo(deliberate: true)],
+            (_) => seen.isNotEmpty,
+            onNotify: seen.add);
+        expect(notes.map((o) => o.kind), [kind]);
+        expect(dao.meals, isEmpty);
+      });
+    }
+
+    test('a save and a permanent failure are still said ONCE (by process)',
+        () async {
+      final saved = await share(
+          FakeDao(),
+          FakeAnalyzer()
+            ..nextPhotoOutcome = AnalysisOutcome(
+                analysis: _foodAnalysis(), isFood: true, wall: Duration.zero),
+          [_photo(deliberate: true)],
+          (d) => d.ledger[_hash] == IngestionStatus.saved);
+      expect(saved.map((o) => o.kind), [PhotoOutcomeKind.saved]);
+
+      final failed = await share(
+          FakeDao(),
+          FakeAnalyzer()
+            ..nextPhotoOutcome =
+                const AnalysisOutcome(error: 'bad key', wall: Duration.zero),
+          [_photo(deliberate: true)],
+          (d) => d.ledger[_hash] == IngestionStatus.failed);
+      expect(failed.map((o) => o.kind), [PhotoOutcomeKind.failed]);
+    });
+
+    test('a transient failure stays silent: the share copy is gone, so '
+        '"kept for retry" would be untrue', () async {
+      var analyzed = false;
+      final dao = FakeDao();
+      final notes = await share(
+          dao,
+          FakeAnalyzer()
+            ..nextPhotoOutcome = const AnalysisOutcome(
+                error: 'rate limit', retryable: true, wall: Duration.zero)
+            ..onAnalyze = () async => analyzed = true,
+          [_photo(deliberate: true)],
+          (_) => analyzed);
+      expect(dao.ledger, isEmpty); // released, no row (spec §2.3)
+      expect(notes, isEmpty);
+    });
+
+    test('enqueue() (the add flow) is NOT told — it renders its own dialog',
+        () async {
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer()..nextPhotoOutcome = notFood,
+          notify: notes.add);
+      final out = await pipeline.enqueue(_photo(deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.skipped);
+      expect(notes, isEmpty,
+          reason: 'a second snackbar behind the add flow\'s dialog');
+    });
+
+    test('bind() (the automatic watcher) stays quiet about a skipped photo',
+        () async {
+      // Every screenshot the automatic scan sees is "not food"; announcing
+      // that with the app open would be a toast per screenshot.
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer()..nextPhotoOutcome = notFood,
+          notify: notes.add);
+      final intake = _SinkCapturingIntake();
+      pipeline.bind(intake);
+      expect(await intake.sink!(_photo(), null), isTrue);
+      expect(notes, isEmpty);
+    });
+
+    test('a throwing snackbar never poisons the shared FIFO', () async {
+      // bindStream's notify runs ON the tail every path chains onto: an
+      // unshielded throw would reject it and no later photo (watcher,
+      // share, coverage Log/Retry) would process until an app restart.
+      final second = Uint8List.fromList([4, 5, 6]);
+      final secondHash = md5.convert(second).toString().toLowerCase();
+      final dao = FakeDao();
+      final notes = await share(
+          dao,
+          FakeAnalyzer()..nextPhotoOutcome = notFood,
+          [
+            _photo(deliberate: true),
+            IntakePhoto(second, 'asset2', 'IMG_2.jpg', deliberate: true),
+          ],
+          (d) => d.ledger[secondHash] == IngestionStatus.skipped,
+          onNotify: (_) => throw StateError('snackbar died'));
+      expect(dao.ledger[_hash], IngestionStatus.skipped);
+      expect(notes, hasLength(2));
+    });
+  });
+}
+
+/// Polls until [done] holds: bound-stream photos resolve on the pipeline's
+/// private FIFO, which nothing outside the pipeline can await.
+Future<void> _until(bool Function() done) async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (!done()) {
+    expect(DateTime.now().isBefore(deadline), isTrue,
+        reason: 'the bound stream never reached the expected state');
+    await Future<void>.delayed(const Duration(milliseconds: 2));
+  }
 }
 
 /// Hands the test the sink `bind()` attaches, so it can be driven directly.
