@@ -15,6 +15,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
+import '../large_text.dart';
+
 /// Apple's ACTUAL neutral system values, not seed-derived: deriving these
 /// from the clay scheme tinted every page pink (user verdict 2026-08-02).
 /// Clay stays the ACCENT; surfaces are neutral — which is also exactly
@@ -217,6 +219,15 @@ class GroupedRow extends StatelessWidget {
         : enabled
             ? scheme.onSurface
             : scheme.onSurface.withValues(alpha: 0.38);
+    final titleStyle = theme.textTheme.bodyLarge?.copyWith(color: titleColor);
+    final valueStyle =
+        theme.textTheme.bodyLarge?.copyWith(color: scheme.onSurfaceVariant);
+    // Accessibility text sizes: the value moves UNDER the title and both
+    // wrap, the way iOS Settings lays its cells out there. Side by side,
+    // the value's cap plus the chevron left a 2-glyph title 77 pt at AX5,
+    // so the root Settings read '后…  系统已关闭' and 'AI…  Claud…'
+    // (2026-10-10, test/ui/large_text_overflow_test.dart).
+    final stacked = isLargeText(context);
     return InkWell(
       onTap: !enabled || onTap == null
           ? null
@@ -227,39 +238,55 @@ class GroupedRow extends StatelessWidget {
       child: ConstrainedBox(
         constraints: const BoxConstraints(minHeight: 44),
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          padding: EdgeInsets.symmetric(
+              horizontal: 16, vertical: stacked ? 10 : 6),
           child: Row(
             children: [
               if (icon != null) ...[
                 RowBadge(icon: icon!, color: iconColor ?? scheme.primary),
                 const SizedBox(width: 12),
               ],
-              Expanded(
-                child: Text(
-                  title,
-                  style: theme.textTheme.bodyLarge
-                      ?.copyWith(color: titleColor),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              if (value != null) ...[
-                const SizedBox(width: 12),
-                // NOT Flexible: a flex value would split the row 50/50
-                // with the title and truncate "Backfill Lookback" beside
-                // a five-character value. The cap keeps a runaway value
-                // from crushing the title instead.
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 170),
+              if (stacked)
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: titleStyle),
+                      if (value != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(value!, style: valueStyle),
+                        ),
+                    ],
+                  ),
+                )
+              else ...[
+                Expanded(
                   child: Text(
-                    value!,
-                    style: theme.textTheme.bodyLarge
-                        ?.copyWith(color: scheme.onSurfaceVariant),
+                    title,
+                    style: titleStyle,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
                   ),
                 ),
+                if (value != null) ...[
+                  const SizedBox(width: 12),
+                  // NOT Flexible: a flex value would split the row 50/50
+                  // with the title and truncate "Backfill Lookback" beside
+                  // a five-character value. The cap keeps a runaway value
+                  // from crushing the title instead.
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 170),
+                    child: Text(
+                      value!,
+                      style: valueStyle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      textAlign: TextAlign.end,
+                    ),
+                  ),
+                ],
               ],
               if (trailing != null) ...[
                 const SizedBox(width: 8),
