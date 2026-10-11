@@ -12,6 +12,7 @@
 		1483FFDB209FBFAA5630E166 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = C61AF55DB959788E1B53D75F /* Foundation.framework */; };
 		1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */ = {isa = PBXBuildFile; fileRef = 1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */; };
 		15F02A2635D30B9300ABCF1A /* Pods_RunnerTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F9BC0C8EB7D7D1A9041173E8 /* Pods_RunnerTests.framework */; };
+		2717728B087B0C7685D21D38 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 2A25721E49F50787B8479253 /* PrivacyInfo.xcprivacy */; };
 		331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 331C807B294A618700263BE5 /* RunnerTests.swift */; };
 		3B3967161E833CAA004F5970 /* AppFrameworkInfo.plist in Resources */ = {isa = PBXBuildFile; fileRef = 3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */; };
 		471D18A24BDDC47E7FDDA285 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F294E0FDF0C79180F70B0B24 /* Pods_Runner.framework */; };
@@ -25,6 +26,7 @@
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
 		9D25CD89DEEBB3D5D69795A8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = FF80F3AC411DE1418D7E15FD /* InfoPlist.strings */; };
 		A695B57625095D4E609386C2 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15C76B2DE7664DCB4D45642 /* ShareViewController.swift */; };
+		D0B6808D19B1D28F7152C855 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 30F109BF9CA2B6004D7C6CC4 /* PrivacyInfo.xcprivacy */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -72,6 +74,8 @@
 		1498D2321E8E86230040F4C2 /* GeneratedPluginRegistrant.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = GeneratedPluginRegistrant.h; sourceTree = "<group>"; };
 		1498D2331E8E89220040F4C2 /* GeneratedPluginRegistrant.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = GeneratedPluginRegistrant.m; sourceTree = "<group>"; };
 		16B110E2E445EC59DB957826 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		2A25721E49F50787B8479253 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		30F109BF9CA2B6004D7C6CC4 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		331C807B294A618700263BE5 /* RunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RunnerTests.swift; sourceTree = "<group>"; };
 		331C8081294A63A400263BE5 /* RunnerTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = RunnerTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
@@ -183,6 +187,7 @@
 				16B110E2E445EC59DB957826 /* Info.plist */,
 				98F3D45FC0BDAFCFBFA62342 /* ShareExtension.entitlements */,
 				FF80F3AC411DE1418D7E15FD /* InfoPlist.strings */,
+				2A25721E49F50787B8479253 /* PrivacyInfo.xcprivacy */,
 			);
 			name = ShareExtension;
 			path = ShareExtension;
@@ -236,6 +241,7 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				4377BC1A20341ED1CFBB3347 /* InfoPlist.strings */,
+				30F109BF9CA2B6004D7C6CC4 /* PrivacyInfo.xcprivacy */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -367,6 +373,7 @@
 			files = (
 				7BDA474982E280EEF692E8EE /* MainInterface.storyboard in Resources */,
 				9D25CD89DEEBB3D5D69795A8 /* InfoPlist.strings in Resources */,
+				2717728B087B0C7685D21D38 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -379,6 +386,7 @@
 				97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */,
 				97C146FC1CF9000F007C117D /* Main.storyboard in Resources */,
 				01D31624B297AC3E223D1DC8 /* InfoPlist.strings in Resources */,
+				D0B6808D19B1D28F7152C855 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

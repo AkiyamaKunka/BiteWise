@@ -95,6 +95,11 @@ jobs:
           for bundle in "$app" "$app/PlugIns/ShareExtension.appex"; do
             printf '%s: ' "$(basename "$bundle")"
             /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$bundle/Info.plist" | paste -sd ' ' -
+            # Each executable uses a required-reason API (UserDefaults via
+            # receive_sharing_intent, which ships no manifest of its own), so
+            # App Store Connect emails ITMS-91053 for any bundle missing this.
+            test -f "$bundle/PrivacyInfo.xcprivacy" || { echo "::error::$(basename "$bundle") has no PrivacyInfo.xcprivacy (ITMS-91053 Missing API declaration would follow)"; exit 1; }
+            plutil -lint "$bundle/PrivacyInfo.xcprivacy"
           done
 
   android-build:
