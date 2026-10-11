@@ -240,6 +240,7 @@
   "settingsRowBackgroundScan": "Background scan",
   "backgroundScanNever": "Not run yet",
   "backgroundScanDisabled": "Off",
+  "backgroundScanRestricted": "Restricted",
   "settingsSectionProfile": "Profile",
   "settingsRowDietaryProfile": "Dietary Profile",
   "profileSet": "Set",

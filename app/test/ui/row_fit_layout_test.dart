@@ -243,10 +243,18 @@ void main() {
           });
         }
 
-        for (final refreshOn in const [false, true]) {
+        // Refresh on → the last-run time; off → the remedy, worded per
+        // platform: 'Off' / '系统已关闭' on iOS (Background App Refresh),
+        // 'Restricted' / '电池受限' on Android (App battery usage,
+        // 2026-10-10). Each must leave the 'Background scan' title whole.
+        for (final (platform, refreshOn) in const [
+          (TargetPlatform.iOS, true),
+          (TargetPlatform.iOS, false),
+          (TargetPlatform.android, false),
+        ]) {
           testWidgets(
-              'background scan row (refresh ${refreshOn ? 'on' : 'off'}), '
-              '$lang at $width pt', (tester) async {
+              'background scan row (refresh ${refreshOn ? 'on' : 'off'}, '
+              '${platform.name}), $lang at $width pt', (tester) async {
             _phone(tester, width);
             await tester.pumpWidget(_app(
                 Locale(lang),
@@ -264,10 +272,21 @@ void main() {
             final row = find.byKey(const Key('backgroundScanRow'));
             await tester.ensureVisible(row);
             await tester.pumpAndSettle();
+            if (!refreshOn) {
+              final expected = switch ((platform, lang)) {
+                (TargetPlatform.android, 'zh') => '电池受限',
+                (TargetPlatform.android, _) => 'Restricted',
+                (_, 'zh') => '系统已关闭',
+                _ => 'Off',
+              };
+              expect(
+                  find.descendant(of: row, matching: find.text(expected)),
+                  findsOneWidget);
+            }
             expect(_ellipsised(tester, row), isEmpty,
                 reason: 'the background scan row must read in full');
             expect(tester.takeException(), isNull);
-          });
+          }, variant: TargetPlatformVariant.only(platform));
         }
 
         // Round 4b (2026-10-08): a NEW meal's empty macro fields show

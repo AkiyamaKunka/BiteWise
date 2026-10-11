@@ -20,6 +20,8 @@ import '../services/analyzer/provider_analyzers.dart'
     show ServerAnalyzer, createMultiProviderAnalyzer;
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
+import '../services/photo/background_restriction.dart'
+    show androidBackgroundAllowed;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
@@ -230,10 +232,14 @@ class AppServices {
       lastBackgroundScan: lastBackgroundRun,
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the
-      // row would say "not run yet" forever and never say why.
+      // row would say "not run yet" forever and never say why. Android's
+      // counterpart is the user-set 电池 › 受限 bucket, which parks the
+      // periodic WorkManager job (the scan AND the nightly summary).
       backgroundRefreshEnabled: Platform.isIOS
           ? () async => (await Permission.backgroundRefresh.status).isGranted
-          : null,
+          : Platform.isAndroid
+              ? androidBackgroundAllowed
+              : null,
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },

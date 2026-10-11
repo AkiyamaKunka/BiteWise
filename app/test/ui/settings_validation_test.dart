@@ -782,7 +782,59 @@ void planTuningTests() {
       await tester.tap(find.byKey(const Key('backgroundScanRow')));
       await tester.pump();
       expect(opened, 1);
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    // 2026-10-10: on Android the same probe answers for the user-set 电池 ›
+    // 受限 bucket (ActivityManager.isBackgroundRestricted), which parks the
+    // periodic WorkManager job — the closed-app scan AND the nightly
+    // summary — for days. Until now the row showed 'Not run yet' / a
+    // frozen time with no hint and no link, exactly like a healthy phone.
+    testWidgets('Android Restricted battery → "Restricted", tap opens App info',
+        (tester) async {
+      var opened = 0;
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => false,
+        openSystemSettings: () async => opened++,
+      )));
+      await tester.pumpAndSettle();
+      // Named after the switch the chevron leads to (App battery usage ›
+      // Restricted), not iOS's 'Off'.
+      expect(find.text('Restricted'), findsOneWidget);
+      expect(find.text('Off'), findsNothing);
+      expect(find.text('Not run yet'), findsNothing);
+      await tester.tap(find.byKey(const Key('backgroundScanRow')));
+      await tester.pump();
+      expect(opened, 1);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('an unanswered Android probe keeps the plain row',
+        (tester) async {
+      // No channel (an older native build) → null: no remedy, no chevron,
+      // the last-run time still shows.
+      var opened = 0;
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => null,
+        openSystemSettings: () async => opened++,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Not run yet'), findsOneWidget);
+      expect(find.text('Restricted'), findsNothing);
+      await tester.tap(find.byKey(const Key('backgroundScanRow')));
+      await tester.pump();
+      expect(opened, 0);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('nothing armed → "Not scheduled"; no probe → no row',
         (tester) async {

@@ -9,6 +9,7 @@ import 'dart:async' show unawaited;
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -58,8 +59,9 @@ class SettingsScreen extends StatefulWidget {
   /// A null PROBE hides the row.
   final Future<DateTime?> Function()? lastBackgroundScan;
 
-  /// iOS Background App Refresh; false turns the background-scan row into
-  /// the remedy ("off in Settings", opens system settings).
+  /// Whether the OS still launches the background scan: iOS Background App
+  /// Refresh, or on Android not the user-set 电池 › 受限 bucket. False
+  /// turns the background-scan row into the remedy (opens system settings).
   final Future<bool?> Function()? backgroundRefreshEnabled;
 
   /// Coverage-audit pieces; all three null in tests → the tile is hidden.
@@ -117,7 +119,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   DateTime? _lastBackgroundScan;
   bool _lastBackgroundProbed = false;
 
-  /// True only when iOS says Background App Refresh is OFF for this app.
+  /// True only when the OS says the background scan cannot launch: iOS
+  /// Background App Refresh off, or Android's 电池 › 受限 bucket.
   bool _backgroundRefreshOff = false;
 
   @override
@@ -178,6 +181,14 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   String _lastBackgroundLabel(DateTime? when) =>
       when == null ? context.l10n.backgroundScanNever : _dayTime(when);
+
+  /// The remedy value, worded after the switch the chevron leads to: iOS
+  /// 'Off' (Background App Refresh), Android 'Restricted' (App battery
+  /// usage). Both short — 'Off in Settings' once cut the English title.
+  String _backgroundOffLabel() =>
+      defaultTargetPlatform == TargetPlatform.android
+          ? context.l10n.backgroundScanRestricted
+          : context.l10n.backgroundScanDisabled;
 
   /// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
   String _dayTime(DateTime when) {
@@ -575,8 +586,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // (the red badge and chevron lead to the remedy): 'Off in
                 // Settings' cut the English title to 'Background sc…'
                 // (loop find 2026-10-08, test/ui/row_fit_layout_test.dart).
+                // Android's 电池 › 受限 (App battery usage › Restricted)
+                // parks the periodic job — the scan AND the nightly
+                // summary — for days, and until 2026-10-10 the row showed
+                // 尚未运行 / a frozen time with no hint; the chevron now
+                // lands on App info, where that switch is one tap away.
                 value: _backgroundRefreshOff
-                    ? context.l10n.backgroundScanDisabled
+                    ? _backgroundOffLabel()
                     : _lastBackgroundProbed
                         ? _lastBackgroundLabel(_lastBackgroundScan)
                         : '…',

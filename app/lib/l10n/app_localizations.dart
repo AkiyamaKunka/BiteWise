@@ -584,6 +584,12 @@ abstract class AppLocalizations {
   /// **'Off'**
   String get backgroundScanDisabled;
 
+  /// No description provided for @backgroundScanRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get backgroundScanRestricted;
+
   /// No description provided for @settingsSectionProfile.
   ///
   /// In en, this message translates to:

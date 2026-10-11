@@ -311,6 +311,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundScanDisabled => 'Off';
 
   @override
+  String get backgroundScanRestricted => 'Restricted';
+
+  @override
   String get settingsSectionProfile => 'Profile';
 
   @override
