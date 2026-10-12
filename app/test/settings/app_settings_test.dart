@@ -189,4 +189,137 @@ void main() {
     await s.setGeminiApiKey('k');
     expect(notifications, 4);
   });
+
+  group('automatic-analysis latch (rejected key / blocked region)', () {
+    test('arms, persists across a load, and gates canAutoAnalyze only',
+        () async {
+      final (s, prefs, keys) = await freshSettings();
+      await s.setGeminiApiKey('k');
+      expect(s.canAutoAnalyze, isTrue);
+      await s.blockAutomaticAnalysis('rejectedKey',
+          revision: s.credentialRevision);
+      expect(s.isAnalysisBlocked, isTrue);
+      expect(s.analysisBlockedKind, 'rejectedKey');
+      expect(s.canAutoAnalyze, isFalse);
+      expect(s.canAnalyze, isTrue, reason: 'deliberate adds still analyze');
+
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.analysisBlockedKind, 'rejectedKey');
+      expect(again.canAutoAnalyze, isFalse);
+      // Kind, time and provider only — nothing derived from the key.
+      final stored = {
+        for (final k in prefs.getKeys())
+          if (k.startsWith('settings.analysis_blocked')) k: prefs.get(k),
+      };
+      expect(stored.keys, hasLength(3));
+      expect(stored['settings.analysis_blocked_kind'], 'rejectedKey');
+      expect(stored['settings.analysis_blocked_provider'], 'gemini');
+      expect(DateTime.tryParse('${stored['settings.analysis_blocked_until']}'),
+          isNotNull);
+    });
+
+    test('expires by itself: 24 h for a rejected key, 2 h for a region',
+        () async {
+      final (s, _, _) = await freshSettings();
+      final now = DateTime.now();
+      await s.blockAutomaticAnalysis('rejectedKey',
+          now: now.subtract(const Duration(hours: 23)));
+      expect(s.isAnalysisBlocked, isTrue);
+      await s.blockAutomaticAnalysis('rejectedKey',
+          now: now.subtract(const Duration(hours: 24, minutes: 1)));
+      expect(s.isAnalysisBlocked, isFalse);
+      expect(s.analysisBlockedKind, isNull);
+
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.subtract(const Duration(hours: 1)));
+      expect(s.analysisBlockedKind, 'regionBlocked');
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.subtract(const Duration(hours: 2, minutes: 1)));
+      expect(s.isAnalysisBlocked, isFalse);
+
+      await s.blockAutomaticAnalysis('billing');
+      expect(s.isAnalysisBlocked, isFalse, reason: 'only the two kinds');
+    });
+
+    test('EVERY credential, provider, model or server edit lifts it',
+        () async {
+      final (s, _, _) = await freshSettings();
+      final edits = <String, Future<void> Function()>{
+        'gemini key': () => s.setGeminiApiKey('k2'),
+        'gemini model': () => s.setModel('gemini-x'),
+        'provider': () => s.setProvider(AiProvider.openai),
+        'openai key': () => s.setOpenaiApiKey('o'),
+        'anthropic key': () => s.setAnthropicApiKey('a'),
+        'qwen key': () => s.setQwenApiKey('q'),
+        'doubao key': () => s.setDoubaoApiKey('d'),
+        'glm key': () => s.setGlmApiKey('g'),
+        'deepseek key': () => s.setDeepseekApiKey('ds'),
+        'xai key': () => s.setXaiApiKey('x'),
+        'openrouter key': () => s.setOpenrouterApiKey('or'),
+        'server key': () => s.setServerApiKey('sv'),
+        'server address': () => s.setServerBaseUrl('http://host.test'),
+        'server plan': () => s.setServerBackend('glm'),
+        'server model': () => s.setServerModel('sonnet'),
+        'openai model': () => s.setOpenaiModel('m'),
+        'anthropic model': () => s.setAnthropicModel('m'),
+        'qwen model': () => s.setQwenModel('m'),
+        'doubao model': () => s.setDoubaoModel('m'),
+        'glm model': () => s.setGlmModel('m'),
+        'deepseek model': () => s.setDeepseekModel('m'),
+        'xai model': () => s.setXaiModel('m'),
+        'openrouter model': () => s.setOpenrouterModel('m'),
+      };
+      for (final MapEntry(:key, :value) in edits.entries) {
+        await s.blockAutomaticAnalysis('rejectedKey');
+        expect(s.isAnalysisBlocked, isTrue, reason: key);
+        final rev = s.credentialRevision;
+        await value();
+        expect(s.isAnalysisBlocked, isFalse, reason: key);
+        expect(s.credentialRevision, greaterThan(rev), reason: key);
+      }
+    });
+
+    test('a refusal read before a key edit is dropped (stale revision)',
+        () async {
+      final (s, _, _) = await freshSettings();
+      final before = s.credentialRevision;
+      await s.setGeminiApiKey('new-key');
+      await s.blockAutomaticAnalysis('rejectedKey', revision: before);
+      expect(s.isAnalysisBlocked, isFalse);
+    });
+
+    test('clearAnalysisBlock lifts it, on disk too', () async {
+      final (s, prefs, keys) = await freshSettings();
+      await s.blockAutomaticAnalysis('regionBlocked');
+      await s.clearAnalysisBlock();
+      expect(s.isAnalysisBlocked, isFalse);
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.isAnalysisBlocked, isFalse);
+    });
+
+    test('belongs to the provider that set it', () async {
+      final (s, prefs, _) = await freshSettings();
+      await s.blockAutomaticAnalysis('regionBlocked');
+      // Another engine switched providers on disk after we armed it.
+      await prefs.setString('settings.provider', AiProvider.deepseek.name);
+      await prefs.setString(
+          'settings.analysis_blocked_provider', AiProvider.gemini.name);
+      final other = await AppSettings.load(
+          prefs: prefs, keyStore: MemoryKeyStore());
+      expect(other.provider, AiProvider.deepseek);
+      expect(other.isAnalysisBlocked, isFalse);
+    });
+
+    test('reloadAnalysisBlock sees what the background engine wrote',
+        () async {
+      final (s, prefs, _) = await freshSettings();
+      expect(s.isAnalysisBlocked, isFalse);
+      // The background isolate armed it on disk.
+      await prefs.setString('settings.analysis_blocked_until',
+          DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String());
+      await prefs.setString('settings.analysis_blocked_kind', 'rejectedKey');
+      await s.reloadAnalysisBlock();
+      expect(s.analysisBlockedKind, 'rejectedKey');
+    });
+  });
 }

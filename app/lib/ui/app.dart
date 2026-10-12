@@ -301,15 +301,27 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _todayKey.currentState?.reload();
     if (_index == 1) _historyKey.currentState?.reload();
     if (!s.settings.watcherEnabled) return;
-    // One predicate for "an analysis could succeed" (key + no quota latch):
-    // don't read photo bytes for nothing.
-    if (!s.settings.canAnalyze) return;
+    unawaited(_resumeCatchUp());
+  }
+
+  Future<void> _resumeCatchUp() async {
+    final s = widget.services;
+    // The background run (its own isolate and preferences cache) may have
+    // latched the automatic scan on a rejected key / blocked region while
+    // we were away — or an analysis there may have lifted it.
+    try {
+      await s.settings.reloadAutoScanBlock();
+    } catch (_) {}
+    // One predicate for "an automatic analysis could succeed" (key, no
+    // quota latch, no rejected-key/region latch): don't read photo bytes
+    // for nothing.
+    if (!mounted || !s.settings.canAutoAnalyze) return;
     // Resume catch-up (full lookback window): the change-notify watcher is
     // frozen with the process on EMUI-class OSes, so photos taken while the
     // app was backgrounded surface here. The md5 ledger + in-session seen
     // set make repeat resumes near-free. Refresh again once the scan's
     // emissions have had a chance to process.
-    unawaited(s.photoIntake
+    await s.photoIntake
         ?.backfillScan()
         .then((_) {}, onError: (Object _) {})
         .then((_) => Future<void>.delayed(const Duration(seconds: 15)))
@@ -317,7 +329,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       if (!mounted) return;
       _todayKey.currentState?.reload();
       if (_index == 1) _historyKey.currentState?.reload();
-    }));
+    });
   }
 
   @override

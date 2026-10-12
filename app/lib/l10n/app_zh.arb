@@ -543,6 +543,25 @@
   "watcherPermissionDenied": "自动记录需要相册访问权限。",
   "watcherOnQuotaPaused": "监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。",
   "watcherOnNoKey": "监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。",
+  "autoScanPausedKey": "自动扫描已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key 后立即恢复（{time} 自动再试）。",
+  "@autoScanPausedKey": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "autoScanPausedRegion": "自动扫描已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后手动添加一张照片即可立即恢复（{time} 自动再试）。",
+  "@autoScanPausedRegion": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "watcherLimitedAccess": "目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。",
   "fixAction": "去修复",
   "importDialogTitle": "导入已导出的数据",

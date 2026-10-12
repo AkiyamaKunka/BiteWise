@@ -132,6 +132,15 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   DateTime? quotaPauseUntil;
   @override
   bool get canAnalyze => apiKey.trim().isNotEmpty && !isQuotaPaused;
+  @override
+  bool get canAutoAnalyze => canAnalyze && autoScanBlockedKind == null;
+  @override
+  String? autoScanBlockedKind;
+  @override
+  DateTime? autoScanBlockedUntil;
+  int reloadAutoScanBlockCalls = 0;
+  @override
+  Future<void> reloadAutoScanBlock() async => reloadAutoScanBlockCalls++;
   /// Provider-scoped MODELS too — the real store keeps one per provider,
   /// and a shared field made provider-switch tests pass while production
   /// would have shown Gemini's model under Doubao (review 2026-07-31).

@@ -3026,6 +3026,18 @@ abstract class AppLocalizations {
   /// **'Watching is on, but photos won\'t be analyzed until a working API key is set above.'**
   String get watcherOnNoKey;
 
+  /// No description provided for @autoScanPausedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service resumes it now (next try: {time}).'**
+  String autoScanPausedKey(String time);
+
+  /// No description provided for @autoScanPausedRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic scan paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, add one photo by hand to resume now (next try: {time}).'**
+  String autoScanPausedRegion(String provider, String time);
+
   /// No description provided for @watcherLimitedAccess.
   ///
   /// In en, this message translates to:

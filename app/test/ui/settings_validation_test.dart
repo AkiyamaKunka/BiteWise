@@ -296,6 +296,52 @@ void main() {
         reason: 'a healthy enable sweeps the window immediately');
   });
 
+  testWidgets('a latched automatic scan says why — in the Photos footer, '
+      'and on enable, without sweeping', (tester) async {
+    // A rejected key / blocked region (perhaps found by a background run,
+    // which has no snackbar) parks the automatic scan for up to a day;
+    // without a visible line it just silently stopped (review 2026-10-12).
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final latched = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true)
+      ..autoScanBlockedKind = 'rejectedKey'
+      ..autoScanBlockedUntil = DateTime.now().add(const Duration(hours: 3));
+    final intake = FakeIntake();
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: latched,
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      photoIntake: intake,
+      requestPhotoPermission: () async => true,
+    )));
+    expect(find.textContaining('Automatic scan paused'), findsNothing,
+        reason: 'watcher off: nothing is paused');
+    await tester.tap(find.byKey(const Key('watcherToggle')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('rejected the API key'), findsNWidgets(2),
+        reason: 'the enable snackbar and the Photos footer');
+    expect(intake.backfillScans, 0,
+        reason: 'the latch means the sweep would upload for nothing');
+
+    latched
+      ..autoScanBlockedKind = 'regionBlocked'
+      ..provider = 'openai';
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      key: const Key('again'),
+      settings: latched,
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      photoIntake: intake,
+      requestPhotoPermission: () async => true,
+    )));
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining(
+            'OpenAI is not available from this network region'),
+        findsOneWidget);
+  });
+
   testWidgets('first-run card shows only without a key, and the quota '
       'banner only while paused', (tester) async {
     final fresh = FakeSettings(apiKey: '');

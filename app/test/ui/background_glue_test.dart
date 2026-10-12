@@ -520,6 +520,70 @@ void main() {
           DateTime(2026, 7, 24, 2, 0).toUtc().toIso8601String());
     });
 
+    test('a rejected key LATCHES the scan: the rest of the run makes no '
+        'analyzer call, the next run reads no bytes, a key edit lifts it',
+        () async {
+      // Every 30 minutes the job re-uploaded the whole window against a
+      // key that refuses every photo (~20 MB a run, review 2026-10-12).
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final dao = FakeDao();
+      var calls = 0;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero)
+        ..onAnalyze = () async => calls++;
+      Future<void> run() => headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: intake,
+            // Production wiring (runHeadlessBackfill): the settings latch.
+            pipeline: () async => PhotoPipeline(
+                dao: dao,
+                analyzer: analyzer,
+                latch: autoScanLatchFor(settings)),
+            showMealCard: (_, _) async {},
+            clock: () => DateTime(2026, 7, 24, 5, 0),
+          );
+      await run();
+      expect(calls, 1, reason: 'photos 2 and 3 never uploaded');
+      expect(settings.analysisBlockedKind, 'rejectedKey');
+      expect(dao.ledger, isEmpty);
+      expect(intake.scans, 1);
+
+      await run();
+      expect(intake.scans, 1, reason: 'guarded out before reading bytes');
+      expect(calls, 1);
+
+      // The user fixes the key: the next run analyzes every photo.
+      await settings.setGeminiApiKey('k2');
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+      await run();
+      expect(intake.scans, 2);
+      expect(dao.meals, hasLength(3));
+    });
+
+    test('does nothing while a blocked region latched the scan', () async {
+      final settings = await settingsWith(key: 'k');
+      await settings.blockAutomaticAnalysis('regionBlocked');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final ok = await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async =>
+            PhotoPipeline(dao: FakeDao(), analyzer: FakeAnalyzer()),
+        showMealCard: (_, _) async {},
+      );
+      expect(ok, isTrue);
+      expect(intake.scans, 0);
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
+    });
+
     test('a photo another run is still analyzing holds the watermark in '
         'front of it', () async {
       // iOS expired the PREVIOUS run's grant mid-analysis: its 'processing'

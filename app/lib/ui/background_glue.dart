@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../core/contracts.dart';
+import '../core/outcome_kind.dart';
 import '../data/meals_dao_impl.dart';
 import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
@@ -140,6 +141,20 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
       scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
 }
 
+/// The pipeline's view of [AppSettings]' automatic-analysis latch — one
+/// adapter for the foreground pipeline (di.dart) and the background run.
+AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
+      blockedKind: () => switch (settings.analysisBlockedKind) {
+        'rejectedKey' => AnalysisErrorKind.rejectedKey,
+        'regionBlocked' => AnalysisErrorKind.regionBlocked,
+        _ => null,
+      },
+      revision: () => settings.credentialRevision,
+      block: (kind, revision) =>
+          settings.blockAutomaticAnalysis(kind.name, revision: revision),
+      clear: settings.clearAnalysisBlock,
+    );
+
 /// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
 /// Written as UTC (see [readStoredInstant]).
 Future<void> recordBackgroundLaunch(
@@ -168,10 +183,13 @@ Future<bool> headlessBackfillWith({
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
   if (!settings.watcherEnabled) return true;
-  // No key yet / quota latch armed: analyses cannot succeed, so don't even
-  // read photo bytes. The watermark stays put — those photos are scanned
-  // once the blocker clears (release-not-burn keeps them eligible).
-  if (!settings.canAnalyze) return true;
+  // No key yet / quota latch armed / an earlier automatic photo came back
+  // 'key rejected' or 'region blocked' (the automatic-analysis latch):
+  // analyses cannot succeed, so don't even read photo bytes — every 30
+  // minutes this used to re-upload the whole window. The watermark stays
+  // put — those photos are scanned once the blocker clears
+  // (release-not-burn keeps them eligible).
+  if (!settings.canAutoAnalyze) return true;
 
   final scanStart = clock();
   final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
@@ -335,7 +353,8 @@ Future<bool> runHeadlessBackfill({
     intake: createPhotoIntake(settings),
     pipeline: () async => PhotoPipeline(
         dao: await createMealsDao(),
-        analyzer: createMultiProviderAnalyzer(settings)),
+        analyzer: createMultiProviderAnalyzer(settings),
+        latch: autoScanLatchFor(settings)),
     showMealCard: (title, body) async {
       await notifier.init(); // idempotent; deferred until a card exists
       await notifier.showMealCard(title, body);

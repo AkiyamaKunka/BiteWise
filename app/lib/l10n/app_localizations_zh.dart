@@ -1744,6 +1744,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get watcherOnNoKey => '监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。';
 
   @override
+  String autoScanPausedKey(String time) {
+    return '自动扫描已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key 后立即恢复（$time 自动再试）。';
+  }
+
+  @override
+  String autoScanPausedRegion(String provider, String time) {
+    return '自动扫描已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后手动添加一张照片即可立即恢复（$time 自动再试）。';
+  }
+
+  @override
   String get watcherLimitedAccess =>
       '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
 

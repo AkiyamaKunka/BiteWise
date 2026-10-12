@@ -189,7 +189,9 @@ class AppServices {
             : (o) => notify(
                 outcomeSnackbar(localizationsFor(settings.appLanguage), o)),
         // Open screens re-query instead of showing pre-save data.
-        onMealSaved: signalMealsChanged);
+        onMealSaved: signalMealsChanged,
+        // A rejected key / blocked region parks the automatic scan.
+        latch: autoScanLatchFor(settings));
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -258,8 +260,9 @@ class AppServices {
       // fires while the process lives, and EMUI-class OS freezing kills it
       // minutes after backgrounding — photos taken since are picked up here.
       // Fire-and-forget: startup must not block on Gemini analyses. Key
-      // guard: without a key nothing can succeed, so don't read photo bytes.
-      if (settings.canAnalyze) {
+      // guard: without a key nothing can succeed, so don't read photo bytes
+      // (nor while a rejected key / blocked region latched the scan).
+      if (settings.canAutoAnalyze) {
         unawaited(photoIntake.backfillScan().then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
@@ -320,6 +323,14 @@ class _AppSettingsStore implements SettingsStore {
   String get apiKey => _s.activeApiKey ?? '';
   @override
   bool get canAnalyze => _s.canAnalyze;
+  @override
+  bool get canAutoAnalyze => _s.canAutoAnalyze;
+  @override
+  String? get autoScanBlockedKind => _s.analysisBlockedKind;
+  @override
+  DateTime? get autoScanBlockedUntil => _s.analysisBlockedUntil;
+  @override
+  Future<void> reloadAutoScanBlock() => _s.reloadAnalysisBlock();
   @override
   String get provider => _s.provider.name;
   @override

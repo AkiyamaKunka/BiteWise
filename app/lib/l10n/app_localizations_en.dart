@@ -1861,6 +1861,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Watching is on, but photos won\'t be analyzed until a working API key is set above.';
 
   @override
+  String autoScanPausedKey(String time) {
+    return 'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service resumes it now (next try: $time).';
+  }
+
+  @override
+  String autoScanPausedRegion(String provider, String time) {
+    return 'Automatic scan paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, add one photo by hand to resume now (next try: $time).';
+  }
+
+  @override
   String get watcherLimitedAccess =>
       'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
 

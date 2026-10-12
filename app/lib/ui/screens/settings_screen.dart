@@ -283,11 +283,15 @@ class _SettingsScreenState extends State<SettingsScreen>
       // The watcher arms fine without a usable key — it just never logs
       // anything. Flipping a switch that silently does nothing needs a
       // sentence, not silence.
+      final paused = _autoScanPausedText();
       if (!widget.settings.canAnalyze) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(widget.settings.isQuotaPaused
                 ? l10n.watcherOnQuotaPaused
                 : l10n.watcherOnNoKey)));
+      } else if (paused != null) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(paused)));
       }
       await widget.photoIntake?.start();
       // A "selected photos" (limited) grant is a TRAP: the watcher can
@@ -309,8 +313,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       // Instant feedback on enable: sweep the lookback window right away
       // instead of waiting for the next change event / background run.
       // Only when analyses can actually succeed (key present, no quota
-      // pause) — otherwise the sweep reads bytes for nothing.
-      if (widget.settings.canAnalyze) {
+      // pause, no rejected-key/region latch) — otherwise the sweep reads
+      // bytes for nothing.
+      if (widget.settings.canAutoAnalyze) {
         unawaited(widget.photoIntake
             ?.backfillScan()
             .then((_) {}, onError: (Object _) {}));
@@ -604,9 +609,29 @@ class _SettingsScreenState extends State<SettingsScreen>
     final explainIos = widget.lastBackgroundScan != null &&
         !_backgroundRefreshOff &&
         defaultTargetPlatform == TargetPlatform.iOS;
-    return explainIos
+    final footer = explainIos
         ? '${l10n.settingsPhotosFooter}\n${l10n.backgroundScanIosHint}'
         : l10n.settingsPhotosFooter;
+    // A rejected key / blocked region latched the automatic scan (perhaps
+    // in a background run, which has no snackbar): without this line the
+    // scan just stops, silently, for up to a day.
+    final paused = _watcherEnabled ? _autoScanPausedText() : null;
+    return paused == null ? footer : '$paused\n$footer';
+  }
+
+  /// Why the automatic scan is latched, with its next try; null when not.
+  String? _autoScanPausedText() {
+    final s = widget.settings;
+    final until = s.autoScanBlockedUntil;
+    if (until == null) return null;
+    final l10n = context.l10n;
+    return switch (s.autoScanBlockedKind) {
+      'rejectedKey' => l10n.autoScanPausedKey(_dayTime(until)),
+      'regionBlocked' => l10n.autoScanPausedRegion(
+          providerDisplayLabel(l10n, s.provider, s.serverBackend),
+          _dayTime(until)),
+      _ => null,
+    };
   }
 
   /// Camera-roll watching, coverage audit, backfill window.

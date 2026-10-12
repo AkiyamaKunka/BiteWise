@@ -90,14 +90,41 @@ class PhotoOutcome {
       this.shared = false});
 }
 
+/// The persisted automatic-analysis latch (AppSettings.isAnalysisBlocked),
+/// as the pipeline sees it. A rejected key or a blocked region refuses
+/// EVERY automatic photo the same way; once one came back like that, the
+/// rest of the scan — and every scan after it until the latch lifts — is
+/// released without an analyzer call instead of re-uploading the whole
+/// lookback window (2026-10-12). Built by [autoScanLatchFor] in production.
+class AutoScanLatch {
+  const AutoScanLatch(
+      {required this.blockedKind,
+      required this.revision,
+      required this.block,
+      required this.clear});
+
+  /// The armed latch's kind ([AnalysisErrorKind.rejectedKey] or
+  /// [AnalysisErrorKind.regionBlocked]); null while automatic analysis may
+  /// run.
+  final AnalysisErrorKind? Function() blockedKind;
+
+  /// The credentials revision, read BEFORE an analysis and handed back to
+  /// [block]: a refusal of the key the user has since replaced is dropped.
+  final int Function() revision;
+  final Future<void> Function(AnalysisErrorKind kind, int revision) block;
+
+  /// Lift the latch (an analysis succeeded).
+  final Future<void> Function() clear;
+}
+
 class PhotoPipeline {
   final MealsDao dao;
   final AnalyzerService analyzer;
 
   /// Notification-style surface (snackbar) for verdicts nobody awaits:
   /// process() announces saves, leftover deductions and PERMANENT failures
-  /// on every path (plus, throttled, a rejected key on the automatic
-  /// scan), and [bindStream] (the share sheet) adds the rest. Handed
+  /// on every path (plus, throttled, a rejected key or blocked region on
+  /// the automatic scan), and [bindStream] (the share sheet) adds the rest. Handed
   /// the OUTCOME, not a sentence: the caller words it in the app language
   /// (di.dart via outcomeSnackbar). Passing [PhotoOutcome.message] here put
   /// English snackbars ("Meal logged: …") in front of the Chinese UI every
@@ -108,6 +135,10 @@ class PhotoPipeline {
   /// from [notify] on purpose: notify also fires for failures, and only a
   /// SAVE changes what the lists should show.
   final void Function()? onMealSaved;
+
+  /// Null (tests, the add flow's fallback instance) = no latch: every
+  /// automatic photo reaches the analyzer.
+  final AutoScanLatch? latch;
 
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
@@ -122,6 +153,7 @@ class PhotoPipeline {
       required this.analyzer,
       this.notify,
       this.onMealSaved,
+      this.latch,
       Future<String> Function(Uint8List bytes)? hasher,
       DateTime Function()? clock})
       : _hash = hasher ?? _computeMd5,
@@ -133,11 +165,16 @@ class PhotoPipeline {
   /// Injectable for the rejected-key notice throttle below.
   final DateTime Function() _clock;
 
-  /// When the automatic scan last told the user their key was rejected:
-  /// a backlog of 40 photos against a revoked key is ONE problem, not 40
-  /// stacked snackbars.
+  /// When the automatic scan last told the user their key was rejected or
+  /// their region blocked: a backlog of 40 photos against a revoked key is
+  /// ONE problem, not 40 stacked snackbars.
   DateTime? _lastRejectedKeyNotice;
   static const rejectedKeyNoticeInterval = Duration(minutes: 10);
+
+  /// The refusals that say nothing about the PHOTO: every automatic photo
+  /// would come back the same way until the user's setup changes.
+  static bool _refusesEveryPhoto(AnalysisErrorKind k) =>
+      k == AnalysisErrorKind.rejectedKey || k == AnalysisErrorKind.regionBlocked;
 
   /// Wire the watcher intake with BACKPRESSURE: the intake awaits each
   /// photo's turn through the same global FIFO the share stream uses, so
@@ -236,6 +273,15 @@ class PhotoPipeline {
     var hash = '';
     var reserved = false;
     try {
+      // The automatic-analysis latch is armed: release the photo before
+      // even hashing it — no ledger row, no analyzer call, no upload. It
+      // stays eligible (retryable), so the scan after the fix picks it up.
+      // Deliberate adds always go through: they are how the fix is tested.
+      final latched = photo.deliberate ? null : latch?.blockedKind();
+      if (latched != null) {
+        return PhotoOutcome(PhotoOutcomeKind.failed, _latchedMessage,
+            retryable: true, errorKind: latched, detail: _latchedMessage);
+      }
       hash = normalizeImageHash(await _hash(photo.bytes));
       // Pre-reservation 5-minute duplicate window — deliberate (user-facing)
       // path only, matching the server's chat-only check (spec §2.3).
@@ -303,24 +349,32 @@ class PhotoPipeline {
           recentMealCompact(time: m.time, analysis: m.analysis),
       ];
 
+      final revision = latch?.revision();
       final outcome =
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
       if (outcome.analysis == null) {
         final why = outcome.error ?? 'Analysis failed.';
         final errorKind = classifyAnalysisError(outcome.error);
-        if (!photo.deliberate && errorKind == AnalysisErrorKind.rejectedKey) {
-          // A rejected key is the USER's state, like a missing one: every
-          // photo of the automatic scan would fail the same way. Burning
-          // each to 'failed' dropped the whole backlog for good (watch
-          // intake never reclaims) and stacked one snackbar per photo.
-          // Release instead — fixing the key brings them all back — and
-          // say it once per [rejectedKeyNoticeInterval], since a retryable
+        if (!photo.deliberate && _refusesEveryPhoto(errorKind)) {
+          // A rejected key (or a region the provider does not serve) is
+          // the USER's state, like a missing key: every photo of the
+          // automatic scan would fail the same way. Burning each to
+          // 'failed' dropped the whole backlog for good (watch intake never
+          // reclaims) and stacked one snackbar per photo. Release instead —
+          // fixing the key / VPN brings them all back — arm the latch so
+          // the rest of this scan and later scans stop uploading, and say
+          // it once per [rejectedKeyNoticeInterval], since a retryable
           // failure is otherwise never announced. The analyzer still calls
           // the key non-retryable (probeKey/diagnostics read that);
-          // deliberate adds keep the permanent verdict below.
+          // deliberate adds keep their own verdict below.
           await dao.releasePhotoHash(hash);
           final held = PhotoOutcome(PhotoOutcomeKind.failed, why,
               retryable: true, errorKind: errorKind, detail: why);
+          if (latch != null && revision != null) {
+            try {
+              await latch!.block(errorKind, revision);
+            } catch (_) {}
+          }
           final now = _clock();
           final last = _lastRejectedKeyNotice;
           if (last == null ||
@@ -355,6 +409,11 @@ class PhotoPipeline {
         } catch (_) {}
         return failed;
       }
+      // An answer came back, so the key and the region work: lift the
+      // automatic-analysis latch (a deliberate add after the fix included).
+      try {
+        await latch?.clear();
+      } catch (_) {}
       if (!outcome.isFood) {
         // Tombstone so backfill never re-analyzes it (spec §6.4).
         await dao.markPhotoHash(hash, IngestionStatus.skipped);
@@ -471,4 +530,8 @@ class PhotoPipeline {
           detail: '$e');
     }
   }
+
+  static const _latchedMessage =
+      'Automatic analysis is paused: the AI service refused the last '
+      'photo for a reason every photo shares (API key or network region).';
 }

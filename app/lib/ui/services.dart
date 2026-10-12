@@ -42,6 +42,20 @@ abstract class SettingsStore {
   /// quota latch. Screens gate byte-reading sweeps on this single predicate
   /// rather than re-deriving it.
   bool get canAnalyze;
+
+  /// [canAnalyze] for the AUTOMATIC scan (launch/resume catch-up, watcher
+  /// toggle sweep): also false while a rejected key or blocked region has
+  /// latched it (AppSettings.isAnalysisBlocked). Deliberate paths — the
+  /// coverage screen included — keep [canAnalyze].
+  bool get canAutoAnalyze;
+
+  /// 'rejectedKey' | 'regionBlocked' while that latch is armed, else null;
+  /// with [autoScanBlockedUntil] it tells Settings why nothing is scanned.
+  String? get autoScanBlockedKind;
+  DateTime? get autoScanBlockedUntil;
+
+  /// Re-read the latch from disk (the background run may have armed it).
+  Future<void> reloadAutoScanBlock();
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time
