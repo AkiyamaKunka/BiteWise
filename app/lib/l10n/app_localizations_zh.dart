@@ -403,6 +403,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get apiKeyFooterDefault => '输入即保存。仅安全存储在本机。';
 
   @override
+  String get apiKeyFooterGemini =>
+      '从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterOpenai =>
+      '从 platform.openai.com/api-keys 获取。按量付费。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterAnthropic =>
+      '从 console.anthropic.com 获取（API keys）。按量付费。仅安全存储在本机。';
+
+  @override
   String get apiKeyFooterQwen =>
       '从 bailian.console.aliyun.com（阿里云百炼 → API-KEY）获取。新账户每个模型约有 100 万免费 tokens。仅安全存储在本机。';
 

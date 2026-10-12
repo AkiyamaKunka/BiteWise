@@ -776,6 +776,24 @@ abstract class AppLocalizations {
   /// **'The key saves as you type. Stored securely on this device only.'**
   String get apiKeyFooterDefault;
 
+  /// No description provided for @apiKeyFooterGemini.
+  ///
+  /// In en, this message translates to:
+  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.'**
+  String get apiKeyFooterGemini;
+
+  /// No description provided for @apiKeyFooterOpenai.
+  ///
+  /// In en, this message translates to:
+  /// **'From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.'**
+  String get apiKeyFooterOpenai;
+
+  /// No description provided for @apiKeyFooterAnthropic.
+  ///
+  /// In en, this message translates to:
+  /// **'From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.'**
+  String get apiKeyFooterAnthropic;
+
   /// No description provided for @apiKeyFooterQwen.
   ///
   /// In en, this message translates to:

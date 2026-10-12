@@ -294,6 +294,9 @@
     }
   },
   "apiKeyFooterDefault": "The key saves as you type. Stored securely on this device only.",
+  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.",
+  "apiKeyFooterOpenai": "From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.",
+  "apiKeyFooterAnthropic": "From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.",
   "apiKeyFooterQwen": "From bailian.console.aliyun.com (Alibaba Cloud 百炼 → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.",
   "apiKeyFooterDoubao": "From console.volcengine.com/ark (API Key + 开通管理 to activate models). 500k free tokens per model. Stored securely on this device only.",
   "apiKeyFooterGlm": "From open.bigmodel.cn (real-name verification required). The default flash model is free. Stored securely on this device only.",

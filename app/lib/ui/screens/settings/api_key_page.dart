@@ -84,6 +84,9 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
   /// Where the key comes from — the footer's job.
   String _keyFooter(BuildContext context) =>
       switch (widget.settings.provider) {
+        'gemini' => context.l10n.apiKeyFooterGemini,
+        'openai' => context.l10n.apiKeyFooterOpenai,
+        'anthropic' => context.l10n.apiKeyFooterAnthropic,
         'qwen' => context.l10n.apiKeyFooterQwen,
         'doubao' => context.l10n.apiKeyFooterDoubao,
         'glm' => context.l10n.apiKeyFooterGlm,

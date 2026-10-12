@@ -425,6 +425,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'The key saves as you type. Stored securely on this device only.';
 
   @override
+  String get apiKeyFooterGemini =>
+      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.';
+
+  @override
+  String get apiKeyFooterOpenai =>
+      'From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.';
+
+  @override
+  String get apiKeyFooterAnthropic =>
+      'From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.';
+
+  @override
   String get apiKeyFooterQwen =>
       'From bailian.console.aliyun.com (Alibaba Cloud 百炼 → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.';
 
