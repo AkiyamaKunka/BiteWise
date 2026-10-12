@@ -8,6 +8,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show compute;
 import 'package:sqflite/sqflite.dart';
 
 import '../core/coerce.dart';
@@ -675,9 +676,17 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     return jsonEncode(buildExportEnvelope(tables, _clock()));
   }
 
+  /// Above this many characters the envelope is decoded on a worker
+  /// isolate: a year of meals is 1–2 MB of JSON, and jsonDecode on the UI
+  /// isolate froze Settings for a second or two mid-import. Small payloads
+  /// stay inline (no isolate spawn). The DB writes below are unchanged.
+  static const int importParseOffIsolateChars = 64 * 1024;
+
   @override
   Future<ImportSummary> importJson(String json) async {
-    final envelope = parseExportEnvelope(json); // throws FormatException
+    final envelope = json.length > importParseOffIsolateChars
+        ? await compute(parseExportEnvelope, json)
+        : parseExportEnvelope(json); // throws FormatException
     final tables = envelope.tables;
     final added = <String, int>{};
     final skipped = <String, int>{};

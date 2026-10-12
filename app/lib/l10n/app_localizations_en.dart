@@ -1993,6 +1993,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importErrNoTables => 'That export has no tables section.';
 
   @override
+  String get importFromClipboard => 'Import from clipboard';
+
+  @override
+  String importClipboardRead(String size) {
+    return 'Read $size from the clipboard';
+  }
+
+  @override
+  String get importClipboardEmpty => 'There is no text on the clipboard.';
+
+  @override
   String get nlSomethingWrong =>
       '❌ Something went wrong handling that message. Please try again.';
 

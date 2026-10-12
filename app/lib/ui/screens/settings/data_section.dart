@@ -4,9 +4,11 @@
 /// URL opener.
 library;
 
+import 'dart:convert' show utf8;
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -53,6 +55,11 @@ class _DataSectionState extends State<DataSection> {
   /// Termux) can put text on the clipboard. The parser refuses anything
   /// that is not a CalorieTracker export, so a mis-paste is a message,
   /// never a corrupted log.
+  ///
+  /// A year of meals is 1–2 MB of JSON. Pasted into the field, that much
+  /// text froze the first frame for a second or two and cost hundreds of
+  /// MB on iOS, so 从剪贴板导入 reads the clipboard straight into the
+  /// import and shows only its size; the field stays for small pastes.
   Future<void> _import() async {
     final l10n = context.l10n; // read before the dialog await
     // The controller is owned by the STATE, not the dialog closure: a
@@ -60,9 +67,12 @@ class _DataSectionState extends State<DataSection> {
     // is still rebuilding the field ("A TextEditingController was used
     // after being disposed" — caught by the new test).
     _importController.clear();
+    String? clipboardPayload; // never put in the field
+    String? clipboardNote;
     final go = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (_) => StatefulBuilder(
+          builder: (ctx, setDialog) => AlertDialog(
         title: Text(l10n.importDialogTitle),
         // Scrollable + bounded: an AlertDialog's content is laid out
         // against the available height, and an unbounded Column here
@@ -73,14 +83,53 @@ class _DataSectionState extends State<DataSection> {
             children: [
               Text(l10n.importDialogBody),
               const SizedBox(height: 12),
-              TextField(
-                key: const Key('importField'),
-                controller: _importController,
-                maxLines: 4,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: '{"format":"calorie_tracker_export",…',
-                  border: OutlineInputBorder(),
+              if (clipboardPayload == null)
+                TextField(
+                  key: const Key('importField'),
+                  controller: _importController,
+                  maxLines: 4,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    hintText: '{"format":"calorie_tracker_export",…',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              if (clipboardNote != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(clipboardNote!,
+                      key: const Key('importClipboardSize')),
+                ),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton.icon(
+                  key: const Key('importFromClipboard'),
+                  icon: const Icon(Icons.content_paste),
+                  label: Text(l10n.importFromClipboard),
+                  onPressed: () async {
+                    String? text;
+                    Object? error;
+                    try {
+                      text = (await Clipboard.getData(Clipboard.kTextPlain))
+                          ?.text;
+                    } catch (e) {
+                      error = e;
+                    }
+                    if (!ctx.mounted) return;
+                    setDialog(() {
+                      if (error != null) {
+                        clipboardPayload = null;
+                        clipboardNote = l10n.importFailed('$error');
+                      } else if (text == null || text.trim().isEmpty) {
+                        clipboardPayload = null;
+                        clipboardNote = l10n.importClipboardEmpty;
+                      } else {
+                        clipboardPayload = text;
+                        clipboardNote =
+                            l10n.importClipboardRead(_sizeLabel(text));
+                      }
+                    });
+                  },
                 ),
               ),
             ],
@@ -95,9 +144,9 @@ class _DataSectionState extends State<DataSection> {
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(l10n.importAction)),
         ],
-      ),
+      )),
     );
-    final payload = _importController.text;
+    final payload = clipboardPayload ?? _importController.text;
     if (go != true || !mounted) return;
     setState(() => _importing = true);
     try {
@@ -124,6 +173,13 @@ class _DataSectionState extends State<DataSection> {
     } finally {
       if (mounted) setState(() => _importing = false);
     }
+  }
+
+  /// '1.2 MB' / '84 KB' — what 从剪贴板导入 shows instead of the text.
+  static String _sizeLabel(String payload) {
+    final bytes = utf8.encode(payload).length;
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).ceil()} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
   /// The parser's refusal in the user's language. [ExportFormatException]

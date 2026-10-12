@@ -770,6 +770,99 @@ void importExportTests() {
         reason: 'a pasted-but-cancelled payload must not be written');
     expect(find.textContaining('Imported'), findsNothing);
   });
+
+  // A year of meals is 1–2 MB of JSON: bound to the 4-line field it froze
+  // the first frame and cost hundreds of MB on iOS (2026-10-12). The
+  // clipboard route hands it to importJson without ever touching the field.
+  for (final (locale, read) in [
+    (const Locale('en'), 'Read 2.0 MB from the clipboard'),
+    (const Locale('zh'), '已读取 2.0 MB'),
+  ]) {
+    testWidgets('import [${locale.languageCode}]: a 2 MB export comes '
+        'straight from the clipboard, never through the field',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final payload = '{"format":"calorie_tracker_export","version":1,'
+          '"tables":{"meals":[{"date":"2026-07-30","pad":"'
+          '${'x' * (2 * 1024 * 1024 - 99)}"}]}}';
+      expect(payload.length, 2 * 1024 * 1024);
+      var reads = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.getData') {
+          reads++;
+          return <String, dynamic>{'text': payload};
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+      final dao = FakeDao();
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SettingsScreen(
+            settings: FakeSettings(apiKey: 'k'),
+            analyzer: FakeAnalyzer(),
+            dao: dao,
+            requestPhotoPermission: () async => true,
+          ),
+        ),
+      ));
+      await tester.tap(find.byKey(const Key('importButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('importFromClipboard')));
+      await tester.pumpAndSettle();
+
+      expect(reads, 1);
+      expect(find.text(read), findsOneWidget);
+      expect(find.byKey(const Key('importField')), findsNothing,
+          reason: 'the payload is never laid out as text');
+      expect(
+          tester
+              .widgetList<EditableText>(find.byType(EditableText))
+              .where((e) => e.controller.text.isNotEmpty),
+          isEmpty);
+      await tester.tap(find.byKey(const Key('importConfirm')));
+      await tester.pumpAndSettle();
+
+      expect(dao.imported, [payload]);
+      expect(
+          find.text(locale.languageCode == 'zh'
+              ? '已导入 1 餐（共 1 行）。'
+              : 'Imported 1 meal (1 rows total).'),
+          findsOneWidget);
+    });
+  }
+
+  testWidgets('import: an empty clipboard says so and keeps the field',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform, (call) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final dao = FakeDao();
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k'),
+      analyzer: FakeAnalyzer(),
+      dao: dao,
+      requestPhotoPermission: () async => true,
+    )));
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('importFromClipboard')));
+    await tester.pumpAndSettle();
+    expect(find.text('There is no text on the clipboard.'), findsOneWidget);
+    expect(find.byKey(const Key('importField')), findsOneWidget);
+    expect(dao.imported, isEmpty);
+  });
 }
 
 // ─── Claude-plan model & effort choice (2026-08-05) ──────────────────

@@ -1483,6 +1483,16 @@
   "importErrWrongFormatTag": "That file is not a Bitewise export (wrong format tag).",
   "importErrBadVersion": "That export has an unusable version tag.",
   "importErrNoTables": "That export has no tables section.",
+  "importFromClipboard": "Import from clipboard",
+  "importClipboardRead": "Read {size} from the clipboard",
+  "@importClipboardRead": {
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "importClipboardEmpty": "There is no text on the clipboard.",
   "nlSomethingWrong": "❌ Something went wrong handling that message. Please try again.",
   "nlMissingServer": "❌ No server is configured — set your server address and upload key in Settings first.",
   "nlMissingKey": "❌ No {provider} API key yet — add one in Settings to use text logging.",

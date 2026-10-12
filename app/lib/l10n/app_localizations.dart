@@ -3174,6 +3174,24 @@ abstract class AppLocalizations {
   /// **'That export has no tables section.'**
   String get importErrNoTables;
 
+  /// No description provided for @importFromClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from clipboard'**
+  String get importFromClipboard;
+
+  /// No description provided for @importClipboardRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Read {size} from the clipboard'**
+  String importClipboardRead(String size);
+
+  /// No description provided for @importClipboardEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no text on the clipboard.'**
+  String get importClipboardEmpty;
+
   /// No description provided for @nlSomethingWrong.
   ///
   /// In en, this message translates to:

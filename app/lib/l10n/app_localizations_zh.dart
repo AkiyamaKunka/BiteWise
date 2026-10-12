@@ -1851,6 +1851,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importErrNoTables => '这份导出文件没有 tables 部分。';
 
   @override
+  String get importFromClipboard => '从剪贴板导入';
+
+  @override
+  String importClipboardRead(String size) {
+    return '已读取 $size';
+  }
+
+  @override
+  String get importClipboardEmpty => '剪贴板里没有文本。';
+
+  @override
   String get nlSomethingWrong => '❌ 处理这条消息时出了点问题，请重试。';
 
   @override
