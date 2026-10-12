@@ -3009,9 +3009,12 @@ _WORKOUT_GROUP_WORDS = {
     "full", "fullbody", "upper", "lower", "quads", "hamstrings", "calves",
 }
 
-ACTIVITY_KCAL_MAX = 20000
-ACTIVITY_STEPS_MAX = 200000
-ACTIVITY_KM_MAX = 500
+# Activity clamps, shared with the app via shared/constants.json.
+from shared_generated import (  # noqa: E402
+    ACTIVITY_KCAL_MAX,
+    ACTIVITY_KM_MAX,
+    ACTIVITY_STEPS_MAX,
+)
 
 # Weigh-in staleness warning threshold (unrelated to TRAIN_LOOKBACK_DAYS's 14).
 WEIGHT_STALE_AFTER_DAYS = 14

@@ -70,8 +70,9 @@ if dietary_profile_path.exists():
         print(f"[WARN] Could not load dietary profile from {dietary_profile_path}: {e}", file=sys.stderr)
 
 # ─── Duplicate Detection ──────────────────────────────────────────
-# Photos sent within this window with the same hash are considered duplicates
-DUPLICATE_WINDOW_MINUTES = 5
+# Photos sent within this window with the same hash are considered duplicates.
+# Value lives in shared/constants.json (shared with the app).
+from shared_generated import DUPLICATE_WINDOW_MINUTES  # noqa: E402,F401
 
 # ─── Unified Text Handler Prompt ────────────────────────────────────
 TEXT_HANDLER_PROMPT = TEXT_HANDLER_PROMPT_TEMPLATE
