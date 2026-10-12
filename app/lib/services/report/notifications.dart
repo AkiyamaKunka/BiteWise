@@ -59,6 +59,13 @@ class ReportNotifier {
 
   static const String _channelId = 'calorietracker_reports';
 
+  /// Android notification small icon (res/drawable/ic_stat_bitewise.xml).
+  /// Android draws a small icon from its alpha channel only, so the
+  /// full-colour launcher art this used to name rendered as a blank circle
+  /// in the status bar and the shade header. Looked up by name at runtime,
+  /// so res/raw/keep.xml must keep it through release resource shrinking.
+  static const String androidSmallIcon = 'ic_stat_bitewise';
+
   final FlutterLocalNotificationsPlugin _plugin;
   final DateTime Function() _clock;
   final NotificationPresenter? _presenter;
@@ -73,6 +80,7 @@ class ReportNotifier {
       _channelId,
       'Reports & meals',
       channelDescription: 'Daily calorie reports and auto-logged meal cards',
+      icon: androidSmallIcon,
       importance: Importance.defaultImportance,
       priority: Priority.defaultPriority,
     ),
@@ -113,7 +121,7 @@ class ReportNotifier {
     // DarwinInitializationSettings defaults request alert/badge/sound
     // permission during initialize on iOS/macOS.
     const settings = InitializationSettings(
-      android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+      android: AndroidInitializationSettings('@drawable/$androidSmallIcon'),
       iOS: DarwinInitializationSettings(),
       macOS: DarwinInitializationSettings(),
     );

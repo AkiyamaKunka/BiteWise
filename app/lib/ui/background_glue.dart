@@ -37,6 +37,7 @@ import 'os_summary.dart';
 import 'outcome_text.dart';
 
 /// Persisted watermark: start time of the last completed background scan.
+/// Stored as a UTC instant (see [readStoredInstant]).
 const String backgroundWatermarkPrefsKey = 'background.last_scan_iso';
 
 /// When the OS last LAUNCHED a background run (before any guard) — the
@@ -44,6 +45,18 @@ const String backgroundWatermarkPrefsKey = 'background.last_scan_iso';
 /// that BGAppRefresh fires on a given phone; the OS decides the cadence
 /// and no debugger is needed to read this (2026-09-30).
 const String backgroundLastRunPrefsKey = 'background.last_run_iso';
+
+/// Reads an instant stored by this file. Both keys are WRITTEN as UTC
+/// ('…Z'): a zone-less local string is read back in whatever zone the
+/// phone is in NOW, so a Shanghai → Chicago flight moved the watermark
+/// 13 hours into the future and the scan skipped every photo taken in
+/// between — the airport and in-flight meals (2026-10-08). Read back as
+/// local, because Settings formats `.hour` directly. A pre-fix zone-less
+/// value still parses as local, exactly as before, and the next forward
+/// checkpoint rewrites it as UTC.
+@visibleForTesting
+DateTime? readStoredInstant(String? stored) =>
+    DateTime.tryParse(stored ?? '')?.toLocal();
 
 /// Re-scan overlap behind the watermark, absorbing camera write latency and
 /// photos created while the previous scan was running.
@@ -127,6 +140,13 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
       scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
 }
 
+/// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
+/// Written as UTC (see [readStoredInstant]).
+Future<void> recordBackgroundLaunch(
+        SharedPreferences prefs, DateTime Function() clock) =>
+    prefs.setString(
+        backgroundLastRunPrefsKey, clock().toUtc().toIso8601String());
+
 /// The headless scan body, dependency-injected so tests can drive it with
 /// fakes. Returns WorkManager success (true) in every recoverable state —
 /// background.dart's no-retry-storm rule.
@@ -139,10 +159,12 @@ Future<bool> headlessBackfillWith({
   required Future<void> Function(String title, String body) showMealCard,
   DateTime Function() clock = DateTime.now,
   Duration? budget,
+  bool launchRecorded = false,
 }) async {
   // First, unconditionally: "the OS ran us" is what Settings reports,
-  // whatever the guards below decide.
-  await prefs.setString(backgroundLastRunPrefsKey, clock().toIso8601String());
+  // whatever the guards below decide. Skipped when [runHeadlessBackfill]
+  // already wrote it before loading the settings — one launch, one stamp.
+  if (!launchRecorded) await recordBackgroundLaunch(prefs, clock);
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
   if (!settings.watcherEnabled) return true;
@@ -152,17 +174,15 @@ Future<bool> headlessBackfillWith({
   if (!settings.canAnalyze) return true;
 
   final scanStart = clock();
-  final since =
-      DateTime.tryParse(prefs.getString(backgroundWatermarkPrefsKey) ?? '');
+  final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
 
   Future<void> checkpoint(DateTime mark) async {
     // Monotonic forward only, never past this scan's start.
     final capped = mark.isAfter(scanStart) ? scanStart : mark;
-    final cur =
-        DateTime.tryParse(prefs.getString(backgroundWatermarkPrefsKey) ?? '');
+    final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
     if (cur == null || capped.isAfter(cur)) {
       await prefs.setString(
-          backgroundWatermarkPrefsKey, capped.toIso8601String());
+          backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
     }
   }
 
@@ -213,10 +233,35 @@ Future<bool> headlessBackfillWith({
 /// after the scan, so a meal logged while the app was closed is in the
 /// card the OS delivers at the slot — posting here too would put a second
 /// alert under the same id minutes after the OS one.
-Future<bool> runHeadlessBackfill({bool? isIOS}) async {
+///
+/// The launch marker is written BEFORE the settings load, and a failed load
+/// ends the run as a success. Loading reads every key from the keychain;
+/// on a locked iPhone that read threw (keys were stored under a class
+/// readable only while unlocked), the run died silently, and the 后台扫描
+/// row read as if iOS had never run the task (2026-10-09). The keystore
+/// now survives a locked phone (MigratingKeyStore), and should a load
+/// still fail — say before the first unlock after a reboot — the row
+/// shows that iOS did run the task. The seams exist for that test.
+Future<bool> runHeadlessBackfill({
+  bool? isIOS,
+  Future<AppSettings> Function()? loadSettings,
+  Future<SharedPreferences> Function()? loadPrefs,
+  DateTime Function() clock = DateTime.now,
+}) async {
   final ios = isIOS ?? Platform.isIOS;
-  final settings = await AppSettings.load();
-  final prefs = await SharedPreferences.getInstance();
+  final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+  await recordBackgroundLaunch(prefs, clock);
+  final AppSettings settings;
+  try {
+    // Read-only key store: only the UI engine moves keys between keychain
+    // classes, so the two engines can never race on the one-time move.
+    settings = await (loadSettings ??
+        () => AppSettings.load(keyStore: platformKeyStore(migrate: false)))();
+  } catch (_) {
+    // Success, not a retry: the next scheduled run tries again, and a
+    // WorkManager retry storm helps nobody (background.dart's rule).
+    return true;
+  }
   // Time-derived id seed: cards from successive runs stack instead of
   // overwriting each other. Base 10000 keeps the whole range clear of the
   // fixed daily-report id 9001 (a colliding meal card would silently
@@ -227,15 +272,15 @@ Future<bool> runHeadlessBackfill({bool? isIOS}) async {
   // The DURABLE daily-summary path. ReportNotifier's in-process Timer
   // dies with the app, and EMUI kills aggressively — so the notification
   // the user asked for is delivered by this 30-minute heartbeat instead,
-  // guarded by a per-date watermark so the live Timer cannot double-post
-  // (user request 2026-08-06).
+  // guarded by a freshly read per-date watermark so the live Timer does
+  // not double-post (user request 2026-08-06).
   if (!ios) {
     try {
       await maybePostDailySummary(DailySummaryDeps(
       dao: await createMealsDao(),
       reportTime: settings.reportTime,
       calorieGoal: settings.calorieGoal,
-      postedDate: settings.summaryPostedDate,
+      postedDate: await settings.freshSummaryPostedDate(),
       markPosted: settings.markSummaryPosted,
       present: (title, body) async {
         await notifier.init();
@@ -260,6 +305,7 @@ Future<bool> runHeadlessBackfill({bool? isIOS}) async {
       await notifier.showMealCard(title, body);
     },
     budget: ios ? iosBackgroundBudget : null,
+    launchRecorded: true,
   );
   if (ios) {
     try {
@@ -308,5 +354,5 @@ Future<void> syncBackgroundScan(AppSettings settings) =>
 Future<DateTime?> lastBackgroundRun() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.reload();
-  return DateTime.tryParse(prefs.getString(backgroundLastRunPrefsKey) ?? '');
+  return readStoredInstant(prefs.getString(backgroundLastRunPrefsKey));
 }

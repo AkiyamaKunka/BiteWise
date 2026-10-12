@@ -9,8 +9,11 @@
 /// compute it from the LOCAL database and post.
 ///
 /// Both paths (live Timer, background catch-up) go through
-/// [maybePostDailySummary], and a persisted per-date watermark makes a
-/// double-post impossible.
+/// [maybePostDailySummary], guarded by a persisted per-date watermark that
+/// each caller reads FRESH (the paths run in different isolates, whose
+/// SharedPreferences caches never see each other's writes). Two posters
+/// reading at the same instant could still both post; the fresh read
+/// closes the common case of a Timer that fires late, after the heartbeat.
 library;
 
 import '../../core/coerce.dart' show safeNumber;

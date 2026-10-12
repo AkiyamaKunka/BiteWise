@@ -19,7 +19,8 @@ import '../ui/fakes.dart';
 
 /// A real 1x1 JPEG carrying real EXIF, built with the same package the
 /// reader uses — no hand-crafted byte fixtures to rot.
-Uint8List jpegWithExif({String? dateTimeOriginal, String? ifd0DateTime}) {
+Uint8List jpegWithExif(
+    {String? dateTimeOriginal, String? ifd0DateTime, String? offset}) {
   final image = img.Image(width: 1, height: 1);
   if (dateTimeOriginal != null) {
     image.exif.exifIfd['DateTimeOriginal'] = dateTimeOriginal;
@@ -27,8 +28,54 @@ Uint8List jpegWithExif({String? dateTimeOriginal, String? ifd0DateTime}) {
   if (ifd0DateTime != null) {
     image.exif.imageIfd['DateTime'] = ifd0DateTime;
   }
+  if (offset != null) image.exif.exifIfd['OffsetTimeOriginal'] = offset;
   return Uint8List.fromList(img.encodeJpg(image));
 }
+
+/// A HEIF-shaped buffer laid out like an ImageIO (iPhone) original: ftyp,
+/// then an iinf entry naming the 'Exif' item type (a DECOY: 'Exif\0' is
+/// followed by the next box header, not a TIFF header), then the mdat
+/// payload: a 4-byte tiff-header offset, 'Exif\0\0', and the TIFF block.
+Uint8List heifWithExif(
+    {required String dateTimeOriginal, required String offset}) {
+  final exif = img.ExifData();
+  exif.exifIfd['DateTimeOriginal'] = dateTimeOriginal;
+  exif.exifIfd['OffsetTimeOriginal'] = offset;
+  final out = img.OutputBuffer(bigEndian: true);
+  exif.write(out);
+  final tiff = out.getBytes();
+  final b = BytesBuilder()
+    ..add([0, 0, 0, 0x18])
+    ..add('ftypheic'.codeUnits)
+    ..add([0, 0, 0, 0])
+    ..add('mif1heic'.codeUnits)
+    // infe v2: version/flags, item_ID, protection index, type 'Exif',
+    // empty name '\0' — then the next infe's size: 'Exif\0\0\0\0\x15'.
+    ..add([0, 0, 0, 0x15])
+    ..add('infe'.codeUnits)
+    ..add([2, 0, 0, 0, 0, 0x33, 0, 0])
+    ..add('Exif'.codeUnits)
+    ..add([0])
+    ..add([0, 0, 0, 0x15])
+    ..add('infe'.codeUnits)
+    ..add([2, 0, 0, 0, 0, 0x34, 0, 0])
+    ..add('hvc1'.codeUnits)
+    ..add([0])
+    ..add([0, 0, 0x10, 0])
+    ..add('mdat'.codeUnits)
+    ..add(List.filled(512, 0x5a)) // stand-in image data before the item
+    ..add([0, 0, 0, 6])
+    ..add('Exif'.codeUnits)
+    ..add([0, 0])
+    ..add(tiff)
+    ..add(List.filled(512, 0x5a));
+  return b.toBytes();
+}
+
+/// The instant photo_manager hands back for an iOS asset: an epoch value
+/// shown in the CURRENT zone (DateTime.fromMillisecondsSinceEpoch).
+DateTime assetInstant(DateTime utc) =>
+    DateTime.fromMillisecondsSinceEpoch(utc.millisecondsSinceEpoch);
 
 void main() {
   group('exifCapturedAt', () {
@@ -67,6 +114,73 @@ void main() {
           validateCapturedAt(exifCapturedAt(tooOld), now: DateTime.now()),
           isNull,
           reason: 'a 6-year-old EXIF date must not backdate a meal');
+    });
+  });
+
+  // Travel (2026-10-08): an iPhone photo's capturedAt is the asset's
+  // createDateTime — an INSTANT shown in the phone's CURRENT zone. A dinner
+  // shot at 19:10 in Chicago and first scanned after landing in Shanghai
+  // was dated 08:10 the next morning. These pass in ANY TZ; run them under
+  // TZ=Asia/Shanghai to see the travel case.
+  group('zone of capture', () {
+    // 12:30 in Chicago (CDT, −05:00) on Oct 8 is 17:30Z.
+    final lunch = DateTime.utc(2026, 10, 8, 17, 30);
+    final chicagoExif = (
+      wall: DateTime(2026, 10, 8, 12, 30),
+      offset: const Duration(hours: -5),
+    );
+
+    test('the camera wall clock wins when its offset names the same instant',
+        () {
+      final got = captureWallClock(assetInstant(lunch), chicagoExif);
+      expect(got, DateTime(2026, 10, 8, 12, 30));
+      expect(got.isUtc, isFalse,
+          reason: 'local components, which isoDate and the clock format read');
+    });
+
+    test('a different instant keeps capturedAt (a filename wall clock read '
+        'in another zone is never re-dated)', () {
+      final captured = assetInstant(lunch.add(const Duration(hours: 1)));
+      expect(captureWallClock(captured, chicagoExif), same(captured));
+      expect(captureWallClock(captured, null), same(captured));
+    });
+
+    test('reads DateTimeOriginal + OffsetTimeOriginal from a JPEG', () {
+      final got = exifWallAndOffset(jpegWithExif(
+          dateTimeOriginal: '2026:10:08 12:30:00', offset: '-05:00'));
+      expect(got?.wall, DateTime(2026, 10, 8, 12, 30));
+      expect(got?.offset, const Duration(hours: -5));
+      expect(
+          exifWallAndOffset(jpegWithExif(
+                  dateTimeOriginal: '2026:10:09 08:10:00', offset: '+08:00'))
+              ?.offset,
+          const Duration(hours: 8));
+    });
+
+    test('reads them from a HEIC past the iinf decoy', () {
+      final got = exifWallAndOffset(heifWithExif(
+          dateTimeOriginal: '2026:10:08 12:30:00', offset: '-05:00'));
+      expect(got?.wall, DateTime(2026, 10, 8, 12, 30));
+      expect(got?.offset, const Duration(hours: -5));
+    });
+
+    test('no offset, junk offset, or junk bytes → null (never throws)', () {
+      expect(
+          exifWallAndOffset(
+              jpegWithExif(dateTimeOriginal: '2026:10:08 12:30:00')),
+          isNull,
+          reason: 'EXIF without a zone cannot be matched to an instant');
+      expect(
+          exifWallAndOffset(jpegWithExif(
+              dateTimeOriginal: '2026:10:08 12:30:00', offset: 'Z')),
+          isNull);
+      expect(exifWallAndOffset(Uint8List.fromList(List.filled(64, 7))),
+          isNull);
+      expect(exifWallAndOffset(Uint8List(0)), isNull);
+      final truncated = heifWithExif(
+          dateTimeOriginal: '2026:10:08 12:30:00', offset: '-05:00');
+      expect(
+          exifWallAndOffset(Uint8List.sublistView(truncated, 0, 620)), isNull);
     });
   });
 
@@ -145,6 +259,20 @@ void main() {
           capturedAt: assetDate,
           deliberate: true));
       expect(meal.time, isNot('01:01 AM'));
+    });
+
+    test('an iPhone photo scanned after a flight is dated by the clock where '
+        'it was TAKEN, not the destination\'s', () async {
+      // 12:30 CDT lunch on Oct 8 = 17:30Z; under TZ=Asia/Shanghai the raw
+      // createDateTime reads Oct 9 01:30 AM.
+      final meal = await savedMealFor(IntakePhoto(
+          jpegWithExif(
+              dateTimeOriginal: '2026:10:08 12:30:00', offset: '-05:00'),
+          'asset-2',
+          'IMG_1234.HEIC',
+          capturedAt: assetInstant(DateTime.utc(2026, 10, 8, 17, 30))));
+      expect(meal.date, '2026-10-08');
+      expect(meal.time, '12:30 PM');
     });
   });
 }

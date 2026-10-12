@@ -395,9 +395,48 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 }
 
 /// Shown when async startup (settings → dao → services) throws.
-class StartupErrorApp extends StatelessWidget {
+class StartupErrorApp extends StatefulWidget {
   final String error;
-  const StartupErrorApp({super.key, required this.error});
+
+  /// Another startup attempt; run on resume and from the Retry button.
+  final Future<void> Function()? onRetry;
+  const StartupErrorApp({super.key, required this.error, this.onRetry});
+
+  @override
+  State<StartupErrorApp> createState() => _StartupErrorAppState();
+}
+
+class _StartupErrorAppState extends State<StartupErrorApp>
+    with WidgetsBindingObserver {
+  bool _retrying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _retry();
+  }
+
+  Future<void> _retry() async {
+    final retry = widget.onRetry;
+    if (retry == null || _retrying) return;
+    _retrying = true;
+    try {
+      await retry(); // success replaces this whole app via runApp
+    } finally {
+      if (mounted) _retrying = false;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -414,7 +453,15 @@ class StartupErrorApp extends StatelessWidget {
                 const SizedBox(height: 12),
                 const Text('CalorieTracker could not start.'),
                 const SizedBox(height: 8),
-                Text(error, textAlign: TextAlign.center),
+                Text(widget.error, textAlign: TextAlign.center),
+                if (widget.onRetry != null) ...[
+                  const SizedBox(height: 16),
+                  TextButton(
+                    key: const Key('startupRetry'),
+                    onPressed: _retry,
+                    child: const Text('Retry'),
+                  ),
+                ],
               ],
             ),
           ),

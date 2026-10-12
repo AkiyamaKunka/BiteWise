@@ -64,11 +64,15 @@ class CalorieRing extends StatelessWidget {
     final l = context.l10n;
     final centerBig = formatKcal(_eaten);
     final centerSmall = l.ringKcalToday;
+    // The spoken sentence follows the app language like the visible
+    // labels do (a zh VoiceOver user heard English here), and keeps the
+    // neutral 'above typical' wording — no shame state in speech either.
     final semantics = budget == null
-        ? '${formatKcal(_eaten)} kcal eaten today'
-        : '${formatKcal(_eaten)} kcal eaten today, of a '
-            '${formatKcal(budget)} kcal typical day'
-            '${over ? ' (above typical)' : ''}';
+        ? l.ringSemantics(formatKcal(_eaten))
+        : over
+            ? l.ringSemanticsAboveTypical(
+                formatKcal(_eaten), formatKcal(budget))
+            : l.ringSemanticsTypical(formatKcal(_eaten), formatKcal(budget));
     return SizedBox(
       width: size,
       height: size,

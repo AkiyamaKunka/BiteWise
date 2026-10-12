@@ -227,6 +227,36 @@ LeftoverResult? applyLeftover(
   );
 }
 
+/// UNDO of one AUTOMATIC deduction (2026-10-09): the analysis to write
+/// back when the user says the photo was not leftovers after all. [applied]
+/// is what that application stored and [before] is the meal as it stood
+/// just before it, so an EARLIER, correct deduction survives the undo
+/// (`leftover.original` would wipe that one too).
+///
+/// Returns null, and nothing may be written, unless [current] still shows
+/// exactly that application: the same photo md5 and applied_at stamp, and
+/// a total still equal to `applied_total`. That is the [leftoverBase]
+/// staleness rule — a chat or editor fix made after the deduction is the
+/// user's newer truth and must never be overwritten by the undo.
+Map<String, dynamic>? revertedLeftover(Map<String, dynamic> current,
+    {required Map<String, dynamic> applied,
+    required Map<String, dynamic> before}) {
+  final now = current['leftover'];
+  final ours = applied['leftover'];
+  if (now is! Map || ours is! Map) return null;
+  final md5 = ours['leftover_photo_md5'];
+  if (md5 is! String || md5.isEmpty || now['leftover_photo_md5'] != md5) {
+    return null;
+  }
+  if (now['applied_at'] != ours['applied_at']) return null;
+  final stamped = now['applied_total'];
+  if (stamped == null ||
+      safeNumber(stamped) != safeNumber(current['total_calories'])) {
+    return null;
+  }
+  return Map<String, dynamic>.from(before);
+}
+
 /// Python-truthiness for same_meal, defaulting TRUE when absent — a model
 /// that omitted the field but returned fractions is answering the question.
 bool isFoodTruthyBool(dynamic v) {

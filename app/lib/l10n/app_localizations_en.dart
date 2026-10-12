@@ -64,6 +64,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ringKcalToday => 'kcal today';
 
   @override
+  String ringSemantics(String kcal) {
+    return '$kcal kcal eaten today';
+  }
+
+  @override
+  String ringSemanticsTypical(String kcal, String typical) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day';
+  }
+
+  @override
+  String ringSemanticsAboveTypical(String kcal, String typical) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day (above typical)';
+  }
+
+  @override
   String get todayEmptyTitle => 'No meals logged yet today.';
 
   @override
@@ -204,7 +219,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — the other providers need a VPN. 中国大陆用户请选择国内提供商。';
+      'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。';
 
   @override
   String get settingsSectionAi => 'AI';
@@ -290,7 +305,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backgroundScanNever => 'Not run yet';
 
   @override
-  String get backgroundScanDisabled => 'Off in Settings';
+  String get backgroundScanDisabled => 'Off';
 
   @override
   String get settingsSectionProfile => 'Profile';
@@ -505,6 +520,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planDoubao => 'Doubao Agent Plan';
 
   @override
+  String get planShortClaude => 'Claude Plan';
+
+  @override
+  String get planShortGlm => 'GLM Plan';
+
+  @override
+  String get planShortDoubao => 'Doubao Plan';
+
+  @override
   String get serverHeader => 'Your server';
 
   @override
@@ -592,6 +616,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addNoPhotos => 'No recent photos found.';
+
+  @override
+  String get addPhotosLimited =>
+      'Only the photos you allowed are shown — photos you take later won\'t appear here. Allow access to all photos in system settings.';
 
   @override
   String get analyzing => 'Analyzing…';
@@ -800,22 +828,36 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String coachPartialGoal(String delta) {
+    return '$delta kcal under your goal — any meals not logged yet? Add them in BiteWise.';
+  }
+
+  @override
+  String coachPartialTypical(String delta) {
+    return '$delta kcal below your usual day — any meals not logged yet? Add them in BiteWise.';
+  }
+
+  @override
   String get coachOnTarget =>
-      'Right on target today. Consistency beats intensity — keep stacking days like this.';
+      'Right on target. Consistency beats intensity — keep stacking days like this.';
+
+  @override
+  String get coachOnTypical =>
+      'Right around your usual day. Consistency beats intensity — keep stacking days like this.';
 
   @override
   String coachOverGoal(String delta) {
-    return '$delta kcal over your goal today. One day doesn\'t undo a week — you\'re back at it tomorrow.';
+    return '$delta kcal over your goal. One day doesn\'t undo a week — just keep going.';
   }
 
   @override
   String coachOverTypical(String delta) {
-    return '$delta kcal above your usual today. Worth knowing, not worth worrying about — tomorrow\'s a clean slate.';
+    return '$delta kcal above your usual. Worth knowing, not worth worrying about — the next meal\'s a clean slate.';
   }
 
   @override
   String get coachNoReference =>
-      'Logged and counted. A few more days and I can tell you how today compares.';
+      'Logged and counted. A few more days and I can tell you how this compares to your usual.';
 
   @override
   String coachDetail(String meals, String protein) {
@@ -860,13 +902,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get macroFatShort => 'F';
 
   @override
-  String get editorProteinLabel => 'Protein (g)';
+  String get editorProteinLabel => 'Protein';
 
   @override
-  String get editorCarbsLabel => 'Carbs (g)';
+  String get editorCarbsLabel => 'Carbs';
 
   @override
-  String get editorFatLabel => 'Fat (g)';
+  String get editorFatLabel => 'Fat';
+
+  @override
+  String get editorGramsSuffix => 'g';
 
   @override
   String get diagTitle => 'Test AI provider';
@@ -972,7 +1017,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixVpn =>
-      'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to Qwen/Doubao/GLM (no VPN needed).';
+      'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).';
 
   @override
   String get diagFixServerUnreachable =>
@@ -1018,7 +1063,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextBad =>
-      'The model did not return usable JSON for a text request.';
+      'The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).';
 
   @override
   String get diagTextBadDetail =>
@@ -1027,6 +1072,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get diagFixPickModel =>
       'If this persists, pick a different model in Settings.';
+
+  @override
+  String get diagTextBadPhotoAlsoFailed =>
+      'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.';
+
+  @override
+  String get diagFixTextPickModel =>
+      'If photo analysis works but this keeps failing, pick a different model in Settings.';
+
+  @override
+  String get diagFixTextFollowPhoto =>
+      'Follow the fix on the photo row, then run the test again.';
 
   @override
   String get diagPhotoOk =>
@@ -1084,6 +1141,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String photoCellLabel(int n, int total, String when) {
+    return 'Photo $n of $total, $when';
+  }
+
+  @override
   String get photoPermissionDenied =>
       'Bitewise isn\'t allowed to see your photos.';
 
@@ -1114,6 +1176,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get outcomeLogManuallyHint =>
       'If this IS food, log it yourself — the photo stays attached to the meal.';
+
+  @override
+  String get outcomeUndoLeftover => 'Not leftovers, log as a new meal';
+
+  @override
+  String get outcomeUndoLeftoverDone =>
+      'Deduction undone — the earlier meal is back as it was.';
+
+  @override
+  String get outcomeUndoLeftoverStale =>
+      'That meal was changed or deleted since, so it was left as it is.';
 
   @override
   String get okButton => 'OK';
@@ -1154,6 +1227,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String outcomeLeftoverMsg(String summary) {
     return 'Leftovers deducted: $summary';
   }
+
+  @override
+  String outcomeFailedKeptMsg(String reason) {
+    return 'Photo analysis failed — kept for retry. $reason';
+  }
+
+  @override
+  String get backlogTruncatedWarning =>
+      'Photo library backlog is very large — some older photos may need to be added manually.';
 
   @override
   String get outcomeNotFoodMsg => 'No food detected in this photo.';
@@ -1221,7 +1303,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dayEmpty => 'Nothing logged on this day yet. Tap + to add a meal.';
 
   @override
+  String get dayAddMealTooltip => 'Add a meal to this day';
+
+  @override
   String get notFoodTag => 'not food';
+
+  @override
+  String get correctedBadge => 'Corrected';
 
   @override
   String fixRequestFailed(String error) {
@@ -1233,7 +1321,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fixIntro =>
-      'Say what to change, move, or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language.';
+      'Say what to change or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language. To move a meal to another day or time, tap it on Today or in History and change its date or time.';
 
   @override
   String get fixNamingTip =>
@@ -1462,6 +1550,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get covRetryAll => 'Retry all';
 
   @override
+  String get covFailedHelp =>
+      '\"Retry all\" asks the AI again (the same error often comes back); tap a row to enter it yourself.';
+
+  @override
   String covMoreRetryAll(int count) {
     return '…and $count more — \"Retry all\" still covers every one.';
   }
@@ -1511,6 +1603,31 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covStoppedBecause(
+    String label,
+    int attempted,
+    int total,
+    String reason,
+    int remaining,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining photos were',
+      one: '1 photo was',
+    );
+    return '$label stopped after $attempted of $total: $reason The remaining $_temp0 not touched — run this again later.';
+  }
+
+  @override
+  String covMoreNotFood(int count) {
+    return '…and $count more.';
+  }
+
+  @override
+  String get covUnnamedPhoto => '(unnamed photo)';
+
+  @override
   String covDone(String label, int count) {
     return '$label done ($count photos).';
   }
@@ -1543,6 +1660,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String covFailedCount(int count) {
     return '$count failed';
+  }
+
+  @override
+  String covDeletedCount(int count) {
+    return '$count deleted by you';
+  }
+
+  @override
+  String covInFlightCount(int count) {
+    return '$count in progress';
+  }
+
+  @override
+  String covUnreadableCount(int count) {
+    return '$count unreadable';
+  }
+
+  @override
+  String covTooLargeCount(int count) {
+    return '$count too large to analyze';
   }
 
   @override

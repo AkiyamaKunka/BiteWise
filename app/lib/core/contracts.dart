@@ -278,6 +278,39 @@ abstract class AnalyzerService {
   }
 }
 
+/// A text-intent reply that keeps WHY it failed. [json] is exactly what
+/// [AnalyzerService.textIntent] returns; [error] is the analyzer's English
+/// failure summary (the same prose the photo path shows, so
+/// `classifyAnalysisError` reads it), or null when the cause is unknown or
+/// the reply simply would not parse.
+class TextIntentOutcome {
+  const TextIntentOutcome(this.json, {this.error});
+  final Map<String, dynamic>? json;
+  final String? error;
+}
+
+/// Optional companion to [AnalyzerService.textIntent] for analyzers that can
+/// say why a text request failed. textIntent folds EVERY failure into null,
+/// so the chat and describe paths told a friend with a wrong key "联系 AI
+/// 失败，请重试" forever, while the photo path on the same key said the key
+/// was rejected (loop find 2026-10-08). A separate interface rather than a
+/// default method on [AnalyzerService]: the test fakes `implements` it, and
+/// an outcome VALUE (not a "last error" field) keeps the shared analyzer
+/// free of per-call state.
+abstract interface class TextIntentExplainer {
+  Future<TextIntentOutcome> textIntentOutcome(String prompt);
+}
+
+/// [AnalyzerService.textIntent] with its failure reason when [analyzer] can
+/// give one; otherwise the plain reply with no reason.
+Future<TextIntentOutcome> askTextIntent(
+    AnalyzerService analyzer, String prompt) async {
+  if (analyzer is TextIntentExplainer) {
+    return (analyzer as TextIntentExplainer).textIntentOutcome(prompt);
+  }
+  return TextIntentOutcome(await analyzer.textIntent(prompt));
+}
+
 /// What a [AnalyzerService.probeKey] learned about the credential.
 enum KeyProbeResult {
   ok,

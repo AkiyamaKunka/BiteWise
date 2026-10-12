@@ -11,7 +11,8 @@ import 'package:flutter/widgets.dart';
 
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
-import 'format.dart' show displayClock, friendlyHistoryDay;
+import 'format.dart' show displayClock, friendlyHistoryDay, isoDate;
+import 'meal_edit_logic.dart' show formatClock;
 
 export '../l10n/app_localizations.dart' show AppLocalizations;
 
@@ -34,6 +35,15 @@ extension L10nX on BuildContext {
 
   /// Locale-aware meal clock over the stored `%I:%M %p` string.
   String clock(String raw) => displayClock(raw, localeName: _localeName);
+
+  /// When a photo was taken, for a screen reader: day + clock in the
+  /// app's own wording (今天 20:05 / 'Today 08:05 PM'), so a grid of
+  /// look-alike thumbnails can be told apart without seeing them.
+  String photoTakenAt(DateTime t, {DateTime? now}) {
+    final local = t.toLocal();
+    return '${friendlyDay(isoDate(local), now: now)} '
+        '${clock(formatClock(local))}';
+  }
 }
 
 /// The switcher's choices: settings value → display name resolver.

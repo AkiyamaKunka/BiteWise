@@ -17,6 +17,7 @@ import 'package:calorie_tracker/ui/background_glue.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -249,7 +250,7 @@ void main() {
       // FRONTIER, never scanStart: outcomes can't see photos whose byte
       // read failed, so only the intake's frontier is coverage-honest.
       expect(prefs.getString(backgroundWatermarkPrefsKey),
-          frontierMark.toIso8601String());
+          frontierMark.toUtc().toIso8601String());
     });
 
     test('a budget turns into a deadline from the scan start', () async {
@@ -281,6 +282,7 @@ void main() {
     test('passes the persisted watermark minus the overlap', () async {
       final settings = await settingsWith(key: 'k');
       final mark = DateTime(2026, 7, 23, 11, 0);
+      // Zone-less, as builds before the UTC fix wrote it: still local.
       await prefs.setString(
           backgroundWatermarkPrefsKey, mark.toIso8601String());
       final intake = EmittingIntake();
@@ -292,6 +294,58 @@ void main() {
         showMealCard: (_, _) async {},
       );
       expect(intake.sinceArgs.single, mark.subtract(backgroundScanOverlap));
+    });
+
+    test('the watermark is stored as a UTC instant and read back as the '
+        'same instant', () async {
+      // A zone-less local string re-parsed in a new zone after a flight:
+      // Shanghai → Chicago moved it 13 h into the future and the scan
+      // skipped the airport and in-flight meals (2026-10-08).
+      final settings = await settingsWith(key: 'k');
+      final frontierMark = DateTime(2026, 10, 20, 11, 30);
+      final first = EmittingIntake()
+        ..batch = [photo(1)]
+        ..frontier = frontierMark;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: first,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: analyzer),
+        showMealCard: (_, _) async {},
+        clock: () => DateTime(2026, 10, 20, 12, 0),
+      );
+      final stored = prefs.getString(backgroundWatermarkPrefsKey)!;
+      expect(stored, endsWith('Z'), reason: 'an instant, not a wall time');
+      expect(DateTime.parse(stored).isAtSameMomentAs(frontierMark), isTrue);
+
+      final second = EmittingIntake();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: second,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: analyzer),
+        showMealCard: (_, _) async {},
+        clock: () => DateTime(2026, 10, 20, 13, 0),
+      );
+      // Same instant AND local, so the intake's date maths is unchanged.
+      expect(second.sinceArgs.single,
+          frontierMark.subtract(backgroundScanOverlap));
+      expect(second.sinceArgs.single!.isUtc, isFalse);
+    });
+
+    test('readStoredInstant gives back the stored instant, in local time',
+        () {
+      final at = DateTime.utc(2026, 10, 20, 3, 30);
+      final read = readStoredInstant(at.toIso8601String())!;
+      expect(read.isAtSameMomentAs(at), isTrue);
+      expect(read.isUtc, isFalse, reason: 'Settings formats .hour directly');
+      expect(readStoredInstant(null), isNull);
+      expect(readStoredInstant('garbage'), isNull);
     });
 
     test('does nothing when the watcher toggle is off', () async {
@@ -311,7 +365,50 @@ void main() {
       expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
       // "The OS ran us" is recorded BEFORE any guard — Settings shows it.
       expect(prefs.getString(backgroundLastRunPrefsKey),
+          launched.toUtc().toIso8601String());
+    });
+
+    test('keeps the launch stamp the production runner already wrote',
+        () async {
+      final settings = await settingsWith(key: 'k', watcher: false);
+      final launched = DateTime.utc(2026, 10, 9, 6, 0);
+      await recordBackgroundLaunch(prefs, () => launched);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: EmittingIntake(),
+        pipeline: () async =>
+            PhotoPipeline(dao: FakeDao(), analyzer: FakeAnalyzer()),
+        showMealCard: (_, _) async {},
+        clock: () => launched.add(const Duration(milliseconds: 40)),
+        launchRecorded: true,
+      );
+      // One launch, one stamp — not a second, later one.
+      expect(prefs.getString(backgroundLastRunPrefsKey),
           launched.toIso8601String());
+    });
+
+    test(
+        'runHeadlessBackfill stamps the launch BEFORE loading settings, and '
+        'a failed load (locked iPhone keychain) still ends as success',
+        () async {
+      final launched = DateTime.utc(2026, 10, 9, 3, 15);
+      String? stampSeenByLoad;
+      final ok = await runHeadlessBackfill(
+        isIOS: true,
+        loadPrefs: () async => prefs,
+        clock: () => launched,
+        loadSettings: () async {
+          stampSeenByLoad = prefs.getString(backgroundLastRunPrefsKey);
+          throw PlatformException(code: '-25308'); // InteractionNotAllowed
+        },
+      );
+      expect(ok, isTrue, reason: 'no WorkManager retry storm');
+      expect(stampSeenByLoad, launched.toIso8601String());
+      // The 后台扫描 row shows iOS ran the task, keys readable or not.
+      expect(prefs.getString(backgroundLastRunPrefsKey),
+          launched.toIso8601String());
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
     });
 
     test('does nothing without an API key (photos must not burn to failed)',
@@ -366,7 +463,7 @@ void main() {
       );
       // NOT scanStart: released photos must stay ahead of the watermark.
       expect(prefs.getString(backgroundWatermarkPrefsKey),
-          frontierMark.toIso8601String());
+          frontierMark.toUtc().toIso8601String());
     });
 
     test('a photo another run is still analyzing holds the watermark in '
@@ -402,7 +499,7 @@ void main() {
       // Photo 1 landed and checkpointed; photo 2's per-photo checkpoint
       // must NOT have advanced the watermark to afterPhoto2.
       expect(prefs.getString(backgroundWatermarkPrefsKey),
-          afterPhoto1.toIso8601String());
+          afterPhoto1.toUtc().toIso8601String());
       expect(dao.meals, hasLength(1));
       expect(dao.ledger[hash2], IngestionStatus.processing,
           reason: 'the other run\'s reservation is left for it, or the '
@@ -439,7 +536,8 @@ void main() {
       // The SECOND photo's save observed the FIRST photo's checkpoint —
       // proof a WorkManager hard-stop mid-batch keeps prior progress.
       expect(seenMarks.length, 2);
-      expect(seenMarks[1], DateTime(2026, 7, 24, 1, 0).toIso8601String());
+      expect(seenMarks[1],
+          DateTime(2026, 7, 24, 1, 0).toUtc().toIso8601String());
     });
 
     test('an aborted scan does NOT advance the watermark', () async {

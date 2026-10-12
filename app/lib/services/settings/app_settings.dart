@@ -8,6 +8,7 @@
 /// it survives restarts. A simple [ChangeNotifier] so UI can listen.
 library;
 
+import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,6 +35,172 @@ class FlutterSecureKeyStore implements SecureKeyStore {
       _storage.write(key: key, value: value);
   @override
   Future<void> delete(String key) => _storage.delete(key: key);
+}
+
+/// iOS keychain class for every credential: readable from the first unlock
+/// after a reboot onward, locked screen included. The BGAppRefresh photo
+/// scan usually runs in a pocket with the screen locked, and under the
+/// plugin default (`unlocked`, kSecAttrAccessibleWhenUnlocked) its very
+/// first key read failed, so the whole run died before scanning anything
+/// (2026-10-09). Deliberately NOT `first_unlock_this_device`: a
+/// this-device item never leaves the phone, so a backup restored onto a
+/// new iPhone would come back without its keys; plain first_unlock
+/// restores exactly like `unlocked` always did. iOS-only — the plugin
+/// reads iOptions on iOS alone, so Android is untouched.
+const IOSOptions keychainIOSOptions =
+    IOSOptions(accessibility: KeychainAccessibility.first_unlock);
+
+/// The store [AppSettings.load] uses when none is injected. On iOS it is
+/// [MigratingKeyStore] over the first_unlock keychain class, carrying the
+/// keys earlier builds saved under the plugin default; every other
+/// platform keeps the plain store, unchanged.
+///
+/// [migrate] false is the BACKGROUND engine's store: it only reads (it
+/// never writes keys), so the one-time move has a single, sequential
+/// mover — the UI engine — and two engines can never race on it.
+SecureKeyStore platformKeyStore({bool migrate = true}) =>
+    defaultTargetPlatform == TargetPlatform.iOS
+        ? MigratingKeyStore(
+            primary: const FlutterSecureKeyStore(
+                FlutterSecureStorage(iOptions: keychainIOSOptions)),
+            legacy: const FlutterSecureKeyStore(),
+            migrate: migrate,
+          )
+        : const FlutterSecureKeyStore();
+
+/// Moves each key saved under the old keychain class ([legacy]) into the
+/// new one ([primary]) the first time it is read, without ever losing it.
+///
+/// Why not simply switch the options: the plugin puts kSecAttrAccessible
+/// into EVERY query, reads included, so a first_unlock read never sees an
+/// item stored as `unlocked` — every upgraded phone's keys would read as
+/// missing. And accessibility is NOT part of a keychain item's identity,
+/// so adding a first_unlock item while the `unlocked` one exists fails as
+/// a duplicate. The plugin's delete, though, matches every accessibility,
+/// so either seam's delete clears both copies. Hence the order in [read]:
+/// read the old copy, delete it, write the new one, and if that write
+/// fails put the old copy back.
+///
+/// Pure over two seams so the order is unit-testable with in-memory fakes;
+/// it does not assume the seams share storage (it deletes through both).
+class MigratingKeyStore implements SecureKeyStore {
+  const MigratingKeyStore(
+      {required this.primary, required this.legacy, this.migrate = true});
+  final SecureKeyStore primary;
+  final SecureKeyStore legacy;
+
+  /// False: read-only (the background engine). Finds a key in either class
+  /// or in a stage, never moves anything — and, because it never writes,
+  /// may treat an unreadable old copy as absent for this run.
+  final bool migrate;
+
+  /// Where a key sits (in the new class) while it is being moved, so an
+  /// app kill between deleting the old copy and writing the new one cannot
+  /// lose it. A different account name: never collides with the item.
+  static String stagingKey(String key) => '$key.migrating';
+
+  @override
+  Future<String?> read(String key) async {
+    final current = await primary.read(key);
+    if (current != null) return current;
+    if (!migrate) {
+      String? old;
+      try {
+        old = await legacy.read(key);
+      } catch (_) {
+        // Locked phone, old class: absent FOR THIS RUN. Safe only because
+        // this store never writes; the UI engine migrates it when unlocked.
+      }
+      if (old != null) return old;
+      final staged = await primary.read(stagingKey(key));
+      return await primary.read(key) ?? staged;
+    }
+    // A locked phone cannot read an `unlocked` item. That failure MUST
+    // propagate. Reporting the key as missing made a locked first launch
+    // look like "no key": the UI then showed an empty key field whose next
+    // save deleted the still-stored item (review 2026-10-09). The
+    // background run already survives a failed load (background_glue).
+    final old = await legacy.read(key);
+    if (old == null) {
+      // The move runs: stage written → old deleted → new written → stage
+      // dropped. A null old copy means we are past "old deleted", so read
+      // the STAGE FIRST and the item second: either the stage is still
+      // there, or it was dropped after the new item was written and the
+      // item read below sees it. (Item first, stage second let a move
+      // finishing in between read as "missing" — review 2026-10-09.)
+      final staged = await primary.read(stagingKey(key));
+      final again = await primary.read(key);
+      if (again != null) return again;
+      if (staged == null) return null;
+      await primary.write(key, staged);
+      await _dropStage(key);
+      return staged;
+    }
+    try {
+      await primary.write(stagingKey(key), old);
+    } catch (_) {
+      return old; // nothing moved; the old copy is intact for later
+    }
+    try {
+      // Delete before the real write: a first_unlock add next to the
+      // `unlocked` item would be rejected as a duplicate.
+      await legacy.delete(key);
+    } catch (_) {
+      await _dropStage(key);
+      return old; // the old copy is intact; migrate on a later read
+    }
+    try {
+      await primary.write(key, old);
+    } catch (_) {
+      try {
+        // Never lose a key: put it back exactly as it was stored.
+        await legacy.write(key, old);
+      } catch (_) {
+        return old; // the staged copy stays; the next read finishes the move
+      }
+    }
+    await _dropStage(key);
+    return old;
+  }
+
+  /// Try the plugin's in-place update first: once migrated it is atomic,
+  /// so a key is never absent between keystrokes. Only an old-class copy
+  /// makes the add fail (duplicate) — then clear every copy and add.
+  @override
+  Future<void> write(String key, String value) async {
+    try {
+      await primary.write(key, value);
+    } on PlatformException catch (e) {
+      // ONLY a duplicate (an old-class copy) justifies clearing every copy;
+      // any other failure must leave the stored key alone. The plugin puts
+      // the OSStatus in `details`.
+      if ('${e.details}' != '$errSecDuplicateItem') rethrow;
+      await _deleteBoth(key);
+      await primary.write(key, value);
+    }
+  }
+
+  /// OSStatus errSecDuplicateItem.
+  static const int errSecDuplicateItem = -25299;
+
+  @override
+  Future<void> delete(String key) async {
+    await _deleteBoth(key);
+    await _dropStage(key); // a stale stage must not resurrect the key
+  }
+
+  Future<void> _deleteBoth(String key) async {
+    await legacy.delete(key);
+    await primary.delete(key);
+  }
+
+  Future<void> _dropStage(String key) async {
+    try {
+      await primary.delete(stagingKey(key));
+    } catch (_) {
+      // Harmless: a stage is only consulted when both classes are empty.
+    }
+  }
 }
 
 /// AI providers the analyzer can call. Gemini is the original and default;
@@ -193,7 +360,7 @@ class AppSettings extends ChangeNotifier {
   static Future<AppSettings> load(
       {SharedPreferences? prefs, SecureKeyStore? keyStore}) async {
     final p = prefs ?? await SharedPreferences.getInstance();
-    final k = keyStore ?? const FlutterSecureKeyStore();
+    final k = keyStore ?? platformKeyStore();
     final s = AppSettings._(p, k);
     final storedKey = (await k.read(_kApiKey))?.trim();
     s._geminiApiKey = (storedKey == null || storedKey.isEmpty) ? null : storedKey;
@@ -260,7 +427,12 @@ class AppSettings extends ChangeNotifier {
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
-    s._quotaPauseUntil = DateTime.tryParse(p.getString(_kQuotaPauseUntil) ?? '');
+    // Written as UTC, read back local: a zone-less string would re-parse
+    // in the zone the phone is in NOW, so a pause armed in Shanghai lasted
+    // 13 hours longer after landing in Chicago. A pre-fix zone-less value
+    // still parses as local, exactly as before.
+    s._quotaPauseUntil =
+        DateTime.tryParse(p.getString(_kQuotaPauseUntil) ?? '')?.toLocal();
     return s;
   }
 
@@ -571,9 +743,19 @@ class AppSettings extends ChangeNotifier {
   }
 
   /// Watermark: the last date whose summary was already posted, so the
-  /// Timer path and the WorkManager catch-up can never double-notify.
-  String get summaryPostedDate =>
-      _prefs.getString(_kSummaryPostedDate) ?? '';
+  /// Timer path and the WorkManager catch-up do not double-notify.
+  ///
+  /// Read FRESH, and deliberately no synchronous getter: the WorkManager
+  /// heartbeat posts from another isolate (same process, new engine), and
+  /// this isolate's SharedPreferences cache never sees its write. On
+  /// Android the freezer can hold the overdue Timer until the heartbeat
+  /// thaws the process, so a cached read let the Timer post the summary
+  /// the heartbeat had just posted — a second alert sound for the same
+  /// card. Same rule as lastBackgroundRun() in background_glue.
+  Future<String> freshSummaryPostedDate() async {
+    await _prefs.reload();
+    return _prefs.getString(_kSummaryPostedDate) ?? '';
+  }
 
   Future<void> markSummaryPosted(String isoDate) =>
       _prefs.setString(_kSummaryPostedDate, isoDate);
@@ -659,7 +841,8 @@ class AppSettings extends ChangeNotifier {
       await _prefs.remove(_kQuotaPauseUntil);
       await _prefs.remove(_kQuotaPauseProvider);
     } else {
-      await _prefs.setString(_kQuotaPauseUntil, value.toIso8601String());
+      await _prefs.setString(
+          _kQuotaPauseUntil, value.toUtc().toIso8601String());
       await _prefs.setString(
           _kQuotaPauseProvider, (forProvider ?? _provider).name);
     }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release builds shrink resources, and the shrinker cannot see names that
+     only Dart code uses: flutter_local_notifications looks the notification
+     small icon up by name (getIdentifier). Without this keep the release APK
+     loses the drawable, initialize() fails with invalid_icon, and Android
+     notifications silently stop, while debug builds keep working. This file
+     itself is not packaged. -->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_bitewise" />

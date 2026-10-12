@@ -11,6 +11,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
+import '../../core/leftover_logic.dart' show revertedLeftover;
 import '../../services/analyzer/platform_decode.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
@@ -147,6 +148,11 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   late Future<List<RecentAsset>> _assets;
   bool _analyzing = false;
   bool _permissionDenied = false;
+  // iOS "limited" / Android "selected photos": the grid holds only the
+  // photos picked in that one system dialog, so a meal shot later never
+  // appears here. Settings warns when the watcher is switched on; this
+  // screen said nothing (2026-10-09).
+  bool _limited = false;
   // Future-cached per asset: dedupes in-flight fetches across rebuilds
   // (the same rule the coverage screen learned).
   final Map<String, Future<Uint8List?>> _thumbs = {};
@@ -173,7 +179,62 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       setState(() => _permissionDenied = true);
       return const [];
     }
+    // Unknown counts as full, the same rule as hasFullAccess itself: the
+    // note is advisory, and a false "limited" would nag a full grant.
+    var full = true;
+    final lib = widget.services.photoLibrary;
+    if (lib != null) {
+      try {
+        full = await lib.hasFullAccess();
+      } catch (_) {}
+      if (!mounted) return const [];
+    }
+    _limited = !full;
     return widget.services.picker.recentAssets();
+  }
+
+  /// Says why photos are missing and where to grant the rest. Shown above
+  /// the grid AND in place of "no recent photos": a limited grant with
+  /// nothing selected is not an empty camera roll.
+  Widget _limitedNote(BuildContext context) {
+    final open = widget.services.openSystemSettings;
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: Row(
+        key: const Key('addPhotosLimited'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.photo_library_outlined, size: 16, color: muted),
+          const SizedBox(width: 8),
+          // Button UNDER the text, not beside it: at large text sizes a
+          // side-by-side button would squeeze the sentence to nothing.
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  context.l10n.addPhotosLimited,
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodySmall
+                      ?.copyWith(color: muted),
+                ),
+                if (open != null)
+                  TextButton(
+                    key: const Key('addPhotosLimitedSettings'),
+                    style: TextButton.styleFrom(
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact),
+                    onPressed: () => open(),
+                    child: Text(context.l10n.openSystemSettings),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<Uint8List?> _thumbFor(String assetId) => _thumbs.putIfAbsent(
@@ -218,6 +279,14 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // repeats the same verdict.
     final canLogManually = outcome.kind == PhotoOutcomeKind.skipped ||
         outcome.kind == PhotoOutcomeKind.failed;
+    // A WRONG automatic leftover verdict was a dead end too: the earlier
+    // meal stayed cut, and re-picking the photo repeats the verdict. The
+    // escape puts that meal back and logs the photo as its own meal.
+    final canUndoLeftover =
+        outcome.kind == PhotoOutcomeKind.leftoverApplied &&
+            outcome.mealId != null &&
+            outcome.previousAnalysis != null &&
+            outcome.analysis != null;
     final l = context.l10n;
     final choice = await showDialog<String>(
       context: context,
@@ -245,11 +314,25 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
               onPressed: () => Navigator.of(ctx).pop('manual'),
               child: Text(l.logManually),
             ),
+          if (canUndoLeftover)
+            FilledButton(
+              key: const Key('undoLeftoverButton'),
+              onPressed: () => Navigator.of(ctx).pop('undoLeftover'),
+              child: Text(l.outcomeUndoLeftover),
+            ),
         ],
       ),
     );
     if (!mounted) return;
-    if (choice == 'manual') {
+    if (choice == 'undoLeftover') {
+      final undone = await _undoLeftover(outcome);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(undone
+              ? l.outcomeUndoLeftoverDone
+              : l.outcomeUndoLeftoverStale)));
+    }
+    if (choice == 'manual' || choice == 'undoLeftover') {
       final saved = await Navigator.of(context).push<bool>(MaterialPageRoute(
         builder: (_) => MealEditorScreen(
           dao: widget.services.dao,
@@ -265,6 +348,28 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     if (outcome.kind == PhotoOutcomeKind.saved && mounted) {
       Navigator.of(context).pop();
     }
+  }
+
+  /// Puts the cut meal back as it was before THIS deduction. Re-reads the
+  /// row first and writes only while it still shows that deduction
+  /// (revertedLeftover) — a deleted meal or a later fix is left alone.
+  /// updateMealAnalysis keeps corrected=1 (spec §2.4); the photo's ledger
+  /// row stays 'skipped', which the editor's photo save turns into
+  /// 'saved'.
+  Future<bool> _undoLeftover(PhotoOutcome outcome) async {
+    final dao = widget.services.dao;
+    final id = outcome.mealId!;
+    final date = outcome.mealDate;
+    final rows = date == null
+        ? const <Meal>[]
+        : await dao.mealsBetween(date, date);
+    final current = rows.where((m) => m.id == id).firstOrNull;
+    if (current == null) return false;
+    final restored = revertedLeftover(current.analysis,
+        applied: outcome.analysis!, before: outcome.previousAnalysis!);
+    if (restored == null) return false;
+    await dao.updateMealAnalysis(id, restored);
+    return true;
   }
 
   @override
@@ -314,10 +419,16 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                 );
               }
               if (assets.isEmpty) {
+                if (_limited) {
+                  return Align(
+                      alignment: Alignment.topCenter,
+                      child: _limitedNote(context));
+                }
                 return Center(
                     child: Text(context.l10n.addNoPhotos));
               }
               return Column(children: [
+                if (_limited) _limitedNote(context),
                 // Portion accuracy is the model's weakest link, and a scale
                 // reference in frame is the cheapest fix the USER controls.
                 Padding(
@@ -354,22 +465,34 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                 itemBuilder: (context, i) => GestureDetector(
                   key: Key('recentPhoto$i'),
                   onTap: _analyzing ? null : () => _pick(assets[i]),
-                  child: FutureBuilder<Uint8List?>(
-                    future: _thumbFor(assets[i].id),
-                    builder: (context, snap) {
-                      final bytes = snap.data;
-                      if (bytes == null || bytes.isEmpty) {
-                        return Container(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest);
-                      }
-                      // cacheWidth: decode at cell size, not 12 MP.
-                      return Image.memory(bytes,
-                          fit: BoxFit.cover,
-                          cacheWidth: 320,
-                          gaplessPlayback: true);
-                    },
+                  // VoiceOver/TalkBack read thirty identical unlabeled
+                  // 'image's — no way to find the photo of a given meal.
+                  // Position + shot time name the cell; the label sits
+                  // INSIDE the gesture widget so the tap action stays on
+                  // the same node, and covers the placeholder too.
+                  child: Semantics(
+                    image: true,
+                    label: context.l10n.photoCellLabel(i + 1, assets.length,
+                        context.photoTakenAt(assets[i].createdAt)),
+                    child: ExcludeSemantics(
+                      child: FutureBuilder<Uint8List?>(
+                        future: _thumbFor(assets[i].id),
+                        builder: (context, snap) {
+                          final bytes = snap.data;
+                          if (bytes == null || bytes.isEmpty) {
+                            return Container(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest);
+                          }
+                          // cacheWidth: decode at cell size, not 12 MP.
+                          return Image.memory(bytes,
+                              fit: BoxFit.cover,
+                              cacheWidth: 320,
+                              gaplessPlayback: true);
+                        },
+                      ),
+                    ),
                   ),
                 ),
               )),
@@ -386,8 +509,14 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                     const CircularProgressIndicator(
                         key: Key('photoAnalyzing')),
                     const SizedBox(height: 12),
-                    Text(context.l10n.analyzing,
-                        style: const TextStyle(color: Colors.white)),
+                    // Live region: a slow round-trip is otherwise silent
+                    // to a screen reader until the outcome dialog.
+                    Semantics(
+                      liveRegion: true,
+                      child: Text(context.l10n.analyzing,
+                          key: const Key('photoAnalyzingText'),
+                          style: const TextStyle(color: Colors.white)),
+                    ),
                   ],
                 ),
               ),

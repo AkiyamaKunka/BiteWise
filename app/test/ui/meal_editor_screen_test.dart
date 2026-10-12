@@ -1,11 +1,14 @@
 // Editor + day-detail flows: edit an existing meal, add one by hand, delete
 // with confirmation. These pin the wiring the pure-logic tests can't see —
 // which DAO call each button makes, and that the day list reflects it.
+import 'dart:typed_data';
+
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 import 'fakes.dart';
 
@@ -108,6 +111,36 @@ void main() {
     expect(saved.analysis['is_food'], isTrue);
     expect(saved.analysis['total_calories'], 320);
     expect(saved.analysis['meal_description'], 'Bowl of congee');
+  });
+
+  testWidgets('logging a photo by hand dates it by the clock where it was '
+      'TAKEN, like the automatic pipeline (travel, 2026-10-08)',
+      (tester) async {
+    // iPhone: capturedAt is the asset's createDateTime — an instant shown in
+    // the CURRENT zone. 12:30 CDT on Oct 8 = 17:30Z reads Oct 9 01:30 AM in
+    // Shanghai; the EXIF wall clock + offset name the same instant.
+    final shot = img.Image(width: 1, height: 1);
+    shot.exif.exifIfd['DateTimeOriginal'] = '2026:10:08 12:30:00';
+    shot.exif.exifIfd['OffsetTimeOriginal'] = '-05:00';
+    final dao = FakeDao();
+    await tester.pumpWidget(host(MealEditorScreen(
+        dao: dao,
+        fromPhoto: IntakePhoto(
+            Uint8List.fromList(img.encodeJpg(shot)), 'asset-9', 'IMG_9.HEIC',
+            capturedAt: DateTime.fromMillisecondsSinceEpoch(
+                DateTime.utc(2026, 10, 8, 17, 30).millisecondsSinceEpoch),
+            deliberate: true),
+        now: clock)));
+
+    await tester.enterText(
+        find.byKey(const Key('editorDescription')), 'Noodles');
+    await tester.enterText(find.byKey(const Key('editorCalories')), '600');
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+
+    final saved = dao.saved.single;
+    expect(saved.date, '2026-10-08');
+    expect(saved.time, '12:30 PM');
   });
 
   testWidgets('delete asks first, and cancelling changes nothing',

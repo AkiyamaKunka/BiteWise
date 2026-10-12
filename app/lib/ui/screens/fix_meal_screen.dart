@@ -36,7 +36,6 @@ class _FixMealScreenState extends State<FixMealScreen> {
     setState(() => _sending = true);
     try {
       final replies = await widget.executor.handleText(text);
-      _controller.clear();
       if (!mounted) return;
       // Sending ends when the executor returns; presentation (incl. the
       // blocking delete-confirmation modal) is not "sending".
@@ -46,7 +45,16 @@ class _FixMealScreenState extends State<FixMealScreen> {
       // replies were read, so a cancelled delete, an invalid-index refusal
       // or an AI-contact error read as applied (loop find 2026-10-07).
       final changed = await presentNlReplies(context, widget.executor, replies);
-      if (changed && mounted) setState(() => _log.add(text));
+      // The field is cleared on the same condition. It used to be cleared
+      // as soon as the executor returned, so "❌ 联系 AI 失败，请重试。", a
+      // refusal or a cancelled delete asked the user to retry with the
+      // sentence they typed already gone (loop find 2026-10-08). Nothing
+      // can be typed in between: presentNlReplies awaits only modal
+      // dialogs, never a snackbar.
+      if (changed && mounted) {
+        _controller.clear();
+        setState(() => _log.add(text));
+      }
     } catch (e) {
       if (!mounted) return;
       // Executor is spec'd never to throw (§4.9); belt-and-braces anyway.

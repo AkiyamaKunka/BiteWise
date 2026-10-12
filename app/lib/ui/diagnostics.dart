@@ -16,6 +16,7 @@ import 'package:image/image.dart' as img;
 
 import '../core/contracts.dart';
 import '../l10n/app_localizations.dart';
+import 'provider_names.dart';
 import 'services.dart';
 
 enum DiagStatus { pass, warn, fail }
@@ -102,8 +103,12 @@ class ProviderDiagnostics {
         l.diagStageConfiguration,
         DiagStatus.pass,
         isServer
-            ? l.diagServerConfigured(settings.serverBackend)
-            : l.diagProviderConfigured(provider, settings.model));
+            // Display names, never the raw ids: the Chinese page read
+            // '服务“qwen”' and '后端：claude' (loop find 2026-10-08).
+            ? l.diagServerConfigured(
+                providerDisplayLabel(l, 'server', settings.serverBackend))
+            : l.diagProviderConfigured(
+                providerLabel(provider), settings.model));
 
     // 2 ── Endpoint reachability ────────────────────────────────────────
     final probeUrl =
@@ -119,14 +124,14 @@ class ProviderDiagnostics {
             l.diagStageEndpoint,
             DiagStatus.pass,
             l.diagEndpointAnswered(
-                isServer ? l.diagTargetServer : provider),
+                isServer ? l.diagTargetServer : providerLabel(provider)),
             detail: probeUrl);
       } catch (e) {
         yield DiagResult(
             l.diagStageEndpoint,
             DiagStatus.fail,
             l.diagEndpointUnreachable(
-                isServer ? l.diagTargetYourServer : provider),
+                isServer ? l.diagTargetYourServer : providerLabel(provider)),
             detail: '$probeUrl — $e',
             fix: _vpnNeeded.contains(provider)
                 ? l.diagFixVpn
@@ -170,15 +175,32 @@ class ProviderDiagnostics {
     }
 
     // 4 ── Text round-trip ──────────────────────────────────────────────
+    // textIntent returns null for EVERY failure — busy server, closed
+    // usage window, timeout, rate limit, and a real no-JSON reply alike —
+    // so this row cannot know the cause on its own. It used to blame the
+    // model's JSON, say "photo analysis can still work" and prescribe a
+    // model change; on a closed Claude window the photo row below then
+    // failed for the same reason and the page contradicted itself. A
+    // failed text row now waits for the photo round-trip and words its
+    // detail and fix by that outcome (the yield order is unchanged).
     final text = await analyzer.textIntent(
         'Respond with ONLY this exact JSON object: {"ok": true}');
-    yield text != null
-        ? DiagResult(l.diagStageText, DiagStatus.pass, l.diagTextOk)
-        : DiagResult(l.diagStageText, DiagStatus.warn, l.diagTextBad,
-            detail: l.diagTextBadDetail, fix: l.diagFixPickModel);
+    if (text != null) {
+      yield DiagResult(l.diagStageText, DiagStatus.pass, l.diagTextOk);
+    }
 
     // 5 ── Photo round-trip ─────────────────────────────────────────────
     final photo = await analyzer.analyzePhoto(_testImage());
+    if (text == null) {
+      final photoWorks = photo.analysis != null;
+      yield DiagResult(l.diagStageText, DiagStatus.warn, l.diagTextBad,
+          detail: photoWorks
+              ? l.diagTextBadDetail
+              : l.diagTextBadPhotoAlsoFailed,
+          fix: photoWorks
+              ? l.diagFixTextPickModel
+              : l.diagFixTextFollowPhoto);
+    }
     if (photo.analysis != null) {
       yield DiagResult(l.diagStagePhoto, DiagStatus.pass, l.diagPhotoOk,
           detail: photo.isFood

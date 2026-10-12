@@ -58,6 +58,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ringKcalToday => '千卡';
 
   @override
+  String ringSemantics(String kcal) {
+    return '今天已摄入 $kcal 千卡';
+  }
+
+  @override
+  String ringSemanticsTypical(String kcal, String typical) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡';
+  }
+
+  @override
+  String ringSemanticsAboveTypical(String kcal, String typical) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡（高于日常）';
+  }
+
+  @override
   String get todayEmptyTitle => '今天还没有记录。';
 
   @override
@@ -198,7 +213,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      '点击下方\"AI 服务\"，选择一家并粘贴它的 API Key（输入即保存），然后\"测试当前服务\"。\n之后打开\"监控相册\"，新的食物照片会自动记录。\n中国大陆用户请选择 Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——其余服务需要 VPN。';
+      '点击下方\"AI 服务\"，选择一家并粘贴它的 API Key（输入即保存），然后\"测试当前服务\"。\n之后打开\"监控相册\"，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
 
   @override
   String get settingsSectionAi => 'AI';
@@ -480,6 +495,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planDoubao => '豆包 Agent 套餐';
 
   @override
+  String get planShortClaude => 'Claude 订阅';
+
+  @override
+  String get planShortGlm => 'GLM 套餐';
+
+  @override
+  String get planShortDoubao => '豆包套餐';
+
+  @override
   String get serverHeader => '你的服务器';
 
   @override
@@ -560,6 +584,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get addNoPhotos => '没有找到最近的照片。';
+
+  @override
+  String get addPhotosLimited => '只显示你允许访问的照片，之后拍的照片不会出现在这里。请在系统设置里允许访问所有照片。';
 
   @override
   String get analyzing => '分析中…';
@@ -751,24 +778,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String coachUnderTypical(String delta) {
-    return '比你平时少 $delta 千卡。今天很棒，这样的一天才是真正有效的。';
+    return '比你平时少 $delta 千卡。很棒，这样的一天才是真正有效的。';
   }
 
   @override
-  String get coachOnTarget => '今天正好达标。稳定比猛冲更重要，继续保持。';
+  String coachPartialGoal(String delta) {
+    return '比目标少 $delta 千卡 —— 还有没记上的餐吗？在筷拍里补上就好。';
+  }
+
+  @override
+  String coachPartialTypical(String delta) {
+    return '比平时少 $delta 千卡 —— 还有没记上的餐吗？在筷拍里补上就好。';
+  }
+
+  @override
+  String get coachOnTarget => '正好达标。稳定比猛冲更重要，继续保持。';
+
+  @override
+  String get coachOnTypical => '和你平时差不多。稳定比猛冲更重要，继续保持。';
 
   @override
   String coachOverGoal(String delta) {
-    return '今天比目标多 $delta 千卡。一天不会毁掉一周，明天继续。';
+    return '比目标多 $delta 千卡。一天不会毁掉一周，接着来就好。';
   }
 
   @override
   String coachOverTypical(String delta) {
-    return '今天比平时多 $delta 千卡。知道就好，不用焦虑 —— 明天重新开始。';
+    return '比平时多 $delta 千卡。知道就好，不用焦虑 —— 下一餐重新开始。';
   }
 
   @override
-  String get coachNoReference => '已记录。再积累几天，我就能告诉你今天和平时比如何了。';
+  String get coachNoReference => '已记录。再积累几天，我就能告诉你和平时比如何了。';
 
   @override
   String coachDetail(String meals, String protein) {
@@ -812,13 +852,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get macroFatShort => '脂';
 
   @override
-  String get editorProteinLabel => '蛋白质（克）';
+  String get editorProteinLabel => '蛋白质';
 
   @override
-  String get editorCarbsLabel => '碳水（克）';
+  String get editorCarbsLabel => '碳水';
 
   @override
-  String get editorFatLabel => '脂肪（克）';
+  String get editorFatLabel => '脂肪';
+
+  @override
+  String get editorGramsSuffix => '克';
 
   @override
   String get diagTitle => '测试 AI 服务';
@@ -919,7 +962,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagFixVpn =>
-      '这个服务在中国大陆需要 VPN 才能访问。请打开 VPN，或改用通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+      '这个服务在中国大陆需要 VPN 才能访问。请打开 VPN，或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
 
   @override
   String get diagFixServerUnreachable => '检查服务器地址、服务器是否在运行，以及你的网络。';
@@ -958,13 +1001,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagTextOk => '模型返回了 JSON —— 对话纠正和“描述一餐”都可用。';
 
   @override
-  String get diagTextBad => '模型没有为文字请求返回可用的 JSON。';
+  String get diagTextBad => '文字请求没有成功（服务器忙、限流或额度窗口未开、超时，或模型没有返回 JSON）。';
 
   @override
   String get diagTextBadDetail => '对话纠正和“描述一餐”可能失败；照片分析仍然可以正常工作。';
 
   @override
   String get diagFixPickModel => '如果一直这样，在设置里换一个模型。';
+
+  @override
+  String get diagTextBadPhotoAlsoFailed =>
+      '对话纠正和“描述一餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
+
+  @override
+  String get diagFixTextPickModel => '如果照片分析正常而这里一直失败，再在设置里换一个模型。';
+
+  @override
+  String get diagFixTextFollowPhoto => '先按照片那一行的建议处理，再重新测试。';
 
   @override
   String get diagPhotoOk => '模型分析了测试图片，并按用餐格式返回。';
@@ -1013,6 +1066,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String photoCellLabel(int n, int total, String when) {
+    return '第 $n/$total 张照片，$when';
+  }
+
+  @override
   String get photoPermissionDenied => '筷拍没有获得访问照片的权限。';
 
   @override
@@ -1041,6 +1099,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get outcomeLogManuallyHint => '如果这确实是食物，可以手动记录 —— 照片会附在这一餐上。';
+
+  @override
+  String get outcomeUndoLeftover => '不是剩菜，记为新的一餐';
+
+  @override
+  String get outcomeUndoLeftoverDone => '已撤销扣除，之前那一餐已恢复原样。';
+
+  @override
+  String get outcomeUndoLeftoverStale => '那一餐之后被修改或删除了，所以没有改动它。';
 
   @override
   String get okButton => '好';
@@ -1079,6 +1146,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String outcomeLeftoverMsg(String summary) {
     return '已扣除剩菜：$summary';
   }
+
+  @override
+  String outcomeFailedKeptMsg(String reason) {
+    return '照片分析失败，已保留以便重试。$reason';
+  }
+
+  @override
+  String get backlogTruncatedWarning => '相册里待处理的照片太多 —— 一些较早的照片可能需要手动添加。';
 
   @override
   String get outcomeNotFoodMsg => '这张照片里没有识别到食物。';
@@ -1134,7 +1209,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dayEmpty => '这一天还没有记录。点 + 添加一餐。';
 
   @override
+  String get dayAddMealTooltip => '给这一天加一餐';
+
+  @override
   String get notFoodTag => '非食物';
+
+  @override
+  String get correctedBadge => '已修正';
 
   @override
   String fixRequestFailed(String error) {
@@ -1146,7 +1227,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fixIntro =>
-      '说出要改、要挪或要删的内容 —— 用你习惯的方式描述那一餐（\"那碗面\"、\"早餐\"、\"600 千卡那个\"），任何语言都可以。';
+      '说出要改或要删的内容 —— 用你习惯的方式描述那一餐（\"那碗面\"、\"早餐\"、\"600 千卡那个\"），任何语言都可以。要把某餐挪到别的日期或时间，请在「今天」或「历史」里点开那一餐，修改日期或时间。';
 
   @override
   String get fixNamingTip => '最稳妥的是说出食物名 —— 餐次编号是按最近 7 天算的，不只是今天。';
@@ -1367,6 +1448,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get covRetryAll => '全部重试';
 
   @override
+  String get covFailedHelp => '\"全部重试\" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。';
+
+  @override
   String covMoreRetryAll(int count) {
     return '…还有 $count 张 —— \"全部重试\" 会覆盖全部。';
   }
@@ -1414,6 +1498,30 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covStoppedBecause(
+    String label,
+    int attempted,
+    int total,
+    String reason,
+    int remaining,
+  ) {
+    String _temp0 = intl.Intl.pluralLogic(
+      remaining,
+      locale: localeName,
+      other: '$remaining 张',
+    );
+    return '$label在第 $attempted/$total 张后停止：$reason剩下的 $_temp0没有处理 —— 稍后再运行一次。';
+  }
+
+  @override
+  String covMoreNotFood(int count) {
+    return '…还有 $count 张。';
+  }
+
+  @override
+  String get covUnnamedPhoto => '（未命名照片）';
+
+  @override
   String covDone(String label, int count) {
     return '$label完成（$count 张照片）。';
   }
@@ -1446,6 +1554,26 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String covFailedCount(int count) {
     return '$count 张失败';
+  }
+
+  @override
+  String covDeletedCount(int count) {
+    return '$count 张已被你删除';
+  }
+
+  @override
+  String covInFlightCount(int count) {
+    return '$count 张分析中';
+  }
+
+  @override
+  String covUnreadableCount(int count) {
+    return '$count 张无法读取';
+  }
+
+  @override
+  String covTooLargeCount(int count) {
+    return '$count 张过大无法分析';
   }
 
   @override

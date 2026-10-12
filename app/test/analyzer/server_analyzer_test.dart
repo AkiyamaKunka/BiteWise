@@ -373,6 +373,128 @@ void main() {
     }
   });
 
+  test('a leftover estimate WAITS OUT a busy server like a text intent',
+      () async {
+    // /api/analyze_leftover answers the same instant 503 retry:true while
+    // the auto-scan's photo run holds the CLI lock; one attempt showed the
+    // leftover screen's "couldn't estimate" error exactly then.
+    final s = await serverSettings();
+    final sleeps = <Duration>[];
+    final bodies = <String>[];
+    final analyzer = ServerAnalyzer(
+      s,
+      normalizer: (b) async => b,
+      sleep: (d) async => sleeps.add(d),
+      client: MockClient((req) async {
+        expect(req.url.path, '/api/analyze_leftover');
+        bodies.add(req.body);
+        if (bodies.length <= 2) {
+          return http.Response(
+              jsonEncode({
+                'error': 'claude_unavailable',
+                'reason': 'the analyzer is busy with another request',
+                'retry': true,
+              }),
+              503);
+        }
+        return http.Response(
+            jsonEncode({
+              'ok': true,
+              'leftover': {'eaten_fraction': 0.5},
+              'analyzed_by': 'claude',
+            }),
+            200);
+      }),
+    );
+    final out = await analyzer.leftoverIntent(jpeg(), '{"total_kcal":600}');
+    expect(out, {'eaten_fraction': 0.5});
+    expect(bodies, hasLength(3));
+    expect(bodies.toSet(), hasLength(1), reason: 'the same photo is resent');
+    expect(sleeps, [const Duration(seconds: 5), const Duration(seconds: 10)]);
+
+    // Bounded exactly like the text path: 7 attempts, ~105 s, then null.
+    sleeps.clear();
+    var calls = 0;
+    final stuck = ServerAnalyzer(
+      s,
+      normalizer: (b) async => b,
+      sleep: (d) async => sleeps.add(d),
+      client: MockClient((_) async {
+        calls++;
+        return http.Response(
+            jsonEncode({
+              'error': 'claude_unavailable',
+              'reason': 'the analyzer is busy with another request',
+              'retry': true,
+            }),
+            503);
+      }),
+    );
+    expect(await stuck.leftoverIntent(jpeg(), '{}'), isNull);
+    expect(calls, 7);
+    expect(sleeps.fold<int>(0, (t, d) => t + d.inSeconds), 105);
+
+    // The busy wait keeps the receipt rule: a wrong-backend reply after
+    // the wait is still refused.
+    await s.setServerBackend('glm');
+    var n = 0;
+    final drifted = ServerAnalyzer(
+      s,
+      normalizer: (b) async => b,
+      sleep: (_) async {},
+      client: MockClient((_) async => ++n == 1
+          ? http.Response(
+              jsonEncode({
+                'error': 'claude_unavailable',
+                'reason': 'the analyzer is busy',
+                'retry': true,
+              }),
+              503)
+          : http.Response(
+              jsonEncode({
+                'leftover': {'eaten_fraction': 0.5},
+                'analyzed_by': 'claude',
+              }),
+              200)),
+    );
+    expect(await drifted.leftoverIntent(jpeg(), '{}'), isNull);
+    expect(n, 2);
+  });
+
+  test('a leftover estimate does NOT wait on any 503 but the busy verdict',
+      () async {
+    final s = await serverSettings();
+    for (final body in [
+      jsonEncode({
+        'error': 'claude_unavailable',
+        'reason': 'the estimation ran but produced no usable result',
+        'retry': false,
+      }),
+      jsonEncode({
+        'error': 'claude_unavailable',
+        'reason': 'You have hit your usage limit.',
+        'retry': 'later',
+      }),
+      '{"error": "claude_unavailable"}',
+    ]) {
+      var calls = 0;
+      final sleeps = <Duration>[];
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        sleep: (d) async => sleeps.add(d),
+        client: MockClient((_) async {
+          calls++;
+          return http.Response(body, 503);
+        }),
+      );
+      expect(await analyzer.leftoverIntent(jpeg(), '{}'), isNull,
+          reason: body);
+      expect(calls, 1, reason: body);
+      expect(sleeps, isEmpty, reason: body);
+    }
+  });
+
   test('a "retry": "later" 503 keeps the photo WITHOUT spinning in place',
       () async {
     // Server fix 2026-10-07: a closed Claude-plan usage window and a CLI

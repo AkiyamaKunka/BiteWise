@@ -59,6 +59,20 @@ void main() {
     expect(again.quotaPauseUntil, pause);
   });
 
+  test('the quota pause is stored as a UTC instant and read back local',
+      () async {
+    // Zone-less, a pause armed in Shanghai re-parsed in Chicago and lasted
+    // 13 hours longer after the flight.
+    final (s, prefs, keys) = await freshSettings();
+    final pause = DateTime(2026, 10, 20, 11, 30);
+    await s.setQuotaPauseUntil(pause);
+    final stored = prefs.getString('settings.quota_pause_until')!;
+    expect(stored, endsWith('Z'));
+    expect(DateTime.parse(stored).isAtSameMomentAs(pause), isTrue);
+    final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+    expect(again.quotaPauseUntil, pause); // same instant, local again
+  });
+
   test('CHANGING the key clears the quota-pause latch; re-saving it does not',
       () async {
     final (s, prefs, keys) = await freshSettings();
@@ -141,6 +155,22 @@ void main() {
     expect(s.isQuotaPaused, isFalse);
     await s.setQuotaPauseUntil(null);
     expect(s.quotaPauseUntil, isNull);
+  });
+
+  test('the summary watermark is read fresh, so a write from the '
+      'heartbeat isolate is seen past this isolate\'s cache', () async {
+    final (s, prefs, _) = await freshSettings();
+    expect(await s.freshSummaryPostedDate(), '');
+    await s.markSummaryPosted('2026-10-07');
+    expect(await s.freshSummaryPostedDate(), '2026-10-07');
+
+    // Another engine (the WorkManager run) writes the native store; this
+    // isolate's cached SharedPreferences does not see it on its own.
+    SharedPreferences.setMockInitialValues(
+        {'settings.summary_posted_date': '2026-10-08'});
+    expect(prefs.getString('settings.summary_posted_date'), '2026-10-07',
+        reason: 'precondition: the cache is stale');
+    expect(await s.freshSummaryPostedDate(), '2026-10-08');
   });
 
   test('setters notify listeners', () async {

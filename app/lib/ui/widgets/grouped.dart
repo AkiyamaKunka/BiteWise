@@ -302,20 +302,25 @@ class GroupedToggleRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GroupedRow(
-      icon: icon,
-      iconColor: iconColor,
-      title: title,
-      showChevron: false,
-      trailing: Switch.adaptive(
-        key: switchKey,
-        value: value,
-        onChanged: (v) {
-          HapticFeedback.selectionClick();
-          onChanged(v);
-        },
+    // One screen-reader node, as SwitchListTile does: unmerged, the title
+    // was one stop and an unnamed switch another, so the state was never
+    // read with the name it belongs to.
+    return MergeSemantics(
+      child: GroupedRow(
+        icon: icon,
+        iconColor: iconColor,
+        title: title,
+        showChevron: false,
+        trailing: Switch.adaptive(
+          key: switchKey,
+          value: value,
+          onChanged: (v) {
+            HapticFeedback.selectionClick();
+            onChanged(v);
+          },
+        ),
+        onTap: () => onChanged(!value),
       ),
-      onTap: () => onChanged(!value),
     );
   }
 }

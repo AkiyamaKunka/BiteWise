@@ -76,6 +76,50 @@ void main() {
     expect(center(tester), '11,240');
   });
 
+  String ringLabel(WidgetTester tester) => tester
+      .getSemantics(find.byKey(const Key('ringCenterValue')))
+      .label;
+
+  testWidgets('the spoken sentence: eaten, the typical day, and a neutral '
+      'above-typical note', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pump(tester, const CalorieRing(eatenKcal: 1240, typicalKcal: 2020));
+    expect(ringLabel(tester),
+        '1,240 kcal eaten today, of a 2,020 kcal typical day');
+    await pump(tester, const CalorieRing(eatenKcal: 3340, typicalKcal: 1760));
+    expect(ringLabel(tester),
+        '3,340 kcal eaten today, of a 1,760 kcal typical day (above typical)');
+    await pump(tester, const CalorieRing(eatenKcal: 345, typicalKcal: null));
+    expect(ringLabel(tester), '345 kcal eaten today');
+    handle.dispose();
+  });
+
+  testWidgets('zh: the ring speaks Chinese, like its visible labels',
+      (tester) async {
+    // The sentence was an English literal, so a zh VoiceOver user heard
+    // 'kcal eaten today' under a '千卡' ring.
+    final handle = tester.ensureSemantics();
+    Future<void> pumpZh(Widget ring) async {
+      await tester.pumpWidget(MaterialApp(
+          locale: const Locale('zh'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: Center(child: ring))));
+      await tester.pumpAndSettle();
+    }
+
+    await pumpZh(const CalorieRing(eatenKcal: 1240, typicalKcal: 2020));
+    expect(ringLabel(tester), contains('千卡'));
+    expect(ringLabel(tester), isNot(contains('kcal')));
+    await pumpZh(const CalorieRing(eatenKcal: 3340, typicalKcal: 1760));
+    expect(ringLabel(tester), contains('高于日常'));
+    expect(ringLabel(tester), isNot(contains('超标')),
+        reason: 'no shame state, spoken or drawn');
+    await pumpZh(const CalorieRing(eatenKcal: 345, typicalKcal: null));
+    expect(ringLabel(tester), contains('345 千卡'));
+    handle.dispose();
+  });
+
   testWidgets('macro trio fills by CALORIE share (Atwater), matching the '
       'detail chart', (tester) async {
     await pump(

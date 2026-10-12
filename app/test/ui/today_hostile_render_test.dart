@@ -8,7 +8,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/intl.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
+import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 
 import 'fakes.dart';
 
@@ -90,6 +92,7 @@ void main() {
     expect(find.text('450 kcal'), findsOneWidget);
     // Corrected badge on the corrected meal only.
     expect(find.byKey(const Key('correctedBadge')), findsOneWidget);
+    expect(find.byTooltip('Corrected'), findsOneWidget);
     // Card fallback: falsy total_calories renders as '?' (spec §3.5).
     expect(find.textContaining('~?'), findsNothing); // hostile ones show raw
     expect(find.textContaining('~NaN kcal'), findsOneWidget);
@@ -144,5 +147,25 @@ void main() {
     ));
     await tester.pumpAndSettle();
     expect(find.text('No meals logged yet today.'), findsOneWidget);
+  });
+
+  testWidgets('zh: the corrected mark is named in Chinese', (tester) async {
+    // The tooltip (and so the screen-reader name) was an English literal
+    // on the zh Today screen.
+    await tester.pumpWidget(MaterialApp(
+      locale: const Locale('zh'),
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: Scaffold(
+        body: MealCard(
+          meal: _meal(_iso(DateTime.now()),
+              {'is_food': true, 'meal_description': '汤', 'total_calories': 80},
+              corrected: true),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('已修正'), findsOneWidget);
+    expect(find.byTooltip('Corrected'), findsNothing);
   });
 }

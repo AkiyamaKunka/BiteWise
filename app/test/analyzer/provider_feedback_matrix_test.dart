@@ -618,6 +618,13 @@ void main() {
                     ? KeyProbeResult.rejected
                     : KeyProbeResult.modelNotFound,
                 reason: '${p.name}/${scenario.name}: ${probe.message}');
+            // A genuine auth refusal carries no message: the Test page
+            // shows it as raw evidence, and the generic English 'rejected
+            // the API key' only restated the localized summary.
+            if (scenario == Scenario.auth) {
+              expect(probe.message, isNull,
+                  reason: '${p.name}: ${probe.message}');
+            }
           });
         }
       }

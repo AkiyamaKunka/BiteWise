@@ -76,6 +76,53 @@ void main() {
     expect(outcomeBody(en, o), contains('server'));
   });
 
+  group('outcomeSnackbar (the pipeline notify in di.dart)', () {
+    // The snackbar used to get the pipeline's English sentence verbatim, so
+    // every photo the automatic scan saved with the app open said "Meal
+    // logged: …" in the Chinese UI (2026-10-08).
+    const saved = PhotoOutcome(
+        PhotoOutcomeKind.saved, 'Meal logged: Ramen — ~600 kcal',
+        detail: 'Ramen — ~600 kcal');
+    const leftover = PhotoOutcome(PhotoOutcomeKind.leftoverApplied,
+        'Leftovers deducted: Ramen — −180 kcal, now ~420 kcal',
+        detail: 'Ramen — −180 kcal, now ~420 kcal');
+
+    test('English is byte-identical to what the snackbar used to show', () {
+      expect(outcomeSnackbar(en, saved), 'Meal logged: Ramen — ~600 kcal');
+      expect(outcomeSnackbar(en, leftover),
+          'Leftovers deducted: Ramen — −180 kcal, now ~420 kcal');
+      const failed = PhotoOutcome(PhotoOutcomeKind.failed, 'Provider said no',
+          errorKind: AnalysisErrorKind.unknown, detail: 'Provider said no');
+      expect(outcomeSnackbar(en, failed),
+          'Photo analysis failed — kept for retry. Provider said no');
+    });
+
+    test('Chinese frames the save and the deduction in Chinese', () {
+      expect(outcomeSnackbar(zh, saved), startsWith('已记录'));
+      expect(outcomeSnackbar(zh, saved), isNot(contains('Meal logged')));
+      expect(outcomeSnackbar(zh, leftover), startsWith('已扣除剩菜'));
+      expect(outcomeSnackbar(zh, leftover),
+          isNot(contains('Leftovers deducted')));
+    });
+
+    test('a recognised permanent failure has no English in Chinese', () {
+      const o = PhotoOutcome(PhotoOutcomeKind.failed, 'raw english line',
+          errorKind: AnalysisErrorKind.badPhoto, detail: 'raw english line');
+      final body = outcomeSnackbar(zh, o);
+      expect(body, startsWith('照片分析失败'));
+      expect(body, contains(zh.errBadPhoto));
+      expect(RegExp(r'[a-z]{4,}').hasMatch(body), isFalse, reason: body);
+    });
+
+    test('the backlog warning is Chinese too', () {
+      expect(RegExp(r'[a-z]{4,}').hasMatch(zh.backlogTruncatedWarning),
+          isFalse);
+      expect(en.backlogTruncatedWarning,
+          'Photo library backlog is very large — some older photos may need '
+          'to be added manually.');
+    });
+  });
+
   test('a server rejection shows the CODE in both languages', () {
     const o = PhotoOutcome(
         PhotoOutcomeKind.failed, 'The server rejected this request (bad_model).',

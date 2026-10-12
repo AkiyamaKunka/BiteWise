@@ -44,10 +44,19 @@ String mealDescription(Map<String, dynamic> analysis) {
   return 'Meal';
 }
 
-/// Card total calories: raw value `or "?"` (spec §3.5 display fallbacks —
-/// falsy → '?', otherwise the raw stringified value).
+/// Card total calories: the raw stringified value, '?' only when there IS no
+/// value (spec §3.5 display fallbacks: null, absent, '', false and empty
+/// shapes stay '?').
+///
+/// A NUMERIC zero is a recorded value, not a missing one, so it renders '0'
+/// rather than following Python's `0 or "?"`: the editor saves a blank
+/// calories field as 0 on purpose (meal_edit_logic.dart, "blank means ZERO,
+/// not unknown"), and the day header sums that same 0 via [todayTotals].
+/// Treating it as unknown here put "~? kcal" on the card under a header
+/// reading "~0 kcal" for the same day (found 2026-10-08).
 String displayTotalCalories(Map<String, dynamic> analysis) {
   final v = analysis['total_calories'];
+  if (v is num && v == 0) return '0';
   return isFoodTruthy(v) ? '$v' : '?';
 }
 

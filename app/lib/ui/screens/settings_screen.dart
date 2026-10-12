@@ -507,8 +507,8 @@ class _SettingsScreenState extends State<SettingsScreen>
               icon: Icons.auto_awesome,
               iconColor: theme.colorScheme.primary,
               title: context.l10n.settingsRowAiProvider,
-              value: providerDisplayLabel(widget.settings.provider,
-                  widget.settings.serverBackend),
+              value: providerDisplayLabel(context.l10n,
+                  widget.settings.provider, widget.settings.serverBackend),
               onTap: () async {
                 await Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => ProviderSettingsPage(
@@ -559,7 +559,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                     : theme.colorScheme.secondary,
                 title: context.l10n.settingsRowBackgroundScan,
                 // Off in iOS settings beats any timestamp: nothing can be
-                // scheduled until the user turns it back on.
+                // scheduled until the user turns it back on. A bare 'Off'
+                // (the red badge and chevron lead to the remedy): 'Off in
+                // Settings' cut the English title to 'Background sc…'
+                // (loop find 2026-10-08, test/ui/row_fit_layout_test.dart).
                 value: _backgroundRefreshOff
                     ? context.l10n.backgroundScanDisabled
                     : _lastBackgroundProbed

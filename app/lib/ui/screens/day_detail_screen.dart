@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../format.dart';
 import '../l10n.dart';
+import '../large_text.dart';
 import '../meal_thumbs.dart';
 import '../widgets/macro_chart.dart';
 import '../widgets/meal_thumb.dart';
@@ -163,6 +164,10 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
                   ),
         floatingActionButton: FloatingActionButton(
           key: const Key('addMealToDay'),
+          // A bare '+' read as just 'button' to a screen reader; the
+          // tooltip names it (and shows on long-press). Stays the round
+          // FAB: the list's bottom padding is sized for it.
+          tooltip: context.l10n.dayAddMealTooltip,
           onPressed: () => _openEditor(),
           child: const Icon(Icons.add),
         ),
@@ -184,6 +189,16 @@ class _MealRow extends StatelessWidget {
     final theme = Theme.of(context);
     final a = meal.analysis;
     final food = isFoodMeal(meal);
+    final title = Text(mealDescription(a),
+        key: const Key('mealRowTitle'), style: theme.textTheme.titleSmall);
+    final time = Text(context.clock(meal.time),
+        key: const Key('mealRowTime'),
+        style: theme.textTheme.bodySmall
+            ?.copyWith(color: theme.colorScheme.onSurfaceVariant));
+    // At large text the clock beside the title took a fixed slice of the
+    // row and squeezed a Chinese title to ~2 glyphs a line; it moves under
+    // the title so the title gets the whole width next to the thumbnail.
+    final clockBelow = isLargeText(context);
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 6),
       child: InkWell(
@@ -201,13 +216,14 @@ class _MealRow extends StatelessWidget {
                       thumb: thumb, isPhotoMeal: meal.imageHash.isNotEmpty),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: Text(mealDescription(a),
-                        style: theme.textTheme.titleSmall),
+                    child: clockBelow
+                        ? Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [title, const SizedBox(height: 2), time],
+                          )
+                        : title,
                   ),
-                  const SizedBox(width: 8),
-                  Text(context.clock(meal.time),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                          color: theme.colorScheme.onSurfaceVariant)),
+                  if (!clockBelow) ...[const SizedBox(width: 8), time],
                 ],
               ),
               const SizedBox(height: 6),
@@ -218,6 +234,7 @@ class _MealRow extends StatelessWidget {
                   if (meal.corrected) ...[
                     const SizedBox(width: 8),
                     Icon(Icons.edit_outlined,
+                        semanticLabel: context.l10n.correctedBadge,
                         size: 13, color: theme.colorScheme.onSurfaceVariant),
                   ],
                   if (!food) ...[

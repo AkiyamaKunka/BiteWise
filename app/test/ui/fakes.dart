@@ -8,6 +8,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
 
@@ -313,6 +314,7 @@ UiServices makeServices({
   bool grantPhotoPermission = true,
   Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto,
   Future<void> Function()? openSystemSettings,
+  PhotoLibrary? photoLibrary,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -329,5 +331,6 @@ UiServices makeServices({
     requestPhotoPermission: () async => grantPhotoPermission,
     processPhoto: processPhoto,
     openSystemSettings: openSystemSettings,
+    photoLibrary: photoLibrary,
   );
 }
