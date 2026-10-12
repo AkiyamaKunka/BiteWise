@@ -90,7 +90,8 @@ class PhotoPipeline {
 
   /// Notification-style surface (snackbar) for verdicts nobody awaits:
   /// process() announces saves, leftover deductions and PERMANENT failures
-  /// on every path, and [bindStream] (the share sheet) adds the rest. Handed
+  /// on every path (plus, throttled, a rejected key on the automatic
+  /// scan), and [bindStream] (the share sheet) adds the rest. Handed
   /// the OUTCOME, not a sentence: the caller words it in the app language
   /// (di.dart via outcomeSnackbar). Passing [PhotoOutcome.message] here put
   /// English snackbars ("Meal logged: …") in front of the Chinese UI every
@@ -115,11 +116,22 @@ class PhotoPipeline {
       required this.analyzer,
       this.notify,
       this.onMealSaved,
-      Future<String> Function(Uint8List bytes)? hasher})
-      : _hash = hasher ?? _computeMd5;
+      Future<String> Function(Uint8List bytes)? hasher,
+      DateTime Function()? clock})
+      : _hash = hasher ?? _computeMd5,
+        _clock = clock ?? DateTime.now;
 
   /// Injectable so tests stay synchronous; production hashes on a worker.
   final Future<String> Function(Uint8List bytes) _hash;
+
+  /// Injectable for the rejected-key notice throttle below.
+  final DateTime Function() _clock;
+
+  /// When the automatic scan last told the user their key was rejected:
+  /// a backlog of 40 photos against a revoked key is ONE problem, not 40
+  /// stacked snackbars.
+  DateTime? _lastRejectedKeyNotice;
+  static const rejectedKeyNoticeInterval = Duration(minutes: 10);
 
   /// Wire the watcher intake with BACKPRESSURE: the intake awaits each
   /// photo's turn through the same global FIFO the share stream uses, so
@@ -279,6 +291,32 @@ class PhotoPipeline {
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
       if (outcome.analysis == null) {
         final why = outcome.error ?? 'Analysis failed.';
+        final errorKind = classifyAnalysisError(outcome.error);
+        if (!photo.deliberate && errorKind == AnalysisErrorKind.rejectedKey) {
+          // A rejected key is the USER's state, like a missing one: every
+          // photo of the automatic scan would fail the same way. Burning
+          // each to 'failed' dropped the whole backlog for good (watch
+          // intake never reclaims) and stacked one snackbar per photo.
+          // Release instead — fixing the key brings them all back — and
+          // say it once per [rejectedKeyNoticeInterval], since a retryable
+          // failure is otherwise never announced. The analyzer still calls
+          // the key non-retryable (probeKey/diagnostics read that);
+          // deliberate adds keep the permanent verdict below.
+          await dao.releasePhotoHash(hash);
+          final held = PhotoOutcome(PhotoOutcomeKind.failed, why,
+              retryable: true, errorKind: errorKind, detail: why);
+          final now = _clock();
+          final last = _lastRejectedKeyNotice;
+          if (last == null ||
+              now.isBefore(last) ||
+              now.difference(last) >= rejectedKeyNoticeInterval) {
+            _lastRejectedKeyNotice = now;
+            try {
+              notify?.call(held);
+            } catch (_) {}
+          }
+          return held;
+        }
         if (outcome.retryable) {
           // Transient trouble (rate limit / network / quota pause / no key):
           // RELEASE the reservation so the next scan simply re-offers the
@@ -286,15 +324,13 @@ class PhotoPipeline {
           // automated path (watch intake never reclaims, spec §2.3).
           await dao.releasePhotoHash(hash);
           return PhotoOutcome(PhotoOutcomeKind.failed, why,
-              retryable: true,
-              errorKind: classifyAnalysisError(outcome.error),
-              detail: why);
+              retryable: true, errorKind: errorKind, detail: why);
         }
         // Permanent failure: kept as status failed for deliberate retry
         // (spec §6.5).
         await dao.markPhotoHash(hash, IngestionStatus.failed);
         final failed = PhotoOutcome(PhotoOutcomeKind.failed, why,
-            errorKind: classifyAnalysisError(outcome.error), detail: why);
+            errorKind: errorKind, detail: why);
         // Shielded like the save paths below: the failed mark is already
         // committed, and a throwing snackbar must not turn this verdict
         // into the outer catch's "Photo intake failed".

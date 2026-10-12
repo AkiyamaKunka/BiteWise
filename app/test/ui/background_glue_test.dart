@@ -466,6 +466,46 @@ void main() {
           frontierMark.toUtc().toIso8601String());
     });
 
+    test('a rejected key burns nothing and holds the watermark: the photos '
+        'are scanned again next run', () async {
+      // The analyzer calls a 401 non-retryable; the automatic scan used to
+      // mark every photo 'failed' and checkpoint past them, so fixing the
+      // key brought none of them back (2026-10-12).
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [
+          DateTime(2026, 7, 24, 1, 0),
+          DateTime(2026, 7, 24, 2, 0),
+        ]; // frontier null: the real intake halts at the released photo 1
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero);
+      Future<void> run() => headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: intake,
+            pipeline: () async => PhotoPipeline(dao: dao, analyzer: analyzer),
+            showMealCard: (_, _) async {},
+            clock: () => DateTime(2026, 7, 24, 5, 0),
+          );
+      await run();
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
+      expect(dao.ledger, isEmpty);
+
+      // Key fixed: the next run analyzes and saves both.
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+      await run();
+      expect(dao.meals, hasLength(2));
+      expect(prefs.getString(backgroundWatermarkPrefsKey),
+          DateTime(2026, 7, 24, 2, 0).toUtc().toIso8601String());
+    });
+
     test('a photo another run is still analyzing holds the watermark in '
         'front of it', () async {
       // iOS expired the PREVIOUS run's grant mid-analysis: its 'processing'

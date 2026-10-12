@@ -11,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 
 import 'fakes.dart';
@@ -64,7 +66,9 @@ void main() {
     final e2 = pipeline.enqueue(photo(5, 'e2'));
     await Future.wait([e1, e2]);
     await stream.close();
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+    // Polled, not a fixed 60 ms: each photo hashes on a compute() isolate,
+    // and a loaded machine overran the fixed wait (flaky, 2026-10-12).
+    await _until(() => dao.meals.length == 5);
 
     expect(maxActive, 1,
         reason: 'a second concurrent analyzer call is the free-tier RPM '
@@ -216,6 +220,73 @@ void main() {
     final retry = await pipeline.process(_photo());
     expect(retry.kind, PhotoOutcomeKind.saved);
     expect(dao.ledger[_hash], IngestionStatus.saved);
+  });
+
+  group('a rejected key on the automatic scan', () {
+    // A 401/403 (xAI's 400 'Incorrect API key', Gemini auth) used to burn
+    // EVERY scanned photo to 'failed' — watch intake never reclaims, so the
+    // backlog was gone for good once the key was fixed — and stacked one
+    // snackbar per photo (2026-10-12).
+    const rejected = AnalysisOutcome(
+        error: 'The provider rejected the API key. Check Settings.',
+        wall: Duration.zero);
+
+    test('5 photos → no failed rows, all released, ONE notice', () async {
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      var now = DateTime(2026, 10, 12, 9, 0);
+      final analyzer = FakeAnalyzer()..nextPhotoOutcome = rejected;
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: analyzer,
+          notify: notes.add,
+          clock: () => now);
+      final intake = _SinkCapturingIntake();
+      pipeline.bind(intake);
+      final photos = [
+        for (var i = 1; i <= 5; i++)
+          IntakePhoto(Uint8List.fromList([i, i]), 'a$i', 'IMG_$i.jpg'),
+      ];
+      for (final p in photos) {
+        expect(await intake.sink!(p, null), isFalse,
+            reason: 'released to the intake: a later scan re-offers it');
+        now = now.add(const Duration(seconds: 30));
+      }
+      expect(dao.ledger.values, isNot(contains(IngestionStatus.failed)));
+      expect(dao.ledger, isEmpty, reason: 'every hash free to re-offer');
+      expect(notes, hasLength(1));
+      expect(notes.single.errorKind, AnalysisErrorKind.rejectedKey);
+      expect(notes.single.retryable, isTrue);
+
+      // Throttled per process, not silenced: ten minutes on, it says it
+      // again — and once the key works, the same photo saves.
+      now = now.add(PhotoPipeline.rejectedKeyNoticeInterval);
+      final again = await pipeline.process(photos.first);
+      expect(again.retryable, isTrue);
+      expect(notes, hasLength(2));
+
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      expect((await pipeline.process(photos.first)).kind,
+          PhotoOutcomeKind.saved);
+    });
+
+    test('a deliberate add keeps the permanent verdict and its dialog text',
+        () async {
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final out = await PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = rejected,
+              notify: notes.add)
+          .process(_photo(deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.retryable, isFalse);
+      expect(dao.ledger[_hash], IngestionStatus.failed);
+      expect(notes.single, same(out));
+      final zh = AppLocalizationsZh();
+      expect(outcomeBody(zh, out), zh.errRejectedKey);
+    });
   });
 
   test('bound streams process photos ONE at a time (no Gemini burst)',
