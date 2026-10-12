@@ -1316,7 +1316,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errBilling =>
-      'The provider account is out of balance or credits — top it up in the provider\'s console. The photo is kept and analyzed again after you top up.';
+      'The provider account is out of balance or credits — top it up in the provider\'s console. After topping up you can analyze this photo again.';
 
   @override
   String get errBillingText =>
@@ -1781,11 +1781,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String errServerFailedFinal(String reason) {
-    return 'Your server could not analyze this photo: $reason. You can retry it from Settings › Coverage.';
+    return 'Your server could not analyze this photo: $reason. You can retry it from Settings › Photo Coverage.';
   }
 
   @override
   String get serverReasonNoResult => 'the AI\'s answer was unusable';
+
+  @override
+  String errServerModelRefused(String reason) {
+    return 'Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Claude Plan.';
+  }
 
   @override
   String nlServerModelRefused(String reason) {
@@ -1851,7 +1856,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String errServerRejected(String code) {
-    return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
+    return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Photo Coverage.';
   }
 
   @override

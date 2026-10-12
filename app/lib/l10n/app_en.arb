@@ -827,7 +827,7 @@
   "errBadModel": "The provider rejected the model — check the model name in Settings.",
   "errBadModelDoubao": "Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.",
   "errBadModelOpenRouter": "OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.",
-  "errBilling": "The provider account is out of balance or credits — top it up in the provider's console. The photo is kept and analyzed again after you top up.",
+  "errBilling": "The provider account is out of balance or credits — top it up in the provider's console. After topping up you can analyze this photo again.",
   "errBillingText": "The provider account is out of balance or credits — top it up in the provider's console.",
   "errBadResponse": "The AI answered in a form the app could not use.",
   "errBadPhoto": "This photo could not be processed (it could not be decoded).",
@@ -1274,7 +1274,7 @@
   "serverLoginChecking": "Checking…",
   "serverLoginFooter": "Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.",
   "errServerFailed": "Your server could not analyze this photo this time — it is kept and retried later.",
-  "errServerFailedFinal": "Your server could not analyze this photo: {reason}. You can retry it from Settings › Coverage.",
+  "errServerFailedFinal": "Your server could not analyze this photo: {reason}. You can retry it from Settings › Photo Coverage.",
   "@errServerFailedFinal": {
     "placeholders": {
       "reason": {
@@ -1283,6 +1283,14 @@
     }
   },
   "serverReasonNoResult": "the AI's answer was unusable",
+  "errServerModelRefused": "Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.",
+  "@errServerModelRefused": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "nlServerModelRefused": "❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.",
   "@nlServerModelRefused": {
     "placeholders": {
@@ -1341,7 +1349,7 @@
     }
   },
   "regionProviderFallback": "This AI service",
-  "errServerRejected": "Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.",
+  "errServerRejected": "Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Photo Coverage.",
   "@errServerRejected": {
     "placeholders": {
       "code": {

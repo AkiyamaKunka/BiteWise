@@ -2237,7 +2237,7 @@ abstract class AppLocalizations {
   /// No description provided for @errBilling.
   ///
   /// In en, this message translates to:
-  /// **'The provider account is out of balance or credits — top it up in the provider\'s console. The photo is kept and analyzed again after you top up.'**
+  /// **'The provider account is out of balance or credits — top it up in the provider\'s console. After topping up you can analyze this photo again.'**
   String get errBilling;
 
   /// No description provided for @errBillingText.
@@ -2903,7 +2903,7 @@ abstract class AppLocalizations {
   /// No description provided for @errServerFailedFinal.
   ///
   /// In en, this message translates to:
-  /// **'Your server could not analyze this photo: {reason}. You can retry it from Settings › Coverage.'**
+  /// **'Your server could not analyze this photo: {reason}. You can retry it from Settings › Photo Coverage.'**
   String errServerFailedFinal(String reason);
 
   /// No description provided for @serverReasonNoResult.
@@ -2911,6 +2911,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'the AI\'s answer was unusable'**
   String get serverReasonNoResult;
+
+  /// No description provided for @errServerModelRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.'**
+  String errServerModelRefused(String reason);
 
   /// No description provided for @nlServerModelRefused.
   ///
@@ -3011,7 +3017,7 @@ abstract class AppLocalizations {
   /// No description provided for @errServerRejected.
   ///
   /// In en, this message translates to:
-  /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.'**
+  /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Photo Coverage.'**
   String errServerRejected(String code);
 
   /// No description provided for @watcherPermissionDenied.

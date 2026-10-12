@@ -67,7 +67,7 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
         // retry by hand. The no-verdict/"later" case stays retryable.
         AnalysisErrorKind.serverError => o.retryable
             ? l.errServerFailed
-            : l.errServerFailedFinal(serverReasonText(l, o.message)),
+            : _serverFinal(l, o.message),
         AnalysisErrorKind.serverRejected =>
           l.errServerRejected(rejectionCode(o.message)),
         AnalysisErrorKind.none || AnalysisErrorKind.unknown => o.message,
@@ -124,6 +124,18 @@ String regionProvider(AppLocalizations l, String? message) {
   final at = m.indexOf(marker);
   final name = at > 0 ? m.substring(0, at).trim() : '';
   return name.isEmpty || name.length > 40 ? l.regionProviderFallback : name;
+}
+
+/// A terminal server refusal. The Claude plan's credits refusal ("Fable 5
+/// requires usage credits") repeats for every photo until another model is
+/// picked, so "retry it from 照片覆盖检查" sent the user into the same
+/// refusal: it names the model switch instead, like the chat does.
+String _serverFinal(AppLocalizations l, String message) {
+  final reason = serverReason(message);
+  if (reason != null && reason.toLowerCase().contains('credit')) {
+    return l.errServerModelRefused(reason);
+  }
+  return l.errServerFailedFinal(serverReasonText(l, message));
 }
 
 /// [message] without its trailing periods, to sit inside parentheses.

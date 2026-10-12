@@ -143,6 +143,10 @@ void main() {
     expect(outcomeBody(zh, o), contains('充值'));
     expect(outcomeBody(zh, o), isNot(contains('billing')));
     expect(outcomeBody(en, o), contains('top it up'));
+    // No automatic re-analysis promise: false with the automatic scan off
+    // and on the coverage stop line.
+    expect(outcomeBody(zh, o), isNot(contains('会重新分析')));
+    expect(outcomeBody(en, o), isNot(contains('analyzed again after')));
   });
 
   test('Doubao / OpenRouter model errors keep their provider remedy', () {
@@ -159,6 +163,8 @@ void main() {
         'google/gemini-3.8-flash) and pick one that accepts images.');
     expect(outcomeBody(zh, openRouter), zh.errBadModelOpenRouter);
     expect(outcomeBody(zh, openRouter), contains('支持图片'));
+    expect(outcomeBody(zh, openRouter), contains('完整模型 ID'));
+    expect(outcomeBody(zh, openRouter), isNot(contains('slug')));
     final qwen = o('Qwen model not found — check the model name in Settings.');
     expect(outcomeBody(zh, qwen), zh.errBadModel);
   });
@@ -183,19 +189,29 @@ void main() {
         '"automatically"', () {
       // The photo is marked failed and no scan offers it again, yet the
       // snackbar said 稍后会自动重试 with no reason (2026-10-12).
-      final credits = o('Fable 5 requires usage credits.', retryable: false);
+      final refused = o('the CLI exited 1', retryable: false);
+      expect(outcomeBody(zh, refused),
+          '你的服务器没能分析这张照片：the CLI exited 1。'
+          '可在 设置 › 照片覆盖检查 里重试。');
+      expect(outcomeBody(en, refused),
+          'Your server could not analyze this photo: the CLI exited 1. '
+          'You can retry it from Settings › Photo Coverage.');
+      // A credits refusal repeats on every retry: the fix is another
+      // model, so it says that instead of sending the user to retry.
+      final credits = o('Fable 5 requires usage credits', retryable: false);
       expect(outcomeBody(zh, credits),
-          '你的服务器没能分析这张照片：Fable 5 requires usage credits。'
-          '可在 设置 › 覆盖检查 里重试。');
+          '你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
+          '请在 设置 › AI 服务 › Claude 订阅 里换一个模型。');
+      expect(outcomeBody(zh, credits), isNot(contains('重试')));
+      expect(outcomeBody(zh, credits), isNot(contains('❌')));
       expect(outcomeBody(en, credits),
-          'Your server could not analyze this photo: Fable 5 requires usage '
-          'credits. You can retry it from Settings › Coverage.');
+          contains('Settings › AI Provider › Claude Plan'));
       final empty = o('the analysis ran but produced no usable result',
           retryable: false);
       expect(outcomeBody(zh, empty), contains('AI 的回答无法使用'));
       expect(RegExp(r'[a-z]{4,}').hasMatch(outcomeBody(zh, empty)), isFalse);
       expect(outcomeBody(en, empty), contains("the AI's answer was unusable"));
-      for (final out in [credits, empty]) {
+      for (final out in [refused, credits, empty]) {
         expect(outcomeBody(zh, out), isNot(contains('自动重试')));
         expect(outcomeBody(en, out), isNot(contains('retried later')));
       }

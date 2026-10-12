@@ -574,7 +574,10 @@ void main() {
       expect(out.retryable, isFalse);
       final zh = outcomeSnackbar(AppLocalizationsZh(), notes.single);
       expect(zh, contains('Fable 5 requires usage credits'));
-      expect(zh, contains('覆盖检查'));
+      // A credits refusal repeats on every retry: it names the model
+      // switch, not 照片覆盖检查.
+      expect(zh, contains('设置 › AI 服务 › Claude 订阅'));
+      expect(zh, isNot(contains('覆盖检查')));
       expect(zh, isNot(contains('自动重试')));
       expect(outcomeSnackbar(AppLocalizationsEn(), notes.single),
           isNot(contains('retried later')));

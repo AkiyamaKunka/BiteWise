@@ -1222,10 +1222,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errBadModelOpenRouter =>
-      'OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整 slug（厂商/模型），并选择支持图片的模型。';
+      'OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整模型 ID（厂商/模型），并选择支持图片的模型。';
 
   @override
-  String get errBilling => '账户余额或额度已用完 —— 请到服务商控制台充值。照片已保留，充值后会重新分析。';
+  String get errBilling => '账户余额或额度已用完 —— 请到服务商控制台充值。充值后可以重新分析这张照片。';
 
   @override
   String get errBillingText => '账户余额或额度已用完 —— 请到服务商控制台充值。';
@@ -1671,11 +1671,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String errServerFailedFinal(String reason) {
-    return '你的服务器没能分析这张照片：$reason。可在 设置 › 覆盖检查 里重试。';
+    return '你的服务器没能分析这张照片：$reason。可在 设置 › 照片覆盖检查 里重试。';
   }
 
   @override
   String get serverReasonNoResult => 'AI 的回答无法使用';
+
+  @override
+  String errServerModelRefused(String reason) {
+    return '你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › Claude 订阅 里换一个模型。';
+  }
 
   @override
   String nlServerModelRefused(String reason) {
@@ -1739,7 +1744,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String errServerRejected(String code) {
-    return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
+    return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 照片覆盖检查 里重试。';
   }
 
   @override
