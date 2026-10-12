@@ -39,7 +39,12 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
         AnalysisErrorKind.badResponse => l.errBadResponse,
         AnalysisErrorKind.badPhoto => l.errBadPhoto,
         AnalysisErrorKind.serverBusy => l.errServerBusy,
-        AnalysisErrorKind.serverError => l.errServerFailed,
+        // retry:false — the photo is marked failed and no scan offers it
+        // again, so "稍后会自动重试" would be false: say why, and where to
+        // retry by hand. The no-verdict/"later" case stays retryable.
+        AnalysisErrorKind.serverError => o.retryable
+            ? l.errServerFailed
+            : l.errServerFailedFinal(serverReasonText(l, o.message)),
         AnalysisErrorKind.serverRejected =>
           l.errServerRejected(rejectionCode(o.message)),
         AnalysisErrorKind.none || AnalysisErrorKind.unknown => o.message,
@@ -64,6 +69,37 @@ String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
 /// "The server rejected this request (bad_model)."; '?' when absent.
 String rejectionCode(String message) =>
     RegExp(r'\(([a-z_]+)\)').firstMatch(message)?.group(1) ?? '?';
+
+/// The server's own reason out of "The server cannot analyze right now:
+/// `<reason>.`" (ServerAnalyzer.unavailableMessage) — trailing periods off,
+/// bounded, since it is the server's (or the Claude CLI's) prose; null
+/// when the message carries none.
+String? serverReason(String message) {
+  const marker = 'cannot analyze right now: ';
+  final at = message.indexOf(marker);
+  if (at < 0) return null;
+  var reason = message.substring(at + marker.length).trim();
+  while (reason.endsWith('.')) {
+    reason = reason.substring(0, reason.length - 1).trimRight();
+  }
+  if (reason.isEmpty) return null;
+  final runes = reason.runes.toList();
+  return runes.length <= 160
+      ? reason
+      : '${String.fromCharCodes(runes.take(159))}…';
+}
+
+/// [serverReason] for display: the server's known "ran but produced no
+/// usable result" in the app language, any other reason verbatim (the
+/// CLI's own sentence, e.g. "Fable 5 requires usage credits").
+String serverReasonText(AppLocalizations l, String message) {
+  final reason = serverReason(message);
+  if (reason == null) return message;
+  if (reason.contains('produced no usable result')) {
+    return l.serverReasonNoResult;
+  }
+  return reason;
+}
 
 /// The bad-model line, keeping the provider-specific remedy where the
 /// analyzer's 404 hint has one: Doubao needs the versioned id AND the model

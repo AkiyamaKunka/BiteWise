@@ -17,7 +17,7 @@ import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/coach_strings.dart' show localizationsFor;
 import '../../ui/format.dart' show byMealClock, displayClock;
-import '../../ui/outcome_text.dart' show badModelText;
+import '../../ui/outcome_text.dart' show badModelText, serverReason;
 import '../settings/app_settings.dart';
 
 /// Spec §1.2 / §8: TEXT_EDIT_WINDOW_DAYS (telegram_bot.py:161), from shared/.
@@ -379,12 +379,21 @@ class DefaultNlExecutor implements NlExecutor {
   /// an empty provider balance, cannot be retried away: say so in the photo
   /// path's words, or a friend with a wrong key is told to retry forever
   /// (loop find 2026-10-08).
-  String _textFailure(String? error) => switch (classifyAnalysisError(error)) {
-        AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
-        AnalysisErrorKind.badModel => '❌ ${badModelText(_l, error)}',
-        AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',
-        _ => _l.nlErrorContactingAi,
-      };
+  /// Of the server's refusals only the plan's credits one is named (the
+  /// selected model needs credits this plan lacks — the CLI's own words);
+  /// busy, "later" and a reply that came back unusable can retry.
+  String _textFailure(String? error) {
+    final reason = error == null ? null : serverReason(error);
+    return switch (classifyAnalysisError(error)) {
+      AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
+      AnalysisErrorKind.badModel => '❌ ${badModelText(_l, error)}',
+      AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',
+      AnalysisErrorKind.serverError
+          when reason != null && reason.toLowerCase().contains('credit') =>
+        _l.nlServerModelRefused(reason),
+      _ => _l.nlErrorContactingAi,
+    };
+  }
 
   /// Describe-only path (app-only, spec §9): analyze [text] as a brand-new
   /// meal and hand the analysis back for preview. NOTHING is saved.

@@ -156,6 +156,28 @@ void main() {
           "in the provider's console.");
     });
 
+    test('the plan refusing the model for credits says "switch model"',
+        () async {
+      // retry:false from the Claude Plan server: the selected model needs
+      // usage credits this plan lacks; 请重试 reproduces it forever.
+      analyzer
+        ..next = null
+        ..nextError = 'The server cannot analyze right now: Fable 5 requires '
+            'usage credits..';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error,
+      ]) {
+        expect(line,
+            '❌ 你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
+            '请在 设置 › AI 服务 › Claude 订阅 里换一个模型。');
+      }
+      expect((await en().handleText('x')).single.text,
+          '❌ Your server cannot use the selected model: Fable 5 requires '
+          'usage credits — choose another model in Settings › AI Provider › '
+          'Claude Plan.');
+    });
+
     test('retryable and unknown failures keep the spec §4 step 4 wording',
         () async {
       for (final error in [
@@ -163,6 +185,12 @@ void main() {
         'Error contacting the provider (network or service issue).',
         'Provider rate/spend limit hit — will retry later.',
         'The analyzer is busy',
+        'The server cannot analyze right now: the analyzer is busy with '
+            'another photo.',
+        'The server cannot analyze right now: You have hit your usage '
+            'limit. It resets at 3pm.',
+        'The server cannot analyze right now: the analysis ran but produced '
+            'no usable result.',
       ]) {
         analyzer
           ..next = null

@@ -1763,6 +1763,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your server could not analyze this photo this time — it is kept and retried later.';
 
   @override
+  String errServerFailedFinal(String reason) {
+    return 'Your server could not analyze this photo: $reason. You can retry it from Settings › Coverage.';
+  }
+
+  @override
+  String get serverReasonNoResult => 'the AI\'s answer was unusable';
+
+  @override
+  String nlServerModelRefused(String reason) {
+    return '❌ Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Claude Plan.';
+  }
+
+  @override
   String errServerRejected(String code) {
     return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
   }

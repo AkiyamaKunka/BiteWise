@@ -1652,6 +1652,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errServerFailed => '你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。';
 
   @override
+  String errServerFailedFinal(String reason) {
+    return '你的服务器没能分析这张照片：$reason。可在 设置 › 覆盖检查 里重试。';
+  }
+
+  @override
+  String get serverReasonNoResult => 'AI 的回答无法使用';
+
+  @override
+  String nlServerModelRefused(String reason) {
+    return '❌ 你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › Claude 订阅 里换一个模型。';
+  }
+
+  @override
   String errServerRejected(String code) {
     return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
   }

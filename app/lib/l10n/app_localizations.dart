@@ -2870,6 +2870,24 @@ abstract class AppLocalizations {
   /// **'Your server could not analyze this photo this time — it is kept and retried later.'**
   String get errServerFailed;
 
+  /// No description provided for @errServerFailedFinal.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server could not analyze this photo: {reason}. You can retry it from Settings › Coverage.'**
+  String errServerFailedFinal(String reason);
+
+  /// No description provided for @serverReasonNoResult.
+  ///
+  /// In en, this message translates to:
+  /// **'the AI\'s answer was unusable'**
+  String get serverReasonNoResult;
+
+  /// No description provided for @nlServerModelRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.'**
+  String nlServerModelRefused(String reason);
+
   /// No description provided for @errServerRejected.
   ///
   /// In en, this message translates to:

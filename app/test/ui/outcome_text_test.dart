@@ -49,8 +49,14 @@ void main() {
   test('Chinese for every recognised failure kind, no English leaking', () {
     for (final kind in AnalysisErrorKind.values) {
       if (kind == AnalysisErrorKind.none || kind == AnalysisErrorKind.unknown) continue;
-      final o = PhotoOutcome(PhotoOutcomeKind.failed, 'raw english line',
-          errorKind: kind, detail: 'raw english line');
+      // A terminal server refusal repeats the server's reason — realistic
+      // here, since an arbitrary English reason is passed through verbatim.
+      final line = kind == AnalysisErrorKind.serverError
+          ? 'The server cannot analyze right now: the analysis ran but '
+              'produced no usable result.'
+          : 'raw english line';
+      final o = PhotoOutcome(PhotoOutcomeKind.failed, line,
+          errorKind: kind, detail: line);
       final body = outcomeBody(zh, o);
       expect(RegExp(r'[a-z]{4,}').hasMatch(body), isFalse,
           reason: '$kind -> $body');
@@ -152,6 +158,53 @@ void main() {
     expect(outcomeBody(zh, openRouter), contains('支持图片'));
     final qwen = o('Qwen model not found — check the model name in Settings.');
     expect(outcomeBody(zh, qwen), zh.errBadModel);
+  });
+
+  group('a server that cannot analyze', () {
+    PhotoOutcome o(String reason, {required bool retryable}) {
+      final line = 'The server cannot analyze right now: $reason.';
+      return PhotoOutcome(PhotoOutcomeKind.failed, line,
+          retryable: retryable,
+          errorKind: classifyAnalysisError(line),
+          detail: line);
+    }
+
+    test('retryable (no verdict / "later"): kept and retried automatically',
+        () {
+      final later = o('You have hit your usage limit', retryable: true);
+      expect(outcomeBody(zh, later), zh.errServerFailed);
+      expect(outcomeBody(en, later), en.errServerFailed);
+    });
+
+    test('terminal (retry:false): says why and where to retry, never '
+        '"automatically"', () {
+      // The photo is marked failed and no scan offers it again, yet the
+      // snackbar said 稍后会自动重试 with no reason (2026-10-12).
+      final credits = o('Fable 5 requires usage credits.', retryable: false);
+      expect(outcomeBody(zh, credits),
+          '你的服务器没能分析这张照片：Fable 5 requires usage credits。'
+          '可在 设置 › 覆盖检查 里重试。');
+      expect(outcomeBody(en, credits),
+          'Your server could not analyze this photo: Fable 5 requires usage '
+          'credits. You can retry it from Settings › Coverage.');
+      final empty = o('the analysis ran but produced no usable result',
+          retryable: false);
+      expect(outcomeBody(zh, empty), contains('AI 的回答无法使用'));
+      expect(RegExp(r'[a-z]{4,}').hasMatch(outcomeBody(zh, empty)), isFalse);
+      expect(outcomeBody(en, empty), contains("the AI's answer was unusable"));
+      for (final out in [credits, empty]) {
+        expect(outcomeBody(zh, out), isNot(contains('自动重试')));
+        expect(outcomeBody(en, out), isNot(contains('retried later')));
+      }
+    });
+
+    test('serverReason is bounded and absent without the marker', () {
+      expect(serverReason('no marker'), isNull);
+      final long = serverReason(
+          'The server cannot analyze right now: ${'x' * 500}.')!;
+      expect(long.runes.length, 160);
+      expect(long, endsWith('…'));
+    });
   });
 
   test('a server rejection shows the CODE in both languages', () {
