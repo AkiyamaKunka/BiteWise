@@ -1403,10 +1403,10 @@
       }
     }
   },
-  "exportShareSubject": "CalorieTracker data export",
+  "exportShareSubject": "Bitewise data export",
   "importErrNotJson": "That file is not JSON.",
-  "importErrNotExport": "That file is not a CalorieTracker export.",
-  "importErrWrongFormatTag": "That file is not a CalorieTracker export (wrong format tag).",
+  "importErrNotExport": "That file is not a Bitewise export.",
+  "importErrWrongFormatTag": "That file is not a Bitewise export (wrong format tag).",
   "importErrBadVersion": "That export has an unusable version tag.",
   "importErrNoTables": "That export has no tables section.",
   "nlSomethingWrong": "❌ Something went wrong handling that message. Please try again.",

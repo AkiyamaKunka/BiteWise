@@ -470,6 +470,10 @@ class _StartupErrorAppState extends State<StartupErrorApp>
 
   @override
   Widget build(BuildContext context) {
+    // No AppLocalizations exists yet when startup fails, so the two lines
+    // follow the phone's language directly.
+    final zh =
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh';
     return MaterialApp(
       title: 'Bitewise',
       home: Scaffold(
@@ -481,15 +485,17 @@ class _StartupErrorAppState extends State<StartupErrorApp>
               children: [
                 const Icon(Icons.error_outline, size: 48),
                 const SizedBox(height: 12),
-                const Text('CalorieTracker could not start.'),
+                Text(zh ? '筷拍无法启动。' : 'Bitewise could not start.'),
                 const SizedBox(height: 8),
-                Text(widget.error, textAlign: TextAlign.center),
+                Text(widget.error,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12)),
                 if (widget.onRetry != null) ...[
                   const SizedBox(height: 16),
                   TextButton(
                     key: const Key('startupRetry'),
                     onPressed: _retry,
-                    child: const Text('Retry'),
+                    child: Text(zh ? '重试' : 'Retry'),
                   ),
                 ],
               ],

@@ -1925,17 +1925,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get exportShareSubject => 'CalorieTracker data export';
+  String get exportShareSubject => 'Bitewise data export';
 
   @override
   String get importErrNotJson => 'That file is not JSON.';
 
   @override
-  String get importErrNotExport => 'That file is not a CalorieTracker export.';
+  String get importErrNotExport => 'That file is not a Bitewise export.';
 
   @override
   String get importErrWrongFormatTag =>
-      'That file is not a CalorieTracker export (wrong format tag).';
+      'That file is not a Bitewise export (wrong format tag).';
 
   @override
   String get importErrBadVersion => 'That export has an unusable version tag.';

@@ -3095,7 +3095,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportShareSubject.
   ///
   /// In en, this message translates to:
-  /// **'CalorieTracker data export'**
+  /// **'Bitewise data export'**
   String get exportShareSubject;
 
   /// No description provided for @importErrNotJson.
@@ -3107,13 +3107,13 @@ abstract class AppLocalizations {
   /// No description provided for @importErrNotExport.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a CalorieTracker export.'**
+  /// **'That file is not a Bitewise export.'**
   String get importErrNotExport;
 
   /// No description provided for @importErrWrongFormatTag.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a CalorieTracker export (wrong format tag).'**
+  /// **'That file is not a Bitewise export (wrong format tag).'**
   String get importErrWrongFormatTag;
 
   /// No description provided for @importErrBadVersion.
