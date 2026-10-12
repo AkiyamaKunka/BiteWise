@@ -26,10 +26,57 @@ bool looksLikeJpeg(Uint8List b) =>
     b.length > 3 && b[0] == 0xFF && b[1] == 0xD8 && b[2] == 0xFF;
 
 /// What a failed normalization may still send: the original, but only when
-/// it is a small JPEG. Null = send nothing (the caller fails the photo
-/// visibly instead of asking a model about bytes it cannot read).
+/// it is a small JPEG, and only with its metadata stripped
+/// ([stripJpegMetadata]). Null = send nothing (the caller fails the photo
+/// visibly instead of asking a model about bytes it cannot read, and a JPEG
+/// whose segments cannot be walked is never sent with its GPS intact).
 Uint8List? unprocessedFallback(Uint8List original, {required int maxBytes}) =>
-    original.length < maxBytes && looksLikeJpeg(original) ? original : null;
+    original.length < maxBytes && looksLikeJpeg(original)
+        ? stripJpegMetadata(original)
+        : null;
+
+/// [jpeg] without its metadata segments: every APP1 (EXIF — GPS location,
+/// camera, times — and XMP) and APP13 (Photoshop/IPTC, which can name a
+/// place). Every other segment, and everything from the first SOS onward,
+/// is copied byte-for-byte, so the pixels are untouched. Null when the
+/// marker walk from SOI to SOS hits a malformed or truncated segment.
+Uint8List? stripJpegMetadata(Uint8List jpeg) {
+  if (jpeg.length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8) return null;
+  final out = BytesBuilder(copy: false)..add(const [0xFF, 0xD8]);
+  var i = 2;
+  while (i < jpeg.length) {
+    if (jpeg[i] != 0xFF) return null;
+    // Fill bytes: any number of 0xFF may precede a marker code.
+    var m = i + 1;
+    while (m < jpeg.length && jpeg[m] == 0xFF) {
+      m++;
+    }
+    if (m >= jpeg.length) return null;
+    final marker = jpeg[m];
+    if (marker == 0xDA) {
+      // SOS: the entropy-coded data (and anything after it) goes out as-is.
+      out.add(Uint8List.sublistView(jpeg, i));
+      return out.takeBytes();
+    }
+    if (marker == 0x00 || marker == 0xD8 || marker == 0xD9) {
+      return null; // stuffing / a second SOI / EOI before any scan
+    }
+    if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+      out.add(Uint8List.sublistView(jpeg, i, m + 1)); // standalone marker
+      i = m + 1;
+      continue;
+    }
+    if (m + 2 >= jpeg.length) return null;
+    final len = (jpeg[m + 1] << 8) | jpeg[m + 2];
+    final end = m + 1 + len;
+    if (len < 2 || end > jpeg.length) return null;
+    if (marker != 0xE1 && marker != 0xED) {
+      out.add(Uint8List.sublistView(jpeg, i, end));
+    }
+    i = end;
+  }
+  return null; // no SOS: there is no image to send
+}
 
 /// The analysis JPEG: pure-Dart decode first (unchanged, runs in an
 /// isolate), platform codec second.

@@ -52,8 +52,8 @@ Settings, using **your own API key**:
 **What is sent with a photo:**
 
 - The image, resized and re-encoded as a JPEG. Embedded photo metadata
-  (for example the time the photo was taken and, if your camera recorded
-  it, its location) may still be inside that file.
+  (for example the time the photo was taken, the camera model and, if your
+  camera recorded it, its location) is removed from the copy that is sent.
 - Your dietary profile text, if you wrote one.
 - For the leftover check: the descriptions, food names, times and calorie
   estimates of meals you already logged (that day's meals, or the meal you
@@ -119,7 +119,7 @@ date. Questions: open an issue at
 
 **随照片一起发送的内容：**
 
-- 照片本身（缩小尺寸并重新编码为 JPEG）。照片中嵌入的元数据（例如拍摄时间，以及相机记录了的话，拍摄地点）可能仍保留在这个文件里。
+- 照片本身（缩小尺寸并重新编码为 JPEG）。照片中嵌入的元数据（例如拍摄时间、相机型号，以及相机记录了的话，拍摄地点）会从发送的这份副本中删除。
 - 你的饮食档案文字（如果你填写了）。
 - 用于剩菜判断：已记录餐食的描述、食物名称、时间和热量估算（当天的餐食，或你选作原餐的那一餐）。
 

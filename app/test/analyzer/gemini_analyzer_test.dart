@@ -332,7 +332,7 @@ void main() {
       final s = await freshSettings();
       final h = Harness(s, [ok(foodJson)], normalizer: (_) async => null);
       final jpegOriginal =
-          Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0, ...photo]);
+          Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xDA, ...photo]); // SOI+SOS
       final out = await h.analyzer.analyzePhoto(jpegOriginal);
       expect(out.isFood, isTrue);
       final data = jsonDecode(h.requests.single.body)['contents'][0]['parts']
