@@ -499,13 +499,12 @@ class PhotoPipeline {
             leftoverPhotoMd5: hash,
             appliedAtIso: DateTime.now().toIso8601String());
         if (applied != null) {
-          // Tombstone FIRST, owner-checked: a run that lost the photo (to
-          // another run, or to the user's own 手动记录) must not cut the
-          // earlier meal — and a kill between the two writes now loses one
-          // deduction instead of leaving a row that re-deducts later.
-          await dao.markPhotoHash(hash, IngestionStatus.skipped,
+          // Tombstone and deduction in ONE owner-checked transaction: a run
+          // that lost the photo (to another run, or to the user's own
+          // 手动记录) must not cut the earlier meal, and a kill or a failed
+          // update can no longer tombstone the photo without the deduction.
+          await dao.applyLeftoverVerdict(hash, original.id, applied.adjusted,
               ownerStamp: stamp);
-          await dao.updateMealAnalysis(original.id, applied.adjusted);
           final newKcal =
               safeNumber(applied.adjusted['total_calories']).round();
           final name = mealDescription(original.analysis);

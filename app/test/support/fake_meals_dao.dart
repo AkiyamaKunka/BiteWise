@@ -227,6 +227,20 @@ class BaseFakeDao implements MealsDao {
   }
 
   @override
+  Future<void> applyLeftoverVerdict(
+      String imageHash, int mealId, Map<String, dynamic> analysis,
+      {String? ownerStamp}) async {
+    // All-or-nothing like the SQLite transaction: check, then update, and
+    // only then the tombstone.
+    _requireHeld(imageHash, ownerStamp);
+    await updateMealAnalysis(mealId, analysis);
+    if (imageHash.isNotEmpty) {
+      ledger[imageHash] = IngestionStatus.skipped;
+      stamps.remove(imageHash);
+    }
+  }
+
+  @override
   Future<void> reclaimStaleProcessing() async {}
 
   @override

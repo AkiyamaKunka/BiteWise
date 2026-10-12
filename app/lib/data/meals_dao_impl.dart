@@ -313,6 +313,40 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
+  Future<void> applyLeftoverVerdict(
+      String imageHash, int mealId, Map<String, dynamic> analysis,
+      {String? ownerStamp}) {
+    final hash = normalizeImageHash(imageHash);
+    return _db.transaction((txn) async {
+      if (hash.isNotEmpty && ownerStamp == null) {
+        await _upsertLedger(txn, hash, IngestionStatus.skipped);
+      } else if (hash.isNotEmpty) {
+        // The same conditional UPDATE as markPhotoHash, inside this
+        // transaction: a lost row cuts nothing, and a failed meal update
+        // rolls the tombstone back.
+        final updated = await txn.update(
+          'photo_ingestions',
+          {
+            'status': IngestionStatus.skipped.name,
+            'meal_id': null,
+            'last_seen_at': _clock().toIso8601String(),
+          },
+          where: _heldWhere,
+          whereArgs: [localChatId, hash, IngestionStatus.processing.name,
+              ownerStamp],
+        );
+        if (updated == 0) throw const ReservationLost();
+      }
+      await txn.update(
+        'meals',
+        {'analysis': jsonEncode(finiteAnalysis(analysis)), 'corrected': 1},
+        where: 'id = ? AND chat_id = ?',
+        whereArgs: [mealId, localChatId],
+      );
+    });
+  }
+
+  @override
   Future<int> reofferUnsavedVerdicts({required String source}) => _db.delete(
         'photo_ingestions',
         where: 'chat_id = ? AND source = ? AND status IN (?, ?)',

@@ -148,6 +148,15 @@ abstract class MealsDao {
   Future<void> markPhotoHash(String imageHash, IngestionStatus status,
       {int? mealId, String? ownerStamp});
   Future<void> releasePhotoHash(String imageHash, {String? ownerStamp});
+
+  /// An automatic leftover verdict, settled in ONE transaction: the
+  /// [ownerStamp] check, the 'skipped' tombstone for [imageHash] and the
+  /// deduction written to meal [mealId] (as [updateMealAnalysis]). Two
+  /// separate writes lost the deduction silently when the app was killed,
+  /// or the update threw, between them. [ReservationLost] as [markPhotoHash].
+  Future<void> applyLeftoverVerdict(
+      String imageHash, int mealId, Map<String, dynamic> analysis,
+      {String? ownerStamp});
   Future<void> reclaimStaleProcessing(); // launch-time sweep (spec §2 delta)
 
   /// Forget every verdict from [source] that did not become a meal

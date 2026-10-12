@@ -1,6 +1,7 @@
 // Real-SQLite tests for the reclaim sweep (spec §2.3 as adjusted for the
 // two-isolate reality) — the first DB-backed harness in the suite: the
 // reclaim SQL had ZERO tests before this file (loop cycle 2 critical gap).
+import 'dart:convert' show JsonUnsupportedObjectError;
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -585,6 +586,102 @@ void main() {
       });
     }
 
+    group('the leftover tombstone and its deduction are one write', () {
+      late int lunch;
+      const tray = {
+        'is_food': true,
+        'meal_description': 'Tray',
+        'total_calories': 965,
+        'food_items': [
+          {'name': 'Rice (~200 g)', 'estimated_calories': 300},
+          {'name': 'Pork (~150 g)', 'estimated_calories': 665},
+        ],
+      };
+      setUp(() async {
+        lunch = await warm.saveMeal(Meal(
+          id: 0,
+          date: '2026-10-12',
+          time: '11:00 AM',
+          timestamp: '2026-10-12T11:00:00.000',
+          source: MealSource.appWatch,
+          imageHash: 'q' * 32,
+          analysis: tray,
+        ), markStatus: IngestionStatus.saved);
+      });
+
+      test('a failing meal update leaves the photo processing under its '
+          'stamp and the meal uncut', () async {
+        final r = await warm.reservePhotoHash(hash, source: MealSource.appWatch);
+        await expectLater(
+            warm.applyLeftoverVerdict(hash, lunch, {'poison': Object()},
+                ownerStamp: r.stamp),
+            throwsA(isA<JsonUnsupportedObjectError>()));
+        expect((await warm.photoStatus(hash))?.status,
+            IngestionStatus.processing);
+        expect(
+            (await warm.mealsBetween('2026-10-12', '2026-10-12'))
+                .singleWhere((m) => m.id == lunch)
+                .analysis,
+            tray);
+        // Still ours: the run can settle it normally.
+        await warm.applyLeftoverVerdict(hash, lunch, {'is_food': true},
+            ownerStamp: r.stamp);
+        expect((await warm.photoStatus(hash))?.status, IngestionStatus.skipped);
+      });
+
+      test('a lost stamp writes neither the tombstone nor the deduction',
+          () async {
+        final a = await warm.reservePhotoHash(hash, source: MealSource.appWatch);
+        clock = DateTime(2026, 10, 12, 12, 31);
+        expect(
+            (await warm.reservePhotoHash(hash, source: MealSource.appWatch))
+                .kind,
+            PhotoReservation.reserved);
+        await expectLater(
+            warm.applyLeftoverVerdict(hash, lunch, {'is_food': true},
+                ownerStamp: a.stamp),
+            throwsA(isA<ReservationLost>()));
+        expect((await warm.photoStatus(hash))?.status,
+            IngestionStatus.processing);
+        expect(
+            (await warm.mealsBetween('2026-10-12', '2026-10-12'))
+                .singleWhere((m) => m.id == lunch)
+                .analysis,
+            tray);
+      });
+
+      test('pipeline: a deduction that fails to write is never tombstoned '
+          'as applied', () async {
+        final failing = _FailingDeductionDao(db, clock: () => clock);
+        final said = <PhotoOutcome>[];
+        final out = await PhotoPipeline(
+                dao: failing,
+                analyzer: FakeAnalyzer()
+                  ..nextPhotoOutcome = const AnalysisOutcome(analysis: {
+                    'is_food': true,
+                    'leftover_of': 0,
+                    'confidence': 0.9,
+                    'leftover_fraction': 0.4,
+                    'items': [
+                      {'name': 'Rice (~200 g)', 'left_fraction': 1.0},
+                      {'name': 'Pork (~150 g)', 'left_fraction': 0.0},
+                    ],
+                  }, isFood: true, wall: Duration.zero),
+                hasher: (_) async => hash,
+                notify: said.add)
+            .process(photo());
+        expect(out.kind, PhotoOutcomeKind.failed);
+        expect(said, isEmpty);
+        expect((await warm.photoStatus(hash))?.status,
+            isNot(IngestionStatus.skipped));
+        expect(
+            (await warm.mealsBetween('2026-10-12', '2026-10-12'))
+                .singleWhere((m) => m.id == lunch)
+                .analysis,
+            tray);
+      });
+    });
+
     test('stamped writes on a row the stamp no longer holds throw and write '
         'nothing', () async {
       final a = await warm.reservePhotoHash(hash, source: MealSource.appWatch);
@@ -606,4 +703,18 @@ void main() {
       expect((await warm.photoStatus(hash))?.status, IngestionStatus.skipped);
     });
   });
+}
+
+/// Poisons the leftover deduction so its meal UPDATE throws INSIDE the
+/// transaction, after the tombstone write (a disk error, a kill).
+class _FailingDeductionDao extends SqfliteMealsDao {
+  _FailingDeductionDao(super.db, {super.clock});
+
+  @override
+  Future<void> applyLeftoverVerdict(
+          String imageHash, int mealId, Map<String, dynamic> analysis,
+          {String? ownerStamp}) =>
+      super.applyLeftoverVerdict(
+          imageHash, mealId, {...analysis, 'poison': Object()},
+          ownerStamp: ownerStamp);
 }
