@@ -644,6 +644,12 @@ abstract class AppLocalizations {
   /// **'Import Data…'**
   String get settingsRowImport;
 
+  /// No description provided for @settingsRowPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get settingsRowPrivacy;
+
   /// No description provided for @settingsRowLanguage.
   ///
   /// In en, this message translates to:

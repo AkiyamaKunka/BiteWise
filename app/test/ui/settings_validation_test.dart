@@ -351,6 +351,34 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('the Privacy Policy row opens the published policy',
+      (tester) async {
+    // App Store 5.1.1(i) / Google Play: the policy must be reachable from
+    // inside the app.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final opened = <Uri>[];
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k'),
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      requestPhotoPermission: () async => true,
+      openUrl: (uri) async {
+        opened.add(uri);
+        return true;
+      },
+    )));
+    final row = find.byKey(const Key('privacyPolicyRow'));
+    await tester.scrollUntilVisible(row, 200);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(opened, [privacyPolicyUri]);
+    expect(privacyPolicyUri.toString(),
+        'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
+  });
+
   testWidgets('watcher toggle stays off when permission is denied',
       (tester) async {
     final settings = FakeSettings(watcherEnabled: false);

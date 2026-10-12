@@ -343,6 +343,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRowImport => 'Import Data…';
 
   @override
+  String get settingsRowPrivacy => 'Privacy Policy';
+
+  @override
   String get settingsRowLanguage => 'Language';
 
   @override

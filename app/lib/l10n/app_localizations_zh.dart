@@ -328,6 +328,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRowImport => '导入数据…';
 
   @override
+  String get settingsRowPrivacy => '隐私政策';
+
+  @override
   String get settingsRowLanguage => '语言';
 
   @override

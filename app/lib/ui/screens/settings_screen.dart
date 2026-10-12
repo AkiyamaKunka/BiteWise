@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../../core/contracts.dart';
 
@@ -28,6 +29,12 @@ import 'coverage_screen.dart';
 import 'meal_editor_screen.dart';
 import 'settings/profile_page.dart';
 import 'settings/provider_page.dart';
+
+/// The published privacy policy (docs/PRIVACY.md in the public repo).
+/// App Store guideline 5.1.1(i) and Google Play both want it reachable
+/// from inside the app, not only on the store listing.
+final Uri privacyPolicyUri = Uri.parse(
+    'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
 
 class SettingsScreen extends StatefulWidget {
   final SettingsStore settings;
@@ -1034,8 +1041,22 @@ class _SettingsScreenState extends State<SettingsScreen>
               showChevron: false,
               onTap: _importing ? null : _import,
             ),
+            GroupedRow(
+              key: const Key('privacyPolicyRow'),
+              icon: Icons.privacy_tip_outlined,
+              iconColor: theme.colorScheme.tertiary,
+              title: context.l10n.settingsRowPrivacy,
+              onTap: _openPrivacyPolicy,
+            ),
           ],
         ),
   ];
+
+  Future<void> _openPrivacyPolicy() async {
+    final open = widget.openUrl ??
+        (uri) => launcher.launchUrl(uri,
+            mode: launcher.LaunchMode.externalApplication);
+    await open(privacyPolicyUri);
+  }
 }
 

@@ -250,6 +250,7 @@
   "settingsDataFooter": "Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
   "settingsRowExport": "Export Data…",
   "settingsRowImport": "Import Data…",
+  "settingsRowPrivacy": "Privacy Policy",
   "settingsRowLanguage": "Language",
   "languageSystem": "System",
   "languageSheetTitle": "Language",

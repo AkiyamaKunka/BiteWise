@@ -112,6 +112,7 @@
   "settingsDataFooter": "导入会把导出的文件合并进这台手机：已有的餐不会被改动，导入两次也不会让热量翻倍。",
   "settingsRowExport": "导出数据…",
   "settingsRowImport": "导入数据…",
+  "settingsRowPrivacy": "隐私政策",
   "settingsRowLanguage": "语言",
   "languageSystem": "跟随系统",
   "languageSheetTitle": "语言",
