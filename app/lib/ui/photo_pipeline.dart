@@ -74,6 +74,11 @@ class PhotoOutcome {
   final int? mealId;
   final String? mealDate;
   final Map<String, dynamic>? previousAnalysis;
+
+  /// Set by [PhotoPipeline.bindStream] on the share-sheet announcement of
+  /// a TRANSIENT failure, so the snackbar can ask for a re-share instead
+  /// of claiming the photo was kept (outcomeSnackbar).
+  final bool shared;
   const PhotoOutcome(this.kind, this.message,
       {this.analysis,
       this.retryable = false,
@@ -81,7 +86,8 @@ class PhotoOutcome {
       this.detail,
       this.mealId,
       this.mealDate,
-      this.previousAnalysis});
+      this.previousAnalysis,
+      this.shared = false});
 }
 
 class PhotoPipeline {
@@ -160,8 +166,9 @@ class PhotoPipeline {
   /// Also used for the share-sheet intake stream (deliberate adds, spec §6).
   ///
   /// Nobody awaits a shared photo's verdict, so the kinds process() leaves
-  /// to its caller — not food, duplicate, already logged, still analyzing —
-  /// are announced HERE. The add flow awaits enqueue() and shows each of
+  /// to its caller — not food, duplicate, already logged, still analyzing,
+  /// a transient failure — are announced HERE. The add flow awaits
+  /// enqueue() and shows each of
   /// them as a dialog; a share that ended the same way showed nothing at
   /// all, indistinguishable from a share that silently failed, and invited
   /// a re-share that re-analyzed the photo just as silently (2026-10-10).
@@ -184,12 +191,21 @@ class PhotoPipeline {
             try {
               notify?.call(o);
             } catch (_) {}
+          case PhotoOutcomeKind.failed when o.retryable:
+            // Released, and the share copy is already gone: nothing will
+            // ever re-offer it, so silence read as "it worked" — say it
+            // failed and ask for a re-share (outcomeSnackbar words it).
+            try {
+              notify?.call(PhotoOutcome(o.kind, o.message,
+                  retryable: true,
+                  errorKind: o.errorKind,
+                  detail: o.detail,
+                  shared: true));
+            } catch (_) {}
           case PhotoOutcomeKind.saved:
           case PhotoOutcomeKind.leftoverApplied:
           case PhotoOutcomeKind.failed:
-            // Announced by process() — or, for a TRANSIENT failure, released
-            // for a later retry; the "kept for retry" snackbar would be
-            // wrong for the share copy, which is already gone.
+            // Announced by process() (permanent failures on every path).
             break;
         }
       });

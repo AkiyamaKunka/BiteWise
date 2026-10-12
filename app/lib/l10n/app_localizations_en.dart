@@ -1776,6 +1776,41 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String outcomeRetryLaterMsg(String reason) {
+    return 'This photo was not analyzed this time ($reason) — tap Retry, or pick it again later.';
+  }
+
+  @override
+  String outcomeShareRetryMsg(String reason) {
+    return 'The shared photo was not analyzed this time ($reason) — share it again later.';
+  }
+
+  @override
+  String get reasonRateLimited => 'the provider is rate-limiting';
+
+  @override
+  String get reasonQuotaPaused => 'the daily quota was hit';
+
+  @override
+  String get reasonBilling =>
+      'the provider account is out of balance — top it up first';
+
+  @override
+  String get reasonNetwork => 'network or service issue';
+
+  @override
+  String get reasonServerBusy => 'your server is busy with another analysis';
+
+  @override
+  String get reasonServerFailed => 'your server could not analyze it';
+
+  @override
+  String get reasonNoApiKey => 'no API key is set';
+
+  @override
+  String get reasonNoServerKey => 'no server address or upload key is set';
+
+  @override
   String errServerRejected(String code) {
     return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
   }

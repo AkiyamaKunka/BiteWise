@@ -1665,6 +1665,40 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String outcomeRetryLaterMsg(String reason) {
+    return '这次没有分析成功（$reason）—— 可以点「重试」，或稍后再选这张照片。';
+  }
+
+  @override
+  String outcomeShareRetryMsg(String reason) {
+    return '分享的照片这次没能分析（$reason）—— 请稍后重新分享。';
+  }
+
+  @override
+  String get reasonRateLimited => '服务正在限流';
+
+  @override
+  String get reasonQuotaPaused => '今天的额度已用完';
+
+  @override
+  String get reasonBilling => '账户余额或额度已用完，请先充值';
+
+  @override
+  String get reasonNetwork => '网络或服务问题';
+
+  @override
+  String get reasonServerBusy => '你的服务器正在处理另一张照片';
+
+  @override
+  String get reasonServerFailed => '你的服务器这次没能分析';
+
+  @override
+  String get reasonNoApiKey => '还没有设置 API Key';
+
+  @override
+  String get reasonNoServerKey => '还没有设置服务器地址或上传 Key';
+
+  @override
   String errServerRejected(String code) {
     return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
   }

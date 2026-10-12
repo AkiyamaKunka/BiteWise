@@ -2888,6 +2888,66 @@ abstract class AppLocalizations {
   /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.'**
   String nlServerModelRefused(String reason);
 
+  /// No description provided for @outcomeRetryLaterMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was not analyzed this time ({reason}) — tap Retry, or pick it again later.'**
+  String outcomeRetryLaterMsg(String reason);
+
+  /// No description provided for @outcomeShareRetryMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'The shared photo was not analyzed this time ({reason}) — share it again later.'**
+  String outcomeShareRetryMsg(String reason);
+
+  /// No description provided for @reasonRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'the provider is rate-limiting'**
+  String get reasonRateLimited;
+
+  /// No description provided for @reasonQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'the daily quota was hit'**
+  String get reasonQuotaPaused;
+
+  /// No description provided for @reasonBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'the provider account is out of balance — top it up first'**
+  String get reasonBilling;
+
+  /// No description provided for @reasonNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'network or service issue'**
+  String get reasonNetwork;
+
+  /// No description provided for @reasonServerBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'your server is busy with another analysis'**
+  String get reasonServerBusy;
+
+  /// No description provided for @reasonServerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'your server could not analyze it'**
+  String get reasonServerFailed;
+
+  /// No description provided for @reasonNoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'no API key is set'**
+  String get reasonNoApiKey;
+
+  /// No description provided for @reasonNoServerKey.
+  ///
+  /// In en, this message translates to:
+  /// **'no server address or upload key is set'**
+  String get reasonNoServerKey;
+
   /// No description provided for @errServerRejected.
   ///
   /// In en, this message translates to:

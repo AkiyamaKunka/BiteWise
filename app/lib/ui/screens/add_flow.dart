@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show revertedLeftover;
+import '../../core/outcome_kind.dart';
 import '../../services/analyzer/platform_decode.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
@@ -287,7 +288,16 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
             outcome.mealId != null &&
             outcome.previousAnalysis != null &&
             outcome.analysis != null;
+    // A transient failure RELEASED the photo, and nothing re-offers a
+    // picked photo by itself (the automatic scan is off by default and
+    // never looks past its window): the dialog offers the retry instead of
+    // promising one. Not for a missing key — Settings is the fix there.
+    final canRetry = outcome.kind == PhotoOutcomeKind.failed &&
+        outcome.retryable &&
+        outcome.errorKind != AnalysisErrorKind.noApiKey &&
+        outcome.errorKind != AnalysisErrorKind.noServerKey;
     final l = context.l10n;
+    final body = outcomeBody(l, outcome, deliberate: true);
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -301,13 +311,19 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
         content: Text(canLogManually
-            ? '${outcomeBody(l, outcome)}\n\n${l.outcomeLogManuallyHint}'
-            : outcomeBody(l, outcome)),
+            ? '$body\n\n${l.outcomeLogManuallyHint}'
+            : body),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('ok'),
             child: Text(l.okButton),
           ),
+          if (canRetry)
+            TextButton(
+              key: const Key('retryAnalysisButton'),
+              onPressed: () => Navigator.of(ctx).pop('retry'),
+              child: Text(l.retry),
+            ),
           if (canLogManually)
             FilledButton(
               key: const Key('logManuallyButton'),
@@ -324,6 +340,12 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       ),
     );
     if (!mounted) return;
+    if (choice == 'retry') {
+      // Same photo, same shared FIFO: the hash was released, so this is a
+      // fresh reservation, never a second one.
+      await _analyze(deliberate);
+      return;
+    }
     if (choice == 'undoLeftover') {
       final undone = await _undoLeftover(outcome);
       if (!mounted) return;

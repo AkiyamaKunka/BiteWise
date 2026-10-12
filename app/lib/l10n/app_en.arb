@@ -1278,6 +1278,30 @@
       }
     }
   },
+  "outcomeRetryLaterMsg": "This photo was not analyzed this time ({reason}) — tap Retry, or pick it again later.",
+  "@outcomeRetryLaterMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeShareRetryMsg": "The shared photo was not analyzed this time ({reason}) — share it again later.",
+  "@outcomeShareRetryMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonRateLimited": "the provider is rate-limiting",
+  "reasonQuotaPaused": "the daily quota was hit",
+  "reasonBilling": "the provider account is out of balance — top it up first",
+  "reasonNetwork": "network or service issue",
+  "reasonServerBusy": "your server is busy with another analysis",
+  "reasonServerFailed": "your server could not analyze it",
+  "reasonNoApiKey": "no API key is set",
+  "reasonNoServerKey": "no server address or upload key is set",
   "errServerRejected": "Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.",
   "@errServerRejected": {
     "placeholders": {

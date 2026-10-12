@@ -11,8 +11,25 @@ import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
 import 'photo_pipeline.dart';
 
-String outcomeBody(AppLocalizations l, PhotoOutcome o) {
+///
+/// [deliberate]: the add flow's dialog. Its photo was RELEASED on a
+/// transient failure, and only the automatic scan (off by default, and
+/// never past its lookback window) could re-offer it — so "照片已保留，稍后
+/// 会自动重试" would promise a retry that never comes. Those kinds say
+/// what happened and point at the dialog's Retry instead. Snackbars, the
+/// headless meal card and the coverage screen (whose rows really are kept)
+/// keep the default.
+String outcomeBody(AppLocalizations l, PhotoOutcome o,
+    {bool deliberate = false}) {
   final d = o.detail;
+  if (deliberate && o.kind == PhotoOutcomeKind.failed && o.retryable) {
+    final reason = switch (o.errorKind) {
+      // The missing-credential lines promise nothing and name the fix.
+      AnalysisErrorKind.noApiKey || AnalysisErrorKind.noServerKey => null,
+      _ => retryReason(l, o),
+    };
+    if (reason != null) return l.outcomeRetryLaterMsg(reason);
+  }
   switch (o.kind) {
     case PhotoOutcomeKind.saved:
       return d == null ? o.message : l.outcomeSavedMsg(d);
@@ -56,13 +73,46 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
 /// leftover deduction or a PERMANENT failure (kept in 之前失败 for a
 /// deliberate retry; transient failures are released silently), and for a
 /// share-sheet photo also the refusals — not food, duplicate, already
-/// logged, still analyzing (bindStream, 2026-10-10). English is
+/// logged, still analyzing (bindStream, 2026-10-10) — and its transient
+/// failures, worded below. English is
 /// byte-identical to the strings the pipeline used to hand the snackbar.
+///
+/// A [PhotoOutcome.shared] transient failure says so and asks for a
+/// re-share: the share copy is gone and nothing re-offers it, so "kept for
+/// retry" would be untrue (2026-10-12).
 String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
+  if (o.shared && o.kind == PhotoOutcomeKind.failed && o.retryable) {
+    return l.outcomeShareRetryMsg(retryReason(l, o) ?? _bare(o.message));
+  }
   final body = outcomeBody(l, o);
   return o.kind == PhotoOutcomeKind.failed
       ? l.outcomeFailedKeptMsg(body)
       : body;
+}
+
+/// A short "why" for a released (retryable) failure, for the lines that
+/// wrap it in parentheses; null for a kind without one (the caller falls
+/// back to its own wording).
+String? retryReason(AppLocalizations l, PhotoOutcome o) =>
+    switch (o.errorKind) {
+      AnalysisErrorKind.rateLimited => l.reasonRateLimited,
+      AnalysisErrorKind.quotaPaused => l.reasonQuotaPaused,
+      AnalysisErrorKind.billing => l.reasonBilling,
+      AnalysisErrorKind.network => l.reasonNetwork,
+      AnalysisErrorKind.serverBusy => l.reasonServerBusy,
+      AnalysisErrorKind.serverError => l.reasonServerFailed,
+      AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
+      AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
+      _ => null,
+    };
+
+/// [message] without its trailing periods, to sit inside parentheses.
+String _bare(String message) {
+  var m = message.trim();
+  while (m.endsWith('.')) {
+    m = m.substring(0, m.length - 1).trimRight();
+  }
+  return m;
 }
 
 /// The `(code)` a server rejection carries, e.g. `bad_model` out of

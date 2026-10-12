@@ -500,8 +500,8 @@ void main() {
       expect(failed.map((o) => o.kind), [PhotoOutcomeKind.failed]);
     });
 
-    test('a transient failure stays silent: the share copy is gone, so '
-        '"kept for retry" would be untrue', () async {
+    test('a transient failure is said ONCE and asks for a re-share: the '
+        'share copy is gone, so silence read as success', () async {
       var analyzed = false;
       final dao = FakeDao();
       final notes = await share(
@@ -513,7 +513,13 @@ void main() {
           [_photo(deliberate: true)],
           (_) => analyzed);
       expect(dao.ledger, isEmpty); // released, no row (spec §2.3)
-      expect(notes, isEmpty);
+      expect(notes, hasLength(1));
+      final o = notes.single;
+      expect(o.kind, PhotoOutcomeKind.failed);
+      expect(o.shared, isTrue);
+      final zh = AppLocalizationsZh();
+      expect(outcomeSnackbar(zh, o), zh.outcomeShareRetryMsg('服务正在限流'));
+      expect(outcomeSnackbar(zh, o), isNot(contains('已保留')));
     });
 
     test('enqueue() (the add flow) is NOT told — it renders its own dialog',

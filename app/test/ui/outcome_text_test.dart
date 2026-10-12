@@ -207,6 +207,68 @@ void main() {
     });
   });
 
+  group('a deliberate add (the add-flow dialog)', () {
+    // Its photo was RELEASED on a transient failure and nothing re-offers
+    // a picked photo, so "kept and retried later" was a false promise
+    // (2026-10-12). Snackbars and the coverage screen keep the default.
+    const promising = {
+      AnalysisErrorKind.rateLimited: 'rate limit',
+      AnalysisErrorKind.quotaPaused: 'Gemini daily quota exhausted',
+      AnalysisErrorKind.billing: 'Provider balance or credits exhausted',
+      AnalysisErrorKind.network: 'network or service issue',
+      AnalysisErrorKind.serverBusy: 'busy',
+      AnalysisErrorKind.serverError: 'The server cannot analyze right now.',
+    };
+
+    test('transient kinds: no automatic-retry promise, point at Retry', () {
+      for (final MapEntry(key: kind, value: line) in promising.entries) {
+        final o = PhotoOutcome(PhotoOutcomeKind.failed, line,
+            retryable: true, errorKind: kind, detail: line);
+        final zhBody = outcomeBody(zh, o, deliberate: true);
+        final enBody = outcomeBody(en, o, deliberate: true);
+        expect(zhBody, zh.outcomeRetryLaterMsg(retryReason(zh, o)!),
+            reason: '$kind');
+        expect(zhBody, isNot(contains('自动重试')), reason: '$kind');
+        expect(zhBody, isNot(contains('已保留')), reason: '$kind');
+        expect(RegExp(r'[a-z]{4,}').hasMatch(zhBody), isFalse, reason: zhBody);
+        expect(enBody, contains('tap Retry'), reason: '$kind');
+        expect(enBody, isNot(contains('retried later')), reason: '$kind');
+        // The default (snackbar / coverage) wording is untouched.
+        expect(outcomeBody(zh, o), isNot(zhBody), reason: '$kind');
+      }
+    });
+
+    test('a permanent failure and a missing key keep their own lines', () {
+      const rejected = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          errorKind: AnalysisErrorKind.rejectedKey, detail: 'x');
+      expect(outcomeBody(zh, rejected, deliberate: true), zh.errRejectedKey);
+      const noKey = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          retryable: true, errorKind: AnalysisErrorKind.noApiKey, detail: 'x');
+      expect(outcomeBody(zh, noKey, deliberate: true), zh.errNoApiKey);
+    });
+
+    test('a share that failed transiently asks for a re-share', () {
+      const o = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          retryable: true,
+          errorKind: AnalysisErrorKind.network,
+          detail: 'x',
+          shared: true);
+      expect(outcomeSnackbar(zh, o),
+          '分享的照片这次没能分析（网络或服务问题）—— 请稍后重新分享。');
+      expect(outcomeSnackbar(en, o),
+          'The shared photo was not analyzed this time (network or service '
+          'issue) — share it again later.');
+      const raw = PhotoOutcome(PhotoOutcomeKind.failed, 'Odd failure.',
+          retryable: true,
+          errorKind: AnalysisErrorKind.unknown,
+          detail: 'Odd failure.',
+          shared: true);
+      expect(outcomeSnackbar(en, raw),
+          'The shared photo was not analyzed this time (Odd failure) — share '
+          'it again later.');
+    });
+  });
+
   test('a server rejection shows the CODE in both languages', () {
     const o = PhotoOutcome(
         PhotoOutcomeKind.failed, 'The server rejected this request (bad_model).',
