@@ -3014,6 +3014,7 @@ from shared_generated import (  # noqa: E402
     ACTIVITY_KCAL_MAX,
     ACTIVITY_KM_MAX,
     ACTIVITY_STEPS_MAX,
+    REPLY_LANGUAGE_DIRECTIVE_ZH,
 )
 
 # Weigh-in staleness warning threshold (unrelated to TRAIN_LOOKBACK_DAYS's 14).
@@ -4828,6 +4829,24 @@ def build_photo_prompt_with_profile(profile: str) -> str:
     )
 
 
+# The app's UI language as sent in the optional "lang" field. Only Chinese
+# changes anything today; the tags are matched case-insensitively.
+_ZH_LANG_TAGS = frozenset({"zh", "zh-hans", "zh-cn"})
+
+
+def with_reply_language(prompt: str, lang) -> str:
+    """[prompt] plus the shared reply-language directive when [lang] asks
+    for Chinese; otherwise [prompt] UNCHANGED (byte-identical — old apps
+    send no lang). A non-string lang is ignored, never a 400. The directive
+    is fixed server text (shared/constants.json), never caller text, and is
+    appended to the MODEL prompt only: it is not part of the dietary
+    profile and does not count against API_PROFILE_MAX_CHARS.
+    """
+    if not isinstance(lang, str) or lang.strip().lower() not in _ZH_LANG_TAGS:
+        return prompt
+    return f"{prompt}\n\n{REPLY_LANGUAGE_DIRECTIVE_ZH}\n"
+
+
 # ─── Flask REST API ───────────────────────────────────────────────
 
 # date -> (monotonic stamp, DailyActivity|None). Shared across requests;
@@ -5084,6 +5103,14 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             if recent:
                 base_prompt = prompt if prompt else FOOD_DETECTION_PROMPT
                 prompt = base_prompt + build_recent_meals_block(recent)
+            # Reply language LAST, after the profile and the recent-meals
+            # block. Its carve-out keeps an auto-leftover reply's item names
+            # copied verbatim, so the app's exact-name match still works.
+            # No lang keeps prompt None (the analyzer's own default).
+            base_prompt = prompt if prompt else FOOD_DETECTION_PROMPT
+            localized = with_reply_language(base_prompt, payload.get("lang"))
+            if localized is not base_prompt:
+                prompt = localized
             backend = payload.get("backend") or "claude"
             model, effort, bad = _plan_model_effort(payload, backend)
             if bad:
@@ -5194,6 +5221,11 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                 f"({reason}).")
             return jsonify({"error": "claude_unavailable",
                             "reason": reason}), 503
+        # Deliberately NO "lang" here: every item in this reply is a
+        # back-reference the app matches by exact (then case-insensitive)
+        # name against the ORIGINAL meal, which may be English — asking
+        # for Chinese invites translated names that silently match nothing
+        # and fall back to the meal-level fraction.
         prompt = LEFTOVER_PROMPT_TEMPLATE.format(original_analysis=compact)
         try:
             leftover = claude_analyzer.analyze_leftover_photo(
@@ -5229,6 +5261,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return _api_bad_request("text_intent", "no_prompt")
         if len(prompt) > API_TEXT_MAX_CHARS:
             return jsonify({"error": "prompt_too_large"}), 413
+        # Size-checked BEFORE the directive: the cap bounds the caller's
+        # text, the appended fixed sentence is the server's own.
+        prompt = with_reply_language(prompt, payload.get("lang"))
         backend = payload.get("backend") or "claude"
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
             return _api_bad_request("text_intent", "bad_backend")
