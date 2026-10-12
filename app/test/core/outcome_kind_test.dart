@@ -31,6 +31,8 @@ void main() {
     'The AI returned an unusable analysis.': AnalysisErrorKind.badResponse,
     'Could not process this photo (decode failed and it is not a JPEG).':
         AnalysisErrorKind.badPhoto,
+    'The server cannot analyze right now: analysis failed.':
+        AnalysisErrorKind.serverError,
     'Provider request failed: something odd': AnalysisErrorKind.unknown,
   };
 

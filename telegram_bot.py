@@ -4873,7 +4873,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         # "backends" lets the phone's Test connection diagnose a missing
         # server-side plan key (GLM_PLAN_KEY / DOUBAO_PLAN_KEY) remotely.
         return jsonify({"ok": True, "analyzer": claude_analyzer.status_label(),
-                        "backends": claude_analyzer.backend_status()})
+                        "backends": claude_analyzer.backend_status(),
+                        "claude_login": claude_analyzer.login_state()})
 
     @app.route('/api/garmin_daily', methods=['POST'])
     def api_garmin_daily():

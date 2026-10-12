@@ -868,6 +868,39 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         message: error);
   }
 
+  /// Whether the SERVER already holds a Claude-plan sign-in — the fact a
+  /// freshly provisioned phone needs, so it stops implying "Connect Claude"
+  /// is required (2026-09-28). 'token' | 'none' from the server;
+  /// 'unreachable' / 'rejected' when it could not be asked (the page shows
+  /// "could not check"); null ONLY for a 200 without the field — an older
+  /// server — where the page hides the row rather than guess.
+  Future<String?> serverLoginState() async {
+    final base = settings.serverBaseUrl;
+    final key = (settings.serverApiKey ?? '').trim();
+    if (base.isEmpty || key.isEmpty) return null;
+    try {
+      final req = http.Request('POST', _uri('/api/auth_check'))
+        ..headers['content-type'] = 'application/json'
+        ..headers['X-API-Key'] = key
+        ..headers['X-Client-Platform'] = 'app'
+        ..body = '{}';
+      // A short cap, NOT the 5-minute analysis deadline: this row is read
+      // while the page is open, and against an unreachable host it sat on
+      // "checking…" for the whole deadline (seen on the simulator).
+      final resp = await client
+          .send(req)
+          .then(http.Response.fromStream)
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode == 401 || resp.statusCode == 403) return 'rejected';
+      if (resp.statusCode != 200) return 'unreachable';
+      final decoded = jsonDecode(resp.body);
+      final v = decoded is Map ? decoded['claude_login'] : null;
+      return (v == 'token' || v == 'none') ? v as String : null;
+    } catch (_) {
+      return 'unreachable';
+    }
+  }
+
   /// /api/auth_check proves "address reachable + key accepted" with no side
   /// effects and no CLI run. Deliberately NOT /ping: that is the Termux
   /// watcher's liveness channel, and stamping it from here would forge

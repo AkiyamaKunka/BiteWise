@@ -151,6 +151,15 @@ class UiServices {
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
 
+  /// Server-side Claude sign-in state ('token' | 'none' | null unknown);
+  /// null hides the status row. See ServerAnalyzer.serverLoginState.
+  final Future<String?> Function()? serverLoginState;
+
+  /// One-click setup links (bitewise://setup?...) — a warm-app stream and
+  /// the cold-start link. Null in tests / when the platform has no plugin.
+  final Stream<Uri>? setupLinks;
+  final Future<Uri?> Function()? initialSetupLink;
+
   /// Whether the OS will show this app's notifications; null = unknown.
   /// Settings shows a "notifications are off" remedy when this is false.
   final Future<bool?> Function()? notificationsEnabled;
@@ -182,6 +191,9 @@ class UiServices {
     this.photoLibrary,
     this.startClaudeAuth,
     this.completeClaudeAuth,
+    this.serverLoginState,
+    this.setupLinks,
+    this.initialSetupLink,
     this.openSystemSettings,
     this.garminDaily,
     this.settingsChanges,

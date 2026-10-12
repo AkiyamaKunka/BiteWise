@@ -1257,4 +1257,43 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get macroNoBreakdown => '没有记录营养素分布。';
+
+  @override
+  String get setupLinkTitle => '通过这个链接配置服务器？';
+
+  @override
+  String setupLinkBody(String server, String backend, String keyTail) {
+    return '服务器：$server\n套餐：$backend\n上传密钥：••••$keyTail\n\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。';
+  }
+
+  @override
+  String get setupLinkConfirm => '使用这台服务器';
+
+  @override
+  String get setupLinkDone => '服务器已配置 —— 照片将通过你的套餐分析。';
+
+  @override
+  String get setupLinkInvalid => '这个配置链接无效。';
+
+  @override
+  String get serverLoginRow => '服务器 Claude 登录';
+
+  @override
+  String get serverLoginOk => '已登录 ✓';
+
+  @override
+  String get serverLoginMissing => '未登录';
+
+  @override
+  String get serverLoginUnknown => '无法检查';
+
+  @override
+  String get serverLoginChecking => '检查中…';
+
+  @override
+  String get serverLoginFooter =>
+      '已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。';
+
+  @override
+  String get errServerFailed => '你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。';
 }

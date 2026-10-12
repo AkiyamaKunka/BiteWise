@@ -36,6 +36,7 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
         AnalysisErrorKind.badResponse => l.errBadResponse,
         AnalysisErrorKind.badPhoto => l.errBadPhoto,
         AnalysisErrorKind.serverBusy => l.errServerBusy,
+        AnalysisErrorKind.serverError => l.errServerFailed,
         AnalysisErrorKind.none || AnalysisErrorKind.unknown => o.message,
       };
   }

@@ -851,5 +851,30 @@
       }
     }
   },
-  "macroNoBreakdown": "No macro breakdown recorded."
+  "macroNoBreakdown": "No macro breakdown recorded.",
+  "setupLinkTitle": "Set up server from this link?",
+  "setupLinkBody": "Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.",
+  "@setupLinkBody": {
+    "placeholders": {
+      "server": {
+        "type": "String"
+      },
+      "backend": {
+        "type": "String"
+      },
+      "keyTail": {
+        "type": "String"
+      }
+    }
+  },
+  "setupLinkConfirm": "Use this server",
+  "setupLinkDone": "Server configured — photos will be analyzed through your plan.",
+  "setupLinkInvalid": "That setup link is not valid.",
+  "serverLoginRow": "Server Claude sign-in",
+  "serverLoginOk": "Signed in ✓",
+  "serverLoginMissing": "Not signed in",
+  "serverLoginUnknown": "Could not check",
+  "serverLoginChecking": "Checking…",
+  "serverLoginFooter": "Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.",
+  "errServerFailed": "Your server could not analyze this photo this time — it is kept and retried later."
 }

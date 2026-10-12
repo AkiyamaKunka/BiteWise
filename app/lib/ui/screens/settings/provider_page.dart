@@ -111,6 +111,7 @@ class ProviderSettingsPage extends StatefulWidget {
     required this.analyzer,
     this.startClaudeAuth,
     this.completeClaudeAuth,
+    this.serverLoginState,
     this.openUrl,
   });
 
@@ -118,6 +119,7 @@ class ProviderSettingsPage extends StatefulWidget {
   final AnalyzerService analyzer;
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
+  final Future<String?> Function()? serverLoginState;
   final Future<bool> Function(Uri url)? openUrl;
 
   @override
@@ -196,6 +198,7 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                     settings: settings,
                     startClaudeAuth: widget.startClaudeAuth,
                     completeClaudeAuth: widget.completeClaudeAuth,
+                    serverLoginState: widget.serverLoginState,
                     openUrl: widget.openUrl,
                   ),
                 ));
