@@ -279,8 +279,12 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // (routine for drinks) or failing permanently would otherwise leave the
     // user with no way to log that photo AT ALL — re-picking it just
     // repeats the same verdict.
+    // Still analyzing too: the run holding the photo may be one iOS cut
+    // off, and until its row goes stale (up to 30 min) OK was the only way
+    // out of a meal the user is looking at right now (2026-10-12).
     final canLogManually = outcome.kind == PhotoOutcomeKind.skipped ||
-        outcome.kind == PhotoOutcomeKind.failed;
+        outcome.kind == PhotoOutcomeKind.failed ||
+        outcome.kind == PhotoOutcomeKind.inFlight;
     // A WRONG automatic leftover verdict was a dead end too: the earlier
     // meal stayed cut, and re-picking the photo repeats the verdict. The
     // escape puts that meal back and logs the photo as its own meal.
@@ -311,7 +315,10 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
           PhotoOutcomeKind.failed => l.outcomeFailed,
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
-        content: Text(canLogManually
+        // The hint asks "if this IS food" — a verdict an in-flight photo
+        // has not had.
+        content: Text(canLogManually &&
+                outcome.kind != PhotoOutcomeKind.inFlight
             ? '$body\n\n${l.outcomeLogManuallyHint}'
             : body),
         actions: [

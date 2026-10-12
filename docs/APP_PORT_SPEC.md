@@ -402,9 +402,10 @@ Android queue retries, and crash-recovery sweeps. A single-process app needs non
 crash races — but keeps: (1) dedup by md5 of **original** bytes, (2) the status ledger with the
 five statuses above and the `deleted` tombstone (so the §6 backfill scan never re-logs a deleted
 or skipped photo), (3) the meals-table backstop check, (4) the reclaim-statuses distinction
-between user-initiated and automated intake. The 6-hour stale-processing reclaim degenerates to:
-on app launch, any `processing` row is a crashed run — reclaim it (or mark `failed`) immediately;
-no timer needed.
+between user-initiated and automated intake. The 6-hour stale-processing reclaim shrinks to
+30 minutes on the phone (`appProcessingStaleAge`; the longest live analysis is ~15 min, and iOS
+kills runs mid-analysis), plus a cold-launch sweep of `processing` rows older than 20 minutes —
+not every row, since a background isolate may own a fresher one.
 
 ### 2.4 Meal mutation semantics
 

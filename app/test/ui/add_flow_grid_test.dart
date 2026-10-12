@@ -130,11 +130,14 @@ void main() {
   });
 
   testWidgets('a photo still being analyzed elsewhere says so — not '
-      '"Already logged", and no manual-log offer', (tester) async {
+      '"Already logged" — and can be logged by hand', (tester) async {
     // The watcher (or an iOS background run cut off mid-analysis) holds
     // this photo's reservation; the user picks the same photo. It is not
-    // logged yet, so "Already logged" was wrong, and it is not a refusal
-    // either, so there is nothing to log by hand (2026-10-07).
+    // logged yet, so "Already logged" was wrong (2026-10-07). The holder
+    // may be a run iOS killed, and its row stays in the way for up to
+    // 30 min: OK alone was a dead end for a meal the user is looking at
+    // (2026-10-12), so the dialog offers the manual log — without the
+    // "if this IS food" hint, which presumes a verdict.
     final picker = FakePicker()..photos = [_photo('a0')];
     final services = makeServices(
         picker: picker,
@@ -151,7 +154,13 @@ void main() {
     expect(find.text('Still analyzing'), findsOneWidget);
     expect(find.text('Already logged'), findsNothing);
     expect(find.textContaining('still being analyzed'), findsOneWidget);
-    expect(find.byKey(const Key('logManuallyButton')), findsNothing);
+    expect(find.textContaining('If this IS food'), findsNothing);
+    await tester.tap(find.byKey(const Key('logManuallyButton')));
+    await tester.pumpAndSettle();
+    final editor =
+        tester.widget<MealEditorScreen>(find.byType(MealEditorScreen));
+    expect(editor.fromPhoto?.assetId, 'a0',
+        reason: 'the manual log keeps the photo attached');
   });
 
   testWidgets('a transient failure promises no automatic retry and offers '

@@ -313,8 +313,10 @@ class SqfliteMealsDao implements MealsDao {
   /// A 'processing' row younger than this may belong to a LIVE run in the
   /// other isolate (the periodic background job vs. the foreground app) —
   /// sweeping it would double-analyze and double-log the photo. Worst-case
-  /// legitimate hold is ~5 min (3 attempts × 90 s deadline + backoffs).
-  static const Duration staleProcessingAge = Duration(minutes: 15);
+  /// legitimate hold is ~15.3 min (ServerAnalyzer: 3 attempts × its 5-min
+  /// deadline + backoffs). Warm paths reclaim on their own after
+  /// appProcessingStaleAge (meals_logic.dart).
+  static const Duration staleProcessingAge = Duration(minutes: 20);
 
   @override
   Future<void> reclaimStaleProcessing() async {

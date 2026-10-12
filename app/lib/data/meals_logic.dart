@@ -19,8 +19,17 @@ export '../core/coerce.dart' show isFoodTruthy, isoDate;
 /// Spec §2: chat_id kept for schema/export parity; one constant local user.
 const int localChatId = 1;
 
-/// Spec §2.3: PHOTO_RESERVATION_STALE_SECONDS = 6 h (database.py:11).
-const int photoReservationStaleSeconds = 6 * 60 * 60;
+/// How long a 'processing' row counts as somebody's LIVE analysis before
+/// any reservation may reclaim it. App-only (spec §2.3 adjusted): the
+/// server's PHOTO_RESERVATION_STALE_SECONDS = 6 h (database.py:11) was
+/// built for a process that is never killed mid-analysis. On the phone,
+/// iOS expires BGAppRefresh runs and kills the app, and only a COLD launch
+/// sweeps (reclaimStaleProcessing) — so under the server value an orphan
+/// parked the photo for up to 6 h on every warm resume, background run and
+/// deliberate pick (2026-10-12). The longest legitimate hold is ~15.3 min
+/// (ServerAnalyzer: 3 attempts × the 5-min deadline + backoffs); 30 min
+/// clears it with room to spare.
+const Duration appProcessingStaleAge = Duration(minutes: 30);
 
 /// Spec §2.3: DUPLICATE_WINDOW_MINUTES (config.py:95), from shared/.
 const int duplicateWindowMinutes = SharedConstants.duplicateWindowMinutes;
@@ -102,7 +111,8 @@ ReserveDecision decideReservation({
   if (mealRowExists) return ReserveDecision.refuse;
   // §2.3 step 4: no ledger row → fresh reservation.
   if (ledgerStatus == null) return ReserveDecision.insert;
-  // §2.3 step 3a: stale 'processing' rows are reclaimable. An unparseable
+  // §2.3 step 3a: stale 'processing' rows are reclaimable — stale after
+  // [appProcessingStaleAge], not the server's 6 h. An unparseable
   // last_seen_at reads as stale — a corrupt row must not block forever.
   // A FRESH one is somebody's live analysis: refused, but as IN FLIGHT,
   // so the automated paths wait in front of the photo instead of counting
@@ -110,8 +120,10 @@ ReserveDecision decideReservation({
   if (ledgerStatus == IngestionStatus.processing.name) {
     final last = ledgerLastSeenAt;
     final stale = last == null ||
-        now.difference(last) >
-            const Duration(seconds: photoReservationStaleSeconds);
+        // abs(): last_seen_at is a zone-less local wall clock, so after a
+        // westbound flight an orphan sits HOURS in the future and would
+        // never age; a row that far ahead is a moved clock, not a live run.
+        now.difference(last).abs() > appProcessingStaleAge;
     return stale ? ReserveDecision.reclaim : ReserveDecision.refuseInFlight;
   }
   // §2.3 step 3b: deliberate re-send may re-log failed/skipped/deleted.

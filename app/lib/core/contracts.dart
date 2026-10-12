@@ -77,7 +77,8 @@ enum IngestionStatus { processing, saved, skipped, failed, deleted }
 /// Two refusals, told apart on purpose (2026-10-07): a row another run is
 /// STILL WORKING ON is not a verdict. iOS can expire the ~30 s background
 /// grant mid-analysis, which leaves that run's 'processing' row behind
-/// until the launch sweep releases it (up to 15 min); until then both
+/// until a cold launch sweeps it or it goes stale (appProcessingStaleAge,
+/// 30 min); until then both
 /// automated paths read the refusal as "already logged", marched the
 /// watermark / seen-set past the photo, and never offered it again.
 enum PhotoReservation {

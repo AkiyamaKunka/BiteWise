@@ -6,8 +6,11 @@ import 'dart:typed_data';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/data/db.dart';
 import 'package:calorie_tracker/data/meals_dao_impl.dart';
+import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+import '../ui/fakes.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -67,7 +70,7 @@ void main() {
   test('FRESH processing rows are untouched — the other isolate may own them',
       () async {
     await seedProcessing('c' * 32, 'app_watch',
-        age: const Duration(minutes: 5)); // < 15-min staleness threshold
+        age: const Duration(minutes: 5)); // < 20-min staleness threshold
     await dao.reclaimStaleProcessing();
     // Still reserved: neither released nor failed — and the refusal names
     // the reason, so the caller waits instead of counting the photo done.
@@ -191,5 +194,115 @@ void main() {
     expect(await dao.photoStatus('4' * 32), isNull);
     expect((await dao.photoStatus('5' * 32))?.status, IngestionStatus.deleted,
         reason: 'a user deletion is never undone');
+  });
+
+  group('a run killed mid-analysis does not park the photo for hours '
+      '(2026-10-12)', () {
+    // A movable clock: the warm paths below never run the launch sweep.
+    var clock = DateTime(2026, 10, 12, 12, 0);
+    late SqfliteMealsDao warm;
+    setUp(() {
+      clock = DateTime(2026, 10, 12, 12, 0);
+      warm = SqfliteMealsDao(db, clock: () => clock);
+    });
+
+    test('orphan at 12:00 → still in flight at 12:29, reserved at 12:31 for '
+        'the automatic scan AND a deliberate pick', () async {
+      // 12:00 an iOS BGAppRefresh run reserves both photos, then iOS
+      // terminates it mid-analysis.
+      for (final h in ['a' * 32, 'b' * 32]) {
+        expect(await warm.reservePhotoHash(h, source: MealSource.appWatch),
+            PhotoReservation.reserved);
+      }
+      // 12:05 cold launch: the sweep leaves a 5-min-old row alone.
+      clock = DateTime(2026, 10, 12, 12, 5);
+      await warm.reclaimStaleProcessing();
+      // Warm resume / background run / deliberate pick: no sweep.
+      clock = DateTime(2026, 10, 12, 12, 29);
+      expect(await warm.reservePhotoHash('a' * 32, source: MealSource.appWatch),
+          PhotoReservation.inFlight);
+      expect(
+          await warm.reservePhotoHash('b' * 32,
+              source: MealSource.appPhoto, reclaimDeliberate: true),
+          PhotoReservation.inFlight);
+      // Under the server's 6 h this stayed inFlight until 18:00.
+      clock = DateTime(2026, 10, 12, 12, 31);
+      expect(await warm.reservePhotoHash('a' * 32, source: MealSource.appWatch),
+          PhotoReservation.reserved);
+      expect(
+          await warm.reservePhotoHash('b' * 32,
+              source: MealSource.appPhoto, reclaimDeliberate: true),
+          PhotoReservation.reserved);
+      expect((await warm.photoStatus('b' * 32))?.status,
+          IngestionStatus.processing,
+          reason: 'reclaimed for the new owner, restamped');
+    });
+
+    test('westbound flight: an orphan stamped on the Shanghai wall clock is '
+        'reclaimable on the Chicago one', () async {
+      clock = DateTime(2026, 10, 12, 20, 0);
+      await warm.reservePhotoHash('c' * 32, source: MealSource.appWatch);
+      clock = DateTime(2026, 10, 12, 10, 0); // 10 h "earlier" after landing
+      await warm.reclaimStaleProcessing();
+      expect(await warm.reservePhotoHash('c' * 32, source: MealSource.appWatch),
+          PhotoReservation.reserved);
+    });
+
+    test('a deliberate pick of a 31-min-old processing row analyzes and '
+        'saves — no 正在分析 dead end', () async {
+      await warm.reservePhotoHash('h' * 32, source: MealSource.appWatch);
+      clock = DateTime(2026, 10, 12, 12, 31);
+      var calls = 0;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'meal_description': 'Noodles',
+                'total_calories': 500},
+            isFood: true,
+            wall: Duration.zero)
+        ..onAnalyze = () async => calls++;
+      final pipeline = PhotoPipeline(
+          dao: warm, analyzer: analyzer, hasher: (_) async => 'h' * 32);
+      final o = await pipeline.process(IntakePhoto(
+          Uint8List.fromList([7]), 'p1', 'p1.jpg',
+          deliberate: true, capturedAt: DateTime(2026, 10, 12, 12)));
+      expect(o.kind, PhotoOutcomeKind.saved);
+      expect(calls, 1);
+      final row = await warm.photoStatus('h' * 32);
+      expect(row?.status, IngestionStatus.saved);
+      expect(row?.mealId, isNotNull);
+    });
+
+    test('a stale owner\'s late save lands on the meal already logged — '
+        'never a second row', () async {
+      Meal meal(String source, String name) => Meal(
+            id: 0,
+            date: '2026-10-12',
+            time: '12:00 PM',
+            timestamp: clock.toIso8601String(),
+            source: source,
+            imageHash: 'd' * 32,
+            analysis: {'is_food': true, 'description': name},
+          );
+      // Owner A reserves at 12:00 and is very slow (or presumed dead).
+      await warm.reservePhotoHash('d' * 32, source: MealSource.appWatch);
+      // 12:31 a deliberate pick reclaims the stale row and saves.
+      clock = DateTime(2026, 10, 12, 12, 31);
+      expect(
+          await warm.reservePhotoHash('d' * 32,
+              source: MealSource.appPhoto, reclaimDeliberate: true),
+          PhotoReservation.reserved);
+      final first = await warm.saveMeal(meal(MealSource.appPhoto, 'B'),
+          markStatus: IngestionStatus.saved);
+      // 12:32 owner A finally answers: the save-time backstop returns B's
+      // meal instead of inserting a duplicate.
+      clock = DateTime(2026, 10, 12, 12, 32);
+      final late = await warm.saveMeal(meal(MealSource.appWatch, 'A'),
+          markStatus: IngestionStatus.saved);
+      expect(late, first);
+      expect(await warm.mealsBetween('2026-10-12', '2026-10-12'), hasLength(1));
+      final row = await warm.photoStatus('d' * 32);
+      expect(row?.status, IngestionStatus.saved);
+      expect(row?.mealId, first);
+    });
   });
 }
