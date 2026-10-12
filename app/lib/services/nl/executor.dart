@@ -17,6 +17,7 @@ import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/coach_strings.dart' show localizationsFor;
 import '../../ui/format.dart' show byMealClock, displayClock;
+import '../../ui/outcome_text.dart' show badModelText;
 import '../settings/app_settings.dart';
 
 /// Spec §1.2 / §8: TEXT_EDIT_WINDOW_DAYS (telegram_bot.py:161), from shared/.
@@ -380,7 +381,7 @@ class DefaultNlExecutor implements NlExecutor {
   /// (loop find 2026-10-08).
   String _textFailure(String? error) => switch (classifyAnalysisError(error)) {
         AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
-        AnalysisErrorKind.badModel => '❌ ${_l.errBadModel}',
+        AnalysisErrorKind.badModel => '❌ ${badModelText(_l, error)}',
         AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',
         _ => _l.nlErrorContactingAi,
       };

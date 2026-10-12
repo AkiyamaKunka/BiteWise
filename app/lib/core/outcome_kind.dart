@@ -49,7 +49,11 @@ AnalysisErrorKind classifyAnalysisError(String? error) {
     return AnalysisErrorKind.rateLimited;
   }
   if (e.contains('network or service')) return AnalysisErrorKind.network;
-  if (e.contains('model error') || e.contains('model name')) {
+  // 'model not found': the Doubao and OpenRouter 404 hints name neither
+  // the "model name" nor a "model error" (2026-10-12).
+  if (e.contains('model error') ||
+      e.contains('model name') ||
+      e.contains('model not found')) {
     return AnalysisErrorKind.badModel;
   }
   if (e.contains("couldn't understand") || e.contains('unusable analysis')) {

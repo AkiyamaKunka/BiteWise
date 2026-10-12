@@ -1202,6 +1202,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errBadModel => '服务不接受这个模型 —— 请在设置里检查模型名。';
 
   @override
+  String get errBadModelDoubao =>
+      '豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台 开通管理 里开通。';
+
+  @override
+  String get errBadModelOpenRouter =>
+      'OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整 slug（厂商/模型），并选择支持图片的模型。';
+
+  @override
   String get errBilling => '账户余额或额度已用完 —— 请到服务商控制台充值。照片已保留，充值后会重新分析。';
 
   @override

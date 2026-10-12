@@ -1293,6 +1293,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'The provider rejected the model — check the model name in Settings.';
 
   @override
+  String get errBadModelDoubao =>
+      'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.';
+
+  @override
+  String get errBadModelOpenRouter =>
+      'OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.';
+
+  @override
   String get errBilling =>
       'The provider account is out of balance or credits — top it up in the provider\'s console. The photo is kept and analyzed again after you top up.';
 

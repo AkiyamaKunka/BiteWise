@@ -2198,6 +2198,18 @@ abstract class AppLocalizations {
   /// **'The provider rejected the model — check the model name in Settings.'**
   String get errBadModel;
 
+  /// No description provided for @errBadModelDoubao.
+  ///
+  /// In en, this message translates to:
+  /// **'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.'**
+  String get errBadModelDoubao;
+
+  /// No description provided for @errBadModelOpenRouter.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.'**
+  String get errBadModelOpenRouter;
+
   /// No description provided for @errBilling.
   ///
   /// In en, this message translates to:

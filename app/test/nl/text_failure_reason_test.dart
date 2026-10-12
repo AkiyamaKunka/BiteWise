@@ -103,6 +103,40 @@ void main() {
           '❌ 服务不接受这个模型 —— 请在设置里检查模型名。');
     });
 
+    test('Doubao / OpenRouter "model not found" keep their own remedy',
+        () async {
+      // Neither hint says "model name", so both classified as unknown and
+      // the chat said 请重试 to a model id a retry cannot fix (2026-10-12).
+      analyzer
+        ..next = null
+        ..nextError = 'Doubao model not found — Ark needs the EXACT '
+            'versioned ID from its model list, and the model must be '
+            'activated (开通管理) in the Volcengine console.';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error!,
+      ]) {
+        expect(line, startsWith('❌ 豆包找不到这个模型'));
+        expect(line, contains('开通管理'));
+        expect(line, isNot(contains('请重试')));
+      }
+      expect((await en().handleText('x')).single.text,
+          contains('activated (开通管理)'));
+      analyzer.nextError = 'OpenRouter model not found — use the full slug '
+          'from openrouter.ai/models (vendor/model, for example '
+          'google/gemini-3.8-flash) and pick one that accepts images.';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error!,
+      ]) {
+        expect(line, contains('支持图片'));
+        expect(line, contains('openrouter.ai/models'));
+        expect(line, isNot(contains('请重试')));
+      }
+      expect((await en().handleText('x')).single.text,
+          contains('accepts images'));
+    });
+
     test('an empty provider balance says "top up", never "请重试"', () async {
       // A retry cannot refill an account; the chat used to say 联系 AI
       // 失败，请重试 to a friend whose DeepSeek balance hit zero (2026-10-12).

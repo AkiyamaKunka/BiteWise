@@ -813,6 +813,8 @@
   "errQuotaPaused": "Analysis is paused: the daily quota was hit. The photo is kept and retried later.",
   "errNetwork": "Could not reach the provider (network or service issue). The photo is kept and retried later.",
   "errBadModel": "The provider rejected the model — check the model name in Settings.",
+  "errBadModelDoubao": "Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.",
+  "errBadModelOpenRouter": "OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.",
   "errBilling": "The provider account is out of balance or credits — top it up in the provider's console. The photo is kept and analyzed again after you top up.",
   "errBillingText": "The provider account is out of balance or credits — top it up in the provider's console.",
   "errBadResponse": "The AI answered in a form the app could not use.",

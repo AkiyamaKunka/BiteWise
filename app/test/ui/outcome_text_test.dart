@@ -136,6 +136,24 @@ void main() {
     expect(outcomeBody(en, o), contains('top it up'));
   });
 
+  test('Doubao / OpenRouter model errors keep their provider remedy', () {
+    PhotoOutcome o(String line) => PhotoOutcome(PhotoOutcomeKind.failed, line,
+        errorKind: classifyAnalysisError(line), detail: line);
+    final doubao = o('Doubao model not found — Ark needs the EXACT versioned '
+        'ID from its model list, and the model must be activated (开通管理) '
+        'in the Volcengine console.');
+    expect(outcomeBody(zh, doubao), zh.errBadModelDoubao);
+    expect(outcomeBody(zh, doubao), contains('开通管理'));
+    expect(outcomeBody(en, doubao), en.errBadModelDoubao);
+    final openRouter = o('OpenRouter model not found — use the full slug from '
+        'openrouter.ai/models (vendor/model, for example '
+        'google/gemini-3.8-flash) and pick one that accepts images.');
+    expect(outcomeBody(zh, openRouter), zh.errBadModelOpenRouter);
+    expect(outcomeBody(zh, openRouter), contains('支持图片'));
+    final qwen = o('Qwen model not found — check the model name in Settings.');
+    expect(outcomeBody(zh, qwen), zh.errBadModel);
+  });
+
   test('a server rejection shows the CODE in both languages', () {
     const o = PhotoOutcome(
         PhotoOutcomeKind.failed, 'The server rejected this request (bad_model).',

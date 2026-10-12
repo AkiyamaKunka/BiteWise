@@ -35,7 +35,7 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
         AnalysisErrorKind.quotaPaused => l.errQuotaPaused,
         AnalysisErrorKind.billing => l.errBilling,
         AnalysisErrorKind.network => l.errNetwork,
-        AnalysisErrorKind.badModel => l.errBadModel,
+        AnalysisErrorKind.badModel => badModelText(l, o.message),
         AnalysisErrorKind.badResponse => l.errBadResponse,
         AnalysisErrorKind.badPhoto => l.errBadPhoto,
         AnalysisErrorKind.serverBusy => l.errServerBusy,
@@ -64,3 +64,16 @@ String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
 /// "The server rejected this request (bad_model)."; '?' when absent.
 String rejectionCode(String message) =>
     RegExp(r'\(([a-z_]+)\)').firstMatch(message)?.group(1) ?? '?';
+
+/// The bad-model line, keeping the provider-specific remedy where the
+/// analyzer's 404 hint has one: Doubao needs the versioned id AND the model
+/// activated (开通管理); OpenRouter needs the full slug of a model that
+/// accepts images. "Check the model name" alone would not fix either.
+String badModelText(AppLocalizations l, String? message) {
+  final m = message ?? '';
+  if (m.startsWith('Doubao model not found')) return l.errBadModelDoubao;
+  if (m.startsWith('OpenRouter model not found')) {
+    return l.errBadModelOpenRouter;
+  }
+  return l.errBadModel;
+}
