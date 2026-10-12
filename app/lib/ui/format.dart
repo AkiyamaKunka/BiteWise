@@ -32,9 +32,18 @@ bool isFoodMeal(Meal m) => isFoodTruthy(m.analysis['is_food']);
 String mealDescription(Map<String, dynamic> analysis,
     {String fallback = 'Meal'}) {
   final d = analysis['meal_description'];
-  if (d is String && d.trim().isNotEmpty) return d.trim();
+  // 'Meal' is the placeholder the editor (meal_edit_logic) and the leftover
+  // rewrite (leftover_logic) store for a meal with no name; show it as the
+  // caller's localized "unnamed" text like a missing name. The stored value
+  // stays as is (leftover prompts and Python parity read it).
+  if (d is String && d.trim().isNotEmpty && d.trim() != kStoredMealPlaceholder) {
+    return d.trim();
+  }
   return fallback;
 }
+
+/// The literal name stored for a meal that has none (see [mealDescription]).
+const kStoredMealPlaceholder = 'Meal';
 
 /// Card total calories: the raw stringified value, '?' only when there IS no
 /// value (spec §3.5 display fallbacks: null, absent, '', false and empty

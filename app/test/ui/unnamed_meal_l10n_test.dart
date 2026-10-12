@@ -36,6 +36,11 @@ void main() {
     expect(mealDescription({}, fallback: '未命名的一餐'), '未命名的一餐');
     expect(mealDescription({'meal_description': ' Ramen '}, fallback: 'x'),
         'Ramen');
+    // The editor and the leftover rewrite STORE 'Meal' for a nameless meal;
+    // it reads as unnamed too.
+    expect(mealDescription({'meal_description': 'Meal'}, fallback: '未命名的一餐'),
+        '未命名的一餐');
+    expect(mealDescription({'meal_description': 'Meal'}), 'Meal');
   });
 
   for (final (locale, unnamed) in [
@@ -48,6 +53,21 @@ void main() {
           locale,
           MealCard(
               meal: _meal({'is_food': true, 'total_calories': 300}))));
+      await tester.pumpAndSettle();
+      expect(find.text(unnamed), findsOneWidget);
+      expect(find.text('Meal'), findsNothing);
+    });
+
+    testWidgets('${locale.languageCode}: a meal saved with the stored '
+        "'Meal' placeholder reads $unnamed", (tester) async {
+      await tester.pumpWidget(_host(
+          locale,
+          MealCard(
+              meal: _meal({
+            'is_food': true,
+            'meal_description': 'Meal',
+            'total_calories': 300
+          }))));
       await tester.pumpAndSettle();
       expect(find.text(unnamed), findsOneWidget);
       expect(find.text('Meal'), findsNothing);
