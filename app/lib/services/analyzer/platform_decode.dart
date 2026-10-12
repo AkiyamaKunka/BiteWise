@@ -39,9 +39,13 @@ Uint8List? unprocessedFallback(Uint8List original, {required int maxBytes}) =>
         ? stripJpegMetadata(original)
         : null;
 
-/// [jpeg] without its metadata segments: every APP1 (EXIF — GPS location,
-/// camera, times — and XMP) and APP13 (Photoshop/IPTC, which can name a
-/// place), and nothing after the primary image's EOI. That trailer is where
+/// [jpeg] without its metadata segments: every APPn except the three a
+/// decoder may need — APP0 (JFIF), APP2 (ICC profile / MPF index) and
+/// APP14 (Adobe colour transform) — so APP1 (EXIF — GPS location, camera,
+/// times — and XMP), APP11 (JUMBF / C2PA Content Credentials, which can
+/// carry its own EXIF assertion with the GPS) and APP13 (Photoshop/IPTC,
+/// which can name a place) all go; so does every COM, free text no decoder
+/// reads that can hold anything. And nothing after the primary image's EOI. That trailer is where
 /// MPF secondary images (iPhone gain maps, previews) and vendor blobs
 /// (Samsung Motion Photo video) live, each able to carry its own EXIF/GPS.
 /// Every other segment and all entropy-coded data — every scan of a
@@ -80,7 +84,10 @@ Uint8List? stripJpegMetadata(Uint8List jpeg) {
     final len = (jpeg[m + 1] << 8) | jpeg[m + 2];
     final end = m + 1 + len;
     if (len < 2 || end > jpeg.length) return null;
-    if (marker != 0xE1 && marker != 0xED) {
+    final isApp = marker >= 0xE0 && marker <= 0xEF;
+    final dropped = marker == 0xFE ||
+        (isApp && marker != 0xE0 && marker != 0xE2 && marker != 0xEE);
+    if (!dropped) {
       out.add(Uint8List.sublistView(jpeg, i, end));
     }
     i = end;

@@ -349,8 +349,50 @@ void main() {
       expect(_hasExifSig(out), isFalse);
       expect(_hasSeq(out, 'ns.adobe.com/xmp/extension'.codeUnits), isFalse);
       expect(_hasSeq(out, [0x41, 0x42, 0x43]), isTrue, reason: 'APP2 kept');
+      expect(_hasSeq(out, [0xFF, 0xFE]), isFalse, reason: 'COM dropped');
       expect(img.decodeJpg(out)!.getPixel(30, 20),
           img.decodeJpg(orig)!.getPixel(30, 20));
+    });
+
+    test('APP11 C2PA/JUMBF (its own GPS assertion) and every other APPn go; '
+        'APP0, ICC APP2 and Adobe APP14 stay', () {
+      final orig = _jpegWithGps(orientation: 1);
+      List<int> seg(int marker, List<int> body) =>
+          [0xFF, marker, (body.length + 2) >> 8, (body.length + 2) & 0xFF,
+              ...body];
+      // A fake JUMBF superbox: CI + En + box len + 'jumb' + a c2pa label and
+      // a stds.exif assertion naming a place.
+      final jumbf = seg(0xEB, [
+        ...'JP'.codeUnits, 0x00, 0x01, 0, 0, 0, 1, 0, 0, 0, 0x40,
+        ...'jumb'.codeUnits, ...'c2pa'.codeUnits, 0,
+        ...'stds.exif'.codeUnits, 0,
+        ...'exif:GPSLatitude=43,4.4N'.codeUnits,
+      ]);
+      final icc = seg(0xE2, [...'ICC_PROFILE'.codeUnits, 0, 1, 1, 7, 7, 7]);
+      // A real Adobe APP14 (DCTEncodeVersion 100, flags 0, transform 1).
+      final adobe = seg(0xEE, [...'Adobe'.codeUnits, 0, 100, 0, 0, 0, 0, 1]);
+      final app3 = seg(0xE3, 'JPS stereo'.codeUnits);
+      final app15 = seg(0xEF, 'vendor'.codeUnits);
+      final bb = BytesBuilder()..add([0xFF, 0xD8]);
+      for (final (off, mk, len) in _segments(orig)) {
+        bb.add(orig.sublist(off, off + len));
+        if (mk == 0xE0) bb..add(icc)..add(jumbf)..add(adobe)..add(app3)..add(app15);
+      }
+      final withAll = bb.toBytes();
+      expect(img.decodeJpg(withAll), isNotNull, reason: 'fixture decodes');
+      final out = stripJpegMetadata(withAll)!;
+      _expectNoMetadata(out);
+      expect(_hasSeq(out, 'jumb'.codeUnits), isFalse, reason: 'APP11 gone');
+      expect(_hasSeq(out, 'GPSLatitude'.codeUnits), isFalse);
+      expect(_hasSeq(out, 'JPS stereo'.codeUnits), isFalse, reason: 'APP3');
+      expect(_hasSeq(out, 'vendor'.codeUnits), isFalse, reason: 'APP15');
+      expect(_hasSeq(out, icc), isTrue, reason: 'ICC APP2 kept');
+      expect(_hasSeq(out, adobe), isTrue, reason: 'Adobe APP14 kept');
+      expect(_segments(out).first.$2, 0xE0, reason: 'JFIF APP0 kept first');
+      final decoded = img.decodeJpg(out)!;
+      expect((decoded.width, decoded.height), (80, 40));
+      expect(decoded.getPixel(30, 20), img.decodeJpg(orig)!.getPixel(30, 20));
+      expect(out.sublist(_sosIndex(out)), orig.sublist(_sosIndex(orig)));
     });
   });
 
