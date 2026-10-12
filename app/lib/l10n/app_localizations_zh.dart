@@ -1700,6 +1700,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String outcomePickRetryMsg(String reason) {
+    return '这张照片没能分析（$reason）—— 请稍后重新选择它。';
+  }
+
+  @override
   String get reasonRateLimited => '服务正在限流';
 
   @override

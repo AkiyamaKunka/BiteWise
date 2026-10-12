@@ -1810,6 +1810,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String outcomePickRetryMsg(String reason) {
+    return 'This photo was not analyzed ($reason) — pick it again later.';
+  }
+
+  @override
   String get reasonRateLimited => 'the provider is rate-limiting';
 
   @override

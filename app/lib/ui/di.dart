@@ -178,16 +178,18 @@ class AppServices {
 
     // Photo pipeline glue (spec §2.3/§3/§6): intake streams → md5 → reserve
     // → analyze → save/skip/fail, notification-style snackbar on save.
+    // Worded HERE, in the app language read live at each call, so a
+    // language switch applies to the next snackbar; main.dart stays a
+    // plain String sink. The add flow gets the same sink for a verdict
+    // that lands after the user backed out.
+    final void Function(PhotoOutcome)? announce = notify == null
+        ? null
+        : (o) =>
+            notify(outcomeSnackbar(localizationsFor(settings.appLanguage), o));
     final pipeline = PhotoPipeline(
         dao: dao,
         analyzer: analyzer,
-        // Worded HERE, in the app language read live at each call, so a
-        // language switch applies to the next snackbar; main.dart stays a
-        // plain String sink.
-        notify: notify == null
-            ? null
-            : (o) => notify(
-                outcomeSnackbar(localizationsFor(settings.appLanguage), o)),
+        notify: announce,
         // Open screens re-query instead of showing pre-save data.
         onMealSaved: signalMealsChanged,
         // A rejected key / blocked region parks the automatic scan.
@@ -225,6 +227,7 @@ class AppServices {
       // The audit's log/retry actions share the pipeline's global FIFO —
       // enqueue() chains onto the tail; process() would race it.
       processPhoto: pipeline.enqueue,
+      announceOutcome: announce,
       photoLibrary: photoLibrary,
       startClaudeAuth: serverAnalyzer.startClaudeAuth,
       completeClaudeAuth: serverAnalyzer.completeClaudeAuth,

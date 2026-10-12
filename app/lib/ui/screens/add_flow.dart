@@ -273,7 +273,21 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
         : await PhotoPipeline(
                 dao: widget.services.dao, analyzer: widget.services.analyzer)
             .process(deliberate);
-    if (!mounted) return;
+    if (!mounted) {
+      // Backed out mid-analysis (the AppBar back stays live under the
+      // overlay): the dialog below is gone with the screen, and process()
+      // itself announces only saves, leftover deductions and permanent
+      // failures — not food, duplicate, already logged, still analyzing
+      // and a transient failure were dropped without a word (2026-10-12).
+      // Same filter as the share sheet's, so nothing is said twice.
+      final say = unannouncedOutcome(outcome, picked: true);
+      if (say != null) {
+        try {
+          widget.services.announceOutcome?.call(say);
+        } catch (_) {}
+      }
+      return;
+    }
     setState(() => _analyzing = false);
     // A refused photo must not be a dead end: the model saying "not food"
     // (routine for drinks) or failing permanently would otherwise leave the

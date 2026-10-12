@@ -2930,6 +2930,12 @@ abstract class AppLocalizations {
   /// **'The shared photo was not analyzed this time ({reason}) — share it again later.'**
   String outcomeShareRetryMsg(String reason);
 
+  /// No description provided for @outcomePickRetryMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was not analyzed ({reason}) — pick it again later.'**
+  String outcomePickRetryMsg(String reason);
+
   /// No description provided for @reasonRateLimited.
   ///
   /// In en, this message translates to:

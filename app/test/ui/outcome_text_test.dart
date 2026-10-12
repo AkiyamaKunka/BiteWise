@@ -342,6 +342,35 @@ void main() {
           'The shared photo was not analyzed this time (Odd failure) — share '
           'it again later.');
     });
+
+    test('a PICKED photo whose add flow was closed asks for a re-pick, not '
+        'a re-share', () {
+      const o = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          retryable: true,
+          errorKind: AnalysisErrorKind.network,
+          detail: 'x',
+          picked: true);
+      expect(outcomeSnackbar(zh, o), '这张照片没能分析（网络或服务问题）—— 请稍后重新选择它。');
+      expect(outcomeSnackbar(en, o),
+          'This photo was not analyzed (network or service issue) — pick it '
+          'again later.');
+      // The filter both detached callers share: refusals pass through
+      // untouched, a transient failure is flagged, announced kinds drop.
+      const notFood = PhotoOutcome(PhotoOutcomeKind.skipped, 'n');
+      expect(unannouncedOutcome(notFood, picked: true), same(notFood));
+      final flagged = unannouncedOutcome(
+          const PhotoOutcome(PhotoOutcomeKind.failed, 'x', retryable: true),
+          picked: true)!;
+      expect((flagged.picked, flagged.shared), (true, false));
+      expect(
+          unannouncedOutcome(const PhotoOutcome(PhotoOutcomeKind.failed, 'x'),
+              picked: true),
+          isNull);
+      expect(
+          unannouncedOutcome(const PhotoOutcome(PhotoOutcomeKind.saved, 's'),
+              shared: true),
+          isNull);
+    });
   });
 
   test('a server rejection shows the CODE in both languages', () {

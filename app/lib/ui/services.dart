@@ -173,6 +173,12 @@ class UiServices {
   /// here so they share the global FIFO with the watcher and share sheet.
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
 
+  /// The pipeline's own snackbar sink (di.dart words the outcome in the
+  /// app language): for a verdict whose screen is gone — the add flow
+  /// closed mid-analysis — so it is still said once (unannouncedOutcome).
+  /// Null in tests that never back out.
+  final void Function(PhotoOutcome outcome)? announceOutcome;
+
   /// Library access for coverage thumbnails; null in tests.
   final PhotoLibrary? photoLibrary;
 
@@ -229,6 +235,7 @@ class UiServices {
     this.thumbs,
     this.coverage,
     this.processPhoto,
+    this.announceOutcome,
     this.photoLibrary,
     this.startClaudeAuth,
     this.completeClaudeAuth,

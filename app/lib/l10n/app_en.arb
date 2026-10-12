@@ -1326,6 +1326,14 @@
       }
     }
   },
+  "outcomePickRetryMsg": "This photo was not analyzed ({reason}) — pick it again later.",
+  "@outcomePickRetryMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
   "reasonRateLimited": "the provider is rate-limiting",
   "reasonQuotaPaused": "the daily quota was hit",
   "reasonBilling": "the provider account is out of balance — top it up first",

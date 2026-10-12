@@ -95,10 +95,17 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
 ///
 /// A [PhotoOutcome.shared] transient failure says so and asks for a
 /// re-share: the share copy is gone and nothing re-offers it, so "kept for
-/// retry" would be untrue (2026-10-12).
+/// retry" would be untrue (2026-10-12). A [PhotoOutcome.picked] one (the
+/// add flow closed mid-analysis) asks for a re-pick, and the refusals
+/// above are said for it too.
 String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
   if (o.shared && o.kind == PhotoOutcomeKind.failed && o.retryable) {
     return l.outcomeShareRetryMsg(retryReason(l, o) ?? _bare(o.message));
+  }
+  // The same for a photo picked in the add flow and backed out of
+  // mid-analysis (unannouncedOutcome): released, so ask for a re-pick.
+  if (o.picked && o.kind == PhotoOutcomeKind.failed && o.retryable) {
+    return l.outcomePickRetryMsg(retryReason(l, o) ?? _bare(o.message));
   }
   final body = outcomeBody(l, o);
   return o.kind == PhotoOutcomeKind.failed

@@ -88,6 +88,11 @@ class PhotoOutcome {
   /// a TRANSIENT failure, so the snackbar can ask for a re-share instead
   /// of claiming the photo was kept (outcomeSnackbar).
   final bool shared;
+
+  /// [shared]'s twin for a photo PICKED in the add flow whose screen was
+  /// closed before the verdict came back (unannouncedOutcome): the
+  /// snackbar asks the user to pick it again.
+  final bool picked;
   const PhotoOutcome(this.kind, this.message,
       {this.analysis,
       this.retryable = false,
@@ -99,8 +104,37 @@ class PhotoOutcome {
       this.mealId,
       this.mealDate,
       this.previousAnalysis,
-      this.shared = false});
+      this.shared = false,
+      this.picked = false});
 }
+
+/// What to announce for a verdict NOBODY is awaiting — a shared photo
+/// (bindStream), or a picked one whose add-flow screen was closed
+/// mid-analysis — or null when process() already announced it itself
+/// (saves, leftover deductions, permanent failures). One filter for both
+/// callers, so the kinds cannot drift apart. A transient failure comes back
+/// flagged [shared] / [picked] so the snackbar asks for the photo again:
+/// it was released, and nothing will re-offer it.
+PhotoOutcome? unannouncedOutcome(PhotoOutcome o,
+        {bool shared = false, bool picked = false}) =>
+    switch (o.kind) {
+      PhotoOutcomeKind.skipped ||
+      PhotoOutcomeKind.duplicate ||
+      PhotoOutcomeKind.alreadyTracked ||
+      PhotoOutcomeKind.inFlight =>
+        o,
+      PhotoOutcomeKind.failed when o.retryable => PhotoOutcome(
+          o.kind, o.message,
+          retryable: true,
+          errorKind: o.errorKind,
+          detail: o.detail,
+          shared: shared,
+          picked: picked),
+      PhotoOutcomeKind.saved ||
+      PhotoOutcomeKind.leftoverApplied ||
+      PhotoOutcomeKind.failed =>
+        null,
+    };
 
 /// The persisted automatic-analysis latch (AppSettings.isAnalysisBlocked),
 /// as the pipeline sees it. A rejected key or a blocked region refuses
@@ -136,7 +170,8 @@ class PhotoPipeline {
   /// Notification-style surface (snackbar) for verdicts nobody awaits:
   /// process() announces saves, leftover deductions and PERMANENT failures
   /// on every path (plus, throttled, a rejected key or blocked region on
-  /// the automatic scan), and [bindStream] (the share sheet) adds the rest. Handed
+  /// the automatic scan), and [bindStream] (the share sheet) and the add
+  /// flow closed mid-analysis add the rest (unannouncedOutcome). Handed
   /// the OUTCOME, not a sentence: the caller words it in the app language
   /// (di.dart via outcomeSnackbar). Passing [PhotoOutcome.message] here put
   /// English snackbars ("Meal logged: …") in front of the Chinese UI every
@@ -228,35 +263,19 @@ class PhotoPipeline {
     _subs.add(photos.listen((p) {
       final slot = _tail.then((_) => process(p));
       _tail = slot.then((o) {
-        switch (o.kind) {
-          case PhotoOutcomeKind.skipped:
-          case PhotoOutcomeKind.duplicate:
-          case PhotoOutcomeKind.alreadyTracked:
-          case PhotoOutcomeKind.inFlight:
-            // Shielded like process()'s own notify calls: this runs ON the
-            // shared tail, and a throwing snackbar would reject it and
-            // stall every later photo (watcher, share, coverage Log/Retry)
-            // until an app restart.
-            try {
-              notify?.call(o);
-            } catch (_) {}
-          case PhotoOutcomeKind.failed when o.retryable:
-            // Released, and the share copy is already gone: nothing will
-            // ever re-offer it, so silence read as "it worked" — say it
-            // failed and ask for a re-share (outcomeSnackbar words it).
-            try {
-              notify?.call(PhotoOutcome(o.kind, o.message,
-                  retryable: true,
-                  errorKind: o.errorKind,
-                  detail: o.detail,
-                  shared: true));
-            } catch (_) {}
-          case PhotoOutcomeKind.saved:
-          case PhotoOutcomeKind.leftoverApplied:
-          case PhotoOutcomeKind.failed:
-            // Announced by process() (permanent failures on every path).
-            break;
-        }
+        // A transient failure was released, and the share copy is already
+        // gone: nothing will ever re-offer it, so silence read as "it
+        // worked" — it comes back flagged [PhotoOutcome.shared] and the
+        // snackbar asks for a re-share (outcomeSnackbar words it).
+        final say = unannouncedOutcome(o, shared: true);
+        if (say == null) return;
+        // Shielded like process()'s own notify calls: this runs ON the
+        // shared tail, and a throwing snackbar would reject it and stall
+        // every later photo (watcher, share, coverage Log/Retry) until an
+        // app restart.
+        try {
+          notify?.call(say);
+        } catch (_) {}
       });
     }, onError: (Object _) {}));
   }
