@@ -17,7 +17,7 @@ import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/coach_strings.dart' show localizationsFor;
 import '../../ui/format.dart' show byMealClock, displayClock;
-import '../../ui/outcome_text.dart' show badModelText, serverReason;
+import '../../ui/outcome_text.dart' show badModelText, regionProvider, serverReason;
 import '../settings/app_settings.dart';
 
 /// Spec §1.2 / §8: TEXT_EDIT_WINDOW_DAYS (telegram_bot.py:161), from shared/.
@@ -388,7 +388,8 @@ class DefaultNlExecutor implements NlExecutor {
       AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
       AnalysisErrorKind.badModel => '❌ ${badModelText(_l, error)}',
       AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',
-      AnalysisErrorKind.regionBlocked => '❌ ${_l.errRegionBlocked}',
+      AnalysisErrorKind.regionBlocked =>
+        '❌ ${_l.errRegionBlocked(regionProvider(_l, error))}',
       AnalysisErrorKind.serverError
           when reason != null && reason.toLowerCase().contains('credit') =>
         _l.nlServerModelRefused(reason),

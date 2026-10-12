@@ -89,10 +89,14 @@ GeminiErrorClass classifyGeminiError(String errorText) {
       up.contains('403')) {
     return GeminiErrorClass.auth;
   }
-  // AFTER auth: a key complaint that also says FAILED_PRECONDITION is
-  // still about the key.
+  // AFTER auth: a key complaint that also names a location is still about
+  // the key. Matched on the region SENTENCES only ("User location is not
+  // supported for the API use.", "… is not available in your country",
+  // incl. "Gemini API free tier is not available in your country"): any
+  // other FAILED_PRECONDITION is no VPN problem, and calling it one kept
+  // the photo eligible and re-uploaded it on every scan.
   if (up.contains('LOCATION IS NOT SUPPORTED') ||
-      up.contains('FAILED_PRECONDITION')) {
+      up.contains('NOT AVAILABLE IN YOUR COUNTRY')) {
     return GeminiErrorClass.regionBlocked;
   }
   if (up.contains('UNAVAILABLE') ||

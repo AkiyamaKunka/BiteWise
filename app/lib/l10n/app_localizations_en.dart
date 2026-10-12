@@ -1828,20 +1828,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reasonNoServerKey => 'no server address or upload key is set';
 
   @override
-  String get errRegionBlocked =>
-      'Gemini is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).';
+  String errRegionBlocked(String provider) {
+    return '$provider is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).';
+  }
 
   @override
   String get errContentBlocked =>
       'Gemini declined to analyze this photo — you can log it manually.';
 
   @override
-  String get reasonRegionBlocked =>
-      'Gemini is not available from this network region';
+  String reasonRegionBlocked(String provider) {
+    return '$provider is not available from this network region';
+  }
 
   @override
-  String get diagFixVpnRegion =>
-      'Switch the VPN to a node in a region Gemini serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.';
+  String diagFixVpnRegion(String provider) {
+    return 'Switch the VPN to a node in a region $provider serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.';
+  }
+
+  @override
+  String get regionProviderFallback => 'This AI service';
 
   @override
   String errServerRejected(String code) {

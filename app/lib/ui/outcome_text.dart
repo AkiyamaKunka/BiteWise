@@ -51,7 +51,8 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
         AnalysisErrorKind.noApiKey => l.errNoApiKey,
         AnalysisErrorKind.noServerKey => l.errNoServerKey,
         AnalysisErrorKind.rejectedKey => l.errRejectedKey,
-        AnalysisErrorKind.regionBlocked => l.errRegionBlocked,
+        AnalysisErrorKind.regionBlocked =>
+          l.errRegionBlocked(regionProvider(l, o.message)),
         AnalysisErrorKind.contentBlocked => l.errContentBlocked,
         AnalysisErrorKind.rateLimited => l.errRateLimited,
         AnalysisErrorKind.quotaPaused => l.errQuotaPaused,
@@ -108,9 +109,22 @@ String? retryReason(AppLocalizations l, PhotoOutcome o) =>
       AnalysisErrorKind.serverError => l.reasonServerFailed,
       AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
       AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
-      AnalysisErrorKind.regionBlocked => l.reasonRegionBlocked,
+      AnalysisErrorKind.regionBlocked =>
+        l.reasonRegionBlocked(regionProvider(l, o.message)),
       _ => null,
     };
+
+/// Who refused the network region, out of the analyzers' "`Provider` is
+/// not available from your current network region …" (Gemini's region
+/// 400, OpenAI's `unsupported_country_region_territory` 403) — the zh line
+/// used to say Gemini for every provider.
+String regionProvider(AppLocalizations l, String? message) {
+  const marker = ' is not available from your current network region';
+  final m = message ?? '';
+  final at = m.indexOf(marker);
+  final name = at > 0 ? m.substring(0, at).trim() : '';
+  return name.isEmpty || name.length > 40 ? l.regionProviderFallback : name;
+}
 
 /// [message] without its trailing periods, to sit inside parentheses.
 String _bare(String message) {

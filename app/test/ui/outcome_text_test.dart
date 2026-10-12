@@ -250,24 +250,42 @@ void main() {
       expect(outcomeBody(zh, noKey, deliberate: true), zh.errNoApiKey);
       // Gemini's region refusal keeps its VPN hint in the dialog, and a
       // share names it instead of the raw English line.
-      const region = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+      const geminiRegion = 'Gemini is not available from your current '
+          'network region (check the VPN).';
+      const region = PhotoOutcome(PhotoOutcomeKind.failed, geminiRegion,
           retryable: true,
           errorKind: AnalysisErrorKind.regionBlocked,
-          detail: 'x');
-      expect(outcomeBody(zh, region, deliberate: true), zh.errRegionBlocked);
+          detail: geminiRegion);
+      expect(outcomeBody(zh, region, deliberate: true),
+          zh.errRegionBlocked('Gemini'));
       expect(
           outcomeSnackbar(
               zh,
-              const PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+              const PhotoOutcome(PhotoOutcomeKind.failed, geminiRegion,
                   retryable: true,
                   errorKind: AnalysisErrorKind.regionBlocked,
-                  detail: 'x',
+                  detail: geminiRegion,
                   shared: true)),
-          zh.outcomeShareRetryMsg(zh.reasonRegionBlocked));
+          zh.outcomeShareRetryMsg(zh.reasonRegionBlocked('Gemini')));
       const withheld = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
           errorKind: AnalysisErrorKind.contentBlocked, detail: 'x');
       expect(outcomeBody(zh, withheld, deliberate: true),
           'Gemini 拒绝分析这张照片 —— 可以手动记录。');
+    });
+
+    test('a region refusal names the provider that refused, not always '
+        'Gemini', () {
+      const openai = PhotoOutcome(PhotoOutcomeKind.failed,
+          'OpenAI is not available from your current network region '
+          '(check the VPN).',
+          retryable: true, errorKind: AnalysisErrorKind.regionBlocked);
+      expect(outcomeBody(zh, openai),
+          'OpenAI 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。');
+      expect(outcomeBody(zh, openai), isNot(contains('Gemini')));
+      // A line without the provider never invents one.
+      const bare = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          retryable: true, errorKind: AnalysisErrorKind.regionBlocked);
+      expect(outcomeBody(zh, bare), startsWith('当前 AI 服务'));
     });
 
     test('a share that failed transiently asks for a re-share', () {

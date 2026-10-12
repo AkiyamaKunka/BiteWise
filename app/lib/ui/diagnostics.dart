@@ -169,9 +169,11 @@ class ProviderDiagnostics {
         return;
       case KeyProbeResult.regionBlocked:
         // Every later stage fails the same way; "re-copy the key" would
-        // be the wrong fix for a key Gemini never looked at.
-        yield DiagResult(l.diagStageAuth, DiagStatus.fail, l.errRegionBlocked,
-            detail: probe.message, fix: l.diagFixVpnRegion);
+        // be the wrong fix for a key the provider never looked at.
+        yield DiagResult(l.diagStageAuth, DiagStatus.fail,
+            l.errRegionBlocked(providerLabel(provider)),
+            detail: probe.message,
+            fix: l.diagFixVpnRegion(providerLabel(provider)));
         return;
       case KeyProbeResult.rejected:
         yield DiagResult(

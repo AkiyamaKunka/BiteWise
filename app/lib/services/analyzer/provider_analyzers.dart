@@ -173,6 +173,21 @@ abstract class _HttpVisionAnalyzer
             billing: true,
             verbatimMessage: true);
       }
+      // A region refusal, checked BEFORE the auth branch for the same
+      // reason as billing: OpenAI answers a Hong Kong VPN exit with a 403
+      // whose error code is `unsupported_country_region_territory`, and
+      // "key rejected" sent the user — every ten minutes — to fix a key
+      // that works. Matched on the documented code only. Retryable (a
+      // different VPN node fixes it) but never in place.
+      if (body.contains('unsupported_country_region_territory')) {
+        throw _ProviderException(
+            '$providerLabel is not available from your current network '
+            'region (check the VPN).',
+            transient: true,
+            retryInPlace: false,
+            regionBlocked: true,
+            verbatimMessage: true);
+      }
       if (resp.statusCode == 401 ||
           resp.statusCode == 403 ||
           // xAI reports a bad key as HTTP 400 "Incorrect API key provided".
@@ -456,6 +471,10 @@ abstract class _HttpVisionAnalyzer
       if (e.billing) {
         return KeyProbe(KeyProbeResult.outOfCredit, message: e.userMessage);
       }
+      // The key was never judged: a different VPN node is the fix.
+      if (e.regionBlocked) {
+        return KeyProbe(KeyProbeResult.regionBlocked, message: e.userMessage);
+      }
       // A transient transport failure (timeout, dropped connection) is NOT
       // a rejected key — reporting "The key was not accepted" for a flaky
       // network sends the user to regenerate a fine key. Only a genuine
@@ -488,6 +507,7 @@ class _ProviderException implements Exception {
       this.retryInPlace = true,
       this.verbatimMessage = false,
       this.modelError = false,
+      this.regionBlocked = false,
       this.serverBusy = false});
   final String message;
   final bool transient;
@@ -499,6 +519,10 @@ class _ProviderException implements Exception {
   /// non-transient failure; only probeKey reads it, to keep diagnostics
   /// from calling a model problem a rejected key.
   final bool modelError;
+
+  /// The provider does not serve the network's region (OpenAI's
+  /// `unsupported_country_region_territory`): the key was never judged.
+  final bool regionBlocked;
 
   /// The key authenticated but the ACCOUNT cannot pay. A subset of
   /// [quotaClass] (both accept the key) with a completely different

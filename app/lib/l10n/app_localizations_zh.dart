@@ -1717,17 +1717,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reasonNoServerKey => '还没有设置服务器地址或上传 Key';
 
   @override
-  String get errRegionBlocked => 'Gemini 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。';
+  String errRegionBlocked(String provider) {
+    return '$provider 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。';
+  }
 
   @override
   String get errContentBlocked => 'Gemini 拒绝分析这张照片 —— 可以手动记录。';
 
   @override
-  String get reasonRegionBlocked => 'Gemini 在当前网络地区不可用';
+  String reasonRegionBlocked(String provider) {
+    return '$provider 在当前网络地区不可用';
+  }
 
   @override
-  String get diagFixVpnRegion =>
-      '把 VPN 换到 Gemini 支持的地区的节点（如美国、日本、新加坡；香港不支持），或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+  String diagFixVpnRegion(String provider) {
+    return '把 VPN 换到 $provider 支持的地区的节点（如美国、日本、新加坡；香港不支持），或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+  }
+
+  @override
+  String get regionProviderFallback => '当前 AI 服务';
 
   @override
   String errServerRejected(String code) {

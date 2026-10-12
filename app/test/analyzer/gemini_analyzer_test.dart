@@ -502,6 +502,27 @@ void main() {
           GeminiErrorClass.regionBlocked);
     });
 
+    test('only the region sentences are regionBlocked — any other '
+        'FAILED_PRECONDITION stays permanent', () async {
+      expect(
+          classifyGeminiError('HTTP 400: {"error": {"code": 400, "message": '
+              '"Gemini API free tier is not available in your country. '
+              'Please enable billing on your project in Google AI Studio.", '
+              '"status": "FAILED_PRECONDITION"}}'),
+          GeminiErrorClass.regionBlocked);
+      const other = '{"error": {"code": 400, "message": "Precondition check '
+          'failed.", "status": "FAILED_PRECONDITION"}}';
+      expect(classifyGeminiError('HTTP 400: $other'), GeminiErrorClass.unknown);
+      final s = await freshSettings();
+      final out = await Harness(s, [http.Response(other, 400)])
+          .analyzer
+          .analyzePhoto(photo);
+      expect(out.retryable, isFalse,
+          reason: 'no VPN node fixes it: re-uploading every scan is waste');
+      expect(classifyAnalysisError(out.error),
+          isNot(AnalysisErrorKind.regionBlocked));
+    });
+
     test('probeKey / validateKey never call a region 400 a rejected key',
         () async {
       final s = await freshSettings(apiKey: null);

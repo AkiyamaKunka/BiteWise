@@ -151,10 +151,11 @@ void main() {
     final results = await _diag(analyzer: blocked).run().toList();
     expect(results.last.stage, 'Authentication');
     expect(results.last.status, DiagStatus.fail);
-    expect(results.last.summary, AppLocalizationsEn().errRegionBlocked);
-    expect(results.last.fix, AppLocalizationsEn().diagFixVpnRegion);
+    expect(results.last.summary,
+        AppLocalizationsEn().errRegionBlocked('Gemini'));
+    expect(results.last.fix, AppLocalizationsEn().diagFixVpnRegion('Gemini'));
     expect(results.last.fix, isNot(contains('Re-copy')));
-    expect(AppLocalizationsZh().errRegionBlocked, contains('VPN'));
+    expect(AppLocalizationsZh().errRegionBlocked('OpenAI'), contains('VPN'));
   });
 
   testWidgets('a stage that THROWS is reported, never silently green',

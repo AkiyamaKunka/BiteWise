@@ -2981,8 +2981,8 @@ abstract class AppLocalizations {
   /// No description provided for @errRegionBlocked.
   ///
   /// In en, this message translates to:
-  /// **'Gemini is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).'**
-  String get errRegionBlocked;
+  /// **'{provider} is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).'**
+  String errRegionBlocked(String provider);
 
   /// No description provided for @errContentBlocked.
   ///
@@ -2993,14 +2993,20 @@ abstract class AppLocalizations {
   /// No description provided for @reasonRegionBlocked.
   ///
   /// In en, this message translates to:
-  /// **'Gemini is not available from this network region'**
-  String get reasonRegionBlocked;
+  /// **'{provider} is not available from this network region'**
+  String reasonRegionBlocked(String provider);
 
   /// No description provided for @diagFixVpnRegion.
   ///
   /// In en, this message translates to:
-  /// **'Switch the VPN to a node in a region Gemini serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.'**
-  String get diagFixVpnRegion;
+  /// **'Switch the VPN to a node in a region {provider} serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.'**
+  String diagFixVpnRegion(String provider);
+
+  /// No description provided for @regionProviderFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'This AI service'**
+  String get regionProviderFallback;
 
   /// No description provided for @errServerRejected.
   ///

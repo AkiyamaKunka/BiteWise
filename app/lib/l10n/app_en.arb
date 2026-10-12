@@ -1315,10 +1315,32 @@
   "reasonServerFailed": "your server could not analyze it",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
-  "errRegionBlocked": "Gemini is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).",
+  "errRegionBlocked": "{provider} is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).",
+  "@errRegionBlocked": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "errContentBlocked": "Gemini declined to analyze this photo — you can log it manually.",
-  "reasonRegionBlocked": "Gemini is not available from this network region",
-  "diagFixVpnRegion": "Switch the VPN to a node in a region Gemini serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.",
+  "reasonRegionBlocked": "{provider} is not available from this network region",
+  "@reasonRegionBlocked": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "diagFixVpnRegion": "Switch the VPN to a node in a region {provider} serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.",
+  "@diagFixVpnRegion": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "regionProviderFallback": "This AI service",
   "errServerRejected": "Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.",
   "@errServerRejected": {
     "placeholders": {
