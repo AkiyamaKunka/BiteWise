@@ -209,6 +209,7 @@
   },
   "settingsRowCoverage": "Photo Coverage",
   "settingsSectionReport": "Report",
+  "settingsRowDailySummary": "Daily summary",
   "settingsRowReportTime": "Report Time",
   "settingsRowNextSummary": "Next summary",
   "timeToday": "Today {time}",
@@ -239,6 +240,8 @@
   "settingsRowBackgroundScan": "Background scan",
   "backgroundScanNever": "Not run yet",
   "backgroundScanDisabled": "Off",
+  "backgroundScanRestricted": "Restricted",
+  "backgroundScanIosHint": "iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.",
   "settingsSectionProfile": "Profile",
   "settingsRowDietaryProfile": "Dietary Profile",
   "profileSet": "Set",
@@ -618,6 +621,7 @@
   "editorCarbsLabel": "Carbs",
   "editorFatLabel": "Fat",
   "editorGramsSuffix": "g",
+  "editorKcalSuffix": "kcal",
   "diagTitle": "Test AI provider",
   "diagIntro": "Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.",
   "diagRunning": "Testing…",
@@ -813,6 +817,14 @@
   "errBadPhoto": "This photo could not be processed (it could not be decoded).",
   "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
   "mealCardAutoTitle": "🍽️ Meal logged automatically",
+  "notificationChannelName": "Reports & meals",
+  "@notificationChannelName": {
+    "description": "Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
+  },
+  "notificationChannelDescription": "Daily calorie reports and auto-logged meal cards",
+  "@notificationChannelDescription": {
+    "description": "Android notification channel description, shown under the channel name in the system notification settings."
+  },
   "dayLoadFailed": "Could not load this day: {error}",
   "@dayLoadFailed": {
     "placeholders": {
@@ -867,7 +879,7 @@
   "editorDeleteTooltip": "Delete meal",
   "editorDescriptionLabel": "What was it?",
   "editorTotalsHeader": "Totals",
-  "editorCaloriesLabel": "Calories (kcal)",
+  "editorCaloriesLabel": "Calories",
   "editorItemsHeader": "Items",
   "editorTotalsDerivedHint": "Totals follow these items",
   "editorAddItem": "Add item",
@@ -1392,6 +1404,10 @@
         "type": "String"
       }
     }
+  },
+  "nlUnnamedMeal": "Unnamed meal",
+  "@nlUnnamedMeal": {
+    "description": "Stands in for meal_description in chat replies (delete labels, the correction line, the added-meal card) when the stored analysis has no name."
   },
   "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
   "nlRequestFailed": "❌ That request failed. Please try again.",

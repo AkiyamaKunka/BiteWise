@@ -53,4 +53,15 @@ void main() {
     expect(parseSetupLink(Uri.parse('bitewise://other?server=http%3A%2F%2Fh&key=$key')),
         isNull);
   });
+
+  test('only the bitewise scheme counts as ours, case-insensitively', () {
+    expect(isSetupLinkScheme(link('server=http%3A%2F%2Fh&key=$key')), isTrue);
+    expect(isSetupLinkScheme(Uri.parse('BITEWISE://setup?key=$key')), isTrue);
+    // The iOS share extension's hand-off to the host app (receive_sharing_intent).
+    expect(
+        isSetupLinkScheme(
+            Uri.parse('ShareMedia-dev.calorietracker.calorieTracker:share')),
+        isFalse);
+    expect(isSetupLinkScheme(Uri.parse('https://setup?key=$key')), isFalse);
+  });
 }

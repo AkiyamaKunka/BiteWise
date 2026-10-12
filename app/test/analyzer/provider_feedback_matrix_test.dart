@@ -205,7 +205,8 @@ void main() {
             404,
             '{"error": {"message": "The model \'gpt-nope\' does not exist '
             'or you do not have access to it.", "type": '
-            '"invalid_request_error", "code": "model_not_found"}}'),
+            '"invalid_request_error", "code": "model_not_found"}}',
+            expectSays: 'model'),
         Scenario.overloaded: const Fx(
             500,
             '{"error": {"message": "The server had an error while '
@@ -248,7 +249,8 @@ void main() {
         Scenario.modelNotFound: const Fx(
             404,
             '{"type": "error", "error": {"type": "not_found_error", '
-            '"message": "model: claude-nope-1"}}'),
+            '"message": "model: claude-nope-1"}}',
+            expectSays: 'model'),
         Scenario.overloaded: const Fx(
             529,
             '{"type": "error", "error": {"type": "overloaded_error", '
@@ -627,6 +629,52 @@ void main() {
             }
           });
         }
+      }
+
+      // Something BETWEEN the phone and the provider answering: a captive
+      // portal's login page (200 text/html) or a redirect to it. No vendor
+      // answers a POST with HTML or a 3xx, so neither is the model's
+      // verdict — transient, one call, the photo survives, and the probe
+      // must not take the page as proof of a key. Only the owner's
+      // plain-HTTP server is actually exposed (an HTTPS vendor behind a
+      // portal fails the TLS handshake → connection error, already
+      // transient), but the rule is provider-agnostic. Gemini keeps its
+      // own spec-pinned request path and is not covered here.
+      if (p.name != 'Gemini') {
+        test('captive portal: HTML 200 and 302 are transient, one call, '
+            'never a tombstone', () async {
+          final portal = {
+            'HTML 200': () => http.Response(
+                '<html><body><h1>Sign in to Wi-Fi</h1></body></html>', 200,
+                headers: {'content-type': 'text/html; charset=utf-8'}),
+            '302': () => http.Response('', 302,
+                headers: {'location': 'http://portal.example/login'}),
+          };
+          for (final entry in portal.entries) {
+            final s = await p.settings();
+            var calls = 0;
+            final a = p.make(s, MockClient((_) async {
+              calls++;
+              return entry.value();
+            }));
+            final out = await a.analyzePhoto(photo);
+            final why = '${p.name}/${entry.key}: ${out.error}';
+            expect(out.analysis, isNull, reason: why);
+            expect(out.retryable, isTrue,
+                reason: '$why — the provider was never reached; the photo '
+                    'must stay eligible for the next scan');
+            expect(calls, 1,
+                reason: '$why — a login page does not change in 15 s');
+            expect(s.isQuotaPaused, isFalse, reason: why);
+            final probe = await a.probeKey('k');
+            final probeWhy = '${p.name}/${entry.key}: ${probe.message}';
+            expect(probe.result, isNot(KeyProbeResult.ok),
+                reason: '$probeWhy — a portal page is not proof of a key');
+            expect(probe.result, isNot(KeyProbeResult.rejected),
+                reason: '$probeWhy — the key was never evaluated; '
+                    '"re-copy the key" is the wrong fix');
+          }
+        });
       }
     });
   }

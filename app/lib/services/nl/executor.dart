@@ -208,10 +208,13 @@ int? mealCalorieMismatch(dynamic analysis) {
 /// Single-meal result card, meal-local portion of format_food_result
 /// (spec §5.4, telegram_bot.py:2875-2919) rendered as plain text. The
 /// running daily-totals block is the reports module's concern; the UI
-/// appends it separately.
-String formatFoodResult(Map<String, dynamic> analysis) {
+/// appends it separately. [unnamed] stands in for a missing
+/// meal_description; the executor passes its localized string so the
+/// fallback is not the one English word in a Chinese reply.
+String formatFoodResult(Map<String, dynamic> analysis,
+    {String unnamed = 'Unknown meal'}) {
   if (!isTruthy(analysis['is_food'])) return '🚫 No food detected in this photo.';
-  final lines = <String>['🍽️ ${analysis['meal_description'] ?? 'Unknown meal'}\n'];
+  final lines = <String>['🍽️ ${analysis['meal_description'] ?? unnamed}\n'];
   for (final item in safeFoodItems(analysis)) {
     dynamic cals =
         item.containsKey('estimated_calories') ? item['estimated_calories'] : '?';
@@ -293,6 +296,20 @@ class DefaultNlExecutor implements NlExecutor {
   }
 
   String _kcal(dynamic v) => _l.kcalAmount('$v');
+
+  /// A meal name for the reply, or null when the analysis has none. Nothing
+  /// guarantees meal_description: a direct-provider photo reply or a partial
+  /// chat correction (updateMealAnalysis replaces the JSON wholesale) can
+  /// leave a food row with the key missing or blank.
+  static String? _namedDesc(dynamic d) {
+    if (d == null) return null;
+    final s = '$d'.trim();
+    return s.isEmpty ? null : s;
+  }
+
+  /// The stored name, else the localized "unnamed meal" — never the English
+  /// 'Unknown meal' inside an otherwise Chinese delete modal or snackbar.
+  String _desc(Map a) => _namedDesc(a['meal_description']) ?? _l.nlUnnamedMeal;
 
   /// One pending confirmation slot (spec §4.5: one per chat; the app's modal
   /// dialog replaces the server's nonce/TTL machinery). id → display label.
@@ -535,8 +552,8 @@ class DefaultNlExecutor implements NlExecutor {
     final old = target.analysis;
     final oldCal = safeNumber(old['total_calories']);
     final newCal = safeNumber(sanitized['total_calories']);
-    final oldDesc = '${old['meal_description'] ?? 'Unknown'}';
-    final newDesc = '${sanitized['meal_description'] ?? oldDesc}';
+    final oldDesc = _desc(old);
+    final newDesc = _namedDesc(sanitized['meal_description']) ?? oldDesc;
     final diff = newCal - oldCal;
     final diffStr = diff > 0 ? '+$diff' : '$diff';
     // Which day's row was rewritten. A correction has no confirmation step
@@ -600,7 +617,7 @@ class DefaultNlExecutor implements NlExecutor {
         final a = meal.analysis;
         ids.add(meal.id);
         labels.add(_l.nlMealLabel(
-            '${a['meal_description'] ?? 'Unknown meal'}',
+            _desc(a),
             meal.date,
             _clock(meal.time),
             _kcal(_orElse(a['total_calories'], 0))));
@@ -668,7 +685,8 @@ class DefaultNlExecutor implements NlExecutor {
       analysis: sanitized,
     ));
     return NlReply(
-        '${_l.nlAddedManualMeal}\n\n${formatFoodResult(sanitized)}',
+        '${_l.nlAddedManualMeal}\n\n'
+        '${formatFoodResult(sanitized, unnamed: _l.nlUnnamedMeal)}',
         applied: true);
   }
 

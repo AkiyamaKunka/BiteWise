@@ -9,6 +9,7 @@ import 'dart:async' show unawaited;
 
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -58,8 +59,9 @@ class SettingsScreen extends StatefulWidget {
   /// A null PROBE hides the row.
   final Future<DateTime?> Function()? lastBackgroundScan;
 
-  /// iOS Background App Refresh; false turns the background-scan row into
-  /// the remedy ("off in Settings", opens system settings).
+  /// Whether the OS still launches the background scan: iOS Background App
+  /// Refresh, or on Android not the user-set 电池 › 受限 bucket. False
+  /// turns the background-scan row into the remedy (opens system settings).
   final Future<bool?> Function()? backgroundRefreshEnabled;
 
   /// Coverage-audit pieces; all three null in tests → the tile is hidden.
@@ -98,6 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   final TextEditingController _importController = TextEditingController();
   late int _lookbackDays;
   late String _reportTime;
+  late bool _summaryEnabled;
   late bool _watcherEnabled;
   bool _exporting = false;
   bool _importing = false;
@@ -116,7 +119,8 @@ class _SettingsScreenState extends State<SettingsScreen>
   DateTime? _lastBackgroundScan;
   bool _lastBackgroundProbed = false;
 
-  /// True only when iOS says Background App Refresh is OFF for this app.
+  /// True only when the OS says the background scan cannot launch: iOS
+  /// Background App Refresh off, or Android's 电池 › 受限 bucket.
   bool _backgroundRefreshOff = false;
 
   @override
@@ -126,6 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _profileController = TextEditingController(text: s.dietaryProfile);
     _lookbackDays = s.lookbackDays.clamp(1, 30); // spec §6.4 range
     _reportTime = s.reportTime.isEmpty ? '21:00' : s.reportTime;
+    _summaryEnabled = s.summaryEnabled;
     _watcherEnabled = s.watcherEnabled;
     WidgetsBinding.instance.addObserver(this);
     _probeNotifications();
@@ -176,6 +181,14 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   String _lastBackgroundLabel(DateTime? when) =>
       when == null ? context.l10n.backgroundScanNever : _dayTime(when);
+
+  /// The remedy value, worded after the switch the chevron leads to: iOS
+  /// 'Off' (Background App Refresh), Android 'Restricted' (App battery
+  /// usage). Both short — 'Off in Settings' once cut the English title.
+  String _backgroundOffLabel() =>
+      defaultTargetPlatform == TargetPlatform.android
+          ? context.l10n.backgroundScanRestricted
+          : context.l10n.backgroundScanDisabled;
 
   /// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
   String _dayTime(DateTime when) {
@@ -308,6 +321,16 @@ class _SettingsScreenState extends State<SettingsScreen>
     setState(() => _reportTime = formatted);
     await widget.settings.update(reportTime: formatted);
     await _probeNextSummary(); // the store re-armed the card for the new slot
+  }
+
+  /// The off switch for the nightly card (friend-cohort finding
+  /// 2026-10-10): before it, the only way to stop the summary was muting
+  /// the whole notification channel, which silenced meal cards too — and
+  /// this screen then painted that choice as a fault.
+  Future<void> _toggleSummary(bool enable) async {
+    setState(() => _summaryEnabled = enable);
+    await widget.settings.update(summaryEnabled: enable);
+    if (enable) await _probeNextSummary(); // the store re-armed the card
   }
 
   /// Import via PASTE, deliberately: adding a file-picker plugin for a
@@ -527,11 +550,29 @@ class _SettingsScreenState extends State<SettingsScreen>
         ),
   ];
 
+  /// The Photos footer, plus on iOS why the 后台扫描 time is what it is:
+  /// iOS alone picks when BGAppRefresh launches the scan (a few times a
+  /// day, AppDelegate.swift), and a swipe-away in the app switcher stops
+  /// every launch until the next open — so a time that stopped advancing
+  /// looked exactly like the real bug run 4 chased through this row.
+  /// Said under the group, Apple-style, so the row value stays short
+  /// (d5458ca title fit). Not over the Off remedy, which already says what
+  /// to do, and not on Android: WorkManager survives a swipe-away there.
+  String _photosFooter() {
+    final l10n = context.l10n;
+    final explainIos = widget.lastBackgroundScan != null &&
+        !_backgroundRefreshOff &&
+        defaultTargetPlatform == TargetPlatform.iOS;
+    return explainIos
+        ? '${l10n.settingsPhotosFooter}\n${l10n.backgroundScanIosHint}'
+        : l10n.settingsPhotosFooter;
+  }
+
   /// Camera-roll watching, coverage audit, backfill window.
   List<Widget> _photoSection(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionPhotos,
-          footer: context.l10n.settingsPhotosFooter,
+          footer: _photosFooter(),
           children: [
             GroupedToggleRow(
               switchKey: const Key('watcherToggle'),
@@ -563,8 +604,13 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // (the red badge and chevron lead to the remedy): 'Off in
                 // Settings' cut the English title to 'Background sc…'
                 // (loop find 2026-10-08, test/ui/row_fit_layout_test.dart).
+                // Android's 电池 › 受限 (App battery usage › Restricted)
+                // parks the periodic job — the scan AND the nightly
+                // summary — for days, and until 2026-10-10 the row showed
+                // 尚未运行 / a frozen time with no hint; the chevron now
+                // lands on App info, where that switch is one tap away.
                 value: _backgroundRefreshOff
-                    ? context.l10n.backgroundScanDisabled
+                    ? _backgroundOffLabel()
                     : _lastBackgroundProbed
                         ? _lastBackgroundLabel(_lastBackgroundScan)
                         : '…',
@@ -651,32 +697,46 @@ class _SettingsScreenState extends State<SettingsScreen>
     await widget.settings.update(lookbackDays: picked);
   }
 
-  /// Daily-report time.
+  /// Daily summary on/off, its time, the goal.
   List<Widget> _reportSection(ThemeData theme) => [
         GroupedSection(
           header: context.l10n.settingsSectionReport,
           footer: context.l10n.goalFooter,
           children: [
-            GroupedRow(
-              key: const Key('reportTimeTile'),
-              icon: Icons.schedule,
+            GroupedToggleRow(
+              switchKey: const Key('summaryToggle'),
+              icon: Icons.notifications_outlined,
               iconColor: theme.colorScheme.primary,
-              title: context.l10n.settingsRowReportTime,
-              value: _reportTime,
-              onTap: _pickReportTime,
+              title: context.l10n.settingsRowDailySummary,
+              value: _summaryEnabled,
+              onChanged: (v) => _toggleSummary(v),
             ),
-            if (_notificationsOff) _notificationsOffRow(theme),
-            if (widget.nextSummaryAt != null)
+            // Off is a choice, not a fault: the slot, the armed-slot row
+            // and the notifications-off remedy all describe a delivery the
+            // user just declined, so they hide with it.
+            if (_summaryEnabled) ...[
               GroupedRow(
-                key: const Key('nextSummaryRow'),
-                icon: Icons.notifications_active_outlined,
-                iconColor: _nextSummaryProbed && _nextSummary == null
-                    ? theme.colorScheme.error
-                    : theme.colorScheme.primary,
-                title: context.l10n.settingsRowNextSummary,
-                value: _nextSummaryProbed ? _nextSummaryLabel(_nextSummary) : '…',
-                showChevron: false,
+                key: const Key('reportTimeTile'),
+                icon: Icons.schedule,
+                iconColor: theme.colorScheme.primary,
+                title: context.l10n.settingsRowReportTime,
+                value: _reportTime,
+                onTap: _pickReportTime,
               ),
+              if (_notificationsOff) _notificationsOffRow(theme),
+              if (widget.nextSummaryAt != null)
+                GroupedRow(
+                  key: const Key('nextSummaryRow'),
+                  icon: Icons.notifications_active_outlined,
+                  iconColor: _nextSummaryProbed && _nextSummary == null
+                      ? theme.colorScheme.error
+                      : theme.colorScheme.primary,
+                  title: context.l10n.settingsRowNextSummary,
+                  value:
+                      _nextSummaryProbed ? _nextSummaryLabel(_nextSummary) : '…',
+                  showChevron: false,
+                ),
+            ],
             GroupedRow(
               key: const Key('calorieGoalTile'),
               icon: Icons.flag_outlined,

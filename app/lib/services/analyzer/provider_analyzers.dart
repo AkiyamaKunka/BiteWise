@@ -102,7 +102,8 @@ abstract class _HttpVisionAnalyzer
   /// transient/permanent classification otherwise. [extract] false skips
   /// text extraction entirely (validateKey: an HTTP 200 proves the key
   /// regardless of reply shape — a 1-token reply may contain no text
-  /// block at all, same rule as Gemini's MAX_TOKENS case).
+  /// block at all, same rule as Gemini's MAX_TOKENS case). The body must
+  /// still be JSON: a non-JSON 200 did not come from the provider.
   Future<String> _post(
       {required String prompt,
       Uint8List? jpegBytes,
@@ -227,18 +228,53 @@ abstract class _HttpVisionAnalyzer
               modelError: true);
         }
       }
+      if (resp.statusCode >= 300 && resp.statusCode < 400) {
+        // No provider redirects a POST: a 3xx is a captive portal (hotel /
+        // airport / campus Wi-Fi before sign-in) or a proxy answering
+        // INSTEAD of the provider. The owner's server is plain HTTP on
+        // port 80 — exactly what portals intercept — and the permanent
+        // 'HTTP 302' this used to throw tombstoned every backlog photo
+        // scanned before the Wi-Fi login, which the automatic scan never
+        // reclaims (loop find 2026-10-10). Transient, so the photo stays
+        // eligible; NOT retryInPlace — a login page does not change in
+        // 15 s, and the sleeps would eat the iOS background-refresh budget
+        // on the first photo. dart:io follows only a POST 303 (as a GET),
+        // whose HTML 200 is the non-JSON case below.
+        throw _ProviderException(
+            'HTTP ${resp.statusCode} redirect (captive portal or proxy)',
+            transient: true,
+            retryInPlace: false);
+      }
       throw _ProviderException('HTTP ${resp.statusCode}',
           transient: _isTransientStatus(resp.statusCode),
           quotaClass: resp.statusCode == 429,
-          // OpenAI / Anthropic post to one fixed endpoint, so a bare 404
-          // there is the MODEL (OpenAI model_not_found, Anthropic
-          // not_found_error "model: …"). ServerAnalyzer overrides probeKey,
-          // the only reader of this flag.
+          // Every direct provider now explains its 404 via notFoundMessage
+          // above; a bare 404 reaches here only from ServerAnalyzer (a
+          // wrong server path), which overrides probeKey, the only reader
+          // of this flag.
           modelError: resp.statusCode == 404);
+    }
+    // A 200 whose body is not JSON never came from the provider — every
+    // vendor answers JSON, and so does the owner's server. It is the same
+    // interception as the 3xx above (a portal's login page, a proxy's
+    // error page), classified the same way. Decoded even for
+    // extract:false, or validateKey / probeKey would take a portal page
+    // as proof of a key. 'unexpected response shape' stays PERMANENT, but
+    // only for JSON that lacks the expected keys: that is app/server
+    // version drift, and a retry would re-spend a model call (a full CLI
+    // run, for the server) for the same answer.
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(resp.body);
+    } on FormatException {
+      throw const _ProviderException(
+          'non-JSON reply (captive portal or proxy page)',
+          transient: true,
+          retryInPlace: false);
     }
     if (!extract) return '';
     try {
-      return extractText(jsonDecode(resp.body) as Map<String, dynamic>);
+      return extractText(decoded as Map<String, dynamic>);
     } on _ProviderException {
       rethrow; // extractText may classify precisely — keep its message
     } catch (_) {
@@ -512,6 +548,15 @@ class OpenAiAnalyzer extends _HttpVisionAnalyzer {
   @override
   String get providerLabel => 'OpenAI';
 
+  /// One fixed endpoint, so a 404 is the MODEL (`model_not_found`): a typed
+  /// id persists across upgrades and OpenAI retires ids. The generic
+  /// 'HTTP 404' classified as unknown, so the Chinese UI showed the raw
+  /// English line with no pointer at Settings (loop find 2026-10-10).
+  @override
+  String? get notFoundMessage =>
+      'OpenAI model "$model" not found (unknown or retired) — check the '
+      'model name in Settings.';
+
   @override
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
@@ -659,6 +704,14 @@ class AnthropicAnalyzer extends _HttpVisionAnalyzer {
   String get model => settings.anthropicModel;
   @override
   String get providerLabel => 'Anthropic';
+
+  /// One fixed endpoint, so a 404 is the MODEL (`not_found_error`
+  /// "model: …"): claude-3-5-sonnet-* and claude-3-opus answer this today.
+  /// Same gap as OpenAI above (loop find 2026-10-10).
+  @override
+  String? get notFoundMessage =>
+      'Anthropic model "$model" not found (unknown or retired) — check the '
+      'model name in Settings.';
 
   @override
   http.Request buildRequest(String key,
@@ -1011,14 +1064,22 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     if (error == null) return const KeyProbe(KeyProbeResult.ok);
     // "backend not ready" / "predates backend selection" are SERVER-side
     // configuration facts, not a rejected upload key: the key reached the
-    // server and was accepted. Rate-limited is the closest non-rejecting
-    // class, and it carries the verbatim message.
-    final serverConfigured =
-        error.contains('not ready') || error.contains('update the server');
+    // server and was accepted. A captive portal / proxy page never reached
+    // the server at all. Rate-limited is the closest non-rejecting class
+    // ("try again"), and it carries the verbatim message.
+    final notTheKey = error.contains('not ready') ||
+        error.contains('update the server') ||
+        error == _interceptedMessage;
     return KeyProbe(
-        serverConfigured ? KeyProbeResult.rateLimited : KeyProbeResult.rejected,
+        notTheKey ? KeyProbeResult.rateLimited : KeyProbeResult.rejected,
         message: error);
   }
+
+  /// What validateKey says when something between the phone and the
+  /// server answered in its place (a 3xx, or a 200 that is not JSON).
+  static const String _interceptedMessage =
+      'A captive portal or proxy page answered instead of your server — '
+      'sign in to the Wi-Fi (or switch network) and test again.';
 
   /// Whether the SERVER already holds a Claude-plan sign-in — the fact a
   /// freshly provisioned phone needs, so it stops implying "Connect Claude"
@@ -1075,20 +1136,28 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           .send(req)
           .then(http.Response.fromStream)
           .timeout(deadline);
+      if (resp.statusCode >= 300 && resp.statusCode < 400) {
+        return _interceptedMessage;
+      }
       if (resp.statusCode == 200) {
-        // The server reports per-backend readiness — surface a chosen
-        // backend whose plan key is missing NOW, at test time, instead of
-        // as a 503 on tonight's dinner photo. `is`-checks, not casts: a
+        // auth_check answers JSON. A non-JSON 200 is a captive portal or
+        // proxy page answering INSTEAD of the server (plain HTTP on port
+        // 80 is exactly what hotel Wi-Fi intercepts) — "null" here said
+        // the server was fine while every photo failed on the same page
+        // (loop find 2026-10-10). `is`-checks below, not casts: a
         // JSON-but-not-object body must not fall into the generic catch
         // and lie "could not reach" about a server that answered.
+        final Object? decoded;
+        try {
+          decoded = jsonDecode(resp.body);
+        } on FormatException {
+          return _interceptedMessage;
+        }
+        // The server reports per-backend readiness — surface a chosen
+        // backend whose plan key is missing NOW, at test time, instead of
+        // as a 503 on tonight's dinner photo.
         final backend = settings.serverBackend;
         if (backend != 'claude') {
-          Object? decoded;
-          try {
-            decoded = jsonDecode(resp.body);
-          } on FormatException {
-            return null; // non-JSON 200 (proxy page?) — nothing to infer
-          }
           if (decoded is Map) {
             final backends = decoded['backends'];
             if (backends is Map) {

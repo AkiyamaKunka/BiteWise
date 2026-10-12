@@ -88,7 +88,9 @@ class PhotoPipeline {
   final MealsDao dao;
   final AnalyzerService analyzer;
 
-  /// Notification-style surface (snackbar) for background saves. Handed
+  /// Notification-style surface (snackbar) for verdicts nobody awaits:
+  /// process() announces saves, leftover deductions and PERMANENT failures
+  /// on every path, and [bindStream] (the share sheet) adds the rest. Handed
   /// the OUTCOME, not a sentence: the caller words it in the app language
   /// (di.dart via outcomeSnackbar). Passing [PhotoOutcome.message] here put
   /// English snackbars ("Meal logged: …") in front of the Chinese UI every
@@ -144,9 +146,41 @@ class PhotoPipeline {
   }
 
   /// Also used for the share-sheet intake stream (deliberate adds, spec §6).
+  ///
+  /// Nobody awaits a shared photo's verdict, so the kinds process() leaves
+  /// to its caller — not food, duplicate, already logged, still analyzing —
+  /// are announced HERE. The add flow awaits enqueue() and shows each of
+  /// them as a dialog; a share that ended the same way showed nothing at
+  /// all, indistinguishable from a share that silently failed, and invited
+  /// a re-share that re-analyzed the photo just as silently (2026-10-10).
+  /// process() keeps announcing saves, leftover deductions and permanent
+  /// failures itself (every path), so none of those is said twice, and the
+  /// watcher's bind() stays quiet about them.
   void bindStream(Stream<IntakePhoto> photos) {
     _subs.add(photos.listen((p) {
-      _tail = _tail.then((_) => process(p));
+      final slot = _tail.then((_) => process(p));
+      _tail = slot.then((o) {
+        switch (o.kind) {
+          case PhotoOutcomeKind.skipped:
+          case PhotoOutcomeKind.duplicate:
+          case PhotoOutcomeKind.alreadyTracked:
+          case PhotoOutcomeKind.inFlight:
+            // Shielded like process()'s own notify calls: this runs ON the
+            // shared tail, and a throwing snackbar would reject it and
+            // stall every later photo (watcher, share, coverage Log/Retry)
+            // until an app restart.
+            try {
+              notify?.call(o);
+            } catch (_) {}
+          case PhotoOutcomeKind.saved:
+          case PhotoOutcomeKind.leftoverApplied:
+          case PhotoOutcomeKind.failed:
+            // Announced by process() — or, for a TRANSIENT failure, released
+            // for a later retry; the "kept for retry" snackbar would be
+            // wrong for the share copy, which is already gone.
+            break;
+        }
+      });
     }, onError: (Object _) {}));
   }
 

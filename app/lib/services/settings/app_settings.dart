@@ -269,6 +269,7 @@ class AppSettings extends ChangeNotifier {
   static const String _kCalorieGoal = 'settings.calorie_goal';
   static const String _kSummaryPostedDate = 'settings.summary_posted_date';
   static const String _kWatcherEnabled = 'settings.watcher_enabled';
+  static const String _kSummaryEnabled = 'settings.summary_enabled';
   static const String _kDietaryProfile = 'settings.dietary_profile';
   static const String _kQuotaPauseUntil = 'settings.quota_pause_until';
   static const String _kProvider = 'settings.provider';
@@ -354,6 +355,7 @@ class AppSettings extends ChangeNotifier {
   String _serverEffort = ''; // '' = server default | low/medium/high
   int _calorieGoal = 0; // 0 = unset -> the daily summary uses the median
   bool _watcherEnabled = false;
+  bool _summaryEnabled = true;
   String? _dietaryProfile;
   DateTime? _quotaPauseUntil;
 
@@ -425,6 +427,7 @@ class AppSettings extends ChangeNotifier {
     final goal = p.getInt(_kCalorieGoal) ?? 0;
     s._calorieGoal = (goal > 0 && goal <= maxDailyGoalKcal) ? goal : 0;
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
+    s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
     // Written as UTC, read back local: a zone-less string would re-parse
@@ -799,6 +802,21 @@ class AppSettings extends ChangeNotifier {
     }
     _reportTime = v;
     await _prefs.setString(_kReportTime, v);
+    notifyListeners();
+  }
+
+  /// Whether the daily coach summary is delivered at all. Defaults TRUE —
+  /// the summary predates this switch and every existing install expects
+  /// it — but it is the only way to stop the nightly card short of muting
+  /// the whole notification channel, which also silences meal cards
+  /// (friend-cohort finding 2026-10-10). Every delivery path reads it:
+  /// the launch Timer + catch-up (di.dart), the Android heartbeat
+  /// (background_glue.dart) and the iOS OS card (os_summary.dart).
+  bool get summaryEnabled => _summaryEnabled;
+
+  Future<void> setSummaryEnabled(bool value) async {
+    _summaryEnabled = value;
+    await _prefs.setBool(_kSummaryEnabled, value);
     notifyListeners();
   }
 

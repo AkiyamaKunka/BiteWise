@@ -26,9 +26,17 @@ class SetupLink {
       key.length <= 4 ? key : key.substring(key.length - 4);
 }
 
+/// True only for the app's own `bitewise://` scheme. app_links forwards
+/// EVERY URL the OS opens to the app — on iOS that includes the
+/// `ShareMedia-<bundle>:share` bounce receive_sharing_intent uses to hand a
+/// shared photo from the extension to the host app (Runner/Info.plist) — and
+/// those are not setup links at all, so the UI must ignore them silently
+/// rather than report a bad link.
+bool isSetupLinkScheme(Uri uri) => uri.scheme.toLowerCase() == 'bitewise';
+
 /// Null for anything that is not a well-formed setup link.
 SetupLink? parseSetupLink(Uri uri) {
-  if (uri.scheme.toLowerCase() != 'bitewise') return null;
+  if (!isSetupLinkScheme(uri)) return null;
   if (uri.host.toLowerCase() != 'setup') return null;
   final q = uri.queryParameters;
   final server = (q['server'] ?? '').trim();

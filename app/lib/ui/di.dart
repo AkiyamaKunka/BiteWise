@@ -20,6 +20,8 @@ import '../services/analyzer/provider_analyzers.dart'
     show ServerAnalyzer, createMultiProviderAnalyzer;
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
+import '../services/photo/background_restriction.dart'
+    show androidBackgroundAllowed;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
@@ -115,15 +117,21 @@ class AppServices {
           strings: coachStringsFor(settings.appLanguage),
           now: DateTime.now,
         ));
-    notifier = ReportNotifier(dailyBody: (slotDate) async {
-      await postSummary();
-      // NULL, not '': postSummary has ALREADY presented the coach summary
-      // through showDailySummary, which uses the same notification id.
-      // Returning a string makes the notifier present again over the top —
-      // and '' produced the English "📊 Daily Calorie Report" with a blank
-      // body that the user actually saw on 2026-08-16. Null means "handled".
-      return null;
-    });
+    notifier = ReportNotifier(
+      // Read per post: the channel name Android shows in its Settings
+      // follows a language switch without a restart.
+      channelStrings: () => notificationChannelFor(settings.appLanguage),
+      dailyBody: (slotDate) async {
+        await postSummary();
+        // NULL, not '': postSummary has ALREADY presented the coach summary
+        // through showDailySummary, which uses the same notification id.
+        // Returning a string makes the notifier present again over the top
+        // — and '' produced the English "📊 Daily Calorie Report" with a
+        // blank body that the user actually saw on 2026-08-16. Null means
+        // "handled".
+        return null;
+      },
+    );
     // iOS has NO background execution in this app (spec §6: share/picker
     // only, enableBackgroundScan no-ops, no BGTask ids) and suspends the
     // process seconds after backgrounding — so the Timer that scheduleDaily
@@ -146,7 +154,12 @@ class AppServices {
     unawaited(() async {
       try {
         await notifier.init();
-        if (osSchedulesSummary) {
+        if (!settings.summaryEnabled) {
+          // Switched off in Settings: nothing armed, no launch catch-up.
+          // The OS card is withdrawn here too, in case the process died
+          // between the toggle's prefs write and its own cancel.
+          await notifier.cancelPendingDaily();
+        } else if (osSchedulesSummary) {
           await armOsSummary();
           if (!summaryArmed.isCompleted) summaryArmed.complete();
         } else {
@@ -225,10 +238,14 @@ class AppServices {
       lastBackgroundScan: lastBackgroundRun,
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the
-      // row would say "not run yet" forever and never say why.
+      // row would say "not run yet" forever and never say why. Android's
+      // counterpart is the user-set 电池 › 受限 bucket, which parks the
+      // periodic WorkManager job (the scan AND the nightly summary).
       backgroundRefreshEnabled: Platform.isIOS
           ? () async => (await Permission.backgroundRefresh.status).isGranted
-          : null,
+          : Platform.isAndroid
+              ? androidBackgroundAllowed
+              : null,
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },
@@ -281,8 +298,23 @@ class _AppSettingsStore implements SettingsStore {
   final ReportNotifier _notifier;
   _AppSettingsStore(this._s, this._notifier, {this.onReportTimeChanged});
 
-  /// iOS: re-arm the OS-scheduled summary card when the slot moves.
+  /// iOS: re-arm the OS-scheduled summary card when the slot moves or the
+  /// summary is switched back on. Null = Android, the in-process Timer.
   final Future<void> Function()? onReportTimeChanged;
+
+  /// Arm the summary for the current slot on this platform's delivery path.
+  Future<void> _rearmSummary() async {
+    final rearmOs = onReportTimeChanged;
+    if (rearmOs != null) {
+      // iOS: the OS card is the ONLY delivery. Arming the in-process
+      // Timer here too made a suspended app wake the next morning and
+      // post a second, stale 昨天 card on top of the OS one (loop find
+      // 2026-10-07).
+      await rearmOs();
+    } else {
+      await _notifier.scheduleDaily(_s.reportTime); // Android: re-arm
+    }
+  }
 
   @override
   String get apiKey => _s.activeApiKey ?? '';
@@ -300,6 +332,8 @@ class _AppSettingsStore implements SettingsStore {
   int get lookbackDays => _s.lookbackDays;
   @override
   String get reportTime => _s.reportTime;
+  @override
+  bool get summaryEnabled => _s.summaryEnabled;
   @override
   bool get watcherEnabled => _s.watcherEnabled;
   @override
@@ -326,6 +360,7 @@ class _AppSettingsStore implements SettingsStore {
     String? model,
     int? lookbackDays,
     String? reportTime,
+    bool? summaryEnabled,
     bool? watcherEnabled,
     String? dietaryProfile,
     String? serverBaseUrl,
@@ -383,18 +418,21 @@ class _AppSettingsStore implements SettingsStore {
     if (reportTime != null) {
       try {
         await _s.setReportTime(reportTime); // validates HH:mm, throws on junk
-        final rearmOs = onReportTimeChanged;
-        if (rearmOs != null) {
-          // iOS: the OS card is the ONLY delivery. Arming the in-process
-          // Timer here too made a suspended app wake the next morning and
-          // post a second, stale 昨天 card on top of the OS one (loop find
-          // 2026-10-07).
-          await rearmOs();
-        } else {
-          await _notifier.scheduleDaily(_s.reportTime); // Android: re-arm
-        }
+        // A slot edit while the summary is off must arm nothing.
+        if (_s.summaryEnabled) await _rearmSummary();
       } on ArgumentError {
         // UI always sends zero-padded HH:mm; a junk value keeps the default.
+      }
+    }
+    if (summaryEnabled != null) {
+      await _s.setSummaryEnabled(summaryEnabled);
+      if (summaryEnabled) {
+        await _rearmSummary();
+      } else {
+        // Both halves: this process's Timer AND the card the OS already
+        // holds (the iOS one-shot) — else tonight's card still fires.
+        _notifier.cancelDaily();
+        await _notifier.cancelPendingDaily();
       }
     }
     if (watcherEnabled != null) {

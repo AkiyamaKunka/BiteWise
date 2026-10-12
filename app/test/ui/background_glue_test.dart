@@ -613,6 +613,57 @@ void main() {
     });
   });
 
+  group('postHeadlessSummary (the daily summary off switch, 2026-10-10)', () {
+    // Friends on the pre-08-16 APKs got a nightly "0 kcal" card they never
+    // opted into and could not stop: this heartbeat path posted regardless
+    // of every setting. The switch gates delivery here; the job itself
+    // stays registered (the group above).
+    Future<AppSettings> settingsAt({required bool summary}) async {
+      SharedPreferences.setMockInitialValues({
+        'settings.summary_enabled': summary,
+        'settings.report_time': '21:30',
+      });
+      return AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+    }
+
+    final pastSlot = DateTime(2026, 10, 10, 22, 0);
+
+    test('off → nothing posted, no database opened, no watermark', () async {
+      final settings = await settingsAt(summary: false);
+      var opened = 0;
+      final posted = <String>[];
+      final did = await postHeadlessSummary(
+        settings: settings,
+        openDao: () async {
+          opened++;
+          return FakeDao();
+        },
+        present: (title, body) async => posted.add(title),
+        now: () => pastSlot,
+      );
+      expect(did, isFalse);
+      expect(posted, isEmpty);
+      expect(opened, 0, reason: 'nothing to say: do not open the database');
+      expect(await settings.freshSummaryPostedDate(), '');
+    });
+
+    test('on (the default) → the slot that passed is posted once', () async {
+      final settings = await settingsAt(summary: true);
+      final posted = <String>[];
+      final did = await postHeadlessSummary(
+        settings: settings,
+        openDao: () async => FakeDao(),
+        present: (title, body) async => posted.add(title),
+        now: () => pastSlot,
+      );
+      expect(did, isTrue);
+      expect(posted, hasLength(1));
+      expect(await settings.freshSummaryPostedDate(), '2026-10-10');
+    });
+  });
+
   group('HomeShell iOS daily-card re-arm', () {
     // The OS-scheduled summary (iOS) carries content computed at ARM time,
     // so the shell must re-arm on every moment content can change:

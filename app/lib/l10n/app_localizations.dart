@@ -524,6 +524,12 @@ abstract class AppLocalizations {
   /// **'Report'**
   String get settingsSectionReport;
 
+  /// No description provided for @settingsRowDailySummary.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily summary'**
+  String get settingsRowDailySummary;
+
   /// No description provided for @settingsRowReportTime.
   ///
   /// In en, this message translates to:
@@ -577,6 +583,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Off'**
   String get backgroundScanDisabled;
+
+  /// No description provided for @backgroundScanRestricted.
+  ///
+  /// In en, this message translates to:
+  /// **'Restricted'**
+  String get backgroundScanRestricted;
+
+  /// No description provided for @backgroundScanIosHint.
+  ///
+  /// In en, this message translates to:
+  /// **'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.'**
+  String get backgroundScanIosHint;
 
   /// No description provided for @settingsSectionProfile.
   ///
@@ -1592,6 +1610,12 @@ abstract class AppLocalizations {
   /// **'g'**
   String get editorGramsSuffix;
 
+  /// No description provided for @editorKcalSuffix.
+  ///
+  /// In en, this message translates to:
+  /// **'kcal'**
+  String get editorKcalSuffix;
+
   /// No description provided for @diagTitle.
   ///
   /// In en, this message translates to:
@@ -2198,6 +2222,18 @@ abstract class AppLocalizations {
   /// **'🍽️ Meal logged automatically'**
   String get mealCardAutoTitle;
 
+  /// Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
+  ///
+  /// In en, this message translates to:
+  /// **'Reports & meals'**
+  String get notificationChannelName;
+
+  /// Android notification channel description, shown under the channel name in the system notification settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily calorie reports and auto-logged meal cards'**
+  String get notificationChannelDescription;
+
   /// No description provided for @dayLoadFailed.
   ///
   /// In en, this message translates to:
@@ -2339,7 +2375,7 @@ abstract class AppLocalizations {
   /// No description provided for @editorCaloriesLabel.
   ///
   /// In en, this message translates to:
-  /// **'Calories (kcal)'**
+  /// **'Calories'**
   String get editorCaloriesLabel;
 
   /// No description provided for @editorItemsHeader.
@@ -3013,6 +3049,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{desc} ({date} {time}, ~{kcal})'**
   String nlMealLabel(String desc, String date, String time, String kcal);
+
+  /// Stands in for meal_description in chat replies (delete labels, the correction line, the added-meal card) when the stored analysis has no name.
+  ///
+  /// In en, this message translates to:
+  /// **'Unnamed meal'**
+  String get nlUnnamedMeal;
 
   /// No description provided for @nlNoActions.
   ///

@@ -46,9 +46,11 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
   }
 }
 
-/// The snackbar line for a pipeline `notify`, which fires only for a save,
-/// a leftover deduction or a PERMANENT failure (kept in 之前失败 for a
-/// deliberate retry; transient failures are released silently). English is
+/// The snackbar line for a pipeline `notify`: on every path a save, a
+/// leftover deduction or a PERMANENT failure (kept in 之前失败 for a
+/// deliberate retry; transient failures are released silently), and for a
+/// share-sheet photo also the refusals — not food, duplicate, already
+/// logged, still analyzing (bindStream, 2026-10-10). English is
 /// byte-identical to the strings the pipeline used to hand the snackbar.
 String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
   final body = outcomeBody(l, o);

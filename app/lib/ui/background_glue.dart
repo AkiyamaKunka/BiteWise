@@ -223,6 +223,37 @@ Future<bool> headlessBackfillWith({
   return true;
 }
 
+/// The Android heartbeat's half of the daily summary: post it when the
+/// slot has passed, that day's is unposted, and the user has not switched
+/// the summary off in Settings. Returns whether a card was presented.
+///
+/// The off switch gates DELIVERY, not the heartbeat: the job stays
+/// registered (see [syncBackgroundScan]) and the photo scan after this
+/// runs regardless. Off opens no database either — a run that has
+/// nothing to say should not take a shot at the shared-handle races.
+/// Before the switch (2026-10-10) this path fired for every install,
+/// every night, watcher and key or not: friends who upgraded from the
+/// Timer-only APKs got a "0 kcal" card they never opted into.
+@visibleForTesting
+Future<bool> postHeadlessSummary({
+  required AppSettings settings,
+  required Future<MealsDao> Function() openDao,
+  required Future<void> Function(String title, String body) present,
+  DateTime Function() now = DateTime.now,
+}) async {
+  if (!settings.summaryEnabled) return false;
+  return maybePostDailySummary(DailySummaryDeps(
+    dao: await openDao(),
+    reportTime: settings.reportTime,
+    calorieGoal: settings.calorieGoal,
+    postedDate: await settings.freshSummaryPostedDate(),
+    markPosted: settings.markSummaryPosted,
+    present: present,
+    strings: coachStringsFor(settings.appLanguage),
+    now: now,
+  ));
+}
+
 /// Production assembly for one background run. Mirrors di.dart's startup
 /// EXCEPT reclaimStaleProcessing: that launch sweep assumes it owns the
 /// only pipeline, and the foreground app may be mid-analysis right now —
@@ -267,6 +298,7 @@ Future<bool> runHeadlessBackfill({
   // fixed daily-report id 9001 (a colliding meal card would silently
   // REPLACE an unread daily report).
   final notifier = ReportNotifier(
+      channelStrings: () => notificationChannelFor(settings.appLanguage),
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
   // The DURABLE daily-summary path. ReportNotifier's in-process Timer
@@ -276,19 +308,14 @@ Future<bool> runHeadlessBackfill({
   // not double-post (user request 2026-08-06).
   if (!ios) {
     try {
-      await maybePostDailySummary(DailySummaryDeps(
-      dao: await createMealsDao(),
-      reportTime: settings.reportTime,
-      calorieGoal: settings.calorieGoal,
-      postedDate: await settings.freshSummaryPostedDate(),
-      markPosted: settings.markSummaryPosted,
-      present: (title, body) async {
-        await notifier.init();
-        await notifier.showDailySummary(title, body);
-      },
-        strings: coachStringsFor(settings.appLanguage),
-        now: DateTime.now,
-      ));
+      await postHeadlessSummary(
+        settings: settings,
+        openDao: createMealsDao,
+        present: (title, body) async {
+          await notifier.init();
+          await notifier.showDailySummary(title, body);
+        },
+      );
     } catch (_) {
       // A summary must never take the photo scan down with it.
     }

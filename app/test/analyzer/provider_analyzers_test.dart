@@ -5,8 +5,13 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/ui/outcome_text.dart';
+import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -624,6 +629,144 @@ void main() {
       expect(calls, 0);
       expect(out.retryable, isTrue);
       expect(out.error, contains('Qwen'));
+    });
+  });
+
+  group('retired model id (direct OpenAI / Anthropic 404)', () {
+    // Both post to ONE fixed endpoint, so a 404 is the MODEL: a typed id
+    // persists across upgrades and the vendors retire ids (gpt-4o-mini,
+    // claude-3-5-sonnet-*). Without a notFoundMessage the generic
+    // 'Provider request failed: HTTP 404' classified as unknown — the zh
+    // watcher snackbar / add-flow dialog showed that raw English line with
+    // no pointer at Settings, and 修改某餐 said "try again" forever (loop
+    // find 2026-10-10). The ledger 'failed' tombstone itself is by design
+    // (matrix: retrying a nonexistent model loops forever).
+    final zh = AppLocalizationsZh();
+
+    Future<void> check(AnalyzerService a, {required String id}) async {
+      final out = await a.analyzePhoto(photo);
+      expect(out.analysis, isNull, reason: id);
+      expect(out.retryable, isFalse,
+          reason: '$id: retrying a nonexistent model loops forever');
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.badModel,
+          reason: '$id: ${out.error}');
+      expect(out.error, contains(id),
+          reason: '$id: the English line (EN UI, diagnostics evidence) '
+              'names the configured id');
+      expect(out.error, isNot(contains('HTTP 404')), reason: id);
+      // What the foreground watcher snackbar and the add-flow dialog show
+      // in Chinese, built the way photo_pipeline builds a permanent failure.
+      final o = PhotoOutcome(PhotoOutcomeKind.failed, out.error!,
+          errorKind: classifyAnalysisError(out.error), detail: out.error);
+      for (final line in [outcomeSnackbar(zh, o), outcomeBody(zh, o)]) {
+        expect(line, contains('模型'), reason: '$id: $line');
+        expect(line, contains('设置'), reason: '$id: $line');
+        expect(RegExp(r'[a-z]{4,}').hasMatch(line), isFalse,
+            reason: '$id: no English leaking into the Chinese UI: $line');
+      }
+      expect(await a.validateKey('k'), contains('model'),
+          reason: '$id: validate must point at the model, not the key');
+      expect((await a.probeKey('k')).result, KeyProbeResult.modelNotFound,
+          reason: id);
+    }
+
+    test('OpenAI model_not_found', () async {
+      final s = await settingsWith();
+      await s.setOpenaiModel('gpt-4o-mini');
+      final a = OpenAiAnalyzer(s,
+          client: MockClient((r) async => http.Response(
+              '{"error": {"message": "The model `gpt-4o-mini` does not '
+              'exist or you do not have access to it.", "type": '
+              '"invalid_request_error", "param": null, "code": '
+              '"model_not_found"}}',
+              404)),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      await check(a, id: 'gpt-4o-mini');
+    });
+
+    test('Anthropic not_found_error', () async {
+      final s = await settingsWith(provider: 'anthropic');
+      await s.setAnthropicModel('claude-3-opus-20240229');
+      final a = AnthropicAnalyzer(s,
+          client: MockClient((r) async => http.Response(
+              '{"type": "error", "error": {"type": "not_found_error", '
+              '"message": "model: claude-3-opus-20240229"}}',
+              404)),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      await check(a, id: 'claude-3-opus-20240229');
+    });
+  });
+
+  group('reply-shape permanence (the other half of the captive-portal rule)',
+      () {
+    // A 200 that is NOT JSON is an interception (portal / proxy page) and
+    // transient — see the feedback matrix. A 200 that IS JSON but lacks
+    // the expected keys is the vendor's own answer and must stay
+    // PERMANENT: the model answered, a retry re-spends for the same
+    // shape, and the watcher would do so on every scan.
+    test('Anthropic: a reply with no text block (thinking only) is '
+        'permanent', () async {
+      final s = await settingsWith(provider: 'anthropic');
+      var calls = 0;
+      final a = AnthropicAnalyzer(s,
+          client: MockClient((r) async {
+            calls++;
+            return http.Response(
+                jsonEncode({
+                  'content': [
+                    {'type': 'thinking', 'thinking': '...'}
+                  ]
+                }),
+                200,
+                headers: {'content-type': 'application/json'});
+          }),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      final out = await a.analyzePhoto(photo);
+      expect(out.analysis, isNull);
+      expect(out.retryable, isFalse);
+      expect(out.error, contains('unexpected response shape'));
+      expect(calls, 1);
+    });
+
+    test('OpenAI: a reply with no choices is permanent', () async {
+      final s = await settingsWith();
+      var calls = 0;
+      final a = OpenAiAnalyzer(s,
+          client: MockClient((r) async {
+            calls++;
+            return http.Response('{"choices": []}', 200,
+                headers: {'content-type': 'application/json'});
+          }),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      final out = await a.analyzePhoto(photo);
+      expect(out.analysis, isNull);
+      expect(out.retryable, isFalse);
+      expect(out.error, contains('unexpected response shape'));
+      expect(calls, 1);
+    });
+
+    test('a non-JSON 200 is transient for a direct provider too, and '
+        'validateKey no longer accepts it as proof of a key', () async {
+      final s = await settingsWith();
+      var calls = 0;
+      final a = OpenAiAnalyzer(s,
+          client: MockClient((r) async {
+            calls++;
+            return http.Response('<html>Sign in to Wi-Fi</html>', 200,
+                headers: {'content-type': 'text/html'});
+          }),
+          sleep: (_) async => fail('no in-place sleep on a portal page'),
+          normalizer: (b) async => b);
+      final out = await a.analyzePhoto(photo);
+      expect(out.retryable, isTrue);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.network);
+      expect(calls, 1);
+      expect(await a.validateKey('candidate'), isNotNull,
+          reason: 'extract:false skips the SHAPE check, not the JSON check');
     });
   });
 

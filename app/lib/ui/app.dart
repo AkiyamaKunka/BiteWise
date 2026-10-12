@@ -224,6 +224,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   /// point every future photo upload at a stranger's server, so the user
   /// sees exactly what it names and confirms with one tap.
   Future<void> _onSetupLink(Uri uri) async {
+    // Not ours at all — e.g. the share extension's ShareMedia-<bundle>:share
+    // bounce on iOS, which app_links also forwards — is ignored silently.
+    // Only a malformed bitewise:// link earns the "not valid" message.
+    if (!isSetupLinkScheme(uri)) return;
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {
@@ -235,8 +239,13 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.l10n.setupLinkTitle),
-        content: Text(ctx.l10n
-            .setupLinkBody(link.server, link.backend, link.keyTail)),
+        // The plan is named with the same words the Settings row shows
+        // after confirming (Claude 订阅 / Claude Plan), not the raw id
+        // 'claude' the link carries; the id itself is what gets saved.
+        content: Text(ctx.l10n.setupLinkBody(
+            link.server,
+            providerDisplayLabel(ctx.l10n, 'server', link.backend),
+            link.keyTail)),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),

@@ -1,0 +1,141 @@
+# Mobile build smoke test: proves that the iOS project (Runner AND the
+# ShareExtension target) and the Android project still compile on a clean
+# machine. No signing, no secrets, no store upload, so it is safe on fork PRs
+# and the owner can watch it pass today, before the Apple Developer Program
+# enrolment. The signed release lane is release.yml; the owner's checklist is
+# docs/RELEASING.md. python-tests.yml (pytest, analyze, test, parity) is
+# deliberately untouched.
+#
+# Docs-only changes (docs/, any *.md, the Play what's-new text) skip it. A
+# push to a branch that has an open PR still runs twice (push + pull_request
+# are separate concurrency groups); drop the loop/feat/fix branches below if
+# the 5-concurrent-macOS-job allowance ever gets in the way.
+name: Mobile build
+
+on:
+  pull_request:
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'app/android/whatsnew/**'
+  push:
+    branches:
+      - main
+      - 'loop/**'
+      - 'feat/**'
+      - 'fix/**'
+    paths-ignore:
+      - 'docs/**'
+      - '**.md'
+      - 'app/android/whatsnew/**'
+
+permissions:
+  contents: read
+
+# One run per branch / PR; a newer push cancels the older build.
+concurrency:
+  group: mobile-build-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned to the owner's local SDK (`flutter --version`, 2026-10-10). Bump it
+  # here and in release.yml together.
+  FLUTTER_VERSION: "3.44.2"
+  # The owner's Mac runs Xcode 26.2. GitHub drops old patch versions from the
+  # macos-26 image over time; when this one is gone the job warns and uses the
+  # image default instead of failing. Set it to "" to always use the default.
+  XCODE_VERSION: "26.2"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  ios-build:
+    name: iOS (unsigned, both targets)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select Xcode
+        run: |
+          set -euo pipefail
+          if [ -n "$XCODE_VERSION" ] && [ -d "/Applications/Xcode_${XCODE_VERSION}.app" ]; then
+            sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          elif [ -n "$XCODE_VERSION" ]; then
+            echo "::warning::Xcode ${XCODE_VERSION} is not on this runner image any more; using $(xcode-select -p). Update XCODE_VERSION in .github/workflows/*.yml."
+          fi
+          xcodebuild -version
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        working-directory: app
+        run: flutter pub get
+
+      # --no-codesign archives with CODE_SIGNING_ALLOWED=NO, so no certificate,
+      # profile or Apple account is needed. Both targets are compiled and
+      # linked; only the signature is missing.
+      - name: Build iOS (release, no codesign)
+        working-directory: app
+        run: flutter build ios --release --no-codesign
+
+      - name: Both targets are in the bundle
+        working-directory: app
+        run: |
+          set -euo pipefail
+          app=build/ios/iphoneos/Runner.app
+          test -x "$app/Runner"
+          test -d "$app/PlugIns/ShareExtension.appex"
+          for bundle in "$app" "$app/PlugIns/ShareExtension.appex"; do
+            printf '%s: ' "$(basename "$bundle")"
+            /usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' -c 'Print :CFBundleVersion' "$bundle/Info.plist" | paste -sd ' ' -
+            # Each executable uses a required-reason API (UserDefaults via
+            # receive_sharing_intent, which ships no manifest of its own), so
+            # App Store Connect emails ITMS-91053 for any bundle missing this.
+            test -f "$bundle/PrivacyInfo.xcprivacy" || { echo "::error::$(basename "$bundle") has no PrivacyInfo.xcprivacy (ITMS-91053 Missing API declaration would follow)"; exit 1; }
+            plutil -lint "$bundle/PrivacyInfo.xcprivacy"
+          done
+
+  android-build:
+    name: Android (app bundle)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+
+      - uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2.23.0
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Pub get
+        working-directory: app
+        run: flutter pub get
+
+      # There is no android/key.properties on CI, so app/build.gradle.kts
+      # signs the release bundle with the DEBUG key and prints a warning. That
+      # is the point of this job: compile + R8 + bundling, nothing uploadable.
+      - name: Build app bundle (release, debug-signed)
+        working-directory: app
+        run: flutter build appbundle --release
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-release-aab-debug-signed
+          path: app/build/app/outputs/bundle/release/app-release.aab
+          retention-days: 14
+          if-no-files-found: error

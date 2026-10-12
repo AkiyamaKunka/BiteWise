@@ -275,6 +275,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionReport => 'Report';
 
   @override
+  String get settingsRowDailySummary => 'Daily summary';
+
+  @override
   String get settingsRowReportTime => 'Report Time';
 
   @override
@@ -306,6 +309,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backgroundScanDisabled => 'Off';
+
+  @override
+  String get backgroundScanRestricted => 'Restricted';
+
+  @override
+  String get backgroundScanIosHint =>
+      'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.';
 
   @override
   String get settingsSectionProfile => 'Profile';
@@ -914,6 +924,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorGramsSuffix => 'g';
 
   @override
+  String get editorKcalSuffix => 'kcal';
+
+  @override
   String get diagTitle => 'Test AI provider';
 
   @override
@@ -1295,6 +1308,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mealCardAutoTitle => '🍽️ Meal logged automatically';
 
   @override
+  String get notificationChannelName => 'Reports & meals';
+
+  @override
+  String get notificationChannelDescription =>
+      'Daily calorie reports and auto-logged meal cards';
+
+  @override
   String dayLoadFailed(String error) {
     return 'Could not load this day: $error';
   }
@@ -1376,7 +1396,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get editorTotalsHeader => 'Totals';
 
   @override
-  String get editorCaloriesLabel => 'Calories (kcal)';
+  String get editorCaloriesLabel => 'Calories';
 
   @override
   String get editorItemsHeader => 'Items';
@@ -1873,6 +1893,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String nlMealLabel(String desc, String date, String time, String kcal) {
     return '$desc ($date $time, ~$kcal)';
   }
+
+  @override
+  String get nlUnnamedMeal => 'Unnamed meal';
 
   @override
   String get nlNoActions =>

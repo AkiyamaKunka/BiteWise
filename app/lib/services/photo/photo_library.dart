@@ -74,6 +74,18 @@ class _PhotoManagerAsset implements LibraryAsset {
 }
 
 class PhotoManagerLibrary implements PhotoLibrary {
+  /// Ask Android for images only. The manifest declares READ_MEDIA_IMAGES
+  /// (+ VISUAL_USER_SELECTED) and no video permission; photo_manager's
+  /// default option asks for image|video, and its Android 14+ delegate folds
+  /// the undeclared READ_MEDIA_VIDEO into "limited" — so every 全部允许 /
+  /// "Allow all" grant read as partial access and 去修复 could fix nothing —
+  /// while the Android 13 delegate answers "denied" on every grant.
+  /// iosAccessLevel stays the default readWrite; iOS ignores the rest.
+  static const _photosOnly = PermissionRequestOption(
+    androidPermission:
+        AndroidPermission(type: RequestType.image, mediaLocation: false),
+  );
+
   void Function(MethodCall)? _changeCallback;
 
   @override
@@ -102,8 +114,8 @@ class PhotoManagerLibrary implements PhotoLibrary {
   @override
   Future<bool> hasFullAccess() async {
     try {
-      final state = await PhotoManager.getPermissionState(
-          requestOption: const PermissionRequestOption());
+      final state =
+          await PhotoManager.getPermissionState(requestOption: _photosOnly);
       return state == PermissionState.authorized;
     } catch (_) {
       // Unknown → assume full: the caveat line is advisory, and a false
@@ -116,7 +128,8 @@ class PhotoManagerLibrary implements PhotoLibrary {
   Future<bool> requestPermission() async {
     // Spec §6 permission flow: iOS "limited" / Android "selected photos"
     // still exposes a user-granted subset, which is enough to watch.
-    final state = await PhotoManager.requestPermissionExtend();
+    final state =
+        await PhotoManager.requestPermissionExtend(requestOption: _photosOnly);
     return state.hasAccess;
   }
 

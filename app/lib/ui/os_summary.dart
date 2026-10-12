@@ -23,6 +23,14 @@ Future<void> armOsDailySummary({
   required ReportNotifier notifier,
   DateTime Function() now = DateTime.now,
 }) async {
+  if (!settings.summaryEnabled) {
+    // Switched off in Settings: nothing may fire. Withdraw whatever is
+    // still armed — every lifecycle transition lands here, so a card that
+    // outlived the toggle's own cancel is caught on the next one.
+    notifier.cancelDaily();
+    await notifier.cancelPendingDaily();
+    return;
+  }
   // init() is idempotent and, on a first launch, resolves only once the
   // permission dialog is answered — arming before that is a card the OS
   // drops silently.

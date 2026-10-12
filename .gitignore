@@ -34,5 +34,17 @@ ios/*.wflow
 # Local artifacts
 outputs/
 
+# Signing material — never commit (docs/RELEASING.md). app/android/.gitignore
+# repeats the Android ones; these cover the whole tree, including a .p12 or
+# .mobileprovision dropped next to the iOS project by mistake.
+*.jks
+*.keystore
+key.properties
+*.p12
+*.mobileprovision
+*.p8
+*.cer
+*.certSigningRequest
+
 # OS generated files
 .DS_Store

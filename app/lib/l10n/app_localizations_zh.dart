@@ -261,6 +261,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionReport => '报告';
 
   @override
+  String get settingsRowDailySummary => '每日总结';
+
+  @override
   String get settingsRowReportTime => '报告时间';
 
   @override
@@ -292,6 +295,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backgroundScanDisabled => '系统已关闭';
+
+  @override
+  String get backgroundScanRestricted => '电池受限';
+
+  @override
+  String get backgroundScanIosHint =>
+      '后台扫描由 iOS 决定何时运行（通常一天几次）。在多任务界面上滑关闭筷拍后，后台扫描会停止，直到下次打开筷拍；期间拍的照片会在打开时补扫。';
 
   @override
   String get settingsSectionProfile => '个人资料';
@@ -864,6 +874,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorGramsSuffix => '克';
 
   @override
+  String get editorKcalSuffix => '千卡';
+
+  @override
   String get diagTitle => '测试 AI 服务';
 
   @override
@@ -1201,6 +1214,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mealCardAutoTitle => '🍽️ 已自动记录一餐';
 
   @override
+  String get notificationChannelName => '总结与餐食';
+
+  @override
+  String get notificationChannelDescription => '每日热量总结和自动记录的餐食卡片';
+
+  @override
   String dayLoadFailed(String error) {
     return '无法加载这一天：$error';
   }
@@ -1279,7 +1298,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get editorTotalsHeader => '总计';
 
   @override
-  String get editorCaloriesLabel => '热量（千卡）';
+  String get editorCaloriesLabel => '热量';
 
   @override
   String get editorItemsHeader => '食物';
@@ -1580,7 +1599,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get macroNoBreakdown => '没有记录营养素分布。';
 
   @override
-  String get setupLinkTitle => '通过这个链接配置服务器？';
+  String get setupLinkTitle => '用此链接配置服务器？';
 
   @override
   String setupLinkBody(String server, String backend, String keyTail) {
@@ -1744,6 +1763,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String nlMealLabel(String desc, String date, String time, String kcal) {
     return '$desc（$date $time，~$kcal）';
   }
+
+  @override
+  String get nlUnnamedMeal => '未命名的一餐';
 
   @override
   String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';

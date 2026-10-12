@@ -23,6 +23,24 @@ List<String> _plistStrings(String plist, String key) {
       .toList();
 }
 
+/// The body of the `project.pbxproj` object `ID /* comment */ = { isa = ...;
+/// ... };` at object depth (two tabs); [id] narrows it when the comment is
+/// shared, e.g. the two `Resources` build phases.
+String _pbxObject(
+  String pbxproj, {
+  String id = '[0-9A-F]{24}',
+  required String comment,
+  required String isa,
+}) {
+  final match = RegExp(
+    '\\n\\t\\t$id /\\* ${RegExp.escape(comment)} \\*/ = \\{\\s*isa = $isa;'
+    '(.*?)\\n\\t\\t\\};',
+    dotAll: true,
+  ).firstMatch(pbxproj);
+  expect(match, isNotNull, reason: 'project.pbxproj has no $isa "$comment"');
+  return match!.group(1)!;
+}
+
 /// Release-manifest drift gate.
 ///
 /// Flutter auto-injects INTERNET into the DEBUG and PROFILE manifests (for
@@ -99,5 +117,89 @@ void main() {
           'UIInterfaceOrientationLandscapeLeft',
           'UIInterfaceOrientationLandscapeRight',
         ]));
+  });
+  // App Store Connect scans every executable in the IPA for "required
+  // reason" APIs and emails ITMS-91053 for each bundle that uses one without
+  // a PrivacyInfo.xcprivacy beside it. Both targets do: receive_sharing_intent
+  // (which ships no manifest) is compiled into the share extension and the
+  // app with its UserDefaults(suiteName:) call, and photo_manager's PHAsset
+  // reads leave the creationDate/modificationDate selectors in the app binary
+  // (the FileTimestamp category). A plugin's own manifest only covers its
+  // resource bundle, so the app and the extension each carry one, and Xcode
+  // only copies it when the target's Resources phase lists it.
+  test('both iOS targets ship a privacy manifest for the APIs they use', () {
+    final ios = '${_appRoot().path}/ios';
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    const categories = {
+      'Runner': {
+        'NSPrivacyAccessedAPICategoryUserDefaults',
+        'NSPrivacyAccessedAPICategoryFileTimestamp',
+      },
+      'ShareExtension': {'NSPrivacyAccessedAPICategoryUserDefaults'},
+    };
+    categories.forEach((target, expected) {
+      final file = File('$ios/$target/PrivacyInfo.xcprivacy');
+      expect(file.existsSync(), isTrue, reason: '${file.path} missing');
+      final plist = file.readAsStringSync();
+      for (final key in [
+        'NSPrivacyTracking',
+        'NSPrivacyTrackingDomains',
+        'NSPrivacyCollectedDataTypes',
+        'NSPrivacyAccessedAPITypes',
+      ]) {
+        expect(plist.contains('<key>$key</key>'), isTrue,
+            reason: '$key missing from $target/PrivacyInfo.xcprivacy');
+      }
+      final declared = {
+        for (final m in RegExp(
+          r'<key>NSPrivacyAccessedAPIType</key>\s*<string>([^<]+)</string>\s*'
+          r'<key>NSPrivacyAccessedAPITypeReasons</key>\s*<array>(.*?)</array>',
+          dotAll: true,
+        ).allMatches(plist))
+          m.group(1)!: RegExp(r'<string>([^<]*)</string>')
+              .allMatches(m.group(2)!)
+              .map((r) => r.group(1)!)
+              .toList(),
+      };
+      expect(declared.keys, unorderedEquals(expected), reason: target);
+      for (final reasons in declared.values) {
+        expect(reasons, isNotEmpty, reason: target);
+        for (final reason in reasons) {
+          expect(reason, matches(RegExp(r'^[0-9A-F]{4}\.\d$')),
+              reason: '$target declares "$reason", not an approved reason '
+                  'code such as CA92.1');
+        }
+      }
+
+      // target → its Resources phase → the PBXBuildFile → a PBXFileReference
+      // that sits in the target's own group, so `path = PrivacyInfo.xcprivacy`
+      // resolves to ios/<target>/PrivacyInfo.xcprivacy.
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Resources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Resources phase');
+      final buildFileId =
+          RegExp(r'([0-9A-F]{24}) /\* PrivacyInfo.xcprivacy in Resources \*/')
+              .firstMatch(_pbxObject(pbxproj,
+                  id: phaseId!,
+                  comment: 'Resources',
+                  isa: 'PBXResourcesBuildPhase'))
+              ?.group(1);
+      expect(buildFileId, isNotNull,
+          reason: 'PrivacyInfo.xcprivacy is not in the $target target\'s '
+              'Resources build phase, so Xcode never copies it');
+      final fileRefId = RegExp('$buildFileId /\\* PrivacyInfo.xcprivacy in '
+              'Resources \\*/ = \\{isa = PBXBuildFile; fileRef = ([0-9A-F]{24})')
+          .firstMatch(pbxproj)
+          ?.group(1);
+      expect(fileRefId, isNotNull, reason: '$buildFileId has no fileRef');
+      final group = _pbxObject(pbxproj, comment: target, isa: 'PBXGroup');
+      expect(group, contains('path = $target;'));
+      expect(group, contains('$fileRefId /* PrivacyInfo.xcprivacy */'),
+          reason: 'the $target manifest reference is not in the $target '
+              'group, so its path would resolve elsewhere');
+    });
   });
 }

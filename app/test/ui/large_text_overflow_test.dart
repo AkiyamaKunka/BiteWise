@@ -16,6 +16,11 @@
 //   - Meal editor: the date pill wrapped and the number-field labels were
 //     cut ('Pr…', 'k…'); date/time and the total macros take a row each,
 //     the item fields a 2x2 grid. Normal text keeps the one-row layout.
+//   - Settings rows (2026-10-10): GroupedRow kept its one-line title beside
+//     a 170 pt value at every size, so the root Settings read '后…  系统已关闭'
+//     and 'AI…  Claud…' — the row names and the last-scan time unreadable.
+//     Above 1.5x the value now sits under the title and both wrap, as iOS
+//     Settings lays its cells out at accessibility sizes.
 // Whether text fits depends on the glyphs (the test font is a full em per
 // glyph, far wider than the phone's), so this loads the iPhone's own system
 // fonts — macOS only, skipped elsewhere, as body_screen_test does.
@@ -27,6 +32,8 @@ import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
+import 'package:calorie_tracker/ui/screens/settings_screen.dart';
+import 'package:calorie_tracker/ui/widgets/grouped.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show FontLoader;
@@ -350,6 +357,49 @@ void main() {
           }
         });
 
+        // The test above seeds a filled meal, whose labels float at 0.75x.
+        // A NEW meal's empty fields rest their labels at the full 3.1x, and
+        // in English 'Calories (kcal)' read 'Calories (kc…' until tapped
+        // (2026-10-10). The unit is a suffix now, like the macro fields' g.
+        testWidgets('$lang: new meal number labels rest uncut, unit as suffix', (
+          tester,
+        ) async {
+          await pumpAt(
+            tester,
+            lang,
+            MealEditorScreen(dao: FakeDao(), now: clock),
+          );
+          expect(tester.takeException(), isNull);
+          final scrollable = find.byType(Scrollable).first;
+          for (final k in const [
+            'editorDescription',
+            'editorCalories',
+            'editorProtein',
+            'editorCarbs',
+            'editorFat',
+          ]) {
+            final field = find.byKey(Key(k));
+            await tester.scrollUntilVisible(field, 200, scrollable: scrollable);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expectLabelsUncut(tester, field);
+            if (k != 'editorCalories') continue;
+            // Typed, the label floats and the unit shows beside the number
+            // (checked here, while the lazy list still has the field).
+            await tester.enterText(field, '1234');
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull);
+            expect(
+              find.descendant(
+                of: field,
+                matching: find.text(lang == 'zh' ? '千卡' : 'kcal'),
+              ),
+              findsOneWidget,
+            );
+            expectLabelsUncut(tester, field);
+          }
+        });
+
         testWidgets('$lang: normal text keeps the one-row field layout', (
           tester,
         ) async {
@@ -382,6 +432,102 @@ void main() {
               tester.getRect(find.byKey(const Key('mealRowTitle'))).right,
             ),
           );
+        });
+
+        // The owner's own Settings root: Claude Plan, a last background
+        // scan, an armed summary, a goal — every row that shows a value.
+        Widget settingsRoot() {
+          final now = DateTime.now();
+          return SettingsScreen(
+            settings: FakeSettings(apiKey: 'k')
+              ..provider = 'server'
+              ..serverBackend = 'claude'
+              ..calorieGoal = 1800,
+            analyzer: FakeAnalyzer(),
+            dao: FakeDao(),
+            requestPhotoPermission: () async => true,
+            lastBackgroundScan: () async =>
+                now.subtract(const Duration(hours: 1)),
+            backgroundRefreshEnabled: () async => true,
+            openSystemSettings: () async {},
+            nextSummaryAt: () async => now.add(const Duration(hours: 2)),
+          );
+        }
+
+        const valueRows = [
+          'aiProviderRow',
+          'backgroundScanRow',
+          'reportTimeTile',
+          'nextSummaryRow',
+          'calorieGoalTile',
+          'dietaryProfileRow',
+          'languageRow',
+        ];
+
+        Finder titleOf(WidgetTester tester, Finder row) => find.descendant(
+          of: row,
+          matching: find.text(tester.widget<GroupedRow>(row).title),
+        );
+        Finder valueOf(WidgetTester tester, Finder row) => find.descendant(
+          of: row,
+          matching: find.text(tester.widget<GroupedRow>(row).value!),
+        );
+
+        // 2.0x is where the cuts start (≈AX2); 3.1x is AX5.
+        for (final scale in const [2.0, 3.1]) {
+          testWidgets('$lang: settings rows read in full at ${scale}x, value '
+              'under the title', (tester) async {
+            await pumpAt(tester, lang, settingsRoot(), scale: scale);
+            expect(tester.takeException(), isNull);
+            final scrollable = find.byType(Scrollable).first;
+
+            // In page order: the sliver builds rows lazily and
+            // scrollUntilVisible only scrolls down. The toggle row has no
+            // value; its title ('Watch Camera Roll') was cut at 2.0x in en.
+            final rows = <(String, Finder)>[
+              ('aiProviderRow', find.byKey(const Key('aiProviderRow'))),
+              (
+                'watcherToggle',
+                find.ancestor(
+                  of: find.byKey(const Key('watcherToggle')),
+                  matching: find.byType(GroupedRow),
+                ),
+              ),
+              for (final k in valueRows.skip(1)) (k, find.byKey(Key(k))),
+            ];
+            for (final (name, row) in rows) {
+              await tester.scrollUntilVisible(row, 300, scrollable: scrollable);
+              await tester.pumpAndSettle();
+              expect(
+                tester.takeException(),
+                isNull,
+                reason: '$name overflowed',
+              );
+              expectLabelsUncut(tester, row);
+              if (tester.widget<GroupedRow>(row).value == null) continue;
+              final title = tester.getRect(titleOf(tester, row));
+              final value = tester.getRect(valueOf(tester, row));
+              expect(
+                value.top,
+                greaterThanOrEqualTo(title.bottom - 0.5),
+                reason: '$name: the value sits under the title, not beside it',
+              );
+            }
+          });
+        }
+
+        testWidgets('$lang: standard sizes keep the settings value beside '
+            'its title', (tester) async {
+          for (final scale in const [1.0, 1.35]) {
+            await pumpAt(tester, lang, settingsRoot(), scale: scale);
+            expect(tester.takeException(), isNull);
+            final row = find.byKey(const Key('aiProviderRow'));
+            final title = tester.getRect(titleOf(tester, row));
+            final value = tester.getRect(valueOf(tester, row));
+            expect(value.left, greaterThanOrEqualTo(title.right),
+                reason: 'at ${scale}x the value stays on the title line');
+            expect(value.right, lessThanOrEqualTo(tester.getRect(row).right));
+          }
         });
       }
     },

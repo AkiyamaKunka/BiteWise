@@ -624,6 +624,66 @@ void planTuningTests() {
     expect(find.byKey(const Key('planEffortRow')), findsNothing);
   });
 
+  group('daily summary switch (2026-10-10)', () {
+    // Friends on the pre-08-16 APKs got a nightly card they never opted
+    // into and could not stop short of muting the whole notification
+    // channel (meal cards included) — which this screen then painted as a
+    // fault with the red notifications-off remedy.
+    Widget screen(FakeSettings settings) => _wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          notificationsEnabled: () async => false,
+          nextSummaryAt: () async => null,
+          openSystemSettings: () async {},
+        ));
+
+    testWidgets(
+        'off persists through the store and hides the time row, the '
+        'armed-slot row and the notifications-off remedy', (tester) async {
+      final settings = FakeSettings(apiKey: 'k');
+      await tester.pumpWidget(screen(settings));
+      await tester.pumpAndSettle();
+      final toggle = find.byKey(const Key('summaryToggle'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      expect(toggle, findsOneWidget);
+      expect(find.byKey(const Key('reportTimeTile')), findsOneWidget);
+      expect(find.byKey(const Key('nextSummaryRow')), findsOneWidget);
+      expect(find.byKey(const Key('notificationsOffHint')), findsOneWidget);
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(settings.summaryEnabled, isFalse, reason: 'persisted via update');
+      expect(find.byKey(const Key('reportTimeTile')), findsNothing);
+      expect(find.byKey(const Key('nextSummaryRow')), findsNothing);
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing,
+          reason: 'off is a choice, not a fault');
+      expect(find.byKey(const Key('calorieGoalTile')), findsOneWidget,
+          reason: 'the goal still drives the Today ring');
+
+      await tester.tap(toggle);
+      await tester.pumpAndSettle();
+      expect(settings.summaryEnabled, isTrue);
+      expect(find.byKey(const Key('reportTimeTile')), findsOneWidget);
+    });
+
+    testWidgets('a stored off shows the switch off from the first frame',
+        (tester) async {
+      await tester.pumpWidget(
+          screen(FakeSettings(apiKey: 'k', summaryEnabled: false)));
+      await tester.pumpAndSettle();
+      final toggle = find.byKey(const Key('summaryToggle'));
+      await tester.ensureVisible(toggle);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(toggle).value, isFalse);
+      expect(find.byKey(const Key('reportTimeTile')), findsNothing);
+      expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
+    });
+  });
+
   group('next-summary row (2026-09-30)', () {
     // A fresh key per pump: the probe runs in initState, and a same-typed
     // widget at the same slot would otherwise keep the old State.
@@ -698,6 +758,71 @@ void planTuningTests() {
       expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
     });
 
+    // 2026-10-10: iOS alone decides when BGAppRefresh launches the scan (a
+    // few times a day), and swiping the app away in the app switcher stops
+    // every launch until the next open — so a 后台扫描 time that stopped
+    // advancing looked exactly like a bug. The Photos footer now says so:
+    // on iOS only (Android's WorkManager survives a swipe-away), only
+    // while the row is there, and not over the Off remedy.
+    testWidgets('iOS: the Photos footer explains the OS cadence and force-quit',
+        (tester) async {
+      Widget bg({
+        Future<DateTime?> Function()? last,
+        bool refreshOn = true,
+      }) =>
+          _wrap(SettingsScreen(
+            key: UniqueKey(),
+            settings: FakeSettings(apiKey: 'k'),
+            analyzer: FakeAnalyzer(),
+            dao: FakeDao(),
+            requestPhotoPermission: () async => true,
+            lastBackgroundScan: last,
+            backgroundRefreshEnabled: () async => refreshOn,
+            openSystemSettings: () async {},
+          ));
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      await tester.pumpWidget(bg(last: () async => yesterday));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('iOS decides when the background scan runs'),
+          findsOneWidget);
+      expect(find.textContaining('app switcher'), findsOneWidget);
+      // The generic watcher sentence is still there, in the same footer.
+      expect(find.textContaining('lookback window'), findsOneWidget);
+      // Refresh off: the red 'Off' remedy is the explanation.
+      await tester.pumpWidget(bg(last: () async => null, refreshOn: false));
+      await tester.pumpAndSettle();
+      expect(find.text('Off'), findsOneWidget);
+      expect(find.textContaining('app switcher'), findsNothing);
+      // No probe → no row → nothing to explain.
+      await tester.pumpWidget(bg());
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
+      expect(find.textContaining('app switcher'), findsNothing);
+      expect(find.textContaining('lookback window'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Android: no force-quit note — WorkManager survives a swipe',
+        (tester) async {
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => yesterday,
+        backgroundRefreshEnabled: () async => true,
+        openSystemSettings: () async {},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Yesterday 14:02'), findsOneWidget);
+      expect(find.textContaining('app switcher'), findsNothing);
+      expect(find.textContaining('iOS decides'), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
     testWidgets('Background App Refresh off → the row becomes the remedy',
         (tester) async {
       // iOS refuses every BGTask request while the system switch (or Low
@@ -722,7 +847,59 @@ void planTuningTests() {
       await tester.tap(find.byKey(const Key('backgroundScanRow')));
       await tester.pump();
       expect(opened, 1);
-    });
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    // 2026-10-10: on Android the same probe answers for the user-set 电池 ›
+    // 受限 bucket (ActivityManager.isBackgroundRestricted), which parks the
+    // periodic WorkManager job — the closed-app scan AND the nightly
+    // summary — for days. Until now the row showed 'Not run yet' / a
+    // frozen time with no hint and no link, exactly like a healthy phone.
+    testWidgets('Android Restricted battery → "Restricted", tap opens App info',
+        (tester) async {
+      var opened = 0;
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => false,
+        openSystemSettings: () async => opened++,
+      )));
+      await tester.pumpAndSettle();
+      // Named after the switch the chevron leads to (App battery usage ›
+      // Restricted), not iOS's 'Off'.
+      expect(find.text('Restricted'), findsOneWidget);
+      expect(find.text('Off'), findsNothing);
+      expect(find.text('Not run yet'), findsNothing);
+      await tester.tap(find.byKey(const Key('backgroundScanRow')));
+      await tester.pump();
+      expect(opened, 1);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('an unanswered Android probe keeps the plain row',
+        (tester) async {
+      // No channel (an older native build) → null: no remedy, no chevron,
+      // the last-run time still shows.
+      var opened = 0;
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => null,
+        openSystemSettings: () async => opened++,
+      )));
+      await tester.pumpAndSettle();
+      expect(find.text('Not run yet'), findsOneWidget);
+      expect(find.text('Restricted'), findsNothing);
+      await tester.tap(find.byKey(const Key('backgroundScanRow')));
+      await tester.pump();
+      expect(opened, 0);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('nothing armed → "Not scheduled"; no probe → no row',
         (tester) async {

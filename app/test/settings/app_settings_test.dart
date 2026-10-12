@@ -32,6 +32,10 @@ void main() {
     expect(s.model, AppSettings.defaultModel);
     expect(s.lookbackDays, 2);
     expect(s.reportTime, '21:30');
+    // ON by default: the summary predates its switch (2026-10-10) and
+    // every existing install, the owner's included, expects it to keep
+    // arriving — the switch exists so a friend can turn it OFF.
+    expect(s.summaryEnabled, isTrue);
     expect(s.watcherEnabled, isFalse);
     expect(s.dietaryProfile, isNull);
     expect(s.quotaPauseUntil, isNull);
@@ -44,6 +48,7 @@ void main() {
     await s.setModel('gemini-2.5-pro');
     await s.setLookbackDays(7);
     await s.setReportTime('08:05');
+    await s.setSummaryEnabled(false);
     await s.setWatcherEnabled(true);
     await s.setDietaryProfile('vegetarian, Cantonese cuisine');
     final pause = DateTime(2026, 7, 18, 9, 30);
@@ -54,6 +59,7 @@ void main() {
     expect(again.model, 'gemini-2.5-pro');
     expect(again.lookbackDays, 7);
     expect(again.reportTime, '08:05');
+    expect(again.summaryEnabled, isFalse, reason: 'off survives a relaunch');
     expect(again.watcherEnabled, isTrue);
     expect(again.dietaryProfile, 'vegetarian, Cantonese cuisine');
     expect(again.quotaPauseUntil, pause);

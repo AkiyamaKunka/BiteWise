@@ -63,8 +63,10 @@ void main() {
     await tester.tap(find.byKey(const Key('addItemRow')));
     await tester.pump();
 
-    // Same vocabulary as the meal cards (macroProteinShort etc.).
-    expect(find.text('千卡'), findsNWidgets(2));
+    // Same vocabulary as the meal cards (macroProteinShort etc.). Two item
+    // rows, plus the Calories total's 千卡 suffix, which is in the tree
+    // (transparent) until a number is typed.
+    expect(find.text('千卡'), findsNWidgets(3));
     expect(find.text('蛋 g'), findsNWidgets(2));
     expect(find.text('碳 g'), findsNWidgets(2));
     expect(find.text('脂 g'), findsNWidgets(2));
@@ -101,7 +103,8 @@ void main() {
     ));
     await tester.tap(find.byKey(const Key('addItemRow')));
     await tester.pump();
-    expect(find.text('千卡'), findsOneWidget);
+    // The item row's label plus the Calories total's (hidden) suffix.
+    expect(find.text('千卡'), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 
