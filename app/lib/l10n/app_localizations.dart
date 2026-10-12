@@ -458,11 +458,11 @@ abstract class AppLocalizations {
   /// **'Photos'**
   String get settingsSectionPhotos;
 
-  /// No description provided for @settingsPhotosFooter.
+  /// Photos section footer. {days} is the current lookback window: turning the watcher on sweeps it right away, so photos taken before the user agreed are sent too.
   ///
   /// In en, this message translates to:
-  /// **'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos are sent to the AI service you chose.'**
-  String get settingsPhotosFooter;
+  /// **'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos — and, when you turn it on, the photos from the last {days, plural, =1{day} other{{days} days}} — are sent to the AI service you chose.'**
+  String settingsPhotosFooter(int days);
 
   /// No description provided for @settingsRowWatch.
   ///
@@ -476,11 +476,11 @@ abstract class AppLocalizations {
   /// **'Photos will be sent to your AI service'**
   String get watcherDisclosureTitle;
 
-  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan.
+  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan. {days} is the lookback window the enable sweeps right away.
   ///
   /// In en, this message translates to:
-  /// **'While Watch Camera Roll is on, every new photo in your library — including ones that are not food — is sent to {provider} so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
-  String watcherDisclosureBody(String provider);
+  /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
+  String watcherDisclosureBody(String provider, int days);
 
   /// No description provided for @watcherDisclosureContinue.
   ///

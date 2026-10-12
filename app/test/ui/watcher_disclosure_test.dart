@@ -47,10 +47,11 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  for (final (locale, title, provider, cancel, go) in const [
-    (Locale('zh'), '照片会发送给 AI 服务', 'DeepSeek', '取消', '继续'),
+  for (final (locale, title, provider, cancel, go, lookback) in const [
+    (Locale('zh'), '照片会发送给 AI 服务', 'DeepSeek', '取消', '继续',
+        '最近 2 天内的照片'),
     (Locale('en'), 'Photos will be sent to your AI service', 'DeepSeek',
-        'Cancel', 'Continue'),
+        'Cancel', 'Continue', 'the photos from the last 2 days'),
   ]) {
     final tag = locale.languageCode;
 
@@ -71,6 +72,15 @@ void main() {
               matching: find.textContaining(provider)),
           findsOneWidget,
           reason: 'the body names where the photos go');
+      // Enabling sweeps the 补扫回溯 window right away, so photos taken
+      // BEFORE the user agreed are sent too — the notice must say so.
+      expect(
+          find.descendant(
+              of: find.byKey(const Key('watcherDisclosureDialog')),
+              matching: find.textContaining(lookback)),
+          findsOneWidget);
+      expect(find.textContaining(lookback), findsNWidgets(2),
+          reason: 'the Photos footer says it as well');
       await tester.tap(find.text(cancel));
       await tester.pumpAndSettle();
 

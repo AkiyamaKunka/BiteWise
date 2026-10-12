@@ -340,7 +340,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         key: const Key('watcherDisclosureDialog'),
         title: Text(ctx.l10n.watcherDisclosureTitle),
         content: SingleChildScrollView(
-            child: Text(ctx.l10n.watcherDisclosureBody(provider))),
+            child: Text(ctx.l10n.watcherDisclosureBody(provider, _lookbackDays))),
         actions: [
           TextButton(
               key: const Key('watcherDisclosureCancel'),
@@ -481,8 +481,9 @@ class _SettingsScreenState extends State<SettingsScreen>
         !_backgroundRefreshOff &&
         defaultTargetPlatform == TargetPlatform.iOS;
     final footer = explainIos
-        ? '${l10n.settingsPhotosFooter}\n${l10n.backgroundScanIosHint}'
-        : l10n.settingsPhotosFooter;
+        ? '${l10n.settingsPhotosFooter(_lookbackDays)}\n'
+            '${l10n.backgroundScanIosHint}'
+        : l10n.settingsPhotosFooter(_lookbackDays);
     // A rejected key / blocked region latched the automatic scan (perhaps
     // in a background run, which has no snackbar): without this line the
     // scan just stops, silently, for up to a day.

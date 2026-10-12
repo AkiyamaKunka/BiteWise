@@ -233,8 +233,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionPhotos => 'Photos';
 
   @override
-  String get settingsPhotosFooter =>
-      'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos are sent to the AI service you chose.';
+  String settingsPhotosFooter(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos — and, when you turn it on, the photos from the last $_temp0 — are sent to the AI service you chose.';
+  }
 
   @override
   String get settingsRowWatch => 'Watch Camera Roll';
@@ -243,8 +250,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get watcherDisclosureTitle => 'Photos will be sent to your AI service';
 
   @override
-  String watcherDisclosureBody(String provider) {
-    return 'While Watch Camera Roll is on, every new photo in your library — including ones that are not food — is sent to $provider so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.';
+  String watcherDisclosureBody(String provider, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.';
   }
 
   @override
