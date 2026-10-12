@@ -51,9 +51,12 @@ Settings, using **your own API key**:
 
 **What is sent with a photo:**
 
-- The image, resized and re-encoded as a JPEG. Embedded photo metadata
-  (for example the time the photo was taken, the camera model and, if your
-  camera recorded it, its location) is removed from the copy that is sent.
+- The image, resized and re-encoded as a JPEG (in the rare case the app
+  cannot decode a small JPEG, that file is sent without re-encoding).
+  Embedded photo metadata (for example the time the photo was taken, the
+  camera model and, if your camera recorded it, its location) is removed
+  from the copy that is sent, and extra images stored inside the file
+  (such as previews) are not sent.
 - Your dietary profile text, if you wrote one.
 - For the leftover check: the descriptions, food names, times and calorie
   estimates of meals you already logged (that day's meals, or the meal you
@@ -64,8 +67,10 @@ noodles" or "delete lunch"): your text, today's date, and the
 descriptions, items, dates, times and calorie estimates of your meals from
 the last 7 days so the AI can find the meal you mean.
 
-The connection check in Settings only contacts the selected service's (or
-your server's) address and sends no personal data.
+The connection check in Settings contacts only the selected service (or
+your server) and sends a fixed test message and a built-in test image, plus
+your dietary profile with the test image if you wrote one. None of your
+photos or meals are sent.
 
 ### Export, import and backups
 
@@ -119,13 +124,13 @@ date. Questions: open an issue at
 
 **随照片一起发送的内容：**
 
-- 照片本身（缩小尺寸并重新编码为 JPEG）。照片中嵌入的元数据（例如拍摄时间、相机型号，以及相机记录了的话，拍摄地点）会从发送的这份副本中删除。
+- 照片本身（缩小尺寸并重新编码为 JPEG；极少数情况下应用无法解码一张较小的 JPEG，则不经重新编码直接发送该文件）。照片中嵌入的元数据（例如拍摄时间、相机型号，以及相机记录了的话，拍摄地点）会从发送的这份副本中删除，文件里附带的其他图像（例如预览图）也不会被发送。
 - 你的饮食档案文字（如果你填写了）。
 - 用于剩菜判断：已记录餐食的描述、食物名称、时间和热量估算（当天的餐食，或你选作原餐的那一餐）。
 
 **随文字请求一起发送的内容**（例如"我吃了一碗面"或"删掉午饭"）：你输入的文字、今天的日期，以及最近 7 天餐食的描述、食物、日期、时间和热量估算，便于 AI 找到你指的那一餐。
 
-设置中的连接检测只会访问所选服务（或你的服务器）的地址，不发送任何个人数据。
+设置中的连接检测只会访问所选服务（或你的服务器），发送一条固定的测试消息和一张内置的测试图片；如果你填写了饮食档案，它会随测试图片一起发送。不会发送你的任何照片或餐食。
 
 ### 导出、导入与备份
 
