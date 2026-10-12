@@ -189,10 +189,12 @@ Still to do in code (each needs an Xcode project edit, i.e. a normal PR):
    naming `receive_sharing_intent.framework`, the plugin itself needs a
    manifest: fork it under `app/packages/` with the file added, or wait for
    upstream. Flutter and the other plugins already ship theirs.
-2. **iPad.** Both targets have `TARGETED_DEVICE_FAMILY = "1,2"`, so the
-   listing requires 13-inch iPad screenshots and reviewers test on an iPad.
-   The UI is phone-only; the simplest fix is `TARGETED_DEVICE_FAMILY = 1`
-   on Runner and ShareExtension (project.pbxproj) before the first upload.
+2. **iPhone only.** Both targets are `TARGETED_DEVICE_FAMILY = 1` (decided
+   2026-10-12): the UI is phone-only, so no iPad screenshots are needed and
+   App Review tests on an iPhone. iPads can still run it in iPhone
+   compatibility mode. Adding iPad later is allowed; removing it after an
+   iPad-capable version has shipped is not, so keep it this way unless an
+   iPad layout is built.
 3. **Privacy policy URL** (guideline 5.1.1). The policy is
    `docs/PRIVACY.md` (English + 中文); enter
    https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md in
@@ -331,9 +333,8 @@ Pick one answer and keep the privacy policy (§ 1.7.3) and the
   copyright, contact information for the reviewer.
 - **Screenshots**: App Store Connect → Screenshot specifications has the
   current list. As of this writing: iPhone 6.9-inch (1320×2868 or 1290×2796
-  portrait) is required; 6.5-inch (1284×2778 or 1242×2688) optional; if iPad
-  stays enabled (§ 1.7.2) iPad 13-inch (2064×2752 or 2048×2732) is required
-  too. Take them from the iPhone 17 Pro simulator (`xcrun simctl io booted
+  portrait) is required; 6.5-inch (1284×2778 or 1242×2688) optional; no
+  iPad screenshots (the app is iPhone-only, § 1.7.2). Take them from the iPhone 17 Pro simulator (`xcrun simctl io booted
   screenshot`), both languages if you localise the listing.
 - **App icon**: the 1024×1024 asset is already in `Runner/Assets.xcassets`
   (`flutter_launcher_icons`, alpha removed).
