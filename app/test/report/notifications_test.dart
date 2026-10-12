@@ -11,6 +11,11 @@ import 'package:flutter_test/flutter_test.dart';
 /// (the permission request) hits Fake's throwing noSuchMethod, which init
 /// already treats as non-fatal.
 class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
+  _RecordingPlugin({this.android});
+
+  /// When set, plays the Android implementation the notifier resolves to
+  /// create its channel; null keeps the old non-Android behaviour.
+  final _FakeAndroid? android;
   InitializationSettings? settings;
   final shown = <NotificationDetails?>[];
   final cancelled = <int>[];
@@ -39,6 +44,25 @@ class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
     String? payload,
   }) async =>
       shown.add(notificationDetails);
+
+  @override
+  T? resolvePlatformSpecificImplementation<
+          T extends FlutterLocalNotificationsPlatform>() =>
+      android is T ? android as T : null;
+}
+
+/// The Android side: records the channels created, grants the permission.
+class _FakeAndroid extends Fake
+    implements AndroidFlutterLocalNotificationsPlugin {
+  final channels = <AndroidNotificationChannel>[];
+
+  @override
+  Future<void> createNotificationChannel(
+          AndroidNotificationChannel notificationChannel) async =>
+      channels.add(notificationChannel);
+
+  @override
+  Future<bool?> requestNotificationsPermission() async => true;
 }
 
 void main() {
@@ -294,9 +318,10 @@ void main() {
     final zh = plugin.shown.single!.android!;
     expect(zh.channelName, '总结与餐食');
     expect(zh.channelDescription, '每日热量总结和自动记录的餐食卡片');
-    // Friends' installs already hold the English channel, and the plugin
-    // leaves an existing channel alone unless told to update it.
-    expect(zh.channelAction, AndroidNotificationChannelAction.update);
+    // `update` never creates a MISSING channel: on a fresh install every
+    // card was dropped. Renaming is the channel sync's job (below).
+    expect(zh.channelAction,
+        AndroidNotificationChannelAction.createIfNotExists);
     expect(zh.channelId, 'calorietracker_reports',
         reason: 'a new id would orphan the old channel and its toggles');
     expect(zh.icon, ReportNotifier.androidSmallIcon);
@@ -305,6 +330,41 @@ void main() {
     language = 'en';
     await notifier.showDailySummary('Today', '1800 kcal');
     expect(plugin.shown.last!.android!.channelName, 'Reports & meals');
+  });
+
+  // A fresh Android install has no channel, and a post naming
+  // channelAction.update never creates one: Android dropped every meal card,
+  // daily summary and pause notice ("No Channel found", API 35 emulator,
+  // 2026-10-12). init — run by the foreground app and every headless run —
+  // creates it, and each post re-syncs the name for a language switch.
+  test('init creates the Android channel, named in the app language',
+      () async {
+    final android = _FakeAndroid();
+    final plugin = _RecordingPlugin(android: android);
+    var language = 'zh';
+    final notifier = ReportNotifier(
+      plugin: plugin,
+      channelStrings: () => language == 'zh'
+          ? (name: '总结与餐食', description: '每日热量总结和自动记录的餐食卡片')
+          : (name: 'Reports & meals', description: 'Daily reports'),
+    );
+    await notifier.init();
+    final created = android.channels.single;
+    expect(created.id, 'calorietracker_reports');
+    expect(created.name, '总结与餐食');
+    expect(created.description, '每日热量总结和自动记录的餐食卡片');
+    expect(created.importance, Importance.defaultImportance);
+
+    await notifier.showMealCard('🍽️ 已自动记录一餐', '约 450 千卡');
+    final posted = plugin.shown.single!.android!;
+    expect(posted.channelId, created.id,
+        reason: 'a card on another id would land on a missing channel');
+    expect(posted.importance, created.importance);
+
+    language = 'en';
+    await notifier.showDailySummary('Today', '1800 kcal');
+    expect(android.channels.last.name, 'Reports & meals',
+        reason: 'an existing channel is renamed on the next post');
   });
 
   test('without channel strings the channel keeps its English name',
