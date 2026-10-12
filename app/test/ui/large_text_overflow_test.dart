@@ -25,6 +25,9 @@
 //     label beside its number, so in zh '已摄入' read '已…' and with prior
 //     days the three rows (日常 / 消耗 / 已摄入) lost their meaning. Above
 //     1.5x the label wraps on its own line and the number sits under it.
+//   - Today ring centre (2026-10-12): the two-line centre could use the
+//     ring's full square height, so '千卡' ran over the stroke; it now
+//     shrinks until its box fits inside the ring's inner circle.
 // Whether text fits depends on the glyphs (the test font is a full em per
 // glyph, far wider than the phone's), so this loads the iPhone's own system
 // fonts — macOS only, skipped elsewhere, as body_screen_test does.
@@ -41,7 +44,7 @@ import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart'
-    show ArithmeticRow;
+    show ArithmeticRow, CalorieRing;
 import 'package:calorie_tracker/ui/widgets/grouped.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -613,6 +616,77 @@ void main() {
           );
           expect(value.left, greaterThanOrEqualTo(label.right));
           expect(value.top, lessThan(label.bottom));
+        });
+
+        testWidgets('$lang: the ring centre text stays inside the ring', (
+          tester,
+        ) async {
+          // At the largest size the two-line centre could use the ring's
+          // full square height, so '千卡' ran over the bottom of the
+          // stroke (simulator 2026-10-12). Every corner of both lines must
+          // lie inside the inner circle (radius = size / 2 − stroke).
+          for (final scale in const [1.0, 3.1]) {
+            for (final size in const [132.0, 116.0]) {
+              for (final kcal in const [0, 1240, 12345]) {
+                await pumpAt(
+                  tester,
+                  lang,
+                  Scaffold(
+                    body: Center(
+                      child: CalorieRing(
+                        eatenKcal: kcal,
+                        typicalKcal: 2000,
+                        size: size,
+                      ),
+                    ),
+                  ),
+                  scale: scale,
+                );
+                expect(tester.takeException(), isNull);
+                final centre = tester.getCenter(find.byType(CalorieRing));
+                final innerR = size / 2 - 11;
+                final texts = find.descendant(
+                  of: find.byType(CalorieRing),
+                  matching: find.byType(RichText),
+                );
+                expect(texts, findsNWidgets(2));
+                for (final e in texts.evaluate()) {
+                  final r = tester.getRect(find.byWidget(e.widget));
+                  for (final p in [
+                    r.topLeft,
+                    r.topRight,
+                    r.bottomLeft,
+                    r.bottomRight,
+                  ]) {
+                    expect(
+                      (p - centre).distance,
+                      lessThanOrEqualTo(innerR + 0.5),
+                      reason: '${scale}x, $size pt ring, $kcal kcal: '
+                          '"${(e.widget as RichText).text.toPlainText()}" '
+                          'runs over the ring',
+                    );
+                  }
+                }
+              }
+            }
+          }
+          // The usual day at standard size draws at full size, as before.
+          await pumpAt(
+            tester,
+            lang,
+            const Scaffold(
+              body: Center(
+                child: CalorieRing(eatenKcal: 1240, typicalKcal: 2000),
+              ),
+            ),
+            scale: 1.0,
+          );
+          final value = find.byKey(const Key('ringCenterValue'));
+          expect(
+            tester.getRect(value).width,
+            closeTo(tester.getSize(value).width, 0.01),
+            reason: "'1,240' at 1.0x is not scaled down",
+          );
         });
 
         testWidgets('$lang: standard sizes keep the settings value beside '

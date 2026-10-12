@@ -16,6 +16,7 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../format.dart';
 import '../l10n.dart';
@@ -89,36 +90,113 @@ class CalorieRing extends StatelessWidget {
               scheme.surfaceContainerLow),
         ),
         child: Center(
-          // FittedBox: the ring is a fixed box; large system font scales
-          // (or 5-digit values) must shrink to fit, never clip the arc.
+          // The ring is a fixed box; large system font scales (or 5-digit
+          // values) must shrink to fit inside the stroke, never run over
+          // it. A square box let the two-line column use the full height,
+          // so at the largest size '千卡' sat on the bottom of the ring.
           child: Semantics(
             label: semantics,
             excludeSemantics: true,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: size * 0.14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(centerBig,
-                        key: const Key('ringCenterValue'),
-                        maxLines: 1,
-                        softWrap: false,
-                        style: theme.textTheme.headlineMedium),
-                    Text(centerSmall,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
-                  ],
-                ),
+            child: _FitInCircle(
+              diameter: size - 2 * _RingPainter.stroke,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(centerBig,
+                      key: const Key('ringCenterValue'),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.headlineMedium),
+                  Text(centerSmall,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Scales its child down (never up) until the child's box, corners
+/// included, lies inside a centred circle of [diameter]: a w×h box centred
+/// in a circle fits iff w² + h² ≤ d². Not the inscribed square (d/√2 a
+/// side): that would shrink the day report's 1.0x '1,240' for no reason.
+class _FitInCircle extends SingleChildRenderObjectWidget {
+  const _FitInCircle({required this.diameter, super.child});
+  final double diameter;
+
+  @override
+  _RenderFitInCircle createRenderObject(BuildContext context) =>
+      _RenderFitInCircle(diameter);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderFitInCircle r) =>
+      r.diameter = diameter;
+}
+
+class _RenderFitInCircle extends RenderProxyBox {
+  _RenderFitInCircle(this._diameter);
+
+  double _diameter;
+  set diameter(double v) {
+    if (v == _diameter) return;
+    _diameter = v;
+    markNeedsLayout();
+  }
+
+  double _scale = 1;
+  Matrix4 get _transform => Matrix4.diagonal3Values(_scale, _scale, 1);
+
+  double _scaleFor(Size s) {
+    final diagonal = math.sqrt(s.width * s.width + s.height * s.height);
+    return diagonal <= _diameter ? 1.0 : _diameter / diagonal;
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final c = child;
+    if (c == null) return constraints.smallest;
+    final s = c.getDryLayout(const BoxConstraints());
+    return constraints.constrain(s * _scaleFor(s));
+  }
+
+  @override
+  void performLayout() {
+    final c = child;
+    if (c == null) {
+      size = constraints.smallest;
+      return;
+    }
+    c.layout(const BoxConstraints(), parentUsesSize: true);
+    _scale = _scaleFor(c.size);
+    size = constraints.constrain(c.size * _scale);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child == null) return;
+    layer = context.pushTransform(needsCompositing, offset, _transform,
+        super.paint,
+        oldLayer: layer is TransformLayer ? layer as TransformLayer : null);
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) =>
+      transform.multiply(_transform);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final c = child;
+    if (c == null) return false;
+    return result.addWithPaintTransform(
+        transform: _transform,
+        position: position,
+        hitTest: (result, p) => c.hitTest(result, position: p));
   }
 }
 
@@ -133,9 +211,10 @@ class _RingPainter extends CustomPainter {
   final Color arc;
   final Color track;
 
+  static const stroke = 11.0;
+
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = 11.0;
     final center = size.center(Offset.zero);
     final radius = (math.min(size.width, size.height) - stroke) / 2;
     final rect = Rect.fromCircle(center: center, radius: radius);
