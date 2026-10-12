@@ -31,7 +31,7 @@ class DiagResult {
 }
 
 /// Providers whose endpoints sit outside the mainland-China firewall.
-const Set<String> _vpnNeeded = {'gemini', 'openai', 'anthropic'};
+const Set<String> _vpnNeeded = {'gemini', 'openai', 'anthropic', 'xai'};
 
 const Map<String, String> _probeUrls = {
   'gemini': 'https://generativelanguage.googleapis.com/',
@@ -40,6 +40,9 @@ const Map<String, String> _probeUrls = {
   'qwen': 'https://dashscope.aliyuncs.com/',
   'doubao': 'https://ark.cn-beijing.volces.com/',
   'glm': 'https://open.bigmodel.cn/',
+  'deepseek': 'https://api.deepseek.com/',
+  'xai': 'https://api.x.ai/',
+  'openrouter': 'https://openrouter.ai/',
 };
 
 /// A real 64x64 JPEG (orange disc on white) generated with the same

@@ -29,7 +29,7 @@ void main() {
   test('defaults on a fresh install', () async {
     final (s, _, _) = await freshSettings();
     expect(s.geminiApiKey, isNull);
-    expect(s.model, 'gemini-2.5-flash');
+    expect(s.model, AppSettings.defaultModel);
     expect(s.lookbackDays, 2);
     expect(s.reportTime, '21:30');
     expect(s.watcherEnabled, isFalse);
@@ -121,7 +121,7 @@ void main() {
   test('blank model resets to the default', () async {
     final (s, _, _) = await freshSettings();
     await s.setModel('   ');
-    expect(s.model, 'gemini-2.5-flash');
+    expect(s.model, AppSettings.defaultModel);
   });
 
   test('blank dietary profile reads back as null', () async {

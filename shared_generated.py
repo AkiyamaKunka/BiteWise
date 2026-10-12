@@ -23,9 +23,9 @@ ACTIVITY_KM_MAX = 500
 CALORIE_MAGNITUDE_LIMIT = 1000000000
 MEAL_MISMATCH_MIN_KCAL = 100
 MEAL_MISMATCH_PCT = 0.2
-GEMINI_MODEL_DEFAULT = 'gemini-2.5-flash'
+GEMINI_MODEL_DEFAULT = 'gemini-3.8-flash'
 GEMINI_ANALYSIS_MAX_ATTEMPTS = 3
 GEMINI_RETRY_DELAY_CAP_SECONDS = 60
 API_LEFTOVER_MAX_CHARS = 4000
 
-CONSTANTS = {'nl_max_actions': 5, 'text_edit_window_days_default': 7, 'duplicate_window_minutes': 5, 'normalize_max_dimension_px': 1568, 'normalize_jpeg_quality': 85, 'captured_at_max_age_days_default': 45, 'captured_at_max_future_seconds': 3600, 'sync_lookback_days_default': 2, 'sync_lookback_days_max': 30, 'weight_min_kg': 30, 'weight_max_kg': 300, 'activity_kcal_max': 20000, 'activity_steps_max': 200000, 'activity_km_max': 500, 'calorie_magnitude_limit': 1000000000, 'meal_mismatch_min_kcal': 100, 'meal_mismatch_pct': 0.2, 'gemini_model_default': 'gemini-2.5-flash', 'gemini_analysis_max_attempts': 3, 'gemini_retry_delay_cap_seconds': 60, 'api_leftover_max_chars': 4000}
+CONSTANTS = {'nl_max_actions': 5, 'text_edit_window_days_default': 7, 'duplicate_window_minutes': 5, 'normalize_max_dimension_px': 1568, 'normalize_jpeg_quality': 85, 'captured_at_max_age_days_default': 45, 'captured_at_max_future_seconds': 3600, 'sync_lookback_days_default': 2, 'sync_lookback_days_max': 30, 'weight_min_kg': 30, 'weight_max_kg': 300, 'activity_kcal_max': 20000, 'activity_steps_max': 200000, 'activity_km_max': 500, 'calorie_magnitude_limit': 1000000000, 'meal_mismatch_min_kcal': 100, 'meal_mismatch_pct': 0.2, 'gemini_model_default': 'gemini-3.8-flash', 'gemini_analysis_max_attempts': 3, 'gemini_retry_delay_cap_seconds': 60, 'api_leftover_max_chars': 4000}

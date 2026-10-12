@@ -334,7 +334,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      '按张计费：Key 保存在这台手机上，每张照片都是一次由服务商计费的 API 调用。中国大陆请选择 Qwen、Doubao 或 GLM — 其余需要 VPN。';
+      '按张计费：Key 保存在这台手机上，每张照片都是一次由服务商计费的 API 调用。中国大陆请选择 DeepSeek、Qwen、Doubao 或 GLM — 其余需要 VPN。';
 
   @override
   String get noteVpn => '需要 VPN';
@@ -370,6 +370,17 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get apiKeyFooterGlm =>
       '从 open.bigmodel.cn 获取（需实名认证）。默认 flash 模型免费。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterDeepseek =>
+      '从 platform.deepseek.com 获取（API keys）。按量付费，中国大陆可直连。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterXai => '从 console.x.ai 获取（API keys）。按量付费。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterOpenrouter =>
+      '从 openrouter.ai/keys 获取。一个 Key 可用 GPT、Claude、Gemini、Grok、DeepSeek 等多家模型，部分模型免费。仅安全存储在本机。';
 
   @override
   String get modelHeader => '模型';

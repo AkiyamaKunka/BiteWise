@@ -48,7 +48,20 @@ class FlutterSecureKeyStore implements SecureKeyStore {
 /// They exist because the other four are unreachable from mainland China
 /// without a VPN; for those users a domestic provider is the only way the
 /// app works at all.
-enum AiProvider { gemini, openai, anthropic, server, qwen, doubao, glm }
+/// New values are APPENDED: the stored value is the name, but tests and
+/// the provider picker iterate in declaration order.
+enum AiProvider {
+  gemini,
+  openai,
+  anthropic,
+  server,
+  qwen,
+  doubao,
+  glm,
+  deepseek,
+  xai,
+  openrouter,
+}
 
 /// The Claude-plan model/effort choices (2026-08-05), mirroring the
 /// server's closed whitelists (claude_analyzer.CLAUDE_PLAN_MODELS /
@@ -74,6 +87,9 @@ class AppSettings extends ChangeNotifier {
   static const String _kQwenKey = 'qwen_api_key';
   static const String _kDoubaoKey = 'doubao_api_key';
   static const String _kGlmKey = 'glm_api_key';
+  static const String _kDeepseekKey = 'deepseek_api_key';
+  static const String _kXaiKey = 'xai_api_key';
+  static const String _kOpenrouterKey = 'openrouter_api_key';
 
   // shared_preferences keys.
   static const String _kModel = 'settings.model';
@@ -97,6 +113,9 @@ class AppSettings extends ChangeNotifier {
   static const String _kQwenModel = 'settings.qwen_model';
   static const String _kDoubaoModel = 'settings.doubao_model';
   static const String _kGlmModel = 'settings.glm_model';
+  static const String _kDeepseekModel = 'settings.deepseek_model';
+  static const String _kXaiModel = 'settings.xai_model';
+  static const String _kOpenrouterModel = 'settings.openrouter_model';
 
   /// Spec §8: Gemini model default (config.py:26), from shared/.
   static const String defaultModel = SharedConstants.geminiModelDefault;
@@ -111,8 +130,22 @@ class AppSettings extends ChangeNotifier {
   static final RegExp _reportTimeRe = RegExp(r'^([01]?\d|2[0-3]):[0-5]\d$');
 
   /// Vision-capable, cost-sane defaults; user-editable like the Gemini one.
-  static const String defaultOpenaiModel = 'gpt-4o-mini';
-  static const String defaultAnthropicModel = 'claude-sonnet-5';
+  /// Refreshed 2026-09-30 against the vendors' model pages: gpt-6-luna is
+  /// OpenAI's current small model (gpt-4o-mini is two generations back),
+  /// claude-sonnet-5-5 the current Sonnet.
+  static const String defaultOpenaiModel = 'gpt-6-luna';
+  static const String defaultAnthropicModel = 'claude-sonnet-5-5';
+
+  /// Added 2026-09-30 (docs verified the same day).
+  /// deepseek-flash: DeepSeek's V4.1 Flash, the only DeepSeek model that
+  /// accepts images (deepseek-v4-pro is text-only) — and the most-used
+  /// model family on the market by tokens.
+  /// grok-4.7: xAI's current model on the chat-completions endpoint.
+  /// OpenRouter: a `~…-latest` alias, so the default follows the vendor's
+  /// newest Flash instead of going stale like the IDs above eventually do.
+  static const String defaultDeepseekModel = 'deepseek-flash';
+  static const String defaultXaiModel = 'grok-4.7';
+  static const String defaultOpenrouterModel = '~google/gemini-flash-latest';
   /// China-provider defaults, verified against provider docs 2026-07-29.
   /// qwen3-vl-flash: ¥0.15/M input — a food photo costs well under a fen.
   /// Doubao REQUIRES the exact versioned ID (undated names 404); the
@@ -131,6 +164,9 @@ class AppSettings extends ChangeNotifier {
   String? _qwenApiKey;
   String? _doubaoApiKey;
   String? _glmApiKey;
+  String? _deepseekApiKey;
+  String? _xaiApiKey;
+  String? _openrouterApiKey;
   String _serverBaseUrl = '';
   String _serverBackend = 'claude';
   AiProvider _provider = AiProvider.gemini;
@@ -139,6 +175,9 @@ class AppSettings extends ChangeNotifier {
   String _qwenModel = defaultQwenModel;
   String _doubaoModel = defaultDoubaoModel;
   String _glmModel = defaultGlmModel;
+  String _deepseekModel = defaultDeepseekModel;
+  String _xaiModel = defaultXaiModel;
+  String _openrouterModel = defaultOpenrouterModel;
   String _model = defaultModel;
   int _lookbackDays = defaultLookbackDays;
   String _reportTime = defaultReportTime;
@@ -170,6 +209,12 @@ class AppSettings extends ChangeNotifier {
     s._doubaoApiKey = (dbKey == null || dbKey.isEmpty) ? null : dbKey;
     final glKey = (await k.read(_kGlmKey))?.trim();
     s._glmApiKey = (glKey == null || glKey.isEmpty) ? null : glKey;
+    final dsKey = (await k.read(_kDeepseekKey))?.trim();
+    s._deepseekApiKey = (dsKey == null || dsKey.isEmpty) ? null : dsKey;
+    final xaKey = (await k.read(_kXaiKey))?.trim();
+    s._xaiApiKey = (xaKey == null || xaKey.isEmpty) ? null : xaKey;
+    final orKey = (await k.read(_kOpenrouterKey))?.trim();
+    s._openrouterApiKey = (orKey == null || orKey.isEmpty) ? null : orKey;
     s._serverBaseUrl = (p.getString(_kServerBaseUrl) ?? '').trim();
     final backend = (p.getString(_kServerBackend) ?? '').trim();
     s._serverBackend =
@@ -189,6 +234,12 @@ class AppSettings extends ChangeNotifier {
     s._doubaoModel = dbModel.isEmpty ? defaultDoubaoModel : dbModel;
     final glModel = (p.getString(_kGlmModel) ?? '').trim();
     s._glmModel = glModel.isEmpty ? defaultGlmModel : glModel;
+    final dsModel = (p.getString(_kDeepseekModel) ?? '').trim();
+    s._deepseekModel = dsModel.isEmpty ? defaultDeepseekModel : dsModel;
+    final xaModel = (p.getString(_kXaiModel) ?? '').trim();
+    s._xaiModel = xaModel.isEmpty ? defaultXaiModel : xaModel;
+    final orModel = (p.getString(_kOpenrouterModel) ?? '').trim();
+    s._openrouterModel = orModel.isEmpty ? defaultOpenrouterModel : orModel;
     s._lookbackDays = (p.getInt(_kLookbackDays) ?? defaultLookbackDays)
         .clamp(minLookbackDays, maxLookbackDays);
     final rt = p.getString(_kReportTime) ?? defaultReportTime;
@@ -269,11 +320,17 @@ class AppSettings extends ChangeNotifier {
   String? get qwenApiKey => _qwenApiKey;
   String? get doubaoApiKey => _doubaoApiKey;
   String? get glmApiKey => _glmApiKey;
+  String? get deepseekApiKey => _deepseekApiKey;
+  String? get xaiApiKey => _xaiApiKey;
+  String? get openrouterApiKey => _openrouterApiKey;
   String get openaiModel => _openaiModel;
   String get anthropicModel => _anthropicModel;
   String get qwenModel => _qwenModel;
   String get doubaoModel => _doubaoModel;
   String get glmModel => _glmModel;
+  String get deepseekModel => _deepseekModel;
+  String get xaiModel => _xaiModel;
+  String get openrouterModel => _openrouterModel;
 
   /// The ACTIVE provider's key (what every "can analysis succeed" guard
   /// must check — a Gemini key does nothing when OpenAI is selected).
@@ -284,6 +341,9 @@ class AppSettings extends ChangeNotifier {
         AiProvider.qwen => _qwenApiKey,
         AiProvider.doubao => _doubaoApiKey,
         AiProvider.glm => _glmApiKey,
+        AiProvider.deepseek => _deepseekApiKey,
+        AiProvider.xai => _xaiApiKey,
+        AiProvider.openrouter => _openrouterApiKey,
         // The server path needs BOTH a URL and a key to be usable; the
         // guards treat a missing URL as "no key configured".
         AiProvider.server =>
@@ -300,6 +360,9 @@ class AppSettings extends ChangeNotifier {
         AiProvider.qwen => 'Qwen',
         AiProvider.doubao => 'Doubao',
         AiProvider.glm => 'GLM',
+        AiProvider.deepseek => 'DeepSeek',
+        AiProvider.xai => 'xAI',
+        AiProvider.openrouter => 'OpenRouter',
       };
 
   /// The ACTIVE provider's model string.
@@ -310,6 +373,9 @@ class AppSettings extends ChangeNotifier {
         AiProvider.qwen => _qwenModel,
         AiProvider.doubao => _doubaoModel,
         AiProvider.glm => _glmModel,
+        AiProvider.deepseek => _deepseekModel,
+        AiProvider.xai => _xaiModel,
+        AiProvider.openrouter => _openrouterModel,
         // The server picks the model (CLAUDE_ANALYZER_MODEL on the VM);
         // the phone deliberately has no say, so nothing is user-editable.
         AiProvider.server => 'server (Claude subscription)',
@@ -334,6 +400,18 @@ class AppSettings extends ChangeNotifier {
   Future<void> setGlmApiKey(String? value) =>
       _setProviderKey(value, _kGlmKey, (v) => _glmApiKey = v,
           () => _glmApiKey, AiProvider.glm);
+
+  Future<void> setDeepseekApiKey(String? value) =>
+      _setProviderKey(value, _kDeepseekKey, (v) => _deepseekApiKey = v,
+          () => _deepseekApiKey, AiProvider.deepseek);
+
+  Future<void> setXaiApiKey(String? value) =>
+      _setProviderKey(value, _kXaiKey, (v) => _xaiApiKey = v,
+          () => _xaiApiKey, AiProvider.xai);
+
+  Future<void> setOpenrouterApiKey(String? value) =>
+      _setProviderKey(value, _kOpenrouterKey, (v) => _openrouterApiKey = v,
+          () => _openrouterApiKey, AiProvider.openrouter);
 
   /// The upload key for the user's own server (same X-API-Key the phone
   /// watcher uses). Secure storage — never shared_preferences.
@@ -422,6 +500,27 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _doubaoModel = v.isEmpty ? defaultDoubaoModel : v;
     await _prefs.setString(_kDoubaoModel, _doubaoModel);
+    notifyListeners();
+  }
+
+  Future<void> setDeepseekModel(String value) async {
+    final v = value.trim();
+    _deepseekModel = v.isEmpty ? defaultDeepseekModel : v;
+    await _prefs.setString(_kDeepseekModel, _deepseekModel);
+    notifyListeners();
+  }
+
+  Future<void> setXaiModel(String value) async {
+    final v = value.trim();
+    _xaiModel = v.isEmpty ? defaultXaiModel : v;
+    await _prefs.setString(_kXaiModel, _xaiModel);
+    notifyListeners();
+  }
+
+  Future<void> setOpenrouterModel(String value) async {
+    final v = value.trim();
+    _openrouterModel = v.isEmpty ? defaultOpenrouterModel : v;
+    await _prefs.setString(_kOpenrouterModel, _openrouterModel);
     notifyListeners();
   }
 

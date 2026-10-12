@@ -104,7 +104,7 @@ void main() {
       expect(req.method, 'POST');
       expect(req.url.toString(),
           startsWith('https://generativelanguage.googleapis.com/v1beta/models/'
-              'gemini-2.5-flash:generateContent'));
+              '${AppSettings.defaultModel}:generateContent'));
       expect(req.url.queryParameters['key'], 'test-key');
 
       final body = jsonDecode(req.body) as Map<String, dynamic>;

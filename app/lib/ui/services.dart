@@ -26,7 +26,7 @@ abstract class SettingsStore {
 
   /// Active AI provider: 'gemini' | 'openai' | 'anthropic' | 'server'
   /// (own server on the Claude subscription) | 'qwen' | 'doubao' | 'glm'
-  /// (the mainland-China providers). String-typed so the UI seam stays
+  /// | 'deepseek' | 'xai' | 'openrouter'. String-typed so the UI seam stays
   /// free of module imports (di adapts the enum).
   String get provider;
 

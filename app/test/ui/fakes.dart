@@ -155,7 +155,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
 
   FakeSettings({
     String apiKey = 'k',
-    String model = 'gemini-2.5-flash',
+    String model = 'gemini-3.8-flash',
     Map<String, String>? keys,
     Map<String, String>? models,
     this.lookbackDays = 2,
@@ -166,8 +166,8 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
         modelsByProvider = models ??
             {
               'gemini': model,
-              'openai': 'gpt-4o-mini',
-              'anthropic': 'claude-sonnet-5',
+              'openai': 'gpt-6-luna',
+              'anthropic': 'claude-sonnet-5-5',
               'qwen': 'qwen3-vl-flash',
               'doubao': 'doubao-seed-2-0-mini-260428',
               'glm': 'glm-4.6v-flash',

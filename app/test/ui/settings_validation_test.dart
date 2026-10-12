@@ -155,10 +155,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('modelPicker')));
     await tester.pumpAndSettle();
-    await tester
-        .tap(find.text('gemini-2.5-pro — strongest, slower').last);
+    await tester.tap(
+        find.text('gemini-3.1-pro-preview — strongest, slower').last);
     await tester.pumpAndSettle();
-    expect(settings.model, 'gemini-2.5-pro', reason: 'picking persists');
+    expect(settings.model, 'gemini-3.1-pro-preview',
+        reason: 'picking persists');
 
     // The Custom row reveals the text field for unlisted models.
     await tester.tap(find.byKey(const Key('modelPicker')));
@@ -194,7 +195,7 @@ void main() {
     addTearDown(tester.view.reset);
     final settings = FakeSettings(
       keys: {'gemini': 'gem-key', 'glm': 'glm-key'},
-      models: {'gemini': 'gemini-2.5-flash', 'glm': 'glm-4.6v-flash'},
+      models: {'gemini': 'gemini-3.8-flash', 'glm': 'glm-4.6v-flash'},
     );
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: settings,

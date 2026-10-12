@@ -17,7 +17,7 @@
   "calorie_magnitude_limit": 1000000000,
   "meal_mismatch_min_kcal": 100,
   "meal_mismatch_pct": 0.2,
-  "gemini_model_default": "gemini-2.5-flash",
+  "gemini_model_default": "gemini-3.8-flash",
   "gemini_analysis_max_attempts": 3,
   "gemini_retry_delay_cap_seconds": 60,
   "api_leftover_max_chars": 4000

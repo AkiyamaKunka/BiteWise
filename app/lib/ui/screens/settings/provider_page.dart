@@ -28,18 +28,46 @@ const String kCustomModelSentinel = '__custom__';
 /// id strings like doubao-seed-2-0-mini-260428. The Custom row reveals a
 /// text field so a model a vendor ships NEXT month never bricks the app.
 const Map<String, List<(String, String)>> kKnownModels = {
+  // International lists refreshed 2026-09-30 from each vendor's models
+  // page (Google restricts the 2.5 generation to accounts that already
+  // used it, so it can no longer be a default for new users).
   'gemini': [
-    ('gemini-2.5-flash', 'gemini-2.5-flash — fast, free-tier default'),
-    ('gemini-2.5-pro', 'gemini-2.5-pro — strongest, slower'),
+    ('gemini-3.8-flash', 'gemini-3.8-flash — fast, free-tier default'),
+    ('gemini-3.5-flash-lite', 'gemini-3.5-flash-lite — cheapest, free tier'),
+    ('gemini-3.1-pro-preview', 'gemini-3.1-pro-preview — strongest, slower'),
   ],
   'openai': [
-    ('gpt-4o-mini', 'gpt-4o-mini — cheap, default'),
-    ('gpt-4o', 'gpt-4o — stronger, pricier'),
+    ('gpt-6-luna', 'gpt-6-luna — cheap, default'),
+    ('gpt-6.1-sol', 'gpt-6.1-sol — stronger, pricier'),
+    ('gpt-6-astra', 'gpt-6-astra — flagship, priciest'),
   ],
   'anthropic': [
-    ('claude-sonnet-5', 'claude-sonnet-5 — default'),
+    ('claude-sonnet-5-5', 'claude-sonnet-5-5 — default'),
     ('claude-haiku-4-5', 'claude-haiku-4-5 — fastest, cheapest'),
-    ('claude-opus-5', 'claude-opus-5 — strongest, priciest'),
+    ('claude-opus-5-5', 'claude-opus-5-5 — strongest, priciest'),
+  ],
+  'xai': [
+    ('grok-4.7', 'grok-4.7 — default'),
+    ('grok-4.6', 'grok-4.6 — previous release'),
+  ],
+  // OpenRouter: `~…-latest` aliases follow each vendor's newest model, so
+  // this list does not go stale the way pinned IDs do.
+  'openrouter': [
+    ('~google/gemini-flash-latest', 'Gemini Flash (latest) — default'),
+    ('~openai/gpt-luna-latest', 'GPT Luna (latest) — cheap'),
+    ('~anthropic/claude-sonnet-latest', 'Claude Sonnet (latest)'),
+    ('~x-ai/grok-latest', 'Grok (latest)'),
+    ('~deepseek/deepseek-flash-latest', 'DeepSeek Flash (latest) — cheapest'),
+    ('~z-ai/glm-flash-latest', 'GLM Flash (latest)'),
+    ('qwen/qwen3.8-flash', 'Qwen 3.8 Flash'),
+    ('~moonshotai/kimi-latest', 'Kimi (latest)'),
+    ('meta-llama/llama-4-maverick', 'Llama 4 Maverick'),
+    ('mistralai/mistral-small-2603', 'Mistral Small'),
+    ('google/gemma-4-31b-it:free', 'Gemma 4 31B — FREE 免费'),
+  ],
+  // Only deepseek-flash accepts photos; deepseek-v4-pro is text-only.
+  'deepseek': [
+    ('deepseek-flash', 'deepseek-flash — V4.1, default'),
   ],
   'qwen': [
     ('qwen3-vl-flash', 'qwen3-vl-flash — cheapest, default'),
@@ -59,6 +87,12 @@ const Map<String, List<(String, String)>> kKnownModels = {
   ],
 };
 
+/// The provider's default model as the UI names it: the FIRST curated
+/// entry. Pinned equal to the AppSettings defaults by a test, so the
+/// screens stay free of module imports and the two cannot drift.
+String defaultModelFor(String provider) =>
+    (kKnownModels[provider] ?? kKnownModels['gemini']!).first.$1;
+
 bool isCuratedModel(String provider, String model) =>
     (kKnownModels[provider] ?? const []).any((m) => m.$1 == model);
 
@@ -70,6 +104,9 @@ String providerLabel(String provider) => switch (provider) {
       'qwen' => 'Qwen 通义千问',
       'doubao' => 'Doubao 豆包',
       'glm' => 'GLM 智谱',
+      'deepseek' => 'DeepSeek',
+      'xai' => 'Grok',
+      'openrouter' => 'OpenRouter',
       _ => 'Gemini',
     };
 
@@ -80,6 +117,9 @@ const List<(String, String, String)> kApiKeyChoices = [
   ('gemini', 'Google Gemini', 'free tier · VPN in China'),
   ('openai', 'OpenAI', 'VPN in China'),
   ('anthropic', 'Anthropic Claude', 'VPN in China'),
+  ('xai', 'xAI Grok', 'VPN in China'),
+  ('openrouter', 'OpenRouter', 'many models'),
+  ('deepseek', 'DeepSeek 深度求索', '中国直连'),
   ('qwen', 'Alibaba Qwen 通义千问', '中国直连'),
   ('doubao', 'ByteDance Doubao 豆包', '中国直连'),
   ('glm', 'Zhipu GLM 智谱', 'free 免费 · 中国直连'),
