@@ -356,10 +356,12 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
       }
     }
 
-    // Spec §1.3: dietary profile appends to the photo prompt only.
-    final prompt =
+    // Spec §1.3: dietary profile appends to the photo prompt only. Reply
+    // language LAST, after the recent-meals block (the server's order).
+    final prompt = withReplyLanguage(
         withDietaryProfile(foodDetectionPrompt, _settings.dietaryProfile) +
-            formatRecentMealsBlock(recentMeals ?? const []);
+            formatRecentMealsBlock(recentMeals ?? const []),
+        chinese: _settings.repliesInChinese);
     final parts = <Map<String, Object?>>[
       {'text': prompt},
       {
@@ -485,7 +487,10 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
     try {
       text = _extractText(
           await _post(<Map<String, Object?>>[
-        {'text': prompt}
+        {
+          'text': withReplyLanguage(prompt,
+              chinese: _settings.repliesInChinese)
+        }
       ]));
     } on GeminiException catch (e) {
       if (isDailyFreeTierQuotaError(e.message)) {

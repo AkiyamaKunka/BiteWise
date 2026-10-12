@@ -36,6 +36,14 @@ String textHandlerPrompt({
       yesterday: yesterday,
     );
 
+/// The reply-language appendix (mirrors telegram_bot.with_reply_language):
+/// [prompt] UNCHANGED unless [chinese], else the shared directive appended.
+/// For the photo and text-intent prompts only — never the leftover prompt,
+/// whose item names must come back exactly as the original meal wrote them.
+String withReplyLanguage(String prompt, {required bool chinese}) => chinese
+    ? '$prompt\n\n${SharedConstants.replyLanguageDirectiveZh}\n'
+    : prompt;
+
 /// Optional dietary-profile appendix (mirrors config.py:83-91).
 String withDietaryProfile(String prompt, String? profile) {
   final p = (profile ?? '').trim();

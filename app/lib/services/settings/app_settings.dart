@@ -746,6 +746,16 @@ class AppSettings extends ChangeNotifier {
   /// App-only (spec §9 localization row) — never a wire value.
   String get appLanguage => _appLanguage;
 
+  /// Whether the EFFECTIVE UI language is Chinese: 'zh', or 'system' on a
+  /// Chinese phone (resolved as localizationsFor does). The analyzers ask
+  /// the model to name meals in it (the server path sends lang: zh).
+  bool get repliesInChinese => switch (_appLanguage) {
+        'zh' => true,
+        'en' => false,
+        _ => PlatformDispatcher.instance.locale.languageCode.toLowerCase() ==
+            'zh',
+      };
+
   Future<void> setAppLanguage(String value) async {
     final v = const {'system', 'en', 'zh'}.contains(value)
         ? value

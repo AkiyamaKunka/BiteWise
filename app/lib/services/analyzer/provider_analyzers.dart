@@ -94,6 +94,18 @@ abstract class _HttpVisionAnalyzer
   /// server): a terminal message carrying the code, or null for the
   /// generic path. Vendor 400s stay generic — their bodies are prose.
   String? rejectedMessage(String body) => null;
+
+  /// Whether this provider appends the reply-language directive to the
+  /// prompt itself. ServerAnalyzer does not: it sends `lang` and the
+  /// server appends the same directive (no doubled sentence).
+  bool get appendsReplyLanguage => true;
+
+  /// [prompt] with the reply-language directive when the app is Chinese
+  /// (photo and text-intent prompts only — never the leftover prompt).
+  String _withReplyLanguage(String prompt) => appendsReplyLanguage
+      ? withReplyLanguage(prompt, chinese: settings.repliesInChinese)
+      : prompt;
+
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens});
   String extractText(Map<String, dynamic> body);
@@ -344,9 +356,11 @@ abstract class _HttpVisionAnalyzer
             wall: sw.elapsed);
       }
     }
-    final prompt =
+    // Reply language LAST, after the profile and the recent-meals block —
+    // the server's order (telegram_bot.py analyze_photo).
+    final prompt = _withReplyLanguage(
         withDietaryProfile(foodDetectionPrompt, settings.dietaryProfile) +
-            formatRecentMealsBlock(recentMeals ?? const []);
+            formatRecentMealsBlock(recentMeals ?? const []));
     for (var attempt = 1;; attempt++) {
       String text;
       try {
@@ -399,9 +413,10 @@ abstract class _HttpVisionAnalyzer
   @override
   Future<TextIntentOutcome> textIntentOutcome(String prompt) async {
     String text;
+    final sent = _withReplyLanguage(prompt);
     for (var attempt = 1;; attempt++) {
       try {
-        text = await _post(prompt: prompt);
+        text = await _post(prompt: sent);
         break;
       } on _ProviderException catch (e) {
         // Only the server's explicit busy verdict waits: the server answers
@@ -899,6 +914,16 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   @override
   Duration get deadline => const Duration(minutes: 5);
 
+  /// The server composes the prompt: it gets `lang` and appends the
+  /// directive itself (an old server ignores the field).
+  @override
+  bool get appendsReplyLanguage => false;
+
+  /// `lang` for /api/analyze_photo and /api/text_intent — never for
+  /// /api/analyze_leftover, whose item names must stay verbatim.
+  Map<String, String> _replyLanguage() =>
+      settings.repliesInChinese ? const {'lang': 'zh'} : const {};
+
   Uri _uri(String path) => Uri.parse('${settings.serverBaseUrl}$path');
 
   /// The user's Claude-plan model/effort choice (2026-08-05). Sent ONLY
@@ -1013,11 +1038,13 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
               if (recentMealsForRequest.isNotEmpty)
                 'recent_meals': recentMealsForRequest,
               ..._planChoice(),
+              ..._replyLanguage(),
             }
           : {
               'prompt': prompt,
               'backend': settings.serverBackend,
               ..._planChoice(),
+              ..._replyLanguage(),
             });
   }
 
