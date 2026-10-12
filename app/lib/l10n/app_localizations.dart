@@ -638,6 +638,12 @@ abstract class AppLocalizations {
   /// **'Privacy Policy'**
   String get settingsRowPrivacy;
 
+  /// No description provided for @privacyOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the privacy policy. It is at {url}'**
+  String privacyOpenFailed(String url);
+
   /// No description provided for @settingsRowLanguage.
   ///
   /// In en, this message translates to:

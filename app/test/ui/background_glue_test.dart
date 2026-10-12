@@ -619,6 +619,45 @@ void main() {
       expect(settings.isAnalysisBlocked, isFalse);
     });
 
+    test('no pause notice when the foreground edited the key during the run',
+        () async {
+      // The arm landed, then the user saved a new key in the app (another
+      // isolate, its own preferences cache): the pause is gone on disk, and
+      // "photos will not be logged automatically" would be stale.
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final cards = <(String, String)>[];
+      final real = autoScanLatchFor(settings);
+      final latch = AutoScanLatch(
+        blockedKind: real.blockedKind,
+        revision: real.revision,
+        block: (kind, revision) async {
+          await real.block(kind, revision);
+          SharedPreferences.resetStatic(); // the foreground isolate
+          final fg = await AppSettings.load(
+              prefs: await SharedPreferences.getInstance(),
+              keyStore: MemoryKeyStore());
+          await fg.setGeminiApiKey('k2');
+        },
+        clear: real.clear,
+      );
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(
+            dao: FakeDao(), analyzer: analyzer, latch: latch),
+        showMealCard: (t, b) async => cards.add((t, b)),
+        clock: () => DateTime(2026, 7, 24, 5, 0),
+      );
+      expect(cards, isEmpty);
+      expect(settings.isAnalysisBlocked, isFalse);
+    });
+
     test('does nothing while a blocked region latched the scan', () async {
       final settings = await settingsWith(key: 'k');
       await settings.blockAutomaticAnalysis('regionBlocked');

@@ -752,9 +752,14 @@ class AppSettings extends ChangeNotifier {
   bool get repliesInChinese => switch (_appLanguage) {
         'zh' => true,
         'en' => false,
-        _ => PlatformDispatcher.instance.locale.languageCode.toLowerCase() ==
-            'zh',
+        _ => systemLanguageCode().toLowerCase() == 'zh',
       };
+
+  /// The phone's language code, as 'system' resolves it. A seam because
+  /// PlatformDispatcher.instance ignores a widget test's locale.
+  @visibleForTesting
+  static String Function() systemLanguageCode =
+      () => PlatformDispatcher.instance.locale.languageCode;
 
   Future<void> setAppLanguage(String value) async {
     final v = const {'system', 'en', 'zh'}.contains(value)
@@ -958,7 +963,16 @@ class AppSettings extends ChangeNotifier {
   /// it, like the quota pause.
   bool get isAnalysisBlocked {
     final until = _analysisBlockedUntil;
-    if (until == null || !DateTime.now().isBefore(until)) return false;
+    final now = DateTime.now();
+    if (until == null || !now.isBefore(until)) return false;
+    // No pause outlasts its kind's TTL: an end further out than that was
+    // armed under a clock that has since been set back, and would park the
+    // scan for as long as the skew. Minutes of slack for NTP nudges.
+    final ttl = _analysisBlockTtl(_analysisBlockedKind);
+    if (ttl == null ||
+        until.isAfter(now.add(ttl + const Duration(minutes: 5)))) {
+      return false;
+    }
     // Unlike the quota pause, a pause WITHOUT its provider is not one: the
     // provider is written first, so a missing one is a torn arm (2026-10-12).
     final owner = _prefs.getString(_kAnalysisBlockedProvider);
@@ -988,11 +1002,7 @@ class AppSettings extends ChangeNotifier {
   /// test seam.
   Future<void> blockAutomaticAnalysis(String kind,
       {int? revision, DateTime? now}) async {
-    final ttl = switch (kind) {
-      'rejectedKey' => rejectedKeyBlockTtl,
-      'regionBlocked' => regionBlockTtl,
-      _ => null,
-    };
+    final ttl = _analysisBlockTtl(kind);
     if (ttl == null) return;
     if (revision != null) {
       await _prefs.reload();
@@ -1019,6 +1029,12 @@ class AppSettings extends ChangeNotifier {
     }
     notifyListeners();
   }
+
+  static Duration? _analysisBlockTtl(String? kind) => switch (kind) {
+        'rejectedKey' => rejectedKeyBlockTtl,
+        'regionBlocked' => regionBlockTtl,
+        _ => null,
+      };
 
   /// Lift the latch: an analysis succeeded, so the key and region work.
   /// Touches the stored keys only when a pause is actually set — in this

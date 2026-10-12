@@ -250,7 +250,10 @@ Future<bool> headlessBackfillWith({
   // This run ARMED the automatic-scan pause (it started unpaused — see the
   // guard above): the background has no snackbar, and without a word the
   // scan just stops for up to a day. One notice per arm: every later run
-  // is guarded out above until the pause lifts.
+  // is guarded out above until the pause lifts. Re-read from disk first:
+  // a key edited in the foreground during this run has already lifted the
+  // pause there, and a notice about it would be stale.
+  await settings.reloadAnalysisBlock();
   final pausedUntil = settings.analysisBlockedUntil;
   if (pausedUntil != null) {
     final l = localizationsFor(settings.appLanguage);

@@ -1,4 +1,5 @@
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 // ignore: depend_on_referenced_packages
@@ -192,6 +193,27 @@ void main() {
     expect(notifications, 4);
   });
 
+  testWidgets("repliesInChinese follows the phone's language on 'system'",
+      (tester) async {
+    final (s, _, _) = await freshSettings();
+    await s.setAppLanguage('system');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    final real = AppSettings.systemLanguageCode;
+    addTearDown(() => AppSettings.systemLanguageCode = real);
+    AppSettings.systemLanguageCode =
+        () => tester.platformDispatcher.locale.languageCode;
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+    expect(s.repliesInChinese, isTrue);
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    expect(s.repliesInChinese, isFalse);
+    // An explicit choice wins over the phone.
+    await s.setAppLanguage('zh');
+    expect(s.repliesInChinese, isTrue);
+    tester.platformDispatcher.localeTestValue = const Locale('zh');
+    await s.setAppLanguage('en');
+    expect(s.repliesInChinese, isFalse);
+  });
+
   group('automatic-analysis latch (rejected key / blocked region)', () {
     test('arms, persists across a load, and gates canAutoAnalyze only',
         () async {
@@ -241,6 +263,28 @@ void main() {
 
       await s.blockAutomaticAnalysis('billing');
       expect(s.isAnalysisBlocked, isFalse, reason: 'only the two kinds');
+    });
+
+    test('an end further out than the TTL (clock set back) is no pause',
+        () async {
+      final (s, prefs, keys) = await freshSettings();
+      final now = DateTime.now();
+      // Armed while the clock read a month ahead.
+      await s.blockAutomaticAnalysis('rejectedKey',
+          now: now.add(const Duration(days: 30)));
+      expect(s.isAnalysisBlocked, isFalse);
+      expect(s.analysisBlockedUntil, isNull);
+      expect(s.canAutoAnalyze, s.canAnalyze);
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.add(const Duration(hours: 1)));
+      expect(s.isAnalysisBlocked, isFalse, reason: '3 h out > 2 h TTL');
+      // The same from disk, as another isolate would read it.
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.isAnalysisBlocked, isFalse);
+      // A nudge of a minute or two is not skew.
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.add(const Duration(minutes: 2)));
+      expect(s.isAnalysisBlocked, isTrue);
     });
 
     test('EVERY credential, provider, model or server edit lifts it',

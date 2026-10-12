@@ -1095,7 +1095,17 @@ class _SettingsScreenState extends State<SettingsScreen>
     final open = widget.openUrl ??
         (uri) => launcher.launchUrl(uri,
             mode: launcher.LaunchMode.externalApplication);
-    await open(privacyPolicyUri);
+    var opened = false;
+    try {
+      opened = await open(privacyPolicyUri);
+    } catch (_) {}
+    if (opened || !mounted) return;
+    // No browser, or the launch was refused: the address itself keeps the
+    // policy reachable.
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        duration: const Duration(seconds: 8),
+        content: Text(
+            context.l10n.privacyOpenFailed(privacyPolicyUri.toString()))));
   }
 }
 

@@ -9,6 +9,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 
 import 'fakes.dart';
@@ -425,6 +426,40 @@ void main() {
     expect(opened, [privacyPolicyUri]);
     expect(privacyPolicyUri.toString(),
         'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
+  });
+
+  for (final (label, fails) in <(String, Future<bool> Function(Uri))>[
+    ('returns false', (_) async => false),
+    ('throws', (_) async => throw StateError('no browser')),
+  ]) {
+    testWidgets('a Privacy Policy launch that $label shows the address',
+        (tester) async {
+      // A phone with no browser (or one that refuses the launch) used to
+      // get no reaction at all from the row.
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        openUrl: fails,
+      )));
+      final row = find.byKey(const Key('privacyPolicyRow'));
+      await tester.scrollUntilVisible(row, 200);
+      await tester.tap(row);
+      await tester.pump();
+      expect(
+          find.text('Could not open the privacy policy. '
+              'It is at $privacyPolicyUri'),
+          findsOneWidget);
+    });
+  }
+
+  test('the privacy-link notice names the address in Chinese too', () {
+    expect(lookupAppLocalizations(const Locale('zh')).privacyOpenFailed('U'),
+        '无法打开隐私政策，网址：U');
   });
 
   testWidgets('watcher toggle stays off when permission is denied',

@@ -257,6 +257,14 @@
   "settingsRowExport": "Export Data…",
   "settingsRowImport": "Import Data…",
   "settingsRowPrivacy": "Privacy Policy",
+  "privacyOpenFailed": "Could not open the privacy policy. It is at {url}",
+  "@privacyOpenFailed": {
+    "placeholders": {
+      "url": {
+        "type": "String"
+      }
+    }
+  },
   "settingsRowLanguage": "Language",
   "languageSystem": "System",
   "languageSheetTitle": "Language",

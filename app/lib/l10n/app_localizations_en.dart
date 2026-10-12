@@ -342,6 +342,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRowPrivacy => 'Privacy Policy';
 
   @override
+  String privacyOpenFailed(String url) {
+    return 'Could not open the privacy policy. It is at $url';
+  }
+
+  @override
   String get settingsRowLanguage => 'Language';
 
   @override

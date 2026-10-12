@@ -328,6 +328,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRowPrivacy => '隐私政策';
 
   @override
+  String privacyOpenFailed(String url) {
+    return '无法打开隐私政策，网址：$url';
+  }
+
+  @override
   String get settingsRowLanguage => '语言';
 
   @override
