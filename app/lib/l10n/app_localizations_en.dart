@@ -1429,6 +1429,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get editorPhotoAlreadyLogged =>
+      'This photo was already logged — your numbers were not saved; open that meal from Today to edit it.';
+
+  @override
   String editorDeleteFailed(String error) {
     return 'Could not delete: $error';
   }

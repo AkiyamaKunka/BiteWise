@@ -2388,6 +2388,12 @@ abstract class AppLocalizations {
   /// **'Could not save: {error}'**
   String editorSaveFailed(String error);
 
+  /// No description provided for @editorPhotoAlreadyLogged.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was already logged — your numbers were not saved; open that meal from Today to edit it.'**
+  String get editorPhotoAlreadyLogged;
+
   /// No description provided for @editorDeleteFailed.
   ///
   /// In en, this message translates to:

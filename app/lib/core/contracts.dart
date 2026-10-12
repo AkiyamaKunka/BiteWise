@@ -117,12 +117,23 @@ class ReservationLost implements Exception {
   String toString() => 'ReservationLost';
 }
 
+/// What [MealsDao.saveMealWithOutcome] did: [inserted] is false when the
+/// meals-table backstop found a meal for the same photo hash and returned
+/// ITS [id] — nothing from this save was written to the meals table.
+typedef MealSaveResult = ({int id, bool inserted});
+
 /// Persistence seam (spec §2, §5 read shapes).
 abstract class MealsDao {
   /// [ownerStamp]: the [PhotoReservationResult.stamp] this save settles —
   /// checked in the same transaction, [ReservationLost] when it no longer
   /// holds. Null = an unconditional save (the editor's deliberate log).
   Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp});
+
+  /// [saveMeal] that also says whether the row was inserted or an existing
+  /// meal for the same photo was returned. The editor's photo save needs
+  /// the difference: the user's typed numbers must not vanish silently.
+  Future<MealSaveResult> saveMealWithOutcome(Meal meal,
       {IngestionStatus? markStatus, String? ownerStamp});
   Future<void> updateMealAnalysis(int mealId, Map<String, dynamic> analysis);
 

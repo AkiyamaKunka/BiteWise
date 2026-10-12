@@ -90,6 +90,12 @@ class BaseFakeDao implements MealsDao {
 
   @override
   Future<int> saveMeal(Meal meal,
+          {IngestionStatus? markStatus, String? ownerStamp}) =>
+      saveMealWithOutcome(meal, markStatus: markStatus, ownerStamp: ownerStamp)
+          .then((r) => r.id);
+
+  @override
+  Future<MealSaveResult> saveMealWithOutcome(Meal meal,
       {IngestionStatus? markStatus, String? ownerStamp}) async {
     _requireHeld(meal.imageHash, ownerStamp);
     // Mirrors the real DAO's save-time meals-table backstop (2026-10-07):
@@ -100,7 +106,7 @@ class BaseFakeDao implements MealsDao {
       if (existing.isNotEmpty) {
         ledger[meal.imageHash] = IngestionStatus.saved;
         stamps.remove(meal.imageHash);
-        return existing.first.id;
+        return (id: existing.first.id, inserted: false);
       }
     }
     saved.add(meal);
@@ -119,7 +125,7 @@ class BaseFakeDao implements MealsDao {
       ledger[meal.imageHash] = markStatus;
       stamps.remove(meal.imageHash);
     }
-    return id;
+    return (id: id, inserted: true);
   }
 
   @override

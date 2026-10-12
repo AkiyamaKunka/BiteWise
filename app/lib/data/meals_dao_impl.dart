@@ -31,6 +31,12 @@ class SqfliteMealsDao implements MealsDao {
 
   @override
   Future<int> saveMeal(Meal meal,
+          {IngestionStatus? markStatus, String? ownerStamp}) =>
+      saveMealWithOutcome(meal, markStatus: markStatus, ownerStamp: ownerStamp)
+          .then((r) => r.id);
+
+  @override
+  Future<MealSaveResult> saveMealWithOutcome(Meal meal,
       {IngestionStatus? markStatus, String? ownerStamp}) {
     final hash = normalizeImageHash(meal.imageHash);
     // Spec §2.3: the meal INSERT and the ledger mark are ONE transaction
@@ -65,7 +71,7 @@ class SqfliteMealsDao implements MealsDao {
           final existingId = existing.first['id'] as int;
           await _upsertLedger(txn, hash, IngestionStatus.saved,
               mealId: existingId, source: meal.source);
-          return existingId;
+          return (id: existingId, inserted: false);
         }
       }
       final id = await txn.insert('meals', {
@@ -94,7 +100,7 @@ class SqfliteMealsDao implements MealsDao {
           source: meal.source,
         );
       }
-      return id;
+      return (id: id, inserted: true);
     });
   }
 

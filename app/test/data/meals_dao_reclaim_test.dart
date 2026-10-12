@@ -130,6 +130,39 @@ void main() {
         PhotoReservation.claimed);
   });
 
+  test('saveMealWithOutcome tells an INSERT from the backstop returning '
+      'the meal already logged for that photo', () async {
+    Meal photoMeal(String source, int cal) => Meal(
+          id: 0,
+          date: '2026-07-24',
+          time: '12:00 PM',
+          timestamp: now.toIso8601String(),
+          source: source,
+          imageHash: 'c' * 32,
+          analysis: {'is_food': true, 'total_calories': cal},
+        );
+    final first = await dao.saveMealWithOutcome(
+        photoMeal('app_watch', 500),
+        markStatus: IngestionStatus.saved);
+    expect(first.inserted, isTrue);
+    // The editor's hand-typed save for the same photo (manual after a
+    // refusal, while the background scan already logged it).
+    final second = await dao.saveMealWithOutcome(
+        photoMeal('app_manual_photo', 321),
+        markStatus: IngestionStatus.saved);
+    expect(second.inserted, isFalse);
+    expect(second.id, first.id);
+    final rows = await dao.mealsBetween('2026-07-24', '2026-07-24');
+    expect(rows, hasLength(1));
+    expect(rows.single.analysis['total_calories'], 500,
+        reason: 'the typed numbers were not written');
+    // saveMeal keeps its plain-id contract on both paths.
+    expect(
+        await dao.saveMeal(photoMeal('app_watch', 1),
+            markStatus: IngestionStatus.saved),
+        first.id);
+  });
+
   test('meal_thumbs: round-trip, replace, delete cascade (spec §9)', () async {
     final id = await dao.saveMeal(Meal(
       id: 0,

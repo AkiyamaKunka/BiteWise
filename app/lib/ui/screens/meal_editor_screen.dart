@@ -278,7 +278,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         final hash = photo == null
             ? ''
             : normalizeImageHash(md5.convert(photo.bytes).toString());
-        final id = await widget.dao.saveMeal(
+        final result = await widget.dao.saveMealWithOutcome(
           Meal(
             id: 0, // assigned on insert
             date: _draft.dateIso.trim(),
@@ -296,10 +296,26 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           ),
           markStatus: photo == null ? null : IngestionStatus.saved,
         );
+        if (!result.inserted) {
+          // The meals-table backstop: this photo already has a meal (a
+          // background scan or an import settled it while the editor was
+          // open) and the typed numbers were NOT written. Say so instead of
+          // closing as a plain success, and go back with true so the add
+          // flow closes too — Today then shows the meal that IS logged,
+          // which is where the snackbar sends the user to edit it.
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              key: const Key('editorPhotoAlreadyLogged'),
+              content: Text(context.l10n.editorPhotoAlreadyLogged)));
+          Navigator.of(context).pop(true);
+          return;
+        }
         if (photo != null && widget.makeThumb != null) {
           try {
             final thumb = await widget.makeThumb!(photo.bytes);
-            if (thumb != null) await widget.dao.saveMealThumb(id, thumb);
+            if (thumb != null) {
+              await widget.dao.saveMealThumb(result.id, thumb);
+            }
           } catch (_) {
             // A missing thumb is cosmetic; the meal is already saved.
           }

@@ -1319,6 +1319,10 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get editorPhotoAlreadyLogged =>
+      '这张照片已经记录过了 —— 你填的数字没有保存，可以在今天里打开那一餐修改。';
+
+  @override
   String editorDeleteFailed(String error) {
     return '删除失败：$error';
   }

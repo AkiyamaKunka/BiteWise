@@ -922,6 +922,7 @@
       }
     }
   },
+  "editorPhotoAlreadyLogged": "This photo was already logged — your numbers were not saved; open that meal from Today to edit it.",
   "editorDeleteFailed": "Could not delete: {error}",
   "@editorDeleteFailed": {
     "placeholders": {
