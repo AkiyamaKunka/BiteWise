@@ -19,6 +19,7 @@ import 'package:flutter/material.dart';
 
 import '../format.dart';
 import '../l10n.dart';
+import '../large_text.dart';
 
 class CalorieRing extends StatelessWidget {
   const CalorieRing({
@@ -187,36 +188,63 @@ class ArithmeticRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dotBox = Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+    );
+    final labelStyle = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    // FittedBox: at narrow widths × large font scale the number wins
+    // over the label, shrinking instead of overflowing the row.
+    final valueBox = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(value,
+          maxLines: 1,
+          softWrap: false,
+          style: (emphasized
+                  ? theme.textTheme.titleSmall
+                  : theme.textTheme.labelLarge)
+              ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+    );
+    if (isLargeText(context)) {
+      // At accessibility sizes the one-line label was cut to '已…', and
+      // with three rows (日常 / 消耗 / 已摄入) the numbers lost their
+      // meaning: the label gets the full width and wraps, the number
+      // sits under it.
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                dotBox,
+                const SizedBox(width: 8),
+                Flexible(child: Text(label, style: labelStyle)),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: valueBox,
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-          ),
+          dotBox,
           const SizedBox(width: 8),
           Expanded(
             child: Text(label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                style: labelStyle),
           ),
-          // FittedBox: at narrow widths × large font scale the number wins
-          // over the label, shrinking instead of overflowing the row.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(value,
-                maxLines: 1,
-                softWrap: false,
-                style: (emphasized
-                        ? theme.textTheme.titleSmall
-                        : theme.textTheme.labelLarge)
-                    ?.copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
+          valueBox,
         ],
       ),
     );

@@ -21,6 +21,10 @@
 //     and 'AI…  Claud…' — the row names and the last-scan time unreadable.
 //     Above 1.5x the value now sits under the title and both wrap, as iOS
 //     Settings lays its cells out at accessibility sizes.
+//   - Today ring legend (2026-10-12): each ArithmeticRow kept a one-line
+//     label beside its number, so in zh '已摄入' read '已…' and with prior
+//     days the three rows (日常 / 消耗 / 已摄入) lost their meaning. Above
+//     1.5x the label wraps on its own line and the number sits under it.
 // Whether text fits depends on the glyphs (the test font is a full em per
 // glyph, far wider than the phone's), so this loads the iPhone's own system
 // fonts — macOS only, skipped elsewhere, as body_screen_test does.
@@ -29,10 +33,15 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/services/garmin_client.dart';
+import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
+import 'package:calorie_tracker/ui/screens/today_screen.dart';
+import 'package:calorie_tracker/ui/widgets/calorie_ring.dart'
+    show ArithmeticRow;
 import 'package:calorie_tracker/ui/widgets/grouped.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -94,6 +103,29 @@ Meal titledMeal(String title) => Meal(
     'total_fat_g': 22,
   },
 );
+
+/// A food meal [daysAgo] calendar days before today (computed — a pinned
+/// date is a time bomb).
+Meal dayMeal(int id, int daysAgo, num kcal) {
+  final now = DateTime.now();
+  final date = isoDate(DateTime(now.year, now.month, now.day - daysAgo));
+  return Meal(
+    id: id,
+    date: date,
+    time: '12:00 PM',
+    timestamp: '${date}T12:00:00',
+    source: 'app_photo',
+    imageHash: 'h$id',
+    analysis: {
+      'is_food': true,
+      'meal_description': 'Lunch',
+      'total_calories': kcal,
+      'total_protein_g': 20,
+      'total_carbs_g': 50,
+      'total_fat_g': 10,
+    },
+  );
+}
 
 /// Every label paragraph inside [field] shows in full (no '…').
 void expectLabelsUncut(WidgetTester tester, Finder field) {
@@ -515,6 +547,73 @@ void main() {
             }
           });
         }
+
+        // Prior days give a typical day and Garmin a burn: all three
+        // legend rows show, as on the owner's phone.
+        Widget todayWithTypical() {
+          final dao = FakeDao()
+            ..seed(dayMeal(1, 0, 1234))
+            ..seed(dayMeal(2, 1, 1850))
+            ..seed(dayMeal(3, 2, 2010))
+            ..seed(dayMeal(4, 3, 1760));
+          return Scaffold(
+            body: TodayScreen(
+              dao: dao,
+              executor: FakeExecutor(),
+              garminDaily: (date) async => GarminDaily(
+                activeCalories: 512,
+                steps: 8000,
+                distanceM: 6200,
+                activityCount: 1,
+              ),
+            ),
+          );
+        }
+
+        testWidgets('$lang: Today ring legend labels read in full, number '
+            'under the label', (tester) async {
+          await pumpAt(tester, lang, todayWithTypical());
+          expect(tester.takeException(), isNull);
+          final rows = find.byType(ArithmeticRow);
+          expect(rows, findsNWidgets(3), reason: 'typical, burn and eaten');
+          for (final row in rows.evaluate().toList()) {
+            final w = row.widget as ArithmeticRow;
+            final f = find.byWidget(w);
+            expectLabelsUncut(tester, f);
+            final label = tester.getRect(
+              find.descendant(of: f, matching: find.text(w.label)),
+            );
+            final value = tester.getRect(
+              find.descendant(of: f, matching: find.text(w.value)),
+            );
+            expect(
+              value.top,
+              greaterThanOrEqualTo(label.bottom - 0.5),
+              reason: '"${w.label}": the number sits under the label',
+            );
+          }
+          expect(
+            find.text(lang == 'zh' ? '已摄入' : 'Eaten'),
+            findsOneWidget,
+          );
+        });
+
+        testWidgets('$lang: standard sizes keep the ring legend on one row', (
+          tester,
+        ) async {
+          await pumpAt(tester, lang, todayWithTypical(), scale: 1.0);
+          expect(tester.takeException(), isNull);
+          final row = find.byKey(const Key('arithmeticResultRow'));
+          final w = tester.widget<ArithmeticRow>(row);
+          final label = tester.getRect(
+            find.descendant(of: row, matching: find.text(w.label)),
+          );
+          final value = tester.getRect(
+            find.descendant(of: row, matching: find.text(w.value)),
+          );
+          expect(value.left, greaterThanOrEqualTo(label.right));
+          expect(value.top, lessThan(label.bottom));
+        });
 
         testWidgets('$lang: standard sizes keep the settings value beside '
             'its title', (tester) async {
