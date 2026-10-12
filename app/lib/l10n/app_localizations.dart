@@ -164,17 +164,33 @@ abstract class AppLocalizations {
   /// **'{kcal} kcal eaten today'**
   String ringSemantics(String kcal);
 
-  /// Screen-reader sentence for the Today ring at or under the typical day.
+  /// Screen-reader sentence for the Today ring at or under the typical day. {typical} is the Typical row's number; {burnClause} is ringSemanticsBurn when Garmin active burn extends the budget, else empty.
   ///
   /// In en, this message translates to:
-  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day'**
-  String ringSemanticsTypical(String kcal, String typical);
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day{burnClause}'**
+  String ringSemanticsTypical(String kcal, String typical, String burnClause);
 
-  /// Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.
+  /// Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state. {typical} is the Typical row's number; {burnClause} is ringSemanticsBurn when Garmin active burn extends the budget, else empty.
   ///
   /// In en, this message translates to:
-  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)'**
-  String ringSemanticsAboveTypical(String kcal, String typical);
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day{burnClause} (above typical)'**
+  String ringSemanticsAboveTypical(
+    String kcal,
+    String typical,
+    String burnClause,
+  );
+
+  /// Clause inserted into the ring's screen-reader sentence right after the typical day when Garmin active burn is above zero (the budget is typical + burn). Starts with its own separator.
+  ///
+  /// In en, this message translates to:
+  /// **', plus {burn} kcal active burn'**
+  String ringSemanticsBurn(String burn);
+
+  /// Snackbar action when the privacy policy could not be opened: copies its address to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get privacyCopyAction;
 
   /// No description provided for @todayEmptyTitle.
   ///

@@ -54,14 +54,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String ringSemanticsTypical(String kcal, String typical) {
-    return '$kcal kcal eaten today, of a $typical kcal typical day';
+  String ringSemanticsTypical(String kcal, String typical, String burnClause) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day$burnClause';
   }
 
   @override
-  String ringSemanticsAboveTypical(String kcal, String typical) {
-    return '$kcal kcal eaten today, of a $typical kcal typical day (above typical)';
+  String ringSemanticsAboveTypical(
+    String kcal,
+    String typical,
+    String burnClause,
+  ) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day$burnClause (above typical)';
   }
+
+  @override
+  String ringSemanticsBurn(String burn) {
+    return ', plus $burn kcal active burn';
+  }
+
+  @override
+  String get privacyCopyAction => 'Copy';
 
   @override
   String get todayEmptyTitle => 'No meals logged yet today.';

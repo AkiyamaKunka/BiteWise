@@ -193,6 +193,7 @@ class GroupedRow extends StatelessWidget {
     this.showChevron,
     this.destructive = false,
     this.enabled = true,
+    this.linkUrl,
   });
 
   final IconData? icon;
@@ -209,10 +210,15 @@ class GroupedRow extends StatelessWidget {
   final bool destructive;
   final bool enabled;
 
+  /// Set when the row opens a web page: screen readers announce it as a
+  /// link (to this address) instead of a button.
+  final Uri? linkUrl;
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final tappable = enabled && onTap != null;
     final chevron = showChevron ?? (onTap != null && trailing == null);
     final titleColor = destructive
         ? scheme.error
@@ -228,77 +234,84 @@ class GroupedRow extends StatelessWidget {
     // so the root Settings read '后…  系统已关闭' and 'AI…  Claud…'
     // (2026-10-10, test/ui/large_text_overflow_test.dart).
     final stacked = isLargeText(context);
-    return InkWell(
-      onTap: !enabled || onTap == null
-          ? null
-          : () {
-              HapticFeedback.selectionClick();
-              onTap!();
-            },
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-              horizontal: 16, vertical: stacked ? 10 : 6),
-          child: Row(
-            children: [
-              if (icon != null) ...[
-                RowBadge(icon: icon!, color: iconColor ?? scheme.primary),
-                const SizedBox(width: 12),
-              ],
-              if (stacked)
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title, style: titleStyle),
-                      if (value != null)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(value!, style: valueStyle),
-                        ),
-                    ],
-                  ),
-                )
-              else ...[
-                Expanded(
-                  child: Text(
-                    title,
-                    style: titleStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (value != null) ...[
+    // A bare InkWell only adds a tap action: VoiceOver read navigation
+    // rows as static text, never 'button'.
+    return Semantics(
+      button: tappable && linkUrl == null ? true : null,
+      link: tappable && linkUrl != null ? true : null,
+      linkUrl: tappable ? linkUrl : null,
+      child: InkWell(
+        onTap: !tappable
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+                horizontal: 16, vertical: stacked ? 10 : 6),
+            child: Row(
+              children: [
+                if (icon != null) ...[
+                  RowBadge(icon: icon!, color: iconColor ?? scheme.primary),
                   const SizedBox(width: 12),
-                  // NOT Flexible: a flex value would split the row 50/50
-                  // with the title and truncate "Backfill Lookback" beside
-                  // a five-character value. The cap keeps a runaway value
-                  // from crushing the title instead.
-                  ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 170),
+                ],
+                if (stacked)
+                  Expanded(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(title, style: titleStyle),
+                        if (value != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(value!, style: valueStyle),
+                          ),
+                      ],
+                    ),
+                  )
+                else ...[
+                  Expanded(
                     child: Text(
-                      value!,
-                      style: valueStyle,
+                      title,
+                      style: titleStyle,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.end,
                     ),
                   ),
+                  if (value != null) ...[
+                    const SizedBox(width: 12),
+                    // NOT Flexible: a flex value would split the row 50/50
+                    // with the title and truncate "Backfill Lookback" beside
+                    // a five-character value. The cap keeps a runaway value
+                    // from crushing the title instead.
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxWidth: 170),
+                      child: Text(
+                        value!,
+                        style: valueStyle,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.end,
+                      ),
+                    ),
+                  ],
+                ],
+                if (trailing != null) ...[
+                  const SizedBox(width: 8),
+                  trailing!,
+                ],
+                if (chevron) ...[
+                  const SizedBox(width: 6),
+                  Icon(Icons.chevron_right,
+                      size: 20,
+                      color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
                 ],
               ],
-              if (trailing != null) ...[
-                const SizedBox(width: 8),
-                trailing!,
-              ],
-              if (chevron) ...[
-                const SizedBox(width: 6),
-                Icon(Icons.chevron_right,
-                    size: 20,
-                    color: scheme.onSurfaceVariant.withValues(alpha: 0.6)),
-              ],
-            ],
+            ),
           ),
         ),
       ),

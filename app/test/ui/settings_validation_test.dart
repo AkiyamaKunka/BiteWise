@@ -7,6 +7,8 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
@@ -470,6 +472,34 @@ void main() {
         'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
   });
 
+  // GroupedRow was a bare InkWell: VoiceOver read every navigation row,
+  // the privacy link included, as static text.
+  testWidgets('screen readers hear the Privacy Policy row as a link and '
+      'navigation rows as buttons', (tester) async {
+    final handle = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k'),
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      requestPhotoPermission: () async => true,
+    )));
+    final row = find.byKey(const Key('privacyPolicyRow'));
+    await tester.scrollUntilVisible(row, 200);
+    final privacy = tester.getSemantics(row);
+    expect(privacy.flagsCollection.isLink, isTrue);
+    expect(privacy.flagsCollection.isButton, isFalse);
+    expect(privacy.label, 'Privacy Policy',
+        reason: 'one label, not doubled by the wrapper');
+    expect(privacy.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final ai = tester.getSemantics(find.byKey(const Key('aiProviderRow')));
+    expect(ai.flagsCollection.isButton, isTrue);
+    expect(ai.flagsCollection.isLink, isFalse);
+    handle.dispose();
+  });
+
   for (final (label, fails) in <(String, Future<bool> Function(Uri))>[
     ('returns false', (_) async => false),
     ('throws', (_) async => throw StateError('no browser')),
@@ -496,12 +526,30 @@ void main() {
           find.text('Could not open the privacy policy. '
               'It is at $privacyPolicyUri'),
           findsOneWidget);
+      // Snackbar text cannot be selected: Copy puts the address on the
+      // clipboard.
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+      expect(find.text('Copy'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('privacyCopyAction')));
+      await tester.pump();
+      expect(copied, privacyPolicyUri.toString());
     });
   }
 
   test('the privacy-link notice names the address in Chinese too', () {
     expect(lookupAppLocalizations(const Locale('zh')).privacyOpenFailed('U'),
         '无法打开隐私政策，网址：U');
+    expect(lookupAppLocalizations(const Locale('zh')).privacyCopyAction, '复制');
   });
 
   testWidgets('watcher toggle stays off when permission is denied',

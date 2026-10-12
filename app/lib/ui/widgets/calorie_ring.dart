@@ -69,12 +69,18 @@ class CalorieRing extends StatelessWidget {
     // The spoken sentence follows the app language like the visible
     // labels do (a zh VoiceOver user heard English here), and keeps the
     // neutral 'above typical' wording — no shame state in speech either.
+    // It names the Typical row's number, not the budget: with Garmin burn
+    // VoiceOver said 'typical day 2,500' beside a row showing 2,100, so the
+    // burn is its own clause.
+    final burn = burnKcal.round();
+    final burnClause = burn > 0 ? l.ringSemanticsBurn(formatKcal(burn)) : '';
     final semantics = budget == null
         ? l.ringSemantics(formatKcal(_eaten))
         : over
-            ? l.ringSemanticsAboveTypical(
-                formatKcal(_eaten), formatKcal(budget))
-            : l.ringSemanticsTypical(formatKcal(_eaten), formatKcal(budget));
+            ? l.ringSemanticsAboveTypical(formatKcal(_eaten),
+                formatKcal(typicalKcal!.round()), burnClause)
+            : l.ringSemanticsTypical(formatKcal(_eaten),
+                formatKcal(typicalKcal!.round()), burnClause);
     return SizedBox(
       width: size,
       height: size,

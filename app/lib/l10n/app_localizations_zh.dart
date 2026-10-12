@@ -48,14 +48,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String ringSemanticsTypical(String kcal, String typical) {
-    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡';
+  String ringSemanticsTypical(String kcal, String typical, String burnClause) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡$burnClause';
   }
 
   @override
-  String ringSemanticsAboveTypical(String kcal, String typical) {
-    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡（高于日常）';
+  String ringSemanticsAboveTypical(
+    String kcal,
+    String typical,
+    String burnClause,
+  ) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡$burnClause（高于日常）';
   }
+
+  @override
+  String ringSemanticsBurn(String burn) {
+    return '，含活动消耗 $burn 千卡';
+  }
+
+  @override
+  String get privacyCopyAction => '复制';
 
   @override
   String get todayEmptyTitle => '今天还没有记录。';

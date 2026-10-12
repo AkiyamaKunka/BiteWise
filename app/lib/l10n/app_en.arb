@@ -33,29 +33,48 @@
       }
     }
   },
-  "ringSemanticsTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day",
+  "ringSemanticsTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day{burnClause}",
   "@ringSemanticsTypical": {
-    "description": "Screen-reader sentence for the Today ring at or under the typical day.",
+    "description": "Screen-reader sentence for the Today ring at or under the typical day. {typical} is the Typical row's number; {burnClause} is ringSemanticsBurn when Garmin active burn extends the budget, else empty.",
     "placeholders": {
       "kcal": {
         "type": "String"
       },
       "typical": {
+        "type": "String"
+      },
+      "burnClause": {
         "type": "String"
       }
     }
   },
-  "ringSemanticsAboveTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)",
+  "ringSemanticsAboveTypical": "{kcal} kcal eaten today, of a {typical} kcal typical day{burnClause} (above typical)",
   "@ringSemanticsAboveTypical": {
-    "description": "Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.",
+    "description": "Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state. {typical} is the Typical row's number; {burnClause} is ringSemanticsBurn when Garmin active burn extends the budget, else empty.",
     "placeholders": {
       "kcal": {
         "type": "String"
       },
       "typical": {
         "type": "String"
+      },
+      "burnClause": {
+        "type": "String"
       }
     }
+  },
+  "ringSemanticsBurn": ", plus {burn} kcal active burn",
+  "@ringSemanticsBurn": {
+    "description": "Clause inserted into the ring's screen-reader sentence right after the typical day when Garmin active burn is above zero (the budget is typical + burn). Starts with its own separator.",
+    "placeholders": {
+      "burn": {
+        "type": "String"
+      }
+    }
+  },
+  "privacyCopyAction": "Copy",
+  "@privacyCopyAction": {
+    "description": "Snackbar action when the privacy policy could not be opened: copies its address to the clipboard."
   },
   "todayEmptyTitle": "No meals logged yet today.",
   "todayEmptyHint": "Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.",

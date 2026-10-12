@@ -21,12 +21,16 @@ class DataSection extends StatefulWidget {
     super.key,
     required this.dao,
     required this.onOpenPrivacyPolicy,
+    this.privacyPolicyUrl,
   });
 
   final MealsDao dao;
 
   /// The 隐私政策 / Privacy Policy row's tap.
   final VoidCallback onOpenPrivacyPolicy;
+
+  /// Where that row goes, so screen readers announce it as a link.
+  final Uri? privacyPolicyUrl;
 
   @override
   State<DataSection> createState() => _DataSectionState();
@@ -210,6 +214,7 @@ class _DataSectionState extends State<DataSection> {
           iconColor: theme.colorScheme.tertiary,
           title: context.l10n.settingsRowPrivacy,
           onTap: widget.onOpenPrivacyPolicy,
+          linkUrl: widget.privacyPolicyUrl,
         ),
       ],
     );

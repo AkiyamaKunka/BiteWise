@@ -9,6 +9,7 @@ import 'dart:async' show unawaited;
 
 import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../../core/contracts.dart';
@@ -399,7 +400,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             ..._profileSection(theme),
             ..._languageSection(theme),
             DataSection(
-                dao: widget.dao, onOpenPrivacyPolicy: _openPrivacyPolicy),
+                dao: widget.dao,
+                onOpenPrivacyPolicy: _openPrivacyPolicy,
+                privacyPolicyUrl: privacyPolicyUri),
             const SizedBox(height: 32),
           ]),
         ],
@@ -945,11 +948,17 @@ class _SettingsScreenState extends State<SettingsScreen>
     } catch (_) {}
     if (opened || !mounted) return;
     // No browser, or the launch was refused: the address itself keeps the
-    // policy reachable.
+    // policy reachable — and copyable, since a snackbar's text cannot be
+    // selected (with an action it also stays up under VoiceOver).
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         duration: const Duration(seconds: 8),
         content: Text(
-            context.l10n.privacyOpenFailed(privacyPolicyUri.toString()))));
+            context.l10n.privacyOpenFailed(privacyPolicyUri.toString())),
+        action: SnackBarAction(
+            key: const Key('privacyCopyAction'),
+            label: context.l10n.privacyCopyAction,
+            onPressed: () => Clipboard.setData(
+                ClipboardData(text: privacyPolicyUri.toString())))));
   }
 }
 
