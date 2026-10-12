@@ -169,5 +169,17 @@ bool isFoodTruthy(dynamic value) {
   return true;
 }
 
+/// User-local calendar day as ISO YYYY-MM-DD (spec §2.2 clock simplification:
+/// the device clock is the only clock) — the one formatter for every layer.
+/// This value is WRITTEN to meals.date and compared with string ranges in
+/// SQL, so it must be Gregorian with ASCII digits regardless of the device
+/// locale. `DateFormat('yyyy-MM-dd')` is locale-sensitive (Buddhist-era
+/// years, Eastern-Arabic digits), which on the photo/editor write paths
+/// would persist dates that no query could match.
+String isoDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
+
 /// Lowercased, hex-normalized image hash (port of _normalize_image_hash).
 String normalizeImageHash(String? hash) => (hash ?? '').trim().toLowerCase();

@@ -443,9 +443,9 @@ class DefaultNlExecutor implements NlExecutor {
     return textHandlerPrompt(
       mealsList: buildMealsList(meals),
       userMessage: userText,
-      today: _isoDate(today),
+      today: isoDate(today),
       weekday: _weekdayNames[today.weekday - 1],
-      yesterday: _isoDate(yesterday),
+      yesterday: isoDate(yesterday),
     );
   }
 
@@ -668,7 +668,7 @@ class DefaultNlExecutor implements NlExecutor {
     final now = DateTime.now();
     await dao.saveMeal(Meal(
       id: 0, // assigned by the DAO
-      date: _isoDate(now),
+      date: isoDate(now),
       time: _time12(now),
       timestamp: now.toIso8601String(),
       source: MealSource.manualText, // spec §4.6
@@ -692,7 +692,7 @@ class DefaultNlExecutor implements NlExecutor {
       if (field >= minWeightKg && field <= maxWeightKg) kg = _round1(field);
     }
     if (kg == null) return NlReply(_l.nlWeightUnreadable);
-    final date = _isoDate(DateTime.now());
+    final date = isoDate(DateTime.now());
     // Upsert-by-day (spec §2.1 body_weight: re-log overwrites).
     await dao.saveBodyWeight(date, kg);
     return NlReply(_l.nlWeightLogged(_g(kg), date), applied: true);
@@ -707,7 +707,7 @@ class DefaultNlExecutor implements NlExecutor {
     if (kcal <= 0 && steps <= 0 && km <= 0) {
       return NlReply(_l.nlActivityUnreadable);
     }
-    final date = _isoDate(DateTime.now());
+    final date = isoDate(DateTime.now());
     // Zeros store as null; steps ride in raw={"steps": n} inside the DAO.
     await dao.saveActivity(date,
         activeCalories: kcal > 0 ? kcal : null,
@@ -745,7 +745,7 @@ String _quotaPauseMessage(DateTime until) {
     remaining = '${remainingSeconds ~/ 3600}h'
         '${((remainingSeconds % 3600) ~/ 60).toString().padLeft(2, '0')}m';
   }
-  final untilStr = '${_isoDate(until)}T'
+  final untilStr = '${isoDate(until)}T'
       '${until.hour.toString().padLeft(2, '0')}:'
       '${until.minute.toString().padLeft(2, '0')}';
   return '⏸️ Gemini is paused right now.\n\n'
@@ -764,10 +764,6 @@ const List<String> _weekdayNames = [
   'Saturday',
   'Sunday',
 ];
-
-String _isoDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
-    '${d.month.toString().padLeft(2, '0')}-'
-    '${d.day.toString().padLeft(2, '0')}';
 
 /// strftime("%I:%M %p") parity: 12-hour, zero-padded, space, AM/PM (spec §2.2).
 String _time12(DateTime t) {

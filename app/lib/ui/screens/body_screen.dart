@@ -12,6 +12,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/coerce.dart' show isoDate;
 import '../../core/contracts.dart';
 import '../l10n.dart';
 import '../services.dart' show SettingsStore;
@@ -45,9 +46,6 @@ class BodyScreenState extends State<BodyScreen> {
 
   DateTime get _now => (widget.clock ?? DateTime.now)();
 
-  static String _iso(DateTime d) =>
-      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
-
   @override
   void initState() {
     super.initState();
@@ -58,8 +56,8 @@ class BodyScreenState extends State<BodyScreen> {
   /// same as the other data tabs (IndexedStack keeps stale state alive).
   Future<void> reload() async {
     final now = _now;
-    final start = _iso(now.subtract(const Duration(days: kBodyWindowDays)));
-    final end = _iso(now);
+    final start = isoDate(now.subtract(const Duration(days: kBodyWindowDays)));
+    final end = isoDate(now);
     final weights = await widget.dao.listBodyWeights(start, end);
     final measurements = await widget.dao.listBodyMeasurements(start, end);
     if (!mounted) return;
@@ -99,7 +97,7 @@ class BodyScreenState extends State<BodyScreen> {
       useImperial(context, widget.settings!);
 
   Future<void> _openSheet({String? date}) async {
-    final initialDate = date ?? _iso(_now);
+    final initialDate = date ?? isoDate(_now);
     final imperial = _imperial; // resolved before the sheet detaches
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -109,7 +107,7 @@ class BodyScreenState extends State<BodyScreen> {
         date: initialDate,
         existingWeight: _weightOn(initialDate)?.kg,
         existing: _measurementsOn(initialDate),
-        latestDate: date == null ? null : _iso(_now),
+        latestDate: date == null ? null : isoDate(_now),
         imperial: imperial,
       ),
     );

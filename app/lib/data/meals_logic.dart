@@ -14,7 +14,7 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../core/shared_generated.dart';
 
-export '../core/coerce.dart' show isFoodTruthy;
+export '../core/coerce.dart' show isFoodTruthy, isoDate;
 
 /// Spec §2: chat_id kept for schema/export parity; one constant local user.
 const int localChatId = 1;
@@ -38,13 +38,6 @@ Map<String, dynamic> coerceStoredAnalysis(dynamic stored) {
   if (parsed is Map) return Map<String, dynamic>.from(parsed);
   return <String, dynamic>{};
 }
-
-/// User-local calendar day as ISO YYYY-MM-DD (spec §2.2 clock simplification:
-/// the device clock is the only clock).
-String isoDate(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-'
-    '${d.month.toString().padLeft(2, '0')}-'
-    '${d.day.toString().padLeft(2, '0')}';
 
 /// Start date of an inclusive N-calendar-day window ending today
 /// (spec §1.2 / §5.3: "last N days including today" → [today−(N−1), today]).

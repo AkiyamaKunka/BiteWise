@@ -187,9 +187,6 @@ final RegExp _isoDayRe = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _isoDay(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-${_two(d.month)}-${_two(d.day)}';
-
 /// Local date → UTC midnight so day arithmetic never crosses a DST edge.
 DateTime _utcDay(DateTime d) => DateTime.utc(d.year, d.month, d.day);
 
@@ -198,7 +195,7 @@ DateTime _utcDay(DateTime d) => DateTime.utc(d.year, d.month, d.day);
 DateTime? _parseIsoDay(String s) {
   if (!_isoDayRe.hasMatch(s)) return null;
   final d = DateTime.tryParse('${s}T00:00:00Z');
-  if (d == null || _isoDay(d) != s) return null;
+  if (d == null || isoDate(d) != s) return null;
   return d;
 }
 
@@ -327,7 +324,7 @@ class ReportBuilderImpl implements ReportBuilder {
   Future<String> todaySummary() async {
     final now = _clock();
     final todayUtc = _utcDay(now);
-    final today = _isoDay(todayUtc);
+    final today = isoDate(todayUtc);
     final meals = await _foodMeals(today, today);
     if (meals.isEmpty) {
       return '📋 Today\'s Summary\n\nNo meals logged yet today.';
@@ -384,8 +381,8 @@ class ReportBuilderImpl implements ReportBuilder {
     // when ≥ 2 days have data — under-logged days would bias a mean low
     // (spec §5.1; pure formula in [typicalDayMedian]).
     final prior = await _dailyCalorieTotals(
-      _isoDay(todayUtc.subtract(const Duration(days: 7))),
-      _isoDay(todayUtc.subtract(const Duration(days: 1))),
+      isoDate(todayUtc.subtract(const Duration(days: 7))),
+      isoDate(todayUtc.subtract(const Duration(days: 1))),
     );
     final typical = typicalDayMedian(prior);
     if (typical != null) {
@@ -406,8 +403,8 @@ class ReportBuilderImpl implements ReportBuilder {
   Future<String> history({int days = 30}) async {
     // Inclusive window [today - (days-1), today] (spec §5.3).
     final todayUtc = _utcDay(_clock());
-    final today = _isoDay(todayUtc);
-    final start = _isoDay(todayUtc.subtract(Duration(days: days - 1)));
+    final today = isoDate(todayUtc);
+    final start = isoDate(todayUtc.subtract(Duration(days: days - 1)));
     final totals = await _dailyCalorieTotals(start, today);
     if (totals.isEmpty) {
       return '📅 $days-Day History\n\nNo meals logged in the past $days days.';
@@ -538,8 +535,8 @@ class ReportBuilderImpl implements ReportBuilder {
     // [reportPriorAvg] (spec §5.5, daily_report.py:450-470), pinned by
     // shared/vectors/report_formulas.json.
     final priorMeals = await _dao.mealsBetween(
-      _isoDay(target.subtract(const Duration(days: 7))),
-      _isoDay(target.subtract(const Duration(days: 1))),
+      isoDate(target.subtract(const Duration(days: 7))),
+      isoDate(target.subtract(const Duration(days: 1))),
     );
     final avg = reportPriorAvg([
       for (final m in priorMeals) {'date': m.date, 'analysis': m.analysis},
@@ -583,12 +580,12 @@ class ReportBuilderImpl implements ReportBuilder {
   /// yesterday never borrows this morning's weigh-in.
   List<String> _weightSection(
       Map<String, dynamic> export, DateTime target, String date) {
-    final windowStart = _isoDay(target.subtract(const Duration(days: 7)));
+    final windowStart = isoDate(target.subtract(const Duration(days: 7)));
     final weights = _weightsBetween(export, windowStart, date);
     if (weights.isEmpty) return const [];
 
     final lines = <String>['', '⚖️ Weight'];
-    final anchorFloor = _isoDay(target.subtract(const Duration(days: 366)));
+    final anchorFloor = isoDate(target.subtract(const Duration(days: 366)));
     final anchors = _weightsBetween(export, anchorFloor, date);
     final num latestKg =
         anchors.isEmpty ? 0 : safeNumber(anchors.last['weight_kg']);
@@ -609,8 +606,8 @@ class ReportBuilderImpl implements ReportBuilder {
   @override
   Future<String> stats() async {
     final todayUtc = _utcDay(_clock());
-    final today = _isoDay(todayUtc);
-    final sevenDaysAgo = _isoDay(todayUtc.subtract(const Duration(days: 6)));
+    final today = isoDate(todayUtc);
+    final sevenDaysAgo = isoDate(todayUtc.subtract(const Duration(days: 6)));
 
     // All-time window [1970-01-01, today], mirroring get_meal_stats
     // semantics (spec §5.6): Python-truthy is_food, safeNumber calorie

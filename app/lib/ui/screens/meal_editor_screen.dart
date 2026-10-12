@@ -365,10 +365,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       lastDate: (widget.now ?? DateTime.now)().add(const Duration(days: 1)),
     );
     if (picked == null || !mounted) return;
-    setState(() => _draft.dateIso =
-        '${picked.year.toString().padLeft(4, '0')}-'
-        '${picked.month.toString().padLeft(2, '0')}-'
-        '${picked.day.toString().padLeft(2, '0')}');
+    setState(() => _draft.dateIso = isoDate(picked));
   }
 
   Future<void> _pickTime() async {
