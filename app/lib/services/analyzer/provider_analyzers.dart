@@ -596,6 +596,25 @@ class _ProviderException implements Exception {
   }
 }
 
+/// The user message's content parts for an OpenAI-style chat-completions
+/// call: the prompt text, then the photo as a base64 JPEG data URL.
+List<Map<String, Object?>> _chatContent(String prompt, Uint8List? jpegBytes) =>
+    <Map<String, Object?>>[
+      {'type': 'text', 'text': prompt},
+      if (jpegBytes != null)
+        {
+          'type': 'image_url',
+          'image_url': {
+            'url': 'data:image/jpeg;base64,${base64Encode(jpegBytes)}'
+          }
+        },
+    ];
+
+/// The reply text of an OpenAI-style chat-completions response
+/// (`choices[0].message.content`).
+String _chatReplyText(Map<String, dynamic> body) =>
+    ((body['choices'] as List).first as Map)['message']['content'] as String;
+
 /// OpenAI chat-completions vision backend.
 class OpenAiAnalyzer extends _HttpVisionAnalyzer {
   OpenAiAnalyzer(super.settings,
@@ -623,16 +642,7 @@ class OpenAiAnalyzer extends _HttpVisionAnalyzer {
   @override
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
-    final content = <Map<String, Object?>>[
-      {'type': 'text', 'text': prompt},
-      if (jpegBytes != null)
-        {
-          'type': 'image_url',
-          'image_url': {
-            'url': 'data:image/jpeg;base64,${base64Encode(jpegBytes)}'
-          }
-        },
-    ];
+    final content = _chatContent(prompt, jpegBytes);
     final req = http.Request('POST', _endpoint)
       ..headers['Authorization'] = 'Bearer $key'
       ..headers['Content-Type'] = 'application/json'
@@ -652,8 +662,7 @@ class OpenAiAnalyzer extends _HttpVisionAnalyzer {
   }
 
   @override
-  String extractText(Map<String, dynamic> body) =>
-      ((body['choices'] as List).first as Map)['message']['content'] as String;
+  String extractText(Map<String, dynamic> body) => _chatReplyText(body);
 }
 
 /// Any OpenAI-compatible chat-completions vision backend, parameterized by
@@ -714,16 +723,7 @@ class OpenAiCompatAnalyzer extends _HttpVisionAnalyzer {
   @override
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
-    final content = <Map<String, Object?>>[
-      {'type': 'text', 'text': prompt},
-      if (jpegBytes != null)
-        {
-          'type': 'image_url',
-          'image_url': {
-            'url': 'data:image/jpeg;base64,${base64Encode(jpegBytes)}'
-          }
-        },
-    ];
+    final content = _chatContent(prompt, jpegBytes);
     // The model field is free text: a user-typed *thinking* model id
     // (doubao-seed-*-thinking-*, glm-4.1v-thinking-*) REQUIRES thinking,
     // and sending {type: disabled} to one is a hard 400 on every call.
@@ -750,8 +750,7 @@ class OpenAiCompatAnalyzer extends _HttpVisionAnalyzer {
   }
 
   @override
-  String extractText(Map<String, dynamic> body) =>
-      ((body['choices'] as List).first as Map)['message']['content'] as String;
+  String extractText(Map<String, dynamic> body) => _chatReplyText(body);
 }
 
 /// Anthropic messages-API vision backend.
