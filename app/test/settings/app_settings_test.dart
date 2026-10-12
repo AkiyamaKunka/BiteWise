@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
@@ -438,7 +440,51 @@ void main() {
       expect(store.writes, 3, reason: 'a set pause is removed');
       expect(s.isAnalysisBlocked, isFalse);
     });
+
+    test('a reload landing between the arm\'s writes does not leave the '
+        'footer saying "not paused"', () async {
+      // The arm set its in-memory pause, then awaited its disk writes; a
+      // resume's reloadAnalysisBlock read the half-written keys in between
+      // and cleared it — and the arm's own notify then showed that.
+      final store = _GatedStore();
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await s.setGeminiApiKey('k');
+      final shown = <bool>[];
+      s.addListener(() => shown.add(s.isAnalysisBlocked));
+      store.gate = Completer<void>();
+      final arm = s.blockAutomaticAnalysis('rejectedKey',
+          revision: s.credentialRevision);
+      await store.gated.future; // the arm is mid-write
+      await s.reloadAnalysisBlock();
+      expect(s.isAnalysisBlocked, isFalse, reason: 'the race itself');
+      store.gate!.complete();
+      await arm;
+      expect(s.isAnalysisBlocked, isTrue);
+      expect(s.analysisBlockedKind, 'rejectedKey');
+      expect(shown.last, isTrue, reason: 'the last notify says paused');
+    });
   });
+}
+
+/// The in-memory preferences store, holding the latch's FIRST disk write
+/// until [gate] completes ([gated] says it got there).
+class _GatedStore extends InMemorySharedPreferencesStore {
+  _GatedStore() : super.empty();
+  Completer<void>? gate;
+  final gated = Completer<void>();
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    final g = gate;
+    if (g != null && key.endsWith('settings.analysis_blocked_provider')) {
+      if (!gated.isCompleted) gated.complete();
+      await g.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
 }
 
 /// The in-memory preferences store, counting writes and removes.

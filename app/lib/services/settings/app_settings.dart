@@ -1027,6 +1027,11 @@ class AppSettings extends ChangeNotifier {
         return;
       }
     }
+    // Re-read what is now on disk: a reloadAnalysisBlock (a resume, the
+    // pipeline's refresh) that ran between the writes above read them half
+    // done and cleared the in-memory pause set at the top, and this notify
+    // then showed the Settings footer "not paused" (2026-10-12).
+    _readAnalysisBlock();
     notifyListeners();
   }
 
