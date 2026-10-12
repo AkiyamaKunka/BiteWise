@@ -195,6 +195,56 @@ void main() {
     expect((items.single as Map)['name'], 'Egg');
   });
 
+  testWidgets('adding the first item row keeps the hand-typed totals',
+      (tester) async {
+    // Found 2026-10-07: 添加食物 on a meal with no rows re-derived the totals
+    // from the one empty row and zeroed what the user had just typed.
+    useTallSurface(tester);
+    final dao = FakeDao();
+    await tester.pumpWidget(host(MealEditorScreen(dao: dao, now: clock)));
+    String text(String key) =>
+        tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+
+    await tester.enterText(find.byKey(const Key('editorCalories')), '450');
+    await tester.enterText(find.byKey(const Key('editorProtein')), '50');
+    await tester.enterText(find.byKey(const Key('editorCarbs')), '12');
+    await tester.enterText(find.byKey(const Key('editorFat')), '22');
+
+    await tester.tap(find.byKey(const Key('addItemRow')));
+    await tester.pump();
+    expect(text('editorCalories'), '450');
+    expect(text('editorProtein'), '50');
+    expect(text('editorCarbs'), '12');
+    expect(text('editorFat'), '22');
+    // The row now carries the numbers, so the totals legitimately follow it.
+    expect(text('itemCal0'), '450');
+    expect(text('itemPro0'), '50');
+    expect(text('itemCarb0'), '12');
+    expect(text('itemFat0'), '22');
+    expect(find.byKey(const Key('totalsDerivedHint')), findsOneWidget);
+
+    // Itemizing from here is the usual flow: edit the row, totals follow.
+    await tester.enterText(find.byKey(const Key('itemName0')), 'Chicken');
+    await tester.enterText(find.byKey(const Key('itemCal0')), '300');
+    await tester.pump();
+    expect(text('editorCalories'), '300');
+
+    // A second row starts blank — seeding it too would double the totals.
+    await tester.tap(find.byKey(const Key('addItemRow')));
+    await tester.pump();
+    expect(text('itemCal1'), '');
+    expect(text('editorCalories'), '300');
+
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+    final saved = dao.saved.single.analysis;
+    expect(saved['total_calories'], 300);
+    expect(saved['total_protein_g'], 50);
+    final items = saved['food_items'] as List;
+    expect(items, hasLength(1), reason: 'the blank second row is dropped');
+    expect((items.single as Map)['estimated_calories'], 300);
+  });
+
   testWidgets('day detail lists the day, opens the editor, and reloads',
       (tester) async {
     final dao = FakeDao()

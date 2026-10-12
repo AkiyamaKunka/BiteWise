@@ -359,8 +359,16 @@ class _AppSettingsStore implements SettingsStore {
     if (reportTime != null) {
       try {
         await _s.setReportTime(reportTime); // validates HH:mm, throws on junk
-        await _notifier.scheduleDaily(_s.reportTime); // re-arm on the new slot
-        await onReportTimeChanged?.call(); // iOS: re-arm the OS card too
+        final rearmOs = onReportTimeChanged;
+        if (rearmOs != null) {
+          // iOS: the OS card is the ONLY delivery. Arming the in-process
+          // Timer here too made a suspended app wake the next morning and
+          // post a second, stale 昨天 card on top of the OS one (loop find
+          // 2026-10-07).
+          await rearmOs();
+        } else {
+          await _notifier.scheduleDaily(_s.reportTime); // Android: re-arm
+        }
       } on ArgumentError {
         // UI always sends zero-padded HH:mm; a junk value keeps the default.
       }

@@ -699,12 +699,81 @@ def test_contract_failure_returns_none_without_fallback(monkeypatch, result_text
 
 def test_stream_timeout_is_terminal_no_fallback(monkeypatch):
     """A timeout means the model was slow, not that the dispatch shape was
-    wrong — a file-path retry would double the wall clock for one photo."""
+    wrong — a file-path retry would double the wall clock for one photo.
+    The Telegram caller (no raise_on_busy) keeps None → Gemini."""
     _configure(monkeypatch)
     records = _fake_run_script(monkeypatch, ["timeout"])
 
     assert claude_analyzer.analyze_food_photo(b"img") is None
     assert len(records) == 1
+    assert claude_analyzer._CLI_LOCK.locked() is False
+
+
+def test_stream_timeout_is_a_distinct_signal_for_api_callers(monkeypatch):
+    """API callers (raise_on_busy=True) get AnalyzerTimeout, not the None
+    that also means "the model answered junk" — the endpoint turns it into
+    "come back later" instead of the terminal 503 that burned the photo
+    (2026-10-07). Still exactly one CLI run, lock released."""
+    _configure(monkeypatch)
+    monkeypatch.setenv("CLAUDE_ANALYZER_TIMEOUT_SECONDS", "90")
+    records = _fake_run_script(monkeypatch, ["timeout"])
+
+    with pytest.raises(claude_analyzer.AnalyzerTimeout) as info:
+        claude_analyzer.analyze_food_photo(
+            b"img", allow_file_fallback=False, raise_on_busy=True)
+    assert info.value.seconds == 90
+    assert info.value.reason == "the analysis timed out after 90 s"
+    assert len(records) == 1, "no file-path retry after a timeout"
+    assert claude_analyzer._CLI_LOCK.locked() is False
+
+
+def test_file_dispatch_timeout_is_the_same_signal(monkeypatch, tmp_path):
+    """CLAUDE_ANALYZER_DISPATCH=file sends API calls straight to the
+    Read-file path — its timeout must not fall back to the terminal None."""
+    _configure(monkeypatch, dispatch="file")
+    _redirect_tempdir(monkeypatch, tmp_path)
+    records = _fake_run_script(monkeypatch, ["timeout"])
+
+    with pytest.raises(claude_analyzer.AnalyzerTimeout):
+        claude_analyzer.analyze_food_photo(b"img", raise_on_busy=True)
+    assert len(records) == 1
+    assert claude_analyzer._CLI_LOCK.locked() is False
+    assert _leftover_temp_files(tmp_path) == [], "cleanup still runs"
+
+
+def test_junk_reply_stays_terminal_none_for_api_callers(monkeypatch):
+    """The opposite case must NOT be reclassified: a model that ANSWERED
+    with junk is None even with raise_on_busy — retrying re-spends a run
+    on a request that already answered."""
+    _configure(monkeypatch)
+    records = _fake_run_script(
+        monkeypatch, [(0, _envelope("total nonsense, no json anywhere"))])
+
+    assert claude_analyzer.analyze_food_photo(
+        b"img", allow_file_fallback=False, raise_on_busy=True) is None
+    assert len(records) == 1
+
+
+def test_text_intent_timeout_is_opt_in_like_busy(monkeypatch):
+    _configure(monkeypatch)
+    _fake_run(monkeypatch, raise_timeout=True)
+
+    assert claude_analyzer.analyze_text_prompt("hi") is None
+    assert claude_analyzer._CLI_LOCK.locked() is False
+    with pytest.raises(claude_analyzer.AnalyzerTimeout):
+        claude_analyzer.analyze_text_prompt("hi", raise_on_busy=True)
+    assert claude_analyzer._CLI_LOCK.locked() is False
+
+
+def test_leftover_timeout_is_opt_in_like_busy(monkeypatch):
+    _configure(monkeypatch)
+    _fake_run(monkeypatch, raise_timeout=True)
+
+    assert claude_analyzer.analyze_leftover_photo(b"img", "prompt") is None
+    assert claude_analyzer._CLI_LOCK.locked() is False
+    with pytest.raises(claude_analyzer.AnalyzerTimeout):
+        claude_analyzer.analyze_leftover_photo(
+            b"img", "prompt", raise_on_busy=True)
     assert claude_analyzer._CLI_LOCK.locked() is False
 
 

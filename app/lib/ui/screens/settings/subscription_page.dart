@@ -13,7 +13,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
-import 'provider_page.dart' show kPlanChoices;
+import 'provider_page.dart' show kPlanChoices, noteLabel;
 
 class SubscriptionProviderPage extends StatefulWidget {
   const SubscriptionProviderPage({
@@ -194,10 +194,15 @@ class _SubscriptionProviderPageState
         _ => context.l10n.planChoiceDefault,
       };
 
+  /// The ROW shows the bare level, like [_modelLabel] shows 'Opus'; the
+  /// picker sheet keeps the explanatory 'High — most thorough' labels.
+  /// The long label as the row value ellipsised in English beside a
+  /// badge and chevron — 'Thinking e…  High — most thoro…' (loop find
+  /// 2026-10-07, round 3).
   String _effortLabel(BuildContext context, String v) => switch (v) {
-        'low' => context.l10n.planEffortLow,
+        'low' => context.l10n.planEffortLowShort,
         'medium' => context.l10n.planEffortMedium,
-        'high' => context.l10n.planEffortHigh,
+        'high' => context.l10n.planEffortHighShort,
         _ => context.l10n.planChoiceDefault,
       };
 
@@ -267,11 +272,15 @@ class _SubscriptionProviderPageState
           header: context.l10n.planHeader,
           footer: context.l10n.planFooter,
           children: [
-            for (final (backend, name, note) in kPlanChoices)
+            for (final (backend, _, note) in kPlanChoices)
               GroupedRow(
                 key: Key('planChoice-$backend'),
-                title: name,
-                value: note,
+                title: switch (backend) {
+                  'glm' => context.l10n.planGlm,
+                  'doubao' => context.l10n.planDoubao,
+                  _ => context.l10n.planClaude,
+                },
+                value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: _planActive &&
                         settings.serverBackend == backend

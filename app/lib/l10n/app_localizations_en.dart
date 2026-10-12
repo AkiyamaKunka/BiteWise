@@ -124,6 +124,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bodyHip => 'Hip';
 
   @override
+  String get bodyWaistShort => 'W';
+
+  @override
+  String get bodyChestShort => 'C';
+
+  @override
+  String get bodyHipShort => 'H';
+
+  @override
   String get bodyEmptyTitle => 'No body data yet.';
 
   @override
@@ -203,6 +212,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsAiFooterPaused =>
       'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.';
+
+  @override
+  String get providerQuotaPaused =>
+      'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.';
+
+  @override
+  String providerQuotaPausedUntil(String time) {
+    return 'Analyses are paused — the daily quota was hit (until $time). New photos are kept and retried automatically; changing the key or provider resumes now.';
+  }
 
   @override
   String get settingsAiFooter =>
@@ -362,7 +380,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noteVpn => 'VPN in China';
 
   @override
-  String get noteFreeTierVpn => 'free tier · VPN in China';
+  String get noteFreeTierVpn => 'free · VPN in China';
 
   @override
   String get noteDirect => 'direct in China';
@@ -416,6 +434,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modelCustomLabel => 'Custom model name';
 
   @override
+  String modelHelperDefault(String model) {
+    return 'Default: $model';
+  }
+
+  @override
+  String modelHelperQwen(String model) {
+    return 'Default: $model. Doubles as the cheap tier — qwen3-vl-plus is the stronger paid model.';
+  }
+
+  @override
+  String modelHelperDoubao(String model) {
+    return 'Default: $model. Doubao needs the EXACT versioned ID from the Ark model list — undated names are rejected.';
+  }
+
+  @override
+  String modelHelperGlm(String model) {
+    return 'Default: $model (free tier). glm-4.6v is the stronger paid model.';
+  }
+
+  @override
+  String modelHelperDeepseek(String model) {
+    return 'Default: $model — the only DeepSeek model that accepts photos.';
+  }
+
+  @override
+  String modelHelperOpenrouter(String model) {
+    return 'Default: $model. Any vendor/model slug from openrouter.ai/models that accepts images works.';
+  }
+
+  @override
   String get apiInactiveFooter =>
       'A subscription is currently active. Pick a provider above to switch to a pay-per-photo API key.';
 
@@ -433,7 +481,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planClaude => 'Claude Plan';
 
   @override
-  String get planClaudeNote => 'Anthropic subscription';
+  String get planClaudeNote => 'Anthropic';
+
+  @override
+  String get planGlmNote => 'Zhipu';
+
+  @override
+  String get planDoubaoNote => 'Volcengine';
+
+  @override
+  String get noteManyModels => 'many models';
+
+  @override
+  String get nlDeleteTitle => 'Delete meals?';
+
+  @override
+  String get nlCannotUndo => 'This cannot be undone.';
 
   @override
   String get planGlm => 'GLM Coding Plan';
@@ -572,6 +635,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String garminBurnOnlyLine(String burn) {
+    return 'Active burn: ~$burn kcal (Garmin)';
+  }
+
+  @override
   String get settingsRowUnits => 'Units';
 
   @override
@@ -684,6 +752,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get planEffortHigh => 'High — most thorough';
+
+  @override
+  String get planEffortLowShort => 'Low';
+
+  @override
+  String get planEffortHighShort => 'High';
 
   @override
   String get planModelFable => 'Fable — frontier · needs credits on Pro';
@@ -934,6 +1008,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).';
 
   @override
+  String diagModelNotFound(String model) {
+    return 'The key works, but the model \"$model\" was not found.';
+  }
+
+  @override
   String get diagTextOk =>
       'The model answered JSON — chat fixes and \"describe a meal\" work.';
 
@@ -1024,6 +1103,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get outcomeAlreadyTracked => 'Already logged';
 
   @override
+  String get outcomeInFlight => 'Still analyzing';
+
+  @override
   String get outcomeFailed => 'Analysis failed';
 
   @override
@@ -1082,6 +1164,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get outcomeAlreadyTrackedMsg => 'This photo was already logged.';
+
+  @override
+  String get outcomeInFlightMsg =>
+      'This photo is still being analyzed — check back in a moment.';
 
   @override
   String get errNoApiKey =>
@@ -1221,6 +1307,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editorRemoveItemTooltip => 'Remove item';
+
+  @override
+  String editorErrNotNumber(String label) {
+    return '$label must be a number.';
+  }
+
+  @override
+  String editorErrNegative(String label) {
+    return '$label cannot be negative.';
+  }
+
+  @override
+  String editorErrTooLarge(String label, String max) {
+    return '$label looks too large (max $max).';
+  }
+
+  @override
+  String editorErrDescTooLong(String max) {
+    return 'Description is too long (max $max).';
+  }
+
+  @override
+  String get editorErrDate => 'Date must be a real YYYY-MM-DD date.';
+
+  @override
+  String get editorErrTime => 'Time must look like 07:30 PM.';
+
+  @override
+  String editorErrTooManyItems(String max) {
+    return 'Too many items (max $max).';
+  }
+
+  @override
+  String editorErrsNeedFixing(int count) {
+    return '$count things need fixing — see the top.';
+  }
+
+  @override
+  String get editorFieldCalories => 'Calories';
+
+  @override
+  String editorItemFieldCalories(int n) {
+    return 'Item $n calories';
+  }
+
+  @override
+  String editorItemFieldProtein(int n) {
+    return 'Item $n protein';
+  }
+
+  @override
+  String editorItemFieldCarbs(int n) {
+    return 'Item $n carbs';
+  }
+
+  @override
+  String editorItemFieldFat(int n) {
+    return 'Item $n fat';
+  }
+
+  @override
+  String get editorItemKcalLabel => 'kcal';
 
   @override
   String get covPermissionRequired =>
@@ -1388,6 +1536,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covLeftoverCount(int count) {
+    return '$count leftover photos (deducted from their meal)';
+  }
+
+  @override
   String covFailedCount(int count) {
     return '$count failed';
   }
@@ -1440,4 +1593,221 @@ class AppLocalizationsEn extends AppLocalizations {
   String errServerRejected(String code) {
     return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
   }
+
+  @override
+  String get watcherPermissionDenied =>
+      'Photo library permission is required for automatic intake.';
+
+  @override
+  String get watcherOnQuotaPaused =>
+      'Watching is on, but analyses are paused by the daily quota — new photos will wait.';
+
+  @override
+  String get watcherOnNoKey =>
+      'Watching is on, but photos won\'t be analyzed until a working API key is set above.';
+
+  @override
+  String get watcherLimitedAccess =>
+      'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
+
+  @override
+  String get fixAction => 'Fix';
+
+  @override
+  String get importDialogTitle => 'Import exported data';
+
+  @override
+  String get importDialogBody =>
+      'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.';
+
+  @override
+  String get importAction => 'Import';
+
+  @override
+  String get importNothingNew =>
+      'Nothing new to import — everything in that file is already here.';
+
+  @override
+  String importDone(int meals, int rows) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'Imported $_temp0 ($rows rows total).';
+  }
+
+  @override
+  String importDoneKept(int meals, int rows, int kept) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'Imported $_temp0 ($rows rows total); $kept already here.';
+  }
+
+  @override
+  String importFailed(String error) {
+    return 'Import failed: $error';
+  }
+
+  @override
+  String exportFailed(String error) {
+    return 'Export failed: $error';
+  }
+
+  @override
+  String get exportShareSubject => 'CalorieTracker data export';
+
+  @override
+  String get importErrNotJson => 'That file is not JSON.';
+
+  @override
+  String get importErrNotExport => 'That file is not a CalorieTracker export.';
+
+  @override
+  String get importErrWrongFormatTag =>
+      'That file is not a CalorieTracker export (wrong format tag).';
+
+  @override
+  String get importErrBadVersion => 'That export has an unusable version tag.';
+
+  @override
+  String get importErrNoTables => 'That export has no tables section.';
+
+  @override
+  String get nlSomethingWrong =>
+      '❌ Something went wrong handling that message. Please try again.';
+
+  @override
+  String get nlMissingServer =>
+      '❌ No server is configured — set your server address and upload key in Settings first.';
+
+  @override
+  String nlMissingKey(String provider) {
+    return '❌ No $provider API key yet — add one in Settings to use text logging.';
+  }
+
+  @override
+  String get nlTypeFirst => 'Type what you ate first.';
+
+  @override
+  String get nlErrorContactingAi => '❌ Error contacting AI. Please try again.';
+
+  @override
+  String get nlNoFoodDetected =>
+      '🚫 I couldn\'t detect food in that description.';
+
+  @override
+  String nlInvalidMealIndex(String shown, int count) {
+    return '❌ Invalid meal index ($shown). You have $count recent meals.';
+  }
+
+  @override
+  String nlCorrectedMeal(int n) {
+    return '✏️ Corrected meal $n!';
+  }
+
+  @override
+  String nlKcalChange(String oldKcal, String newKcal, String diff) {
+    return '🔥 $oldKcal → $newKcal ($diff)';
+  }
+
+  @override
+  String nlDeleteAsk(int count) {
+    return '🗑️ Delete $count meal(s)?';
+  }
+
+  @override
+  String get nlDeleteCancelled => '👍 Cancelled — nothing was deleted.';
+
+  @override
+  String nlDeletedMeals(int count) {
+    return '🗑️ Deleted $count meal(s):';
+  }
+
+  @override
+  String get nlAddedManualMeal => '✅ Added new manual meal:';
+
+  @override
+  String nlMealLabel(String desc, String date, String time, String kcal) {
+    return '$desc ($date $time, ~$kcal)';
+  }
+
+  @override
+  String get nlNoActions =>
+      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
+
+  @override
+  String get nlRequestFailed => '❌ That request failed. Please try again.';
+
+  @override
+  String nlAllActionsFailed(int count) {
+    return '❌ All $count requested actions failed. Please try again.';
+  }
+
+  @override
+  String nlSomeActionsFailed(int failed, int total) {
+    return '⚠️ $failed of $total requested action(s) failed — the rest were applied.';
+  }
+
+  @override
+  String get nlCannotCorrectNoMeals =>
+      '❌ Cannot correct because no meals are logged recently.';
+
+  @override
+  String get nlCorrectionUnusable =>
+      '❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.';
+
+  @override
+  String get nlCannotDeleteNoMeals =>
+      '❌ Cannot delete because no meals are logged recently.';
+
+  @override
+  String get nlDeleteWhich =>
+      '❌ Didn\'t catch which meals to delete. Try being more specific.';
+
+  @override
+  String get nlDeleteNoMatch =>
+      '❌ Couldn\'t match those meals to the recent list.';
+
+  @override
+  String nlDescribedMultiple(int count) {
+    return 'That described $count meals — only the first is shown. Describe the others one at a time.';
+  }
+
+  @override
+  String get nlWeightUnreadable =>
+      '⚖️ I couldn\'t read a valid body weight (30–300 kg). Try “I weigh 72.5 kg”.';
+
+  @override
+  String nlWeightLogged(String kg, String date) {
+    return '⚖️ Logged $kg kg for $date.';
+  }
+
+  @override
+  String get nlActivityUnreadable =>
+      '🏃 I couldn\'t find any activity numbers to log. Try “burned 450 kcal running 5 km”.';
+
+  @override
+  String nlActivityLogged(String bits, String date) {
+    return '🏃 Logged activity: $bits ($date).';
+  }
+
+  @override
+  String nlStepsAmount(String steps) {
+    return '$steps steps';
+  }
+
+  @override
+  String nlKmAmount(String km) {
+    return '$km km';
+  }
+
+  @override
+  String get nlChatFallback =>
+      'I\'m not sure what you mean. Try describing a meal or correction!';
 }

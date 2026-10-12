@@ -93,6 +93,31 @@ void main() {
         reason: 'one photo, one model call, one ledger reservation');
   });
 
+  testWidgets('a photo still being analyzed elsewhere says so — not '
+      '"Already logged", and no manual-log offer', (tester) async {
+    // The watcher (or an iOS background run cut off mid-analysis) holds
+    // this photo's reservation; the user picks the same photo. It is not
+    // logged yet, so "Already logged" was wrong, and it is not a refusal
+    // either, so there is nothing to log by hand (2026-10-07).
+    final picker = FakePicker()..photos = [_photo('a0')];
+    final services = makeServices(
+        picker: picker,
+        processPhoto: (photo) async => const PhotoOutcome(
+            PhotoOutcomeKind.inFlight,
+            'This photo is still being analyzed — check back in a moment.',
+            retryable: true));
+    await tester.pumpWidget(
+        MaterialApp(home: AddPhotoScreen(services: services)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recentPhoto0')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Still analyzing'), findsOneWidget);
+    expect(find.text('Already logged'), findsNothing);
+    expect(find.textContaining('still being analyzed'), findsOneWidget);
+    expect(find.byKey(const Key('logManuallyButton')), findsNothing);
+  });
+
   testWidgets('an unreadable original says so instead of hanging on the '
       'spinner', (tester) async {
     // loadOriginal returns null for a photo that vanished or exceeds the

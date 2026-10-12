@@ -24,6 +24,8 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
       return l.outcomeDuplicateMsg;
     case PhotoOutcomeKind.alreadyTracked:
       return l.outcomeAlreadyTrackedMsg;
+    case PhotoOutcomeKind.inFlight:
+      return l.outcomeInFlightMsg;
     case PhotoOutcomeKind.failed:
       return switch (o.errorKind) {
         AnalysisErrorKind.noApiKey => l.errNoApiKey,

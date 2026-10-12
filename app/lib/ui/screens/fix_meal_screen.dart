@@ -22,7 +22,7 @@ class FixMealScreen extends StatefulWidget {
 class _FixMealScreenState extends State<FixMealScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _sending = false;
-  final List<String> _log = []; // sent requests, newest last
+  final List<String> _log = []; // requests that changed something, newest last
 
   @override
   void dispose() {
@@ -40,11 +40,13 @@ class _FixMealScreenState extends State<FixMealScreen> {
       if (!mounted) return;
       // Sending ends when the executor returns; presentation (incl. the
       // blocking delete-confirmation modal) is not "sending".
-      setState(() {
-        _sending = false;
-        _log.add(text);
-      });
-      await presentNlReplies(context, widget.executor, replies);
+      setState(() => _sending = false);
+      // Only a request that changed something belongs under "Applied this
+      // session": the list used to record every request BEFORE the
+      // replies were read, so a cancelled delete, an invalid-index refusal
+      // or an AI-contact error read as applied (loop find 2026-10-07).
+      final changed = await presentNlReplies(context, widget.executor, replies);
+      if (changed && mounted) setState(() => _log.add(text));
     } catch (e) {
       if (!mounted) return;
       // Executor is spec'd never to throw (§4.9); belt-and-braces anyway.

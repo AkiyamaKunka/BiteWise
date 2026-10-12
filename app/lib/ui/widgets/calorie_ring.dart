@@ -247,6 +247,9 @@ class MacroTrio extends StatelessWidget {
     final cKcal = math.max(0, carbsG) * 4;
     final fKcal = math.max(0, fatG) * 9;
     final totalKcal = pKcal + cKcal + fKcal;
+    // Same short labels as the meal-card chips below (zh 蛋/碳/脂), so the
+    // hero and the cards agree.
+    final l = context.l10n;
     final theme = Theme.of(context);
     final trackColor = Color.alphaBlend(
         theme.colorScheme.onSurface.withValues(alpha: 0.20),
@@ -284,11 +287,11 @@ class MacroTrio extends StatelessWidget {
     return Row(
       key: const Key('macroTrio'),
       children: [
-        bar('P', proteinG, pKcal, proteinColor),
+        bar(l.macroProteinShort, proteinG, pKcal, proteinColor),
         const SizedBox(width: 10),
-        bar('C', carbsG, cKcal, carbsColor),
+        bar(l.macroCarbsShort, carbsG, cKcal, carbsColor),
         const SizedBox(width: 10),
-        bar('F', fatG, fKcal, fatColor),
+        bar(l.macroFatShort, fatG, fKcal, fatColor),
       ],
     );
   }

@@ -227,6 +227,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
           PhotoOutcomeKind.skipped => l.outcomeSkipped,
           PhotoOutcomeKind.duplicate => l.outcomeDuplicate,
           PhotoOutcomeKind.alreadyTracked => l.outcomeAlreadyTracked,
+          PhotoOutcomeKind.inFlight => l.outcomeInFlight,
           PhotoOutcomeKind.failed => l.outcomeFailed,
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),

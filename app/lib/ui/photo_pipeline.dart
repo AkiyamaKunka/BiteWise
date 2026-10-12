@@ -32,6 +32,13 @@ enum PhotoOutcomeKind {
   duplicate,
   alreadyTracked,
 
+  /// Another run holds a FRESH 'processing' reservation for this photo:
+  /// it is being analyzed right now, or was until iOS expired that run's
+  /// background grant (2026-10-07). Always [PhotoOutcome.retryable], so the
+  /// frontier halts in front of it, the watcher forgets it was seen, and
+  /// the add flow says "still analyzing" rather than "already logged".
+  inFlight,
+
   /// The photo was the REMAINS of an earlier meal (2026-08-05): no new
   /// row — the original meal's totals shrank and the photo's hash is
   /// tombstoned so no scan re-offers it.
@@ -42,9 +49,10 @@ class PhotoOutcome {
   final PhotoOutcomeKind kind;
   final Map<String, dynamic>? analysis; // present when kind == saved
 
-  /// True when the failure was transient and the RESERVATION WAS RELEASED —
-  /// the photo stays eligible and a later scan re-offers it. Consumers use
-  /// this to hold watermarks/seen-sets open instead of marking coverage.
+  /// True when the photo stays ELIGIBLE: a transient failure whose
+  /// reservation was released, or a reservation that was never ours
+  /// ([PhotoOutcomeKind.inFlight]) — a later scan re-offers it. Consumers
+  /// use this to hold watermarks/seen-sets open instead of marking coverage.
   final bool retryable;
   final String message; // user-facing summary (English, parity-pinned)
 
@@ -162,18 +170,41 @@ class PhotoPipeline {
       // automated watch intake is strict (spec §2.3 caller policies).
       final source =
           photo.deliberate ? MealSource.appPhoto : MealSource.appWatch;
-      reserved = await dao.reservePhotoHash(hash,
-          source: source, reclaimDeliberate: photo.deliberate);
-      if (!reserved) {
-        return const PhotoOutcome(PhotoOutcomeKind.alreadyTracked,
-            'This photo was already logged.');
+      switch (await dao.reservePhotoHash(hash,
+          source: source, reclaimDeliberate: photo.deliberate)) {
+        case PhotoReservation.claimed:
+          return const PhotoOutcome(PhotoOutcomeKind.alreadyTracked,
+              'This photo was already logged.');
+        case PhotoReservation.inFlight:
+          // Not ours and not a verdict: another run is mid-analysis, or
+          // iOS killed one mid-analysis and the launch sweep has not
+          // released its row yet (up to 15 min). RETRYABLE, and the row is
+          // left alone: reporting this as alreadyTracked let the background
+          // watermark and the watcher's seen-set march past a photo nobody
+          // had analyzed (2026-10-07).
+          return const PhotoOutcome(PhotoOutcomeKind.inFlight,
+              'This photo is still being analyzed — check back in a moment.',
+              retryable: true);
+        case PhotoReservation.reserved:
+          reserved = true;
       }
 
-      // AUTOMATIC leftover check (2026-08-05): today's meals ride along
-      // as compacts; the model may answer leftover_of instead of a new
-      // meal. The SNAPSHOT is captured here — reply indexes resolve
-      // against exactly this list (spec §4.2 snapshot rule).
-      final today = isoDate(DateTime.now());
+      // The day this photo belongs to. validateCapturedAt is NOT optional:
+      // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
+      // with a dead clock, a forward-set date), and an unvalidated value
+      // writes a meal into a random month of the user's log.
+      final when = photo.capturedAt ??
+          validateCapturedAt(exifCapturedAt(photo.bytes),
+              now: DateTime.now()) ??
+          DateTime.now();
+      // AUTOMATIC leftover check (2026-08-05): the meals of the day the
+      // photo was TAKEN ride along as compacts; the model may answer
+      // leftover_of instead of a new meal. The SNAPSHOT is captured here —
+      // reply indexes resolve against exactly this list (spec §4.2
+      // snapshot rule). The photo's own day, never "today": a backfilled or
+      // re-scanned photo from last week used to be matched against today's
+      // meals and could deduct from the wrong one (loop find 2026-10-07).
+      final today = isoDate(when);
       final candidates = byMealClock(
               (await dao.mealsBetween(today, today)).where(isFoodMeal))
           .toList();
@@ -259,14 +290,6 @@ class PhotoPipeline {
       // before intake-time dating — same validation window (§9 app-only,
       // 2026-07-31). This is what keeps a 23:50 photo shared after
       // midnight on YESTERDAY's total.
-      // validateCapturedAt is NOT optional here: EXIF is attacker- and
-      // junk-controlled (a 2015 stock photo, a camera with a dead clock,
-      // a forward-set date), and an unvalidated value writes a meal into
-      // a random month of the user's log where they will never find it.
-      final when = photo.capturedAt ??
-          validateCapturedAt(exifCapturedAt(photo.bytes),
-              now: DateTime.now()) ??
-          DateTime.now();
       final id = await dao.saveMeal(
         Meal(
           id: 0, // assigned by the DAO on insert

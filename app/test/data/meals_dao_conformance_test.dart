@@ -236,10 +236,9 @@ void main() {
           reason: 'without the tombstone the §6 backfill re-logs the photo');
       expect(row.mealId, isNull);
       expect(await dao.mealThumb(id), isNull);
-      // And the strict automated path must refuse it now.
-      expect(
-          await dao.reservePhotoHash(hash, source: MealSource.appWatch),
-          isFalse);
+      // And the strict automated path must refuse it now — for good.
+      expect(await dao.reservePhotoHash(hash, source: MealSource.appWatch),
+          PhotoReservation.claimed);
     });
   });
 

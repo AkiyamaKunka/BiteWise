@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../format.dart';
 import '../meal_thumbs.dart';
+import '../refresh_signal.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart'
     show GroupedCard, cellBackground, kGroupInset;
@@ -69,6 +70,9 @@ class HistoryScreenState extends State<HistoryScreen> {
       builder: (_) =>
           DayDetailScreen(dao: widget.dao, date: date, thumbs: widget.thumbs),
     ));
+    // Same reason for the signal: today's meals edited from here must
+    // reach Today and the iOS OS card, not only this list.
+    signalMealsChanged();
     if (mounted) await reload();
   }
 
@@ -253,9 +257,17 @@ class HistoryScreenState extends State<HistoryScreen> {
                 children: [
                   // Bars in ascending date order with the average as a
                   // dashed reference; tapping a bar opens that day (same
-                  // target as the rows below).
+                  // target as the rows below). The chart gets the SAME
+                  // span as the rows, gap days as 0: fed only `_perDay`,
+                  // five logged days over four weeks became five adjacent
+                  // bars — a lie of continuity the list right below
+                  // contradicted. A 0 slot paints nothing (an empty gap)
+                  // and taps through to that day like its gap row. The
+                  // dashed line keeps the caption's days-with-data mean
+                  // (spec §5.3) instead of diluting it over the gaps.
                   CalorieTrendChart(
-                    dayTotals: _perDay,
+                    dayTotals: {for (final d in dates) d: _perDay[d] ?? 0},
+                    average: sum / _perDay.length,
                     onDayTap: (date) => _openDay(date),
                   ),
                   const SizedBox(height: 10),

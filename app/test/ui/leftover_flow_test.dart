@@ -5,6 +5,8 @@
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
 import 'package:flutter/material.dart';
@@ -143,5 +145,71 @@ void main() {
     expect(find.text("Couldn't estimate the leftovers from that photo."),
         findsOneWidget);
     expect(dao.updates, isEmpty);
+  });
+
+  // Photo access declined (or iOS no longer re-prompting): the picker said
+  // 'No recent photos found.' with nothing to tap — indistinguishable from
+  // an empty camera roll and a dead end. It must name the real problem
+  // and offer the system-settings way back, like AddPhotoScreen does
+  // (loop find 2026-10-07).
+  Future<void> pumpDenied(WidgetTester tester,
+      {Locale? locale, Future<void> Function()? openSystemSettings}) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates:
+            locale == null ? null : AppLocalizations.localizationsDelegates,
+        supportedLocales: locale == null
+            ? const [Locale('en', 'US')]
+            : AppLocalizations.supportedLocales,
+        home: LeftoverScreen(
+            services: makeServices(
+                dao: dao,
+                analyzer: analyzer,
+                picker: picker,
+                grantPhotoPermission: false,
+                openSystemSettings: openSystemSettings))));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('leftoverMeal-1')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('denied photo access says so and opens system settings',
+      (tester) async {
+    var opened = 0;
+    dao.put(_meal(1, '13:34', 965));
+    await pumpDenied(tester, openSystemSettings: () async => opened++);
+    expect(find.byKey(const Key('leftoverPhotoPermissionDenied')),
+        findsOneWidget);
+    expect(find.text("Bitewise isn't allowed to see your photos."),
+        findsOneWidget);
+    expect(find.text('No recent photos found.'), findsNothing,
+        reason: 'a denial is not an empty camera roll');
+    await tester.tap(find.byKey(const Key('leftoverOpenSystemSettings')));
+    await tester.pump();
+    expect(opened, 1);
+    expect(dao.updates, isEmpty);
+  });
+
+  testWidgets('denied photo access without a settings hook shows no button',
+      (tester) async {
+    dao.put(_meal(1, '13:34', 965));
+    await pumpDenied(tester);
+    expect(find.byKey(const Key('leftoverPhotoPermissionDenied')),
+        findsOneWidget);
+    expect(find.byKey(const Key('leftoverOpenSystemSettings')), findsNothing);
+  });
+
+  testWidgets('zh: the denial and its settings button are Chinese',
+      (tester) async {
+    final zh = AppLocalizationsZh();
+    dao.put(_meal(1, '13:34', 965));
+    await pumpDenied(tester,
+        locale: const Locale('zh'), openSystemSettings: () async {});
+    expect(find.text(zh.photoPermissionDenied), findsOneWidget);
+    expect(find.text(zh.openSystemSettings), findsOneWidget);
+    expect(find.text(zh.addNoPhotos), findsNothing);
   });
 }

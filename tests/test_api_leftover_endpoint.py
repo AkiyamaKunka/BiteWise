@@ -134,6 +134,47 @@ def test_no_result_is_a_terminal_503(client, monkeypatch):
     assert resp.get_json()["retry"] is False
 
 
+def test_timeout_and_closed_window_are_come_back_later(client, monkeypatch):
+    """Same three-way 503 as analyze_photo (2026-10-07): a timeout and the
+    plan's usage window are temporary, so "later" — never the terminal
+    False that burned the photo. Credits stay terminal."""
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+
+    def slow(*a, **kw):
+        raise claude_analyzer.AnalyzerTimeout(120)
+
+    monkeypatch.setattr(claude_analyzer, "analyze_leftover_photo", slow)
+    resp = client.http.post("/api/analyze_leftover",
+                            headers={"X-API-Key": "secret-key"},
+                            json=_payload())
+    assert resp.status_code == 503
+    assert resp.get_json()["retry"] == "later"
+    assert "timed out" in resp.get_json()["reason"]
+
+    def window(*a, **kw):
+        raise claude_analyzer.PlanRefused("usage limit reached",
+                                          terminal=False)
+
+    monkeypatch.setattr(claude_analyzer, "analyze_leftover_photo", window)
+    resp = client.http.post("/api/analyze_leftover",
+                            headers={"X-API-Key": "secret-key"},
+                            json=_payload())
+    assert resp.status_code == 503
+    assert resp.get_json()["retry"] == "later"
+    assert resp.get_json()["reason"] == "usage limit reached"
+
+    def credits(*a, **kw):
+        raise claude_analyzer.PlanRefused("needs usage credits",
+                                          terminal=True)
+
+    monkeypatch.setattr(claude_analyzer, "analyze_leftover_photo", credits)
+    resp = client.http.post("/api/analyze_leftover",
+                            headers={"X-API-Key": "secret-key"},
+                            json=_payload())
+    assert resp.status_code == 503
+    assert resp.get_json()["retry"] is False
+
+
 def test_finish_analysis_leftover_contract_skips_is_food():
     env = {"duration_ms": 1, "duration_api_ms": 1, "num_turns": 1}
     out = claude_analyzer._finish_analysis(

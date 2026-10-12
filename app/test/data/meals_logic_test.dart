@@ -46,22 +46,36 @@ void main() {
               ledgerStatus: 'failed',
               reclaimDeliberate: true),
           ReserveDecision.refuse);
+      // And a stray 'processing' row beside a real meal is a VERDICT, not
+      // an analysis in flight — reading it as in flight would park the
+      // background frontier in front of that photo forever.
+      expect(
+          decide(
+              mealRowExists: true,
+              ledgerStatus: 'processing',
+              lastSeen: now.subtract(const Duration(minutes: 5))),
+          ReserveDecision.refuse);
     });
 
     test('no ledger row inserts a fresh processing reservation', () {
       expect(decide(), ReserveDecision.insert);
     });
 
-    test('fresh processing row blocks everyone, deliberate or not', () {
+    test('fresh processing row blocks everyone, deliberate or not — as IN '
+        'FLIGHT, never as a verdict', () {
+      // iOS can expire a background run mid-analysis; its row then stays
+      // 'processing' until the launch sweep. Both callers are refused, but
+      // the refusal must say "somebody is on it" so nothing passes over the
+      // photo (2026-10-07).
       final fresh = now.subtract(const Duration(minutes: 5));
       expect(decide(ledgerStatus: 'processing', lastSeen: fresh),
-          ReserveDecision.refuse);
+          ReserveDecision.refuseInFlight);
       expect(
           decide(
               ledgerStatus: 'processing',
               lastSeen: fresh,
               reclaimDeliberate: true),
-          ReserveDecision.refuse);
+          ReserveDecision.refuseInFlight);
     });
 
     test('processing goes stale strictly after 6 hours', () {
@@ -70,7 +84,7 @@ void main() {
       final over6h = now.subtract(
           const Duration(seconds: photoReservationStaleSeconds + 1));
       expect(decide(ledgerStatus: 'processing', lastSeen: exactly6h),
-          ReserveDecision.refuse);
+          ReserveDecision.refuseInFlight);
       expect(decide(ledgerStatus: 'processing', lastSeen: over6h),
           ReserveDecision.reclaim);
     });
@@ -253,6 +267,42 @@ void main() {
       expect(envelope['exported_at'], '2026-07-17T08:30:00.000');
       expect(envelope['tables'], same(tables));
       expect((envelope['tables'] as Map)['meals'], hasLength(1));
+    });
+  });
+
+  group('parseExportEnvelope refusals carry WHY (2026-10-07)', () {
+    // The settings screen maps each ExportRefusal to a sentence in the
+    // user's language; the English message stays for logs and for the
+    // conformance suite's isA<FormatException>() checks.
+    ExportFormatException refusal(String json) {
+      try {
+        parseExportEnvelope(json);
+      } on ExportFormatException catch (e) {
+        return e;
+      }
+      fail('expected a refusal for $json');
+    }
+
+    test('each refusal has its kind and its English message', () {
+      expect(refusal('hello').refusal, ExportRefusal.notJson);
+      expect(refusal('hello').message, 'That file is not JSON.');
+      expect(refusal('[1,2]').refusal, ExportRefusal.notExport);
+      expect(refusal('{"format":"someone_elses_app"}').refusal,
+          ExportRefusal.wrongFormatTag);
+      expect(
+          refusal('{"format":"$kExportFormat","version":"v1","tables":{}}')
+              .refusal,
+          ExportRefusal.badVersion);
+      expect(
+          refusal('{"format":"$kExportFormat","version":1,"tables":"nope"}')
+              .refusal,
+          ExportRefusal.noTables);
+    });
+
+    test('a refusal is still a FormatException for every existing catcher',
+        () {
+      expect(() => parseExportEnvelope('hello'),
+          throwsA(isA<FormatException>()));
     });
   });
 

@@ -3,6 +3,7 @@
 // countdown-to-zero frames every meal as spending a budget. The arc still
 // carries progress against typical + burn, so these pin BOTH — the number
 // is always the eaten total, and the sweep still reflects the budget.
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -90,5 +91,29 @@ void main() {
     expect(find.text('P 50g'), findsOneWidget);
     expect(find.text('C 100g'), findsOneWidget);
     expect(find.text('F 0g'), findsOneWidget);
+  });
+
+  testWidgets('macro trio labels follow the app language (zh 蛋/碳/脂, as '
+      'the meal-card chips below it)', (tester) async {
+    // The bars said a literal 'P'/'C'/'F' in every language, so the zh
+    // Today screen read 'P 120g' in the hero and '蛋' on the cards.
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(
+            body: Center(
+                child: MacroTrio(
+                    proteinG: 50,
+                    carbsG: 100,
+                    fatG: 0,
+                    proteinColor: Colors.blue,
+                    carbsColor: Colors.orange,
+                    fatColor: Colors.green)))));
+    await tester.pumpAndSettle();
+    expect(find.text('蛋 50g'), findsOneWidget);
+    expect(find.text('碳 100g'), findsOneWidget);
+    expect(find.text('脂 0g'), findsOneWidget);
+    expect(find.text('P 50g'), findsNothing);
   });
 }

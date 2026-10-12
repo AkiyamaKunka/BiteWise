@@ -24,6 +24,26 @@ void main() {
     expect(outcomeBody(en, dup), dup.message);
     const tracked = PhotoOutcome(PhotoOutcomeKind.alreadyTracked, 'This photo was already logged.');
     expect(outcomeBody(en, tracked), tracked.message);
+    const inFlight = PhotoOutcome(PhotoOutcomeKind.inFlight,
+        'This photo is still being analyzed — check back in a moment.',
+        retryable: true);
+    expect(outcomeBody(en, inFlight), inFlight.message);
+  });
+
+  test('a photo mid-analysis elsewhere is "still analyzing", not "already '
+      'logged", in both languages', () {
+    // The deliberate add used to answer 已经记录过了 for a photo the watcher
+    // (or an iOS run cut off mid-analysis) was still holding (2026-10-07).
+    const o = PhotoOutcome(PhotoOutcomeKind.inFlight,
+        'This photo is still being analyzed — check back in a moment.',
+        retryable: true);
+    expect(outcomeBody(zh, o), zh.outcomeInFlightMsg);
+    expect(outcomeBody(zh, o), isNot(zh.outcomeAlreadyTrackedMsg));
+    expect(RegExp(r'[a-z]{4,}').hasMatch(outcomeBody(zh, o)), isFalse,
+        reason: 'no English leaking into the Chinese UI');
+    expect(outcomeBody(en, o), isNot(en.outcomeAlreadyTrackedMsg));
+    expect(en.outcomeInFlight, isNot(en.outcomeAlreadyTracked));
+    expect(zh.outcomeInFlight, isNot(zh.outcomeAlreadyTracked));
   });
 
   test('Chinese for every recognised failure kind, no English leaking', () {

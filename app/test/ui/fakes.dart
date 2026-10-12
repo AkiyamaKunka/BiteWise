@@ -312,6 +312,7 @@ UiServices makeServices({
   FakeIntake? intake,
   bool grantPhotoPermission = true,
   Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto,
+  Future<void> Function()? openSystemSettings,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -327,5 +328,6 @@ UiServices makeServices({
     reports: FakeReports(),
     requestPhotoPermission: () async => grantPhotoPermission,
     processPhoto: processPhoto,
+    openSystemSettings: openSystemSettings,
   );
 }

@@ -16,6 +16,7 @@ library;
 
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../l10n.dart';
@@ -138,6 +139,7 @@ class MacroBreakdownBar extends StatelessWidget {
         // Legend + direct labels in one row: identity never rests on colour,
         // and the numbers wear text tokens rather than the series colour.
         Wrap(
+          key: const Key('macroLegend'),
           spacing: 14,
           runSpacing: 4,
           children: [
@@ -175,9 +177,15 @@ class _LegendEntry extends StatelessWidget {
               BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
         ),
         const SizedBox(width: 6),
-        Text(text,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        // Flexible: the Wrap caps each entry at its own width, but an
+        // unflexed Text ignored that, so at the largest text sizes an entry
+        // wider than the card ran its percentage past the edge (RenderFlex
+        // overflow). Now that one entry wraps onto a second line instead.
+        Flexible(
+          child: Text(text,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ),
       ],
     );
   }
@@ -243,12 +251,20 @@ class CalorieTrendChart extends StatelessWidget {
     required this.dayTotals,
     this.height = 132,
     this.onDayTap,
+    this.average,
   });
 
-  /// date (YYYY-MM-DD) → kcal. Rendered in ascending date order.
+  /// date (YYYY-MM-DD) → kcal. Rendered in ascending date order, one
+  /// equal slot per entry — a caller that wants calendar gaps visible
+  /// passes them as 0 (an empty slot, no bar, no label).
   final Map<String, num> dayTotals;
   final double height;
   final void Function(String date)? onDayTap;
+
+  /// The dashed reference line's value. Null → mean of every entry. A
+  /// caller that pads gap days with 0 passes its own mean so the line
+  /// still matches the days-with-data average it prints.
+  final num? average;
 
   @override
   Widget build(BuildContext context) {
@@ -257,7 +273,8 @@ class CalorieTrendChart extends StatelessWidget {
     final dates = dayTotals.keys.toList()..sort();
     final values = [for (final d in dates) math.max(0, dayTotals[d]!)];
     final maxV = values.fold<num>(0, math.max);
-    final avg = values.fold<num>(0, (a, b) => a + b) / values.length;
+    final avg = average?.toDouble() ??
+        values.fold<num>(0, (a, b) => a + b) / values.length;
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -367,10 +384,13 @@ class _TrendPainter extends CustomPainter {
         fill,
       );
     }
-    // Selective direct labels: the peak and the latest day only.
+    // Selective direct labels: the peak and the latest LOGGED day only —
+    // with gap days padded as 0, an empty today must not hide the most
+    // recent value.
     _label(canvas, values[maxIndex], maxIndex, slot, plotH, scaleMax, size);
-    if (maxIndex != values.length - 1) {
-      _label(canvas, values.last, values.length - 1, slot, plotH, scaleMax, size);
+    final latest = values.lastIndexWhere((v) => v > 0);
+    if (latest >= 0 && latest != maxIndex) {
+      _label(canvas, values[latest], latest, slot, plotH, scaleMax, size);
     }
   }
 
@@ -394,7 +414,9 @@ class _TrendPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_TrendPainter old) =>
-      old.values.length != values.length ||
+      // Contents, not just length: with a fixed calendar span, moving a
+      // meal between two days keeps length, max and average equal.
+      !listEquals(old.values, values) ||
       old.maxValue != maxValue ||
       old.average != average ||
       old.bar != bar ||

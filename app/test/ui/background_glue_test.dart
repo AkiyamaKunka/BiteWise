@@ -6,6 +6,8 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart';
+
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
@@ -367,6 +369,46 @@ void main() {
           frontierMark.toIso8601String());
     });
 
+    test('a photo another run is still analyzing holds the watermark in '
+        'front of it', () async {
+      // iOS expired the PREVIOUS run's grant mid-analysis: its 'processing'
+      // row for photo 2 is still in the ledger (the launch sweep has not
+      // run). This run must not checkpoint past photo 2 — the old
+      // alreadyTracked reading did exactly that, and the photo was never
+      // offered again (2026-10-07).
+      final settings = await settingsWith(key: 'k');
+      final afterPhoto1 = DateTime(2026, 7, 24, 1, 0);
+      final afterPhoto2 = DateTime(2026, 7, 24, 2, 0);
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [afterPhoto1, afterPhoto2]
+        ..frontier = afterPhoto1; // the real intake halts where photo 2 is released
+      final dao = FakeDao();
+      final hash2 = md5.convert(photo(2).bytes).toString();
+      dao.ledger[hash2] = IngestionStatus.processing;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: dao, analyzer: analyzer),
+        showMealCard: (_, _) async {},
+        clock: () => DateTime(2026, 7, 24, 5, 0),
+      );
+      // Photo 1 landed and checkpointed; photo 2's per-photo checkpoint
+      // must NOT have advanced the watermark to afterPhoto2.
+      expect(prefs.getString(backgroundWatermarkPrefsKey),
+          afterPhoto1.toIso8601String());
+      expect(dao.meals, hasLength(1));
+      expect(dao.ledger[hash2], IngestionStatus.processing,
+          reason: 'the other run\'s reservation is left for it, or the '
+              'launch sweep, to finish');
+    });
+
     test('per-photo checkpoints persist the intake safeFrontier as they go',
         () async {
       final settings = await settingsWith(key: 'k');
@@ -511,6 +553,74 @@ void main() {
       signalMealsChanged();
       await tester.pump();
       expect(calls, 1);
+    });
+
+    // The chat (修改或删除某餐), describe, manual and leftover paths write
+    // meals straight through the DAO — not the photo pipeline that fires
+    // the signal — so the add flow's return used to reload Today only: a
+    // meal deleted at 23:40 with the app left open was still in the 23:55
+    // card (loop find 2026-10-07).
+    testWidgets('closing a Meals-sheet screen (chat fix) re-arms',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(services: services(() async => calls++))));
+      await tester.pumpAndSettle();
+      final before = calls;
+      await tester.tap(find.byKey(const Key('addMealFab')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('addFixMeal')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('fixMealField')), findsOneWidget);
+      expect(calls, before, reason: 'nothing changed yet');
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(calls, before + 1);
+    });
+
+    testWidgets('closing the editor opened from a Today meal re-arms',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final now = DateTime.now();
+      final dao = FakeDao()
+        ..seed(Meal(
+          id: 1,
+          date: now.toIso8601String().substring(0, 10),
+          time: '12:30 PM',
+          timestamp: now.toIso8601String(),
+          source: 'manual_text',
+          analysis: const {
+            'is_food': true,
+            'meal_description': 'Noodles',
+            'total_calories': 500,
+          },
+        ));
+      var calls = 0;
+      await tester.pumpWidget(MaterialApp(
+          home: HomeShell(
+              services: UiServices(
+        dao: dao,
+        analyzer: FakeAnalyzer(),
+        executor: FakeExecutor(),
+        settings: FakeSettings(watcherEnabled: false),
+        picker: FakePicker(),
+        requestPhotoPermission: () async => true,
+        reports: FakeReports(),
+        refreshDailyNotification: () async => calls++,
+      ))));
+      await tester.pumpAndSettle();
+      final before = calls;
+      await tester.tap(find.byKey(const ValueKey('meal1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('saveMealButton')), findsOneWidget);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+      expect(calls, before + 1);
     });
 
     testWidgets('Android (no hook) is untouched', (tester) async {

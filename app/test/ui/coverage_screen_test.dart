@@ -235,6 +235,35 @@ void main() {
         reason: 'only a deliberate re-add reclaims a skipped ledger row');
   });
 
+  testWidgets('a leftover photo is a read-only summary line, never "not food"',
+      (tester) async {
+    // Re-analyzing a leftover tombstone logged the remains as a second meal
+    // on top of the already-reduced original.
+    library.assets = [
+      FakeAsset('a8', 'IMG_8.jpg', DateTime(2026, 7, 26, 13), bytesOf(8)),
+    ];
+    dao.ledger['h8'] = IngestionStatus.skipped;
+    dao.seed(const Meal(
+      id: 5,
+      date: '2026-07-26',
+      time: '12:00 PM',
+      timestamp: 'x',
+      source: 'app_watch',
+      analysis: {
+        'is_food': true,
+        'leftover': {'leftover_photo_md5': 'h8'},
+      },
+    ));
+    await tester.pumpWidget(host());
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('1 leftover photos (deducted from their meal)'),
+        findsOneWidget);
+    expect(find.textContaining('0 not food'), findsOneWidget);
+    expect(find.byKey(const Key('reanalyzeAllSkipped')), findsNothing);
+    expect(find.text('IMG_8.jpg'), findsNothing);
+  });
+
   testWidgets('failed photos get a Retry all that goes through the pipeline',
       (tester) async {
     library.assets = [

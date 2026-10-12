@@ -162,6 +162,77 @@ void main() {
         reason: 'the corrected numbers must survive');
   });
 
+  test('an edited PHOTOLESS meal stays ONE meal when backups are imported '
+      'oldest-first', () async {
+    // The 2026-08-03 guard asked only whether the TARGET already held the
+    // corrected copy. A chronological multi-backup restore (or a two-device
+    // sync by re-export) puts the pre-edit copy in first, so the edited
+    // export — corrected=1, new analysis text — matched neither identity
+    // and the same lunch landed twice: 600 kcal and 450 kcal. Every edit
+    // path sets corrected=1 and never touches timestamp, so EITHER side
+    // being corrected proves sameness.
+    final id = await daoA.saveMeal(Meal(
+        id: 0,
+        date: '2026-07-29',
+        time: '12:00 PM',
+        timestamp: '2026-07-29T12:00:00.123456',
+        source: MealSource.manualText,
+        analysis: {'is_food': true, 'total_calories': 600}));
+    final backupOld = await daoA.exportJson();
+    await daoA.updateMealFields(id,
+        analysis: {'is_food': true, 'total_calories': 450});
+    final backupNew = await daoA.exportJson();
+
+    final first = await daoB.importJson(backupOld);
+    expect(first.added['meals'], 1);
+    final second = await daoB.importJson(backupNew);
+    expect(second.added['meals'], 0,
+        reason: 'the edited export is the meal already restored');
+    final meals = await daoB.mealsBetween('2026-07-01', '2026-07-31');
+    expect(meals, hasLength(1));
+
+    // The mirror order (the one the 2026-08-03 fix pinned for PHOTO meals)
+    // must keep holding for photoless meals too.
+    final dbC = await openAppDatabase(path: '${tmp.path}/c.db');
+    addTearDown(dbC.close);
+    final daoC = SqfliteMealsDao(dbC, clock: () => now);
+    await daoC.importJson(backupNew);
+    final older = await daoC.importJson(backupOld);
+    expect(older.added['meals'], 0);
+    expect(
+        await daoC.mealsBetween('2026-07-01', '2026-07-31'), hasLength(1));
+  });
+
+  test('an import landing MID-ANALYSIS does not double the photo meal',
+      () async {
+    // The reinstall sequence: 监控相册 is flipped on, backfillScan reserves
+    // h1 ('processing') and awaits the analyzer for 10–60 s, and the user
+    // pastes the backup from the same Settings screen in that gap. The
+    // import lands A's meal for h1 (no meals row had the hash yet) and
+    // skips the exported ledger row (our 'processing' row exists). The
+    // pipeline's saveMeal(markStatus: saved) must then recognise the
+    // imported row instead of inserting a second one (2026-10-07).
+    await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
+    expect(await daoB.reservePhotoHash('h1', source: MealSource.appWatch),
+        PhotoReservation.reserved);
+    final summary = await daoB.importJson(await daoA.exportJson());
+    expect(summary.added['meals'], 1);
+    expect(summary.skipped['photo_ingestions'], 1,
+        reason: 'the live processing row is kept, not overwritten');
+
+    // The analysis finishes: the pipeline saves with the 'saved' mark.
+    final id = await seed(daoB, date: '2026-07-29', cal: 590, hash: 'h1');
+    final rows = await dbB
+        .query('meals', where: 'image_hash = ?', whereArgs: ['h1']);
+    expect(rows, hasLength(1), reason: 'one photo, one meal');
+    expect(id, rows.single['id'],
+        reason: 'the pipeline gets the imported row\'s id back');
+    final ledger = await dbB.query('photo_ingestions',
+        where: 'image_hash = ?', whereArgs: ['h1']);
+    expect(ledger.single['status'], 'saved');
+    expect(ledger.single['meal_id'], id);
+  });
+
   test('two photoless meals in the same minute stay distinct', () async {
     // Without a photo there is no stable anchor, so date+time+analysis is
     // the fallback identity — and a coffee is not a sandwich.

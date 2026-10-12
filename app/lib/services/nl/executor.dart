@@ -13,6 +13,9 @@ import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/prompts.dart';
 import '../../core/shared_generated.dart';
+import '../../l10n/app_localizations.dart';
+import '../../ui/coach_strings.dart' show localizationsFor;
+import '../../ui/format.dart' show byMealClock, displayClock;
 import '../settings/app_settings.dart';
 
 /// Spec §1.2 / §8: TEXT_EDIT_WINDOW_DAYS (telegram_bot.py:161), from shared/.
@@ -236,8 +239,12 @@ String formatFoodResult(Map<String, dynamic> analysis) {
   return lines.join('\n');
 }
 
-/// meals_list prompt lines in the exact server format (spec §1.2,
-/// telegram_bot.py:4265-4281). Stored analyses are untrusted: safeFoodItems
+/// meals_list prompt lines in the server format (spec §1.2,
+/// telegram_bot.py:4265-4281) plus the stored meal clock (spec §9): photo
+/// meals are backdated and editor moves keep their timestamp, so "this
+/// morning's" / "breakfast" can only be resolved from the Time field. The
+/// raw stored hh:mm AM/PM goes in, never displayClock — the prompt must not
+/// depend on the UI locale. Stored analyses are untrusted: safeFoodItems
 /// plus stringification mean one poison row cannot break prompt building.
 String buildMealsList(List<Meal> meals) {
   if (meals.isEmpty) return 'No meals logged recently.';
@@ -249,17 +256,42 @@ String buildMealsList(List<Meal> meals) {
     final items =
         safeFoodItems(a).map((it) => '${it['name'] ?? '?'}').join(', ');
     lines.add(
-        '[$i] Date: ${meals[i].date} | Meal: $desc (~$cal kcal) — Items: $items');
+        '[$i] Date: ${meals[i].date} | Time: ${meals[i].time} | '
+        'Meal: $desc (~$cal kcal) — Items: $items');
   }
   return lines.join('\n');
 }
 
 class DefaultNlExecutor implements NlExecutor {
-  DefaultNlExecutor(this.dao, this.analyzer, this.settings);
+  DefaultNlExecutor(this.dao, this.analyzer, this.settings, {this.l10n});
 
   final MealsDao dao;
   final AnalyzerService analyzer;
   final AppSettings settings;
+
+  /// Test seam only. Every reply template below used to be an English
+  /// literal, so the whole chat spoke English inside the Chinese UI (testing
+  /// loop 2026-10-07). Production resolves the language LAZILY from the live
+  /// settings on every reply — the executor is built once at startup and
+  /// must follow a later language switch — the same localizationsFor the
+  /// headless daily summary uses. Model-authored text (chat replies, the
+  /// 💬 reason) is passed through untouched; only our own templates
+  /// localize.
+  final AppLocalizations? l10n;
+  AppLocalizations get _l => l10n ?? localizationsFor(settings.appLanguage);
+
+  /// Stored meal clocks keep the server-parity 12-hour shape; the user sees
+  /// the locale clock (24-hour in Chinese). A stray intl locale-data gap
+  /// must not turn a delete into "Something went wrong", so degrade to raw.
+  String _clock(String raw) {
+    try {
+      return displayClock(raw, localeName: _l.localeName);
+    } catch (_) {
+      return raw;
+    }
+  }
+
+  String _kcal(dynamic v) => _l.kcalAmount('$v');
 
   /// One pending confirmation slot (spec §4.5: one per chat; the app's modal
   /// dialog replaces the server's nonce/TTL machinery). id → display label.
@@ -272,10 +304,7 @@ class DefaultNlExecutor implements NlExecutor {
     try {
       return await _handleTextInner(userText);
     } catch (_) {
-      return const [
-        NlReply(
-            '❌ Something went wrong handling that message. Please try again.')
-      ];
+      return [NlReply(_l.nlSomethingWrong)];
     }
   }
 
@@ -286,11 +315,9 @@ class DefaultNlExecutor implements NlExecutor {
   String? _missingKeyMessage() {
     if ((settings.activeApiKey ?? '').trim().isNotEmpty) return null;
     if (settings.provider == AiProvider.server) {
-      return '❌ No server is configured — set your server address and '
-          'upload key in Settings first.';
+      return _l.nlMissingServer;
     }
-    return '❌ No ${settings.providerDisplayName} API key yet — add one in '
-        'Settings to use text logging.';
+    return _l.nlMissingKey(settings.providerDisplayName);
   }
 
   Future<List<NlReply>> _handleTextInner(String userText) async {
@@ -302,21 +329,25 @@ class DefaultNlExecutor implements NlExecutor {
     final missingKey = _missingKeyMessage();
     if (missingKey != null) return [NlReply(missingKey)];
 
-    // Snapshot: last TEXT_EDIT_WINDOW_DAYS of food meals, oldest first
-    // (spec §1.2). Every index in every action resolves against THIS list.
-    final meals = await dao.recentMeals(days: textEditWindowDays);
+    // Snapshot: last TEXT_EDIT_WINDOW_DAYS of food meals (spec §1.2) in
+    // MEAL-CLOCK order, matching every screen the owner reads; the DAO's
+    // timestamp order is server parity, but backdated photos and catch-up
+    // scans ingest out of eating order, so "第一顿" must mean the meal shown
+    // first (spec §9). Every index in every action resolves against THIS
+    // list — the prompt and executeParsed share it (spec §4.2).
+    final meals = byMealClock(await dao.recentMeals(days: textEditWindowDays));
     final prompt = buildPrompt(meals, userText, DateTime.now());
 
     final Map<String, dynamic>? result;
     try {
       result = await analyzer.textIntent(prompt);
     } catch (_) {
-      return const [NlReply('❌ Error contacting AI. Please try again.')];
+      return [NlReply(_l.nlErrorContactingAi)];
     }
     if (result == null) {
       // The analyzer seam folds parse + transport failures into null
       // (contract: textIntent never throws); spec §4 step 4 wording.
-      return const [NlReply('❌ Error contacting AI. Please try again.')];
+      return [NlReply(_l.nlErrorContactingAi)];
     }
     return executeParsed(result, userText, meals);
   }
@@ -333,7 +364,7 @@ class DefaultNlExecutor implements NlExecutor {
   Future<DescribeOutcome> describeMeal(String text) async {
     final userText = text.trim();
     if (userText.isEmpty) {
-      return const DescribeOutcome(error: 'Type what you ate first.');
+      return DescribeOutcome(error: _l.nlTypeFirst);
     }
     if (settings.isQuotaPaused) {
       return DescribeOutcome(
@@ -346,12 +377,10 @@ class DefaultNlExecutor implements NlExecutor {
     try {
       result = await analyzer.textIntent(prompt);
     } catch (_) {
-      return const DescribeOutcome(
-          error: '❌ Error contacting AI. Please try again.');
+      return DescribeOutcome(error: _l.nlErrorContactingAi);
     }
     if (result == null) {
-      return const DescribeOutcome(
-          error: '❌ Error contacting AI. Please try again.');
+      return DescribeOutcome(error: _l.nlErrorContactingAi);
     }
     // Reuse the hardened normalization: bare arrays, {actions:[...]},
     // single objects and junk all collapse to a list of actions (§4.1).
@@ -372,15 +401,12 @@ class DefaultNlExecutor implements NlExecutor {
       meals.add(sanitized);
     }
     if (meals.isEmpty) {
-      return const DescribeOutcome(
-          error: "🚫 I couldn't detect food in that description.");
+      return DescribeOutcome(error: _l.nlNoFoodDetected);
     }
     return DescribeOutcome(
       analysis: meals.first,
-      warning: meals.length > 1
-          ? 'That described ${meals.length} meals — only the first is shown. '
-              'Describe the others one at a time.'
-          : null,
+      warning:
+          meals.length > 1 ? _l.nlDescribedMultiple(meals.length) : null,
     );
   }
 
@@ -408,10 +434,7 @@ class DefaultNlExecutor implements NlExecutor {
       dynamic result, String userText, List<Meal> snapshot) async {
     final actions = normalizeActions(result);
     if (actions.isEmpty) {
-      return const [
-        NlReply("❌ I couldn't work out what to do with that. "
-            'Try one request at a time, e.g. “change meal 2 to roast duck rice”.')
-      ];
+      return [NlReply(_l.nlNoActions)];
     }
 
     final replies = <NlReply>[];
@@ -427,11 +450,10 @@ class DefaultNlExecutor implements NlExecutor {
     if (failures == actions.length) {
       // The wording must never claim partial success (spec §4.9).
       replies.add(NlReply(failures == 1
-          ? '❌ That request failed. Please try again.'
-          : '❌ All $failures requested actions failed. Please try again.'));
+          ? _l.nlRequestFailed
+          : _l.nlAllActionsFailed(failures)));
     } else if (failures > 0) {
-      replies.add(NlReply(
-          '⚠️ $failures of ${actions.length} requested action(s) failed — the rest were applied.'));
+      replies.add(NlReply(_l.nlSomeActionsFailed(failures, actions.length)));
     }
     return replies;
   }
@@ -464,25 +486,21 @@ class DefaultNlExecutor implements NlExecutor {
     final dynamic reason = action['reason'] ?? '';
 
     if (meals.isEmpty) {
-      return const NlReply(
-          '❌ Cannot correct because no meals are logged recently.');
+      return NlReply(_l.nlCannotCorrectNoMeals);
     }
     if (mealIndex == null || mealIndex < 0 || mealIndex >= meals.length) {
       // meal_index is raw model output: truncate to 40 chars so hallucinated
       // markup cannot flood the reply (spec §4.4.2; app renders plain text).
       var shown = '${action['meal_index']}';
       if (shown.length > 40) shown = shown.substring(0, 40);
-      return NlReply(
-          '❌ Invalid meal index ($shown). You have ${meals.length} recent meals.');
+      return NlReply(_l.nlInvalidMealIndex(shown, meals.length));
     }
 
     // Silent-delete guard (spec §4.4.3): an empty or non-food analysis would
     // overwrite the meal into a row every is_food view filters out — a
     // delete that skipped the delete confirmation. Refuse it.
     if (newAnalysis is! Map || !isTruthy(newAnalysis['is_food'])) {
-      return const NlReply(
-          "❌ That correction didn't include a usable updated analysis, so I left "
-          'the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.');
+      return NlReply(_l.nlCorrectionUnusable);
     }
 
     final sanitized = <String, dynamic>{
@@ -498,27 +516,35 @@ class DefaultNlExecutor implements NlExecutor {
     // hallucinated string calorie can no longer throw after
     // updateMealAnalysis already ran (the user would be told "failed" for a
     // change that happened — spec §4.4.5).
-    final old = meals[mealIndex].analysis;
+    final target = meals[mealIndex];
+    final old = target.analysis;
     final oldCal = safeNumber(old['total_calories']);
     final newCal = safeNumber(sanitized['total_calories']);
     final oldDesc = '${old['meal_description'] ?? 'Unknown'}';
     final newDesc = '${sanitized['meal_description'] ?? oldDesc}';
     final diff = newCal - oldCal;
     final diffStr = diff > 0 ? '+$diff' : '$diff';
+    // Which day's row was rewritten. A correction has no confirmation step
+    // (unlike delete, whose modal lists date and time), and over the
+    // seven-day window the same dish recurs — without this line the owner
+    // could not tell whether today's or Tuesday's 白粥 changed. From the
+    // snapshot row, so it names the row the write targets (spec §4.4.6).
+    final when = '${target.date} ${_clock(target.time)}';
 
     // Update by the snapshot row's DB id, so a meal logged mid-conversation
     // cannot shift the target (spec §4.4.6). The DAO sets corrected=1
     // unconditionally (spec §2.4).
-    await dao.updateMealAnalysis(meals[mealIndex].id, sanitized);
+    await dao.updateMealAnalysis(target.id, sanitized);
 
     final lines = <String>[
-      '✏️ Corrected meal ${mealIndex + 1}!',
+      _l.nlCorrectedMeal(mealIndex + 1),
+      '📅 $when',
       '',
       '$oldDesc → $newDesc',
-      '🔥 $oldCal kcal → $newCal kcal ($diffStr)',
+      _l.nlKcalChange(_kcal(oldCal), _kcal(newCal), diffStr),
     ];
     if (isTruthy(reason)) lines.add('\n💬 $reason');
-    return NlReply(lines.join('\n'));
+    return NlReply(lines.join('\n'), applied: true);
   }
 
   /// _nl_delete (spec §4.5, telegram_bot.py:4035-4094). Stages ids + labels
@@ -541,14 +567,8 @@ class DefaultNlExecutor implements NlExecutor {
     }
     final dynamic reason = action['reason'] ?? '';
 
-    if (meals.isEmpty) {
-      return const NlReply(
-          '❌ Cannot delete because no meals are logged recently.');
-    }
-    if (mealIndices.isEmpty) {
-      return const NlReply(
-          "❌ Didn't catch which meals to delete. Try being more specific.");
-    }
+    if (meals.isEmpty) return NlReply(_l.nlCannotDeleteNoMeals);
+    if (mealIndices.isEmpty) return NlReply(_l.nlDeleteWhich);
 
     // Coerce, de-duplicate, ascending, in-range only (spec §4.5.3); resolve
     // ids and labels from the SNAPSHOT the model indexed.
@@ -564,14 +584,14 @@ class DefaultNlExecutor implements NlExecutor {
         final meal = meals[index];
         final a = meal.analysis;
         ids.add(meal.id);
-        labels.add('${a['meal_description'] ?? 'Unknown meal'} '
-            '(${meal.date} ${meal.time}, '
-            '~${_orElse(a['total_calories'], 0)} kcal)');
+        labels.add(_l.nlMealLabel(
+            '${a['meal_description'] ?? 'Unknown meal'}',
+            meal.date,
+            _clock(meal.time),
+            _kcal(_orElse(a['total_calories'], 0))));
       }
     }
-    if (ids.isEmpty) {
-      return const NlReply("❌ Couldn't match those meals to the recent list.");
-    }
+    if (ids.isEmpty) return NlReply(_l.nlDeleteNoMatch);
 
     // One pending slot per chat (spec §4.5.4): staging a new delete
     // supersedes any older pending set.
@@ -581,10 +601,10 @@ class DefaultNlExecutor implements NlExecutor {
         for (var i = 0; i < ids.length; i++) MapEntry(ids[i], labels[i]),
       ]);
 
-    final lines = <String>['🗑️ Delete ${ids.length} meal(s)?', ''];
+    final lines = <String>[_l.nlDeleteAsk(ids.length), ''];
     lines.addAll(labels.map((l) => '• $l'));
     if (isTruthy(reason)) lines.add('\n💬 $reason');
-    lines.add('\nThis cannot be undone.');
+    lines.add('\n${_l.nlCannotUndo}');
     return NlReply(lines.join('\n'),
         needsDeleteConfirmation: true,
         pendingDeleteIds: ids,
@@ -593,7 +613,7 @@ class DefaultNlExecutor implements NlExecutor {
 
   @override
   Future<String> confirmPendingDelete(List<int> mealIds) async {
-    if (mealIds.isEmpty) return '👍 Cancelled — nothing was deleted.';
+    if (mealIds.isEmpty) return _l.nlDeleteCancelled;
     final labels = <String>[];
     for (final id in mealIds) {
       // deleteMeal tombstones the ledger row (spec §2.4) so the backfill
@@ -603,7 +623,7 @@ class DefaultNlExecutor implements NlExecutor {
     }
     _pendingDeleteLabels.clear();
     return [
-      '🗑️ Deleted ${mealIds.length} meal(s):',
+      _l.nlDeletedMeals(mealIds.length),
       ...labels.map((l) => '• $l'),
     ].join('\n');
   }
@@ -613,7 +633,7 @@ class DefaultNlExecutor implements NlExecutor {
     final dynamic analysis =
         action.containsKey('analysis') ? action['analysis'] : <String, dynamic>{};
     if (analysis is! Map || !isTruthy(analysis['is_food'])) {
-      return const NlReply("🚫 I couldn't detect food in that description.");
+      return NlReply(_l.nlNoFoodDetected);
     }
     final sanitized = <String, dynamic>{
       for (final e in analysis.entries) '${e.key}': e.value,
@@ -632,7 +652,9 @@ class DefaultNlExecutor implements NlExecutor {
       fileId: '',
       analysis: sanitized,
     ));
-    return NlReply('✅ Added new manual meal:\n\n${formatFoodResult(sanitized)}');
+    return NlReply(
+        '${_l.nlAddedManualMeal}\n\n${formatFoodResult(sanitized)}',
+        applied: true);
   }
 
   /// _nl_log_weight (spec §4.7, telegram_bot.py:4112-4128): deterministic
@@ -644,14 +666,11 @@ class DefaultNlExecutor implements NlExecutor {
       final field = safeNumber(action['weight_kg']);
       if (field >= minWeightKg && field <= maxWeightKg) kg = _round1(field);
     }
-    if (kg == null) {
-      return const NlReply("⚖️ I couldn't read a valid body weight (30–300 kg). "
-          'Try “I weigh 72.5 kg”.');
-    }
+    if (kg == null) return NlReply(_l.nlWeightUnreadable);
     final date = _isoDate(DateTime.now());
     // Upsert-by-day (spec §2.1 body_weight: re-log overwrites).
     await dao.saveBodyWeight(date, kg);
-    return NlReply('⚖️ Logged ${_g(kg)} kg for $date.');
+    return NlReply(_l.nlWeightLogged(_g(kg), date), applied: true);
   }
 
   /// _nl_log_activity (spec §4.8, telegram_bot.py:4131-4158).
@@ -661,8 +680,7 @@ class DefaultNlExecutor implements NlExecutor {
         _clamp(safeNumber(action['steps']), 0, activityStepsMax).round();
     final km = _clamp(safeNumber(action['distance_km']), 0, activityKmMax);
     if (kcal <= 0 && steps <= 0 && km <= 0) {
-      return const NlReply("🏃 I couldn't find any activity numbers to log. "
-          'Try “burned 450 kcal running 5 km”.');
+      return NlReply(_l.nlActivityUnreadable);
     }
     final date = _isoDate(DateTime.now());
     // Zeros store as null; steps ride in raw={"steps": n} inside the DAO.
@@ -671,11 +689,12 @@ class DefaultNlExecutor implements NlExecutor {
         steps: steps > 0 ? steps : null,
         distanceKm: km > 0 ? km.toDouble() : null);
     final bits = <String>[
-      if (kcal > 0) '${_comma(kcal.round())} kcal',
-      if (steps > 0) '${_comma(steps)} steps',
-      if (km > 0) '${_g(km)} km',
+      if (kcal > 0) _kcal(_comma(kcal.round())),
+      if (steps > 0) _l.nlStepsAmount(_comma(steps)),
+      if (km > 0) _l.nlKmAmount(_g(km)),
     ];
-    return NlReply('🏃 Logged activity: ${bits.join(' · ')} ($date).');
+    return NlReply(_l.nlActivityLogged(bits.join(' · '), date),
+        applied: true);
   }
 
   /// _nl_chat (spec §4.9, telegram_bot.py:4161-4168): a null/non-string/blank
@@ -683,8 +702,7 @@ class DefaultNlExecutor implements NlExecutor {
   Future<NlReply> _chat(Map action) async {
     final reply = action['reply'];
     if (reply is String && reply.trim().isNotEmpty) return NlReply(reply);
-    return const NlReply(
-        "I'm not sure what you mean. Try describing a meal or correction!");
+    return NlReply(_l.nlChatFallback);
   }
 }
 

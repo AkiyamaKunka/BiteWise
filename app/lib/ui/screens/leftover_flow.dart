@@ -17,6 +17,7 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show HapticFeedback;
 
 import '../../core/coerce.dart' show normalizeImageHash, safeNumber;
 import '../../core/contracts.dart';
@@ -313,19 +314,20 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         ),
       );
     }
+    // No horizontal padding: GroupedSection already insets 16 (ONE
+    // gutter); an extra 16 a side here shrank every cell to 326 px.
     return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+      padding: const EdgeInsets.only(top: 8, bottom: 24),
       children: [
         GroupedSection(
           header: l.leftoverPickMeal,
+          separatorInset: 16, // no badges: label-aligned hairlines
           children: [
             for (final m in _candidates)
-              GroupedRow(
+              _MealPickRow(
                 key: Key('leftoverMeal-${m.id}'),
                 title: mealDescription(m.analysis),
-                value:
-                    '${context.friendlyDay(m.date)} ${context.clock(m.time)}'
-                    ' · ~${l.kcalAmount(formatKcal(safeCal(m)))}',
+                detail: _pickDetail(m),
                 onTap: () => _selectMeal(m),
               ),
           ],
@@ -334,11 +336,27 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     );
   }
 
+  /// A picker row's second line: day + clock + calories. The calories —
+  /// the number that tells two 午餐 apart — stay visible, but BELOW the
+  /// description: one GroupedRow line held all three and left the
+  /// description, the thing that names the meal, 20–90 px (0 px and an
+  /// overflow at the largest English text size; loop finds 2026-10-07).
+  /// The picker only ever holds today/yesterday.
+  String _pickDetail(Meal m) {
+    final l = context.l10n;
+    final clock = context.clock(m.time);
+    final day = m.date == isoDate(DateTime.now())
+        ? l.timeToday(clock)
+        : l.timeYesterday(clock);
+    return '$day · ~${l.kcalAmount(formatKcal(safeCal(m)))}';
+  }
+
   Widget _photoPicker(ThemeData theme, dynamic l) {
     final meal = _selected!;
     return Column(children: [
       Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        // GroupedSection insets itself (see _mealPicker).
+        padding: const EdgeInsets.only(top: 8),
         child: GroupedSection(
           children: [
             GroupedRow(
@@ -365,8 +383,36 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         child: FutureBuilder<List<RecentAsset>>(
           future: _assets,
           builder: (context, snap) {
+            // A denial is NOT an empty camera roll: 'No recent photos
+            // found.' here was the same permanent dead end AddPhotoScreen
+            // already fixed (once the OS stops re-prompting, the request
+            // above is a silent no-op) — say what is wrong and offer the
+            // only way back (loop find 2026-10-07).
             if (_permissionDenied) {
-              return Center(child: Text(l.addNoPhotos));
+              final open = widget.services.openSystemSettings;
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        l.photoPermissionDenied,
+                        key: const Key('leftoverPhotoPermissionDenied'),
+                        textAlign: TextAlign.center,
+                      ),
+                      if (open != null) ...[
+                        const SizedBox(height: 12),
+                        FilledButton.tonal(
+                          key: const Key('leftoverOpenSystemSettings'),
+                          onPressed: () => open(),
+                          child: Text(l.openSystemSettings),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              );
             }
             if (!snap.hasData) {
               return const Center(child: CircularProgressIndicator());
@@ -406,5 +452,59 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         ),
       ),
     ]);
+  }
+}
+
+/// One meal-picker row: the description on its own line(s) at the FULL
+/// cell width, day · clock · calories on a quiet line below. Same cell
+/// geometry and selection haptic as a GroupedRow; no chevron — a picker
+/// row is self-evidently the thing to tap. Grows with the text size
+/// instead of overflowing.
+class _MealPickRow extends StatelessWidget {
+  const _MealPickRow({
+    super.key,
+    required this.title,
+    required this.detail,
+    required this.onTap,
+  });
+
+  final String title;
+  final String detail;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: () {
+        HapticFeedback.selectionClick();
+        onTap();
+      },
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: 44),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                title,
+                style: theme.textTheme.bodyLarge,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                detail,
+                style: theme.textTheme.bodyMedium
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

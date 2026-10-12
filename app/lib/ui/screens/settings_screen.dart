@@ -228,21 +228,27 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   Future<void> _toggleWatcher(bool enable) async {
+    // Captured BEFORE the first await: every snackbar below fires after a
+    // permission / photo-library round trip, and reading l10n off a
+    // context that may have gone away is the use-after-await the lint
+    // exists for. (The strings themselves were English literals until
+    // 2026-10-07 — the Chinese UI showed them verbatim.)
+    final l10n = context.l10n;
     if (enable) {
       final granted = await widget.requestPhotoPermission();
       if (!granted) {
         if (!mounted) return;
         final open = widget.openSystemSettings;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: const Text(
-                'Photo library permission is required for automatic intake.'),
+            content: Text(l10n.watcherPermissionDenied),
             // Once the OS stops re-prompting, the in-app request above is
             // a silent no-op — without this action the toggle is a
             // forever dead end.
             action: open == null
                 ? null
                 : SnackBarAction(
-                    label: 'Open settings', onPressed: () => open())));
+                    label: l10n.openSystemSettings,
+                    onPressed: () => open())));
         return; // leave the switch off
       }
       if (!mounted) return;
@@ -252,10 +258,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (!widget.settings.canAnalyze) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content: Text(widget.settings.isQuotaPaused
-                ? 'Watching is on, but analyses are paused by the daily '
-                    'quota — new photos will wait.'
-                : "Watching is on, but photos won't be analyzed until a "
-                    'working API key is set above.')));
+                ? l10n.watcherOnQuotaPaused
+                : l10n.watcherOnNoKey)));
       }
       await widget.photoIntake?.start();
       // A "selected photos" (limited) grant is a TRAP: the watcher can
@@ -268,14 +272,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         final open = widget.openSystemSettings;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             duration: const Duration(seconds: 8),
-            content: const Text(
-                'Only SELECTED photos are shared, so new food photos '
-                "won't be seen automatically. Grant access to ALL photos "
-                'for automatic logging.'),
+            content: Text(l10n.watcherLimitedAccess),
             action: open == null
                 ? null
                 : SnackBarAction(
-                    label: 'Fix', onPressed: () => open())));
+                    label: l10n.fixAction, onPressed: () => open())));
       }
       // Instant feedback on enable: sweep the lookback window right away
       // instead of waiting for the next change event / background run.
@@ -316,6 +317,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// that is not a CalorieTracker export, so a mis-paste is a message,
   /// never a corrupted log.
   Future<void> _import() async {
+    final l10n = context.l10n; // before the dialog await, as in _toggleWatcher
     // The controller is owned by the STATE, not the dialog closure: a
     // locally-created one gets disposed while the dialog's exit animation
     // is still rebuilding the field ("A TextEditingController was used
@@ -324,7 +326,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     final go = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Import exported data'),
+        title: Text(l10n.importDialogTitle),
         // Scrollable + bounded: an AlertDialog's content is laid out
         // against the available height, and an unbounded Column here
         // overflowed by ~97000 px on a tall viewport.
@@ -332,9 +334,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text(
-                  'Paste the contents of an exported JSON file. Existing '
-                  'meals are kept; only new ones are added.'),
+              Text(l10n.importDialogBody),
               const SizedBox(height: 12),
               TextField(
                 key: const Key('importField'),
@@ -352,11 +352,11 @@ class _SettingsScreenState extends State<SettingsScreen>
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
-              child: const Text('Cancel')),
+              child: Text(l10n.cancel)),
           FilledButton(
               key: const Key('importConfirm'),
               onPressed: () => Navigator.of(ctx).pop(true),
-              child: const Text('Import')),
+              child: Text(l10n.importAction)),
         ],
       ),
     );
@@ -368,27 +368,44 @@ class _SettingsScreenState extends State<SettingsScreen>
       if (!mounted) return;
       final meals = summary.added['meals'] ?? 0;
       final kept = summary.totalSkipped;
+      // Two whole sentences rather than one with a glued-on "; N already
+      // here" suffix: a translator needs the full sentence to order it.
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(summary.totalAdded == 0
-              ? 'Nothing new to import — everything in that file is '
-                  'already here.'
-              : 'Imported $meals meal${meals == 1 ? '' : 's'} '
-                  '(${summary.totalAdded} rows total)'
-                  '${kept > 0 ? '; $kept already here' : ''}.')));
+              ? l10n.importNothingNew
+              : kept > 0
+                  ? l10n.importDoneKept(meals, summary.totalAdded, kept)
+                  : l10n.importDone(meals, summary.totalAdded))));
     } on FormatException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(e.message)));
+          .showSnackBar(SnackBar(content: Text(_refusalText(l10n, e))));
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Import failed: $e')));
+          .showSnackBar(SnackBar(content: Text(l10n.importFailed('$e'))));
     } finally {
       if (mounted) setState(() => _importing = false);
     }
   }
 
+  /// The parser's refusal in the user's language. [ExportFormatException]
+  /// carries WHY; a plain FormatException (nothing throws one today, but
+  /// the DAO contract allows it) gets the generic failure line with its
+  /// own message rather than a silent swallow.
+  static String _refusalText(AppLocalizations l10n, FormatException e) {
+    if (e is! ExportFormatException) return l10n.importFailed(e.message);
+    return switch (e.refusal) {
+      ExportRefusal.notJson => l10n.importErrNotJson,
+      ExportRefusal.notExport => l10n.importErrNotExport,
+      ExportRefusal.wrongFormatTag => l10n.importErrWrongFormatTag,
+      ExportRefusal.badVersion => l10n.importErrBadVersion,
+      ExportRefusal.noTables => l10n.importErrNoTables,
+    };
+  }
+
   Future<void> _export() async {
+    final l10n = context.l10n; // before the awaits, as in _toggleWatcher
     setState(() => _exporting = true);
     try {
       final json = await widget.dao.exportJson(); // spec §8 full export
@@ -413,12 +430,11 @@ class _SettingsScreenState extends State<SettingsScreen>
       final file = File('${dir.path}/calorietracker-$stamp.json');
       await file.writeAsString(json, flush: true);
       await SharePlus.instance.share(ShareParams(
-          files: [XFile(file.path)],
-          subject: 'CalorieTracker data export'));
+          files: [XFile(file.path)], subject: l10n.exportShareSubject));
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Export failed: $e')));
+            .showSnackBar(SnackBar(content: Text(l10n.exportFailed('$e'))));
       }
     } finally {
       if (mounted) setState(() => _exporting = false);

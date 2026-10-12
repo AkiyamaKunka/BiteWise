@@ -233,4 +233,43 @@ void main() {
     expect(t.fat, 3);
     expect(t.carbs, 0);
   });
+
+  group('addItem', () {
+    test('the first row inherits the hand-typed totals, later rows are blank',
+        () {
+      // Found 2026-10-07: with no rows the totals are the only source of
+      // truth; deriving them from one empty row zeroed a 450 kcal meal the
+      // moment "Add item" was tapped.
+      final d = MealDraft.blank(DateTime(2026, 7, 24))
+        ..calories = '450'
+        ..protein = '50'
+        ..carbs = '12'
+        ..fat = '22';
+      final first = d.addItem();
+      expect(d.items, [same(first)]);
+      expect(first.name, '');
+      expect(first.calories, '450');
+      expect(first.protein, '50');
+      expect(first.carbs, '12');
+      expect(first.fat, '22');
+      // Re-deriving the totals from the rows gives back what was typed.
+      final t = d.itemTotals();
+      expect(t.calories, 450);
+      expect(t.protein, 50);
+      expect(t.carbs, 12);
+      expect(t.fat, 22);
+
+      final second = d.addItem();
+      expect(d.items, hasLength(2));
+      expect(second.isBlank, isTrue,
+          reason: 'seeding again would double the totals');
+      expect(d.itemTotals().calories, 450);
+    });
+
+    test('with blank totals the first row is blank too', () {
+      final d = MealDraft.blank(DateTime(2026, 7, 24));
+      expect(d.addItem().isBlank, isTrue);
+      expect(d.itemTotals().calories, 0);
+    });
+  });
 }

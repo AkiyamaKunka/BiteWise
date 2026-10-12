@@ -72,6 +72,29 @@ class Meal {
 /// but not by the automatic watcher.
 enum IngestionStatus { processing, saved, skipped, failed, deleted }
 
+/// Answer to [MealsDao.reservePhotoHash].
+///
+/// Two refusals, told apart on purpose (2026-10-07): a row another run is
+/// STILL WORKING ON is not a verdict. iOS can expire the ~30 s background
+/// grant mid-analysis, which leaves that run's 'processing' row behind
+/// until the launch sweep releases it (up to 15 min); until then both
+/// automated paths read the refusal as "already logged", marched the
+/// watermark / seen-set past the photo, and never offered it again.
+enum PhotoReservation {
+  /// The hash is ours: analyze, then end the row saved/skipped/failed —
+  /// or release it (spec §6 ledger rule).
+  reserved,
+
+  /// Claimed for good: a saved meal, or a verdict this caller's policy may
+  /// not reclaim. Terminal — coverage may pass over the photo.
+  claimed,
+
+  /// A FRESH 'processing' row belongs to another run (the foreground app,
+  /// a background isolate, or one iOS cut off mid-analysis). Not terminal:
+  /// the photo must be offered again once that row is saved or released.
+  inFlight,
+}
+
 /// Persistence seam (spec §2, §5 read shapes).
 abstract class MealsDao {
   Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus});
@@ -88,10 +111,10 @@ abstract class MealsDao {
   Future<List<Meal>> mealsBetween(String startDate, String endDate);
   Future<List<Meal>> recentMeals({int days = 7}); // food-only, oldest-first
   Future<bool> isDuplicatePhoto(String imageHash); // 5-min same-hash window
-  /// Reserve the hash before analysis; false = already claimed. Set
+  /// Reserve the hash before analysis (see [PhotoReservation]). Set
   /// [reclaimDeliberate] on user-initiated adds (reclaims failed/skipped/
   /// deleted rows, the "deliberate re-send" rule).
-  Future<bool> reservePhotoHash(String imageHash,
+  Future<PhotoReservation> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false});
   Future<void> markPhotoHash(String imageHash, IngestionStatus status,
       {int? mealId});
@@ -179,6 +202,20 @@ class ImportSummary {
   int get totalSkipped => skipped.values.fold(0, (a, b) => a + b);
 }
 
+/// Why [MealsDao.importJson] refused a payload. The settings screen maps
+/// each reason to a sentence in the user's language; the English
+/// [ExportFormatException.message] is for logs and tests.
+enum ExportRefusal { notJson, notExport, wrongFormatTag, badVersion, noTables }
+
+/// The import parser's refusal — still a [FormatException], so every
+/// `on FormatException` catcher and `throwsA(isA<FormatException>())` test
+/// keeps working, but one that says WHY. Until 2026-10-07 the UI echoed
+/// this English message straight into the Chinese UI.
+class ExportFormatException extends FormatException {
+  const ExportFormatException(this.refusal, String message) : super(message);
+  final ExportRefusal refusal;
+}
+
 /// Result of one photo analysis (spec §3).
 class AnalysisOutcome {
   final Map<String, dynamic>? analysis; // null = failed (kept for retry)
@@ -252,6 +289,11 @@ enum KeyProbeResult {
   /// The key authenticated but the provider is rate-limiting right now.
   rateLimited,
 
+  /// The key was not refused; the MODEL id is wrong, retired or not
+  /// activated. Picking a model is the fix, NOT a new key — reporting
+  /// this as [rejected] sent users to re-copy a key that worked.
+  modelNotFound,
+
   /// The provider refused the credential, or the request could not be made.
   rejected,
 }
@@ -268,10 +310,19 @@ class NlReply {
   final bool needsDeleteConfirmation;
   final List<int> pendingDeleteIds; // meal ids awaiting the modal confirm
   final List<String> pendingDeleteLabels;
+
+  /// True only when this reply reports a change the executor already wrote
+  /// (a correction, a new meal, a weight or an activity). Refusals, errors,
+  /// chat and a STAGED delete are false — a delete applies only once the
+  /// modal confirms. The fix screen's "Applied this session" list used to
+  /// record every request, so a cancelled delete or an "invalid meal index"
+  /// refusal was shown as applied (loop find 2026-10-07).
+  final bool applied;
   const NlReply(this.text,
       {this.needsDeleteConfirmation = false,
       this.pendingDeleteIds = const [],
-      this.pendingDeleteLabels = const []});
+      this.pendingDeleteLabels = const [],
+      this.applied = false});
 }
 
 /// Result of describing a meal in free text: [analysis] on success (the

@@ -10,6 +10,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 
 import 'fakes.dart';
@@ -236,6 +237,62 @@ void main() {
     expect(dao.meals.single.source, 'app_photo');
   });
 
+  test('a photo another run is still analyzing is IN FLIGHT — retryable, '
+      'untouched, not "already logged"', () async {
+    // iOS expires the ~30 s background grant mid-analysis; that run's
+    // 'processing' row survives until the launch sweep releases it (up to
+    // 15 min). Both paths used to read the refused reservation as
+    // alreadyTracked (terminal), so the watermark and the watcher's
+    // seen-set passed over a photo nobody had analyzed (2026-10-07).
+    final dao = FakeDao();
+    dao.ledger[_hash] = IngestionStatus.processing;
+    var analyzerCalls = 0;
+    final analyzer = FakeAnalyzer()
+      ..onAnalyze = () async {
+        analyzerCalls++;
+      };
+    final pipeline = PhotoPipeline(dao: dao, analyzer: analyzer);
+
+    final auto = await pipeline.process(_photo());
+    expect(auto.kind, PhotoOutcomeKind.inFlight);
+    expect(auto.retryable, isTrue,
+        reason: 'the frontier must halt in front of it and the watcher '
+            'must forget it was seen');
+    expect(auto.message,
+        'This photo is still being analyzed — check back in a moment.');
+    expect(auto.errorKind, AnalysisErrorKind.none);
+
+    // The deliberate path: same answer, and it must NOT steal the analysis
+    // (reclaim covers failed/skipped/deleted only — unchanged).
+    final deliberate = await pipeline.process(_photo(deliberate: true));
+    expect(deliberate.kind, PhotoOutcomeKind.inFlight,
+        reason: 'the add flow must not say "already logged" about a photo '
+            'that is still being analyzed');
+    expect(deliberate.retryable, isTrue);
+
+    expect(analyzerCalls, 0);
+    expect(dao.ledger[_hash], IngestionStatus.processing,
+        reason: 'the other run\'s row is left alone for it (or the launch '
+            'sweep) to finish');
+    expect(dao.meals, isEmpty);
+  });
+
+  test('bind(): an in-flight photo is RELEASED to the intake (sink false), '
+      'a claimed one is terminal', () async {
+    final dao = FakeDao();
+    dao.ledger[_hash] = IngestionStatus.processing;
+    final pipeline = PhotoPipeline(dao: dao, analyzer: FakeAnalyzer());
+    final intake = _SinkCapturingIntake();
+    pipeline.bind(intake);
+    expect(await intake.sink!(_photo(), null), isFalse,
+        reason: 'false = the watcher drops its seen entry and halts the '
+            'frontier; a later scan re-offers the photo');
+
+    dao.ledger[_hash] = IngestionStatus.saved;
+    expect(await intake.sink!(_photo(), null), isTrue,
+        reason: 'a real verdict stays terminal — coverage may pass it');
+  });
+
   test('deliberate add inside the 5-minute duplicate window is refused',
       () async {
     final dao = FakeDao()..duplicatePhoto = true;
@@ -255,6 +312,23 @@ void main() {
     expect(out.kind, PhotoOutcomeKind.failed); // contained, no throw (spec §6)
     expect(dao.ledger[_hash], IngestionStatus.failed);
   });
+}
+
+/// Hands the test the sink `bind()` attaches, so it can be driven directly.
+class _SinkCapturingIntake implements PhotoIntake {
+  Future<bool> Function(IntakePhoto, DateTime?)? sink;
+  @override
+  Stream<IntakePhoto> get photos => const Stream.empty();
+  @override
+  void attachSink(Future<bool> Function(IntakePhoto, DateTime?)? s) =>
+      sink = s;
+  @override
+  Future<DateTime?> backfillScan({int lookbackDays = 0, DateTime? since}) async =>
+      null;
+  @override
+  Future<void> start() async {}
+  @override
+  Future<void> stop() async {}
 }
 
 class _ThrowingSaveDao extends FakeDao {

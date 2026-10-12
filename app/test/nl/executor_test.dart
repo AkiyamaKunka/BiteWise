@@ -398,8 +398,25 @@ void main() {
       final replies = await exec.executeParsed(
           {'intent': 'correction', 'meal_index': 1, 'analysis': roastDuckAnalysis, 'reason': '改为烧鸭饭'},
           'fix', await dao.recentMeals());
-      expect(replies.single.text, '✏️ Corrected meal 2!\n\n'
+      expect(replies.single.text, '✏️ Corrected meal 2!\n📅 2026-07-17 12:30 PM\n\n'
           '面条 → 烧鸭饭\n🔥 550 kcal → 780 kcal (+230)\n\n💬 改为烧鸭饭');
+    });
+
+    test('reply names the rewritten row\'s day when the dish recurs', () async {
+      // Corrections have no confirmation step, and over the seven-day window
+      // the same dish recurs: the reply must say WHICH day's row changed
+      // (from the snapshot row the write targets), or a wrong-day hit is
+      // invisible.
+      final olderId = dao.seed('白粥', 150, date: '2026-07-15', time: '08:00 AM');
+      dao.seed('白粥', 150, date: '2026-07-17', time: '08:30 AM');
+      final replies = await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': 0,
+        'analysis': {'is_food': true, 'meal_description': '小米粥', 'total_calories': 120},
+      }, 'fix the porridge', await dao.recentMeals());
+      expect(dao.updates.single.$1, olderId);
+      expect(replies.single.text, contains('📅 2026-07-15 08:00 AM'));
+      expect(replies.single.text, isNot(contains('2026-07-17')));
     });
   });
 
@@ -649,7 +666,8 @@ void main() {
       expect(analyzer.lastPrompt,
           contains('today is $today (${weekdays[now.weekday - 1]}); yesterday was $yesterday'));
       expect(analyzer.lastPrompt,
-          contains('[0] Date: 2026-07-17 | Meal: 白粥 (~150 kcal) — Items: '));
+          contains('[0] Date: 2026-07-17 | Time: 12:00 PM | '
+              'Meal: 白粥 (~150 kcal) — Items: '));
       expect(analyzer.lastPrompt, contains('The user says: "what did I eat yesterday?"'));
       expect(dao.lastRecentDays, textEditWindowDays);
     });
@@ -670,7 +688,34 @@ void main() {
       final replies = await exec.handleText('hello');
       expect(replies.single.text, 'hi');
       expect(analyzer.lastPrompt,
-          contains('[0] Date: 2026-07-17 | Meal: Unknown (~0 kcal) — Items: ?'));
+          contains('[0] Date: 2026-07-17 | Time: 12:00 PM | '
+              'Meal: Unknown (~0 kcal) — Items: ?'));
+    });
+
+    test('snapshot is in meal-clock order, the order the screens show', () async {
+      // A catch-up scan ingests the backdated 08:00 breakfast photo AFTER
+      // the 12:30 lunch that was shared directly: timestamp order is
+      // [lunch, breakfast], but Today shows breakfast first — and "第一顿"
+      // must mean the meal the owner sees first (spec §9).
+      final lunchId = dao.seed('面条', 550, time: '12:30 PM');
+      final breakfastId = dao.seed('白粥', 150, time: '08:00 AM');
+      final dinnerYesterdayId =
+          dao.seed('米饭', 400, date: '2026-07-16', time: '07:00 PM');
+      analyzer.next = {
+        'intent': 'correction',
+        'meal_index': 1,
+        'analysis': roastDuckAnalysis,
+      };
+      await exec.handleText('第一顿其实是烧鸭饭');
+
+      final prompt = analyzer.lastPrompt!;
+      expect(prompt, contains('[0] Date: 2026-07-16 | Time: 07:00 PM | Meal: 米饭'));
+      expect(prompt, contains('[1] Date: 2026-07-17 | Time: 08:00 AM | Meal: 白粥'));
+      expect(prompt, contains('[2] Date: 2026-07-17 | Time: 12:30 PM | Meal: 面条'));
+      // The index resolves against the SAME sorted list the prompt showed.
+      expect(dao.byId(breakfastId).analysis['meal_description'], '烧鸭饭');
+      expect(dao.byId(lunchId).analysis['meal_description'], '面条');
+      expect(dao.byId(dinnerYesterdayId).analysis['meal_description'], '米饭');
     });
   });
 
@@ -704,6 +749,51 @@ void main() {
       expect(replies.single.text, contains('Gemini is paused right now.'));
       expect(replies.single.text, contains('did not send this request'));
       expect(analyzer.lastPrompt, isNull); // NO model call during the pause
+    });
+  });
+
+  // NlReply.applied drives the fix screen's "Applied this session" list: it
+  // must be true ONLY for a change already written (loop find 2026-10-07).
+  group('applied flag', () {
+    Future<NlReply> one(dynamic action, String text) async =>
+        (await exec.executeParsed(action, text, await dao.recentMeals())).single;
+
+    test('true for every write the executor performs', () async {
+      seedThreeMeals();
+      expect(
+          (await one({'intent': 'correction', 'meal_index': 1, 'analysis': roastDuckAnalysis},
+                  '第二顿是烧鸭饭'))
+              .applied,
+          isTrue);
+      expect(
+          (await one({'intent': 'new_meal', 'analysis': roastDuckAnalysis}, 'roast duck'))
+              .applied,
+          isTrue);
+      expect((await one({'intent': 'log_weight'}, 'I weigh 72.5 kg')).applied, isTrue);
+      expect(
+          (await one({'intent': 'log_activity', 'steps': 8000}, '8000 steps')).applied,
+          isTrue);
+    });
+
+    test('false for refusals, chat and a delete that is only staged', () async {
+      seedThreeMeals();
+      final notApplied = <NlReply>[
+        await one({'intent': 'correction', 'meal_index': 9, 'analysis': roastDuckAnalysis},
+            'fix meal 9'),
+        await one({'intent': 'correction', 'meal_index': 0, 'analysis': {}}, 'fix it'),
+        await one({'intent': 'delete'}, 'delete'),
+        await one({'intent': 'delete', 'meal_indices': [99]}, 'delete'),
+        await one({'intent': 'delete', 'meal_indices': [0]}, 'delete the porridge'),
+        await one({'intent': 'new_meal', 'analysis': {'is_food': false}}, 'a rock'),
+        await one({'intent': 'log_weight'}, 'weigh me'),
+        await one({'intent': 'log_activity'}, 'I moved'),
+        await one({'intent': 'chat', 'reply': 'hi'}, 'hello'),
+      ];
+      expect(notApplied.map((r) => r.applied), everyElement(isFalse));
+      expect(dao.deletedIds, isEmpty);
+
+      analyzer.next = null;
+      expect((await exec.handleText('anything')).single.applied, isFalse);
     });
   });
 }
