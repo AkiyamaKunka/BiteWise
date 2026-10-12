@@ -244,6 +244,49 @@ void main() {
       expect(h.requests, hasLength(1));
     });
 
+    test('an HTML 403/401 from a front end or web filter is network, not '
+        'a rejected key: one call, photo kept, probe not "rejected"',
+        () async {
+      // Review 2026-10-12 probe D: bare 401/403 digits anywhere used to
+      // read as auth, and a rejected key now parks the automatic scan for
+      // a day. Only Google's JSON statuses (or a JSON-bodied 401/403) are
+      // a verdict on the key.
+      const gfe = "<html><body>Your client does not have permission to get "
+          "URL. That's an error.</body></html>";
+      expect(classifyGeminiError('HTTP 403: $gfe'),
+          GeminiErrorClass.networkService);
+      expect(classifyGeminiError('HTTP 401: Login required'),
+          GeminiErrorClass.networkService);
+      expect(
+          classifyGeminiError('HTTP 400: {"error":{"message":"Request payload '
+              '4031 bytes invalid","status":"INVALID_ARGUMENT"}}'),
+          GeminiErrorClass.modelError);
+      expect(classifyGeminiError('HTTP 403: {"error":{"code":403}}'),
+          GeminiErrorClass.auth);
+      expect(
+          classifyGeminiError('HTTP 400: {"error":{"status":"INVALID_ARGUMENT",'
+              '"details":[{"reason":"API_KEY_INVALID"}]}}'),
+          GeminiErrorClass.auth);
+      for (final status in [403, 401]) {
+        final s = await freshSettings();
+        final h = Harness(s, [
+          http.Response(gfe, status, headers: {'content-type': 'text/html'})
+        ]);
+        final out = await h.analyzer.analyzePhoto(photo);
+        expect(out.retryable, isTrue, reason: '$status: ${out.error}');
+        expect(classifyAnalysisError(out.error), AnalysisErrorKind.network,
+            reason: '$status: ${out.error}');
+        expect(h.requests, hasLength(1), reason: '$status');
+        expect(h.sleeps, isEmpty, reason: '$status');
+        final probe = await GeminiAnalyzer(s,
+                client: MockClient((_) async => http.Response(gfe, status)))
+            .probeKey('k');
+        expect(probe.result, isNot(KeyProbeResult.rejected),
+            reason: '$status: ${probe.message}');
+        expect(probe.result, isNot(KeyProbeResult.ok), reason: '$status');
+      }
+    });
+
     test('classification table matches the spec', () {
       expect(classifyGeminiError('HTTP 429: $dailyQuotaBody'),
           GeminiErrorClass.dailyQuotaExhausted);

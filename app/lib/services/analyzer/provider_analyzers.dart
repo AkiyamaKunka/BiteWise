@@ -188,6 +188,20 @@ abstract class _HttpVisionAnalyzer
             regionBlocked: true,
             verbatimMessage: true);
       }
+      // Every provider — and the owner's server ({"error":"Unauthorized"})
+      // — answers its 401/403 as JSON. An HTML or text 401/403 is a web
+      // filter or captive portal answering in its place (the server is
+      // plain HTTP): the key was never judged, so it is the same
+      // interception as the 3xx below — never 'key rejected', which parks
+      // the automatic scan for a day (review 2026-10-12).
+      if ((resp.statusCode == 401 || resp.statusCode == 403) &&
+          !_isJsonObject(body)) {
+        throw _ProviderException(
+            'HTTP ${resp.statusCode} non-JSON reply (captive portal or proxy '
+            'page)',
+            transient: true,
+            retryInPlace: false);
+      }
       if (resp.statusCode == 401 ||
           resp.statusCode == 403 ||
           // xAI reports a bad key as HTTP 400 "Incorrect API key provided".
@@ -495,6 +509,16 @@ abstract class _HttpVisionAnalyzer
       return KeyProbe(KeyProbeResult.rejected,
           message: e.auth ? null : e.userMessage);
     }
+  }
+}
+
+/// True when [body] decodes as a JSON object — what every provider's (and
+/// the owner's server's) error reply is.
+bool _isJsonObject(String body) {
+  try {
+    return jsonDecode(body) is Map;
+  } on FormatException {
+    return false;
   }
 }
 
@@ -1128,7 +1152,9 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           .send(req)
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 8));
-      if (resp.statusCode == 401 || resp.statusCode == 403) return 'rejected';
+      if (resp.statusCode == 401 || resp.statusCode == 403) {
+        return _isJsonObject(resp.body) ? 'rejected' : 'unreachable';
+      }
       if (resp.statusCode != 200) return 'unreachable';
       final decoded = jsonDecode(resp.body);
       final v = decoded is Map ? decoded['claude_login'] : null;
@@ -1204,7 +1230,11 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         return null;
       }
       if (resp.statusCode == 401 || resp.statusCode == 403) {
-        return 'Your server rejected that key.';
+        // The server's own 401 is JSON; an HTML/text one is a web filter
+        // or portal on the plain-HTTP path, not a verdict on the key.
+        return _isJsonObject(resp.body)
+            ? 'Your server rejected that key.'
+            : _interceptedMessage;
       }
       return 'Server answered HTTP ${resp.statusCode}.';
     } on TimeoutException {

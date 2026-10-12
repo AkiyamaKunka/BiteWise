@@ -932,6 +932,15 @@ void main() {
             headers: {'location': 'http://portal.example/login'}),
         '307': () => http.Response('<html>Redirecting</html>', 307,
             headers: {'location': 'http://portal.example/login'}),
+        // A web filter / portal answering 403 or 401 with its own page:
+        // the server's 401 is JSON {"error":"Unauthorized"}, so these were
+        // never its verdict on the key (review 2026-10-12).
+        'HTML 403': () => http.Response(
+            '<html><body><h1>403 Forbidden</h1>Access denied by web filter'
+            '</body></html>',
+            403,
+            headers: {'content-type': 'text/html'}),
+        'text 401': () => http.Response('Login required', 401),
       };
 
   test('a captive portal answering for the server (HTML 200, 302, 307) is '

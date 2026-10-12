@@ -82,12 +82,21 @@ GeminiErrorClass classifyGeminiError(String errorText) {
   if (RegExp(r'^HTTP 5\d\d').hasMatch(up)) {
     return GeminiErrorClass.networkService;
   }
+  // Auth: Google's JSON statuses / API_KEY_* reasons, or an HTTP 401/403
+  // whose body is JSON. NOT bare 401/403 digits anywhere — a 400 naming
+  // "4031 bytes" read as a rejected key — and NOT an HTML/text 401/403:
+  // that is a front end, proxy or web filter answering in Google's place,
+  // the key never judged (network class, retryable, no scan pause).
   if (up.contains('API_KEY') ||
       up.contains('UNAUTHENTICATED') ||
-      up.contains('PERMISSION_DENIED') ||
-      up.contains('401') ||
-      up.contains('403')) {
+      up.contains('PERMISSION_DENIED')) {
     return GeminiErrorClass.auth;
+  }
+  final authStatus = RegExp(r'^HTTP 40[13]\b').hasMatch(up);
+  if (authStatus) {
+    return _isJsonObjectReply(errorText)
+        ? GeminiErrorClass.auth
+        : GeminiErrorClass.networkService;
   }
   // AFTER auth: a key complaint that also names a location is still about
   // the key. Matched on the region SENTENCES only ("User location is not
@@ -112,6 +121,17 @@ GeminiErrorClass classifyGeminiError(String errorText) {
     return GeminiErrorClass.modelError;
   }
   return GeminiErrorClass.unknown;
+}
+
+/// Whether the body after `HTTP <status>: ` decodes as a JSON object.
+bool _isJsonObjectReply(String errorText) {
+  final colon = errorText.indexOf(':');
+  if (colon < 0) return false;
+  try {
+    return jsonDecode(errorText.substring(colon + 1)) is Map;
+  } on FormatException {
+    return false;
+  }
 }
 
 /// Retryable = RESOURCE_EXHAUSTED/429/UNAVAILABLE/503 and NOT daily-quota
@@ -373,9 +393,13 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
         // region Gemini does not serve (no in-place retry: seconds do not
         // move a VPN node): the PHOTO is fine either way — a later scan may
         // succeed. Auth/model/parse/withheld failures are not.
+        // An HTML 401/403 (a front end or web filter answering in Google's
+        // place) is network-class too: no in-place retry, photo kept.
+        final cls = classifyGeminiError(e.message);
         final transient = isRetryableGeminiError(e.message) ||
             e.message.startsWith('API_KEY missing') ||
-            classifyGeminiError(e.message) == GeminiErrorClass.regionBlocked;
+            cls == GeminiErrorClass.regionBlocked ||
+            cls == GeminiErrorClass.networkService;
         return AnalysisOutcome(
             error: _userMessageFor(e.message),
             retryable: transient,
