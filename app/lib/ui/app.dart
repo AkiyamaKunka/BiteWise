@@ -334,16 +334,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               dao: s.dao,
               executor: s.executor,
               thumbs: s.thumbs,
-              garminDaily: s.garminDaily,
-              // The + button lives INSIDE TodayScreen (above its chat box),
-              // not as a Scaffold FAB — a Scaffold FAB floats exactly over
-              // the chat box's send button.
-              // The SIGNAL, not a Today-only reload: the chat fix/delete,
-              // describe, manual and leftover paths write meals directly,
-              // and on iOS the pending OS card must be re-armed with them
-              // (_onMealsChanged reloads Today + History and re-arms).
-              onAdd: () => openAddFlow(context, s,
-                  onChanged: () async => signalMealsChanged())),
+              garminDaily: s.garminDaily),
           HistoryScreen(key: _historyKey, dao: s.dao, thumbs: s.thumbs),
           BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
           SettingsScreen(
@@ -366,6 +357,24 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           ),
         ],
       ),
+      // The + 记录 button is a REAL Scaffold FAB (Today tab only — Body has
+      // its own), so Material lifts it above this messenger's snackbars.
+      // Until 2026-10-12 it was a Positioned inside TodayScreen, kept out
+      // of the Scaffold so it would not cover the chat box's send button
+      // (the chat box went 2026-07-31) — and every snackbar covered IT.
+      floatingActionButton: _index == 0
+          ? FloatingActionButton.extended(
+              key: const Key('addMealFab'),
+              // The SIGNAL, not a Today-only reload: the fix/delete,
+              // describe, manual and leftover paths write meals directly,
+              // and on iOS the pending OS card must be re-armed with them
+              // (_onMealsChanged reloads Today + History and re-arms).
+              onPressed: () => openAddFlow(context, s,
+                  onChanged: () async => signalMealsChanged()),
+              icon: const Icon(Icons.add),
+              label: Text(context.l10n.fabLog),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
