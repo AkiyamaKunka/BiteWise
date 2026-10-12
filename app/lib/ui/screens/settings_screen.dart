@@ -73,6 +73,12 @@ class SettingsScreen extends StatefulWidget {
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
   final PhotoLibrary? photoLibrary;
 
+  /// Fires when settings change (AppServices.settingsChanges). The app
+  /// shell's rebuild keeps this same screen instance, so without listening
+  /// the Photos footer showed a pause armed or lifted mid-view only after
+  /// a tab switch (API 35 emulator, 2026-10-12). Null in most tests.
+  final Listenable? changes;
+
   const SettingsScreen({
     super.key,
     required this.settings,
@@ -92,6 +98,7 @@ class SettingsScreen extends StatefulWidget {
     this.nextSummaryAt,
     this.lastBackgroundScan,
     this.backgroundRefreshEnabled,
+    this.changes,
   });
 
   @override
@@ -127,6 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   @override
   void initState() {
     super.initState();
+    widget.changes?.addListener(_onSettingsChanged);
     final s = widget.settings;
     _profileController = TextEditingController(text: s.dietaryProfile);
     _lookbackDays = s.lookbackDays.clamp(1, 30); // spec §6.4 range
@@ -220,8 +228,22 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (off != _notificationsOff) setState(() => _notificationsOff = off);
   }
 
+  void _onSettingsChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void didUpdateWidget(SettingsScreen old) {
+    super.didUpdateWidget(old);
+    if (old.changes != widget.changes) {
+      old.changes?.removeListener(_onSettingsChanged);
+      widget.changes?.addListener(_onSettingsChanged);
+    }
+  }
+
   @override
   void dispose() {
+    widget.changes?.removeListener(_onSettingsChanged);
     WidgetsBinding.instance.removeObserver(this);
     _profileController.dispose();
     super.dispose();

@@ -14,6 +14,11 @@ import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 
 import 'fakes.dart';
 
+/// AppSettings' notifier, as the screen sees it.
+class _Changes extends ChangeNotifier {
+  void fire() => notifyListeners();
+}
+
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
 /// The 2026-08-02 Apple restructure moved provider/key/model/server
@@ -295,6 +300,43 @@ void main() {
     expect(find.textContaining("won't be analyzed"), findsNothing);
     expect(intake.backfillScans, 1,
         reason: 'a healthy enable sweeps the window immediately');
+  });
+
+  testWidgets('the Photos footer shows a pause the moment it starts and '
+      'drops it the moment it ends — no tab switch', (tester) async {
+    // The shell's rebuild keeps the same SettingsScreen instance, so a
+    // pause armed while Settings was open only appeared after switching
+    // tabs (API 35 emulator, 2026-10-12).
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final settings = FakeSettings(
+        apiKey: 'k', watcherEnabled: true, watcherDisclosureSeen: true);
+    final changes = _Changes();
+    addTearDown(changes.dispose);
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: settings,
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      requestPhotoPermission: () async => true,
+      changes: changes,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('rejected the API key'), findsNothing);
+
+    settings
+      ..autoScanBlockedKind = 'rejectedKey'
+      ..autoScanBlockedUntil = DateTime.now().add(const Duration(hours: 3));
+    changes.fire();
+    await tester.pump();
+    expect(find.textContaining('rejected the API key'), findsOneWidget);
+
+    settings
+      ..autoScanBlockedKind = null
+      ..autoScanBlockedUntil = null;
+    changes.fire();
+    await tester.pump();
+    expect(find.textContaining('rejected the API key'), findsNothing);
   });
 
   testWidgets('a latched automatic scan says why — in the Photos footer, '
