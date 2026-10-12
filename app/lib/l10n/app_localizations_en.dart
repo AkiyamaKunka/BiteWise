@@ -858,12 +858,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String coachPartialGoal(String delta) {
-    return '$delta kcal under your goal — any meals not logged yet? Add them in BiteWise.';
+    return '$delta kcal under your goal — any meals not logged yet? Add them in Bitewise.';
   }
 
   @override
   String coachPartialTypical(String delta) {
-    return '$delta kcal below your usual day — any meals not logged yet? Add them in BiteWise.';
+    return '$delta kcal below your usual day — any meals not logged yet? Add them in Bitewise.';
   }
 
   @override
@@ -1804,12 +1804,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String errServerModelRefused(String reason) {
-    return 'Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Claude Plan.';
+    return 'Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Subscription › Model.';
   }
 
   @override
   String nlServerModelRefused(String reason) {
-    return '❌ Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Claude Plan.';
+    return '❌ Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Subscription › Model.';
   }
 
   @override
@@ -1893,12 +1893,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String autoScanPausedKey(String time) {
-    return 'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service, or a passing Test This Provider, resumes it now (next try: $time).';
+    return 'Watch Camera Roll is paused: the AI service rejected the API key. Photos are kept — changing the key in AI Provider, or a passing Test This Provider, resumes it now (next try: $time).';
   }
 
   @override
   String autoScanPausedRegion(String provider, String time) {
-    return 'Automatic scan paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo by hand to resume now (next try: $time).';
+    return 'Watch Camera Roll is paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: $time).';
   }
 
   @override

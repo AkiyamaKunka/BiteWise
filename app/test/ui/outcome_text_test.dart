@@ -219,11 +219,11 @@ void main() {
       final credits = o('Fable 5 requires usage credits', retryable: false);
       expect(outcomeBody(zh, credits),
           '你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
-          '请在 设置 › AI 服务 › Claude 订阅 里换一个模型。');
+          '请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。');
       expect(outcomeBody(zh, credits), isNot(contains('重试')));
       expect(outcomeBody(zh, credits), isNot(contains('❌')));
       expect(outcomeBody(en, credits),
-          contains('Settings › AI Provider › Claude Plan'));
+          contains('Settings › AI Provider › Subscription › Model'));
       final empty = o('the analysis ran but produced no usable result',
           retryable: false);
       expect(outcomeBody(zh, empty), contains('AI 的回答无法使用'));
@@ -381,5 +381,26 @@ void main() {
     expect(outcomeBody(zh, o), contains('bad_model'));
     expect(outcomeBody(en, o), contains('bad_model'));
     expect(rejectionCode('no code here'), '?');
+  });
+
+  // The pause line used a third name (自动扫描) for 监控相册 next to a
+  // different 后台扫描 row, and '手动添加' read as 手动输入, which calls no
+  // AI and so never lifts the pause.
+  test('the scan-pause line names the toggle and the path that resumes it',
+      () {
+    final until = DateTime(2026, 10, 12, 15);
+    final now = DateTime(2026, 10, 12, 9);
+    String line(l, String kind) => autoScanPausedLine(l,
+        kind: kind,
+        until: until,
+        provider: 'gemini',
+        serverBackend: 'claude',
+        now: now)!;
+    expect(line(zh, 'rejectedKey'), startsWith('监控相册已暂停：'));
+    expect(line(zh, 'regionBlocked'), startsWith('监控相册已暂停：'));
+    expect(line(zh, 'regionBlocked'), contains('记录 › 从最近照片选择'));
+    expect(line(en, 'rejectedKey'), startsWith('Watch Camera Roll is paused:'));
+    expect(line(en, 'rejectedKey'), contains('in AI Provider,'));
+    expect(line(en, 'regionBlocked'), contains('Log › From recent photos'));
   });
 }

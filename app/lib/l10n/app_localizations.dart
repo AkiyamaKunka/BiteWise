@@ -1475,13 +1475,13 @@ abstract class AppLocalizations {
   /// Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.'**
+  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in Bitewise.'**
   String coachPartialGoal(String delta);
 
   /// Coach line for a day logged far below the usual day: more likely missing meals than a real cut.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.'**
+  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in Bitewise.'**
   String coachPartialTypical(String delta);
 
   /// No description provided for @coachOnTarget.
@@ -2909,13 +2909,13 @@ abstract class AppLocalizations {
   /// No description provided for @errServerModelRefused.
   ///
   /// In en, this message translates to:
-  /// **'Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.'**
+  /// **'Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.'**
   String errServerModelRefused(String reason);
 
   /// No description provided for @nlServerModelRefused.
   ///
   /// In en, this message translates to:
-  /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Claude Plan.'**
+  /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.'**
   String nlServerModelRefused(String reason);
 
   /// No description provided for @outcomeRetryLaterMsg.
@@ -3041,13 +3041,13 @@ abstract class AppLocalizations {
   /// No description provided for @autoScanPausedKey.
   ///
   /// In en, this message translates to:
-  /// **'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service, or a passing Test This Provider, resumes it now (next try: {time}).'**
+  /// **'Watch Camera Roll is paused: the AI service rejected the API key. Photos are kept — changing the key in AI Provider, or a passing Test This Provider, resumes it now (next try: {time}).'**
   String autoScanPausedKey(String time);
 
   /// No description provided for @autoScanPausedRegion.
   ///
   /// In en, this message translates to:
-  /// **'Automatic scan paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo by hand to resume now (next try: {time}).'**
+  /// **'Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).'**
   String autoScanPausedRegion(String provider, String time);
 
   /// No description provided for @autoScanPausedTitle.

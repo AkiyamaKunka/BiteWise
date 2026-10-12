@@ -1202,7 +1202,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errNoApiKey => '当前服务还没有设置 API Key —— 请在设置里添加。';
 
   @override
-  String get errNoServerKey => '还没有设置服务器地址或上传 Key —— 请在设置里添加。';
+  String get errNoServerKey => '还没有设置服务器地址或上传密钥 —— 请在设置里添加。';
 
   @override
   String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
@@ -1221,7 +1221,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errBadModelDoubao =>
-      '豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台 开通管理 里开通。';
+      '豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的“开通管理”里开通。';
 
   @override
   String get errBadModelOpenRouter =>
@@ -1682,17 +1682,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String errServerModelRefused(String reason) {
-    return '你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › Claude 订阅 里换一个模型。';
+    return '你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。';
   }
 
   @override
   String nlServerModelRefused(String reason) {
-    return '❌ 你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › Claude 订阅 里换一个模型。';
+    return '❌ 你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。';
   }
 
   @override
   String outcomeRetryLaterMsg(String reason) {
-    return '这次没有分析成功（$reason）—— 可以点「重试」，或稍后再选这张照片。';
+    return '这次没有分析成功（$reason）—— 可以点“重试”，或稍后再选这张照片。';
   }
 
   @override
@@ -1727,7 +1727,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reasonNoApiKey => '还没有设置 API Key';
 
   @override
-  String get reasonNoServerKey => '还没有设置服务器地址或上传 Key';
+  String get reasonNoServerKey => '还没有设置服务器地址或上传密钥';
 
   @override
   String errRegionBlocked(String provider) {
@@ -1766,12 +1766,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String autoScanPausedKey(String time) {
-    return '自动扫描已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（$time 自动再试）。';
+    return '监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（$time 自动再试）。';
   }
 
   @override
   String autoScanPausedRegion(String provider, String time) {
-    return '自动扫描已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或手动添加一张照片即可立即恢复（$time 自动再试）。';
+    return '监控相册已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
   }
 
   @override

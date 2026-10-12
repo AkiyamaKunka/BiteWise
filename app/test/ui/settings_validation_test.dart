@@ -358,7 +358,7 @@ void main() {
       photoIntake: intake,
       requestPhotoPermission: () async => true,
     )));
-    expect(find.textContaining('Automatic scan paused'), findsNothing,
+    expect(find.textContaining('rejected the API key'), findsNothing,
         reason: 'watcher off: nothing is paused');
     await tester.tap(find.byKey(const Key('watcherToggle')));
     await tester.pumpAndSettle();

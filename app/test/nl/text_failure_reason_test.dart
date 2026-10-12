@@ -170,12 +170,12 @@ void main() {
       ]) {
         expect(line,
             '❌ 你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
-            '请在 设置 › AI 服务 › Claude 订阅 里换一个模型。');
+            '请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。');
       }
       expect((await en().handleText('x')).single.text,
           '❌ Your server cannot use the selected model: Fable 5 requires '
           'usage credits — choose another model in Settings › AI Provider › '
-          'Claude Plan.');
+          'Subscription › Model.');
     });
 
     test('retryable and unknown failures keep the spec §4 step 4 wording',

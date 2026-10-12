@@ -368,13 +368,13 @@
   "outcomeAlreadyTrackedMsg": "这张照片已经记录过了。",
   "outcomeInFlightMsg": "这张照片还在分析中，稍等片刻再看。",
   "errNoApiKey": "当前服务还没有设置 API Key —— 请在设置里添加。",
-  "errNoServerKey": "还没有设置服务器地址或上传 Key —— 请在设置里添加。",
+  "errNoServerKey": "还没有设置服务器地址或上传密钥 —— 请在设置里添加。",
   "errRejectedKey": "服务拒绝了 API Key，请在设置里检查。",
   "errRateLimited": "服务正在限流 —— 照片已保留，稍后会自动重试。",
   "errQuotaPaused": "分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。",
   "errNetwork": "连不上服务（网络或服务问题）。照片已保留，稍后会自动重试。",
   "errBadModel": "服务不接受这个模型 —— 请在设置里检查模型名。",
-  "errBadModelDoubao": "豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台 开通管理 里开通。",
+  "errBadModelDoubao": "豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的“开通管理”里开通。",
   "errBadModelOpenRouter": "OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整模型 ID（厂商/模型），并选择支持图片的模型。",
   "errBilling": "账户余额或额度已用完 —— 请到服务商控制台充值。充值后可以重新分析这张照片。",
   "errBillingText": "账户余额或额度已用完 —— 请到服务商控制台充值。",
@@ -495,7 +495,7 @@
     }
   },
   "serverReasonNoResult": "AI 的回答无法使用",
-  "errServerModelRefused": "你的服务器无法使用所选模型：{reason} —— 请在 设置 › AI 服务 › Claude 订阅 里换一个模型。",
+  "errServerModelRefused": "你的服务器无法使用所选模型：{reason} —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。",
   "@errServerModelRefused": {
     "placeholders": {
       "reason": {
@@ -503,7 +503,7 @@
       }
     }
   },
-  "nlServerModelRefused": "❌ 你的服务器无法使用所选模型：{reason} —— 请在 设置 › AI 服务 › Claude 订阅 里换一个模型。",
+  "nlServerModelRefused": "❌ 你的服务器无法使用所选模型：{reason} —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。",
   "@nlServerModelRefused": {
     "placeholders": {
       "reason": {
@@ -511,7 +511,7 @@
       }
     }
   },
-  "outcomeRetryLaterMsg": "这次没有分析成功（{reason}）—— 可以点「重试」，或稍后再选这张照片。",
+  "outcomeRetryLaterMsg": "这次没有分析成功（{reason}）—— 可以点“重试”，或稍后再选这张照片。",
   "@outcomeRetryLaterMsg": {
     "placeholders": {
       "reason": {
@@ -542,7 +542,7 @@
   "reasonServerBusy": "你的服务器正在处理另一张照片",
   "reasonServerFailed": "你的服务器这次没能分析",
   "reasonNoApiKey": "还没有设置 API Key",
-  "reasonNoServerKey": "还没有设置服务器地址或上传 Key",
+  "reasonNoServerKey": "还没有设置服务器地址或上传密钥",
   "errRegionBlocked": "{provider} 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。",
   "@errRegionBlocked": {
     "placeholders": {
@@ -580,7 +580,7 @@
   "watcherPermissionDenied": "自动记录需要相册访问权限。",
   "watcherOnQuotaPaused": "监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。",
   "watcherOnNoKey": "监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。",
-  "autoScanPausedKey": "自动扫描已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（{time} 自动再试）。",
+  "autoScanPausedKey": "监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（{time} 自动再试）。",
   "@autoScanPausedKey": {
     "placeholders": {
       "time": {
@@ -588,7 +588,7 @@
       }
     }
   },
-  "autoScanPausedRegion": "自动扫描已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或手动添加一张照片即可立即恢复（{time} 自动再试）。",
+  "autoScanPausedRegion": "监控相册已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
   "@autoScanPausedRegion": {
     "placeholders": {
       "provider": {
