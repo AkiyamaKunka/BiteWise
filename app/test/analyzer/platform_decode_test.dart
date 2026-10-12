@@ -10,8 +10,10 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('unprocessedFallback', () {
-    // SOI + SOS: a well-formed marker walk with nothing to strip.
-    final jpeg = Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xDA, 1, 2, 3]);
+    // SOI + SOS + scan + EOI: a well-formed marker walk with nothing to
+    // strip.
+    final jpeg = Uint8List.fromList(
+        [0xFF, 0xD8, 0xFF, 0xDA, 0x00, 0x02, 1, 2, 3, 0xFF, 0xD9]);
     final heic = Uint8List.fromList(
         [0, 0, 0, 0x24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63]);
 

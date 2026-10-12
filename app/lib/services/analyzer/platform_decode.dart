@@ -30,6 +30,10 @@ bool looksLikeJpeg(Uint8List b) =>
 /// ([stripJpegMetadata]). Null = send nothing (the caller fails the photo
 /// visibly instead of asking a model about bytes it cannot read, and a JPEG
 /// whose segments cannot be walked is never sent with its GPS intact).
+///
+/// Only reached when both decoders failed, so nothing re-encodes the pixels:
+/// the EXIF Orientation goes with the rest of the EXIF and a rotated photo
+/// arrives sideways. Sideways is still readable; its location is not sent.
 Uint8List? unprocessedFallback(Uint8List original, {required int maxBytes}) =>
     original.length < maxBytes && looksLikeJpeg(original)
         ? stripJpegMetadata(original)
@@ -37,12 +41,17 @@ Uint8List? unprocessedFallback(Uint8List original, {required int maxBytes}) =>
 
 /// [jpeg] without its metadata segments: every APP1 (EXIF — GPS location,
 /// camera, times — and XMP) and APP13 (Photoshop/IPTC, which can name a
-/// place). Every other segment, and everything from the first SOS onward,
-/// is copied byte-for-byte, so the pixels are untouched. Null when the
-/// marker walk from SOI to SOS hits a malformed or truncated segment.
+/// place), and nothing after the primary image's EOI. That trailer is where
+/// MPF secondary images (iPhone gain maps, previews) and vendor blobs
+/// (Samsung Motion Photo video) live, each able to carry its own EXIF/GPS.
+/// Every other segment and all entropy-coded data — every scan of a
+/// progressive JPEG, restart markers included — is copied byte-for-byte, so
+/// the pixels are untouched. Null when the walk hits a malformed or
+/// truncated segment, or runs out of bytes before the EOI.
 Uint8List? stripJpegMetadata(Uint8List jpeg) {
   if (jpeg.length < 4 || jpeg[0] != 0xFF || jpeg[1] != 0xD8) return null;
   final out = BytesBuilder(copy: false)..add(const [0xFF, 0xD8]);
+  var sawScan = false;
   var i = 2;
   while (i < jpeg.length) {
     if (jpeg[i] != 0xFF) return null;
@@ -53,13 +62,14 @@ Uint8List? stripJpegMetadata(Uint8List jpeg) {
     }
     if (m >= jpeg.length) return null;
     final marker = jpeg[m];
-    if (marker == 0xDA) {
-      // SOS: the entropy-coded data (and anything after it) goes out as-is.
-      out.add(Uint8List.sublistView(jpeg, i));
+    if (marker == 0xD9) {
+      if (!sawScan) return null; // EOI before any scan: no image to send
+      // The primary image ends here; whatever follows is not sent.
+      out.add(Uint8List.sublistView(jpeg, i, m + 1));
       return out.takeBytes();
     }
-    if (marker == 0x00 || marker == 0xD8 || marker == 0xD9) {
-      return null; // stuffing / a second SOI / EOI before any scan
+    if (marker == 0x00 || marker == 0xD8) {
+      return null; // stuffing outside entropy data / a second SOI
     }
     if (marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
       out.add(Uint8List.sublistView(jpeg, i, m + 1)); // standalone marker
@@ -74,8 +84,27 @@ Uint8List? stripJpegMetadata(Uint8List jpeg) {
       out.add(Uint8List.sublistView(jpeg, i, end));
     }
     i = end;
+    if (marker == 0xDA) {
+      // SOS: entropy-coded data follows. Inside it 0xFF is only ever
+      // followed by 0x00 (stuffing) or D0–D7 (restart); anything else is
+      // the next marker — EOI, or a DHT/SOS/DRI between progressive scans.
+      sawScan = true;
+      var k = end;
+      while (true) {
+        if (k + 1 >= jpeg.length) return null; // no EOI: truncated
+        if (jpeg[k] == 0xFF) {
+          final next = jpeg[k + 1];
+          if (next != 0x00 && (next < 0xD0 || next > 0xD7)) break;
+          k += 2;
+        } else {
+          k++;
+        }
+      }
+      out.add(Uint8List.sublistView(jpeg, end, k));
+      i = k;
+    }
   }
-  return null; // no SOS: there is no image to send
+  return null; // no EOI: there is no complete image to send
 }
 
 /// The analysis JPEG: pure-Dart decode first (unchanged, runs in an
