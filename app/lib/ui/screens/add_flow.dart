@@ -22,6 +22,7 @@ import 'fix_meal_screen.dart';
 import 'leftover_flow.dart';
 import 'meal_editor_screen.dart';
 import '../services.dart';
+import '../widgets/small_spinner.dart';
 
 /// Entry point wired to the FAB. [onChanged] refreshes the Today screen.
 Future<void> openAddFlow(BuildContext context, UiServices services,
@@ -653,10 +654,7 @@ class _AddTextScreenState extends State<AddTextScreen> {
               key: const Key('addTextSend'),
               onPressed: _sending ? null : _describe,
               icon: _sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SmallSpinner()
                   : const Icon(Icons.auto_awesome),
               label: Text(_sending
                   ? context.l10n.describeEstimating

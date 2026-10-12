@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 
 import '../diagnostics.dart';
 import '../l10n.dart';
+import '../widgets/small_spinner.dart';
 
 class DiagnosticsScreen extends StatefulWidget {
   final ProviderDiagnostics diagnostics;
@@ -83,10 +84,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
             key: const Key('runDiagnostics'),
             onPressed: _running ? null : _run,
             icon: _running
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2))
+                ? const SmallSpinner()
                 : const Icon(Icons.play_arrow),
             label: Text(_running
                 ? l.diagRunning

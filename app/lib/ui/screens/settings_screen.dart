@@ -26,6 +26,7 @@ import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
 import '../services.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
+import '../widgets/small_spinner.dart';
 import 'coverage_screen.dart';
 import 'meal_editor_screen.dart';
 import 'settings/profile_page.dart';
@@ -1063,10 +1064,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               iconColor: theme.colorScheme.primary,
               title: context.l10n.settingsRowExport,
               trailing: _exporting
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SmallSpinner()
                   : null,
               showChevron: false,
               onTap: _exporting ? null : _export,
@@ -1077,10 +1075,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               iconColor: theme.colorScheme.secondary,
               title: context.l10n.settingsRowImport,
               trailing: _importing
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SmallSpinner()
                   : null,
               showChevron: false,
               onTap: _importing ? null : _import,

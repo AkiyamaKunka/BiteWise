@@ -13,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
+import '../../widgets/small_spinner.dart';
 import 'provider_page.dart' show kPlanChoices, noteLabel;
 
 class SubscriptionProviderPage extends StatefulWidget {
@@ -407,11 +408,7 @@ class _SubscriptionProviderPageState
                   iconColor: scheme.tertiary,
                   title: context.l10n.connectClaude,
                   trailing: _authBusy
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2))
+                      ? const SmallSpinner()
                       : null,
                   onTap: _authBusy ? null : _connectClaude,
                 ),

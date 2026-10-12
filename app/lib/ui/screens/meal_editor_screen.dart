@@ -25,6 +25,7 @@ import '../l10n.dart';
 import '../large_text.dart';
 import '../meal_edit_logic.dart';
 import '../widgets/macro_chart.dart';
+import '../widgets/small_spinner.dart';
 
 class MealEditorScreen extends StatefulWidget {
   const MealEditorScreen({
@@ -586,8 +587,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         key: const Key('saveMealButton'),
         onPressed: _saving ? null : _save,
         icon: _saving
-            ? const SizedBox(
-                width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+            ? const SmallSpinner(size: 18)
             : const Icon(Icons.check),
         label: Text(widget.isNew ? context.l10n.editorAdd : context.l10n.save),
       ),

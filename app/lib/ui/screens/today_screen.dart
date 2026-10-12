@@ -23,6 +23,7 @@ import '../widgets/macro_chart.dart' show MacroPalette;
 import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
 import '../widgets/meal_card.dart';
+import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
 
 class TodayScreen extends StatefulWidget {
@@ -139,10 +140,7 @@ class TodayScreenState extends State<TodayScreen> {
               IconButton(
                 key: const Key('shareDayButton'),
                 icon: _sharing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SmallSpinner(size: 18)
                     : const Icon(Icons.ios_share),
                 tooltip: context.l10n.shareDayTooltip,
                 onPressed: _sharing ? null : _shareDay,
