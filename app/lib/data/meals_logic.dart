@@ -145,8 +145,8 @@ Map<String, dynamic> buildExportEnvelope(
   DateTime exportedAt,
 ) =>
     <String, dynamic>{
-      'format': 'calorie_tracker_export',
-      'version': 1,
+      'format': kExportFormat,
+      'version': kExportVersion,
       'exported_at': exportedAt.toIso8601String(),
       'tables': tables,
     };
