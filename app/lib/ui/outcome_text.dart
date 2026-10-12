@@ -2,15 +2,26 @@
 ///
 /// Used by the add-flow dialog AND the headless meal card (which has no
 /// BuildContext — pass `localizationsFor(appLanguage)`). English values are
-/// byte-identical to the pipeline's own [PhotoOutcome.message], so every
+/// byte-identical to the pipeline's own [PhotoOutcome.message] (except an
+/// undescribed meal, named like the meal cards — see [_shownName]), so every
 /// test that pins that prose keeps holding; anything the classifier does
 /// not recognise falls back to the raw message rather than a wrong guess.
 library;
 
 import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
+import 'format.dart' show mealDescription;
 import 'photo_pipeline.dart';
 import 'provider_names.dart';
+
+/// [PhotoOutcome.mealName] in the app language: the pipeline names a meal
+/// whose analysis has no description 'Meal' (its English prose), which the
+/// Chinese UI shows as 未命名的一餐 like every other meal title.
+String? _shownName(AppLocalizations l, PhotoOutcome o) {
+  final name = o.mealName, a = o.analysis;
+  if (name == null || a == null) return name;
+  return mealDescription(a, fallback: '').isEmpty ? l.nlUnnamedMeal : name;
+}
 
 ///
 /// [deliberate]: the add flow's dialog. Its photo was RELEASED on a
@@ -36,13 +47,13 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
   }
   switch (o.kind) {
     case PhotoOutcomeKind.saved:
-      final name = o.mealName, kcal = o.kcal;
+      final name = _shownName(l, o), kcal = o.kcal;
       if (name != null && kcal != null) {
         return l.outcomeSavedMsg(l.outcomeSavedSummary(name, kcal));
       }
       return d == null ? o.message : l.outcomeSavedMsg(d);
     case PhotoOutcomeKind.leftoverApplied:
-      final name = o.mealName, kcal = o.kcal, cut = o.deductedKcal;
+      final name = _shownName(l, o), kcal = o.kcal, cut = o.deductedKcal;
       if (name != null && kcal != null && cut != null) {
         return l.outcomeLeftoverMsg(
             l.outcomeLeftoverSummary(name, '$cut', kcal));

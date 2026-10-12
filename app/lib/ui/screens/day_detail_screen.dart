@@ -189,7 +189,8 @@ class _MealRow extends StatelessWidget {
     final theme = Theme.of(context);
     final a = meal.analysis;
     final food = isFoodMeal(meal);
-    final title = Text(mealDescription(a),
+    final title = Text(
+        mealDescription(a, fallback: context.l10n.nlUnnamedMeal),
         key: const Key('mealRowTitle'), style: theme.textTheme.titleSmall);
     final time = Text(context.clock(meal.time),
         key: const Key('mealRowTime'),

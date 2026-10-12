@@ -26,10 +26,14 @@ String formatKcal(num v) =>
 bool isFoodMeal(Meal m) => isFoodTruthy(m.analysis['is_food']);
 
 /// Meal description with a plain fallback (renderers never assume a string).
-String mealDescription(Map<String, dynamic> analysis) {
+/// Screens pass `fallback: l.nlUnnamedMeal` so an analysis without a
+/// description reads 未命名的一餐 in the Chinese UI; the default 'Meal'
+/// stays for the pipeline's English prose ([PhotoOutcome.message]).
+String mealDescription(Map<String, dynamic> analysis,
+    {String fallback = 'Meal'}) {
   final d = analysis['meal_description'];
   if (d is String && d.trim().isNotEmpty) return d.trim();
-  return 'Meal';
+  return fallback;
 }
 
 /// Card total calories: the raw stringified value, '?' only when there IS no
