@@ -193,11 +193,12 @@ Still to do in code (each needs an Xcode project edit, i.e. a normal PR):
    listing requires 13-inch iPad screenshots and reviewers test on an iPad.
    The UI is phone-only; the simplest fix is `TARGETED_DEVICE_FAMILY = 1`
    on Runner and ShareExtension (project.pbxproj) before the first upload.
-3. **Privacy policy URL** (guideline 5.1.1). Nothing exists yet. Publish
-   `docs/PRIVACY.md` (what stays on the phone, that the single photo being
-   analysed goes to the provider the user chose with the user's own key or
-   to a server the user runs, that the developer operates no backend and
-   collects nothing) and use its GitHub URL, or enable GitHub Pages.
+3. **Privacy policy URL** (guideline 5.1.1). The policy is
+   `docs/PRIVACY.md` (English + 中文); enter
+   https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md in
+   App Store Connect. That URL goes live once this branch reaches `main`.
+   Keep the file in step with what the code actually sends. Linking it
+   from the in-app Settings screen is a separate task.
 4. **In-app disclosure** (guideline 5.1.2(i), "clearly disclose where
    personal data will be shared with third parties, including with
    third-party AI, and obtain explicit permission"). The provider picker +
