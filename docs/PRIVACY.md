@@ -46,8 +46,10 @@ Settings, using **your own API key**:
 
 - Photos you pick or share into the app.
 - Only if you turn on **Watch Camera Roll**: every new photo in your
-  library, including photos that are not food — the AI decides whether a
-  photo shows food, and non-food photos are not logged.
+  library, and — when you switch it on — the photos already taken within
+  the look-back window (2 days by default, set under Settings), including
+  photos that are not food. The AI decides whether a photo shows food, and
+  non-food photos are not logged.
 
 **What is sent with a photo:**
 
@@ -120,7 +122,7 @@ date. Questions: open an issue at
 **哪些照片会被发送：**
 
 - 你手动选择或分享到应用里的照片。
-- 仅当你打开**「监控相册」**时：相册里的每一张新照片，包括不是食物的照片——由 AI 判断照片是否为食物，非食物照片不会被记录。
+- 仅当你打开**「监控相册」**时：相册里的每一张新照片，以及开启那一刻回溯窗口内（默认最近 2 天，可在设置里调整）已经拍下的照片，包括不是食物的照片——由 AI 判断照片是否为食物，非食物照片不会被记录。
 
 **随照片一起发送的内容：**
 
