@@ -7,6 +7,7 @@ PID_FILE="$HOME/.calorie_watcher.pid"
 LOCK_DIR="$HOME/.calorie_watcher.lock"
 PROC_DIR="${CALORIE_PROC_DIR:-/proc}"
 HISTORY_FILE="$HOME/uploaded_files.log"
+HISTORY_SORT_TMP="$HISTORY_FILE.sort.tmp"
 FAIL_COUNT_DIR="$HOME/.calorie_upload_failures"
 MAX_UPLOAD_ATTEMPTS=3
 # A file that never stabilizes (e.g. permanently 0-byte) would otherwise force
@@ -75,7 +76,7 @@ echo $$ > "$PID_FILE"
 cleanup() {
   [ -n "$PING_PID" ] && kill "$PING_PID" 2>/dev/null
   [ -n "$SYNC_PID" ] && kill "$SYNC_PID" 2>/dev/null
-  rm -f "$PID_FILE" "$SCAN_LIST" "$NEW_LIST" "$EXPECTED_KEYS" "$HOME/.history.tmp"
+  rm -f "$PID_FILE" "$SCAN_LIST" "$NEW_LIST" "$EXPECTED_KEYS" "$HOME/.history.tmp" "$HISTORY_SORT_TMP"
   rmdir "$LOCK_DIR" 2>/dev/null
   return 0
 }
@@ -143,9 +144,18 @@ list_photos() {
 }
 
 # History stays sorted so each poll can diff it against the scan with comm.
+# Never `sort -o "$HISTORY_FILE"` in place: sort truncates the file before it
+# writes the result, so a concurrent reader (or a SIGKILL mid-sort) sees an
+# empty history and the whole backlog re-uploads. Sort into a sibling temp
+# file and rename it over the history, which readers see atomically.
+sort_history() {
+  LC_ALL=C sort -u "$HISTORY_FILE" -o "$HISTORY_SORT_TMP" \
+    && mv "$HISTORY_SORT_TMP" "$HISTORY_FILE"
+}
+
 remember_uploaded() {
   echo "$1" >> "$HISTORY_FILE"
-  LC_ALL=C sort -u "$HISTORY_FILE" -o "$HISTORY_FILE"
+  sort_history
 }
 
 # Camera-dir mtime for the poll gate. Read this BEFORE each full scan: a photo
@@ -244,7 +254,7 @@ if [ "$SEED_FRESH_MINUTES" -gt 0 ] 2>/dev/null; then
 else
   list_photos >> "$HISTORY_FILE"
 fi
-LC_ALL=C sort -u "$HISTORY_FILE" -o "$HISTORY_FILE" 2>/dev/null || true
+sort_history 2>/dev/null || true
 
 echo "[$(date)] Started polling loop for $CAMERA_DIR" | tee -a "$LOG_FILE"
 
