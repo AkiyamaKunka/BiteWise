@@ -297,7 +297,13 @@ class PhotoPipeline {
   }
 
   /// One photo through the full pipeline. Never throws.
-  Future<PhotoOutcome> process(IntakePhoto photo) async {
+  Future<PhotoOutcome> process(IntakePhoto photo) => _process(photo);
+
+  /// [held]: a verdict this photo ALREADY got, with the meal snapshot its
+  /// leftover indexes resolve against — settled again instead of uploading
+  /// the photo a second time (see [_afterLost]).
+  Future<PhotoOutcome> _process(IntakePhoto photo,
+      {_HeldVerdict? held}) async {
     // Identity = md5 of ORIGINAL bytes, normalized (spec §6.2, §2.2).
     // OFF the UI isolate: md5 over a 12-25 MB original is tens of ms of
     // straight-line work, and an album burst runs this once per photo —
@@ -315,6 +321,8 @@ class PhotoPipeline {
     // Our reservation's ownership stamp: every write that settles the photo
     // carries it, and fails (ReservationLost) once the row is not ours.
     String? stamp;
+    // The verdict this run holds once the analyzer answered.
+    _HeldVerdict? verdict;
     try {
       // The automatic-analysis latch is armed: release the photo before
       // even hashing it — no ledger row, no analyzer call, no upload. It
@@ -349,8 +357,7 @@ class PhotoPipeline {
           source: source, reclaimDeliberate: photo.deliberate);
       switch (reservation.kind) {
         case PhotoReservation.claimed:
-          return const PhotoOutcome(PhotoOutcomeKind.alreadyTracked,
-              'This photo was already logged.');
+          return _alreadyTracked;
         case PhotoReservation.inFlight:
           // Not ours and not a verdict: another run is mid-analysis, or
           // iOS killed one mid-analysis and its row has not gone stale yet
@@ -392,17 +399,21 @@ class PhotoPipeline {
       final candidates = byMealClock(
               (await dao.mealsBetween(today, today)).where(isFoodMeal))
           .toList();
-      final recent = candidates.length > kAutoLeftoverMaxCandidates
-          ? candidates.sublist(candidates.length - kAutoLeftoverMaxCandidates)
-          : candidates;
+      // A held verdict resolves against the snapshot ITS model call saw.
+      final recent = held?.recent ??
+          (candidates.length > kAutoLeftoverMaxCandidates
+              ? candidates
+                  .sublist(candidates.length - kAutoLeftoverMaxCandidates)
+              : candidates);
       final compacts = [
         for (final m in recent)
           recentMealCompact(time: m.time, analysis: m.analysis),
       ];
 
       final revision = latch?.revision();
-      final outcome =
+      final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
+      verdict = (outcome: outcome, recent: recent);
       if (outcome.analysis == null) {
         final why = outcome.error ?? 'Analysis failed.';
         final errorKind = classifyAnalysisError(outcome.error);
@@ -470,8 +481,7 @@ class PhotoPipeline {
         // Tombstone so backfill never re-analyzes it (spec §6.4).
         await dao.markPhotoHash(hash, IngestionStatus.skipped,
             ownerStamp: stamp);
-        return const PhotoOutcome(
-            PhotoOutcomeKind.skipped, 'No food detected in this photo.');
+        return _notFood;
       }
 
       final analysis = Map<String, dynamic>.from(outcome.analysis!);
@@ -579,9 +589,8 @@ class PhotoPipeline {
       // Our 'processing' row was reclaimed while this run was suspended
       // (or the user logged the photo by hand): the photo is somebody
       // else's now. Drop the verdict without a word — the owner saves and
-      // announces it. Retryable, like any run that is not ours: if the
-      // row was only released, the next scan re-offers the photo.
-      return _inFlight;
+      // announces it — unless the user is waiting on this very photo.
+      return _afterLost(photo, hash, verdict, retried: held != null);
     } catch (e) {
       // Containment: never rethrow (spec §6). Mark failed ONLY if we hold
       // the reservation — a pre-reservation throw (e.g. the duplicate
@@ -602,6 +611,59 @@ class PhotoPipeline {
     }
   }
 
+  /// What a run that lost its reservation says, read from the ledger NOW
+  /// (2026-10-12). A blanket "still analyzing" was wrong twice for a photo
+  /// the user picked or shared: when the other run had already SAVED it,
+  /// 手动记录 then landed on that meal and dropped the typed numbers; when
+  /// it had marked the photo not-food, the user's food verdict was lost and
+  /// nothing ever logged it. A deliberate run therefore settles the verdict
+  /// it holds ONCE more under a fresh deliberate reservation — no second
+  /// upload. Automatic runs stay quiet and retryable: if the row was only
+  /// released, the next scan re-offers the photo.
+  Future<PhotoOutcome> _afterLost(
+      IntakePhoto photo, String hash, _HeldVerdict? verdict,
+      {required bool retried}) async {
+    if (!photo.deliberate) return _inFlight;
+    final IngestionStatus? status;
+    try {
+      status = (await dao.photoStatus(hash))?.status;
+    } catch (_) {
+      return _inFlight;
+    }
+    if (status == IngestionStatus.saved) return _alreadyTracked;
+    if (status == IngestionStatus.processing || verdict == null) {
+      return _inFlight;
+    }
+    final outcome = verdict.outcome;
+    if (retried) {
+      // Lost twice: report what is there, never a third try.
+      return switch (status) {
+        IngestionStatus.skipped => _notFood,
+        IngestionStatus.failed => PhotoOutcome(
+            PhotoOutcomeKind.failed, outcome.error ?? 'Analysis failed.',
+            errorKind: classifyAnalysisError(outcome.error),
+            detail: outcome.error ?? 'Analysis failed.'),
+        _ => _inFlight,
+      };
+    }
+    if (outcome.analysis == null && outcome.retryable) {
+      // A transient failure settles as a release: nothing to re-write, and
+      // reclaiming another run's verdict only to delete it would be worse.
+      final why = outcome.error ?? 'Analysis failed.';
+      return PhotoOutcome(PhotoOutcomeKind.failed, why,
+          retryable: true,
+          errorKind: classifyAnalysisError(outcome.error),
+          detail: why);
+    }
+    return _process(photo, held: verdict);
+  }
+
+  static const _alreadyTracked = PhotoOutcome(
+      PhotoOutcomeKind.alreadyTracked, 'This photo was already logged.');
+
+  static const _notFood =
+      PhotoOutcome(PhotoOutcomeKind.skipped, 'No food detected in this photo.');
+
   static const _inFlight = PhotoOutcome(PhotoOutcomeKind.inFlight,
       'This photo is still being analyzed — check back in a moment.',
       retryable: true);
@@ -610,3 +672,7 @@ class PhotoPipeline {
       'Automatic analysis is paused: the AI service refused the last '
       'photo for a reason every photo shares (API key or network region).';
 }
+
+/// A verdict a run already holds, and the meals its leftover indexes
+/// resolve against (spec §4.2 snapshot rule).
+typedef _HeldVerdict = ({AnalysisOutcome outcome, List<Meal> recent});

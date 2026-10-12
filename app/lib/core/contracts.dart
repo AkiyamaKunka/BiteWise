@@ -157,9 +157,10 @@ abstract class MealsDao {
   /// being sent bytes it could not read are worthless (migrations.dart).
   Future<int> reofferUnsavedVerdicts({required String source});
 
-  /// Read-only ledger lookup for the coverage audit: the status of one
-  /// photo hash (and the meal it became, when saved). Null = never seen —
-  /// the photo has NOT been through intake.
+  /// Read-only ledger lookup for the coverage audit (and for a pipeline run
+  /// that lost its reservation): the status of one photo hash (and the meal
+  /// it became, when saved). Null = never seen — the photo has NOT been
+  /// through intake.
   Future<({IngestionStatus status, int? mealId})?> photoStatus(
       String imageHash);
 

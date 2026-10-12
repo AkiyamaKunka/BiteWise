@@ -384,6 +384,99 @@ void main() {
       expect(row?.mealId, meals.single.id);
     });
 
+    test('a PICKED photo whose run lost to an automatic run that saved it '
+        'is "already logged" — never "still analyzing" with a 手动记录 '
+        'that lands on that meal', () async {
+      final saidA = <PhotoOutcome>[];
+      final analyzerA = FakeAnalyzer()
+        ..nextPhotoOutcome = food('A')
+        ..onAnalyze = () async {
+          clock = DateTime(2026, 10, 12, 12, 40);
+          final outB = await pipeline(
+                  FakeAnalyzer()..nextPhotoOutcome = food('B'), [])
+              .process(photo());
+          expect(outB.kind, PhotoOutcomeKind.saved);
+        };
+      final outA =
+          await pipeline(analyzerA, saidA).process(photo(deliberate: true));
+      expect(outA.kind, PhotoOutcomeKind.alreadyTracked);
+      expect(saidA, isEmpty);
+      final meals = await warm.mealsBetween('2026-10-12', '2026-10-12');
+      expect(meals.map((m) => m.analysis['meal_description']), ['B']);
+      expect((await warm.photoStatus(hash))?.mealId, meals.single.id);
+    });
+
+    test('a PICKED photo whose run lost to a not-food mark logs the user\'s '
+        'food verdict once — no second upload', () async {
+      final saidA = <PhotoOutcome>[];
+      var uploads = 0;
+      final analyzerA = FakeAnalyzer()
+        ..nextPhotoOutcome = food('A')
+        ..onAnalyze = () async {
+          uploads++;
+          clock = DateTime(2026, 10, 12, 12, 40);
+          final outB = await pipeline(
+                  FakeAnalyzer()
+                    ..nextPhotoOutcome = const AnalysisOutcome(
+                        analysis: {'is_food': false}, wall: Duration.zero),
+                  [])
+              .process(photo());
+          expect(outB.kind, PhotoOutcomeKind.skipped);
+        };
+      final outA =
+          await pipeline(analyzerA, saidA).process(photo(deliberate: true));
+      expect(outA.kind, PhotoOutcomeKind.saved);
+      expect(uploads, 1);
+      expect(saidA.map((o) => o.kind), [PhotoOutcomeKind.saved]);
+      final meals = await warm.mealsBetween('2026-10-12', '2026-10-12');
+      expect(meals.map((m) => m.analysis['meal_description']), ['A']);
+      final row = await warm.photoStatus(hash);
+      expect(row?.status, IngestionStatus.saved);
+      expect(row?.mealId, meals.single.id);
+    });
+
+    test('an AUTOMATIC run that lost to a not-food mark stays quiet and '
+        'writes nothing', () async {
+      final saidA = <PhotoOutcome>[];
+      final analyzerA = FakeAnalyzer()
+        ..nextPhotoOutcome = food('A')
+        ..onAnalyze = () async {
+          clock = DateTime(2026, 10, 12, 12, 40);
+          await pipeline(
+                  FakeAnalyzer()
+                    ..nextPhotoOutcome = const AnalysisOutcome(
+                        analysis: {'is_food': false}, wall: Duration.zero),
+                  [])
+              .process(photo());
+        };
+      final outA = await pipeline(analyzerA, saidA).process(photo());
+      expect(outA.kind, PhotoOutcomeKind.inFlight);
+      expect(outA.retryable, isTrue);
+      expect(saidA, isEmpty);
+      expect(await warm.mealsBetween('2026-10-12', '2026-10-12'), isEmpty);
+      expect((await warm.photoStatus(hash))?.status, IngestionStatus.skipped);
+    });
+
+    test('a PICKED photo whose run lost to a LIVE run is still analyzing',
+        () async {
+      final analyzerA = FakeAnalyzer()
+        ..nextPhotoOutcome = food('A')
+        ..onAnalyze = () async {
+          clock = DateTime(2026, 10, 12, 12, 40);
+          expect(
+              (await warm.reservePhotoHash(hash,
+                      source: MealSource.appWatch))
+                  .kind,
+              PhotoReservation.reserved);
+        };
+      final outA =
+          await pipeline(analyzerA, []).process(photo(deliberate: true));
+      expect(outA.kind, PhotoOutcomeKind.inFlight);
+      expect(await warm.mealsBetween('2026-10-12', '2026-10-12'), isEmpty);
+      expect((await warm.photoStatus(hash))?.status,
+          IngestionStatus.processing);
+    });
+
     test('A\'s transient failure does not delete B\'s LIVE reservation',
         () async {
       final said = <PhotoOutcome>[];
