@@ -332,6 +332,9 @@ class _AppSettingsStore implements SettingsStore {
   @override
   Future<void> reloadAutoScanBlock() => _s.reloadAnalysisBlock();
   @override
+  Future<void> credentialsProven({required bool reachedGeneration}) =>
+      _s.credentialsProven(reachedGeneration: reachedGeneration);
+  @override
   String get provider => _s.provider.name;
   @override
   bool get isQuotaPaused => _s.isQuotaPaused;

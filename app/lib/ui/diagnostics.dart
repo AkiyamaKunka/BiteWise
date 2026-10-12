@@ -150,6 +150,14 @@ class ProviderDiagnostics {
     final probe = await analyzer.probeKey(settings.apiKey);
     switch (probe.result) {
       case KeyProbeResult.ok:
+        // The credentials work: lift an automatic-scan pause a rejected
+        // key armed (the owner may have fixed the account at the
+        // provider's console without editing anything here). A region
+        // pause only when the probe went through the generation endpoint
+        // — every direct provider's does; the server's is /api/auth_check.
+        try {
+          await settings.credentialsProven(reachedGeneration: !isServer);
+        } catch (_) {}
         yield DiagResult(
             l.diagStageAuth, DiagStatus.pass, l.diagKeyAccepted);
       case KeyProbeResult.outOfCredit:
@@ -210,6 +218,10 @@ class ProviderDiagnostics {
               : l.diagFixTextFollowPhoto);
     }
     if (photo.analysis != null) {
+      // A full photo analysis answered: key and region both work.
+      try {
+        await settings.credentialsProven(reachedGeneration: true);
+      } catch (_) {}
       yield DiagResult(l.diagStagePhoto, DiagStatus.pass, l.diagPhotoOk,
           detail: photo.isFood
               ? l.diagPhotoThoughtFood

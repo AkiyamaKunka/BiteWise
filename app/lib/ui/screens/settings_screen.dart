@@ -22,6 +22,7 @@ import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
 import '../photo_pipeline.dart';
 import '../format.dart' show isoDate;
+import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
 import '../services.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
@@ -198,20 +199,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           : context.l10n.backgroundScanDisabled;
 
   /// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
-  String _dayTime(DateTime when) {
-    final l = context.l10n;
-    final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
-        '${when.minute.toString().padLeft(2, '0')}';
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final day = DateTime(when.year, when.month, when.day);
-    final diff = day.difference(today).inDays;
-    if (diff == 0) return l.timeToday(hhmm);
-    if (diff == 1) return l.timeTomorrow(hhmm);
-    if (diff == -1) return l.timeYesterday(hhmm);
-    return '${when.month.toString().padLeft(2, '0')}-'
-        '${when.day.toString().padLeft(2, '0')} $hhmm';
-  }
+  String _dayTime(DateTime when) => dayTimeLabel(context.l10n, when);
 
   /// Re-probe on resume: the user comes BACK from system settings to this
   /// very screen (it lives in the IndexedStack), so the row must clear
@@ -624,14 +612,11 @@ class _SettingsScreenState extends State<SettingsScreen>
     final s = widget.settings;
     final until = s.autoScanBlockedUntil;
     if (until == null) return null;
-    final l10n = context.l10n;
-    return switch (s.autoScanBlockedKind) {
-      'rejectedKey' => l10n.autoScanPausedKey(_dayTime(until)),
-      'regionBlocked' => l10n.autoScanPausedRegion(
-          providerDisplayLabel(l10n, s.provider, s.serverBackend),
-          _dayTime(until)),
-      _ => null,
-    };
+    return autoScanPausedLine(context.l10n,
+        kind: s.autoScanBlockedKind,
+        until: until,
+        provider: s.provider,
+        serverBackend: s.serverBackend);
   }
 
   /// Camera-roll watching, coverage audit, backfill window.

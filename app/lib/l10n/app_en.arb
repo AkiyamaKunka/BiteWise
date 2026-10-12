@@ -1333,7 +1333,7 @@
   "watcherPermissionDenied": "Photo library permission is required for automatic intake.",
   "watcherOnQuotaPaused": "Watching is on, but analyses are paused by the daily quota — new photos will wait.",
   "watcherOnNoKey": "Watching is on, but photos won't be analyzed until a working API key is set above.",
-  "autoScanPausedKey": "Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service resumes it now (next try: {time}).",
+  "autoScanPausedKey": "Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service, or a passing Test This Provider, resumes it now (next try: {time}).",
   "@autoScanPausedKey": {
     "placeholders": {
       "time": {
@@ -1341,7 +1341,7 @@
       }
     }
   },
-  "autoScanPausedRegion": "Automatic scan paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, add one photo by hand to resume now (next try: {time}).",
+  "autoScanPausedRegion": "Automatic scan paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo by hand to resume now (next try: {time}).",
   "@autoScanPausedRegion": {
     "placeholders": {
       "provider": {
@@ -1352,6 +1352,7 @@
       }
     }
   },
+  "autoScanPausedTitle": "Photos are not being logged automatically",
   "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
   "fixAction": "Fix",
   "importDialogTitle": "Import exported data",

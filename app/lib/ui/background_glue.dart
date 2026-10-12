@@ -247,6 +247,24 @@ Future<bool> headlessBackfillWith({
   // frontier is the single honest source. Cost: the next run re-offers at
   // most the newest covered photo (ledger absorbs it without a model call).
   if (drain.frontier != null) await checkpoint(drain.frontier!);
+  // This run ARMED the automatic-scan pause (it started unpaused — see the
+  // guard above): the background has no snackbar, and without a word the
+  // scan just stops for up to a day. One notice per arm: every later run
+  // is guarded out above until the pause lifts.
+  final pausedUntil = settings.analysisBlockedUntil;
+  if (pausedUntil != null) {
+    final l = localizationsFor(settings.appLanguage);
+    final line = autoScanPausedLine(l,
+        kind: settings.analysisBlockedKind,
+        until: pausedUntil,
+        provider: settings.provider.name,
+        serverBackend: settings.serverBackend);
+    if (line != null) {
+      try {
+        await showMealCard(l.autoScanPausedTitle, line);
+      } catch (_) {}
+    }
+  }
   return true;
 }
 

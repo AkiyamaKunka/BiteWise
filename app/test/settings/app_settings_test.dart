@@ -1,6 +1,8 @@
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 /// In-memory stand-in for flutter_secure_storage (no platform channel in
 /// unit tests).
@@ -318,8 +320,96 @@ void main() {
       await prefs.setString('settings.analysis_blocked_until',
           DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String());
       await prefs.setString('settings.analysis_blocked_kind', 'rejectedKey');
+      // A torn arm without its provider is no pause (2026-10-12): the
+      // provider is written first, so it can only be missing by accident.
+      await s.reloadAnalysisBlock();
+      expect(s.isAnalysisBlocked, isFalse);
+      expect(s.canAutoAnalyze, s.canAnalyze);
+      await prefs.setString(
+          'settings.analysis_blocked_provider', AiProvider.gemini.name);
       await s.reloadAnalysisBlock();
       expect(s.analysisBlockedKind, 'rejectedKey');
     });
+
+    test('a passing key probe lifts a rejected-key pause; a region pause '
+        'only when the probe reached the generation endpoint', () async {
+      final (s, _, _) = await freshSettings();
+      await s.blockAutomaticAnalysis('rejectedKey');
+      await s.credentialsProven(reachedGeneration: false);
+      expect(s.isAnalysisBlocked, isFalse);
+
+      await s.blockAutomaticAnalysis('regionBlocked');
+      await s.credentialsProven(reachedGeneration: false);
+      expect(s.analysisBlockedKind, 'regionBlocked',
+          reason: "the server's auth check never meets a region refusal");
+      await s.credentialsProven(reachedGeneration: true);
+      expect(s.isAnalysisBlocked, isFalse);
+    });
+
+    test('a passing probe lifts a pause the background engine armed on disk',
+        () async {
+      final (fg, _, keys) = await freshSettings();
+      await fg.setGeminiApiKey('k');
+      SharedPreferences.resetStatic(); // the other isolate: its own cache
+      final bg = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: keys);
+      await bg.blockAutomaticAnalysis('rejectedKey',
+          revision: bg.credentialRevision);
+      expect(fg.isAnalysisBlocked, isFalse, reason: 'stale cache');
+      await fg.credentialsProven(reachedGeneration: true);
+      SharedPreferences.resetStatic();
+      final next = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: keys);
+      expect(next.isAnalysisBlocked, isFalse);
+    });
+
+    test("a passing probe leaves another provider's pause alone", () async {
+      final (s, prefs, _) = await freshSettings();
+      await s.setProvider(AiProvider.deepseek);
+      // Gemini's pause, still on disk from before the switch.
+      await prefs.setString('settings.analysis_blocked_until',
+          DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String());
+      await prefs.setString('settings.analysis_blocked_kind', 'rejectedKey');
+      await prefs.setString(
+          'settings.analysis_blocked_provider', AiProvider.gemini.name);
+      // DeepSeek's probe says nothing about Gemini's key.
+      await s.credentialsProven(reachedGeneration: true);
+      expect(prefs.getString('settings.analysis_blocked_provider'),
+          AiProvider.gemini.name);
+    });
+
+    test('clearAnalysisBlock writes nothing when no pause is set', () async {
+      // Every successful photo calls it: three removes per meal for nothing.
+      final store = _CountingStore();
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await s.clearAnalysisBlock();
+      expect(store.writes, 0);
+      await s.blockAutomaticAnalysis('rejectedKey');
+      store.writes = 0;
+      await s.clearAnalysisBlock();
+      expect(store.writes, 3, reason: 'a set pause is removed');
+      expect(s.isAnalysisBlocked, isFalse);
+    });
   });
+}
+
+/// The in-memory preferences store, counting writes and removes.
+class _CountingStore extends InMemorySharedPreferencesStore {
+  _CountingStore() : super.empty();
+  int writes = 0;
+  @override
+  Future<bool> remove(String key) {
+    writes++;
+    return super.remove(key);
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    writes++;
+    return super.setValue(valueType, key, value);
+  }
 }

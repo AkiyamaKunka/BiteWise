@@ -281,6 +281,7 @@ class AppSettings extends ChangeNotifier {
   static const String _kAnalysisBlockedKind = 'settings.analysis_blocked_kind';
   static const String _kAnalysisBlockedProvider =
       'settings.analysis_blocked_provider';
+  static const String _kCredentialRevision = 'settings.credential_revision';
   static const String _kOpenaiModel = 'settings.openai_model';
   static const String _kAnthropicModel = 'settings.anthropic_model';
   static const String _kServerBaseUrl = 'settings.server_base_url';
@@ -368,7 +369,6 @@ class AppSettings extends ChangeNotifier {
   DateTime? _quotaPauseUntil;
   DateTime? _analysisBlockedUntil;
   String? _analysisBlockedKind;
-  int _credentialRevision = 0;
 
   static Future<AppSettings> load(
       {SharedPreferences? prefs, SecureKeyStore? keyStore}) async {
@@ -949,8 +949,10 @@ class AppSettings extends ChangeNotifier {
   bool get isAnalysisBlocked {
     final until = _analysisBlockedUntil;
     if (until == null || !DateTime.now().isBefore(until)) return false;
+    // Unlike the quota pause, a pause WITHOUT its provider is not one: the
+    // provider is written first, so a missing one is a torn arm (2026-10-12).
     final owner = _prefs.getString(_kAnalysisBlockedProvider);
-    return owner == null || owner == _provider.name;
+    return owner != null && owner == _provider.name;
   }
 
   /// 'rejectedKey' | 'regionBlocked' while [isAnalysisBlocked], else null.
@@ -961,13 +963,19 @@ class AppSettings extends ChangeNotifier {
   DateTime? get analysisBlockedUntil =>
       isAnalysisBlocked ? _analysisBlockedUntil : null;
 
-  /// Bumped by every credential/provider/model/server edit. Read BEFORE an
-  /// analysis and handed to [blockAutomaticAnalysis], so a refusal of the
-  /// key the user has just replaced does not park the new one.
-  int get credentialRevision => _credentialRevision;
+  /// Bumped by every credential/provider/model/server edit and PERSISTED,
+  /// so the background engine (another isolate, its own preferences
+  /// cache) sees the foreground's edits. Read BEFORE an analysis and handed
+  /// to [blockAutomaticAnalysis], so a refusal of the key the user has
+  /// just replaced does not park the new one. A plain counter — nothing
+  /// derived from a key is ever stored.
+  int get credentialRevision => _prefs.getInt(_kCredentialRevision) ?? 0;
 
   /// Arm the latch for [kind] ('rejectedKey' | 'regionBlocked'; anything
-  /// else is ignored). [revision] stale = dropped. [now] is a test seam.
+  /// else is ignored). [revision] stale = dropped: compared against the
+  /// revision ON DISK, before and after the write, because the edit that
+  /// made it stale may have happened in the other isolate. [now] is a
+  /// test seam.
   Future<void> blockAutomaticAnalysis(String kind,
       {int? revision, DateTime? now}) async {
     final ttl = switch (kind) {
@@ -976,28 +984,74 @@ class AppSettings extends ChangeNotifier {
       _ => null,
     };
     if (ttl == null) return;
-    if (revision != null && revision != _credentialRevision) return;
+    if (revision != null) {
+      await _prefs.reload();
+      if (revision != credentialRevision) return;
+    }
     final until = (now ?? DateTime.now()).add(ttl);
     _analysisBlockedUntil = until;
     _analysisBlockedKind = kind;
+    // Provider FIRST: a pause without its owner reads as no pause, so an
+    // arm cut short in between parks nothing.
+    await _prefs.setString(_kAnalysisBlockedProvider, _provider.name);
+    await _prefs.setString(_kAnalysisBlockedKind, kind);
     await _prefs.setString(
         _kAnalysisBlockedUntil, until.toUtc().toIso8601String());
-    await _prefs.setString(_kAnalysisBlockedKind, kind);
-    await _prefs.setString(_kAnalysisBlockedProvider, _provider.name);
+    if (revision != null) {
+      // An edit that landed between the check above and these writes has
+      // already removed the keys — or will find these and remove them; one
+      // that removed them BEFORE the writes is caught here.
+      await _prefs.reload();
+      if (revision != credentialRevision) {
+        await _removeAnalysisBlock();
+        return;
+      }
+    }
     notifyListeners();
   }
 
   /// Lift the latch: an analysis succeeded, so the key and region work.
-  /// Removes the stored keys even when this isolate's copy is empty — the
-  /// background engine may have armed it on disk.
+  /// Touches the stored keys only when a pause is actually set — in this
+  /// isolate's copy, or on disk (the background engine may have armed it
+  /// since this one loaded): every successful photo comes through here.
   Future<void> clearAnalysisBlock() async {
     final wasSet = _analysisBlockedUntil != null;
+    if (!wasSet && !_analysisBlockStored()) {
+      await _prefs.reload();
+      if (!_analysisBlockStored()) return;
+    }
+    await _removeAnalysisBlock();
+    if (wasSet) notifyListeners();
+  }
+
+  /// Something proved the ACTIVE provider's credentials work (测试 AI 服务's
+  /// key probe answered OK): lift a 'rejectedKey' pause it owns, and a
+  /// 'regionBlocked' one only when [reachedGeneration] — the probe went
+  /// through the provider's generation endpoint, which is where a region
+  /// is refused (the server's probe is its auth check, which is not).
+  Future<void> credentialsProven({required bool reachedGeneration}) async {
+    await reloadAnalysisBlock();
+    final kind = _prefs.getString(_kAnalysisBlockedKind);
+    if (kind == null) return;
+    final owner = _prefs.getString(_kAnalysisBlockedProvider);
+    if (owner != null && owner != _provider.name) return;
+    if (kind == 'regionBlocked' && !reachedGeneration) return;
+    final wasSet = _analysisBlockedUntil != null;
+    await _removeAnalysisBlock();
+    if (wasSet) notifyListeners();
+  }
+
+  bool _analysisBlockStored() =>
+      _prefs.getString(_kAnalysisBlockedUntil) != null ||
+      _prefs.getString(_kAnalysisBlockedKind) != null ||
+      _prefs.getString(_kAnalysisBlockedProvider) != null;
+
+  Future<void> _removeAnalysisBlock() async {
     _analysisBlockedUntil = null;
     _analysisBlockedKind = null;
     await _prefs.remove(_kAnalysisBlockedUntil);
     await _prefs.remove(_kAnalysisBlockedKind);
     await _prefs.remove(_kAnalysisBlockedProvider);
-    if (wasSet) notifyListeners();
   }
 
   /// Re-read the latch from disk: the background engine (another isolate,
@@ -1026,16 +1080,11 @@ class AppSettings extends ChangeNotifier {
   /// provider, a model, the server address, plan or model — lifts the
   /// latch: the next automatic photo is the test of the new setup. Even a
   /// same-value re-save counts (the user may have fixed the account at the
-  /// provider's console).
+  /// provider's console). The revision is bumped BEFORE the removal and
+  /// the removal is unconditional: the background engine may have armed
+  /// the pause on disk without this isolate's copy knowing.
   Future<void> _credentialsEdited() async {
-    _credentialRevision++;
-    if (_analysisBlockedUntil != null ||
-        _prefs.getString(_kAnalysisBlockedKind) != null) {
-      _analysisBlockedUntil = null;
-      _analysisBlockedKind = null;
-      await _prefs.remove(_kAnalysisBlockedUntil);
-      await _prefs.remove(_kAnalysisBlockedKind);
-      await _prefs.remove(_kAnalysisBlockedProvider);
-    }
+    await _prefs.setInt(_kCredentialRevision, credentialRevision + 1);
+    await _removeAnalysisBlock();
   }
 }

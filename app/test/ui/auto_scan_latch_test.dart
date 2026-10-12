@@ -16,7 +16,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'fakes.dart' show FakeDao;
+import 'fakes.dart' show FakeAnalyzer, FakeDao;
 
 class _MemKeys implements SecureKeyStore {
   final Map<String, String> data = {};
@@ -89,6 +89,68 @@ void main() {
           .process(_auto(1));
       expect(out.errorKind, AnalysisErrorKind.rejectedKey);
       expect(s.analysisBlockedKind, 'rejectedKey');
+    });
+  });
+
+  group('two engines, one preferences store', () {
+    // The background run is another isolate with its own preferences
+    // cache; the foreground never saw what it wrote, and the credentials
+    // revision lived in memory only (probes B1/B2).
+    const rejected = AnalysisOutcome(
+        error: 'The provider rejected the API key. Check Settings.',
+        wall: Duration.zero);
+
+    Future<(AppSettings fg, _MemKeys keys)> foreground() async {
+      SharedPreferences.setMockInitialValues({});
+      final keys = _MemKeys();
+      final fg = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: keys);
+      await fg.setGeminiApiKey('old');
+      return (fg, keys);
+    }
+
+    Future<AppSettings> otherIsolate(_MemKeys keys) async {
+      SharedPreferences.resetStatic(); // its own cache, the same store
+      return AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: keys);
+    }
+
+    test('B1: a pause the background armed is lifted by a key edit in the '
+        'still-open foreground', () async {
+      final (fg, keys) = await foreground();
+      final bg = await otherIsolate(keys);
+      await PhotoPipeline(
+              dao: FakeDao(),
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = rejected,
+              latch: autoScanLatchFor(bg))
+          .process(_auto(1));
+      expect(bg.analysisBlockedKind, 'rejectedKey');
+
+      await fg.setGeminiApiKey('new-working-key');
+      await fg.reloadAnalysisBlock(); // the next resume
+      expect(fg.canAutoAnalyze, isTrue);
+      final nextRun = await otherIsolate(keys);
+      expect(nextRun.canAutoAnalyze, isTrue,
+          reason: 'the next background run scans with the new key');
+    });
+
+    test('B2: the old key\'s refusal landing after the edit arms nothing',
+        () async {
+      final (fg, keys) = await foreground();
+      final bg = await otherIsolate(keys);
+      // The user replaces the key WHILE the background's photo is at the
+      // provider with the old one.
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = rejected
+        ..onAnalyze = () => fg.setGeminiApiKey('new');
+      final out = await PhotoPipeline(
+              dao: FakeDao(), analyzer: analyzer, latch: autoScanLatchFor(bg))
+          .process(_auto(1));
+      expect(out.retryable, isTrue, reason: 'released all the same');
+      expect(bg.isAnalysisBlocked, isFalse);
+      await fg.reloadAnalysisBlock();
+      expect(fg.canAutoAnalyze, isTrue);
+      expect((await otherIsolate(keys)).canAutoAnalyze, isTrue);
     });
   });
 }

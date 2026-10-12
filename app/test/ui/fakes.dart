@@ -141,6 +141,11 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   int reloadAutoScanBlockCalls = 0;
   @override
   Future<void> reloadAutoScanBlock() async => reloadAutoScanBlockCalls++;
+  /// One entry per [credentialsProven] call: its reachedGeneration.
+  final List<bool> credentialsProvenCalls = [];
+  @override
+  Future<void> credentialsProven({required bool reachedGeneration}) async =>
+      credentialsProvenCalls.add(reachedGeneration);
   /// Provider-scoped MODELS too — the real store keeps one per provider,
   /// and a shared field made provider-switch tests pass while production
   /// would have shown Gemini's model under Doubao (review 2026-07-31).

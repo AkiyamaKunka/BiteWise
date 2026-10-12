@@ -2999,14 +2999,20 @@ abstract class AppLocalizations {
   /// No description provided for @autoScanPausedKey.
   ///
   /// In en, this message translates to:
-  /// **'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service resumes it now (next try: {time}).'**
+  /// **'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service, or a passing Test This Provider, resumes it now (next try: {time}).'**
   String autoScanPausedKey(String time);
 
   /// No description provided for @autoScanPausedRegion.
   ///
   /// In en, this message translates to:
-  /// **'Automatic scan paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, add one photo by hand to resume now (next try: {time}).'**
+  /// **'Automatic scan paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo by hand to resume now (next try: {time}).'**
   String autoScanPausedRegion(String provider, String time);
+
+  /// No description provided for @autoScanPausedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos are not being logged automatically'**
+  String get autoScanPausedTitle;
 
   /// No description provided for @watcherLimitedAccess.
   ///

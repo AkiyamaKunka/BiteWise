@@ -56,6 +56,11 @@ abstract class SettingsStore {
 
   /// Re-read the latch from disk (the background run may have armed it).
   Future<void> reloadAutoScanBlock();
+
+  /// 测试 AI 服务 proved the active provider's credentials work: lift a
+  /// rejected-key pause, and a blocked-region one only when the probe
+  /// [reachedGeneration] (went through the endpoint that refuses regions).
+  Future<void> credentialsProven({required bool reachedGeneration});
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time

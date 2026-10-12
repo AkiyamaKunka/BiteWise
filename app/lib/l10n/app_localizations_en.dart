@@ -1848,13 +1848,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String autoScanPausedKey(String time) {
-    return 'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service resumes it now (next try: $time).';
+    return 'Automatic scan paused: the AI service rejected the API key. Photos are kept — changing the key in AI Service, or a passing Test This Provider, resumes it now (next try: $time).';
   }
 
   @override
   String autoScanPausedRegion(String provider, String time) {
-    return 'Automatic scan paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, add one photo by hand to resume now (next try: $time).';
+    return 'Automatic scan paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo by hand to resume now (next try: $time).';
   }
+
+  @override
+  String get autoScanPausedTitle => 'Photos are not being logged automatically';
 
   @override
   String get watcherLimitedAccess =>

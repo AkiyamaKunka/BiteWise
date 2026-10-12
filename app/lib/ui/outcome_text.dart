@@ -10,6 +10,7 @@ library;
 import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
 import 'photo_pipeline.dart';
+import 'provider_names.dart';
 
 ///
 /// [deliberate]: the add flow's dialog. Its photo was RELEASED on a
@@ -195,3 +196,36 @@ String badModelText(AppLocalizations l, String? message) {
   }
   return l.errBadModel;
 }
+
+/// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
+/// [now] is a test seam.
+String dayTimeLabel(AppLocalizations l, DateTime when, {DateTime? now}) {
+  final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
+      '${when.minute.toString().padLeft(2, '0')}';
+  final n = now ?? DateTime.now();
+  final today = DateTime(n.year, n.month, n.day);
+  final day = DateTime(when.year, when.month, when.day);
+  final diff = day.difference(today).inDays;
+  if (diff == 0) return l.timeToday(hhmm);
+  if (diff == 1) return l.timeTomorrow(hhmm);
+  if (diff == -1) return l.timeYesterday(hhmm);
+  return '${when.month.toString().padLeft(2, '0')}-'
+      '${when.day.toString().padLeft(2, '0')} $hhmm';
+}
+
+/// Why the automatic scan is paused and when it is next tried — the
+/// Settings footer line and the background run's notice. Null for a kind
+/// that is not a pause.
+String? autoScanPausedLine(AppLocalizations l,
+        {required String? kind,
+        required DateTime until,
+        required String provider,
+        required String serverBackend,
+        DateTime? now}) =>
+    switch (kind) {
+      'rejectedKey' => l.autoScanPausedKey(dayTimeLabel(l, until, now: now)),
+      'regionBlocked' => l.autoScanPausedRegion(
+          providerDisplayLabel(l, provider, serverBackend),
+          dayTimeLabel(l, until, now: now)),
+      _ => null,
+    };

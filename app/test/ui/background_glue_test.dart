@@ -15,6 +15,8 @@ import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
 import 'package:calorie_tracker/ui/background_glue.dart';
+import 'package:calorie_tracker/ui/coach_strings.dart' show localizationsFor;
+import 'package:calorie_tracker/ui/outcome_text.dart' show autoScanPausedLine;
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
@@ -565,6 +567,56 @@ void main() {
       await run();
       expect(intake.scans, 2);
       expect(dao.meals, hasLength(3));
+    });
+
+    test('a run that ARMS the pause posts one notice saying so; the runs '
+        'it guards out post nothing more', () async {
+      // The background has no snackbar: the scan used to just stop, for up
+      // to a day, with only a Settings footer to say why (review
+      // 2026-10-12).
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final cards = <(String, String)>[];
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero);
+      Future<void> run() => headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: intake,
+            pipeline: () async => PhotoPipeline(
+                dao: FakeDao(),
+                analyzer: analyzer,
+                latch: autoScanLatchFor(settings)),
+            showMealCard: (t, b) async => cards.add((t, b)),
+            clock: () => DateTime(2026, 7, 24, 5, 0),
+          );
+      await run();
+      expect(cards, hasLength(1));
+      final l = localizationsFor(settings.appLanguage);
+      expect(cards.single.$1, l.autoScanPausedTitle);
+      expect(
+          cards.single.$2,
+          autoScanPausedLine(l,
+              kind: 'rejectedKey',
+              until: settings.analysisBlockedUntil!,
+              provider: settings.provider.name,
+              serverBackend: settings.serverBackend));
+      await run();
+      await run();
+      expect(cards, hasLength(1), reason: 'one notice per arm');
+
+      // A run that releases photos WITHOUT arming (a network failure)
+      // says nothing.
+      await settings.setGeminiApiKey('k2');
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          error: 'Error contacting the provider (network or service issue).',
+          retryable: true,
+          wall: Duration.zero);
+      await run();
+      expect(cards, hasLength(1));
+      expect(settings.isAnalysisBlocked, isFalse);
     });
 
     test('does nothing while a blocked region latched the scan', () async {

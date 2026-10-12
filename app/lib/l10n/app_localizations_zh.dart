@@ -1733,13 +1733,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String autoScanPausedKey(String time) {
-    return '自动扫描已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key 后立即恢复（$time 自动再试）。';
+    return '自动扫描已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（$time 自动再试）。';
   }
 
   @override
   String autoScanPausedRegion(String provider, String time) {
-    return '自动扫描已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后手动添加一张照片即可立即恢复（$time 自动再试）。';
+    return '自动扫描已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或手动添加一张照片即可立即恢复（$time 自动再试）。';
   }
+
+  @override
+  String get autoScanPausedTitle => '照片暂时不会自动记录';
 
   @override
   String get watcherLimitedAccess =>
