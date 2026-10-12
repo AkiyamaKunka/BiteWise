@@ -153,6 +153,7 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
       block: (kind, revision) =>
           settings.blockAutomaticAnalysis(kind.name, revision: revision),
       clear: settings.clearAnalysisBlock,
+      refresh: settings.reloadAnalysisBlock,
     );
 
 /// Stamps "the OS launched a background run" for the Settings 后台扫描 row.

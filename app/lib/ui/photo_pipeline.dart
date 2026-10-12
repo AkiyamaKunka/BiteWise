@@ -147,7 +147,16 @@ class AutoScanLatch {
       {required this.blockedKind,
       required this.revision,
       required this.block,
-      required this.clear});
+      required this.clear,
+      this.refresh});
+
+  /// Re-read the latch from disk before an automatic photo is checked: the
+  /// other engine (the background run is another isolate with its own
+  /// preferences cache) may have armed it since this one loaded. Without
+  /// it a photo event delivered to the open app after a background run
+  /// paused the scan was uploaded again on the rejected key (API 35
+  /// emulator, 2026-10-12). Null (tests) trusts [blockedKind] as is.
+  final Future<void> Function()? refresh;
 
   /// The armed latch's kind ([AnalysisErrorKind.rejectedKey] or
   /// [AnalysisErrorKind.regionBlocked]); null while automatic analysis may
@@ -308,7 +317,15 @@ class PhotoPipeline {
       // even hashing it — no ledger row, no analyzer call, no upload. It
       // stays eligible (retryable), so the scan after the fix picks it up.
       // Deliberate adds always go through: they are how the fix is tested.
-      final latched = photo.deliberate ? null : latch?.blockedKind();
+      final gate = photo.deliberate ? null : latch;
+      if (gate != null && gate.refresh != null) {
+        try {
+          await gate.refresh!(); // a prefs read: cheap next to an upload
+        } catch (_) {
+          // Unreadable store: fall back to this engine's own copy.
+        }
+      }
+      final latched = gate?.blockedKind();
       if (latched != null) {
         return PhotoOutcome(PhotoOutcomeKind.failed, _latchedMessage,
             retryable: true, errorKind: latched, detail: _latchedMessage);

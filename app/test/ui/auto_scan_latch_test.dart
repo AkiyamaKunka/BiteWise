@@ -134,6 +134,41 @@ void main() {
           reason: 'the next background run scans with the new key');
     });
 
+    test('B3: a photo the open app is handed after the background paused '
+        'the scan is released without an upload', () async {
+      final (fg, keys) = await foreground();
+      // The foreground engine loaded first; its in-memory latch is clear.
+      expect(fg.canAutoAnalyze, isTrue);
+
+      final bg = await otherIsolate(keys);
+      await PhotoPipeline(
+              dao: FakeDao(),
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = rejected,
+              latch: autoScanLatchFor(bg))
+          .process(_auto(1));
+      expect(bg.analysisBlockedKind, 'rejectedKey');
+
+      // A photo event queued while the process was frozen reaches the
+      // foreground isolate — no resume catch-up ran first.
+      final notices = <PhotoOutcome>[];
+      var fgCalls = 0;
+      final dao = FakeDao();
+      final out = await PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()
+                ..nextPhotoOutcome = rejected
+                ..onAnalyze = () async => fgCalls++,
+              notify: notices.add,
+              latch: autoScanLatchFor(fg))
+          .process(_auto(2));
+      expect(fgCalls, 0, reason: 'no second upload on the rejected key');
+      expect(out.retryable, isTrue, reason: 'released for the scan after');
+      expect(out.errorKind, AnalysisErrorKind.rejectedKey);
+      expect(dao.ledger, isEmpty);
+      expect(notices, isEmpty, reason: 'no late rejected-key snackbar');
+      expect(fg.analysisBlockedKind, 'rejectedKey');
+    });
+
     test('B2: the old key\'s refusal landing after the edit arms nothing',
         () async {
       final (fg, keys) = await foreground();
