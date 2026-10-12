@@ -2270,6 +2270,12 @@ abstract class AppLocalizations {
   /// **'🍽️ Meal logged automatically'**
   String get mealCardAutoTitle;
 
+  /// No description provided for @mealCardLeftoverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'🍽️ Leftovers deducted'**
+  String get mealCardLeftoverTitle;
+
   /// Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
   ///
   /// In en, this message translates to:

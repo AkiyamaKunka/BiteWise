@@ -1338,6 +1338,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mealCardAutoTitle => '🍽️ Meal logged automatically';
 
   @override
+  String get mealCardLeftoverTitle => '🍽️ Leftovers deducted';
+
+  @override
   String get notificationChannelName => 'Reports & meals';
 
   @override

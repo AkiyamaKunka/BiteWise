@@ -9,6 +9,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
@@ -101,6 +102,19 @@ class RecordingScheduler implements BackgroundScheduler {
 
 IntakePhoto photo(int n) => IntakePhoto(
     Uint8List.fromList([n, n, n]), 'asset$n', 'IMG_$n.jpg');
+
+/// A pipeline that answers each photo with the next scripted outcome —
+/// for outcome kinds a FakeAnalyzer cannot reach on its own.
+class _ScriptedPipeline extends PhotoPipeline {
+  _ScriptedPipeline(this.outcomes)
+      : super(dao: FakeDao(), analyzer: FakeAnalyzer());
+  final List<PhotoOutcome> outcomes;
+  var _next = 0;
+
+  @override
+  Future<PhotoOutcome> process(IntakePhoto photo) async =>
+      outcomes[_next++];
+}
 
 /// FakeDao that fires a callback on each saveMeal — used to observe the
 /// watermark state at the moment each photo lands.
@@ -607,6 +621,41 @@ void main() {
       );
       expect(cards, isEmpty);
     });
+
+    for (final (lang, title, body) in const [
+      ('zh', '🍽️ 已扣除剩菜', '已扣除剩菜：Noodles was ~600 kcal, now ~300 kcal'),
+      ('en', '🍽️ Leftovers deducted',
+          'Leftovers deducted: Noodles was ~600 kcal, now ~300 kcal'),
+    ]) {
+      test('[$lang] a leftover deduction posts ONE card; not-food and '
+          'failures still post none', () async {
+        // A second photo of the same plate cuts a logged meal's calories
+        // unattended — it used to happen with no card at all.
+        final settings = await settingsWith(key: 'k');
+        await settings.setAppLanguage(lang);
+        final intake = EmittingIntake()
+          ..batch = [photo(1), photo(2), photo(3)];
+        final cards = <(String, String)>[];
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: intake,
+          pipeline: () async => _ScriptedPipeline([
+            const PhotoOutcome(PhotoOutcomeKind.leftoverApplied,
+                'Leftovers deducted: Noodles was ~600 kcal, now ~300 kcal',
+                detail: 'Noodles was ~600 kcal, now ~300 kcal',
+                mealId: 7,
+                mealDate: '2026-10-12',
+                previousAnalysis: {'is_food': true}),
+            const PhotoOutcome(PhotoOutcomeKind.skipped, 'not food'),
+            const PhotoOutcome(PhotoOutcomeKind.failed, 'bad photo',
+                errorKind: AnalysisErrorKind.badPhoto),
+          ]),
+          showMealCard: (title, body) async => cards.add((title, body)),
+        );
+        expect(cards, [(title, body)]);
+      });
+    }
   });
 
   group('syncBackgroundScan', () {

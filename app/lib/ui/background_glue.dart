@@ -199,11 +199,20 @@ Future<bool> headlessBackfillWith({
       // Per photo, BEFORE the next one: a WorkManager hard-stop mid-batch
       // must not lose the notification for an already-saved meal, nor the
       // progress the run already made.
-      if (o.kind == PhotoOutcomeKind.saved) {
+      // A leftover deduction CUTS an already-logged meal's calories, so
+      // an unattended one needs a card as much as a new meal does — it
+      // used to be silent here (the foreground snackbar was its only
+      // announcement, and the headless path has no snackbar).
+      if (o.kind == PhotoOutcomeKind.saved ||
+          o.kind == PhotoOutcomeKind.leftoverApplied) {
         // In the app language, like the coach summary (headless, so via
         // the saved preference rather than a BuildContext).
         final l = localizationsFor(settings.appLanguage);
-        await showMealCard(l.mealCardAutoTitle, outcomeBody(l, o));
+        await showMealCard(
+            o.kind == PhotoOutcomeKind.saved
+                ? l.mealCardAutoTitle
+                : l.mealCardLeftoverTitle,
+            outcomeBody(l, o));
       }
       // The intake's safeFrontier is the ONLY persistable value: it is
       // createDate-based (the watermark's timebase), halts at transient

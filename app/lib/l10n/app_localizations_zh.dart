@@ -1243,6 +1243,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get mealCardAutoTitle => '🍽️ 已自动记录一餐';
 
   @override
+  String get mealCardLeftoverTitle => '🍽️ 已扣除剩菜';
+
+  @override
   String get notificationChannelName => '总结与餐食';
 
   @override
