@@ -40,21 +40,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rowEaten => '已摄入';
 
   @override
-  String get rowResultLeft => '= 剩余';
-
-  @override
-  String get rowResultOver => '= 超出日常';
-
-  @override
-  String get ringHeadroom => '剩余';
-
-  @override
-  String get ringLeftToday => '今日剩余';
-
-  @override
-  String get ringAboveTypical => '超出日常';
-
-  @override
   String get ringKcalToday => '千卡';
 
   @override
@@ -629,16 +614,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reportFooter => '由筷拍记录';
-
-  @override
-  String typicalDayHeadroom(String typical, String delta) {
-    return '日常：~$typical 千卡 · 剩余 ~$delta 千卡';
-  }
-
-  @override
-  String typicalDayOver(String typical, String delta) {
-    return '日常：~$typical 千卡 · 超出 ~$delta 千卡';
-  }
 
   @override
   String get historyDayPattern => 'M月d日 EEEE';

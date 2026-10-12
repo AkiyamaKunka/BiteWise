@@ -152,36 +152,6 @@ abstract class AppLocalizations {
   /// **'Eaten'**
   String get rowEaten;
 
-  /// No description provided for @rowResultLeft.
-  ///
-  /// In en, this message translates to:
-  /// **'= Left'**
-  String get rowResultLeft;
-
-  /// No description provided for @rowResultOver.
-  ///
-  /// In en, this message translates to:
-  /// **'= Above typical'**
-  String get rowResultOver;
-
-  /// No description provided for @ringHeadroom.
-  ///
-  /// In en, this message translates to:
-  /// **'headroom'**
-  String get ringHeadroom;
-
-  /// No description provided for @ringLeftToday.
-  ///
-  /// In en, this message translates to:
-  /// **'left today'**
-  String get ringLeftToday;
-
-  /// No description provided for @ringAboveTypical.
-  ///
-  /// In en, this message translates to:
-  /// **'above typical'**
-  String get ringAboveTypical;
-
   /// No description provided for @ringKcalToday.
   ///
   /// In en, this message translates to:
@@ -1189,18 +1159,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Logged with Bitewise'**
   String get reportFooter;
-
-  /// No description provided for @typicalDayHeadroom.
-  ///
-  /// In en, this message translates to:
-  /// **'Typical day: ~{typical} kcal · ~{delta} kcal headroom'**
-  String typicalDayHeadroom(String typical, String delta);
-
-  /// No description provided for @typicalDayOver.
-  ///
-  /// In en, this message translates to:
-  /// **'Typical day: ~{typical} kcal · ~{delta} kcal above typical'**
-  String typicalDayOver(String typical, String delta);
 
   /// intl DateFormat PATTERN for dated history-day labels, not display text. en: "Tuesday, Jul 15"; zh: "7月15日 星期二".
   ///

@@ -46,21 +46,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rowEaten => 'Eaten';
 
   @override
-  String get rowResultLeft => '= Left';
-
-  @override
-  String get rowResultOver => '= Above typical';
-
-  @override
-  String get ringHeadroom => 'headroom';
-
-  @override
-  String get ringLeftToday => 'left today';
-
-  @override
-  String get ringAboveTypical => 'above typical';
-
-  @override
   String get ringKcalToday => 'kcal today';
 
   @override
@@ -667,16 +652,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reportFooter => 'Logged with Bitewise';
-
-  @override
-  String typicalDayHeadroom(String typical, String delta) {
-    return 'Typical day: ~$typical kcal · ~$delta kcal headroom';
-  }
-
-  @override
-  String typicalDayOver(String typical, String delta) {
-    return 'Typical day: ~$typical kcal · ~$delta kcal above typical';
-  }
 
   @override
   String get historyDayPattern => 'EEEE, MMM dd';

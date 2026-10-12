@@ -23,11 +23,6 @@
   "rowTypical": "Typical",
   "rowBurn": "Burn",
   "rowEaten": "Eaten",
-  "rowResultLeft": "= Left",
-  "rowResultOver": "= Above typical",
-  "ringHeadroom": "headroom",
-  "ringLeftToday": "left today",
-  "ringAboveTypical": "above typical",
   "ringKcalToday": "kcal today",
   "ringSemantics": "{kcal} kcal eaten today",
   "@ringSemantics": {
@@ -412,28 +407,6 @@
   },
   "reportNoMeals": "No meals logged.",
   "reportFooter": "Logged with Bitewise",
-  "typicalDayHeadroom": "Typical day: ~{typical} kcal · ~{delta} kcal headroom",
-  "@typicalDayHeadroom": {
-    "placeholders": {
-      "typical": {
-        "type": "String"
-      },
-      "delta": {
-        "type": "String"
-      }
-    }
-  },
-  "typicalDayOver": "Typical day: ~{typical} kcal · ~{delta} kcal above typical",
-  "@typicalDayOver": {
-    "placeholders": {
-      "typical": {
-        "type": "String"
-      },
-      "delta": {
-        "type": "String"
-      }
-    }
-  },
   "historyDayPattern": "EEEE, MMM dd",
   "@historyDayPattern": {
     "description": "intl DateFormat PATTERN for dated history-day labels, not display text. en: \"Tuesday, Jul 15\"; zh: \"7月15日 星期二\"."
