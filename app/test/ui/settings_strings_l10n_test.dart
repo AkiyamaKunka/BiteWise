@@ -185,7 +185,8 @@ void main() {
           'action', (tester) async {
         var opened = 0;
         await pump(tester, c.locale,
-            settings: FakeSettings(watcherEnabled: false),
+            settings: FakeSettings(
+                watcherEnabled: false, watcherDisclosureSeen: true),
             permission: false,
             openSystemSettings: () async => opened++);
         await tester.tap(find.byKey(const Key('watcherToggle')));
@@ -200,7 +201,8 @@ void main() {
 
       testWidgets('no usable key: "watching is on, but…"', (tester) async {
         await pump(tester, c.locale,
-            settings: FakeSettings(apiKey: '', watcherEnabled: false));
+            settings: FakeSettings(
+                apiKey: '', watcherEnabled: false, watcherDisclosureSeen: true));
         await tester.tap(find.byKey(const Key('watcherToggle')));
         await tester.pumpAndSettle();
         expect(find.text(c.noKey), findsOneWidget);
@@ -208,7 +210,8 @@ void main() {
 
       testWidgets('quota pause: the paused variant', (tester) async {
         await pump(tester, c.locale,
-            settings: FakeSettings(apiKey: 'k', watcherEnabled: false)
+            settings: FakeSettings(
+                apiKey: 'k', watcherEnabled: false, watcherDisclosureSeen: true)
               ..isQuotaPaused = true);
         await tester.tap(find.byKey(const Key('watcherToggle')));
         await tester.pumpAndSettle();
@@ -219,7 +222,8 @@ void main() {
           (tester) async {
         var opened = 0;
         await pump(tester, c.locale,
-            settings: FakeSettings(apiKey: 'k', watcherEnabled: false),
+            settings: FakeSettings(
+                apiKey: 'k', watcherEnabled: false, watcherDisclosureSeen: true),
             library: _LimitedLibrary(),
             openSystemSettings: () async => opened++);
         await tester.tap(find.byKey(const Key('watcherToggle')));
@@ -296,7 +300,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: SettingsScreen(
-      settings: FakeSettings(watcherEnabled: false),
+      settings: FakeSettings(watcherEnabled: false, watcherDisclosureSeen: true),
       analyzer: FakeAnalyzer(),
       dao: FakeDao(),
       requestPhotoPermission: () async => false,

@@ -491,7 +491,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsPhotosFooter.
   ///
   /// In en, this message translates to:
-  /// **'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach.'**
+  /// **'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos are sent to the AI service you chose.'**
   String get settingsPhotosFooter;
 
   /// No description provided for @settingsRowWatch.
@@ -499,6 +499,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Watch Camera Roll'**
   String get settingsRowWatch;
+
+  /// No description provided for @watcherDisclosureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos will be sent to your AI service'**
+  String get watcherDisclosureTitle;
+
+  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan.
+  ///
+  /// In en, this message translates to:
+  /// **'While Watch Camera Roll is on, every new photo in your library — including ones that are not food — is sent to {provider} so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
+  String watcherDisclosureBody(String provider);
+
+  /// No description provided for @watcherDisclosureContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get watcherDisclosureContinue;
 
   /// No description provided for @settingsRowLookback.
   ///

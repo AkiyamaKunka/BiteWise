@@ -249,10 +249,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsPhotosFooter =>
-      'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach.';
+      'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos are sent to the AI service you chose.';
 
   @override
   String get settingsRowWatch => 'Watch Camera Roll';
+
+  @override
+  String get watcherDisclosureTitle => 'Photos will be sent to your AI service';
+
+  @override
+  String watcherDisclosureBody(String provider) {
+    return 'While Watch Camera Roll is on, every new photo in your library — including ones that are not food — is sent to $provider so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.';
+  }
+
+  @override
+  String get watcherDisclosureContinue => 'Continue';
 
   @override
   String get settingsRowLookback => 'Backfill Lookback';

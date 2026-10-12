@@ -255,6 +255,14 @@ class _SettingsScreenState extends State<SettingsScreen>
     // 2026-10-07 — the Chinese UI showed them verbatim.)
     final l10n = context.l10n;
     if (enable) {
+      // App Store 5.1.2(i): say where the photos go BEFORE the first one
+      // leaves. Once per install, only from this switch — a watcher that
+      // is already on, and every headless/background path, never asks.
+      if (!widget.settings.watcherDisclosureSeen) {
+        if (!await _confirmWatcherDisclosure()) return; // switch stays off
+        await widget.settings.update(watcherDisclosureSeen: true);
+        if (!mounted) return;
+      }
       final granted = await widget.requestPhotoPermission();
       if (!granted) {
         if (!mounted) return;
@@ -313,6 +321,32 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted) return;
     setState(() => _watcherEnabled = enable);
     await widget.settings.update(watcherEnabled: enable);
+  }
+
+  /// The one-time 照片会发送给 AI 服务 notice; true = Continue.
+  Future<bool> _confirmWatcherDisclosure() async {
+    final provider = providerDisplayLabel(context.l10n,
+        widget.settings.provider, widget.settings.serverBackend);
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('watcherDisclosureDialog'),
+        title: Text(ctx.l10n.watcherDisclosureTitle),
+        content: SingleChildScrollView(
+            child: Text(ctx.l10n.watcherDisclosureBody(provider))),
+        actions: [
+          TextButton(
+              key: const Key('watcherDisclosureCancel'),
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(ctx.l10n.cancel)),
+          FilledButton(
+              key: const Key('watcherDisclosureContinue'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(ctx.l10n.watcherDisclosureContinue)),
+        ],
+      ),
+    );
+    return go == true;
   }
 
   Future<void> _pickReportTime() async {

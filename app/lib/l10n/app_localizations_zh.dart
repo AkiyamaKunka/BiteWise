@@ -241,10 +241,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionPhotos => '照片';
 
   @override
-  String get settingsPhotosFooter => '监控会自动记录新的食物照片；回溯窗口决定补扫时往回看多少天。';
+  String get settingsPhotosFooter =>
+      '监控会自动记录新的食物照片；回溯窗口决定补扫时往回看多少天。开启监控相册时，新照片会发送给你选择的 AI 服务。';
 
   @override
   String get settingsRowWatch => '监控相册';
+
+  @override
+  String get watcherDisclosureTitle => '照片会发送给 AI 服务';
+
+  @override
+  String watcherDisclosureBody(String provider) {
+    return '开启监控相册后，相册里的每张新照片（包括不是食物的照片）都会发送给 $provider，由它判断是不是食物。不会发送给本应用的开发者。你可以随时关闭。';
+  }
+
+  @override
+  String get watcherDisclosureContinue => '继续';
 
   @override
   String get settingsRowLookback => '补扫回溯';

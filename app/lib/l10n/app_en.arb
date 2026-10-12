@@ -196,8 +196,19 @@
   "settingsAiFooter": "Photos are analysed by the provider you pick — its key never leaves this phone.",
   "settingsRowAiProvider": "AI Provider",
   "settingsSectionPhotos": "Photos",
-  "settingsPhotosFooter": "The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach.",
+  "settingsPhotosFooter": "The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos are sent to the AI service you chose.",
   "settingsRowWatch": "Watch Camera Roll",
+  "watcherDisclosureTitle": "Photos will be sent to your AI service",
+  "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library — including ones that are not food — is sent to {provider} so it can tell whether it is a meal. Nothing is sent to the app's developer. You can turn this off any time.",
+  "@watcherDisclosureBody": {
+    "description": "One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "watcherDisclosureContinue": "Continue",
   "settingsRowLookback": "Backfill Lookback",
   "lookbackDays": "{count, plural, =1{1 day} other{{count} days}}",
   "@lookbackDays": {

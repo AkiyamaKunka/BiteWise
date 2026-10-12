@@ -337,6 +337,8 @@ class _AppSettingsStore implements SettingsStore {
   @override
   bool get watcherEnabled => _s.watcherEnabled;
   @override
+  bool get watcherDisclosureSeen => _s.watcherDisclosureSeen;
+  @override
   String get dietaryProfile => _s.dietaryProfile ?? '';
   @override
   String get serverBaseUrl => _s.serverBaseUrl;
@@ -362,6 +364,7 @@ class _AppSettingsStore implements SettingsStore {
     String? reportTime,
     bool? summaryEnabled,
     bool? watcherEnabled,
+    bool? watcherDisclosureSeen,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -438,6 +441,9 @@ class _AppSettingsStore implements SettingsStore {
     if (watcherEnabled != null) {
       await _s.setWatcherEnabled(watcherEnabled);
       await syncBackgroundScan(_s); // register/cancel the periodic job
+    }
+    if (watcherDisclosureSeen != null) {
+      await _s.setWatcherDisclosureSeen(watcherDisclosureSeen);
     }
     if (dietaryProfile != null) await _s.setDietaryProfile(dietaryProfile);
     if (serverBaseUrl != null) await _s.setServerBaseUrl(serverBaseUrl);

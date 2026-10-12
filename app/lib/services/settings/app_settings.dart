@@ -269,6 +269,8 @@ class AppSettings extends ChangeNotifier {
   static const String _kCalorieGoal = 'settings.calorie_goal';
   static const String _kSummaryPostedDate = 'settings.summary_posted_date';
   static const String _kWatcherEnabled = 'settings.watcher_enabled';
+  static const String _kWatcherDisclosureSeen =
+      'settings.watcher_disclosure_seen';
   static const String _kSummaryEnabled = 'settings.summary_enabled';
   static const String _kDietaryProfile = 'settings.dietary_profile';
   static const String _kQuotaPauseUntil = 'settings.quota_pause_until';
@@ -355,6 +357,7 @@ class AppSettings extends ChangeNotifier {
   String _serverEffort = ''; // '' = server default | low/medium/high
   int _calorieGoal = 0; // 0 = unset -> the daily summary uses the median
   bool _watcherEnabled = false;
+  bool _watcherDisclosureSeen = false;
   bool _summaryEnabled = true;
   String? _dietaryProfile;
   DateTime? _quotaPauseUntil;
@@ -427,6 +430,7 @@ class AppSettings extends ChangeNotifier {
     final goal = p.getInt(_kCalorieGoal) ?? 0;
     s._calorieGoal = (goal > 0 && goal <= maxDailyGoalKcal) ? goal : 0;
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
+    s._watcherDisclosureSeen = p.getBool(_kWatcherDisclosureSeen) ?? false;
     s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
@@ -826,6 +830,18 @@ class AppSettings extends ChangeNotifier {
   Future<void> setWatcherEnabled(bool value) async {
     _watcherEnabled = value;
     await _prefs.setBool(_kWatcherEnabled, value);
+    notifyListeners();
+  }
+
+  /// Whether the user has accepted the one-time "photos will be sent to
+  /// your AI service" notice that turning on 监控相册 shows (App Store
+  /// 5.1.2(i): explicit consent before personal data goes to a third-party
+  /// AI). Device-local: never exported, never set by a setup link.
+  bool get watcherDisclosureSeen => _watcherDisclosureSeen;
+
+  Future<void> setWatcherDisclosureSeen(bool value) async {
+    _watcherDisclosureSeen = value;
+    await _prefs.setBool(_kWatcherDisclosureSeen, value);
     notifyListeners();
   }
 

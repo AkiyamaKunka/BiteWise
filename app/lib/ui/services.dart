@@ -50,6 +50,10 @@ abstract class SettingsStore {
   /// true). Off cancels every delivery path; the time row hides with it.
   bool get summaryEnabled;
   bool get watcherEnabled;
+
+  /// True once the user accepted the one-time 监控相册 disclosure (photos
+  /// go to the chosen AI service); only the Settings toggle reads it.
+  bool get watcherDisclosureSeen;
   String get dietaryProfile; // spec §1.3 photo-prompt appendix
 
   /// Base URL of the user's own server (AiProvider.server); '' when unset.
@@ -83,6 +87,7 @@ abstract class SettingsStore {
     String? reportTime,
     bool? summaryEnabled,
     bool? watcherEnabled,
+    bool? watcherDisclosureSeen,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,

@@ -236,7 +236,8 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: '', watcherEnabled: false);
+    final settings = FakeSettings(
+        apiKey: '', watcherEnabled: false, watcherDisclosureSeen: true);
     final intake = FakeIntake();
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: settings,
@@ -259,7 +260,8 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final paused = FakeSettings(apiKey: 'k')..isQuotaPaused = true;
+    final paused = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true)
+      ..isQuotaPaused = true;
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: paused,
       analyzer: FakeAnalyzer(),
@@ -278,7 +280,7 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final healthy = FakeSettings(apiKey: 'k');
+    final healthy = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true);
     final intake = FakeIntake();
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: healthy,
@@ -381,7 +383,8 @@ void main() {
 
   testWidgets('watcher toggle stays off when permission is denied',
       (tester) async {
-    final settings = FakeSettings(watcherEnabled: false);
+    final settings =
+        FakeSettings(watcherEnabled: false, watcherDisclosureSeen: true);
 
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: settings,
