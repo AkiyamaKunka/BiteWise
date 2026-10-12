@@ -24,8 +24,11 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
   final d = o.detail;
   if (deliberate && o.kind == PhotoOutcomeKind.failed && o.retryable) {
     final reason = switch (o.errorKind) {
-      // The missing-credential lines promise nothing and name the fix.
-      AnalysisErrorKind.noApiKey || AnalysisErrorKind.noServerKey => null,
+      // These lines promise nothing and name the fix.
+      AnalysisErrorKind.noApiKey ||
+      AnalysisErrorKind.noServerKey ||
+      AnalysisErrorKind.regionBlocked =>
+        null,
       _ => retryReason(l, o),
     };
     if (reason != null) return l.outcomeRetryLaterMsg(reason);
@@ -48,6 +51,8 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
         AnalysisErrorKind.noApiKey => l.errNoApiKey,
         AnalysisErrorKind.noServerKey => l.errNoServerKey,
         AnalysisErrorKind.rejectedKey => l.errRejectedKey,
+        AnalysisErrorKind.regionBlocked => l.errRegionBlocked,
+        AnalysisErrorKind.contentBlocked => l.errContentBlocked,
         AnalysisErrorKind.rateLimited => l.errRateLimited,
         AnalysisErrorKind.quotaPaused => l.errQuotaPaused,
         AnalysisErrorKind.billing => l.errBilling,
@@ -103,6 +108,7 @@ String? retryReason(AppLocalizations l, PhotoOutcome o) =>
       AnalysisErrorKind.serverError => l.reasonServerFailed,
       AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
       AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
+      AnalysisErrorKind.regionBlocked => l.reasonRegionBlocked,
       _ => null,
     };
 

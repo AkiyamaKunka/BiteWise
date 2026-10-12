@@ -58,7 +58,10 @@ void main() {
       final o = PhotoOutcome(PhotoOutcomeKind.failed, line,
           errorKind: kind, detail: line);
       final body = outcomeBody(zh, o);
-      expect(RegExp(r'[a-z]{4,}').hasMatch(body), isFalse,
+      // A provider's NAME is not English leaking (Gemini's region and
+      // withheld-answer lines are about Gemini specifically).
+      expect(RegExp(r'[a-z]{4,}').hasMatch(body.replaceAll('Gemini', '')),
+          isFalse,
           reason: '$kind -> $body');
     }
   });
@@ -245,6 +248,26 @@ void main() {
       const noKey = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
           retryable: true, errorKind: AnalysisErrorKind.noApiKey, detail: 'x');
       expect(outcomeBody(zh, noKey, deliberate: true), zh.errNoApiKey);
+      // Gemini's region refusal keeps its VPN hint in the dialog, and a
+      // share names it instead of the raw English line.
+      const region = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          retryable: true,
+          errorKind: AnalysisErrorKind.regionBlocked,
+          detail: 'x');
+      expect(outcomeBody(zh, region, deliberate: true), zh.errRegionBlocked);
+      expect(
+          outcomeSnackbar(
+              zh,
+              const PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+                  retryable: true,
+                  errorKind: AnalysisErrorKind.regionBlocked,
+                  detail: 'x',
+                  shared: true)),
+          zh.outcomeShareRetryMsg(zh.reasonRegionBlocked));
+      const withheld = PhotoOutcome(PhotoOutcomeKind.failed, 'x',
+          errorKind: AnalysisErrorKind.contentBlocked, detail: 'x');
+      expect(outcomeBody(zh, withheld, deliberate: true),
+          'Gemini 拒绝分析这张照片 —— 可以手动记录。');
     });
 
     test('a share that failed transiently asks for a re-share', () {

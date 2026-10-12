@@ -2948,6 +2948,30 @@ abstract class AppLocalizations {
   /// **'no server address or upload key is set'**
   String get reasonNoServerKey;
 
+  /// No description provided for @errRegionBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Gemini is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).'**
+  String get errRegionBlocked;
+
+  /// No description provided for @errContentBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Gemini declined to analyze this photo — you can log it manually.'**
+  String get errContentBlocked;
+
+  /// No description provided for @reasonRegionBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Gemini is not available from this network region'**
+  String get reasonRegionBlocked;
+
+  /// No description provided for @diagFixVpnRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch the VPN to a node in a region Gemini serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.'**
+  String get diagFixVpnRegion;
+
   /// No description provided for @errServerRejected.
   ///
   /// In en, this message translates to:

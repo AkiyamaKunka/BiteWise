@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -468,6 +470,112 @@ void main() {
             429)
       ]);
       expect(await h.analyzer.validateKey('k'), isNull);
+    });
+  });
+
+  group('region blocks, 5xx pages and withheld answers (2026-10-12)', () {
+    // Gemini does not serve Hong Kong — the usual exit of a mainland VPN.
+    const regionBody = '{"error": {"code": 400, "message": "User location '
+        'is not supported for the API use.", "status": "FAILED_PRECONDITION"}}';
+
+    test('a region 400 keeps the photo, is not retried in place, and says '
+        'VPN', () async {
+      final s = await freshSettings();
+      final h = Harness(s, [http.Response(regionBody, 400)]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(out.retryable, isTrue,
+          reason: 'a different VPN node fixes it; the photo must survive');
+      expect(h.requests, hasLength(1));
+      expect(h.sleeps, isEmpty, reason: 'seconds do not move a VPN node');
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.regionBlocked);
+      expect(out.error, contains('VPN'));
+      expect(s.isQuotaPaused, isFalse);
+    });
+
+    test('a key complaint that also says FAILED_PRECONDITION is still auth',
+        () {
+      expect(
+          classifyGeminiError('HTTP 400: {"status": "FAILED_PRECONDITION", '
+              '"message": "API_KEY_INVALID"}'),
+          GeminiErrorClass.auth);
+      expect(classifyGeminiError('HTTP 400: $regionBody'),
+          GeminiErrorClass.regionBlocked);
+    });
+
+    test('probeKey / validateKey never call a region 400 a rejected key',
+        () async {
+      final s = await freshSettings(apiKey: null);
+      final probe = await Harness(s, [http.Response(regionBody, 400)])
+          .analyzer
+          .probeKey('k');
+      expect(probe.result, KeyProbeResult.regionBlocked);
+      expect(probe.message, contains('region'));
+      final msg = await Harness(s, [http.Response(regionBody, 400)])
+          .analyzer
+          .validateKey('k');
+      expect(msg, isNotNull);
+      expect(classifyAnalysisError(msg), AnalysisErrorKind.regionBlocked);
+      expect(classifyAnalysisError(msg), isNot(AnalysisErrorKind.rejectedKey));
+    });
+
+    test('500 INTERNAL and a 502 HTML page read as network/service trouble',
+        () async {
+      for (final r in [
+        () => http.Response(
+            '{"error": {"code": 500, "message": "An internal error has '
+            'occurred. Please retry or report in '
+            'https://developers.generativeai.google/guide/troubleshooting", '
+            '"status": "INTERNAL"}}',
+            500),
+        () => http.Response(
+            '<!DOCTYPE html><html lang=en><title>Error 502 (Server Error)!!1'
+            '</title><p><b>502.</b> <ins>That’s an error.</ins><p>The server '
+            'encountered a temporary error (ref 4031). Please try again in '
+            '30 seconds.</html>',
+            502,
+            headers: {'content-type': 'text/html; charset=utf-8'}),
+      ]) {
+        final s = await freshSettings();
+        final h = Harness(s, List.generate(3, (_) => r()));
+        final out = await h.analyzer.analyzePhoto(photo);
+        expect(out.retryable, isTrue);
+        expect(classifyAnalysisError(out.error), AnalysisErrorKind.network,
+            reason: '${out.error}');
+        expect(h.requests, hasLength(3));
+        final probe =
+            await Harness(s, [r()]).analyzer.probeKey('k');
+        expect(probe.result, isNot(KeyProbeResult.rejected),
+            reason: 'a 5xx says nothing about the key');
+      }
+    });
+
+    test('a SAFETY-blocked 200 is permanent and says Gemini declined',
+        () async {
+      for (final body in [
+        '{"candidates": [{"finishReason": "SAFETY", "index": 0, '
+            '"safetyRatings": [{"category": "HARM_CATEGORY_DANGEROUS_CONTENT", '
+            '"probability": "HIGH"}]}]}',
+        '{"promptFeedback": {"blockReason": "PROHIBITED_CONTENT"}}',
+      ]) {
+        final s = await freshSettings();
+        final h = Harness(s, [http.Response(body, 200)]);
+        final out = await h.analyzer.analyzePhoto(photo);
+        expect(out.retryable, isFalse, reason: 'the same photo is refused '
+            'again; a retry loops forever');
+        expect(h.requests, hasLength(1));
+        expect(out.error, 'Gemini declined to analyze this photo.');
+        expect(classifyAnalysisError(out.error),
+            AnalysisErrorKind.contentBlocked);
+      }
+    });
+
+    test('a 200 with no text and no block reason is still a shape error',
+        () async {
+      final s = await freshSettings();
+      final h = Harness(s, [http.Response('{"candidates": []}', 200)]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(out.retryable, isFalse);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.unknown);
     });
   });
 }

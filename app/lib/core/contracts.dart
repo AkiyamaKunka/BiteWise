@@ -327,6 +327,11 @@ enum KeyProbeResult {
   /// this as [rejected] sent users to re-copy a key that worked.
   modelNotFound,
 
+  /// The key was not judged: the provider does not serve the network's
+  /// region (Gemini behind a Hong Kong VPN exit). A different VPN node is
+  /// the fix, NOT a new key.
+  regionBlocked,
+
   /// The provider refused the credential, or the request could not be made.
   rejected,
 }

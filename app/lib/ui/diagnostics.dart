@@ -167,6 +167,12 @@ class ProviderDiagnostics {
             l.diagModelNotFound(settings.model),
             detail: probe.message, fix: l.diagFixPickModel);
         return;
+      case KeyProbeResult.regionBlocked:
+        // Every later stage fails the same way; "re-copy the key" would
+        // be the wrong fix for a key Gemini never looked at.
+        yield DiagResult(l.diagStageAuth, DiagStatus.fail, l.errRegionBlocked,
+            detail: probe.message, fix: l.diagFixVpnRegion);
+        return;
       case KeyProbeResult.rejected:
         yield DiagResult(
             l.diagStageAuth, DiagStatus.fail, l.diagKeyRejected,

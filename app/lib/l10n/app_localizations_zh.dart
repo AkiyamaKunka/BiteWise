@@ -1699,6 +1699,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reasonNoServerKey => '还没有设置服务器地址或上传 Key';
 
   @override
+  String get errRegionBlocked => 'Gemini 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。';
+
+  @override
+  String get errContentBlocked => 'Gemini 拒绝分析这张照片 —— 可以手动记录。';
+
+  @override
+  String get reasonRegionBlocked => 'Gemini 在当前网络地区不可用';
+
+  @override
+  String get diagFixVpnRegion =>
+      '把 VPN 换到 Gemini 支持的地区的节点（如美国、日本、新加坡；香港不支持），或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+
+  @override
   String errServerRejected(String code) {
     return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
   }

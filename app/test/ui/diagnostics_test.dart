@@ -141,6 +141,22 @@ void main() {
         allOf(contains('找不到模型'), isNot(contains('未被接受'))));
   });
 
+  test('a region-blocked Gemini stops at Authentication with a VPN fix, '
+      'never "re-copy the key"', () async {
+    final blocked = _okAnalyzer()
+      ..onProbeKey = (_) async => const KeyProbe(
+          KeyProbeResult.regionBlocked,
+          message: 'Gemini is not available from your current network '
+              'region (check the VPN).');
+    final results = await _diag(analyzer: blocked).run().toList();
+    expect(results.last.stage, 'Authentication');
+    expect(results.last.status, DiagStatus.fail);
+    expect(results.last.summary, AppLocalizationsEn().errRegionBlocked);
+    expect(results.last.fix, AppLocalizationsEn().diagFixVpnRegion);
+    expect(results.last.fix, isNot(contains('Re-copy')));
+    expect(AppLocalizationsZh().errRegionBlocked, contains('VPN'));
+  });
+
   testWidgets('a stage that THROWS is reported, never silently green',
       (tester) async {
     tester.view.physicalSize = const Size(800, 2400);

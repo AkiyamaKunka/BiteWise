@@ -173,6 +173,14 @@ void main() {
             'not found for API version v1beta, or is not supported for '
             'generateContent.", "status": "NOT_FOUND"}}',
             expectSays: 'model'),
+        // Gemini withholds a refused answer in an HTTP 200.
+        Scenario.contentFilter: const Fx(
+            200,
+            '{"candidates": [{"finishReason": "SAFETY", "index": 0, '
+            '"safetyRatings": [{"category": '
+            '"HARM_CATEGORY_DANGEROUS_CONTENT", "probability": "HIGH"}]}]}',
+            expectSays: 'declined',
+            expectCalls: 1),
       },
     ),
     ProviderSpec(

@@ -34,10 +34,24 @@ enum GeminiErrorClass {
   dailyQuotaExhausted,
   quotaRateLimit,
   auth,
+
+  /// 400 FAILED_PRECONDITION "User location is not supported for the API
+  /// use." — Gemini does not serve the caller's region (Hong Kong, the
+  /// usual exit of a mainland user's VPN). The key and the photo are fine;
+  /// a different VPN node is the fix, so the photo stays eligible.
+  regionBlocked,
   networkService,
   modelError,
+
+  /// An HTTP 200 whose answer Gemini withheld (finishReason SAFETY /
+  /// RECITATION / PROHIBITED_CONTENT / BLOCKLIST / SPII, or a prompt
+  /// blockReason). The same photo is refused again, so it is permanent.
+  contentBlocked,
   unknown,
 }
+
+/// Marker [GeminiAnalyzer] puts in front of a withheld answer's reason.
+const String _blockedMarker = 'CONTENT_BLOCKED';
 
 /// Port of `_is_daily_free_tier_quota_error` (spec §3.3): the free-tier
 /// per-day quota strings, matched on the upper-cased error text.
@@ -54,6 +68,7 @@ bool isDailyFreeTierQuotaError(String errorText) {
 /// QUOTA/429), then rate limit, auth, network, model, unknown.
 GeminiErrorClass classifyGeminiError(String errorText) {
   final up = errorText.toUpperCase();
+  if (up.startsWith(_blockedMarker)) return GeminiErrorClass.contentBlocked;
   if (isDailyFreeTierQuotaError(up)) return GeminiErrorClass.dailyQuotaExhausted;
   if (up.contains('RESOURCE_EXHAUSTED') ||
       up.contains('429') ||
@@ -61,12 +76,24 @@ GeminiErrorClass classifyGeminiError(String errorText) {
       up.contains('RATE_LIMIT')) {
     return GeminiErrorClass.quotaRateLimit;
   }
+  // Any other 5xx (500 INTERNAL, a 502/504 HTML page from Google's front
+  // end) is service trouble, never a verdict on the key — checked before
+  // auth, whose bare 401/403 digits an HTML error page can contain.
+  if (RegExp(r'^HTTP 5\d\d').hasMatch(up)) {
+    return GeminiErrorClass.networkService;
+  }
   if (up.contains('API_KEY') ||
       up.contains('UNAUTHENTICATED') ||
       up.contains('PERMISSION_DENIED') ||
       up.contains('401') ||
       up.contains('403')) {
     return GeminiErrorClass.auth;
+  }
+  // AFTER auth: a key complaint that also says FAILED_PRECONDITION is
+  // still about the key.
+  if (up.contains('LOCATION IS NOT SUPPORTED') ||
+      up.contains('FAILED_PRECONDITION')) {
+    return GeminiErrorClass.regionBlocked;
   }
   if (up.contains('UNAVAILABLE') ||
       up.contains('DEADLINE') ||
@@ -198,15 +225,46 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
 
   /// Extract `candidates[0].content.parts[0].text` (spec §3.2).
   String _extractText(String responseBody) {
+    dynamic decoded;
     try {
-      final decoded = jsonDecode(responseBody);
+      decoded = jsonDecode(responseBody);
       final text =
           decoded['candidates'][0]['content']['parts'][0]['text'] as String;
       return text;
     } catch (_) {
+      // A WITHHELD answer is not a malformed one: it said "unexpected
+      // response shape" in English, read as a glitch worth retrying.
+      final reason = _blockReason(decoded);
+      if (reason != null) throw GeminiException('$_blockedMarker: $reason');
       throw const GeminiException(
           'unexpected response shape: no candidates text');
     }
+  }
+
+  static const _blockingFinishReasons = {
+    'SAFETY',
+    'RECITATION',
+    'PROHIBITED_CONTENT',
+    'BLOCKLIST',
+    'SPII',
+  };
+
+  /// Why Gemini withheld its answer, or null when it did not.
+  static String? _blockReason(dynamic decoded) {
+    if (decoded is! Map) return null;
+    final feedback = decoded['promptFeedback'];
+    if (feedback is Map && feedback['blockReason'] is String) {
+      return 'blockReason=${feedback['blockReason']}';
+    }
+    final candidates = decoded['candidates'];
+    if (candidates is List && candidates.isNotEmpty) {
+      final first = candidates.first;
+      final finish = first is Map ? first['finishReason'] : null;
+      if (finish is String && _blockingFinishReasons.contains(finish)) {
+        return 'finishReason=$finish';
+      }
+    }
+    return null;
   }
 
   String _pausedMessage() {
@@ -229,6 +287,11 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
         return 'Gemini rate limit hit — please try again shortly.';
       case GeminiErrorClass.auth:
         return 'Gemini rejected the API key. Check the key in Settings.';
+      case GeminiErrorClass.regionBlocked:
+        return 'Gemini is not available from your current network region '
+            '(check the VPN).';
+      case GeminiErrorClass.contentBlocked:
+        return 'Gemini declined to analyze this photo.';
       case GeminiErrorClass.networkService:
         return 'Error contacting Gemini (network or service issue). '
             'Please try again.';
@@ -302,10 +365,13 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
           continue;
         }
         // Exhausted in-place retries on a transient class (429/5xx/network),
-        // or the key is simply not configured yet: the PHOTO is fine either
-        // way — a later scan may succeed. Auth/model/parse failures are not.
+        // the key is simply not configured yet, or the network exits in a
+        // region Gemini does not serve (no in-place retry: seconds do not
+        // move a VPN node): the PHOTO is fine either way — a later scan may
+        // succeed. Auth/model/parse/withheld failures are not.
         final transient = isRetryableGeminiError(e.message) ||
-            e.message.startsWith('API_KEY missing');
+            e.message.startsWith('API_KEY missing') ||
+            classifyGeminiError(e.message) == GeminiErrorClass.regionBlocked;
         return AnalysisOutcome(
             error: _userMessageFor(e.message),
             retryable: transient,
@@ -488,6 +554,11 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
         // restated the localized summary (loop find 2026-10-08).
         case GeminiErrorClass.auth:
           return const KeyProbe(KeyProbeResult.rejected);
+        // The key was never judged: a different VPN node is the fix.
+        case GeminiErrorClass.regionBlocked:
+          return KeyProbe(KeyProbeResult.regionBlocked,
+              message: _userMessageFor(e.message));
+        case GeminiErrorClass.contentBlocked:
         case GeminiErrorClass.unknown:
           return KeyProbe(KeyProbeResult.rejected,
               message: _userMessageFor(e.message));

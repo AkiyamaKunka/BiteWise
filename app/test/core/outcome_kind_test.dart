@@ -14,6 +14,10 @@ void main() {
         AnalysisErrorKind.rejectedKey,
     'The provider rejected the API key. Check Settings.':
         AnalysisErrorKind.rejectedKey,
+    'Gemini is not available from your current network region (check the '
+            'VPN).':
+        AnalysisErrorKind.regionBlocked,
+    'Gemini declined to analyze this photo.': AnalysisErrorKind.contentBlocked,
     'Gemini rate limit hit — please try again shortly.':
         AnalysisErrorKind.rateLimited,
     'Provider rate/spend limit hit — will retry later.':

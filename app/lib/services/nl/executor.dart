@@ -388,6 +388,7 @@ class DefaultNlExecutor implements NlExecutor {
       AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
       AnalysisErrorKind.badModel => '❌ ${badModelText(_l, error)}',
       AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',
+      AnalysisErrorKind.regionBlocked => '❌ ${_l.errRegionBlocked}',
       AnalysisErrorKind.serverError
           when reason != null && reason.toLowerCase().contains('credit') =>
         _l.nlServerModelRefused(reason),
