@@ -123,6 +123,19 @@ void main() {
     });
   });
 
+  test('an empty provider balance says "top up" in both languages', () {
+    const line =
+        'Provider balance or credits exhausted — check your DeepSeek billing.';
+    final o = PhotoOutcome(PhotoOutcomeKind.failed, line,
+        retryable: true,
+        errorKind: classifyAnalysisError(line),
+        detail: line);
+    expect(o.errorKind, AnalysisErrorKind.billing);
+    expect(outcomeBody(zh, o), contains('充值'));
+    expect(outcomeBody(zh, o), isNot(contains('billing')));
+    expect(outcomeBody(en, o), contains('top it up'));
+  });
+
   test('a server rejection shows the CODE in both languages', () {
     const o = PhotoOutcome(
         PhotoOutcomeKind.failed, 'The server rejected this request (bad_model).',

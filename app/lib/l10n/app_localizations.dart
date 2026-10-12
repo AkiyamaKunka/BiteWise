@@ -2198,6 +2198,18 @@ abstract class AppLocalizations {
   /// **'The provider rejected the model — check the model name in Settings.'**
   String get errBadModel;
 
+  /// No description provided for @errBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider account is out of balance or credits — top it up in the provider\'s console. The photo is kept and analyzed again after you top up.'**
+  String get errBilling;
+
+  /// No description provided for @errBillingText.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider account is out of balance or credits — top it up in the provider\'s console.'**
+  String get errBillingText;
+
   /// No description provided for @errBadResponse.
   ///
   /// In en, this message translates to:

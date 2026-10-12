@@ -1202,6 +1202,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errBadModel => '服务不接受这个模型 —— 请在设置里检查模型名。';
 
   @override
+  String get errBilling => '账户余额或额度已用完 —— 请到服务商控制台充值。照片已保留，充值后会重新分析。';
+
+  @override
+  String get errBillingText => '账户余额或额度已用完 —— 请到服务商控制台充值。';
+
+  @override
   String get errBadResponse => 'AI 返回的内容应用无法使用。';
 
   @override

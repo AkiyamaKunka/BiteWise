@@ -15,6 +15,7 @@ enum AnalysisErrorKind {
   rejectedKey,
   rateLimited,
   quotaPaused,
+  billing,
   network,
   badModel,
   badResponse,
@@ -35,6 +36,10 @@ AnalysisErrorKind classifyAnalysisError(String? error) {
     return AnalysisErrorKind.noApiKey;
   }
   if (e.contains('rejected the api key')) return AnalysisErrorKind.rejectedKey;
+  // The provider's out-of-money line (402 / insufficient_quota / Arrearage
+  // …): a retry cannot refill a balance, so it gets its own words rather
+  // than the raw English line or the chat's "请重试" (2026-10-12).
+  if (e.contains('credits exhausted')) return AnalysisErrorKind.billing;
   // Order matters: the Gemini pause line also mentions the free tier, and
   // the provider pause line says "(quota)" — both are pauses, not limits.
   if (e.contains('quota exhausted') || e.contains('analysis paused')) {

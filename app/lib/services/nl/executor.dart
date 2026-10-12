@@ -374,12 +374,14 @@ class DefaultNlExecutor implements NlExecutor {
 
   /// The failed-text-request line. Spec §4 step 4's "Error contacting AI.
   /// Please try again." stays for network, busy, rate-limit, parse and
-  /// unknown failures — a retry can fix those. A rejected key or model
-  /// cannot be retried away: say so in the photo path's words, or a friend
-  /// with a wrong key is told to retry forever (loop find 2026-10-08).
+  /// unknown failures — a retry can fix those. A rejected key or model, or
+  /// an empty provider balance, cannot be retried away: say so in the photo
+  /// path's words, or a friend with a wrong key is told to retry forever
+  /// (loop find 2026-10-08).
   String _textFailure(String? error) => switch (classifyAnalysisError(error)) {
         AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
         AnalysisErrorKind.badModel => '❌ ${_l.errBadModel}',
+        AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',
         _ => _l.nlErrorContactingAi,
       };
 

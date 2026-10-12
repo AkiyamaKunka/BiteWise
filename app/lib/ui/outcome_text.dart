@@ -33,6 +33,7 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
         AnalysisErrorKind.rejectedKey => l.errRejectedKey,
         AnalysisErrorKind.rateLimited => l.errRateLimited,
         AnalysisErrorKind.quotaPaused => l.errQuotaPaused,
+        AnalysisErrorKind.billing => l.errBilling,
         AnalysisErrorKind.network => l.errNetwork,
         AnalysisErrorKind.badModel => l.errBadModel,
         AnalysisErrorKind.badResponse => l.errBadResponse,

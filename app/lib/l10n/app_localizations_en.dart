@@ -1293,6 +1293,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'The provider rejected the model — check the model name in Settings.';
 
   @override
+  String get errBilling =>
+      'The provider account is out of balance or credits — top it up in the provider\'s console. The photo is kept and analyzed again after you top up.';
+
+  @override
+  String get errBillingText =>
+      'The provider account is out of balance or credits — top it up in the provider\'s console.';
+
+  @override
   String get errBadResponse =>
       'The AI answered in a form the app could not use.';
 

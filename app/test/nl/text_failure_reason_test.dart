@@ -103,13 +103,31 @@ void main() {
           '❌ 服务不接受这个模型 —— 请在设置里检查模型名。');
     });
 
+    test('an empty provider balance says "top up", never "请重试"', () async {
+      // A retry cannot refill an account; the chat used to say 联系 AI
+      // 失败，请重试 to a friend whose DeepSeek balance hit zero (2026-10-12).
+      analyzer
+        ..next = null
+        ..nextError =
+            'Provider balance or credits exhausted — check your Qwen billing.';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error,
+      ]) {
+        expect(line, '❌ 账户余额或额度已用完 —— 请到服务商控制台充值。');
+        expect(line, isNot(contains('请重试')));
+      }
+      expect((await en().handleText('x')).single.text,
+          "❌ The provider account is out of balance or credits — top it up "
+          "in the provider's console.");
+    });
+
     test('retryable and unknown failures keep the spec §4 step 4 wording',
         () async {
       for (final error in [
         null, // parse failure / no reason
         'Error contacting the provider (network or service issue).',
         'Provider rate/spend limit hit — will retry later.',
-        'Provider balance or credits exhausted — check your Qwen billing.',
         'The analyzer is busy',
       ]) {
         analyzer

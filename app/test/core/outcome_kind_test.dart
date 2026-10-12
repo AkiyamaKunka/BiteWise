@@ -21,6 +21,8 @@ void main() {
     'Gemini daily quota exhausted — analysis paused.':
         AnalysisErrorKind.quotaPaused,
     'Analysis paused (quota) — retrying later.': AnalysisErrorKind.quotaPaused,
+    'Provider balance or credits exhausted — check your Qwen billing.':
+        AnalysisErrorKind.billing,
     'Error contacting Gemini (network or service issue). Please try again.':
         AnalysisErrorKind.network,
     'Error contacting the provider (network or service issue).':
