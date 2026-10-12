@@ -20,6 +20,8 @@ import '../../ui/format.dart' show byMealClock, displayClock;
 import '../../ui/outcome_text.dart' show badModelText, regionProvider, serverReason;
 import '../settings/app_settings.dart';
 
+export '../../core/coerce.dart' show mealCalorieMismatch;
+
 /// Spec §1.2 / §8: TEXT_EDIT_WINDOW_DAYS (telegram_bot.py:161), from shared/.
 const int textEditWindowDays = SharedConstants.textEditWindowDaysDefault;
 
@@ -178,30 +180,6 @@ double? parseWeightKg(dynamic input) {
   if (m != null) {
     final kg = _round1(double.parse(m.group(1)!));
     if (kg >= minWeightKg && kg <= maxWeightKg) return kg;
-  }
-  return null;
-}
-
-/// meal_calorie_mismatch (spec §3.5, utils.py:75-97): item sum when it
-/// contradicts the stored total by more than max(100, 20%), else null.
-/// Missing/non-numeric data is treated as consistent.
-int? mealCalorieMismatch(dynamic analysis) {
-  num itemSum = 0;
-  var counted = 0;
-  for (final item in safeFoodItems(analysis)) {
-    final cal = _asNumber(item['estimated_calories']);
-    if (cal != null) {
-      itemSum += cal;
-      counted++;
-    }
-  }
-  final total = analysis is Map ? _asNumber(analysis['total_calories']) : null;
-  if (counted == 0 || itemSum <= 0 || total == null) return null;
-  if ((total - itemSum).abs() >
-      math.max(
-          SharedConstants.mealMismatchMinKcal,
-          SharedConstants.mealMismatchPct * math.max(total, itemSum))) {
-    return itemSum.toInt();
   }
   return null;
 }
@@ -849,13 +827,4 @@ String _comma(int n) {
     buf.write(s[i]);
   }
   return buf.toString();
-}
-
-/// utils._as_number bounds (spec §3.5): null instead of a default, so the
-/// mismatch check can distinguish "no data" from zero.
-num? _asNumber(dynamic v) {
-  if (v is bool || v is! num) return null;
-  final d = v.toDouble();
-  if (d.isNaN || d.isInfinite || d <= -1e9 || d >= 1e9) return null;
-  return v;
 }

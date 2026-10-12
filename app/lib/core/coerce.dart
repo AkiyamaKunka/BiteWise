@@ -9,6 +9,9 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
+
+import 'shared_generated.dart';
 
 /// Bounded numeric coercion with a NULLABLE fallback — full parity with
 /// Python `safe_number(value, default)` where default may be None. Returns
@@ -35,6 +38,32 @@ List<Map<String, dynamic>> safeFoodItems(dynamic analysis) {
   final items = analysis['food_items'];
   if (items is! List) return const [];
   return items.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+}
+
+/// meal_calorie_mismatch (spec §3.5, utils.py:75-97): item sum when it
+/// contradicts the stored total by more than max(100, 20%), else null.
+/// Missing/non-numeric data is treated as consistent. The one copy for chat
+/// (services/nl/executor.dart) and daily reports (services/report/builders.dart).
+int? mealCalorieMismatch(dynamic analysis) {
+  num itemSum = 0;
+  var counted = 0;
+  for (final item in safeFoodItems(analysis)) {
+    final cal = safeNumberOr(item['estimated_calories'], null);
+    if (cal != null) {
+      itemSum += cal;
+      counted++;
+    }
+  }
+  final total =
+      analysis is Map ? safeNumberOr(analysis['total_calories'], null) : null;
+  if (counted == 0 || itemSum <= 0 || total == null) return null;
+  if ((total - itemSum).abs() >
+      math.max(
+          SharedConstants.mealMismatchMinKcal,
+          SharedConstants.mealMismatchPct * math.max(total, itemSum))) {
+    return itemSum.toInt(); // Python int(): truncation toward zero
+  }
+  return null;
 }
 
 /// Truthy/falsy string-or-bool coercion ("false"/"no"/"0"/"off" are false).

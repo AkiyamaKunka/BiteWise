@@ -7,10 +7,11 @@
 library;
 
 import 'dart:convert';
-import 'dart:math' as math;
 
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
+
+export '../../core/coerce.dart' show mealCalorieMismatch;
 
 /// Factory the integrator wires (INTEGRATION CONTRACT).
 ReportBuilder createReportBuilder(MealsDao dao) => ReportBuilderImpl(dao);
@@ -34,35 +35,7 @@ bool isFoodTruthy(dynamic value) {
 /// utils._as_number port (spec §3.5): null — not a default — for non-numeric,
 /// bool, NaN/Infinity, and |x| >= 1e9 values, so callers can distinguish
 /// "junk" from a real 0.
-num? boundedNumber(dynamic value) {
-  if (value is bool || value is! num) return null;
-  final d = value.toDouble();
-  if (d.isNaN || d.isInfinite) return null;
-  if (d <= -1e9 || d >= 1e9) return null;
-  return value;
-}
-
-/// utils.meal_calorie_mismatch port (spec §3.5): the item-calorie sum when it
-/// contradicts the stored total beyond max(100 kcal, 20%), else null. No
-/// counted items, a non-positive item sum, or an unusable total all read as
-/// "consistent" — a crashed warning would be worse than the bug it flags.
-int? mealCalorieMismatch(Map<String, dynamic> analysis) {
-  num itemSum = 0;
-  var counted = 0;
-  for (final item in safeFoodItems(analysis)) {
-    final cal = boundedNumber(item['estimated_calories']);
-    if (cal != null) {
-      itemSum += cal;
-      counted++;
-    }
-  }
-  final total = boundedNumber(analysis['total_calories']);
-  if (counted == 0 || itemSum <= 0 || total == null) return null;
-  if ((total - itemSum).abs() > math.max(100, 0.2 * math.max(total, itemSum))) {
-    return itemSum.truncate(); // Python int(): truncation toward zero
-  }
-  return null;
-}
+num? boundedNumber(dynamic value) => safeNumberOr(value, null);
 
 /// Python round(): banker's rounding (half-to-even), returning int — Dart's
 /// .round() is half-away-from-zero and would drift on exact .5 ties.
