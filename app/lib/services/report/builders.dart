@@ -11,26 +11,14 @@ import 'dart:convert';
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 
-export '../../core/coerce.dart' show mealCalorieMismatch;
+export '../../core/coerce.dart' show isFoodTruthy, mealCalorieMismatch;
 
 /// Factory the integrator wires (INTEGRATION CONTRACT).
 ReportBuilder createReportBuilder(MealsDao dao) => ReportBuilderImpl(dao);
 
 // ─── Coercions the spec pins beyond core/coerce.dart ───────────────
-// (core/ is frozen; these helpers live here and are exported for tests.)
-
-/// Python truthiness over every JSON shape. Spec §3.5: is_food filtering is
-/// `analysis.get("is_food")` TRUTHY, never `== true` (database.py:453-461
-/// spells the same table out in SQL). false/0/""/[]/{}/null → false.
-bool isFoodTruthy(dynamic value) {
-  if (value == null) return false;
-  if (value is bool) return value;
-  if (value is num) return value != 0; // NaN != 0 → truthy, like Python
-  if (value is String) return value.isNotEmpty;
-  if (value is List) return value.isNotEmpty;
-  if (value is Map) return value.isNotEmpty;
-  return true;
-}
+// (isFoodTruthy and mealCalorieMismatch live in core/coerce.dart and are
+// re-exported above, so existing imports of this file keep compiling.)
 
 /// utils._as_number port (spec §3.5): null — not a default — for non-numeric,
 /// bool, NaN/Infinity, and |x| >= 1e9 values, so callers can distinguish

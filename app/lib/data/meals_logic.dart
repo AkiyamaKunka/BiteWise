@@ -14,6 +14,8 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../core/shared_generated.dart';
 
+export '../core/coerce.dart' show isFoodTruthy;
+
 /// Spec §2: chat_id kept for schema/export parity; one constant local user.
 const int localChatId = 1;
 
@@ -22,20 +24,6 @@ const int photoReservationStaleSeconds = 6 * 60 * 60;
 
 /// Spec §2.3: DUPLICATE_WINDOW_MINUTES (config.py:95), from shared/.
 const int duplicateWindowMinutes = SharedConstants.duplicateWindowMinutes;
-
-/// Spec §3.5: Python truthiness for is_food — false, 0, 0.0, '', [], {},
-/// null → false; anything else (including non-empty strings, 1, NaN) → true.
-/// Consumers filter with raw truthiness, never `== true`.
-bool isFoodTruthy(dynamic value) {
-  if (value == null) return false;
-  if (value is bool) return value;
-  // NaN != 0 is true, matching Python where NaN is truthy.
-  if (value is num) return value != 0;
-  if (value is String) return value.isNotEmpty;
-  if (value is List) return value.isNotEmpty;
-  if (value is Map) return value.isNotEmpty;
-  return true;
-}
 
 /// Spec §2.2: stored `analysis` is JSON text; a parse result that is not an
 /// object/map coerces to {} — a poison row must never crash a reader.

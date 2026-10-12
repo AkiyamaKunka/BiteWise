@@ -13,6 +13,8 @@ import '../data/meals_logic.dart' as logic;
 import '../core/contracts.dart';
 import 'meal_edit_logic.dart' show isRealIsoDate, parseClock;
 
+export '../core/coerce.dart' show isFoodTruthy;
+
 final NumberFormat _thousands = NumberFormat('#,##0');
 
 /// Thousands-separated integer calories (spec §5 formatting rules).
@@ -21,19 +23,6 @@ final NumberFormat _thousands = NumberFormat('#,##0');
 /// hostile value must degrade, never crash the screen (spec §1.2).
 String formatKcal(num v) =>
     _thousands.format(v is double && !v.isFinite ? 0 : v.round());
-
-/// Python truthiness for is_food (spec §3.5): false, 0, 0.0, '', [], {},
-/// null → false; every other value → true. Food filtering uses THIS, never
-/// `== true`.
-bool isFoodTruthy(dynamic v) {
-  if (v == null || v == false) return false;
-  if (v == true) return true;
-  if (v is num) return v != 0;
-  if (v is String) return v.isNotEmpty;
-  if (v is List) return v.isNotEmpty;
-  if (v is Map) return v.isNotEmpty;
-  return true;
-}
 
 bool isFoodMeal(Meal m) => isFoodTruthy(m.analysis['is_food']);
 

@@ -154,5 +154,20 @@ bool? coerceIsFood(dynamic analysis) {
   return parseBoolish(raw);
 }
 
+/// Spec §3.5: Python truthiness for is_food — false, 0, 0.0, '', [], {},
+/// null → false; anything else (including non-empty strings, 1, NaN) → true.
+/// Consumers filter with raw truthiness, never `== true` (database.py:453-461
+/// spells the same table out in SQL).
+bool isFoodTruthy(dynamic value) {
+  if (value == null) return false;
+  if (value is bool) return value;
+  // NaN != 0 is true, matching Python where NaN is truthy.
+  if (value is num) return value != 0;
+  if (value is String) return value.isNotEmpty;
+  if (value is List) return value.isNotEmpty;
+  if (value is Map) return value.isNotEmpty;
+  return true;
+}
+
 /// Lowercased, hex-normalized image hash (port of _normalize_image_hash).
 String normalizeImageHash(String? hash) => (hash ?? '').trim().toLowerCase();
