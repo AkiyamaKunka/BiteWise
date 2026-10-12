@@ -372,13 +372,13 @@ class SqfliteMealsDao implements MealsDao {
   /// deadline + backoffs). Warm paths reclaim on their own after
   /// appProcessingStaleAge (meals_logic.dart).
   ///
-  /// Deliberately SHORTER than that 90 min: this sweep runs only when the
+  /// Deliberately SHORTER than that 30 min: this sweep runs only when the
   /// main engine cold-launches, so every row it sees is either an orphan
   /// (the common case — iOS ends a background grant mid-analysis, and
-  /// waiting 90 min would park the photo the owner just shot) or a
+  /// waiting 30 min would park the photo the owner just shot) or a
   /// headless background run that was suspended, or whose wall clock
   /// jumped forward, past 20 min. Sweeping that live run is safe since
-  /// 2026-10-12: its settling writes no longer carry its ownership stamp,
+  /// 2026-10-12: the row no longer matches the swept run's ownership stamp,
   /// so it drops its verdict (ReservationLost) and the photo is analyzed
   /// once more by whoever reserves it next — one redundant upload, never a
   /// second meal or a second announcement.

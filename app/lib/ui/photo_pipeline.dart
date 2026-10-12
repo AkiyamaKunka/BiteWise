@@ -354,7 +354,7 @@ class PhotoPipeline {
         case PhotoReservation.inFlight:
           // Not ours and not a verdict: another run is mid-analysis, or
           // iOS killed one mid-analysis and its row has not gone stale yet
-          // (appProcessingStaleAge, 90 min). RETRYABLE, and the row is
+          // (appProcessingStaleAge, 30 min). RETRYABLE, and the row is
           // left alone: reporting this as alreadyTracked let the background
           // watermark and the watcher's seen-set march past a photo nobody
           // had analyzed (2026-10-07).

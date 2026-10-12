@@ -78,18 +78,18 @@ void main() {
           ReserveDecision.refuseInFlight);
     });
 
-    test('processing goes stale strictly after 90 minutes, not the '
+    test('processing goes stale strictly after 30 minutes, not the '
         'server\'s 6 hours', () {
       // A run iOS killed mid-analysis leaves its row behind, and warm
       // resumes, background runs and deliberate picks never sweep: under
       // the server's 6 h the photo stayed refused for hours (2026-10-12).
-      // The longest live hold is ~15.3 min (3 × 5-min server deadline),
-      // plus an hour for a DST fall-back / eastbound zone change.
+      // The longest live hold is ~15.3 min (3 × 5-min server deadline);
+      // reclaiming a live run past this age is harmless (ownership stamp).
       for (final reclaimDeliberate in [false, true]) {
         expect(
             decide(
                 ledgerStatus: 'processing',
-                lastSeen: now.subtract(const Duration(minutes: 89)),
+                lastSeen: now.subtract(const Duration(minutes: 29)),
                 reclaimDeliberate: reclaimDeliberate),
             ReserveDecision.refuseInFlight);
         expect(
@@ -101,7 +101,7 @@ void main() {
         expect(
             decide(
                 ledgerStatus: 'processing',
-                lastSeen: now.subtract(const Duration(minutes: 91)),
+                lastSeen: now.subtract(const Duration(minutes: 31)),
                 reclaimDeliberate: reclaimDeliberate),
             ReserveDecision.reclaim);
       }
@@ -343,7 +343,7 @@ void main() {
   group('constants pinned by the spec', () {
     test('spec §2.3 / §2 values', () {
       expect(localChatId, 1);
-      expect(appProcessingStaleAge, const Duration(minutes: 90));
+      expect(appProcessingStaleAge, const Duration(minutes: 30));
       expect(duplicateWindowMinutes, 5);
     });
 

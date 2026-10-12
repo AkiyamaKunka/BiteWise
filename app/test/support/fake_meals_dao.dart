@@ -193,7 +193,7 @@ class BaseFakeDao implements MealsDao {
       return (kind: PhotoReservation.reserved, stamp: _stamp(imageHash));
     }
     // No last_seen_at here, so every 'processing' row reads as FRESH —
-    // another run's live reservation (the real DAO reclaims after 90 min).
+    // another run's live reservation (the real DAO reclaims after 30 min).
     if (existing == IngestionStatus.processing) {
       return (kind: PhotoReservation.inFlight, stamp: null);
     }

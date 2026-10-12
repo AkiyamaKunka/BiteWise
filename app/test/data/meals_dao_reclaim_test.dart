@@ -207,7 +207,7 @@ void main() {
       warm = SqfliteMealsDao(db, clock: () => clock);
     });
 
-    test('orphan at 12:00 → still in flight at 13:29, reserved at 13:31 for '
+    test('orphan at 12:00 → still in flight at 12:29, reserved at 12:31 for '
         'the automatic scan AND a deliberate pick', () async {
       // 12:00 an iOS BGAppRefresh run reserves both photos, then iOS
       // terminates it mid-analysis.
@@ -219,7 +219,7 @@ void main() {
       clock = DateTime(2026, 10, 12, 12, 5);
       await warm.reclaimStaleProcessing();
       // Warm resume / background run / deliberate pick: no sweep.
-      clock = DateTime(2026, 10, 12, 13, 29);
+      clock = DateTime(2026, 10, 12, 12, 29);
       expect((await warm.reservePhotoHash('a' * 32, source: MealSource.appWatch)).kind,
           PhotoReservation.inFlight);
       expect(
@@ -227,7 +227,7 @@ void main() {
               source: MealSource.appPhoto, reclaimDeliberate: true)).kind,
           PhotoReservation.inFlight);
       // Under the server's 6 h this stayed inFlight until 18:00.
-      clock = DateTime(2026, 10, 12, 13, 31);
+      clock = DateTime(2026, 10, 12, 12, 31);
       expect((await warm.reservePhotoHash('a' * 32, source: MealSource.appWatch)).kind,
           PhotoReservation.reserved);
       expect(
@@ -237,6 +237,25 @@ void main() {
       expect((await warm.photoStatus('b' * 32))?.status,
           IngestionStatus.processing,
           reason: 'reclaimed for the new owner, restamped');
+    });
+
+    test('owner path: a run iOS cut off at 12:05 and a cold launch at 12:15 '
+        '— the photo is offered again at +31 min, not +91', () async {
+      clock = DateTime(2026, 10, 12, 12, 5);
+      expect((await warm.reservePhotoHash('o' * 32, source: MealSource.appWatch)).kind,
+          PhotoReservation.reserved);
+      // 12:15 cold launch: the sweep leaves a 10-min-old row alone.
+      clock = DateTime(2026, 10, 12, 12, 15);
+      await warm.reclaimStaleProcessing();
+      expect((await warm.photoStatus('o' * 32))?.status,
+          IngestionStatus.processing);
+      // The app is then only resumed (no sweep): still in flight at +30.
+      clock = DateTime(2026, 10, 12, 12, 35);
+      expect((await warm.reservePhotoHash('o' * 32, source: MealSource.appWatch)).kind,
+          PhotoReservation.inFlight);
+      clock = DateTime(2026, 10, 12, 12, 36);
+      expect((await warm.reservePhotoHash('o' * 32, source: MealSource.appWatch)).kind,
+          PhotoReservation.reserved);
     });
 
     test('westbound flight: an orphan stamped on the Shanghai wall clock is '
@@ -249,10 +268,10 @@ void main() {
           PhotoReservation.reserved);
     });
 
-    test('a deliberate pick of a 91-min-old processing row analyzes and '
+    test('a deliberate pick of a 31-min-old processing row analyzes and '
         'saves — no 正在分析 dead end', () async {
       await warm.reservePhotoHash('h' * 32, source: MealSource.appWatch);
-      clock = DateTime(2026, 10, 12, 13, 31);
+      clock = DateTime(2026, 10, 12, 12, 31);
       var calls = 0;
       final analyzer = FakeAnalyzer()
         ..nextPhotoOutcome = const AnalysisOutcome(
@@ -286,17 +305,17 @@ void main() {
           );
       // Owner A reserves at 12:00 and is very slow (or presumed dead).
       await warm.reservePhotoHash('d' * 32, source: MealSource.appWatch);
-      // 13:31 a deliberate pick reclaims the stale row and saves.
-      clock = DateTime(2026, 10, 12, 13, 31);
+      // 12:31 a deliberate pick reclaims the stale row and saves.
+      clock = DateTime(2026, 10, 12, 12, 31);
       expect(
           (await warm.reservePhotoHash('d' * 32,
               source: MealSource.appPhoto, reclaimDeliberate: true)).kind,
           PhotoReservation.reserved);
       final first = await warm.saveMeal(meal(MealSource.appPhoto, 'B'),
           markStatus: IngestionStatus.saved);
-      // 13:32 an UNSTAMPED late save (the backstop alone, no ownership
+      // 12:32 an UNSTAMPED late save (the backstop alone, no ownership
       // check): it returns B's meal instead of inserting a duplicate.
-      clock = DateTime(2026, 10, 12, 13, 32);
+      clock = DateTime(2026, 10, 12, 12, 32);
       final late = await warm.saveMeal(meal(MealSource.appWatch, 'A'),
           markStatus: IngestionStatus.saved);
       expect(late, first);
@@ -337,7 +356,7 @@ void main() {
             hasher: (_) async => hash,
             notify: said.add);
 
-    test('A reserves, B reclaims at +91 min and saves → A\'s late verdict '
+    test('A reserves, B reclaims at +31 min and saves → A\'s late verdict '
         'is dropped: one meal, B\'s ledger row, nothing said by A',
         () async {
       final saidA = <PhotoOutcome>[], saidB = <PhotoOutcome>[];
@@ -346,8 +365,8 @@ void main() {
       final analyzerA = FakeAnalyzer()
         ..nextPhotoOutcome = food('A')
         ..onAnalyze = () async {
-          // A is suspended here; 91 min later the open app picks the photo.
-          clock = DateTime(2026, 10, 12, 13, 31);
+          // A is suspended here; 31 min later the open app picks the photo.
+          clock = DateTime(2026, 10, 12, 12, 31);
           outB = await b.process(photo(deliberate: true));
         };
       final outA = await pipeline(analyzerA, saidA).process(photo());
@@ -373,7 +392,7 @@ void main() {
         ..nextPhotoOutcome = const AnalysisOutcome(
             error: 'Rate limited', retryable: true, wall: Duration.zero)
         ..onAnalyze = () async {
-          clock = DateTime(2026, 10, 12, 13, 31);
+          clock = DateTime(2026, 10, 12, 12, 31);
           final r =
               await warm.reservePhotoHash(hash, source: MealSource.appWatch);
           expect(r.kind, PhotoReservation.reserved);
@@ -386,7 +405,7 @@ void main() {
           IngestionStatus.processing,
           reason: 'B is still mid-analysis — its row must survive');
       // B finishes normally on its own stamp.
-      clock = DateTime(2026, 10, 12, 13, 32);
+      clock = DateTime(2026, 10, 12, 12, 32);
       final id = await warm.saveMeal(
           Meal(
               id: 0,
@@ -476,7 +495,7 @@ void main() {
     test('stamped writes on a row the stamp no longer holds throw and write '
         'nothing', () async {
       final a = await warm.reservePhotoHash(hash, source: MealSource.appWatch);
-      clock = DateTime(2026, 10, 12, 13, 31);
+      clock = DateTime(2026, 10, 12, 12, 31);
       final b = await warm.reservePhotoHash(hash, source: MealSource.appWatch);
       expect(b.kind, PhotoReservation.reserved);
       expect(b.stamp, isNot(a.stamp));
