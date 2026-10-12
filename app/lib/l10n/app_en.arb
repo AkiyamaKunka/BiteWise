@@ -164,6 +164,35 @@
   "settingsRowCoverage": "Photo Coverage",
   "settingsSectionReport": "Report",
   "settingsRowReportTime": "Report Time",
+  "settingsRowNextSummary": "Next summary",
+  "timeToday": "Today {time}",
+  "@timeToday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "timeTomorrow": "Tomorrow {time}",
+  "@timeTomorrow": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "nextSummaryNone": "Not scheduled",
+  "timeYesterday": "Yesterday {time}",
+  "@timeYesterday": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsRowBackgroundScan": "Background scan",
+  "backgroundScanNever": "Not run yet",
+  "backgroundScanDisabled": "Off in Settings",
   "settingsSectionProfile": "Profile",
   "settingsRowDietaryProfile": "Dietary Profile",
   "profileSet": "Set",
@@ -876,5 +905,13 @@
   "serverLoginUnknown": "Could not check",
   "serverLoginChecking": "Checking…",
   "serverLoginFooter": "Signed in: nothing to connect. Not signed in: use Connect Claude below. Could not check: the server is unreachable or rejected the key.",
-  "errServerFailed": "Your server could not analyze this photo this time — it is kept and retried later."
+  "errServerFailed": "Your server could not analyze this photo this time — it is kept and retried later.",
+  "errServerRejected": "Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.",
+  "@errServerRejected": {
+    "placeholders": {
+      "code": {
+        "type": "String"
+      }
+    }
+  }
 }

@@ -21,6 +21,7 @@ enum AnalysisErrorKind {
   badPhoto,
   serverBusy,
   serverError,
+  serverRejected,
   unknown,
 }
 
@@ -53,6 +54,9 @@ AnalysisErrorKind classifyAnalysisError(String? error) {
     return AnalysisErrorKind.badPhoto;
   }
   if (e.contains('busy')) return AnalysisErrorKind.serverBusy;
+  if (e.contains('rejected this request')) {
+    return AnalysisErrorKind.serverRejected;
+  }
   if (e.contains('cannot analyze right now')) return AnalysisErrorKind.serverError;
   return AnalysisErrorKind.unknown;
 }

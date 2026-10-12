@@ -3,6 +3,7 @@
 // iOS no-op delta (§6).
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:workmanager/workmanager.dart';
 
 class FakeScheduler implements BackgroundScheduler {
   final List<String> calls = [];
@@ -39,6 +40,7 @@ void main() {
     headlessBackfill = null;
     debugSchedulerOverride = null;
     debugIsAndroidOverride = null;
+    debugIsIOSOverride = null;
   });
 
   group('lookbackDaysFromInput', () {
@@ -76,6 +78,20 @@ void main() {
       };
       await handleBackgroundTask(photoBackfillTaskName, null);
       expect(seen, [2]);
+    });
+
+    test('iOS hands back the IDENTIFIER (unique name) or the legacy fetch '
+        'name — both are ours', () async {
+      var runs = 0;
+      headlessBackfill = (_) async {
+        runs++;
+        return true;
+      };
+      expect(await handleBackgroundTask(photoBackfillUniqueName, null), isTrue);
+      expect(await handleBackgroundTask(Workmanager.iOSBackgroundTask, null),
+          isTrue);
+      expect(runs, 2);
+      expect(isPhotoBackfillTask('somebody.else'), isFalse);
     });
 
     test('unknown task name: success without invoking the runner', () async {
@@ -137,14 +153,35 @@ void main() {
       expect(scheduler.calls, ['cancel:$photoBackfillUniqueName']);
     });
 
-    test('iOS: complete no-op (spec §6 delta: share/picker only)', () async {
+    test('neither Android nor iOS (desktop host): complete no-op', () async {
       final scheduler = FakeScheduler();
       debugSchedulerOverride = scheduler;
       debugIsAndroidOverride = false;
+      debugIsIOSOverride = false;
 
       await enableBackgroundScan(true);
       await enableBackgroundScan(false);
       expect(scheduler.calls, isEmpty);
+    });
+
+    test('iOS registers the SAME unique name the native side declares',
+        () async {
+      // 2026-09-30: iOS joins via BGAppRefreshTask. The identifier iOS
+      // hands back is the unique name, and AppDelegate.swift + Info.plist
+      // must spell it identically — pinned here against drift.
+      final scheduler = FakeScheduler();
+      debugSchedulerOverride = scheduler;
+      debugIsAndroidOverride = false;
+      debugIsIOSOverride = true;
+
+      await enableBackgroundScan(true, frequency: const Duration(minutes: 30));
+      expect(scheduler.calls,
+          ['initialize', 'cancel:$photoBackfillUniqueName', 'register']);
+      expect(scheduler.registeredUniqueName, photoBackfillUniqueName);
+      expect(scheduler.registeredTaskName, photoBackfillTaskName);
+      expect(photoBackfillUniqueName, 'calorietracker.photo.backfill.periodic');
+      await enableBackgroundScan(false);
+      expect(scheduler.calls.last, 'cancel:$photoBackfillUniqueName');
     });
 
     test('a custom dispatcher is what gets initialized (integrator wiring)',

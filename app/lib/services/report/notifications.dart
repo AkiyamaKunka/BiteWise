@@ -32,6 +32,7 @@ class ReportNotifier {
     NotificationPresenter? presenter,
     NotificationScheduler? scheduler,
     Future<bool?> Function()? enabledProbe,
+    Future<List<int>> Function()? pendingIds,
     Future<String?> Function(DateTime slotDate)? dailyBody,
     int? mealCardIdSeed,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
@@ -42,6 +43,8 @@ class ReportNotifier {
         _scheduler = scheduler,
         // ignore: prefer_initializing_formals
         _enabledProbe = enabledProbe,
+        // ignore: prefer_initializing_formals
+        _pendingIds = pendingIds,
         // ignore: prefer_initializing_formals
         _dailyBody = dailyBody {
     // Each background run constructs a FRESH notifier; a fixed 100-base
@@ -61,6 +64,9 @@ class ReportNotifier {
   final NotificationPresenter? _presenter;
   final NotificationScheduler? _scheduler;
   final Future<bool?> Function()? _enabledProbe;
+
+  /// Test seam for [scheduledDailyAt]: the ids the OS still holds pending.
+  final Future<List<int>> Function()? _pendingIds;
 
   static const NotificationDetails _details = NotificationDetails(
     android: AndroidNotificationDetails(
@@ -93,8 +99,17 @@ class ReportNotifier {
   /// The armed daily slot (for UI display and tests); null when unscheduled.
   DateTime? get nextDailyFire => _nextDailyFire;
 
-  Future<void> init() async {
-    if (_presenter != null || _initialized) return;
+  Future<void>? _initInFlight;
+
+  /// Single-flight: on iOS the first call blocks on the permission dialog,
+  /// and every lifecycle transition the dialog itself causes re-arms the
+  /// summary through here — one initialize, everyone awaits it.
+  Future<void> init() {
+    if (_presenter != null || _initialized) return Future.value();
+    return _initInFlight ??= _init().whenComplete(() => _initInFlight = null);
+  }
+
+  Future<void> _init() async {
     // DarwinInitializationSettings defaults request alert/badge/sound
     // permission during initialize on iOS/macOS.
     const settings = InitializationSettings(
@@ -218,6 +233,29 @@ class ReportNotifier {
     return null;
   }
 
+  /// The slot the daily summary is armed for, as far as this process can
+  /// tell: the live Timer's next fire (Android), or — on the OS path — the
+  /// last armed slot IF the OS still lists the card as pending. Null means
+  /// nothing is armed, which Settings shows as "not scheduled" so a silent
+  /// no-show has a visible cause instead of a shrug (2026-09-30).
+  Future<DateTime?> scheduledDailyAt() async {
+    if (_dailyTimer != null) return _nextDailyFire;
+    final next = _nextDailyFire;
+    if (next == null) return null;
+    final probe = _pendingIds;
+    if (probe == null && _scheduler != null) return next; // seam-only tests
+    try {
+      final ids = probe != null
+          ? await probe()
+          : (await _plugin.pendingNotificationRequests())
+              .map((p) => p.id)
+              .toList();
+      return ids.contains(dailyReportNotificationId) ? next : null;
+    } catch (_) {
+      return next; // the OS would not say: trust what was armed
+    }
+  }
+
   /// Hand the daily summary to the OS to deliver at [when] — the iOS path.
   ///
   /// iOS suspends the process seconds after backgrounding and this app has
@@ -240,7 +278,9 @@ class ReportNotifier {
   }) async {
     final scheduler = _scheduler;
     if (scheduler != null) {
-      return scheduler(dailyReportNotificationId, title, body, when);
+      await scheduler(dailyReportNotificationId, title, body, when);
+      _nextDailyFire = when;
+      return;
     }
     await _plugin.zonedSchedule(
       id: dailyReportNotificationId,
@@ -256,6 +296,7 @@ class ReportNotifier {
       // throw for a missing SCHEDULE_EXACT_ALARM grant.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
+    _nextDailyFire = when;
   }
 
   /// Meal card for watcher-logged meals (spec §6 auto intake surfaces its

@@ -7,7 +7,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 
 import '../../core/coerce.dart';
@@ -15,7 +14,7 @@ import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show formatRecentMealsBlock;
 import '../../core/prompts.dart';
 import '../settings/app_settings.dart';
-import 'normalize.dart';
+import 'platform_decode.dart';
 
 /// Frozen integration seam.
 AnalyzerService createAnalyzer(AppSettings settings, {http.Client? client}) =>
@@ -152,7 +151,7 @@ class GeminiAnalyzer implements AnalyzerService {
 
   // Spec §3.1: normalization runs off the UI thread.
   static Future<Uint8List?> _computeNormalize(Uint8List bytes) =>
-      compute(normalizeForAnalysis, bytes);
+      normalizeAnyForAnalysis(bytes);
 
   Uri _endpoint(String key) => Uri.parse(
       'https://generativelanguage.googleapis.com/v1beta/models/${_settings.model}'
@@ -253,13 +252,19 @@ class GeminiAnalyzer implements AnalyzerService {
 
     Uint8List? sendBytes = await _normalize(originalBytes);
     if (sendBytes == null) {
-      // Spec §3.1 step 6: fall back to original bytes only under 5 MB.
-      if (originalBytes.length < maxOriginalFallbackBytes) {
-        sendBytes = originalBytes;
-      } else {
+      // Spec §3.1 step 6, NARROWED 2026-09-30: an unprocessed original may
+      // go out only if it IS a small JPEG — the upload is labelled
+      // image/jpeg. Raw HEIC sent this way came back "not food" for every
+      // iPhone camera photo; failing visibly beats a confident wrong answer.
+      sendBytes = unprocessedFallback(originalBytes,
+          maxBytes: maxOriginalFallbackBytes);
+      if (sendBytes == null) {
         return AnalysisOutcome(
-            error: 'Could not process this photo (decode failed and it is '
-                'too large to send unprocessed).',
+            error: looksLikeJpeg(originalBytes)
+                ? 'Could not process this photo (decode failed and it is '
+                    'too large to send unprocessed).'
+                : 'Could not process this photo (decode failed and it is '
+                    'not a JPEG).',
             wall: sw.elapsed);
       }
     }
@@ -340,10 +345,8 @@ class GeminiAnalyzer implements AnalyzerService {
     // Same shape as analyzePhoto minus the is_food gate: leftover replies
     // are {same_meal, leftover_fraction, items} — the PURE applyLeftover
     // layer owns every clamp, so the raw map is returned as-is.
-    Uint8List? sendBytes = await _normalize(originalBytes);
-    if (sendBytes == null && originalBytes.length < maxOriginalFallbackBytes) {
-      sendBytes = originalBytes;
-    }
+    final sendBytes = await _normalize(originalBytes) ??
+        unprocessedFallback(originalBytes, maxBytes: maxOriginalFallbackBytes);
     if (sendBytes == null) return null;
     final prompt = sharedLeftoverPrompt(originalAnalysis: originalCompact);
     String text;

@@ -33,6 +33,8 @@ void main() {
         AnalysisErrorKind.badPhoto,
     'The server cannot analyze right now: analysis failed.':
         AnalysisErrorKind.serverError,
+    'The server rejected this request (bad_model).':
+        AnalysisErrorKind.serverRejected,
     'Provider request failed: something odd': AnalysisErrorKind.unknown,
   };
 

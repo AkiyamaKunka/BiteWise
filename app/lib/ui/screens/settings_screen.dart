@@ -14,9 +14,8 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../core/contracts.dart';
-import 'package:flutter/foundation.dart' show compute;
 
-import '../../services/analyzer/normalize.dart' show makeMealThumb;
+import '../../services/analyzer/platform_decode.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
 import '../photo_pipeline.dart';
@@ -51,6 +50,18 @@ class SettingsScreen extends StatefulWidget {
   /// probed (tests). False surfaces the daily-summary remedy row.
   final Future<bool?> Function()? notificationsEnabled;
 
+  /// The slot the daily summary is armed for; null = nothing armed. A
+  /// null PROBE hides the row (tests, older wiring).
+  final Future<DateTime?> Function()? nextSummaryAt;
+
+  /// When the OS last launched the background photo scan; null = never.
+  /// A null PROBE hides the row.
+  final Future<DateTime?> Function()? lastBackgroundScan;
+
+  /// iOS Background App Refresh; false turns the background-scan row into
+  /// the remedy ("off in Settings", opens system settings).
+  final Future<bool?> Function()? backgroundRefreshEnabled;
+
   /// Coverage-audit pieces; all three null in tests → the tile is hidden.
   final CoverageAuditor? coverage;
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
@@ -72,6 +83,9 @@ class SettingsScreen extends StatefulWidget {
     this.openUrl,
     this.openSystemSettings,
     this.notificationsEnabled,
+    this.nextSummaryAt,
+    this.lastBackgroundScan,
+    this.backgroundRefreshEnabled,
   });
 
   @override
@@ -94,6 +108,17 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// settings). Unknown/null keeps the row hidden.
   bool _notificationsOff = false;
 
+  /// The armed daily-summary slot; null once probed = nothing armed.
+  DateTime? _nextSummary;
+  bool _nextSummaryProbed = false;
+
+  /// The OS's last background launch; null once probed = never ran.
+  DateTime? _lastBackgroundScan;
+  bool _lastBackgroundProbed = false;
+
+  /// True only when iOS says Background App Refresh is OFF for this app.
+  bool _backgroundRefreshOff = false;
+
   @override
   void initState() {
     super.initState();
@@ -104,6 +129,68 @@ class _SettingsScreenState extends State<SettingsScreen>
     _watcherEnabled = s.watcherEnabled;
     WidgetsBinding.instance.addObserver(this);
     _probeNotifications();
+    _probeNextSummary();
+    _probeBackgroundScan();
+  }
+
+  Future<void> _probeBackgroundScan() async {
+    final probe = widget.lastBackgroundScan;
+    if (probe == null) return;
+    DateTime? when;
+    bool? refresh;
+    try {
+      when = await probe();
+      refresh = await widget.backgroundRefreshEnabled?.call();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _lastBackgroundScan = when;
+      _lastBackgroundProbed = true;
+      _backgroundRefreshOff = refresh == false;
+    });
+  }
+
+  /// "Next summary: today 21:30" — or "not scheduled", which is the whole
+  /// point: on iOS the card is armed ahead of time, and a phone that shows
+  /// nothing at the slot should be able to say WHY in Settings.
+  Future<void> _probeNextSummary() async {
+    final probe = widget.nextSummaryAt;
+    if (probe == null) return;
+    DateTime? when;
+    try {
+      when = await probe();
+    } catch (_) {
+      return; // unknown: leave the row as it was
+    }
+    if (!mounted) return;
+    setState(() {
+      _nextSummary = when;
+      _nextSummaryProbed = true;
+    });
+  }
+
+  String _nextSummaryLabel(DateTime? when) =>
+      when == null ? context.l10n.nextSummaryNone : _dayTime(when);
+
+  String _lastBackgroundLabel(DateTime? when) =>
+      when == null ? context.l10n.backgroundScanNever : _dayTime(when);
+
+  /// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
+  String _dayTime(DateTime when) {
+    final l = context.l10n;
+    final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
+        '${when.minute.toString().padLeft(2, '0')}';
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(when.year, when.month, when.day);
+    final diff = day.difference(today).inDays;
+    if (diff == 0) return l.timeToday(hhmm);
+    if (diff == 1) return l.timeTomorrow(hhmm);
+    if (diff == -1) return l.timeYesterday(hhmm);
+    return '${when.month.toString().padLeft(2, '0')}-'
+        '${when.day.toString().padLeft(2, '0')} $hhmm';
   }
 
   /// Re-probe on resume: the user comes BACK from system settings to this
@@ -111,7 +198,11 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// itself without a restart.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _probeNotifications();
+    if (state == AppLifecycleState.resumed) {
+      _probeNotifications();
+      _probeNextSummary();
+      _probeBackgroundScan();
+    }
   }
 
   Future<void> _probeNotifications() async {
@@ -215,6 +306,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         '${picked.minute.toString().padLeft(2, '0')}';
     setState(() => _reportTime = formatted);
     await widget.settings.update(reportTime: formatted);
+    await _probeNextSummary(); // the store re-armed the card for the new slot
   }
 
   /// Import via PASTE, deliberately: adding a file-picker plugin for a
@@ -440,6 +532,29 @@ class _SettingsScreenState extends State<SettingsScreen>
               value: context.l10n.lookbackDays(_lookbackDays),
               onTap: _pickLookback,
             ),
+            // The OS's last background launch — on iOS the only visible
+            // proof that Background App Refresh runs for this app at all.
+            if (widget.lastBackgroundScan != null)
+              GroupedRow(
+                key: const Key('backgroundScanRow'),
+                icon: Icons.update,
+                iconColor: _backgroundRefreshOff
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.secondary,
+                title: context.l10n.settingsRowBackgroundScan,
+                // Off in iOS settings beats any timestamp: nothing can be
+                // scheduled until the user turns it back on.
+                value: _backgroundRefreshOff
+                    ? context.l10n.backgroundScanDisabled
+                    : _lastBackgroundProbed
+                        ? _lastBackgroundLabel(_lastBackgroundScan)
+                        : '…',
+                onTap: _backgroundRefreshOff && widget.openSystemSettings != null
+                    ? () => widget.openSystemSettings!()
+                    : null,
+                showChevron: _backgroundRefreshOff &&
+                    widget.openSystemSettings != null,
+              ),
             if (widget.coverage != null && widget.processPhoto != null)
               GroupedRow(
                 key: const Key('coverageCheckTile'),
@@ -462,7 +577,7 @@ class _SettingsScreenState extends State<SettingsScreen>
                           builder: (_) => MealEditorScreen(
                             dao: widget.dao,
                             fromPhoto: photo,
-                            makeThumb: (b) => compute(makeMealThumb, b),
+                            makeThumb: makeMealThumbAny,
                           ),
                         )) ==
                         true,
@@ -532,6 +647,17 @@ class _SettingsScreenState extends State<SettingsScreen>
               onTap: _pickReportTime,
             ),
             if (_notificationsOff) _notificationsOffRow(theme),
+            if (widget.nextSummaryAt != null)
+              GroupedRow(
+                key: const Key('nextSummaryRow'),
+                icon: Icons.notifications_active_outlined,
+                iconColor: _nextSummaryProbed && _nextSummary == null
+                    ? theme.colorScheme.error
+                    : theme.colorScheme.primary,
+                title: context.l10n.settingsRowNextSummary,
+                value: _nextSummaryProbed ? _nextSummaryLabel(_nextSummary) : '…',
+                showChevron: false,
+              ),
             GroupedRow(
               key: const Key('calorieGoalTile'),
               icon: Icons.flag_outlined,

@@ -55,4 +55,14 @@ void main() {
     expect(outcomeBody(zh, o), contains('服务器'));
     expect(outcomeBody(en, o), contains('server'));
   });
+
+  test('a server rejection shows the CODE in both languages', () {
+    const o = PhotoOutcome(
+        PhotoOutcomeKind.failed, 'The server rejected this request (bad_model).',
+        errorKind: AnalysisErrorKind.serverRejected,
+        detail: 'The server rejected this request (bad_model).');
+    expect(outcomeBody(zh, o), contains('bad_model'));
+    expect(outcomeBody(en, o), contains('bad_model'));
+    expect(rejectionCode('no code here'), '?');
+  });
 }

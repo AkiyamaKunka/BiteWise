@@ -37,7 +37,14 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o) {
         AnalysisErrorKind.badPhoto => l.errBadPhoto,
         AnalysisErrorKind.serverBusy => l.errServerBusy,
         AnalysisErrorKind.serverError => l.errServerFailed,
+        AnalysisErrorKind.serverRejected =>
+          l.errServerRejected(rejectionCode(o.message)),
         AnalysisErrorKind.none || AnalysisErrorKind.unknown => o.message,
       };
   }
 }
+
+/// The `(code)` a server rejection carries, e.g. `bad_model` out of
+/// "The server rejected this request (bad_model)."; '?' when absent.
+String rejectionCode(String message) =>
+    RegExp(r'\(([a-z_]+)\)').firstMatch(message)?.group(1) ?? '?';

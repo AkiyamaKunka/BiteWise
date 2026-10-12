@@ -4961,6 +4961,35 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "cancelled": claude_auth.cancel_session()})
 
 
+    def _api_bad_request(endpoint, code):
+        """A 400 the app can act on — and LOGGED. These branches used to
+        answer silently: the journal for 2026-09-29 showed one
+        `analyze_photo 400` from the owner's phone and nothing else, so
+        the phone's "photo analysis failed" had no server-side story at
+        all. One line per refusal, with the code and the client platform
+        (never the payload), is all a later reader needs.
+        """
+        log.warning(
+            f"{endpoint} refused (400 {code}); client="
+            f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
+        return jsonify({"error": code}), 400
+
+    def _api_jpeg_bytes(data):
+        """The bytes the analyzer may be shown, or None when unusable.
+
+        claude_analyzer labels every upload image/jpeg (its callers were
+        assumed to send normalized JPEG). The iOS app could not decode
+        HEIC and sent the raw original instead: the model, unable to read
+        it, answered is_food:false for every iPhone photo (2026-09-30 —
+        the same picture as JPEG was "food"). So any recognisable image
+        container that is NOT JPEG is converted here (PIL + pillow_heif);
+        a conversion failure is a 400, never a guess. Bytes that are not
+        recognisably an image keep the old pass-through path.
+        """
+        if data[:3] == b"\xff\xd8\xff" or not _looks_like_image(data):
+            return data
+        return _normalize_photo_for_analysis(data)
+
     def _plan_model_effort(payload, backend):
         """Validate the app's optional model/effort choice (2026-08-05).
 
@@ -4973,11 +5002,11 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if model is not None and (
                 backend != "claude"
                 or model not in claude_analyzer.CLAUDE_PLAN_MODELS):
-            return None, None, (jsonify({"error": "bad_model"}), 400)
+            return None, None, _api_bad_request("analyze", "bad_model")
         if effort is not None and (
                 backend != "claude"
                 or effort not in claude_analyzer.CLAUDE_PLAN_EFFORTS):
-            return None, None, (jsonify({"error": "bad_effort"}), 400)
+            return None, None, _api_bad_request("analyze", "bad_effort")
         return model, effort, None
 
     @app.route('/api/analyze_photo', methods=['POST'])
@@ -5004,11 +5033,11 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             payload = request.get_json(silent=True) or {}
             raw = payload.get("image_b64")
             if not isinstance(raw, str) or not raw.strip():
-                return jsonify({"error": "no_image"}), 400
+                return _api_bad_request("analyze_photo", "no_image")
             try:
                 data = base64.b64decode(raw, validate=True)
             except (binascii.Error, ValueError):
-                return jsonify({"error": "bad_image_encoding"}), 400
+                return _api_bad_request("analyze_photo", "bad_image_encoding")
             profile = payload.get("dietary_profile")
             if isinstance(profile, str) and profile.strip():
                 if len(profile) > API_PROFILE_MAX_CHARS:
@@ -5019,7 +5048,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             # whitelist rebuild — same no-caller-prompt rule as always.
             recent = compact_recent_meals(payload.get("recent_meals"))
             if recent is None:
-                return jsonify({"error": "bad_recent_meals"}), 400
+                return _api_bad_request("analyze_photo", "bad_recent_meals")
             if recent:
                 base_prompt = prompt if prompt else FOOD_DETECTION_PROMPT
                 prompt = base_prompt + build_recent_meals_block(recent)
@@ -5034,11 +5063,14 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             data = request.get_data(cache=False) or b""
             model = effort = None
         if not data:
-            return jsonify({"error": "no_image"}), 400
+            return _api_bad_request("analyze_photo", "no_image")
         if len(data) > API_ANALYZE_MAX_BYTES:
             return jsonify({"error": "image_too_large"}), 413
+        data = _api_jpeg_bytes(data)
+        if data is None:
+            return _api_bad_request("analyze_photo", "bad_image_format")
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
-            return jsonify({"error": "bad_backend"}), 400
+            return _api_bad_request("analyze_photo", "bad_backend")
         if not claude_analyzer.backend_available(backend, for_photo=True):
             # 503 keeps old-app compat for claude; the reason string tells
             # a new app WHICH server-side knob is missing. LOGGED: a burst
@@ -5099,24 +5131,27 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if not isinstance(payload, dict):
             # A JSON array/scalar body crashed .get with a 500
             # (pressure-test find) — it is a client error, say so.
-            return jsonify({"error": "bad_request_shape"}), 400
+            return _api_bad_request("analyze_leftover", "bad_request_shape")
         raw = payload.get("image_b64")
         if not isinstance(raw, str) or not raw.strip():
-            return jsonify({"error": "no_image"}), 400
+            return _api_bad_request("analyze_leftover", "no_image")
         try:
             data = base64.b64decode(raw, validate=True)
         except (binascii.Error, ValueError):
-            return jsonify({"error": "bad_image_encoding"}), 400
+            return _api_bad_request("analyze_leftover", "bad_image_encoding")
         if not data:
-            return jsonify({"error": "no_image"}), 400
+            return _api_bad_request("analyze_leftover", "no_image")
         if len(data) > API_ANALYZE_MAX_BYTES:
             return jsonify({"error": "image_too_large"}), 413
+        data = _api_jpeg_bytes(data)
+        if data is None:
+            return _api_bad_request("analyze_leftover", "bad_image_format")
         compact = compact_leftover_original(payload.get("original_analysis"))
         if compact is None:
-            return jsonify({"error": "bad_original_analysis"}), 400
+            return _api_bad_request("analyze_leftover", "bad_original_analysis")
         backend = payload.get("backend") or "claude"
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
-            return jsonify({"error": "bad_backend"}), 400
+            return _api_bad_request("analyze_leftover", "bad_backend")
         model, effort, bad = _plan_model_effort(payload, backend)
         if bad:
             return bad
@@ -5159,12 +5194,12 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         payload = request.get_json(silent=True) or {}
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
-            return jsonify({"error": "no_prompt"}), 400
+            return _api_bad_request("text_intent", "no_prompt")
         if len(prompt) > API_TEXT_MAX_CHARS:
             return jsonify({"error": "prompt_too_large"}), 413
         backend = payload.get("backend") or "claude"
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
-            return jsonify({"error": "bad_backend"}), 400
+            return _api_bad_request("text_intent", "bad_backend")
         model, effort, bad = _plan_model_effort(payload, backend)
         if bad:
             return bad

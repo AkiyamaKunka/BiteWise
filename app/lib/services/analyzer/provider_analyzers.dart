@@ -14,7 +14,6 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 
 import '../../core/coerce.dart';
@@ -23,15 +22,17 @@ import '../../core/leftover_logic.dart' show formatRecentMealsBlock;
 import '../../core/prompts.dart';
 import '../settings/app_settings.dart';
 import 'gemini_analyzer.dart' show createAnalyzer;
-import 'normalize.dart';
+import 'platform_decode.dart';
 
 /// Transient failure classes shared by both providers: HTTP 429 (rate or
 /// spend limits), 5xx/overloaded, client deadline, transport errors.
 bool _isTransientStatus(int status) =>
     status == 429 || status == 529 || (status >= 500 && status < 600);
 
+/// Pure-Dart decode in an isolate, then the platform codec for what Dart
+/// cannot read (HEIC — i.e. every iPhone camera photo).
 Future<Uint8List?> _computeNormalize(Uint8List bytes) =>
-    compute(normalizeForAnalysis, bytes);
+    normalizeAnyForAnalysis(bytes);
 
 /// Common skeleton: subclasses supply the endpoint request and reply-text
 /// extraction; everything else (normalize, retries, coercion, validate
@@ -87,6 +88,11 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
   /// the run already answered (terminal), null = it did not say (an old
   /// server, or a configuration refusal). Overridden by ServerAnalyzer.
   bool? unavailableRetry(String body) => null;
+
+  /// A 400 the provider EXPLAINS (`{"error": code}` from the user's own
+  /// server): a terminal message carrying the code, or null for the
+  /// generic path. Vendor 400s stay generic — their bodies are prose.
+  String? rejectedMessage(String body) => null;
   http.Request buildRequest(String key,
       {required String prompt, Uint8List? jpegBytes, required int maxTokens});
   String extractText(Map<String, dynamic> body);
@@ -189,6 +195,17 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
               verbatimMessage: true);
         }
       }
+      if (resp.statusCode == 400) {
+        final custom = rejectedMessage(resp.body);
+        if (custom != null) {
+          // Terminal: the REQUEST is wrong (an app/server version drift,
+          // typically), so retrying reproduces it. The bare 'HTTP 400'
+          // this used to throw left the owner's 2026-09-29 failure with
+          // no code on either end.
+          throw _ProviderException(custom,
+              transient: false, verbatimMessage: true);
+        }
+      }
       throw _ProviderException('HTTP ${resp.statusCode}',
           transient: _isTransientStatus(resp.statusCode),
           quotaClass: resp.statusCode == 429);
@@ -220,12 +237,19 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
     }
     Uint8List? sendBytes = await _normalize(originalBytes);
     if (sendBytes == null) {
-      if (originalBytes.length < maxOriginalFallbackBytes) {
-        sendBytes = originalBytes;
-      } else {
+      // Spec §3.1 step 6, NARROWED 2026-09-30: an unprocessed original may
+      // go out only if it IS a small JPEG — the upload is labelled
+      // image/jpeg. Raw HEIC sent this way came back "not food" for every
+      // iPhone camera photo; failing visibly beats a confident wrong answer.
+      sendBytes = unprocessedFallback(originalBytes,
+          maxBytes: maxOriginalFallbackBytes);
+      if (sendBytes == null) {
         return AnalysisOutcome(
-            error: 'Could not process this photo (decode failed and it is '
-                'too large to send unprocessed).',
+            error: looksLikeJpeg(originalBytes)
+                ? 'Could not process this photo (decode failed and it is '
+                    'too large to send unprocessed).'
+                : 'Could not process this photo (decode failed and it is '
+                    'not a JPEG).',
             wall: sw.elapsed);
       }
     }
@@ -295,10 +319,8 @@ abstract class _HttpVisionAnalyzer implements AnalyzerService {
     // Direct-API path: the leftover prompt is composed HERE from the
     // shared template — the server provider overrides this and ships the
     // compact analysis instead (its prompt is composed server-side).
-    Uint8List? sendBytes = await _normalize(originalBytes);
-    if (sendBytes == null && originalBytes.length < maxOriginalFallbackBytes) {
-      sendBytes = originalBytes;
-    }
+    final sendBytes = await _normalize(originalBytes) ??
+        unprocessedFallback(originalBytes, maxBytes: maxOriginalFallbackBytes);
     if (sendBytes == null) return null;
     final prompt = sharedLeftoverPrompt(originalAnalysis: originalCompact);
     String text;
@@ -656,6 +678,26 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     return null; // old server / configuration refusal
   }
 
+  /// The server's own 400 codes (no_image, bad_recent_meals, bad_model,
+  /// bad_effort, bad_backend, …): repeat the code so the outcome names
+  /// WHICH contract broke. Anything without a string `error` (an old
+  /// server, a proxy page) keeps the generic path.
+  @override
+  String? rejectedMessage(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map && decoded['error'] is String) {
+        final code = (decoded['error'] as String).trim();
+        if (code.isNotEmpty && RegExp(r'^[a-z_]{1,40}$').hasMatch(code)) {
+          return 'The server rejected this request ($code).';
+        }
+      }
+    } on FormatException {
+      // fall through
+    }
+    return null;
+  }
+
   /// The server runs a Claude CLI analysis (up to ~120 s, and up to ~240 s
   /// across its internal stream→file fallback) behind a synchronous Flask
   /// handler, so the 90 s API default would abandon work that is still
@@ -685,11 +727,9 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     // its own shared/ copy (same posture as analyze_photo).
     final key = (apiKey ?? '').trim();
     if (key.isEmpty || settings.serverBaseUrl.isEmpty) return null;
-    Uint8List? sendBytes = await _normalize(originalBytes);
-    if (sendBytes == null &&
-        originalBytes.length < _HttpVisionAnalyzer.maxOriginalFallbackBytes) {
-      sendBytes = originalBytes;
-    }
+    final sendBytes = await _normalize(originalBytes) ??
+        unprocessedFallback(originalBytes,
+            maxBytes: _HttpVisionAnalyzer.maxOriginalFallbackBytes);
     if (sendBytes == null) return null;
     try {
       final resp = await client
