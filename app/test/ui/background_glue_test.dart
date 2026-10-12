@@ -739,9 +739,10 @@ void main() {
     });
 
     for (final (lang, title, body) in const [
-      ('zh', '🍽️ 已扣除剩菜', '已扣除剩菜：Noodles was ~600 kcal, now ~300 kcal'),
+      // The card's summary is in the app language too (zh 千卡).
+      ('zh', '🍽️ 已扣除剩菜', '已扣除剩菜：Noodles —— 减 300 千卡，现约 300 千卡'),
       ('en', '🍽️ Leftovers deducted',
-          'Leftovers deducted: Noodles was ~600 kcal, now ~300 kcal'),
+          'Leftovers deducted: Noodles — −300 kcal, now ~300 kcal'),
     ]) {
       test('[$lang] a leftover deduction posts ONE card; not-food and '
           'failures still post none', () async {
@@ -758,8 +759,11 @@ void main() {
           intake: intake,
           pipeline: () async => _ScriptedPipeline([
             const PhotoOutcome(PhotoOutcomeKind.leftoverApplied,
-                'Leftovers deducted: Noodles was ~600 kcal, now ~300 kcal',
-                detail: 'Noodles was ~600 kcal, now ~300 kcal',
+                'Leftovers deducted: Noodles — −300 kcal, now ~300 kcal',
+                detail: 'Noodles — −300 kcal, now ~300 kcal',
+                mealName: 'Noodles',
+                kcal: '300',
+                deductedKcal: 300,
                 mealId: 7,
                 mealDate: '2026-10-12',
                 previousAnalysis: {'is_food': true}),

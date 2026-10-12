@@ -781,6 +781,33 @@
       }
     }
   },
+  "outcomeSavedSummary": "{name} — ~{kcal} kcal",
+  "@outcomeSavedSummary": {
+    "description": "The {summary} of outcomeSavedMsg: the meal and its calories.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeLeftoverSummary": "{name} — −{delta} kcal, now ~{total} kcal",
+  "@outcomeLeftoverSummary": {
+    "description": "The {summary} of outcomeLeftoverMsg: the meal, the calories cut and its new total.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "delta": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
   "outcomeFailedKeptMsg": "Photo analysis failed — kept for retry. {reason}",
   "@outcomeFailedKeptMsg": {
     "placeholders": {

@@ -6,7 +6,10 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/leftover_logic.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
+import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -99,6 +102,37 @@ void main() {
         reason: 'uncertain verdicts must not silently shrink a real meal');
     expect(dao.meals.first.analysis['total_calories'], 965,
         reason: 'the original is untouched');
+  });
+
+  test('the save and the deduction snackbars say 千卡 in Chinese, English '
+      'word for word as before', () async {
+    // The summary was English inside the zh frame: '已记录：… — ~485 kcal'
+    // (simulator 2026-10-12).
+    final en = AppLocalizationsEn(), zh = AppLocalizationsZh();
+    dao.put(_meal(1, '01:34 PM', 965));
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    final cut = await pipeline.process(photo());
+    expect(cut.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(outcomeSnackbar(en, cut), cut.message);
+    expect(outcomeSnackbar(zh, cut),
+        '已扣除剩菜：Cafeteria tray 1 —— 减 300 千卡，现约 665 千卡');
+
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: {
+          'is_food': true,
+          'meal_description': '红烧肉',
+          'total_calories': 485,
+        },
+        isFood: true,
+        wall: Duration.zero);
+    final saved = await PhotoPipeline(
+            dao: dao, analyzer: analyzer, hasher: (_) async => 'new-hash-2')
+        .process(photo());
+    expect(saved.kind, PhotoOutcomeKind.saved);
+    expect(saved.message, 'Meal logged: 红烧肉 — ~485 kcal');
+    expect(outcomeSnackbar(en, saved), saved.message);
+    expect(outcomeSnackbar(zh, saved), '已记录：红烧肉 —— 约 485 千卡');
   });
 
   test('an out-of-range index falls through to a normal meal', () async {

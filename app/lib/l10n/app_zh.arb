@@ -358,6 +358,8 @@
   "notificationsOffHint": "通知已关闭 —— 每日总结无法送达。",
   "outcomeSavedMsg": "已记录：{summary}",
   "outcomeLeftoverMsg": "已扣除剩菜：{summary}",
+  "outcomeSavedSummary": "{name} —— 约 {kcal} 千卡",
+  "outcomeLeftoverSummary": "{name} —— 减 {delta} 千卡，现约 {total} 千卡",
   "outcomeFailedKeptMsg": "照片分析失败，已保留以便重试。{reason}",
   "backlogTruncatedWarning": "相册里待处理的照片太多 —— 一些较早的照片可能需要手动添加。",
   "outcomeNotFoodMsg": "这张照片里没有识别到食物。",

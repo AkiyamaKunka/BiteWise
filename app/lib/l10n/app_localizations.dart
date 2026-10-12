@@ -2120,6 +2120,18 @@ abstract class AppLocalizations {
   /// **'Leftovers deducted: {summary}'**
   String outcomeLeftoverMsg(String summary);
 
+  /// The {summary} of outcomeSavedMsg: the meal and its calories.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} — ~{kcal} kcal'**
+  String outcomeSavedSummary(String name, String kcal);
+
+  /// The {summary} of outcomeLeftoverMsg: the meal, the calories cut and its new total.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} — −{delta} kcal, now ~{total} kcal'**
+  String outcomeLeftoverSummary(String name, String delta, String total);
+
   /// No description provided for @outcomeFailedKeptMsg.
   ///
   /// In en, this message translates to:

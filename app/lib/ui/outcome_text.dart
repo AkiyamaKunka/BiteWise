@@ -36,8 +36,17 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
   }
   switch (o.kind) {
     case PhotoOutcomeKind.saved:
+      final name = o.mealName, kcal = o.kcal;
+      if (name != null && kcal != null) {
+        return l.outcomeSavedMsg(l.outcomeSavedSummary(name, kcal));
+      }
       return d == null ? o.message : l.outcomeSavedMsg(d);
     case PhotoOutcomeKind.leftoverApplied:
+      final name = o.mealName, kcal = o.kcal, cut = o.deductedKcal;
+      if (name != null && kcal != null && cut != null) {
+        return l.outcomeLeftoverMsg(
+            l.outcomeLeftoverSummary(name, '$cut', kcal));
+      }
       return d == null ? o.message : l.outcomeLeftoverMsg(d);
     case PhotoOutcomeKind.skipped:
       return l.outcomeNotFoodMsg;

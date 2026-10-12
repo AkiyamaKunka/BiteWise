@@ -1243,6 +1243,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String outcomeSavedSummary(String name, String kcal) {
+    return '$name — ~$kcal kcal';
+  }
+
+  @override
+  String outcomeLeftoverSummary(String name, String delta, String total) {
+    return '$name — −$delta kcal, now ~$total kcal';
+  }
+
+  @override
   String outcomeFailedKeptMsg(String reason) {
     return 'Photo analysis failed — kept for retry. $reason';
   }

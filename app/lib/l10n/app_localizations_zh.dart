@@ -1163,6 +1163,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String outcomeSavedSummary(String name, String kcal) {
+    return '$name —— 约 $kcal 千卡';
+  }
+
+  @override
+  String outcomeLeftoverSummary(String name, String delta, String total) {
+    return '$name —— 减 $delta 千卡，现约 $total 千卡';
+  }
+
+  @override
   String outcomeFailedKeptMsg(String reason) {
     return '照片分析失败，已保留以便重试。$reason';
   }

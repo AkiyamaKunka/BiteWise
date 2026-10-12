@@ -67,6 +67,15 @@ class PhotoOutcome {
   /// to [message] verbatim.
   final String? detail;
 
+  /// [PhotoOutcomeKind.saved] / [PhotoOutcomeKind.leftoverApplied]: the
+  /// parts of [detail], so the UI says it in the app language (zh 千卡, not
+  /// 'kcal'). [kcal] is the saved meal's total, or the cut meal's NEW
+  /// total; [deductedKcal] is the leftover's cut. Null when an outcome was
+  /// built without them — the UI then shows [detail].
+  final String? mealName;
+  final String? kcal;
+  final int? deductedKcal;
+
   /// [PhotoOutcomeKind.leftoverApplied] only: the meal that was cut, its
   /// day, and its analysis as it stood just BEFORE this deduction — what
   /// the add flow's "not leftovers" undo writes back (revertedLeftover).
@@ -84,6 +93,9 @@ class PhotoOutcome {
       this.retryable = false,
       this.errorKind = AnalysisErrorKind.none,
       this.detail,
+      this.mealName,
+      this.kcal,
+      this.deductedKcal,
       this.mealId,
       this.mealDate,
       this.previousAnalysis,
@@ -440,13 +452,16 @@ class PhotoPipeline {
           await dao.markPhotoHash(hash, IngestionStatus.skipped);
           final newKcal =
               safeNumber(applied.adjusted['total_calories']).round();
-          final summary =
-              '${mealDescription(original.analysis)} — −${applied.deductedKcal} '
+          final name = mealDescription(original.analysis);
+          final summary = '$name — −${applied.deductedKcal} '
               'kcal, now ~$newKcal kcal';
           final leftover = PhotoOutcome(
               PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
               analysis: applied.adjusted,
               detail: summary,
+              mealName: name,
+              kcal: '$newKcal',
+              deductedKcal: applied.deductedKcal,
               mealId: original.id,
               mealDate: original.date,
               // The row as THIS application found it, not
@@ -496,13 +511,14 @@ class PhotoPipeline {
         final thumb = await makeMealThumbAny(photo.bytes);
         if (thumb != null) await dao.saveMealThumb(id, thumb);
       } catch (_) {}
-      final summary =
-          '${mealDescription(analysis)} — ~${displayTotalCalories(analysis)} kcal';
+      final name = mealDescription(analysis);
+      final kcal = displayTotalCalories(analysis);
+      final summary = '$name — ~$kcal kcal';
       // No row id in the copy: the chat flow numbers meals by LIST position
       // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
       // a number that is guaranteed to miss.
       final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-          analysis: analysis, detail: summary);
+          analysis: analysis, detail: summary, mealName: name, kcal: kcal);
       // Same shield as the thumbnail: these run AFTER the commit, so a
       // throwing callback must not fall into the outer catch — that
       // flipped the committed ledger row saved→failed and told the user

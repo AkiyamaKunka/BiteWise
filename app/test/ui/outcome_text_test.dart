@@ -114,6 +114,24 @@ void main() {
           isNot(contains('Leftovers deducted')));
     });
 
+    test('the summary itself is Chinese when the numbers ride along', () {
+      // The {summary} was built in English by the pipeline, so the zh
+      // snackbar and the headless card read '已记录：… — ~485 kcal'.
+      const s = PhotoOutcome(
+          PhotoOutcomeKind.saved, 'Meal logged: Ramen — ~600 kcal',
+          detail: 'Ramen — ~600 kcal', mealName: 'Ramen', kcal: '600');
+      const c = PhotoOutcome(PhotoOutcomeKind.leftoverApplied,
+          'Leftovers deducted: Ramen — −180 kcal, now ~420 kcal',
+          detail: 'Ramen — −180 kcal, now ~420 kcal',
+          mealName: 'Ramen',
+          kcal: '420',
+          deductedKcal: 180);
+      expect(outcomeSnackbar(en, s), s.message);
+      expect(outcomeSnackbar(en, c), c.message);
+      expect(outcomeBody(zh, s), '已记录：Ramen —— 约 600 千卡');
+      expect(outcomeBody(zh, c), '已扣除剩菜：Ramen —— 减 180 千卡，现约 420 千卡');
+    });
+
     test('a recognised permanent failure has no English in Chinese', () {
       const o = PhotoOutcome(PhotoOutcomeKind.failed, 'raw english line',
           errorKind: AnalysisErrorKind.badPhoto, detail: 'raw english line');
