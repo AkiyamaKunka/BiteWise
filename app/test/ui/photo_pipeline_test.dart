@@ -751,7 +751,8 @@ class _SinkCapturingIntake implements PhotoIntake {
 
 class _ThrowingSaveDao extends FakeDao {
   @override
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) async {
+  Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp}) async {
     throw StateError('disk full');
   }
 }

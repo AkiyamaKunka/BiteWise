@@ -403,9 +403,13 @@ crash races — but keeps: (1) dedup by md5 of **original** bytes, (2) the statu
 five statuses above and the `deleted` tombstone (so the §6 backfill scan never re-logs a deleted
 or skipped photo), (3) the meals-table backstop check, (4) the reclaim-statuses distinction
 between user-initiated and automated intake. The 6-hour stale-processing reclaim shrinks to
-30 minutes on the phone (`appProcessingStaleAge`; the longest live analysis is ~15 min, and iOS
-kills runs mid-analysis), plus a cold-launch sweep of `processing` rows older than 20 minutes —
-not every row, since a background isolate may own a fresher one.
+90 minutes on the phone (`appProcessingStaleAge`; the longest live analysis is ~15 min, plus an
+hour for a DST fall-back or eastbound zone change, and iOS kills runs mid-analysis), plus a
+cold-launch sweep of `processing` rows older than 20 minutes — not every row, since a background
+isolate may own a fresher one. A run is not dead just because its row went stale (a suspended
+process wakes up later), so `reservePhotoHash` returns the `last_seen_at` stamp it wrote and every
+settling write (save / mark / release) checks the row still carries it; a run that lost its row
+drops its verdict silently (`ReservationLost`).
 
 ### 2.4 Meal mutation semantics
 

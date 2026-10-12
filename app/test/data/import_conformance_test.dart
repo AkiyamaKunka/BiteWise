@@ -213,7 +213,7 @@ void main() {
     // pipeline's saveMeal(markStatus: saved) must then recognise the
     // imported row instead of inserting a second one (2026-10-07).
     await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
-    expect(await daoB.reservePhotoHash('h1', source: MealSource.appWatch),
+    expect((await daoB.reservePhotoHash('h1', source: MealSource.appWatch)).kind,
         PhotoReservation.reserved);
     final summary = await daoB.importJson(await daoA.exportJson());
     expect(summary.added['meals'], 1);

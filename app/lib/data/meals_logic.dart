@@ -27,9 +27,14 @@ const int localChatId = 1;
 /// sweeps (reclaimStaleProcessing) — so under the server value an orphan
 /// parked the photo for up to 6 h on every warm resume, background run and
 /// deliberate pick (2026-10-12). The longest legitimate hold is ~15.3 min
-/// (ServerAnalyzer: 3 attempts × the 5-min deadline + backoffs); 30 min
-/// clears it with room to spare.
-const Duration appProcessingStaleAge = Duration(minutes: 30);
+/// (ServerAnalyzer: 3 attempts × the 5-min deadline + backoffs). 90 min
+/// adds an hour on top: last_seen_at is a zone-less wall clock, so a live
+/// row written in the repeated hour of a DST fall-back (or before an
+/// eastbound zone change) reads an hour OLDER than it is. Reclaiming a
+/// merely suspended run is still possible past this age — that run's
+/// settling writes then fail its ownership stamp (PhotoReservationResult)
+/// and it drops its verdict instead of saving a second time.
+const Duration appProcessingStaleAge = Duration(minutes: 90);
 
 /// Spec §2.3: DUPLICATE_WINDOW_MINUTES (config.py:95), from shared/.
 const int duplicateWindowMinutes = SharedConstants.duplicateWindowMinutes;

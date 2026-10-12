@@ -124,9 +124,11 @@ class _CheckpointSpyDao extends FakeDao {
   _CheckpointSpyDao(this.onSave);
   final void Function() onSave;
   @override
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) {
+  Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp}) {
     onSave();
-    return super.saveMeal(meal, markStatus: markStatus);
+    return super
+        .saveMeal(meal, markStatus: markStatus, ownerStamp: ownerStamp);
   }
 }
 

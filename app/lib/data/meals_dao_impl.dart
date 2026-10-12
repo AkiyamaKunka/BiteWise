@@ -30,11 +30,18 @@ class SqfliteMealsDao implements MealsDao {
   // ---------------------------------------------------------------- meals
 
   @override
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) {
+  Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp}) {
     final hash = normalizeImageHash(meal.imageHash);
     // Spec §2.3: the meal INSERT and the ledger mark are ONE transaction
     // (database.py:158-189, the atomic save).
     return _db.transaction((txn) async {
+      // A run that lost its reservation while suspended saves NOTHING —
+      // checked inside this transaction, so no reclaim can slip between
+      // the check and the insert (see PhotoReservationResult).
+      if (ownerStamp != null && hash.isNotEmpty) {
+        await _requireHeld(txn, hash, ownerStamp);
+      }
       // Spec §2.3 app simplification (3) — the meals-table backstop — is
       // mirrored here at SAVE time, not only in reservePhotoHash. The
       // reservation runs BEFORE the 10–60 s analysis, and that await sits
@@ -205,11 +212,13 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
-  Future<PhotoReservation> reservePhotoHash(String imageHash,
+  Future<PhotoReservationResult> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false}) {
     final hash = normalizeImageHash(imageHash);
     // Spec §2.3 step 1: empty hash → nothing to reserve.
-    if (hash.isEmpty) return Future.value(PhotoReservation.reserved);
+    if (hash.isEmpty) {
+      return Future.value((kind: PhotoReservation.reserved, stamp: null));
+    }
     // One transaction stands in for the server's row-locked decision tree —
     // sufficient in a single-process app (spec §2.3 app simplification).
     return _db.transaction((txn) async {
@@ -227,6 +236,8 @@ class SqfliteMealsDao implements MealsDao {
         limit: 1,
       );
       final now = _clock();
+      // The run's ownership stamp: exactly what lands in last_seen_at.
+      final stamp = now.toIso8601String();
       final ledger = ledgerRows.isEmpty ? null : ledgerRows.first;
       final decision = decideReservation(
         hashEmpty: false,
@@ -241,11 +252,11 @@ class SqfliteMealsDao implements MealsDao {
       );
       switch (decision) {
         case ReserveDecision.allowNoop:
-          return PhotoReservation.reserved;
+          return (kind: PhotoReservation.reserved, stamp: null);
         case ReserveDecision.refuse:
-          return PhotoReservation.claimed;
+          return (kind: PhotoReservation.claimed, stamp: null);
         case ReserveDecision.refuseInFlight:
-          return PhotoReservation.inFlight;
+          return (kind: PhotoReservation.inFlight, stamp: null);
         case ReserveDecision.reclaim:
           // database.py:242-254: row → processing, meal_id=NULL,
           // last_seen_at=now, source updated.
@@ -254,35 +265,51 @@ class SqfliteMealsDao implements MealsDao {
             {
               'status': IngestionStatus.processing.name,
               'meal_id': null,
-              'last_seen_at': now.toIso8601String(),
+              'last_seen_at': stamp,
               'source': source,
             },
             where: 'chat_id = ? AND image_hash = ?',
             whereArgs: [localChatId, hash],
           );
-          return PhotoReservation.reserved;
+          return (kind: PhotoReservation.reserved, stamp: stamp);
         case ReserveDecision.insert:
           // database.py:259-265: fresh reservation.
           await txn.insert('photo_ingestions', {
             'chat_id': localChatId,
             'image_hash': hash,
-            'first_seen_at': now.toIso8601String(),
-            'last_seen_at': now.toIso8601String(),
+            'first_seen_at': stamp,
+            'last_seen_at': stamp,
             'source': source,
             'status': IngestionStatus.processing.name,
             'meal_id': null,
           });
-          return PhotoReservation.reserved;
+          return (kind: PhotoReservation.reserved, stamp: stamp);
       }
     });
   }
 
   @override
   Future<void> markPhotoHash(String imageHash, IngestionStatus status,
-      {int? mealId}) async {
+      {int? mealId, String? ownerStamp}) async {
     final hash = normalizeImageHash(imageHash);
     if (hash.isEmpty) return; // spec §2.2: no hash → ledger no-op
-    await _upsertLedger(_db, hash, status, mealId: mealId);
+    if (ownerStamp == null) {
+      await _upsertLedger(_db, hash, status, mealId: mealId);
+      return;
+    }
+    // One conditional UPDATE: the check and the write cannot be split.
+    final updated = await _db.update(
+      'photo_ingestions',
+      {
+        'status': status.name,
+        'meal_id': mealId,
+        'last_seen_at': _clock().toIso8601String(),
+      },
+      where: _heldWhere,
+      whereArgs: [localChatId, hash, IngestionStatus.processing.name,
+          ownerStamp],
+    );
+    if (updated == 0) throw const ReservationLost();
   }
 
   @override
@@ -298,16 +325,44 @@ class SqfliteMealsDao implements MealsDao {
       );
 
   @override
-  Future<void> releasePhotoHash(String imageHash) async {
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp}) async {
     final hash = normalizeImageHash(imageHash);
     if (hash.isEmpty) return;
     // Spec §2.3: release deletes ONLY rows still in 'processing'
     // (database.py:304-315) — never a saved/skipped/failed/deleted record.
-    await _db.delete(
+    // With a stamp, only OUR processing row: a run that woke up after
+    // another reclaimed the photo must not delete that run's live row.
+    if (ownerStamp == null) {
+      await _db.delete(
+        'photo_ingestions',
+        where: 'chat_id = ? AND image_hash = ? AND status = ?',
+        whereArgs: [localChatId, hash, IngestionStatus.processing.name],
+      );
+      return;
+    }
+    final deleted = await _db.delete(
       'photo_ingestions',
-      where: 'chat_id = ? AND image_hash = ? AND status = ?',
-      whereArgs: [localChatId, hash, IngestionStatus.processing.name],
+      where: _heldWhere,
+      whereArgs: [localChatId, hash, IngestionStatus.processing.name,
+          ownerStamp],
     );
+    if (deleted == 0) throw const ReservationLost();
+  }
+
+  /// The ledger row a reservation stamp still holds: 'processing', and
+  /// last_seen_at exactly as reservePhotoHash wrote it (every other write
+  /// to the row restamps it).
+  static const String _heldWhere =
+      'chat_id = ? AND image_hash = ? AND status = ? AND last_seen_at = ?';
+
+  Future<void> _requireHeld(
+      DatabaseExecutor executor, String hash, String stamp) async {
+    final rows = await executor.query('photo_ingestions',
+        columns: const ['1'],
+        where: _heldWhere,
+        whereArgs: [localChatId, hash, IngestionStatus.processing.name, stamp],
+        limit: 1);
+    if (rows.isEmpty) throw const ReservationLost();
   }
 
   /// A 'processing' row younger than this may belong to a LIVE run in the
@@ -316,6 +371,17 @@ class SqfliteMealsDao implements MealsDao {
   /// legitimate hold is ~15.3 min (ServerAnalyzer: 3 attempts × its 5-min
   /// deadline + backoffs). Warm paths reclaim on their own after
   /// appProcessingStaleAge (meals_logic.dart).
+  ///
+  /// Deliberately SHORTER than that 90 min: this sweep runs only when the
+  /// main engine cold-launches, so every row it sees is either an orphan
+  /// (the common case — iOS ends a background grant mid-analysis, and
+  /// waiting 90 min would park the photo the owner just shot) or a
+  /// headless background run that was suspended, or whose wall clock
+  /// jumped forward, past 20 min. Sweeping that live run is safe since
+  /// 2026-10-12: its settling writes no longer carry its ownership stamp,
+  /// so it drops its verdict (ReservationLost) and the photo is analyzed
+  /// once more by whoever reserves it next — one redundant upload, never a
+  /// second meal or a second announcement.
   static const Duration staleProcessingAge = Duration(minutes: 20);
 
   @override

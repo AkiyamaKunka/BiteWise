@@ -294,7 +294,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // user with no way to log that photo AT ALL — re-picking it just
     // repeats the same verdict.
     // Still analyzing too: the run holding the photo may be one iOS cut
-    // off, and until its row goes stale (up to 30 min) OK was the only way
+    // off, and until its row goes stale (up to 90 min) OK was the only way
     // out of a meal the user is looking at right now (2026-10-12).
     final canLogManually = outcome.kind == PhotoOutcomeKind.skipped ||
         outcome.kind == PhotoOutcomeKind.failed ||

@@ -312,6 +312,9 @@ class PhotoPipeline {
     // empty (nothing was reserved under it, so nothing to mark).
     var hash = '';
     var reserved = false;
+    // Our reservation's ownership stamp: every write that settles the photo
+    // carries it, and fails (ReservationLost) once the row is not ours.
+    String? stamp;
     try {
       // The automatic-analysis latch is armed: release the photo before
       // even hashing it — no ledger row, no analyzer call, no upload. It
@@ -342,23 +345,23 @@ class PhotoPipeline {
       // automated watch intake is strict (spec §2.3 caller policies).
       final source =
           photo.deliberate ? MealSource.appPhoto : MealSource.appWatch;
-      switch (await dao.reservePhotoHash(hash,
-          source: source, reclaimDeliberate: photo.deliberate)) {
+      final reservation = await dao.reservePhotoHash(hash,
+          source: source, reclaimDeliberate: photo.deliberate);
+      switch (reservation.kind) {
         case PhotoReservation.claimed:
           return const PhotoOutcome(PhotoOutcomeKind.alreadyTracked,
               'This photo was already logged.');
         case PhotoReservation.inFlight:
           // Not ours and not a verdict: another run is mid-analysis, or
           // iOS killed one mid-analysis and its row has not gone stale yet
-          // (appProcessingStaleAge, 30 min). RETRYABLE, and the row is
+          // (appProcessingStaleAge, 90 min). RETRYABLE, and the row is
           // left alone: reporting this as alreadyTracked let the background
           // watermark and the watcher's seen-set march past a photo nobody
           // had analyzed (2026-10-07).
-          return const PhotoOutcome(PhotoOutcomeKind.inFlight,
-              'This photo is still being analyzed — check back in a moment.',
-              retryable: true);
+          return _inFlight;
         case PhotoReservation.reserved:
           reserved = true;
+          stamp = reservation.stamp;
       }
 
       // The day this photo belongs to. validateCapturedAt is NOT optional:
@@ -415,7 +418,7 @@ class PhotoPipeline {
           // failure is otherwise never announced. The analyzer still calls
           // the key non-retryable (probeKey/diagnostics read that);
           // deliberate adds keep their own verdict below.
-          await dao.releasePhotoHash(hash);
+          await dao.releasePhotoHash(hash, ownerStamp: stamp);
           final held = PhotoOutcome(PhotoOutcomeKind.failed, why,
               retryable: true, errorKind: errorKind, detail: why);
           if (latch != null && revision != null) {
@@ -440,13 +443,14 @@ class PhotoPipeline {
           // RELEASE the reservation so the next scan simply re-offers the
           // photo. Burning it to 'failed' would drop it forever on the
           // automated path (watch intake never reclaims, spec §2.3).
-          await dao.releasePhotoHash(hash);
+          await dao.releasePhotoHash(hash, ownerStamp: stamp);
           return PhotoOutcome(PhotoOutcomeKind.failed, why,
               retryable: true, errorKind: errorKind, detail: why);
         }
         // Permanent failure: kept as status failed for deliberate retry
         // (spec §6.5).
-        await dao.markPhotoHash(hash, IngestionStatus.failed);
+        await dao.markPhotoHash(hash, IngestionStatus.failed,
+            ownerStamp: stamp);
         final failed = PhotoOutcome(PhotoOutcomeKind.failed, why,
             errorKind: errorKind, detail: why);
         // Shielded like the save paths below: the failed mark is already
@@ -464,7 +468,8 @@ class PhotoPipeline {
       } catch (_) {}
       if (!outcome.isFood) {
         // Tombstone so backfill never re-analyzes it (spec §6.4).
-        await dao.markPhotoHash(hash, IngestionStatus.skipped);
+        await dao.markPhotoHash(hash, IngestionStatus.skipped,
+            ownerStamp: stamp);
         return const PhotoOutcome(
             PhotoOutcomeKind.skipped, 'No food detected in this photo.');
       }
@@ -484,8 +489,13 @@ class PhotoPipeline {
             leftoverPhotoMd5: hash,
             appliedAtIso: DateTime.now().toIso8601String());
         if (applied != null) {
+          // Tombstone FIRST, owner-checked: a run that lost the photo (to
+          // another run, or to the user's own 手动记录) must not cut the
+          // earlier meal — and a kill between the two writes now loses one
+          // deduction instead of leaving a row that re-deducts later.
+          await dao.markPhotoHash(hash, IngestionStatus.skipped,
+              ownerStamp: stamp);
           await dao.updateMealAnalysis(original.id, applied.adjusted);
-          await dao.markPhotoHash(hash, IngestionStatus.skipped);
           final newKcal =
               safeNumber(applied.adjusted['total_calories']).round();
           final name = mealDescription(original.analysis);
@@ -538,6 +548,7 @@ class PhotoPipeline {
           analysis: analysis,
         ),
         markStatus: IngestionStatus.saved, // atomic saved mark (spec §2.3)
+        ownerStamp: stamp,
       );
       // History thumbnail from the ORIGINAL bytes we already hold (spec §9
       // app-only). Best-effort AND awaited: the pipeline is serialized, so
@@ -564,6 +575,13 @@ class PhotoPipeline {
         onMealSaved?.call();
       } catch (_) {}
       return saved;
+    } on ReservationLost {
+      // Our 'processing' row was reclaimed while this run was suspended
+      // (or the user logged the photo by hand): the photo is somebody
+      // else's now. Drop the verdict without a word — the owner saves and
+      // announces it. Retryable, like any run that is not ours: if the
+      // row was only released, the next scan re-offers the photo.
+      return _inFlight;
     } catch (e) {
       // Containment: never rethrow (spec §6). Mark failed ONLY if we hold
       // the reservation — a pre-reservation throw (e.g. the duplicate
@@ -574,7 +592,8 @@ class PhotoPipeline {
       // unrecorded one.
       if (reserved) {
         try {
-          await dao.markPhotoHash(hash, IngestionStatus.failed);
+          await dao.markPhotoHash(hash, IngestionStatus.failed,
+              ownerStamp: stamp);
         } catch (_) {}
       }
       return PhotoOutcome(PhotoOutcomeKind.failed, 'Photo intake failed: $e',
@@ -582,6 +601,10 @@ class PhotoPipeline {
           detail: '$e');
     }
   }
+
+  static const _inFlight = PhotoOutcome(PhotoOutcomeKind.inFlight,
+      'This photo is still being analyzed — check back in a moment.',
+      retryable: true);
 
   static const _latchedMessage =
       'Automatic analysis is paused: the AI service refused the last '
