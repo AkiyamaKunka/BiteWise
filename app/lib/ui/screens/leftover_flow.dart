@@ -196,7 +196,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(mealDescription(meal.analysis),
+            Text(
+                mealDescription(meal.analysis,
+                    fallback: ctx.l10n.nlUnnamedMeal),
                 style: Theme.of(ctx).textTheme.titleSmall),
             const SizedBox(height: 8),
             Text(
@@ -326,7 +328,8 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
             for (final m in _candidates)
               _MealPickRow(
                 key: Key('leftoverMeal-${m.id}'),
-                title: mealDescription(m.analysis),
+                title: mealDescription(m.analysis,
+                    fallback: l.nlUnnamedMeal),
                 detail: _pickDetail(m),
                 onTap: () => _selectMeal(m),
               ),
@@ -361,7 +364,8 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
           children: [
             GroupedRow(
               key: const Key('leftoverChosenMeal'),
-              title: mealDescription(meal.analysis),
+              title: mealDescription(meal.analysis,
+                  fallback: l.nlUnnamedMeal),
               value: '~${l.kcalAmount(formatKcal(safeCal(meal)))}',
               trailing: TextButton(
                 key: const Key('leftoverChangeMeal'),

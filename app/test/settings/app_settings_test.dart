@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+// ignore: depend_on_referenced_packages
+import 'package:shared_preferences_platform_interface/shared_preferences_platform_interface.dart';
 
 /// In-memory stand-in for flutter_secure_storage (no platform channel in
 /// unit tests).
@@ -189,4 +194,312 @@ void main() {
     await s.setGeminiApiKey('k');
     expect(notifications, 4);
   });
+
+  testWidgets("repliesInChinese follows the phone's language on 'system'",
+      (tester) async {
+    final (s, _, _) = await freshSettings();
+    await s.setAppLanguage('system');
+    addTearDown(tester.platformDispatcher.clearLocaleTestValue);
+    final real = AppSettings.systemLanguageCode;
+    addTearDown(() => AppSettings.systemLanguageCode = real);
+    AppSettings.systemLanguageCode =
+        () => tester.platformDispatcher.locale.languageCode;
+    tester.platformDispatcher.localeTestValue = const Locale('zh', 'CN');
+    expect(s.repliesInChinese, isTrue);
+    tester.platformDispatcher.localeTestValue = const Locale('en', 'US');
+    expect(s.repliesInChinese, isFalse);
+    // An explicit choice wins over the phone.
+    await s.setAppLanguage('zh');
+    expect(s.repliesInChinese, isTrue);
+    tester.platformDispatcher.localeTestValue = const Locale('zh');
+    await s.setAppLanguage('en');
+    expect(s.repliesInChinese, isFalse);
+  });
+
+  group('automatic-analysis latch (rejected key / blocked region)', () {
+    test('arms, persists across a load, and gates canAutoAnalyze only',
+        () async {
+      final (s, prefs, keys) = await freshSettings();
+      await s.setGeminiApiKey('k');
+      expect(s.canAutoAnalyze, isTrue);
+      await s.blockAutomaticAnalysis('rejectedKey',
+          revision: s.credentialRevision);
+      expect(s.isAnalysisBlocked, isTrue);
+      expect(s.analysisBlockedKind, 'rejectedKey');
+      expect(s.canAutoAnalyze, isFalse);
+      expect(s.canAnalyze, isTrue, reason: 'deliberate adds still analyze');
+
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.analysisBlockedKind, 'rejectedKey');
+      expect(again.canAutoAnalyze, isFalse);
+      // Kind, time and provider only — nothing derived from the key.
+      final stored = {
+        for (final k in prefs.getKeys())
+          if (k.startsWith('settings.analysis_blocked')) k: prefs.get(k),
+      };
+      expect(stored.keys, hasLength(3));
+      expect(stored['settings.analysis_blocked_kind'], 'rejectedKey');
+      expect(stored['settings.analysis_blocked_provider'], 'gemini');
+      expect(DateTime.tryParse('${stored['settings.analysis_blocked_until']}'),
+          isNotNull);
+    });
+
+    test('expires by itself: 24 h for a rejected key, 2 h for a region',
+        () async {
+      final (s, _, _) = await freshSettings();
+      final now = DateTime.now();
+      await s.blockAutomaticAnalysis('rejectedKey',
+          now: now.subtract(const Duration(hours: 23)));
+      expect(s.isAnalysisBlocked, isTrue);
+      await s.blockAutomaticAnalysis('rejectedKey',
+          now: now.subtract(const Duration(hours: 24, minutes: 1)));
+      expect(s.isAnalysisBlocked, isFalse);
+      expect(s.analysisBlockedKind, isNull);
+
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.subtract(const Duration(hours: 1)));
+      expect(s.analysisBlockedKind, 'regionBlocked');
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.subtract(const Duration(hours: 2, minutes: 1)));
+      expect(s.isAnalysisBlocked, isFalse);
+
+      await s.blockAutomaticAnalysis('billing');
+      expect(s.isAnalysisBlocked, isFalse, reason: 'only the two kinds');
+    });
+
+    test('an end further out than the TTL (clock set back) is no pause',
+        () async {
+      final (s, prefs, keys) = await freshSettings();
+      final now = DateTime.now();
+      // Armed while the clock read a month ahead.
+      await s.blockAutomaticAnalysis('rejectedKey',
+          now: now.add(const Duration(days: 30)));
+      expect(s.isAnalysisBlocked, isFalse);
+      expect(s.analysisBlockedUntil, isNull);
+      expect(s.canAutoAnalyze, s.canAnalyze);
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.add(const Duration(hours: 1)));
+      expect(s.isAnalysisBlocked, isFalse, reason: '3 h out > 2 h TTL');
+      // The same from disk, as another isolate would read it.
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.isAnalysisBlocked, isFalse);
+      // A nudge of a minute or two is not skew.
+      await s.blockAutomaticAnalysis('regionBlocked',
+          now: now.add(const Duration(minutes: 2)));
+      expect(s.isAnalysisBlocked, isTrue);
+    });
+
+    test('EVERY credential, provider, model or server edit lifts it',
+        () async {
+      final (s, _, _) = await freshSettings();
+      final edits = <String, Future<void> Function()>{
+        'gemini key': () => s.setGeminiApiKey('k2'),
+        'gemini model': () => s.setModel('gemini-x'),
+        'provider': () => s.setProvider(AiProvider.openai),
+        'openai key': () => s.setOpenaiApiKey('o'),
+        'anthropic key': () => s.setAnthropicApiKey('a'),
+        'qwen key': () => s.setQwenApiKey('q'),
+        'doubao key': () => s.setDoubaoApiKey('d'),
+        'glm key': () => s.setGlmApiKey('g'),
+        'deepseek key': () => s.setDeepseekApiKey('ds'),
+        'xai key': () => s.setXaiApiKey('x'),
+        'openrouter key': () => s.setOpenrouterApiKey('or'),
+        'server key': () => s.setServerApiKey('sv'),
+        'server address': () => s.setServerBaseUrl('http://host.test'),
+        'server plan': () => s.setServerBackend('glm'),
+        'server model': () => s.setServerModel('sonnet'),
+        'openai model': () => s.setOpenaiModel('m'),
+        'anthropic model': () => s.setAnthropicModel('m'),
+        'qwen model': () => s.setQwenModel('m'),
+        'doubao model': () => s.setDoubaoModel('m'),
+        'glm model': () => s.setGlmModel('m'),
+        'deepseek model': () => s.setDeepseekModel('m'),
+        'xai model': () => s.setXaiModel('m'),
+        'openrouter model': () => s.setOpenrouterModel('m'),
+      };
+      for (final MapEntry(:key, :value) in edits.entries) {
+        await s.blockAutomaticAnalysis('rejectedKey');
+        expect(s.isAnalysisBlocked, isTrue, reason: key);
+        final rev = s.credentialRevision;
+        await value();
+        expect(s.isAnalysisBlocked, isFalse, reason: key);
+        expect(s.credentialRevision, greaterThan(rev), reason: key);
+      }
+    });
+
+    test('a refusal read before a key edit is dropped (stale revision)',
+        () async {
+      final (s, _, _) = await freshSettings();
+      final before = s.credentialRevision;
+      await s.setGeminiApiKey('new-key');
+      await s.blockAutomaticAnalysis('rejectedKey', revision: before);
+      expect(s.isAnalysisBlocked, isFalse);
+    });
+
+    test('clearAnalysisBlock lifts it, on disk too', () async {
+      final (s, prefs, keys) = await freshSettings();
+      await s.blockAutomaticAnalysis('regionBlocked');
+      await s.clearAnalysisBlock();
+      expect(s.isAnalysisBlocked, isFalse);
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.isAnalysisBlocked, isFalse);
+    });
+
+    test('belongs to the provider that set it', () async {
+      final (s, prefs, _) = await freshSettings();
+      await s.blockAutomaticAnalysis('regionBlocked');
+      // Another engine switched providers on disk after we armed it.
+      await prefs.setString('settings.provider', AiProvider.deepseek.name);
+      await prefs.setString(
+          'settings.analysis_blocked_provider', AiProvider.gemini.name);
+      final other = await AppSettings.load(
+          prefs: prefs, keyStore: MemoryKeyStore());
+      expect(other.provider, AiProvider.deepseek);
+      expect(other.isAnalysisBlocked, isFalse);
+    });
+
+    test('reloadAnalysisBlock sees what the background engine wrote',
+        () async {
+      final (s, prefs, _) = await freshSettings();
+      expect(s.isAnalysisBlocked, isFalse);
+      // The background isolate armed it on disk.
+      await prefs.setString('settings.analysis_blocked_until',
+          DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String());
+      await prefs.setString('settings.analysis_blocked_kind', 'rejectedKey');
+      // A torn arm without its provider is no pause (2026-10-12): the
+      // provider is written first, so it can only be missing by accident.
+      await s.reloadAnalysisBlock();
+      expect(s.isAnalysisBlocked, isFalse);
+      expect(s.canAutoAnalyze, s.canAnalyze);
+      await prefs.setString(
+          'settings.analysis_blocked_provider', AiProvider.gemini.name);
+      await s.reloadAnalysisBlock();
+      expect(s.analysisBlockedKind, 'rejectedKey');
+    });
+
+    test('a passing key probe lifts a rejected-key pause; a region pause '
+        'only when the probe reached the generation endpoint', () async {
+      final (s, _, _) = await freshSettings();
+      await s.blockAutomaticAnalysis('rejectedKey');
+      await s.credentialsProven(reachedGeneration: false);
+      expect(s.isAnalysisBlocked, isFalse);
+
+      await s.blockAutomaticAnalysis('regionBlocked');
+      await s.credentialsProven(reachedGeneration: false);
+      expect(s.analysisBlockedKind, 'regionBlocked',
+          reason: "the server's auth check never meets a region refusal");
+      await s.credentialsProven(reachedGeneration: true);
+      expect(s.isAnalysisBlocked, isFalse);
+    });
+
+    test('a passing probe lifts a pause the background engine armed on disk',
+        () async {
+      final (fg, _, keys) = await freshSettings();
+      await fg.setGeminiApiKey('k');
+      SharedPreferences.resetStatic(); // the other isolate: its own cache
+      final bg = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: keys);
+      await bg.blockAutomaticAnalysis('rejectedKey',
+          revision: bg.credentialRevision);
+      expect(fg.isAnalysisBlocked, isFalse, reason: 'stale cache');
+      await fg.credentialsProven(reachedGeneration: true);
+      SharedPreferences.resetStatic();
+      final next = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: keys);
+      expect(next.isAnalysisBlocked, isFalse);
+    });
+
+    test("a passing probe leaves another provider's pause alone", () async {
+      final (s, prefs, _) = await freshSettings();
+      await s.setProvider(AiProvider.deepseek);
+      // Gemini's pause, still on disk from before the switch.
+      await prefs.setString('settings.analysis_blocked_until',
+          DateTime.now().add(const Duration(hours: 1)).toUtc().toIso8601String());
+      await prefs.setString('settings.analysis_blocked_kind', 'rejectedKey');
+      await prefs.setString(
+          'settings.analysis_blocked_provider', AiProvider.gemini.name);
+      // DeepSeek's probe says nothing about Gemini's key.
+      await s.credentialsProven(reachedGeneration: true);
+      expect(prefs.getString('settings.analysis_blocked_provider'),
+          AiProvider.gemini.name);
+    });
+
+    test('clearAnalysisBlock writes nothing when no pause is set', () async {
+      // Every successful photo calls it: three removes per meal for nothing.
+      final store = _CountingStore();
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await s.clearAnalysisBlock();
+      expect(store.writes, 0);
+      await s.blockAutomaticAnalysis('rejectedKey');
+      store.writes = 0;
+      await s.clearAnalysisBlock();
+      expect(store.writes, 3, reason: 'a set pause is removed');
+      expect(s.isAnalysisBlocked, isFalse);
+    });
+
+    test('a reload landing between the arm\'s writes does not leave the '
+        'footer saying "not paused"', () async {
+      // The arm set its in-memory pause, then awaited its disk writes; a
+      // resume's reloadAnalysisBlock read the half-written keys in between
+      // and cleared it — and the arm's own notify then showed that.
+      final store = _GatedStore();
+      SharedPreferencesStorePlatform.instance = store;
+      SharedPreferences.resetStatic();
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await s.setGeminiApiKey('k');
+      final shown = <bool>[];
+      s.addListener(() => shown.add(s.isAnalysisBlocked));
+      store.gate = Completer<void>();
+      final arm = s.blockAutomaticAnalysis('rejectedKey',
+          revision: s.credentialRevision);
+      await store.gated.future; // the arm is mid-write
+      await s.reloadAnalysisBlock();
+      expect(s.isAnalysisBlocked, isFalse, reason: 'the race itself');
+      store.gate!.complete();
+      await arm;
+      expect(s.isAnalysisBlocked, isTrue);
+      expect(s.analysisBlockedKind, 'rejectedKey');
+      expect(shown.last, isTrue, reason: 'the last notify says paused');
+    });
+  });
+}
+
+/// The in-memory preferences store, holding the latch's FIRST disk write
+/// until [gate] completes ([gated] says it got there).
+class _GatedStore extends InMemorySharedPreferencesStore {
+  _GatedStore() : super.empty();
+  Completer<void>? gate;
+  final gated = Completer<void>();
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) async {
+    final g = gate;
+    if (g != null && key.endsWith('settings.analysis_blocked_provider')) {
+      if (!gated.isCompleted) gated.complete();
+      await g.future;
+    }
+    return super.setValue(valueType, key, value);
+  }
+}
+
+/// The in-memory preferences store, counting writes and removes.
+class _CountingStore extends InMemorySharedPreferencesStore {
+  _CountingStore() : super.empty();
+  int writes = 0;
+  @override
+  Future<bool> remove(String key) {
+    writes++;
+    return super.remove(key);
+  }
+
+  @override
+  Future<bool> setValue(String valueType, String key, Object value) {
+    writes++;
+    return super.setValue(valueType, key, value);
+  }
 }

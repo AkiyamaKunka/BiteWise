@@ -13,8 +13,11 @@ enum AnalysisErrorKind {
   noApiKey,
   noServerKey,
   rejectedKey,
+  regionBlocked,
+  contentBlocked,
   rateLimited,
   quotaPaused,
+  billing,
   network,
   badModel,
   badResponse,
@@ -35,6 +38,16 @@ AnalysisErrorKind classifyAnalysisError(String? error) {
     return AnalysisErrorKind.noApiKey;
   }
   if (e.contains('rejected the api key')) return AnalysisErrorKind.rejectedKey;
+  // Gemini's region refusal (a Hong Kong VPN exit) and its withheld answer
+  // (finishReason SAFETY …): neither is the key, nor worth "请重试" (2026-10-12).
+  if (e.contains('not available from your current network region')) {
+    return AnalysisErrorKind.regionBlocked;
+  }
+  if (e.contains('declined to analyze')) return AnalysisErrorKind.contentBlocked;
+  // The provider's out-of-money line (402 / insufficient_quota / Arrearage
+  // …): a retry cannot refill a balance, so it gets its own words rather
+  // than the raw English line or the chat's "请重试" (2026-10-12).
+  if (e.contains('credits exhausted')) return AnalysisErrorKind.billing;
   // Order matters: the Gemini pause line also mentions the free tier, and
   // the provider pause line says "(quota)" — both are pauses, not limits.
   if (e.contains('quota exhausted') || e.contains('analysis paused')) {
@@ -44,7 +57,11 @@ AnalysisErrorKind classifyAnalysisError(String? error) {
     return AnalysisErrorKind.rateLimited;
   }
   if (e.contains('network or service')) return AnalysisErrorKind.network;
-  if (e.contains('model error') || e.contains('model name')) {
+  // 'model not found': the Doubao and OpenRouter 404 hints name neither
+  // the "model name" nor a "model error" (2026-10-12).
+  if (e.contains('model error') ||
+      e.contains('model name') ||
+      e.contains('model not found')) {
     return AnalysisErrorKind.badModel;
   }
   if (e.contains("couldn't understand") || e.contains('unusable analysis')) {

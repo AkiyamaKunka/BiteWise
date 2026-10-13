@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../nl_presenter.dart';
 import '../l10n.dart';
+import '../widgets/small_spinner.dart';
 
 class FixMealScreen extends StatefulWidget {
   final NlExecutor executor;
@@ -114,10 +115,7 @@ class _FixMealScreenState extends State<FixMealScreen> {
               key: const Key('fixMealSend'),
               onPressed: _sending ? null : _send,
               icon: _sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SmallSpinner()
                   : const Icon(Icons.build_outlined),
               label: Text(_sending ? context.l10n.working : context.l10n.fixApply),
             ),

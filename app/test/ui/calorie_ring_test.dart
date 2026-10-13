@@ -120,6 +120,35 @@ void main() {
     handle.dispose();
   });
 
+  // The sentence put the BUDGET (typical + Garmin burn) in its 'typical
+  // day' slot, so VoiceOver said 2,500 beside a Typical row showing 2,100.
+  testWidgets('with Garmin burn it speaks the typical number plus a burn '
+      'clause', (tester) async {
+    final handle = tester.ensureSemantics();
+    await pump(tester,
+        const CalorieRing(eatenKcal: 1240, typicalKcal: 2100, burnKcal: 400));
+    expect(ringLabel(tester),
+        '1,240 kcal eaten today, of a 2,100 kcal typical day, plus 400 kcal '
+        'active burn');
+    await pump(tester,
+        const CalorieRing(eatenKcal: 2600, typicalKcal: 2100, burnKcal: 400));
+    expect(ringLabel(tester),
+        '2,600 kcal eaten today, of a 2,100 kcal typical day, plus 400 kcal '
+        'active burn (above typical)');
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: const Scaffold(
+            body: Center(
+                child: CalorieRing(
+                    eatenKcal: 1240, typicalKcal: 2100, burnKcal: 400)))));
+    await tester.pumpAndSettle();
+    expect(ringLabel(tester),
+        '今天已摄入 1,240 千卡，日常一天约 2,100 千卡，含活动消耗 400 千卡');
+    handle.dispose();
+  });
+
   testWidgets('macro trio fills by CALORIE share (Atwater), matching the '
       'detail chart', (tester) async {
     await pump(

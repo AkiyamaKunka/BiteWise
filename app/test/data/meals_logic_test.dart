@@ -78,15 +78,49 @@ void main() {
           ReserveDecision.refuseInFlight);
     });
 
-    test('processing goes stale strictly after 6 hours', () {
-      final exactly6h =
-          now.subtract(const Duration(seconds: photoReservationStaleSeconds));
-      final over6h = now.subtract(
-          const Duration(seconds: photoReservationStaleSeconds + 1));
-      expect(decide(ledgerStatus: 'processing', lastSeen: exactly6h),
-          ReserveDecision.refuseInFlight);
-      expect(decide(ledgerStatus: 'processing', lastSeen: over6h),
+    test('processing goes stale strictly after 30 minutes, not the '
+        'server\'s 6 hours', () {
+      // A run iOS killed mid-analysis leaves its row behind, and warm
+      // resumes, background runs and deliberate picks never sweep: under
+      // the server's 6 h the photo stayed refused for hours (2026-10-12).
+      // The longest live hold is ~15.3 min (3 × 5-min server deadline);
+      // reclaiming a live run past this age is harmless (ownership stamp).
+      for (final reclaimDeliberate in [false, true]) {
+        expect(
+            decide(
+                ledgerStatus: 'processing',
+                lastSeen: now.subtract(const Duration(minutes: 29)),
+                reclaimDeliberate: reclaimDeliberate),
+            ReserveDecision.refuseInFlight);
+        expect(
+            decide(
+                ledgerStatus: 'processing',
+                lastSeen: now.subtract(appProcessingStaleAge),
+                reclaimDeliberate: reclaimDeliberate),
+            ReserveDecision.refuseInFlight);
+        expect(
+            decide(
+                ledgerStatus: 'processing',
+                lastSeen: now.subtract(const Duration(minutes: 31)),
+                reclaimDeliberate: reclaimDeliberate),
+            ReserveDecision.reclaim);
+      }
+    });
+
+    test('a processing row stamped far in the FUTURE is stale (the wall '
+        'clock moved back: a westbound flight)', () {
+      // last_seen_at is local wall-clock text: an orphan left at Shanghai
+      // 20:00 reads as 10 h ahead once the phone shows Chicago time.
+      expect(
+          decide(
+              ledgerStatus: 'processing',
+              lastSeen: now.add(const Duration(hours: 10))),
           ReserveDecision.reclaim);
+      expect(
+          decide(
+              ledgerStatus: 'processing',
+              lastSeen: now.add(const Duration(minutes: 5))),
+          ReserveDecision.refuseInFlight);
     });
 
     test('processing with unparseable last_seen_at reads as stale', () {
@@ -309,7 +343,7 @@ void main() {
   group('constants pinned by the spec', () {
     test('spec §2.3 / §2 values', () {
       expect(localChatId, 1);
-      expect(photoReservationStaleSeconds, 6 * 60 * 60);
+      expect(appProcessingStaleAge, const Duration(minutes: 30));
       expect(duplicateWindowMinutes, 5);
     });
 

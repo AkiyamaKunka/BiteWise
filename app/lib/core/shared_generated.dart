@@ -285,4 +285,5 @@ abstract final class SharedConstants {
   static const int geminiAnalysisMaxAttempts = 3;
   static const int geminiRetryDelayCapSeconds = 60;
   static const int apiLeftoverMaxChars = 4000;
+  static const String replyLanguageDirectiveZh = 'Write meal_description, every food item name and every free-text field (confidence_note, note, reason, reply) in Simplified Chinese (简体中文), except that an item name referring back to a listed meal must be copied exactly as written there; keep every JSON key and fixed value (such as intent) in English and keep numbers as numbers.';
 }

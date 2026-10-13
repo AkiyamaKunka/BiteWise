@@ -222,7 +222,7 @@ class DayReportCard extends StatelessWidget {
                   const SizedBox(width: 10),
                 ],
                 Expanded(
-                  child: Text(mealDescription(a),
+                  child: Text(mealDescription(a, fallback: l.nlUnnamedMeal),
                       style: theme.textTheme.titleSmall
                           ?.copyWith(fontWeight: FontWeight.w600)),
                 ),

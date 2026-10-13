@@ -42,6 +42,25 @@ abstract class SettingsStore {
   /// quota latch. Screens gate byte-reading sweeps on this single predicate
   /// rather than re-deriving it.
   bool get canAnalyze;
+
+  /// [canAnalyze] for the AUTOMATIC scan (launch/resume catch-up, watcher
+  /// toggle sweep): also false while a rejected key or blocked region has
+  /// latched it (AppSettings.isAnalysisBlocked). Deliberate paths — the
+  /// coverage screen included — keep [canAnalyze].
+  bool get canAutoAnalyze;
+
+  /// 'rejectedKey' | 'regionBlocked' while that latch is armed, else null;
+  /// with [autoScanBlockedUntil] it tells Settings why nothing is scanned.
+  String? get autoScanBlockedKind;
+  DateTime? get autoScanBlockedUntil;
+
+  /// Re-read the latch from disk (the background run may have armed it).
+  Future<void> reloadAutoScanBlock();
+
+  /// 测试 AI 服务 proved the active provider's credentials work: lift a
+  /// rejected-key pause, and a blocked-region one only when the probe
+  /// [reachedGeneration] (went through the endpoint that refuses regions).
+  Future<void> credentialsProven({required bool reachedGeneration});
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time
@@ -50,6 +69,10 @@ abstract class SettingsStore {
   /// true). Off cancels every delivery path; the time row hides with it.
   bool get summaryEnabled;
   bool get watcherEnabled;
+
+  /// True once the user accepted the one-time 监控相册 disclosure (photos
+  /// go to the chosen AI service); only the Settings toggle reads it.
+  bool get watcherDisclosureSeen;
   String get dietaryProfile; // spec §1.3 photo-prompt appendix
 
   /// Base URL of the user's own server (AiProvider.server); '' when unset.
@@ -83,6 +106,7 @@ abstract class SettingsStore {
     String? reportTime,
     bool? summaryEnabled,
     bool? watcherEnabled,
+    bool? watcherDisclosureSeen,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -149,6 +173,12 @@ class UiServices {
   /// here so they share the global FIFO with the watcher and share sheet.
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
 
+  /// The pipeline's own snackbar sink (di.dart words the outcome in the
+  /// app language): for a verdict whose screen is gone — the add flow
+  /// closed mid-analysis — so it is still said once (unannouncedOutcome).
+  /// Null in tests that never back out.
+  final void Function(PhotoOutcome outcome)? announceOutcome;
+
   /// Library access for coverage thumbnails; null in tests.
   final PhotoLibrary? photoLibrary;
 
@@ -205,6 +235,7 @@ class UiServices {
     this.thumbs,
     this.coverage,
     this.processPhoto,
+    this.announceOutcome,
     this.photoLibrary,
     this.startClaudeAuth,
     this.completeClaudeAuth,

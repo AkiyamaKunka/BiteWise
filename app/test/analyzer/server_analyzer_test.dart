@@ -9,12 +9,18 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/ui/outcome_text.dart';
+import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../ui/fakes.dart' show FakeDao;
 
 class MemoryKeyStore implements SecureKeyStore {
   final Map<String, String> data = {};
@@ -537,6 +543,56 @@ void main() {
     }
   });
 
+  group('pipeline: what the user is told about a 503', () {
+    // Snackbars fire only for PERMANENT failures; the retry:false one used
+    // to promise 稍后会自动重试 for a photo no scan ever offers again, with
+    // no reason (2026-10-12).
+    Future<(PhotoOutcome, List<PhotoOutcome>)> run(Object? retry) async {
+      final s = await serverSettings();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: ServerAnalyzer(s,
+              normalizer: (b) async => b,
+              sleep: (_) async {},
+              client: MockClient((_) async => http.Response(
+                  jsonEncode({
+                    'error': 'claude_unavailable',
+                    'reason': 'Fable 5 requires usage credits.',
+                    'retry': retry,
+                  }),
+                  503))),
+          notify: notes.add);
+      final out = await pipeline.process(
+          IntakePhoto(jpeg(), 'a1', 'IMG_1.jpg', deliberate: true));
+      return (out, notes);
+    }
+
+    test('retry:false: the snackbar names the reason, no automatic retry',
+        () async {
+      final (out, notes) = await run(false);
+      expect(out.retryable, isFalse);
+      final zh = outcomeSnackbar(AppLocalizationsZh(), notes.single);
+      expect(zh, contains('Fable 5 requires usage credits'));
+      // A credits refusal repeats on every retry: it names the model
+      // switch, not 照片覆盖检查.
+      expect(zh, contains('设置 › AI 服务 › 订阅 › 模型'));
+      expect(zh, isNot(contains('覆盖检查')));
+      expect(zh, isNot(contains('自动重试')));
+      expect(outcomeSnackbar(AppLocalizationsEn(), notes.single),
+          isNot(contains('retried later')));
+    });
+
+    test('retry:"later": kept, released, and the old wording holds', () async {
+      final (out, notes) = await run('later');
+      expect(out.retryable, isTrue);
+      expect(notes, isEmpty, reason: 'transient failures stay silent');
+      expect(outcomeBody(AppLocalizationsZh(), out),
+          AppLocalizationsZh().errServerFailed);
+      expect(outcomeBody(AppLocalizationsZh(), out), contains('自动重试'));
+    });
+  });
+
   test('probeKey uses the FREE auth_check — never a CLI run — and keeps '
       'the readiness verdicts', () async {
     // The regression this pins (caught 2026-07-31, same day it shipped):
@@ -876,6 +932,15 @@ void main() {
             headers: {'location': 'http://portal.example/login'}),
         '307': () => http.Response('<html>Redirecting</html>', 307,
             headers: {'location': 'http://portal.example/login'}),
+        // A web filter / portal answering 403 or 401 with its own page:
+        // the server's 401 is JSON {"error":"Unauthorized"}, so these were
+        // never its verdict on the key (review 2026-10-12).
+        'HTML 403': () => http.Response(
+            '<html><body><h1>403 Forbidden</h1>Access denied by web filter'
+            '</body></html>',
+            403,
+            headers: {'content-type': 'text/html'}),
+        'text 401': () => http.Response('Login required', 401),
       };
 
   test('a captive portal answering for the server (HTML 200, 302, 307) is '

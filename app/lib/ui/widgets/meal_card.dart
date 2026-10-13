@@ -59,7 +59,8 @@ class MealCard extends StatelessWidget {
                 ],
                 Expanded(
                   child: Text(
-                    mealDescription(a),
+                    mealDescription(a,
+                        fallback: context.l10n.nlUnnamedMeal),
                     style: theme.textTheme.titleMedium,
                     overflow: TextOverflow.ellipsis,
                     maxLines: 2,

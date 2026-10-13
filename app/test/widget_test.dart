@@ -19,6 +19,45 @@ void main() {
     expect(find.byKey(const Key('addMealFab')), findsOneWidget);
   });
 
+  testWidgets('a snackbar never covers the + button, and only Today has it',
+      (tester) async {
+    // The + was a Positioned inside TodayScreen while snackbars came from
+    // the shell's messenger, so Material never lifted it and every notice
+    // hid it. As the shell Scaffold's FAB it rides above the snackbar.
+    final messenger = GlobalKey<ScaffoldMessengerState>();
+    await tester.pumpWidget(CalorieTrackerApp(
+        services: makeServices(settings: FakeSettings()),
+        messengerKey: messenger));
+    await tester.pumpAndSettle();
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+
+    messenger.currentState!
+        .showSnackBar(const SnackBar(content: Text('a notice')));
+    await tester.pumpAndSettle();
+    final fab = tester.getRect(find.byKey(const Key('addMealFab')));
+    final bar = tester.getRect(find.byType(SnackBar));
+    expect(fab.bottom, lessThanOrEqualTo(bar.top),
+        reason: 'the FAB must sit entirely above the snackbar');
+    messenger.currentState!.removeCurrentSnackBar();
+    await tester.pumpAndSettle();
+
+    // History and Settings have none; Body shows only its own button.
+    await tester.tap(find.text('History'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('addMealFab')), findsNothing);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await tester.tap(find.text('Body'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('addMealFab')), findsNothing);
+    expect(find.byType(FloatingActionButton), findsOneWidget);
+    await tester.tap(find.text('Settings').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await tester.tap(find.text('Today').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('addMealFab')), findsOneWidget);
+  });
+
   testWidgets('the Meals button owns all four meal actions '
       '(chat bar is gone)', (tester) async {
     await tester.pumpWidget(

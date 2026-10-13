@@ -24,6 +24,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
 import '../core/contracts.dart';
+import '../core/outcome_kind.dart';
 import '../data/meals_dao_impl.dart';
 import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
@@ -140,6 +141,21 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
       scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
 }
 
+/// The pipeline's view of [AppSettings]' automatic-analysis latch — one
+/// adapter for the foreground pipeline (di.dart) and the background run.
+AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
+      blockedKind: () => switch (settings.analysisBlockedKind) {
+        'rejectedKey' => AnalysisErrorKind.rejectedKey,
+        'regionBlocked' => AnalysisErrorKind.regionBlocked,
+        _ => null,
+      },
+      revision: () => settings.credentialRevision,
+      block: (kind, revision) =>
+          settings.blockAutomaticAnalysis(kind.name, revision: revision),
+      clear: settings.clearAnalysisBlock,
+      refresh: settings.reloadAnalysisBlock,
+    );
+
 /// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
 /// Written as UTC (see [readStoredInstant]).
 Future<void> recordBackgroundLaunch(
@@ -168,10 +184,13 @@ Future<bool> headlessBackfillWith({
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
   if (!settings.watcherEnabled) return true;
-  // No key yet / quota latch armed: analyses cannot succeed, so don't even
-  // read photo bytes. The watermark stays put — those photos are scanned
-  // once the blocker clears (release-not-burn keeps them eligible).
-  if (!settings.canAnalyze) return true;
+  // No key yet / quota latch armed / an earlier automatic photo came back
+  // 'key rejected' or 'region blocked' (the automatic-analysis latch):
+  // analyses cannot succeed, so don't even read photo bytes — every 30
+  // minutes this used to re-upload the whole window. The watermark stays
+  // put — those photos are scanned once the blocker clears
+  // (release-not-burn keeps them eligible).
+  if (!settings.canAutoAnalyze) return true;
 
   final scanStart = clock();
   final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
@@ -199,11 +218,20 @@ Future<bool> headlessBackfillWith({
       // Per photo, BEFORE the next one: a WorkManager hard-stop mid-batch
       // must not lose the notification for an already-saved meal, nor the
       // progress the run already made.
-      if (o.kind == PhotoOutcomeKind.saved) {
+      // A leftover deduction CUTS an already-logged meal's calories, so
+      // an unattended one needs a card as much as a new meal does — it
+      // used to be silent here (the foreground snackbar was its only
+      // announcement, and the headless path has no snackbar).
+      if (o.kind == PhotoOutcomeKind.saved ||
+          o.kind == PhotoOutcomeKind.leftoverApplied) {
         // In the app language, like the coach summary (headless, so via
         // the saved preference rather than a BuildContext).
         final l = localizationsFor(settings.appLanguage);
-        await showMealCard(l.mealCardAutoTitle, outcomeBody(l, o));
+        await showMealCard(
+            o.kind == PhotoOutcomeKind.saved
+                ? l.mealCardAutoTitle
+                : l.mealCardLeftoverTitle,
+            outcomeBody(l, o));
       }
       // The intake's safeFrontier is the ONLY persistable value: it is
       // createDate-based (the watermark's timebase), halts at transient
@@ -220,6 +248,27 @@ Future<bool> headlessBackfillWith({
   // frontier is the single honest source. Cost: the next run re-offers at
   // most the newest covered photo (ledger absorbs it without a model call).
   if (drain.frontier != null) await checkpoint(drain.frontier!);
+  // This run ARMED the automatic-scan pause (it started unpaused — see the
+  // guard above): the background has no snackbar, and without a word the
+  // scan just stops for up to a day. One notice per arm: every later run
+  // is guarded out above until the pause lifts. Re-read from disk first:
+  // a key edited in the foreground during this run has already lifted the
+  // pause there, and a notice about it would be stale.
+  await settings.reloadAnalysisBlock();
+  final pausedUntil = settings.analysisBlockedUntil;
+  if (pausedUntil != null) {
+    final l = localizationsFor(settings.appLanguage);
+    final line = autoScanPausedLine(l,
+        kind: settings.analysisBlockedKind,
+        until: pausedUntil,
+        provider: settings.provider.name,
+        serverBackend: settings.serverBackend);
+    if (line != null) {
+      try {
+        await showMealCard(l.autoScanPausedTitle, line);
+      } catch (_) {}
+    }
+  }
   return true;
 }
 
@@ -326,7 +375,8 @@ Future<bool> runHeadlessBackfill({
     intake: createPhotoIntake(settings),
     pipeline: () async => PhotoPipeline(
         dao: await createMealsDao(),
-        analyzer: createMultiProviderAnalyzer(settings)),
+        analyzer: createMultiProviderAnalyzer(settings),
+        latch: autoScanLatchFor(settings)),
     showMealCard: (title, body) async {
       await notifier.init(); // idempotent; deferred until a card exists
       await notifier.showMealCard(title, body);

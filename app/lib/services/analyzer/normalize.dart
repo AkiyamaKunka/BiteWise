@@ -54,6 +54,10 @@ Uint8List? makeMealThumb(Uint8List original) {
               height: kThumbLongSidePx,
               interpolation: img.Interpolation.average);
     }
+    // Drop the original's EXIF (GPS, camera, times) — bakeOrientation and
+    // copyResize carry it over and encodeJpg would write it back. Only
+    // after the bake, which reads the Orientation tag.
+    decoded.exif = img.ExifData();
     return Uint8List.fromList(
         img.encodeJpg(decoded, quality: kThumbJpegQuality));
   } catch (_) {
@@ -88,6 +92,11 @@ Uint8List? normalizeForAnalysis(Uint8List original) {
               height: kAnalysisLongSidePx,
               interpolation: img.Interpolation.linear);
     }
+    // Privacy: the copy sent to the AI service carries no EXIF — no GPS
+    // location, camera or timestamps. bakeOrientation/copyResize copy the
+    // original's ExifData and encodeJpg writes it back, so it is cleared
+    // here, AFTER the bake (which reads the Orientation tag).
+    decoded.exif = img.ExifData();
     return Uint8List.fromList(
         img.encodeJpg(decoded, quality: kAnalysisJpegQuality));
   } catch (_) {

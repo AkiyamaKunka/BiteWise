@@ -7,11 +7,19 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 
 import 'fakes.dart';
+
+/// AppSettings' notifier, as the screen sees it.
+class _Changes extends ChangeNotifier {
+  void fire() => notifyListeners();
+}
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
@@ -236,7 +244,8 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: '', watcherEnabled: false);
+    final settings = FakeSettings(
+        apiKey: '', watcherEnabled: false, watcherDisclosureSeen: true);
     final intake = FakeIntake();
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: settings,
@@ -259,7 +268,8 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final paused = FakeSettings(apiKey: 'k')..isQuotaPaused = true;
+    final paused = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true)
+      ..isQuotaPaused = true;
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: paused,
       analyzer: FakeAnalyzer(),
@@ -278,7 +288,7 @@ void main() {
     tester.view.physicalSize = const Size(800, 3000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final healthy = FakeSettings(apiKey: 'k');
+    final healthy = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true);
     final intake = FakeIntake();
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: healthy,
@@ -292,6 +302,89 @@ void main() {
     expect(find.textContaining("won't be analyzed"), findsNothing);
     expect(intake.backfillScans, 1,
         reason: 'a healthy enable sweeps the window immediately');
+  });
+
+  testWidgets('the Photos footer shows a pause the moment it starts and '
+      'drops it the moment it ends — no tab switch', (tester) async {
+    // The shell's rebuild keeps the same SettingsScreen instance, so a
+    // pause armed while Settings was open only appeared after switching
+    // tabs (API 35 emulator, 2026-10-12).
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final settings = FakeSettings(
+        apiKey: 'k', watcherEnabled: true, watcherDisclosureSeen: true);
+    final changes = _Changes();
+    addTearDown(changes.dispose);
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: settings,
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      requestPhotoPermission: () async => true,
+      changes: changes,
+    )));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('rejected the API key'), findsNothing);
+
+    settings
+      ..autoScanBlockedKind = 'rejectedKey'
+      ..autoScanBlockedUntil = DateTime.now().add(const Duration(hours: 3));
+    changes.fire();
+    await tester.pump();
+    expect(find.textContaining('rejected the API key'), findsOneWidget);
+
+    settings
+      ..autoScanBlockedKind = null
+      ..autoScanBlockedUntil = null;
+    changes.fire();
+    await tester.pump();
+    expect(find.textContaining('rejected the API key'), findsNothing);
+  });
+
+  testWidgets('a latched automatic scan says why — in the Photos footer, '
+      'and on enable, without sweeping', (tester) async {
+    // A rejected key / blocked region (perhaps found by a background run,
+    // which has no snackbar) parks the automatic scan for up to a day;
+    // without a visible line it just silently stopped (review 2026-10-12).
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final latched = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true)
+      ..autoScanBlockedKind = 'rejectedKey'
+      ..autoScanBlockedUntil = DateTime.now().add(const Duration(hours: 3));
+    final intake = FakeIntake();
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: latched,
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      photoIntake: intake,
+      requestPhotoPermission: () async => true,
+    )));
+    expect(find.textContaining('rejected the API key'), findsNothing,
+        reason: 'watcher off: nothing is paused');
+    await tester.tap(find.byKey(const Key('watcherToggle')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('rejected the API key'), findsNWidgets(2),
+        reason: 'the enable snackbar and the Photos footer');
+    expect(intake.backfillScans, 0,
+        reason: 'the latch means the sweep would upload for nothing');
+
+    latched
+      ..autoScanBlockedKind = 'regionBlocked'
+      ..provider = 'openai';
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      key: const Key('again'),
+      settings: latched,
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      photoIntake: intake,
+      requestPhotoPermission: () async => true,
+    )));
+    await tester.pumpAndSettle();
+    expect(
+        find.textContaining(
+            'OpenAI is not available from this network region'),
+        findsOneWidget);
   });
 
   testWidgets('first-run card shows only without a key, and the quota '
@@ -351,9 +444,118 @@ void main() {
     handle.dispose();
   });
 
+  testWidgets('the Privacy Policy row opens the published policy',
+      (tester) async {
+    // App Store 5.1.1(i) / Google Play: the policy must be reachable from
+    // inside the app.
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final opened = <Uri>[];
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k'),
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      requestPhotoPermission: () async => true,
+      openUrl: (uri) async {
+        opened.add(uri);
+        return true;
+      },
+    )));
+    final row = find.byKey(const Key('privacyPolicyRow'));
+    await tester.scrollUntilVisible(row, 200);
+    expect(find.text('Privacy Policy'), findsOneWidget);
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    expect(opened, [privacyPolicyUri]);
+    expect(privacyPolicyUri.toString(),
+        'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
+  });
+
+  // GroupedRow was a bare InkWell: VoiceOver read every navigation row,
+  // the privacy link included, as static text.
+  testWidgets('screen readers hear the Privacy Policy row as a link and '
+      'navigation rows as buttons', (tester) async {
+    final handle = tester.ensureSemantics();
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k'),
+      analyzer: FakeAnalyzer(),
+      dao: FakeDao(),
+      requestPhotoPermission: () async => true,
+    )));
+    final row = find.byKey(const Key('privacyPolicyRow'));
+    await tester.scrollUntilVisible(row, 200);
+    final privacy = tester.getSemantics(row);
+    expect(privacy.flagsCollection.isLink, isTrue);
+    expect(privacy.flagsCollection.isButton, isFalse);
+    expect(privacy.label, 'Privacy Policy',
+        reason: 'one label, not doubled by the wrapper');
+    expect(privacy.getSemanticsData().hasAction(SemanticsAction.tap), isTrue);
+    final ai = tester.getSemantics(find.byKey(const Key('aiProviderRow')));
+    expect(ai.flagsCollection.isButton, isTrue);
+    expect(ai.flagsCollection.isLink, isFalse);
+    handle.dispose();
+  });
+
+  for (final (label, fails) in <(String, Future<bool> Function(Uri))>[
+    ('returns false', (_) async => false),
+    ('throws', (_) async => throw StateError('no browser')),
+  ]) {
+    testWidgets('a Privacy Policy launch that $label shows the address',
+        (tester) async {
+      // A phone with no browser (or one that refuses the launch) used to
+      // get no reaction at all from the row.
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        openUrl: fails,
+      )));
+      final row = find.byKey(const Key('privacyPolicyRow'));
+      await tester.scrollUntilVisible(row, 200);
+      await tester.tap(row);
+      await tester.pump();
+      expect(
+          find.text('Could not open the privacy policy. '
+              'It is at $privacyPolicyUri'),
+          findsOneWidget);
+      // Snackbar text cannot be selected: Copy puts the address on the
+      // clipboard.
+      String? copied;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String?;
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+      expect(find.text('Copy'), findsOneWidget);
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('privacyCopyAction')));
+      await tester.pump();
+      expect(copied, privacyPolicyUri.toString());
+    });
+  }
+
+  test('the privacy-link notice names the address in Chinese too', () {
+    expect(lookupAppLocalizations(const Locale('zh')).privacyOpenFailed('U'),
+        '无法打开隐私政策，网址：U');
+    expect(lookupAppLocalizations(const Locale('zh')).privacyCopyAction, '复制');
+  });
+
   testWidgets('watcher toggle stays off when permission is denied',
       (tester) async {
-    final settings = FakeSettings(watcherEnabled: false);
+    final settings =
+        FakeSettings(watcherEnabled: false, watcherDisclosureSeen: true);
 
     await tester.pumpWidget(_wrap(SettingsScreen(
       settings: settings,
@@ -567,6 +769,99 @@ void importExportTests() {
     expect(dao.imported, isEmpty,
         reason: 'a pasted-but-cancelled payload must not be written');
     expect(find.textContaining('Imported'), findsNothing);
+  });
+
+  // A year of meals is 1–2 MB of JSON: bound to the 4-line field it froze
+  // the first frame and cost hundreds of MB on iOS (2026-10-12). The
+  // clipboard route hands it to importJson without ever touching the field.
+  for (final (locale, read) in [
+    (const Locale('en'), 'Read 2.0 MB from the clipboard'),
+    (const Locale('zh'), '已读取 2.0 MB'),
+  ]) {
+    testWidgets('import [${locale.languageCode}]: a 2 MB export comes '
+        'straight from the clipboard, never through the field',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final payload = '{"format":"calorie_tracker_export","version":1,'
+          '"tables":{"meals":[{"date":"2026-07-30","pad":"'
+          '${'x' * (2 * 1024 * 1024 - 99)}"}]}}';
+      expect(payload.length, 2 * 1024 * 1024);
+      var reads = 0;
+      tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+          SystemChannels.platform, (call) async {
+        if (call.method == 'Clipboard.getData') {
+          reads++;
+          return <String, dynamic>{'text': payload};
+        }
+        return null;
+      });
+      addTearDown(() => tester.binding.defaultBinaryMessenger
+          .setMockMethodCallHandler(SystemChannels.platform, null));
+      final dao = FakeDao();
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: Scaffold(
+          body: SettingsScreen(
+            settings: FakeSettings(apiKey: 'k'),
+            analyzer: FakeAnalyzer(),
+            dao: dao,
+            requestPhotoPermission: () async => true,
+          ),
+        ),
+      ));
+      await tester.tap(find.byKey(const Key('importButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('importFromClipboard')));
+      await tester.pumpAndSettle();
+
+      expect(reads, 1);
+      expect(find.text(read), findsOneWidget);
+      expect(find.byKey(const Key('importField')), findsNothing,
+          reason: 'the payload is never laid out as text');
+      expect(
+          tester
+              .widgetList<EditableText>(find.byType(EditableText))
+              .where((e) => e.controller.text.isNotEmpty),
+          isEmpty);
+      await tester.tap(find.byKey(const Key('importConfirm')));
+      await tester.pumpAndSettle();
+
+      expect(dao.imported, [payload]);
+      expect(
+          find.text(locale.languageCode == 'zh'
+              ? '已导入 1 餐（共 1 行）。'
+              : 'Imported 1 meal (1 rows total).'),
+          findsOneWidget);
+    });
+  }
+
+  testWidgets('import: an empty clipboard says so and keeps the field',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 3000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform, (call) async => null);
+    addTearDown(() => tester.binding.defaultBinaryMessenger
+        .setMockMethodCallHandler(SystemChannels.platform, null));
+    final dao = FakeDao();
+    await tester.pumpWidget(_wrap(SettingsScreen(
+      settings: FakeSettings(apiKey: 'k'),
+      analyzer: FakeAnalyzer(),
+      dao: dao,
+      requestPhotoPermission: () async => true,
+    )));
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('importFromClipboard')));
+    await tester.pumpAndSettle();
+    expect(find.text('There is no text on the clipboard.'), findsOneWidget);
+    expect(find.byKey(const Key('importField')), findsOneWidget);
+    expect(dao.imported, isEmpty);
   });
 }
 

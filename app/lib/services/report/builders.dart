@@ -7,62 +7,23 @@
 library;
 
 import 'dart:convert';
-import 'dart:math' as math;
 
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
+
+export '../../core/coerce.dart' show isFoodTruthy, mealCalorieMismatch;
 
 /// Factory the integrator wires (INTEGRATION CONTRACT).
 ReportBuilder createReportBuilder(MealsDao dao) => ReportBuilderImpl(dao);
 
 // ─── Coercions the spec pins beyond core/coerce.dart ───────────────
-// (core/ is frozen; these helpers live here and are exported for tests.)
-
-/// Python truthiness over every JSON shape. Spec §3.5: is_food filtering is
-/// `analysis.get("is_food")` TRUTHY, never `== true` (database.py:453-461
-/// spells the same table out in SQL). false/0/""/[]/{}/null → false.
-bool isFoodTruthy(dynamic value) {
-  if (value == null) return false;
-  if (value is bool) return value;
-  if (value is num) return value != 0; // NaN != 0 → truthy, like Python
-  if (value is String) return value.isNotEmpty;
-  if (value is List) return value.isNotEmpty;
-  if (value is Map) return value.isNotEmpty;
-  return true;
-}
+// (isFoodTruthy and mealCalorieMismatch live in core/coerce.dart and are
+// re-exported above, so existing imports of this file keep compiling.)
 
 /// utils._as_number port (spec §3.5): null — not a default — for non-numeric,
 /// bool, NaN/Infinity, and |x| >= 1e9 values, so callers can distinguish
 /// "junk" from a real 0.
-num? boundedNumber(dynamic value) {
-  if (value is bool || value is! num) return null;
-  final d = value.toDouble();
-  if (d.isNaN || d.isInfinite) return null;
-  if (d <= -1e9 || d >= 1e9) return null;
-  return value;
-}
-
-/// utils.meal_calorie_mismatch port (spec §3.5): the item-calorie sum when it
-/// contradicts the stored total beyond max(100 kcal, 20%), else null. No
-/// counted items, a non-positive item sum, or an unusable total all read as
-/// "consistent" — a crashed warning would be worse than the bug it flags.
-int? mealCalorieMismatch(Map<String, dynamic> analysis) {
-  num itemSum = 0;
-  var counted = 0;
-  for (final item in safeFoodItems(analysis)) {
-    final cal = boundedNumber(item['estimated_calories']);
-    if (cal != null) {
-      itemSum += cal;
-      counted++;
-    }
-  }
-  final total = boundedNumber(analysis['total_calories']);
-  if (counted == 0 || itemSum <= 0 || total == null) return null;
-  if ((total - itemSum).abs() > math.max(100, 0.2 * math.max(total, itemSum))) {
-    return itemSum.truncate(); // Python int(): truncation toward zero
-  }
-  return null;
-}
+num? boundedNumber(dynamic value) => safeNumberOr(value, null);
 
 /// Python round(): banker's rounding (half-to-even), returning int — Dart's
 /// .round() is half-away-from-zero and would drift on exact .5 ties.
@@ -226,9 +187,6 @@ final RegExp _isoDayRe = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
 String _two(int n) => n.toString().padLeft(2, '0');
 
-String _isoDay(DateTime d) =>
-    '${d.year.toString().padLeft(4, '0')}-${_two(d.month)}-${_two(d.day)}';
-
 /// Local date → UTC midnight so day arithmetic never crosses a DST edge.
 DateTime _utcDay(DateTime d) => DateTime.utc(d.year, d.month, d.day);
 
@@ -237,7 +195,7 @@ DateTime _utcDay(DateTime d) => DateTime.utc(d.year, d.month, d.day);
 DateTime? _parseIsoDay(String s) {
   if (!_isoDayRe.hasMatch(s)) return null;
   final d = DateTime.tryParse('${s}T00:00:00Z');
-  if (d == null || _isoDay(d) != s) return null;
+  if (d == null || isoDate(d) != s) return null;
   return d;
 }
 
@@ -366,7 +324,7 @@ class ReportBuilderImpl implements ReportBuilder {
   Future<String> todaySummary() async {
     final now = _clock();
     final todayUtc = _utcDay(now);
-    final today = _isoDay(todayUtc);
+    final today = isoDate(todayUtc);
     final meals = await _foodMeals(today, today);
     if (meals.isEmpty) {
       return '📋 Today\'s Summary\n\nNo meals logged yet today.';
@@ -423,8 +381,8 @@ class ReportBuilderImpl implements ReportBuilder {
     // when ≥ 2 days have data — under-logged days would bias a mean low
     // (spec §5.1; pure formula in [typicalDayMedian]).
     final prior = await _dailyCalorieTotals(
-      _isoDay(todayUtc.subtract(const Duration(days: 7))),
-      _isoDay(todayUtc.subtract(const Duration(days: 1))),
+      isoDate(todayUtc.subtract(const Duration(days: 7))),
+      isoDate(todayUtc.subtract(const Duration(days: 1))),
     );
     final typical = typicalDayMedian(prior);
     if (typical != null) {
@@ -445,8 +403,8 @@ class ReportBuilderImpl implements ReportBuilder {
   Future<String> history({int days = 30}) async {
     // Inclusive window [today - (days-1), today] (spec §5.3).
     final todayUtc = _utcDay(_clock());
-    final today = _isoDay(todayUtc);
-    final start = _isoDay(todayUtc.subtract(Duration(days: days - 1)));
+    final today = isoDate(todayUtc);
+    final start = isoDate(todayUtc.subtract(Duration(days: days - 1)));
     final totals = await _dailyCalorieTotals(start, today);
     if (totals.isEmpty) {
       return '📅 $days-Day History\n\nNo meals logged in the past $days days.';
@@ -577,8 +535,8 @@ class ReportBuilderImpl implements ReportBuilder {
     // [reportPriorAvg] (spec §5.5, daily_report.py:450-470), pinned by
     // shared/vectors/report_formulas.json.
     final priorMeals = await _dao.mealsBetween(
-      _isoDay(target.subtract(const Duration(days: 7))),
-      _isoDay(target.subtract(const Duration(days: 1))),
+      isoDate(target.subtract(const Duration(days: 7))),
+      isoDate(target.subtract(const Duration(days: 1))),
     );
     final avg = reportPriorAvg([
       for (final m in priorMeals) {'date': m.date, 'analysis': m.analysis},
@@ -622,12 +580,12 @@ class ReportBuilderImpl implements ReportBuilder {
   /// yesterday never borrows this morning's weigh-in.
   List<String> _weightSection(
       Map<String, dynamic> export, DateTime target, String date) {
-    final windowStart = _isoDay(target.subtract(const Duration(days: 7)));
+    final windowStart = isoDate(target.subtract(const Duration(days: 7)));
     final weights = _weightsBetween(export, windowStart, date);
     if (weights.isEmpty) return const [];
 
     final lines = <String>['', '⚖️ Weight'];
-    final anchorFloor = _isoDay(target.subtract(const Duration(days: 366)));
+    final anchorFloor = isoDate(target.subtract(const Duration(days: 366)));
     final anchors = _weightsBetween(export, anchorFloor, date);
     final num latestKg =
         anchors.isEmpty ? 0 : safeNumber(anchors.last['weight_kg']);
@@ -648,8 +606,8 @@ class ReportBuilderImpl implements ReportBuilder {
   @override
   Future<String> stats() async {
     final todayUtc = _utcDay(_clock());
-    final today = _isoDay(todayUtc);
-    final sevenDaysAgo = _isoDay(todayUtc.subtract(const Duration(days: 6)));
+    final today = isoDate(todayUtc);
+    final sevenDaysAgo = isoDate(todayUtc.subtract(const Duration(days: 6)));
 
     // All-time window [1970-01-01, today], mirroring get_meal_stats
     // semantics (spec §5.6): Python-truthy is_food, safeNumber calorie

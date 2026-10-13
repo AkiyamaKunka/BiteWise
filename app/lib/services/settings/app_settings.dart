@@ -269,11 +269,19 @@ class AppSettings extends ChangeNotifier {
   static const String _kCalorieGoal = 'settings.calorie_goal';
   static const String _kSummaryPostedDate = 'settings.summary_posted_date';
   static const String _kWatcherEnabled = 'settings.watcher_enabled';
+  static const String _kWatcherDisclosureSeen =
+      'settings.watcher_disclosure_seen';
   static const String _kSummaryEnabled = 'settings.summary_enabled';
   static const String _kDietaryProfile = 'settings.dietary_profile';
   static const String _kQuotaPauseUntil = 'settings.quota_pause_until';
   static const String _kProvider = 'settings.provider';
   static const String _kQuotaPauseProvider = 'settings.quota_pause_provider';
+  static const String _kAnalysisBlockedUntil =
+      'settings.analysis_blocked_until';
+  static const String _kAnalysisBlockedKind = 'settings.analysis_blocked_kind';
+  static const String _kAnalysisBlockedProvider =
+      'settings.analysis_blocked_provider';
+  static const String _kCredentialRevision = 'settings.credential_revision';
   static const String _kOpenaiModel = 'settings.openai_model';
   static const String _kAnthropicModel = 'settings.anthropic_model';
   static const String _kServerBaseUrl = 'settings.server_base_url';
@@ -355,9 +363,12 @@ class AppSettings extends ChangeNotifier {
   String _serverEffort = ''; // '' = server default | low/medium/high
   int _calorieGoal = 0; // 0 = unset -> the daily summary uses the median
   bool _watcherEnabled = false;
+  bool _watcherDisclosureSeen = false;
   bool _summaryEnabled = true;
   String? _dietaryProfile;
   DateTime? _quotaPauseUntil;
+  DateTime? _analysisBlockedUntil;
+  String? _analysisBlockedKind;
 
   static Future<AppSettings> load(
       {SharedPreferences? prefs, SecureKeyStore? keyStore}) async {
@@ -427,6 +438,7 @@ class AppSettings extends ChangeNotifier {
     final goal = p.getInt(_kCalorieGoal) ?? 0;
     s._calorieGoal = (goal > 0 && goal <= maxDailyGoalKcal) ? goal : 0;
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
+    s._watcherDisclosureSeen = p.getBool(_kWatcherDisclosureSeen) ?? false;
     s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
@@ -436,6 +448,7 @@ class AppSettings extends ChangeNotifier {
     // still parses as local, exactly as before.
     s._quotaPauseUntil =
         DateTime.tryParse(p.getString(_kQuotaPauseUntil) ?? '')?.toLocal();
+    s._readAnalysisBlock();
     return s;
   }
 
@@ -461,6 +474,7 @@ class AppSettings extends ChangeNotifier {
       _quotaPauseUntil = null;
       await _prefs.remove(_kQuotaPauseUntil);
     }
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -471,6 +485,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _model = v.isEmpty ? defaultModel : v;
     await _prefs.setString(_kModel, _model);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -487,6 +502,7 @@ class AppSettings extends ChangeNotifier {
       _quotaPauseUntil = null;
       await _prefs.remove(_kQuotaPauseUntil);
     }
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -607,6 +623,7 @@ class AppSettings extends ChangeNotifier {
     }
     _serverBaseUrl = v;
     await _prefs.setString(_kServerBaseUrl, v);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -623,6 +640,7 @@ class AppSettings extends ChangeNotifier {
     final v = serverBackends.contains(value) ? value : 'claude';
     _serverBackend = v;
     await _prefs.setString(_kServerBackend, v);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -647,6 +665,7 @@ class AppSettings extends ChangeNotifier {
       _quotaPauseUntil = null;
       await _prefs.remove(_kQuotaPauseUntil);
     }
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -654,6 +673,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _openaiModel = v.isEmpty ? defaultOpenaiModel : v;
     await _prefs.setString(_kOpenaiModel, _openaiModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -661,6 +681,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _anthropicModel = v.isEmpty ? defaultAnthropicModel : v;
     await _prefs.setString(_kAnthropicModel, _anthropicModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -668,6 +689,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _qwenModel = v.isEmpty ? defaultQwenModel : v;
     await _prefs.setString(_kQwenModel, _qwenModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -675,6 +697,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _doubaoModel = v.isEmpty ? defaultDoubaoModel : v;
     await _prefs.setString(_kDoubaoModel, _doubaoModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -682,6 +705,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _deepseekModel = v.isEmpty ? defaultDeepseekModel : v;
     await _prefs.setString(_kDeepseekModel, _deepseekModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -689,6 +713,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _xaiModel = v.isEmpty ? defaultXaiModel : v;
     await _prefs.setString(_kXaiModel, _xaiModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -696,6 +721,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _openrouterModel = v.isEmpty ? defaultOpenrouterModel : v;
     await _prefs.setString(_kOpenrouterModel, _openrouterModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -703,6 +729,7 @@ class AppSettings extends ChangeNotifier {
     final v = value.trim();
     _glmModel = v.isEmpty ? defaultGlmModel : v;
     await _prefs.setString(_kGlmModel, _glmModel);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -718,6 +745,21 @@ class AppSettings extends ChangeNotifier {
   /// UI language override: 'system' follows the OS; 'en'/'zh' force it.
   /// App-only (spec §9 localization row) — never a wire value.
   String get appLanguage => _appLanguage;
+
+  /// Whether the EFFECTIVE UI language is Chinese: 'zh', or 'system' on a
+  /// Chinese phone (resolved as localizationsFor does). The analyzers ask
+  /// the model to name meals in it (the server path sends lang: zh).
+  bool get repliesInChinese => switch (_appLanguage) {
+        'zh' => true,
+        'en' => false,
+        _ => systemLanguageCode().toLowerCase() == 'zh',
+      };
+
+  /// The phone's language code, as 'system' resolves it. A seam because
+  /// PlatformDispatcher.instance ignores a widget test's locale.
+  @visibleForTesting
+  static String Function() systemLanguageCode =
+      () => PlatformDispatcher.instance.locale.languageCode;
 
   Future<void> setAppLanguage(String value) async {
     final v = const {'system', 'en', 'zh'}.contains(value)
@@ -774,6 +816,7 @@ class AppSettings extends ChangeNotifier {
     final v = kServerPlanModels.contains(value) ? value : '';
     _serverModel = v;
     await _prefs.setString(_kServerModel, v);
+    await _credentialsEdited();
     notifyListeners();
   }
 
@@ -826,6 +869,18 @@ class AppSettings extends ChangeNotifier {
   Future<void> setWatcherEnabled(bool value) async {
     _watcherEnabled = value;
     await _prefs.setBool(_kWatcherEnabled, value);
+    notifyListeners();
+  }
+
+  /// Whether the user has accepted the one-time "photos will be sent to
+  /// your AI service" notice that turning on 监控相册 shows (App Store
+  /// 5.1.2(i): explicit consent before personal data goes to a third-party
+  /// AI). Device-local: never exported, never set by a setup link.
+  bool get watcherDisclosureSeen => _watcherDisclosureSeen;
+
+  Future<void> setWatcherDisclosureSeen(bool value) async {
+    _watcherDisclosureSeen = value;
+    await _prefs.setBool(_kWatcherDisclosureSeen, value);
     notifyListeners();
   }
 
@@ -885,5 +940,182 @@ class AppSettings extends ChangeNotifier {
     }
     final owner = _prefs.getString(_kQuotaPauseProvider);
     return owner == null || owner == _provider.name;
+  }
+
+  /// [canAnalyze] for the AUTOMATIC scan (watcher, launch/resume catch-up,
+  /// background run): also false while the automatic-analysis latch below
+  /// is armed. Deliberate adds (picker, share, 照片覆盖检查) keep using
+  /// [canAnalyze] — a deliberate photo is how the user checks the fix.
+  bool get canAutoAnalyze => canAnalyze && !isAnalysisBlocked;
+
+  /// How long a refusal parks the automatic scan. A rejected key stays
+  /// rejected until the user edits it (which clears the latch at once);
+  /// a region block lifts with the VPN node, so it is re-tried sooner.
+  static const Duration rejectedKeyBlockTtl = Duration(hours: 24);
+  static const Duration regionBlockTtl = Duration(hours: 2);
+
+  /// Automatic-analysis latch (2026-10-12): armed when an AUTOMATIC photo
+  /// came back 'rejectedKey' or 'regionBlocked'. Without it, every scan —
+  /// Android's 30-minute job, each launch/resume/library change, iOS's
+  /// refresh — re-uploaded the whole lookback window against a key or
+  /// region that refuses each photo. Stores the KIND and the provider only,
+  /// never anything derived from the key. Owned by the provider that set
+  /// it, like the quota pause.
+  bool get isAnalysisBlocked {
+    final until = _analysisBlockedUntil;
+    final now = DateTime.now();
+    if (until == null || !now.isBefore(until)) return false;
+    // No pause outlasts its kind's TTL: an end further out than that was
+    // armed under a clock that has since been set back, and would park the
+    // scan for as long as the skew. Minutes of slack for NTP nudges.
+    final ttl = _analysisBlockTtl(_analysisBlockedKind);
+    if (ttl == null ||
+        until.isAfter(now.add(ttl + const Duration(minutes: 5)))) {
+      return false;
+    }
+    // Unlike the quota pause, a pause WITHOUT its provider is not one: the
+    // provider is written first, so a missing one is a torn arm (2026-10-12).
+    final owner = _prefs.getString(_kAnalysisBlockedProvider);
+    return owner != null && owner == _provider.name;
+  }
+
+  /// 'rejectedKey' | 'regionBlocked' while [isAnalysisBlocked], else null.
+  String? get analysisBlockedKind =>
+      isAnalysisBlocked ? _analysisBlockedKind : null;
+
+  /// When the latch lifts by itself; null while it is not armed.
+  DateTime? get analysisBlockedUntil =>
+      isAnalysisBlocked ? _analysisBlockedUntil : null;
+
+  /// Bumped by every credential/provider/model/server edit and PERSISTED,
+  /// so the background engine (another isolate, its own preferences
+  /// cache) sees the foreground's edits. Read BEFORE an analysis and handed
+  /// to [blockAutomaticAnalysis], so a refusal of the key the user has
+  /// just replaced does not park the new one. A plain counter — nothing
+  /// derived from a key is ever stored.
+  int get credentialRevision => _prefs.getInt(_kCredentialRevision) ?? 0;
+
+  /// Arm the latch for [kind] ('rejectedKey' | 'regionBlocked'; anything
+  /// else is ignored). [revision] stale = dropped: compared against the
+  /// revision ON DISK, before and after the write, because the edit that
+  /// made it stale may have happened in the other isolate. [now] is a
+  /// test seam.
+  Future<void> blockAutomaticAnalysis(String kind,
+      {int? revision, DateTime? now}) async {
+    final ttl = _analysisBlockTtl(kind);
+    if (ttl == null) return;
+    if (revision != null) {
+      await _prefs.reload();
+      if (revision != credentialRevision) return;
+    }
+    final until = (now ?? DateTime.now()).add(ttl);
+    _analysisBlockedUntil = until;
+    _analysisBlockedKind = kind;
+    // Provider FIRST: a pause without its owner reads as no pause, so an
+    // arm cut short in between parks nothing.
+    await _prefs.setString(_kAnalysisBlockedProvider, _provider.name);
+    await _prefs.setString(_kAnalysisBlockedKind, kind);
+    await _prefs.setString(
+        _kAnalysisBlockedUntil, until.toUtc().toIso8601String());
+    if (revision != null) {
+      // An edit that landed between the check above and these writes has
+      // already removed the keys — or will find these and remove them; one
+      // that removed them BEFORE the writes is caught here.
+      await _prefs.reload();
+      if (revision != credentialRevision) {
+        await _removeAnalysisBlock();
+        return;
+      }
+    }
+    // Re-read what is now on disk: a reloadAnalysisBlock (a resume, the
+    // pipeline's refresh) that ran between the writes above read them half
+    // done and cleared the in-memory pause set at the top, and this notify
+    // then showed the Settings footer "not paused" (2026-10-12).
+    _readAnalysisBlock();
+    notifyListeners();
+  }
+
+  static Duration? _analysisBlockTtl(String? kind) => switch (kind) {
+        'rejectedKey' => rejectedKeyBlockTtl,
+        'regionBlocked' => regionBlockTtl,
+        _ => null,
+      };
+
+  /// Lift the latch: an analysis succeeded, so the key and region work.
+  /// Touches the stored keys only when a pause is actually set — in this
+  /// isolate's copy, or on disk (the background engine may have armed it
+  /// since this one loaded): every successful photo comes through here.
+  Future<void> clearAnalysisBlock() async {
+    final wasSet = _analysisBlockedUntil != null;
+    if (!wasSet && !_analysisBlockStored()) {
+      await _prefs.reload();
+      if (!_analysisBlockStored()) return;
+    }
+    await _removeAnalysisBlock();
+    if (wasSet) notifyListeners();
+  }
+
+  /// Something proved the ACTIVE provider's credentials work (测试 AI 服务's
+  /// key probe answered OK): lift a 'rejectedKey' pause it owns, and a
+  /// 'regionBlocked' one only when [reachedGeneration] — the probe went
+  /// through the provider's generation endpoint, which is where a region
+  /// is refused (the server's probe is its auth check, which is not).
+  Future<void> credentialsProven({required bool reachedGeneration}) async {
+    await reloadAnalysisBlock();
+    final kind = _prefs.getString(_kAnalysisBlockedKind);
+    if (kind == null) return;
+    final owner = _prefs.getString(_kAnalysisBlockedProvider);
+    if (owner != null && owner != _provider.name) return;
+    if (kind == 'regionBlocked' && !reachedGeneration) return;
+    final wasSet = _analysisBlockedUntil != null;
+    await _removeAnalysisBlock();
+    if (wasSet) notifyListeners();
+  }
+
+  bool _analysisBlockStored() =>
+      _prefs.getString(_kAnalysisBlockedUntil) != null ||
+      _prefs.getString(_kAnalysisBlockedKind) != null ||
+      _prefs.getString(_kAnalysisBlockedProvider) != null;
+
+  Future<void> _removeAnalysisBlock() async {
+    _analysisBlockedUntil = null;
+    _analysisBlockedKind = null;
+    await _prefs.remove(_kAnalysisBlockedUntil);
+    await _prefs.remove(_kAnalysisBlockedKind);
+    await _prefs.remove(_kAnalysisBlockedProvider);
+  }
+
+  /// Re-read the latch from disk: the background engine (another isolate,
+  /// its own preferences cache) may have armed or cleared it since this
+  /// one loaded. Called before the resume catch-up.
+  Future<void> reloadAnalysisBlock() async {
+    final before = (_analysisBlockedUntil, _analysisBlockedKind);
+    await _prefs.reload();
+    _readAnalysisBlock();
+    if ((_analysisBlockedUntil, _analysisBlockedKind) != before) {
+      notifyListeners();
+    }
+  }
+
+  void _readAnalysisBlock() {
+    final kind = _prefs.getString(_kAnalysisBlockedKind);
+    final until = DateTime.tryParse(
+            _prefs.getString(_kAnalysisBlockedUntil) ?? '')
+        ?.toLocal();
+    final known = kind == 'rejectedKey' || kind == 'regionBlocked';
+    _analysisBlockedUntil = known ? until : null;
+    _analysisBlockedKind = known && until != null ? kind : null;
+  }
+
+  /// Every edit that can change whether a photo is accepted — a key, the
+  /// provider, a model, the server address, plan or model — lifts the
+  /// latch: the next automatic photo is the test of the new setup. Even a
+  /// same-value re-save counts (the user may have fixed the account at the
+  /// provider's console). The revision is bumped BEFORE the removal and
+  /// the removal is unconditional: the background engine may have armed
+  /// the pause on disk without this isolate's copy knowing.
+  Future<void> _credentialsEdited() async {
+    await _prefs.setInt(_kCredentialRevision, credentialRevision + 1);
+    await _removeAnalysisBlock();
   }
 }

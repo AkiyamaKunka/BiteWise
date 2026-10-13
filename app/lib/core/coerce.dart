@@ -9,6 +9,9 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' as math;
+
+import 'shared_generated.dart';
 
 /// Bounded numeric coercion with a NULLABLE fallback — full parity with
 /// Python `safe_number(value, default)` where default may be None. Returns
@@ -35,6 +38,32 @@ List<Map<String, dynamic>> safeFoodItems(dynamic analysis) {
   final items = analysis['food_items'];
   if (items is! List) return const [];
   return items.whereType<Map>().map((m) => m.cast<String, dynamic>()).toList();
+}
+
+/// meal_calorie_mismatch (spec §3.5, utils.py:75-97): item sum when it
+/// contradicts the stored total by more than max(100, 20%), else null.
+/// Missing/non-numeric data is treated as consistent. The one copy for chat
+/// (services/nl/executor.dart) and daily reports (services/report/builders.dart).
+int? mealCalorieMismatch(dynamic analysis) {
+  num itemSum = 0;
+  var counted = 0;
+  for (final item in safeFoodItems(analysis)) {
+    final cal = safeNumberOr(item['estimated_calories'], null);
+    if (cal != null) {
+      itemSum += cal;
+      counted++;
+    }
+  }
+  final total =
+      analysis is Map ? safeNumberOr(analysis['total_calories'], null) : null;
+  if (counted == 0 || itemSum <= 0 || total == null) return null;
+  if ((total - itemSum).abs() >
+      math.max(
+          SharedConstants.mealMismatchMinKcal,
+          SharedConstants.mealMismatchPct * math.max(total, itemSum))) {
+    return itemSum.toInt(); // Python int(): truncation toward zero
+  }
+  return null;
 }
 
 /// Truthy/falsy string-or-bool coercion ("false"/"no"/"0"/"off" are false).
@@ -124,6 +153,33 @@ bool? coerceIsFood(dynamic analysis) {
   if (raw is bool) return raw;
   return parseBoolish(raw);
 }
+
+/// Spec §3.5: Python truthiness for is_food — false, 0, 0.0, '', [], {},
+/// null → false; anything else (including non-empty strings, 1, NaN) → true.
+/// Consumers filter with raw truthiness, never `== true` (database.py:453-461
+/// spells the same table out in SQL).
+bool isFoodTruthy(dynamic value) {
+  if (value == null) return false;
+  if (value is bool) return value;
+  // NaN != 0 is true, matching Python where NaN is truthy.
+  if (value is num) return value != 0;
+  if (value is String) return value.isNotEmpty;
+  if (value is List) return value.isNotEmpty;
+  if (value is Map) return value.isNotEmpty;
+  return true;
+}
+
+/// User-local calendar day as ISO YYYY-MM-DD (spec §2.2 clock simplification:
+/// the device clock is the only clock) — the one formatter for every layer.
+/// This value is WRITTEN to meals.date and compared with string ranges in
+/// SQL, so it must be Gregorian with ASCII digits regardless of the device
+/// locale. `DateFormat('yyyy-MM-dd')` is locale-sensitive (Buddhist-era
+/// years, Eastern-Arabic digits), which on the photo/editor write paths
+/// would persist dates that no query could match.
+String isoDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-'
+    '${d.month.toString().padLeft(2, '0')}-'
+    '${d.day.toString().padLeft(2, '0')}';
 
 /// Lowercased, hex-normalized image hash (port of _normalize_image_hash).
 String normalizeImageHash(String? hash) => (hash ?? '').trim().toLowerCase();

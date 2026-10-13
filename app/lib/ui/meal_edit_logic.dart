@@ -19,7 +19,6 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
-import 'format.dart' show isoDate;
 
 /// UI bounds. Deliberately generous — the point is to reject typos and
 /// hostile input (1e9 breaks the coercion layer's accumulation guarantees),

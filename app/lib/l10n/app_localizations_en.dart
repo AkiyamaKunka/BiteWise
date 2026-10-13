@@ -46,21 +46,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rowEaten => 'Eaten';
 
   @override
-  String get rowResultLeft => '= Left';
-
-  @override
-  String get rowResultOver => '= Above typical';
-
-  @override
-  String get ringHeadroom => 'headroom';
-
-  @override
-  String get ringLeftToday => 'left today';
-
-  @override
-  String get ringAboveTypical => 'above typical';
-
-  @override
   String get ringKcalToday => 'kcal today';
 
   @override
@@ -69,14 +54,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String ringSemanticsTypical(String kcal, String typical) {
-    return '$kcal kcal eaten today, of a $typical kcal typical day';
+  String ringSemanticsTypical(String kcal, String typical, String burnClause) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day$burnClause';
   }
 
   @override
-  String ringSemanticsAboveTypical(String kcal, String typical) {
-    return '$kcal kcal eaten today, of a $typical kcal typical day (above typical)';
+  String ringSemanticsAboveTypical(
+    String kcal,
+    String typical,
+    String burnClause,
+  ) {
+    return '$kcal kcal eaten today, of a $typical kcal typical day$burnClause (above typical)';
   }
+
+  @override
+  String ringSemanticsBurn(String burn) {
+    return ', plus $burn kcal active burn';
+  }
+
+  @override
+  String get privacyCopyAction => 'Copy';
 
   @override
   String get todayEmptyTitle => 'No meals logged yet today.';
@@ -248,11 +245,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsSectionPhotos => 'Photos';
 
   @override
-  String get settingsPhotosFooter =>
-      'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach.';
+  String settingsPhotosFooter(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos — and, when you turn it on, the photos from the last $_temp0 — are sent to the AI service you chose.';
+  }
 
   @override
   String get settingsRowWatch => 'Watch Camera Roll';
+
+  @override
+  String get watcherDisclosureTitle => 'Photos will be sent to your AI service';
+
+  @override
+  String watcherDisclosureBody(String provider, int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.';
+  }
+
+  @override
+  String get watcherDisclosureContinue => 'Continue';
 
   @override
   String get settingsRowLookback => 'Backfill Lookback';
@@ -343,6 +364,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRowImport => 'Import Data…';
 
   @override
+  String get settingsRowPrivacy => 'Privacy Policy';
+
+  @override
+  String privacyOpenFailed(String url) {
+    return 'Could not open the privacy policy. It is at $url';
+  }
+
+  @override
   String get settingsRowLanguage => 'Language';
 
   @override
@@ -424,6 +453,18 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get apiKeyFooterDefault =>
       'The key saves as you type. Stored securely on this device only.';
+
+  @override
+  String get apiKeyFooterGemini =>
+      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.';
+
+  @override
+  String get apiKeyFooterOpenai =>
+      'From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.';
+
+  @override
+  String get apiKeyFooterAnthropic =>
+      'From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterQwen =>
@@ -655,16 +696,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportFooter => 'Logged with Bitewise';
 
   @override
-  String typicalDayHeadroom(String typical, String delta) {
-    return 'Typical day: ~$typical kcal · ~$delta kcal headroom';
-  }
-
-  @override
-  String typicalDayOver(String typical, String delta) {
-    return 'Typical day: ~$typical kcal · ~$delta kcal above typical';
-  }
-
-  @override
   String get historyDayPattern => 'EEEE, MMM dd';
 
   @override
@@ -839,12 +870,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String coachPartialGoal(String delta) {
-    return '$delta kcal under your goal — any meals not logged yet? Add them in BiteWise.';
+    return '$delta kcal under your goal — any meals not logged yet? Add them in Bitewise.';
   }
 
   @override
   String coachPartialTypical(String delta) {
-    return '$delta kcal below your usual day — any meals not logged yet? Add them in BiteWise.';
+    return '$delta kcal below your usual day — any meals not logged yet? Add them in Bitewise.';
   }
 
   @override
@@ -1242,6 +1273,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String outcomeSavedSummary(String name, String kcal) {
+    return '$name — ~$kcal kcal';
+  }
+
+  @override
+  String outcomeLeftoverSummary(String name, String delta, String total) {
+    return '$name — −$delta kcal, now ~$total kcal';
+  }
+
+  @override
   String outcomeFailedKeptMsg(String reason) {
     return 'Photo analysis failed — kept for retry. $reason';
   }
@@ -1293,6 +1334,22 @@ class AppLocalizationsEn extends AppLocalizations {
       'The provider rejected the model — check the model name in Settings.';
 
   @override
+  String get errBadModelDoubao =>
+      'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.';
+
+  @override
+  String get errBadModelOpenRouter =>
+      'OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.';
+
+  @override
+  String get errBilling =>
+      'The provider account is out of balance or credits — top it up in the provider\'s console. After topping up you can analyze this photo again.';
+
+  @override
+  String get errBillingText =>
+      'The provider account is out of balance or credits — top it up in the provider\'s console.';
+
+  @override
   String get errBadResponse =>
       'The AI answered in a form the app could not use.';
 
@@ -1306,6 +1363,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get mealCardAutoTitle => '🍽️ Meal logged automatically';
+
+  @override
+  String get mealCardLeftoverTitle => '🍽️ Leftovers deducted';
 
   @override
   String get notificationChannelName => 'Reports & meals';
@@ -1367,6 +1427,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String editorSaveFailed(String error) {
     return 'Could not save: $error';
   }
+
+  @override
+  String get editorPhotoAlreadyLogged =>
+      'This photo was already logged — your numbers were not saved; open that meal from Today to edit it.';
 
   @override
   String editorDeleteFailed(String error) {
@@ -1747,8 +1811,88 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your server could not analyze this photo this time — it is kept and retried later.';
 
   @override
+  String errServerFailedFinal(String reason) {
+    return 'Your server could not analyze this photo: $reason. You can retry it from Settings › Photo Coverage.';
+  }
+
+  @override
+  String get serverReasonNoResult => 'the AI\'s answer was unusable';
+
+  @override
+  String errServerModelRefused(String reason) {
+    return 'Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Subscription › Model.';
+  }
+
+  @override
+  String nlServerModelRefused(String reason) {
+    return '❌ Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Subscription › Model.';
+  }
+
+  @override
+  String outcomeRetryLaterMsg(String reason) {
+    return 'This photo was not analyzed this time ($reason) — tap Retry, or pick it again later.';
+  }
+
+  @override
+  String outcomeShareRetryMsg(String reason) {
+    return 'The shared photo was not analyzed this time ($reason) — share it again later.';
+  }
+
+  @override
+  String outcomePickRetryMsg(String reason) {
+    return 'This photo was not analyzed ($reason) — pick it again later.';
+  }
+
+  @override
+  String get reasonRateLimited => 'the provider is rate-limiting';
+
+  @override
+  String get reasonQuotaPaused => 'the daily quota was hit';
+
+  @override
+  String get reasonBilling =>
+      'the provider account is out of balance — top it up first';
+
+  @override
+  String get reasonNetwork => 'network or service issue';
+
+  @override
+  String get reasonServerBusy => 'your server is busy with another analysis';
+
+  @override
+  String get reasonServerFailed => 'your server could not analyze it';
+
+  @override
+  String get reasonNoApiKey => 'no API key is set';
+
+  @override
+  String get reasonNoServerKey => 'no server address or upload key is set';
+
+  @override
+  String errRegionBlocked(String provider) {
+    return '$provider is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).';
+  }
+
+  @override
+  String get errContentBlocked =>
+      'Gemini declined to analyze this photo — you can log it manually.';
+
+  @override
+  String reasonRegionBlocked(String provider) {
+    return '$provider is not available from this network region';
+  }
+
+  @override
+  String diagFixVpnRegion(String provider) {
+    return 'Switch the VPN to a node in a region $provider serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.';
+  }
+
+  @override
+  String get regionProviderFallback => 'This AI service';
+
+  @override
   String errServerRejected(String code) {
-    return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Coverage.';
+    return 'Your server rejected this request ($code). Update the app and the server to matching versions, then retry from Settings › Photo Coverage.';
   }
 
   @override
@@ -1762,6 +1906,19 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get watcherOnNoKey =>
       'Watching is on, but photos won\'t be analyzed until a working API key is set above.';
+
+  @override
+  String autoScanPausedKey(String time) {
+    return 'Watch Camera Roll is paused: the AI service rejected the API key. Photos are kept — changing the key in AI Provider, or a passing Test This Provider, resumes it now (next try: $time).';
+  }
+
+  @override
+  String autoScanPausedRegion(String provider, String time) {
+    return 'Watch Camera Roll is paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: $time).';
+  }
+
+  @override
+  String get autoScanPausedTitle => 'Photos are not being logged automatically';
 
   @override
   String get watcherLimitedAccess =>
@@ -1817,23 +1974,34 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get exportShareSubject => 'CalorieTracker data export';
+  String get exportShareSubject => 'Bitewise data export';
 
   @override
   String get importErrNotJson => 'That file is not JSON.';
 
   @override
-  String get importErrNotExport => 'That file is not a CalorieTracker export.';
+  String get importErrNotExport => 'That file is not a Bitewise export.';
 
   @override
   String get importErrWrongFormatTag =>
-      'That file is not a CalorieTracker export (wrong format tag).';
+      'That file is not a Bitewise export (wrong format tag).';
 
   @override
   String get importErrBadVersion => 'That export has an unusable version tag.';
 
   @override
   String get importErrNoTables => 'That export has no tables section.';
+
+  @override
+  String get importFromClipboard => 'Import from clipboard';
+
+  @override
+  String importClipboardRead(String size) {
+    return 'Read $size from the clipboard';
+  }
+
+  @override
+  String get importClipboardEmpty => 'There is no text on the clipboard.';
 
   @override
   String get nlSomethingWrong =>

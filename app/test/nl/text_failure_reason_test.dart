@@ -103,14 +103,94 @@ void main() {
           '❌ 服务不接受这个模型 —— 请在设置里检查模型名。');
     });
 
+    test('Doubao / OpenRouter "model not found" keep their own remedy',
+        () async {
+      // Neither hint says "model name", so both classified as unknown and
+      // the chat said 请重试 to a model id a retry cannot fix (2026-10-12).
+      analyzer
+        ..next = null
+        ..nextError = 'Doubao model not found — Ark needs the EXACT '
+            'versioned ID from its model list, and the model must be '
+            'activated (开通管理) in the Volcengine console.';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error!,
+      ]) {
+        expect(line, startsWith('❌ 豆包找不到这个模型'));
+        expect(line, contains('开通管理'));
+        expect(line, isNot(contains('请重试')));
+      }
+      expect((await en().handleText('x')).single.text,
+          contains('activated (开通管理)'));
+      analyzer.nextError = 'OpenRouter model not found — use the full slug '
+          'from openrouter.ai/models (vendor/model, for example '
+          'google/gemini-3.8-flash) and pick one that accepts images.';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error!,
+      ]) {
+        expect(line, contains('支持图片'));
+        expect(line, contains('openrouter.ai/models'));
+        expect(line, isNot(contains('请重试')));
+      }
+      expect((await en().handleText('x')).single.text,
+          contains('accepts images'));
+    });
+
+    test('an empty provider balance says "top up", never "请重试"', () async {
+      // A retry cannot refill an account; the chat used to say 联系 AI
+      // 失败，请重试 to a friend whose DeepSeek balance hit zero (2026-10-12).
+      analyzer
+        ..next = null
+        ..nextError =
+            'Provider balance or credits exhausted — check your Qwen billing.';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error,
+      ]) {
+        expect(line, '❌ 账户余额或额度已用完 —— 请到服务商控制台充值。');
+        expect(line, isNot(contains('请重试')));
+      }
+      expect((await en().handleText('x')).single.text,
+          "❌ The provider account is out of balance or credits — top it up "
+          "in the provider's console.");
+    });
+
+    test('the plan refusing the model for credits says "switch model"',
+        () async {
+      // retry:false from the Claude Plan server: the selected model needs
+      // usage credits this plan lacks; 请重试 reproduces it forever.
+      analyzer
+        ..next = null
+        ..nextError = 'The server cannot analyze right now: Fable 5 requires '
+            'usage credits..';
+      for (final line in [
+        (await zh().handleText('x')).single.text,
+        (await zh().describeMeal('一碗米饭')).error,
+      ]) {
+        expect(line,
+            '❌ 你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
+            '请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。');
+      }
+      expect((await en().handleText('x')).single.text,
+          '❌ Your server cannot use the selected model: Fable 5 requires '
+          'usage credits — choose another model in Settings › AI Provider › '
+          'Subscription › Model.');
+    });
+
     test('retryable and unknown failures keep the spec §4 step 4 wording',
         () async {
       for (final error in [
         null, // parse failure / no reason
         'Error contacting the provider (network or service issue).',
         'Provider rate/spend limit hit — will retry later.',
-        'Provider balance or credits exhausted — check your Qwen billing.',
         'The analyzer is busy',
+        'The server cannot analyze right now: the analyzer is busy with '
+            'another photo.',
+        'The server cannot analyze right now: You have hit your usage '
+            'limit. It resets at 3pm.',
+        'The server cannot analyze right now: the analysis ran but produced '
+            'no usable result.',
       ]) {
         analyzer
           ..next = null

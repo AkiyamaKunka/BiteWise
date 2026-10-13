@@ -23,6 +23,7 @@ import '../widgets/macro_chart.dart' show MacroPalette;
 import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
 import '../widgets/meal_card.dart';
+import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
 
 class TodayScreen extends StatefulWidget {
@@ -31,10 +32,6 @@ class TodayScreen extends StatefulWidget {
 
   /// Photo thumbnails for the cards; null (tests) renders placeholders.
   final MealThumbResolver? thumbs;
-
-  /// Opens the meals sheet (add / describe / manual / fix). Null (tests /
-  /// other hosts) hides the button.
-  final VoidCallback? onAdd;
 
   /// Today's Garmin active burn, via the user's server (spec §9). Injected
   /// (null = feature off): Today must not know how the server is reached,
@@ -45,7 +42,6 @@ class TodayScreen extends StatefulWidget {
       required this.dao,
       required this.executor,
       this.thumbs,
-      this.onAdd,
       this.garminDaily});
 
   @override
@@ -121,27 +117,10 @@ class TodayScreenState extends State<TodayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final onAdd = widget.onAdd;
-    // The chat bar that used to sit under this Stack is GONE
-    // (2026-07-31, user request): corrections live in the meals button's
-    // sheet ("Fix or delete a meal"), so Today is purely the day's list
-    // plus the one button.
-    return Stack(
-      children: [
-        _body(context),
-        if (onAdd != null)
-          Positioned(
-            right: 16,
-            bottom: 16,
-            child: FloatingActionButton.extended(
-              key: const Key('addMealFab'),
-              onPressed: onAdd,
-              icon: const Icon(Icons.add),
-              label: Text(context.l10n.fabLog),
-            ),
-          ),
-      ],
-    );
+    // Today is purely the day's list: the + 记录 button is the shell
+    // Scaffold's floatingActionButton (HomeShell, Today tab only), so
+    // Material lifts it above snackbars instead of hiding it under them.
+    return _body(context);
   }
 
   /// iOS-style collapsing large title above whatever [child] slivers show.
@@ -161,10 +140,7 @@ class TodayScreenState extends State<TodayScreen> {
               IconButton(
                 key: const Key('shareDayButton'),
                 icon: _sharing
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2))
+                    ? const SmallSpinner(size: 18)
                     : const Icon(Icons.ios_share),
                 tooltip: context.l10n.shareDayTooltip,
                 onPressed: _sharing ? null : _shareDay,
@@ -259,6 +235,7 @@ class TodayScreenState extends State<TodayScreen> {
     return RefreshIndicator(
       onRefresh: reload,
       child: _withTitle(context, [
+        // Room under the last meal for the shell's + 记录 button.
         SliverPadding(
           padding: const EdgeInsets.only(bottom: 96),
           sliver: SliverList.list(children: [

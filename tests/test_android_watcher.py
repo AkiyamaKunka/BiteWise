@@ -80,7 +80,8 @@ def _wait_for(predicate, timeout=30.0):
 
 
 def _file_contains(path, needle):
-    # sort -u -o briefly replaces the history file; tolerate the window.
+    # The watcher renames a freshly sorted history over the old one; tolerate
+    # a read that races the rename.
     try:
         return needle in path.read_text()
     except OSError:
@@ -144,7 +145,7 @@ def test_watcher_end_to_end_lifecycle(tmp_path):
         text = calls.read_text()
         assert "existing.jpg" not in text  # old backlog seeded at startup, never uploaded
         assert ".pending-123" not in text  # in-progress MediaStore names excluded
-        assert _file_contains(history, str(camera / "existing.jpg"))
+        assert _wait_for(lambda: _file_contains(history, str(camera / "existing.jpg")))
 
         # --- FIX 5: a 0-byte file that never stabilizes is skipped, not
         # uploaded, and stays out of history so the next poll retries it ---

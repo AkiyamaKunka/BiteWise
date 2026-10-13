@@ -11,6 +11,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
+import '../../core/outcome_kind.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
 import '../outcome_text.dart';
@@ -37,7 +38,10 @@ class CoverageScreen extends StatefulWidget {
   final int initialLookbackDays;
 
   /// Live read of AppSettings.canAnalyze: a key for the ACTIVE provider and
-  /// no quota latch. A FUNCTION, not a bool — the latch can arm MID-BATCH
+  /// no quota latch. Deliberately NOT canAutoAnalyze: Log/Retry here are
+  /// the user's own request, and a retry after fixing the key or the VPN
+  /// is how the automatic scan's rejected-key/region latch gets lifted —
+  /// the loop below stops at the first such refusal instead. A FUNCTION, not a bool — the latch can arm MID-BATCH
   /// (photo 1's daily-quota 429 sets the pause), and a value captured at
   /// construction would wave photos 2..N into the reserve-then-release
   /// shredder that [_processAll] exists to avoid.
@@ -190,8 +194,12 @@ class _CoverageScreenState extends State<CoverageScreen> {
           // A retryable failure (rate limit, network, quota, missing key)
           // means the NEXT photo cannot succeed either — and its reservation
           // was released, not burned, so this photo's tombstone is already
-          // gone. Cap the damage at one row.
-          if (outcome.retryable) {
+          // gone. Cap the damage at one row. A rejected key is permanent
+          // for a deliberate photo, yet refuses photos 2..N just the same:
+          // stop there too rather than upload every one of them for the
+          // same verdict.
+          if (outcome.retryable ||
+              outcome.errorKind == AnalysisErrorKind.rejectedKey) {
             stopOutcome = outcome;
             stopped = true;
             if (mounted) setState(() => _progressDone = attempted);

@@ -15,10 +15,7 @@ import 'package:calorie_tracker/core/coerce.dart';
 import 'package:calorie_tracker/core/shared_generated.dart';
 import 'package:calorie_tracker/services/nl/executor.dart';
 import 'package:calorie_tracker/services/photo/filename_dates.dart';
-// builders also exports a mealCalorieMismatch; the mismatch vectors pin the
-// EXECUTOR's copy (the task contract), so hide the builders one.
-import 'package:calorie_tracker/services/report/builders.dart'
-    hide mealCalorieMismatch;
+import 'package:calorie_tracker/services/report/builders.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Locate shared/vectors by walking up from the working directory (tests run

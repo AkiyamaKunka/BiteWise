@@ -77,6 +77,36 @@ void main() {
         reason: 'gemini is unreachable from mainland China without one');
   });
 
+  test('a passing key probe tells the store the credentials work — the '
+      'automatic-scan pause lifts without a key edit', () async {
+    // Review 2026-10-12: the owner who fixed the account at the provider's
+    // console and pressed 测试当前服务 still waited a day for the scan.
+    final settings = FakeSettings();
+    await _diag(settings: settings).run().toList();
+    // Probe OK (a generation call for a direct provider), then the photo
+    // round-trip.
+    expect(settings.credentialsProvenCalls, [true, true]);
+
+    // The server's probe is its auth check — no generation endpoint — so
+    // that alone must not lift a region pause; its photo round-trip may.
+    final server = FakeSettings()
+      ..provider = 'server'
+      ..apiKey = 'k'
+      ..serverBaseUrl = 'http://h.test';
+    await _diag(settings: server).run().toList();
+    expect(server.credentialsProvenCalls, [false, true]);
+
+    // A rejected probe proves nothing.
+    final refused = FakeSettings();
+    await _diag(
+            settings: refused,
+            analyzer: _okAnalyzer()
+              ..onValidateKey = (_) async => 'The provider rejected the key.')
+        .run()
+        .toList();
+    expect(refused.credentialsProvenCalls, isEmpty);
+  });
+
   test('rejected key stops at Authentication; out-of-credit only WARNS '
       'and continues', () async {
     final rejected = _okAnalyzer()
@@ -139,6 +169,23 @@ void main() {
     // The owner reads the Chinese page.
     expect(AppLocalizationsZh().diagModelNotFound('gemini-9.9-nope'),
         allOf(contains('找不到模型'), isNot(contains('未被接受'))));
+  });
+
+  test('a region-blocked Gemini stops at Authentication with a VPN fix, '
+      'never "re-copy the key"', () async {
+    final blocked = _okAnalyzer()
+      ..onProbeKey = (_) async => const KeyProbe(
+          KeyProbeResult.regionBlocked,
+          message: 'Gemini is not available from your current network '
+              'region (check the VPN).');
+    final results = await _diag(analyzer: blocked).run().toList();
+    expect(results.last.stage, 'Authentication');
+    expect(results.last.status, DiagStatus.fail);
+    expect(results.last.summary,
+        AppLocalizationsEn().errRegionBlocked('Gemini'));
+    expect(results.last.fix, AppLocalizationsEn().diagFixVpnRegion('Gemini'));
+    expect(results.last.fix, isNot(contains('Re-copy')));
+    expect(AppLocalizationsZh().errRegionBlocked('OpenAI'), contains('VPN'));
   });
 
   testWidgets('a stage that THROWS is reported, never silently green',

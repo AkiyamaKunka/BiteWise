@@ -24,6 +24,23 @@ import 'package:calorie_tracker/data/meals_logic.dart';
 class BaseFakeDao implements MealsDao {
   final List<Meal> meals = [];
   final Map<String, IngestionStatus> ledger = {};
+
+  /// The ownership stamp of each 'processing' row (the real DAO's
+  /// last_seen_at): handed out by [reservePhotoHash], cleared by any other
+  /// write to that hash, so a stale owner's settling write throws
+  /// [ReservationLost] exactly like the SQLite one.
+  final Map<String, String> stamps = {};
+  int _stampSeq = 0;
+
+  void _requireHeld(String hash, String? ownerStamp) {
+    if (ownerStamp == null || hash.isEmpty) return;
+    if (ledger[hash] != IngestionStatus.processing ||
+        stamps[hash] != ownerStamp) {
+      throw const ReservationLost();
+    }
+  }
+
+  String _stamp(String hash) => stamps[hash] = 'fake-stamp-${++_stampSeq}';
   final Map<int, Uint8List> thumbs = {};
 
   /// Rows inserted via [saveMeal] only — lets a test tell an INSERT from an
@@ -72,7 +89,15 @@ class BaseFakeDao implements MealsDao {
   }
 
   @override
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) async {
+  Future<int> saveMeal(Meal meal,
+          {IngestionStatus? markStatus, String? ownerStamp}) =>
+      saveMealWithOutcome(meal, markStatus: markStatus, ownerStamp: ownerStamp)
+          .then((r) => r.id);
+
+  @override
+  Future<MealSaveResult> saveMealWithOutcome(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp}) async {
+    _requireHeld(meal.imageHash, ownerStamp);
     // Mirrors the real DAO's save-time meals-table backstop (2026-10-07):
     // a 'saved' mark for a hash that already has a meal returns that meal
     // instead of inserting a second one.
@@ -80,7 +105,8 @@ class BaseFakeDao implements MealsDao {
       final existing = meals.where((m) => m.imageHash == meal.imageHash);
       if (existing.isNotEmpty) {
         ledger[meal.imageHash] = IngestionStatus.saved;
-        return existing.first.id;
+        stamps.remove(meal.imageHash);
+        return (id: existing.first.id, inserted: false);
       }
     }
     saved.add(meal);
@@ -97,8 +123,9 @@ class BaseFakeDao implements MealsDao {
     ));
     if (markStatus != null && meal.imageHash.isNotEmpty) {
       ledger[meal.imageHash] = markStatus;
+      stamps.remove(meal.imageHash);
     }
-    return id;
+    return (id: id, inserted: true);
   }
 
   @override
@@ -161,17 +188,20 @@ class BaseFakeDao implements MealsDao {
   Future<bool> isDuplicatePhoto(String imageHash) async => duplicatePhoto;
 
   @override
-  Future<PhotoReservation> reservePhotoHash(String imageHash,
+  Future<PhotoReservationResult> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false}) async {
+    if (imageHash.isEmpty) {
+      return (kind: PhotoReservation.reserved, stamp: null);
+    }
     final existing = ledger[imageHash];
     if (existing == null) {
       ledger[imageHash] = IngestionStatus.processing;
-      return PhotoReservation.reserved;
+      return (kind: PhotoReservation.reserved, stamp: _stamp(imageHash));
     }
     // No last_seen_at here, so every 'processing' row reads as FRESH —
-    // another run's live reservation (the real DAO reclaims after 6 h).
+    // another run's live reservation (the real DAO reclaims after 30 min).
     if (existing == IngestionStatus.processing) {
-      return PhotoReservation.inFlight;
+      return (kind: PhotoReservation.inFlight, stamp: null);
     }
     if (reclaimDeliberate &&
         const {
@@ -180,21 +210,39 @@ class BaseFakeDao implements MealsDao {
           IngestionStatus.deleted
         }.contains(existing)) {
       ledger[imageHash] = IngestionStatus.processing;
-      return PhotoReservation.reserved;
+      return (kind: PhotoReservation.reserved, stamp: _stamp(imageHash));
     }
-    return PhotoReservation.claimed;
+    return (kind: PhotoReservation.claimed, stamp: null);
   }
 
   @override
   Future<void> markPhotoHash(String imageHash, IngestionStatus status,
-      {int? mealId}) async {
+      {int? mealId, String? ownerStamp}) async {
+    _requireHeld(imageHash, ownerStamp);
     ledger[imageHash] = status;
+    stamps.remove(imageHash);
   }
 
   @override
-  Future<void> releasePhotoHash(String imageHash) async {
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp}) async {
+    _requireHeld(imageHash, ownerStamp);
     if (ledger[imageHash] == IngestionStatus.processing) {
       ledger.remove(imageHash);
+      stamps.remove(imageHash);
+    }
+  }
+
+  @override
+  Future<void> applyLeftoverVerdict(
+      String imageHash, int mealId, Map<String, dynamic> analysis,
+      {String? ownerStamp}) async {
+    // All-or-nothing like the SQLite transaction: check, then update, and
+    // only then the tombstone.
+    _requireHeld(imageHash, ownerStamp);
+    await updateMealAnalysis(mealId, analysis);
+    if (imageHash.isNotEmpty) {
+      ledger[imageHash] = IngestionStatus.skipped;
+      stamps.remove(imageHash);
     }
   }
 

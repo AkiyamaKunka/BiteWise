@@ -120,6 +120,69 @@ void main() {
       expect(out.retryable, isTrue);
     });
 
+    group('a Hong Kong VPN exit (403 unsupported_country_region_territory)',
+        () {
+      // OpenAI's documented region refusal. Mapped to 'key rejected', it
+      // told the user every ten minutes to fix a key that works.
+      const regionBody = '{"error": {"code": '
+          '"unsupported_country_region_territory", "message": "Country, '
+          'region, or territory not supported", "param": null, "type": '
+          '"request_forbidden"}}';
+
+      test('is a retryable region block, one call, no sleeps, and the zh '
+          'line names OpenAI and the VPN', () async {
+        final s = await settingsWith();
+        var calls = 0;
+        final sleeps = <Duration>[];
+        final a = OpenAiAnalyzer(s,
+            client: MockClient((r) async {
+              calls++;
+              return http.Response(regionBody, 403);
+            }),
+            sleep: (d) async => sleeps.add(d),
+            normalizer: (b) async => b);
+        final out = await a.analyzePhoto(photo);
+        expect(out.retryable, isTrue);
+        expect(calls, 1);
+        expect(sleeps, isEmpty);
+        expect(classifyAnalysisError(out.error),
+            AnalysisErrorKind.regionBlocked);
+        final zh = AppLocalizationsZh();
+        final line = outcomeBody(
+            zh,
+            PhotoOutcome(PhotoOutcomeKind.failed, out.error!,
+                retryable: true,
+                errorKind: classifyAnalysisError(out.error)));
+        expect(line, startsWith('OpenAI 在当前网络地区不可用'));
+        expect(line, contains('VPN'));
+        expect(line, isNot(contains('Key')));
+      });
+
+      test('probeKey / validateKey say region, never a rejected key',
+          () async {
+        final s = await settingsWith();
+        OpenAiAnalyzer make() => OpenAiAnalyzer(s,
+            client: MockClient((r) async => http.Response(regionBody, 403)),
+            sleep: (_) async {},
+            normalizer: (b) async => b);
+        final probe = await make().probeKey('sk-oa');
+        expect(probe.result, KeyProbeResult.regionBlocked);
+        final msg = await make().validateKey('sk-oa');
+        expect(classifyAnalysisError(msg), AnalysisErrorKind.regionBlocked);
+      });
+
+      test('a plain 403 is still a rejected key', () async {
+        final s = await settingsWith();
+        final probe = await OpenAiAnalyzer(s,
+                client: MockClient((r) async => http.Response(
+                    '{"error": {"code": "invalid_api_key"}}', 403)),
+                sleep: (_) async {},
+                normalizer: (b) async => b)
+            .probeKey('sk-oa');
+        expect(probe.result, KeyProbeResult.rejected);
+      });
+    });
+
     test('429 insufficient_quota surfaces a billing message, stays retryable',
         () async {
       final s = await settingsWith();

@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
+import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
@@ -141,6 +142,66 @@ void main() {
     final saved = dao.saved.single;
     expect(saved.date, '2026-10-08');
     expect(saved.time, '12:30 PM');
+  });
+
+  testWidgets('a hand-typed photo save that lands on a meal already logged '
+      'for that photo says so and does not pretend it saved', (tester) async {
+    // The add flow's 手动记录 after a refusal, while the background scan (or
+    // an import) logged the same photo: the DAO backstop returns the
+    // existing meal and writes nothing. The editor must not close as a
+    // plain success with the typed numbers silently gone.
+    final bytes = Uint8List.fromList([1, 2, 3, 4]);
+    final dao = FakeDao()
+      ..seed(Meal(
+        id: 7,
+        date: '2026-07-24',
+        time: '12:00 PM',
+        timestamp: '2026-07-24T12:00:00.000',
+        source: 'app_watch',
+        imageHash: md5.convert(bytes).toString(),
+        analysis: const {'is_food': true, 'total_calories': 500},
+      ));
+    var thumbs = 0;
+    Object? popped;
+    await tester.pumpWidget(host(Builder(
+      builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () async {
+            popped = await Navigator.of(context).push<bool>(
+                MaterialPageRoute(
+                    builder: (_) => MealEditorScreen(
+                        dao: dao,
+                        fromPhoto: IntakePhoto(bytes, 'asset-7', 'IMG_7.JPG',
+                            deliberate: true),
+                        makeThumb: (_) async {
+                          thumbs++;
+                          return Uint8List.fromList([9]);
+                        },
+                        now: clock)));
+          },
+          child: const Text('open'),
+        ),
+      ),
+    )));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+        find.byKey(const Key('editorDescription')), 'Noodles');
+    await tester.enterText(find.byKey(const Key('editorCalories')), '321');
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('This photo was already logged — your numbers were not '
+            'saved; open that meal from Today to edit it.'),
+        findsOneWidget,
+        reason: 'the snackbar survives the pop back to the page below');
+    expect(popped, isTrue,
+        reason: 'back to Today, where the logged meal is shown');
+    expect(dao.saved, isEmpty);
+    expect(dao.meals.single.analysis['total_calories'], 500);
+    expect(thumbs, 0, reason: 'nothing of this save is written');
   });
 
   testWidgets('delete asks first, and cancelling changes nothing',

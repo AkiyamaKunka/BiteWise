@@ -440,8 +440,9 @@ _WEIGHT_KEYWORD_RE = re.compile(
     re.IGNORECASE | re.ASCII,
 )
 _LB_TO_KG = 0.45359237
-MIN_WEIGHT_KG = 30
-MAX_WEIGHT_KG = 300
+# Plausible body-weight range, shared with the app via shared/constants.json.
+from shared_generated import WEIGHT_MAX_KG as MAX_WEIGHT_KG  # noqa: E402
+from shared_generated import WEIGHT_MIN_KG as MIN_WEIGHT_KG  # noqa: E402
 
 
 _FULLWIDTH_DIGITS = str.maketrans("０１２３４５６７８９．", "0123456789.")

@@ -40,21 +40,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rowEaten => '已摄入';
 
   @override
-  String get rowResultLeft => '= 剩余';
-
-  @override
-  String get rowResultOver => '= 超出日常';
-
-  @override
-  String get ringHeadroom => '剩余';
-
-  @override
-  String get ringLeftToday => '今日剩余';
-
-  @override
-  String get ringAboveTypical => '超出日常';
-
-  @override
   String get ringKcalToday => '千卡';
 
   @override
@@ -63,14 +48,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String ringSemanticsTypical(String kcal, String typical) {
-    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡';
+  String ringSemanticsTypical(String kcal, String typical, String burnClause) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡$burnClause';
   }
 
   @override
-  String ringSemanticsAboveTypical(String kcal, String typical) {
-    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡（高于日常）';
+  String ringSemanticsAboveTypical(
+    String kcal,
+    String typical,
+    String burnClause,
+  ) {
+    return '今天已摄入 $kcal 千卡，日常一天约 $typical 千卡$burnClause（高于日常）';
   }
+
+  @override
+  String ringSemanticsBurn(String burn) {
+    return '，含活动消耗 $burn 千卡';
+  }
+
+  @override
+  String get privacyCopyAction => '复制';
 
   @override
   String get todayEmptyTitle => '今天还没有记录。';
@@ -241,10 +238,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSectionPhotos => '照片';
 
   @override
-  String get settingsPhotosFooter => '监控会自动记录新的食物照片；回溯窗口决定补扫时往回看多少天。';
+  String settingsPhotosFooter(int days) {
+    return '监控会自动记录新的食物照片；回溯窗口决定补扫时往回看多少天。开启监控相册时，之后的新照片，以及最近 $days 天内的照片，都会发送给你选择的 AI 服务。';
+  }
 
   @override
   String get settingsRowWatch => '监控相册';
+
+  @override
+  String get watcherDisclosureTitle => '照片会发送给 AI 服务';
+
+  @override
+  String watcherDisclosureBody(String provider, int days) {
+    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。不会发送给本应用的开发者。你可以随时关闭。';
+  }
+
+  @override
+  String get watcherDisclosureContinue => '继续';
 
   @override
   String get settingsRowLookback => '补扫回溯';
@@ -328,6 +338,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRowImport => '导入数据…';
 
   @override
+  String get settingsRowPrivacy => '隐私政策';
+
+  @override
+  String privacyOpenFailed(String url) {
+    return '无法打开隐私政策，网址：$url';
+  }
+
+  @override
   String get settingsRowLanguage => '语言';
 
   @override
@@ -401,6 +419,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apiKeyFooterDefault => '输入即保存。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterGemini =>
+      '从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterOpenai =>
+      '从 platform.openai.com/api-keys 获取。按量付费。仅安全存储在本机。';
+
+  @override
+  String get apiKeyFooterAnthropic =>
+      '从 console.anthropic.com 获取（API keys）。按量付费。仅安全存储在本机。';
 
   @override
   String get apiKeyFooterQwen =>
@@ -614,16 +644,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reportFooter => '由筷拍记录';
-
-  @override
-  String typicalDayHeadroom(String typical, String delta) {
-    return '日常：~$typical 千卡 · 剩余 ~$delta 千卡';
-  }
-
-  @override
-  String typicalDayOver(String typical, String delta) {
-    return '日常：~$typical 千卡 · 超出 ~$delta 千卡';
-  }
 
   @override
   String get historyDayPattern => 'M月d日 EEEE';
@@ -1161,6 +1181,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String outcomeSavedSummary(String name, String kcal) {
+    return '$name —— 约 $kcal 千卡';
+  }
+
+  @override
+  String outcomeLeftoverSummary(String name, String delta, String total) {
+    return '$name —— 减 $delta 千卡，现约 $total 千卡';
+  }
+
+  @override
   String outcomeFailedKeptMsg(String reason) {
     return '照片分析失败，已保留以便重试。$reason';
   }
@@ -1184,7 +1214,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errNoApiKey => '当前服务还没有设置 API Key —— 请在设置里添加。';
 
   @override
-  String get errNoServerKey => '还没有设置服务器地址或上传 Key —— 请在设置里添加。';
+  String get errNoServerKey => '还没有设置服务器地址或上传密钥 —— 请在设置里添加。';
 
   @override
   String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
@@ -1202,6 +1232,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errBadModel => '服务不接受这个模型 —— 请在设置里检查模型名。';
 
   @override
+  String get errBadModelDoubao =>
+      '豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的“开通管理”里开通。';
+
+  @override
+  String get errBadModelOpenRouter =>
+      'OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整模型 ID（厂商/模型），并选择支持图片的模型。';
+
+  @override
+  String get errBilling => '账户余额或额度已用完 —— 请到服务商控制台充值。充值后可以重新分析这张照片。';
+
+  @override
+  String get errBillingText => '账户余额或额度已用完 —— 请到服务商控制台充值。';
+
+  @override
   String get errBadResponse => 'AI 返回的内容应用无法使用。';
 
   @override
@@ -1212,6 +1256,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get mealCardAutoTitle => '🍽️ 已自动记录一餐';
+
+  @override
+  String get mealCardLeftoverTitle => '🍽️ 已扣除剩菜';
 
   @override
   String get notificationChannelName => '总结与餐食';
@@ -1270,6 +1317,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String editorSaveFailed(String error) {
     return '保存失败：$error';
   }
+
+  @override
+  String get editorPhotoAlreadyLogged =>
+      '这张照片已经记录过了 —— 你填的数字没有保存，可以在今天里打开那一餐修改。';
 
   @override
   String editorDeleteFailed(String error) {
@@ -1638,8 +1689,86 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errServerFailed => '你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。';
 
   @override
+  String errServerFailedFinal(String reason) {
+    return '你的服务器没能分析这张照片：$reason。可在 设置 › 照片覆盖检查 里重试。';
+  }
+
+  @override
+  String get serverReasonNoResult => 'AI 的回答无法使用';
+
+  @override
+  String errServerModelRefused(String reason) {
+    return '你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。';
+  }
+
+  @override
+  String nlServerModelRefused(String reason) {
+    return '❌ 你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。';
+  }
+
+  @override
+  String outcomeRetryLaterMsg(String reason) {
+    return '这次没有分析成功（$reason）—— 可以点“重试”，或稍后再选这张照片。';
+  }
+
+  @override
+  String outcomeShareRetryMsg(String reason) {
+    return '分享的照片这次没能分析（$reason）—— 请稍后重新分享。';
+  }
+
+  @override
+  String outcomePickRetryMsg(String reason) {
+    return '这张照片没能分析（$reason）—— 请稍后重新选择它。';
+  }
+
+  @override
+  String get reasonRateLimited => '服务正在限流';
+
+  @override
+  String get reasonQuotaPaused => '今天的额度已用完';
+
+  @override
+  String get reasonBilling => '账户余额或额度已用完，请先充值';
+
+  @override
+  String get reasonNetwork => '网络或服务问题';
+
+  @override
+  String get reasonServerBusy => '你的服务器正在处理另一张照片';
+
+  @override
+  String get reasonServerFailed => '你的服务器这次没能分析';
+
+  @override
+  String get reasonNoApiKey => '还没有设置 API Key';
+
+  @override
+  String get reasonNoServerKey => '还没有设置服务器地址或上传密钥';
+
+  @override
+  String errRegionBlocked(String provider) {
+    return '$provider 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。';
+  }
+
+  @override
+  String get errContentBlocked => 'Gemini 拒绝分析这张照片 —— 可以手动记录。';
+
+  @override
+  String reasonRegionBlocked(String provider) {
+    return '$provider 在当前网络地区不可用';
+  }
+
+  @override
+  String diagFixVpnRegion(String provider) {
+    return '把 VPN 换到 $provider 支持的地区的节点（如美国、日本、新加坡；香港不支持），或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。';
+  }
+
+  @override
+  String get regionProviderFallback => '当前 AI 服务';
+
+  @override
   String errServerRejected(String code) {
-    return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。';
+    return '你的服务器拒绝了这次请求（$code）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 照片覆盖检查 里重试。';
   }
 
   @override
@@ -1650,6 +1779,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watcherOnNoKey => '监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。';
+
+  @override
+  String autoScanPausedKey(String time) {
+    return '监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（$time 自动再试）。';
+  }
+
+  @override
+  String autoScanPausedRegion(String provider, String time) {
+    return '监控相册已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
+  }
+
+  @override
+  String get autoScanPausedTitle => '照片暂时不会自动记录';
 
   @override
   String get watcherLimitedAccess =>
@@ -1707,6 +1849,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importErrNoTables => '这份导出文件没有 tables 部分。';
+
+  @override
+  String get importFromClipboard => '从剪贴板导入';
+
+  @override
+  String importClipboardRead(String size) {
+    return '已读取 $size';
+  }
+
+  @override
+  String get importClipboardEmpty => '剪贴板里没有文本。';
 
   @override
   String get nlSomethingWrong => '❌ 处理这条消息时出了点问题，请重试。';

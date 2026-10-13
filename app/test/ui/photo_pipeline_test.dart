@@ -11,6 +11,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 
 import 'fakes.dart';
@@ -64,7 +66,9 @@ void main() {
     final e2 = pipeline.enqueue(photo(5, 'e2'));
     await Future.wait([e1, e2]);
     await stream.close();
-    await Future<void>.delayed(const Duration(milliseconds: 60));
+    // Polled, not a fixed 60 ms: each photo hashes on a compute() isolate,
+    // and a loaded machine overran the fixed wait (flaky, 2026-10-12).
+    await _until(() => dao.meals.length == 5);
 
     expect(maxActive, 1,
         reason: 'a second concurrent analyzer call is the free-tier RPM '
@@ -216,6 +220,222 @@ void main() {
     final retry = await pipeline.process(_photo());
     expect(retry.kind, PhotoOutcomeKind.saved);
     expect(dao.ledger[_hash], IngestionStatus.saved);
+  });
+
+  group('a rejected key on the automatic scan', () {
+    // A 401/403 (xAI's 400 'Incorrect API key', Gemini auth) used to burn
+    // EVERY scanned photo to 'failed' — watch intake never reclaims, so the
+    // backlog was gone for good once the key was fixed — and stacked one
+    // snackbar per photo (2026-10-12).
+    const rejected = AnalysisOutcome(
+        error: 'The provider rejected the API key. Check Settings.',
+        wall: Duration.zero);
+
+    test('5 photos → no failed rows, all released, ONE notice', () async {
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      var now = DateTime(2026, 10, 12, 9, 0);
+      final analyzer = FakeAnalyzer()..nextPhotoOutcome = rejected;
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: analyzer,
+          notify: notes.add,
+          clock: () => now);
+      final intake = _SinkCapturingIntake();
+      pipeline.bind(intake);
+      final photos = [
+        for (var i = 1; i <= 5; i++)
+          IntakePhoto(Uint8List.fromList([i, i]), 'a$i', 'IMG_$i.jpg'),
+      ];
+      for (final p in photos) {
+        expect(await intake.sink!(p, null), isFalse,
+            reason: 'released to the intake: a later scan re-offers it');
+        now = now.add(const Duration(seconds: 30));
+      }
+      expect(dao.ledger.values, isNot(contains(IngestionStatus.failed)));
+      expect(dao.ledger, isEmpty, reason: 'every hash free to re-offer');
+      expect(notes, hasLength(1));
+      expect(notes.single.errorKind, AnalysisErrorKind.rejectedKey);
+      expect(notes.single.retryable, isTrue);
+
+      // Throttled per process, not silenced: ten minutes on, it says it
+      // again — and once the key works, the same photo saves.
+      now = now.add(PhotoPipeline.rejectedKeyNoticeInterval);
+      final again = await pipeline.process(photos.first);
+      expect(again.retryable, isTrue);
+      expect(notes, hasLength(2));
+
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      expect((await pipeline.process(photos.first)).kind,
+          PhotoOutcomeKind.saved);
+    });
+
+    test('a deliberate add keeps the permanent verdict and its dialog text',
+        () async {
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final out = await PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = rejected,
+              notify: notes.add)
+          .process(_photo(deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.retryable, isFalse);
+      expect(dao.ledger[_hash], IngestionStatus.failed);
+      expect(notes.single, same(out));
+      final zh = AppLocalizationsZh();
+      expect(outcomeBody(zh, out), zh.errRejectedKey);
+    });
+  });
+
+  group('the automatic-analysis latch', () {
+    // After a rejected key every scan re-uploaded the whole lookback window
+    // (Android every 30 min, each launch/resume, iOS refresh): the photos
+    // were released and nothing remembered why (review 2026-10-12).
+    const rejected = AnalysisOutcome(
+        error: 'The provider rejected the API key. Check Settings.',
+        wall: Duration.zero);
+    const region = AnalysisOutcome(
+        error: 'Gemini is not available from your current network region '
+            '(check the VPN).',
+        retryable: true,
+        wall: Duration.zero);
+
+    ({AutoScanLatch latch, List<String> log, void Function() bump}) memLatch() {
+      AnalysisErrorKind? armed;
+      var rev = 0;
+      final log = <String>[];
+      return (
+        latch: AutoScanLatch(
+          blockedKind: () => armed,
+          revision: () => rev,
+          block: (k, r) async {
+            log.add('block:${k.name}@$r');
+            if (r == rev) armed = k;
+          },
+          clear: () async {
+            log.add('clear');
+            armed = null;
+          },
+        ),
+        log: log,
+        bump: () {
+          rev++;
+          armed = null; // what every AppSettings credential setter does
+        },
+      );
+    }
+
+    test('after one rejected key, later watch photos are released WITHOUT '
+        'an analyzer call; a deliberate add still calls it', () async {
+      final dao = FakeDao();
+      var calls = 0;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = rejected
+        ..onAnalyze = () async => calls++;
+      final m = memLatch();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao, analyzer: analyzer, notify: notes.add, latch: m.latch);
+      final intake = _SinkCapturingIntake();
+      pipeline.bind(intake);
+      for (var i = 1; i <= 4; i++) {
+        expect(
+            await intake.sink!(
+                IntakePhoto(Uint8List.fromList([i, i]), 'a$i', 'IMG_$i.jpg'),
+                null),
+            isFalse,
+            reason: 'released: the scan after the fix re-offers it');
+      }
+      expect(calls, 1, reason: 'photos 2..4 never reached the analyzer');
+      expect(m.log, ['block:rejectedKey@0']);
+      expect(dao.ledger, isEmpty, reason: 'latched photos are not reserved');
+      expect(notes, hasLength(1));
+
+      final latched = await pipeline
+          .process(IntakePhoto(Uint8List.fromList([9]), 'a9', 'IMG_9.jpg'));
+      expect(latched.kind, PhotoOutcomeKind.failed);
+      expect(latched.retryable, isTrue);
+      expect(latched.errorKind, AnalysisErrorKind.rejectedKey);
+
+      // The user picks a photo by hand: it bypasses the latch.
+      await pipeline.process(_photo(deliberate: true));
+      expect(calls, 2);
+    });
+
+    test('a success — a deliberate add after the fix — lifts it', () async {
+      final analyzer = FakeAnalyzer()..nextPhotoOutcome = rejected;
+      final m = memLatch();
+      final pipeline =
+          PhotoPipeline(dao: FakeDao(), analyzer: analyzer, latch: m.latch);
+      await pipeline.process(_photo());
+      expect(m.latch.blockedKind(), AnalysisErrorKind.rejectedKey);
+
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      expect((await pipeline.process(_photo(deliberate: true))).kind,
+          PhotoOutcomeKind.saved);
+      expect(m.latch.blockedKind(), isNull);
+      // …and the automatic scan reaches the analyzer again.
+      var calls = 0;
+      analyzer.onAnalyze = () async => calls++;
+      await pipeline.process(
+          IntakePhoto(Uint8List.fromList([7]), 'a7', 'IMG_7.jpg'));
+      expect(calls, 1);
+    });
+
+    test('a refusal of a key the user has since replaced does not latch',
+        () async {
+      final m = memLatch();
+      final analyzer = FakeAnalyzer()..nextPhotoOutcome = rejected;
+      // The key is edited WHILE the photo is at the provider.
+      analyzer.onAnalyze = () async => m.bump();
+      await PhotoPipeline(dao: FakeDao(), analyzer: analyzer, latch: m.latch)
+          .process(_photo());
+      expect(m.log, ['block:rejectedKey@0']);
+      expect(m.latch.blockedKind(), isNull);
+    });
+
+    test('a blocked region on the automatic scan latches and says so ONCE',
+        () async {
+      // regionBlocked used to be released silently on every photo of
+      // every scan: no notice at all, and the whole window re-uploaded.
+      var now = DateTime(2026, 10, 12, 9, 0);
+      var calls = 0;
+      final m = memLatch();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer()
+            ..nextPhotoOutcome = region
+            ..onAnalyze = () async => calls++,
+          notify: notes.add,
+          latch: m.latch,
+          clock: () => now);
+      for (var i = 1; i <= 3; i++) {
+        final out = await pipeline.process(
+            IntakePhoto(Uint8List.fromList([i]), 'a$i', 'IMG_$i.jpg'));
+        expect(out.retryable, isTrue);
+        now = now.add(const Duration(seconds: 30));
+      }
+      expect(calls, 1);
+      expect(m.log, ['block:regionBlocked@0']);
+      expect(notes, hasLength(1));
+      expect(notes.single.errorKind, AnalysisErrorKind.regionBlocked);
+      final zh = AppLocalizationsZh();
+      expect(outcomeSnackbar(zh, notes.single), contains('VPN'));
+    });
+
+    test('a deliberate refusal never arms it', () async {
+      final m = memLatch();
+      await PhotoPipeline(
+              dao: FakeDao(),
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = rejected,
+              latch: m.latch)
+          .process(_photo(deliberate: true));
+      expect(m.log, isEmpty);
+    });
   });
 
   test('bound streams process photos ONE at a time (no Gemini burst)',
@@ -429,8 +649,8 @@ void main() {
       expect(failed.map((o) => o.kind), [PhotoOutcomeKind.failed]);
     });
 
-    test('a transient failure stays silent: the share copy is gone, so '
-        '"kept for retry" would be untrue', () async {
+    test('a transient failure is said ONCE and asks for a re-share: the '
+        'share copy is gone, so silence read as success', () async {
       var analyzed = false;
       final dao = FakeDao();
       final notes = await share(
@@ -442,7 +662,13 @@ void main() {
           [_photo(deliberate: true)],
           (_) => analyzed);
       expect(dao.ledger, isEmpty); // released, no row (spec §2.3)
-      expect(notes, isEmpty);
+      expect(notes, hasLength(1));
+      final o = notes.single;
+      expect(o.kind, PhotoOutcomeKind.failed);
+      expect(o.shared, isTrue);
+      final zh = AppLocalizationsZh();
+      expect(outcomeSnackbar(zh, o), zh.outcomeShareRetryMsg('服务正在限流'));
+      expect(outcomeSnackbar(zh, o), isNot(contains('已保留')));
     });
 
     test('enqueue() (the add flow) is NOT told — it renders its own dialog',
@@ -525,7 +751,8 @@ class _SinkCapturingIntake implements PhotoIntake {
 
 class _ThrowingSaveDao extends FakeDao {
   @override
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) async {
+  Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp}) async {
     throw StateError('disk full');
   }
 }

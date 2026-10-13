@@ -96,31 +96,60 @@ class ReportNotifier {
     description: 'Daily calorie reports and auto-logged meal cards',
   );
 
+  static const Importance _importance = Importance.defaultImportance;
+
+  /// The channel name/description in the app language right now.
+  ({String name, String description}) _channel() =>
+      _channelStrings?.call() ?? _englishChannel;
+
   /// Built per post, not const. Android shows the channel name under
   /// 设置 › 应用 › 筷拍 › 通知 and in every card's long-press menu, and it was
   /// a compile-time English constant — the one English line in an
   /// otherwise Chinese install (API 35 zh-CN emulator, 2026-10-11).
-  /// channelAction `update` is REQUIRED: with the default createIfNotExists
-  /// the plugin never touches an existing channel, so friends' APKs that
-  /// already registered the English one would keep it forever. For an
-  /// existing channel Android only takes the name/description from this
-  /// (same importance; sound/vibration/badge edits are ignored), so the
-  /// user's own per-channel settings survive.
+  /// channelAction stays createIfNotExists: with `update` the plugin creates
+  /// a MISSING channel never, so on a fresh install Android dropped every
+  /// card ("No Channel found", API 35 emulator 2026-10-12). Naming and
+  /// renaming is [_syncChannel]'s job, not the post's.
   NotificationDetails _details() {
-    final channel = _channelStrings?.call() ?? _englishChannel;
+    final channel = _channel();
     return NotificationDetails(
       android: AndroidNotificationDetails(
         _channelId,
         channel.name,
         channelDescription: channel.description,
         icon: androidSmallIcon,
-        importance: Importance.defaultImportance,
+        importance: _importance,
         priority: Priority.defaultPriority,
-        channelAction: AndroidNotificationChannelAction.update,
+        channelAction: AndroidNotificationChannelAction.createIfNotExists,
       ),
       iOS: const DarwinNotificationDetails(),
       macOS: const DarwinNotificationDetails(),
     );
+  }
+
+  /// Create the Android channel, or rename an existing one to the app
+  /// language. Run from init() — which the foreground app and every
+  /// headless run both call before posting — and again before each post so
+  /// a 语言 switch shows on the very next card. For an existing channel
+  /// Android only takes the name/description (same importance), so the
+  /// user's own per-channel settings survive. Never throws: a no-op off
+  /// Android.
+  Future<void> _syncChannel() async {
+    final channel = _channel();
+    try {
+      await _plugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.createNotificationChannel(AndroidNotificationChannel(
+            _channelId,
+            channel.name,
+            description: channel.description,
+            importance: _importance,
+          ));
+    } catch (_) {
+      // No platform plugin (tests); the post's createIfNotExists still
+      // creates a missing channel.
+    }
   }
 
   /// Body provider for the scheduled notification, given the DATE the slot
@@ -161,6 +190,7 @@ class ReportNotifier {
       macOS: DarwinInitializationSettings(),
     );
     await _plugin.initialize(settings: settings);
+    await _syncChannel();
     try {
       // Android 13+ runtime grant; a denial means silent no-shows, so a
       // failure here is non-fatal.
@@ -341,6 +371,7 @@ class ReportNotifier {
       _nextDailyFire = when;
       return;
     }
+    await _syncChannel();
     await _plugin.zonedSchedule(
       id: dailyReportNotificationId,
       title: title,
@@ -373,6 +404,7 @@ class ReportNotifier {
   Future<void> _present(int id, String title, String body) async {
     final presenter = _presenter;
     if (presenter != null) return presenter(id, title, body);
+    await _syncChannel();
     await _plugin.show(
         id: id, title: title, body: body, notificationDetails: _details());
   }

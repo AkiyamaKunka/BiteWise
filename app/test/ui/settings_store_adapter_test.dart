@@ -43,6 +43,18 @@ void main() {
         reason: "another provider's key must never be overwritten");
   });
 
+  test('the 监控相册 disclosure flag defaults off and survives a reload',
+      () async {
+    final (_, store) = await build();
+    expect(store.watcherDisclosureSeen, isFalse);
+    await store.update(watcherDisclosureSeen: true);
+    expect(store.watcherDisclosureSeen, isTrue);
+    final reloaded = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: MemoryKeyStore());
+    expect(reloaded.watcherDisclosureSeen, isTrue);
+  });
+
   test('model is provider-scoped too, with each default preserved',
       () async {
     final (settings, store) = await build();

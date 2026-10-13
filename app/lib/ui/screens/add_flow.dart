@@ -12,6 +12,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show revertedLeftover;
+import '../../core/outcome_kind.dart';
 import '../../services/analyzer/platform_decode.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
@@ -21,6 +22,7 @@ import 'fix_meal_screen.dart';
 import 'leftover_flow.dart';
 import 'meal_editor_screen.dart';
 import '../services.dart';
+import '../widgets/small_spinner.dart';
 
 /// Entry point wired to the FAB. [onChanged] refreshes the Today screen.
 Future<void> openAddFlow(BuildContext context, UiServices services,
@@ -271,14 +273,32 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
         : await PhotoPipeline(
                 dao: widget.services.dao, analyzer: widget.services.analyzer)
             .process(deliberate);
-    if (!mounted) return;
+    if (!mounted) {
+      // Backed out mid-analysis (the AppBar back stays live under the
+      // overlay): the dialog below is gone with the screen, and process()
+      // itself announces only saves, leftover deductions and permanent
+      // failures — not food, duplicate, already logged, still analyzing
+      // and a transient failure were dropped without a word (2026-10-12).
+      // Same filter as the share sheet's, so nothing is said twice.
+      final say = unannouncedOutcome(outcome, picked: true);
+      if (say != null) {
+        try {
+          widget.services.announceOutcome?.call(say);
+        } catch (_) {}
+      }
+      return;
+    }
     setState(() => _analyzing = false);
     // A refused photo must not be a dead end: the model saying "not food"
     // (routine for drinks) or failing permanently would otherwise leave the
     // user with no way to log that photo AT ALL — re-picking it just
     // repeats the same verdict.
+    // Still analyzing too: the run holding the photo may be one iOS cut
+    // off, and until its row goes stale (up to 30 min) OK was the only way
+    // out of a meal the user is looking at right now (2026-10-12).
     final canLogManually = outcome.kind == PhotoOutcomeKind.skipped ||
-        outcome.kind == PhotoOutcomeKind.failed;
+        outcome.kind == PhotoOutcomeKind.failed ||
+        outcome.kind == PhotoOutcomeKind.inFlight;
     // A WRONG automatic leftover verdict was a dead end too: the earlier
     // meal stayed cut, and re-picking the photo repeats the verdict. The
     // escape puts that meal back and logs the photo as its own meal.
@@ -287,7 +307,16 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
             outcome.mealId != null &&
             outcome.previousAnalysis != null &&
             outcome.analysis != null;
+    // A transient failure RELEASED the photo, and nothing re-offers a
+    // picked photo by itself (the automatic scan is off by default and
+    // never looks past its window): the dialog offers the retry instead of
+    // promising one. Not for a missing key — Settings is the fix there.
+    final canRetry = outcome.kind == PhotoOutcomeKind.failed &&
+        outcome.retryable &&
+        outcome.errorKind != AnalysisErrorKind.noApiKey &&
+        outcome.errorKind != AnalysisErrorKind.noServerKey;
     final l = context.l10n;
+    final body = outcomeBody(l, outcome, deliberate: true);
     final choice = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -300,14 +329,23 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
           PhotoOutcomeKind.failed => l.outcomeFailed,
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
-        content: Text(canLogManually
-            ? '${outcomeBody(l, outcome)}\n\n${l.outcomeLogManuallyHint}'
-            : outcomeBody(l, outcome)),
+        // The hint asks "if this IS food" — a verdict an in-flight photo
+        // has not had.
+        content: Text(canLogManually &&
+                outcome.kind != PhotoOutcomeKind.inFlight
+            ? '$body\n\n${l.outcomeLogManuallyHint}'
+            : body),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('ok'),
             child: Text(l.okButton),
           ),
+          if (canRetry)
+            TextButton(
+              key: const Key('retryAnalysisButton'),
+              onPressed: () => Navigator.of(ctx).pop('retry'),
+              child: Text(l.retry),
+            ),
           if (canLogManually)
             FilledButton(
               key: const Key('logManuallyButton'),
@@ -324,6 +362,12 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       ),
     );
     if (!mounted) return;
+    if (choice == 'retry') {
+      // Same photo, same shared FIFO: the hash was released, so this is a
+      // fresh reservation, never a second one.
+      await _analyze(deliberate);
+      return;
+    }
     if (choice == 'undoLeftover') {
       final undone = await _undoLeftover(outcome);
       if (!mounted) return;
@@ -631,10 +675,7 @@ class _AddTextScreenState extends State<AddTextScreen> {
               key: const Key('addTextSend'),
               onPressed: _sending ? null : _describe,
               icon: _sending
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(strokeWidth: 2))
+                  ? const SmallSpinner()
                   : const Icon(Icons.auto_awesome),
               label: Text(_sending
                   ? context.l10n.describeEstimating

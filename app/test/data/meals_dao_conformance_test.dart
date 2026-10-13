@@ -237,7 +237,7 @@ void main() {
       expect(row.mealId, isNull);
       expect(await dao.mealThumb(id), isNull);
       // And the strict automated path must refuse it now — for good.
-      expect(await dao.reservePhotoHash(hash, source: MealSource.appWatch),
+      expect((await dao.reservePhotoHash(hash, source: MealSource.appWatch)).kind,
           PhotoReservation.claimed);
     });
   });

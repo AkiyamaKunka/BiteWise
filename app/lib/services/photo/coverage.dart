@@ -13,7 +13,7 @@ library;
 
 import 'dart:typed_data';
 
-import '../../core/coerce.dart' show normalizeImageHash;
+import '../../core/coerce.dart' show isoDate, normalizeImageHash;
 import '../../core/contracts.dart';
 import 'filename_dates.dart';
 import 'photo_library.dart';
@@ -237,7 +237,7 @@ class CoverageAuditor {
   /// md5s of the leftover photos recorded on meals dated [from]..[to]
   /// (applyLeftover stores them; core/leftover_logic.dart).
   Future<Set<String>> _leftoverPhotoHashes(DateTime from, DateTime to) async {
-    final meals = await _dao.mealsBetween(_isoDay(from), _isoDay(to));
+    final meals = await _dao.mealsBetween(isoDate(from), isoDate(to));
     return {
       for (final m in meals)
         if (m.analysis['leftover'] case final Map<dynamic, dynamic> lo)
@@ -267,7 +267,3 @@ class CoverageAuditor {
         capturedAt: capturedAt, deliberate: deliberate);
   }
 }
-
-String _isoDay(DateTime d) => '${d.year.toString().padLeft(4, '0')}-'
-    '${d.month.toString().padLeft(2, '0')}-'
-    '${d.day.toString().padLeft(2, '0')}';

@@ -77,7 +77,8 @@ enum IngestionStatus { processing, saved, skipped, failed, deleted }
 /// Two refusals, told apart on purpose (2026-10-07): a row another run is
 /// STILL WORKING ON is not a verdict. iOS can expire the ~30 s background
 /// grant mid-analysis, which leaves that run's 'processing' row behind
-/// until the launch sweep releases it (up to 15 min); until then both
+/// until a cold launch sweeps it or it goes stale (appProcessingStaleAge,
+/// 30 min); until then both
 /// automated paths read the refusal as "already logged", marched the
 /// watermark / seen-set past the photo, and never offered it again.
 enum PhotoReservation {
@@ -95,9 +96,45 @@ enum PhotoReservation {
   inFlight,
 }
 
+/// [MealsDao.reservePhotoHash]'s answer. On [PhotoReservation.reserved]
+/// with a non-empty hash, [stamp] is the exact last_seen_at the DAO wrote:
+/// the run's proof that the 'processing' row is still ITS row. A row goes
+/// stale after appProcessingStaleAge and another run may reclaim it, but a
+/// run is not dead just because its process was SUSPENDED (iOS
+/// backgrounding, Android's freezer) — it wakes up later still holding a
+/// verdict (2026-10-12). Every write that settles the reservation passes
+/// the stamp back; null (empty hash, or a refusal) means "nothing held".
+typedef PhotoReservationResult = ({PhotoReservation kind, String? stamp});
+
+/// Thrown by a settling write ([MealsDao.saveMeal], [MealsDao.markPhotoHash],
+/// [MealsDao.releasePhotoHash]) given a reservation stamp when the row no
+/// longer is 'processing' with that stamp: another run reclaimed it, the
+/// user logged the photo by hand, or the launch sweep released it. Nothing
+/// was written; the caller drops its verdict without a word.
+class ReservationLost implements Exception {
+  const ReservationLost();
+  @override
+  String toString() => 'ReservationLost';
+}
+
+/// What [MealsDao.saveMealWithOutcome] did: [inserted] is false when the
+/// meals-table backstop found a meal for the same photo hash and returned
+/// ITS [id] — nothing from this save was written to the meals table.
+typedef MealSaveResult = ({int id, bool inserted});
+
 /// Persistence seam (spec §2, §5 read shapes).
 abstract class MealsDao {
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus});
+  /// [ownerStamp]: the [PhotoReservationResult.stamp] this save settles —
+  /// checked in the same transaction, [ReservationLost] when it no longer
+  /// holds. Null = an unconditional save (the editor's deliberate log).
+  Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp});
+
+  /// [saveMeal] that also says whether the row was inserted or an existing
+  /// meal for the same photo was returned. The editor's photo save needs
+  /// the difference: the user's typed numbers must not vanish silently.
+  Future<MealSaveResult> saveMealWithOutcome(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp});
   Future<void> updateMealAnalysis(int mealId, Map<String, dynamic> analysis);
 
   /// Editor save (spec §9): rewrites the analysis AND optionally moves the
@@ -114,11 +151,23 @@ abstract class MealsDao {
   /// Reserve the hash before analysis (see [PhotoReservation]). Set
   /// [reclaimDeliberate] on user-initiated adds (reclaims failed/skipped/
   /// deleted rows, the "deliberate re-send" rule).
-  Future<PhotoReservation> reservePhotoHash(String imageHash,
+  Future<PhotoReservationResult> reservePhotoHash(String imageHash,
       {required String source, bool reclaimDeliberate = false});
+
+  /// With [ownerStamp], only a 'processing' row carrying that stamp is
+  /// settled, else [ReservationLost] (see [PhotoReservationResult]).
   Future<void> markPhotoHash(String imageHash, IngestionStatus status,
-      {int? mealId});
-  Future<void> releasePhotoHash(String imageHash);
+      {int? mealId, String? ownerStamp});
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp});
+
+  /// An automatic leftover verdict, settled in ONE transaction: the
+  /// [ownerStamp] check, the 'skipped' tombstone for [imageHash] and the
+  /// deduction written to meal [mealId] (as [updateMealAnalysis]). Two
+  /// separate writes lost the deduction silently when the app was killed,
+  /// or the update threw, between them. [ReservationLost] as [markPhotoHash].
+  Future<void> applyLeftoverVerdict(
+      String imageHash, int mealId, Map<String, dynamic> analysis,
+      {String? ownerStamp});
   Future<void> reclaimStaleProcessing(); // launch-time sweep (spec §2 delta)
 
   /// Forget every verdict from [source] that did not become a meal
@@ -128,9 +177,10 @@ abstract class MealsDao {
   /// being sent bytes it could not read are worthless (migrations.dart).
   Future<int> reofferUnsavedVerdicts({required String source});
 
-  /// Read-only ledger lookup for the coverage audit: the status of one
-  /// photo hash (and the meal it became, when saved). Null = never seen —
-  /// the photo has NOT been through intake.
+  /// Read-only ledger lookup for the coverage audit (and for a pipeline run
+  /// that lost its reservation): the status of one photo hash (and the meal
+  /// it became, when saved). Null = never seen — the photo has NOT been
+  /// through intake.
   Future<({IngestionStatus status, int? mealId})?> photoStatus(
       String imageHash);
 
@@ -326,6 +376,11 @@ enum KeyProbeResult {
   /// activated. Picking a model is the fix, NOT a new key — reporting
   /// this as [rejected] sent users to re-copy a key that worked.
   modelNotFound,
+
+  /// The key was not judged: the provider does not serve the network's
+  /// region (Gemini behind a Hong Kong VPN exit). A different VPN node is
+  /// the fix, NOT a new key.
+  regionBlocked,
 
   /// The provider refused the credential, or the request could not be made.
   rejected,

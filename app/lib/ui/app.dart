@@ -301,15 +301,27 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     _todayKey.currentState?.reload();
     if (_index == 1) _historyKey.currentState?.reload();
     if (!s.settings.watcherEnabled) return;
-    // One predicate for "an analysis could succeed" (key + no quota latch):
-    // don't read photo bytes for nothing.
-    if (!s.settings.canAnalyze) return;
+    unawaited(_resumeCatchUp());
+  }
+
+  Future<void> _resumeCatchUp() async {
+    final s = widget.services;
+    // The background run (its own isolate and preferences cache) may have
+    // latched the automatic scan on a rejected key / blocked region while
+    // we were away — or an analysis there may have lifted it.
+    try {
+      await s.settings.reloadAutoScanBlock();
+    } catch (_) {}
+    // One predicate for "an automatic analysis could succeed" (key, no
+    // quota latch, no rejected-key/region latch): don't read photo bytes
+    // for nothing.
+    if (!mounted || !s.settings.canAutoAnalyze) return;
     // Resume catch-up (full lookback window): the change-notify watcher is
     // frozen with the process on EMUI-class OSes, so photos taken while the
     // app was backgrounded surface here. The md5 ledger + in-session seen
     // set make repeat resumes near-free. Refresh again once the scan's
     // emissions have had a chance to process.
-    unawaited(s.photoIntake
+    await s.photoIntake
         ?.backfillScan()
         .then((_) {}, onError: (Object _) {})
         .then((_) => Future<void>.delayed(const Duration(seconds: 15)))
@@ -317,7 +329,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       if (!mounted) return;
       _todayKey.currentState?.reload();
       if (_index == 1) _historyKey.currentState?.reload();
-    }));
+    });
   }
 
   @override
@@ -334,16 +346,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               dao: s.dao,
               executor: s.executor,
               thumbs: s.thumbs,
-              garminDaily: s.garminDaily,
-              // The + button lives INSIDE TodayScreen (above its chat box),
-              // not as a Scaffold FAB — a Scaffold FAB floats exactly over
-              // the chat box's send button.
-              // The SIGNAL, not a Today-only reload: the chat fix/delete,
-              // describe, manual and leftover paths write meals directly,
-              // and on iOS the pending OS card must be re-armed with them
-              // (_onMealsChanged reloads Today + History and re-arms).
-              onAdd: () => openAddFlow(context, s,
-                  onChanged: () async => signalMealsChanged())),
+              garminDaily: s.garminDaily),
           HistoryScreen(key: _historyKey, dao: s.dao, thumbs: s.thumbs),
           BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
           SettingsScreen(
@@ -363,9 +366,28 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             nextSummaryAt: s.nextSummaryAt,
             lastBackgroundScan: s.lastBackgroundScan,
             backgroundRefreshEnabled: s.backgroundRefreshEnabled,
+            changes: s.settingsChanges,
           ),
         ],
       ),
+      // The + 记录 button is a REAL Scaffold FAB (Today tab only — Body has
+      // its own), so Material lifts it above this messenger's snackbars.
+      // Until 2026-10-12 it was a Positioned inside TodayScreen, kept out
+      // of the Scaffold so it would not cover the chat box's send button
+      // (the chat box went 2026-07-31) — and every snackbar covered IT.
+      floatingActionButton: _index == 0
+          ? FloatingActionButton.extended(
+              key: const Key('addMealFab'),
+              // The SIGNAL, not a Today-only reload: the fix/delete,
+              // describe, manual and leftover paths write meals directly,
+              // and on iOS the pending OS card must be re-armed with them
+              // (_onMealsChanged reloads Today + History and re-arms).
+              onPressed: () => openAddFlow(context, s,
+                  onChanged: () async => signalMealsChanged()),
+              icon: const Icon(Icons.add),
+              label: Text(context.l10n.fabLog),
+            )
+          : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
@@ -449,6 +471,10 @@ class _StartupErrorAppState extends State<StartupErrorApp>
 
   @override
   Widget build(BuildContext context) {
+    // No AppLocalizations exists yet when startup fails, so the two lines
+    // follow the phone's language directly.
+    final zh =
+        WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh';
     return MaterialApp(
       title: 'Bitewise',
       home: Scaffold(
@@ -460,15 +486,17 @@ class _StartupErrorAppState extends State<StartupErrorApp>
               children: [
                 const Icon(Icons.error_outline, size: 48),
                 const SizedBox(height: 12),
-                const Text('CalorieTracker could not start.'),
+                Text(zh ? '筷拍无法启动。' : 'Bitewise could not start.'),
                 const SizedBox(height: 8),
-                Text(widget.error, textAlign: TextAlign.center),
+                Text(widget.error,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 12)),
                 if (widget.onRetry != null) ...[
                   const SizedBox(height: 16),
                   TextButton(
                     key: const Key('startupRetry'),
                     onPressed: _retry,
-                    child: const Text('Retry'),
+                    child: Text(zh ? '重试' : 'Retry'),
                   ),
                 ],
               ],

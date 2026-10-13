@@ -167,6 +167,40 @@ void main() {
   // usually an unreachable or busy server — used to end in covStopped,
   // which blamed "quota pause or missing key" and sent the owner to check a
   // key that was fine. The stop now names the failure that caused it.
+  testWidgets('a rejected key stops the bulk run after ONE photo too',
+      (tester) async {
+    // Permanent for a deliberate photo, so the retryable stop missed it:
+    // a Retry-all uploaded every photo for the same 服务拒绝了 API Key.
+    library.assets = [
+      FakeAsset('r1', 'R1.jpg', DateTime(2026, 7, 26, 8), bytesOf(1)),
+      FakeAsset('r2', 'R2.jpg', DateTime(2026, 7, 26, 9), bytesOf(2)),
+    ];
+    dao.ledger['h1'] = IngestionStatus.skipped;
+    dao.ledger['h2'] = IngestionStatus.skipped;
+    await tester.pumpWidget(MaterialApp(
+      home: CoverageScreen(
+        auditor: auditor,
+        processPhoto: (photo) async {
+          processed.add(photo);
+          return const PhotoOutcome(PhotoOutcomeKind.failed,
+              'The provider rejected the API key. Check Settings.',
+              errorKind: AnalysisErrorKind.rejectedKey);
+        },
+        requestPhotoPermission: () async => true,
+        initialLookbackDays: 2,
+        library: library,
+      ),
+    ));
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('reanalyzeAllSkipped')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmBulkAction')));
+    await tester.pumpAndSettle();
+    expect(processed, hasLength(1));
+    expect(find.textContaining('stopped after 1 of 2'), findsOneWidget);
+  });
+
   Future<void> stopOnNetworkFailure(WidgetTester tester, Locale locale) async {
     library.assets = [
       FakeAsset('n1', 'N1.jpg', DateTime(2026, 7, 26, 8), bytesOf(1)),

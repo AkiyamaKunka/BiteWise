@@ -152,36 +152,6 @@ abstract class AppLocalizations {
   /// **'Eaten'**
   String get rowEaten;
 
-  /// No description provided for @rowResultLeft.
-  ///
-  /// In en, this message translates to:
-  /// **'= Left'**
-  String get rowResultLeft;
-
-  /// No description provided for @rowResultOver.
-  ///
-  /// In en, this message translates to:
-  /// **'= Above typical'**
-  String get rowResultOver;
-
-  /// No description provided for @ringHeadroom.
-  ///
-  /// In en, this message translates to:
-  /// **'headroom'**
-  String get ringHeadroom;
-
-  /// No description provided for @ringLeftToday.
-  ///
-  /// In en, this message translates to:
-  /// **'left today'**
-  String get ringLeftToday;
-
-  /// No description provided for @ringAboveTypical.
-  ///
-  /// In en, this message translates to:
-  /// **'above typical'**
-  String get ringAboveTypical;
-
   /// No description provided for @ringKcalToday.
   ///
   /// In en, this message translates to:
@@ -194,17 +164,33 @@ abstract class AppLocalizations {
   /// **'{kcal} kcal eaten today'**
   String ringSemantics(String kcal);
 
-  /// Screen-reader sentence for the Today ring at or under the typical day.
+  /// Screen-reader sentence for the Today ring at or under the typical day. {typical} is the Typical row's number; {burnClause} is ringSemanticsBurn when Garmin active burn extends the budget, else empty.
   ///
   /// In en, this message translates to:
-  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day'**
-  String ringSemanticsTypical(String kcal, String typical);
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day{burnClause}'**
+  String ringSemanticsTypical(String kcal, String typical, String burnClause);
 
-  /// Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state.
+  /// Screen-reader sentence for the Today ring above the typical day. Neutral wording: the ring has no shame state. {typical} is the Typical row's number; {burnClause} is ringSemanticsBurn when Garmin active burn extends the budget, else empty.
   ///
   /// In en, this message translates to:
-  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day (above typical)'**
-  String ringSemanticsAboveTypical(String kcal, String typical);
+  /// **'{kcal} kcal eaten today, of a {typical} kcal typical day{burnClause} (above typical)'**
+  String ringSemanticsAboveTypical(
+    String kcal,
+    String typical,
+    String burnClause,
+  );
+
+  /// Clause inserted into the ring's screen-reader sentence right after the typical day when Garmin active burn is above zero (the budget is typical + burn). Starts with its own separator.
+  ///
+  /// In en, this message translates to:
+  /// **', plus {burn} kcal active burn'**
+  String ringSemanticsBurn(String burn);
+
+  /// Snackbar action when the privacy policy could not be opened: copies its address to the clipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy'**
+  String get privacyCopyAction;
 
   /// No description provided for @todayEmptyTitle.
   ///
@@ -488,17 +474,35 @@ abstract class AppLocalizations {
   /// **'Photos'**
   String get settingsSectionPhotos;
 
-  /// No description provided for @settingsPhotosFooter.
+  /// Photos section footer. {days} is the current lookback window: turning the watcher on sweeps it right away, so photos taken before the user agreed are sent too.
   ///
   /// In en, this message translates to:
-  /// **'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach.'**
-  String get settingsPhotosFooter;
+  /// **'The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos — and, when you turn it on, the photos from the last {days, plural, =1{day} other{{days} days}} — are sent to the AI service you chose.'**
+  String settingsPhotosFooter(int days);
 
   /// No description provided for @settingsRowWatch.
   ///
   /// In en, this message translates to:
   /// **'Watch Camera Roll'**
   String get settingsRowWatch;
+
+  /// No description provided for @watcherDisclosureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos will be sent to your AI service'**
+  String get watcherDisclosureTitle;
+
+  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan. {days} is the lookback window the enable sweeps right away.
+  ///
+  /// In en, this message translates to:
+  /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
+  String watcherDisclosureBody(String provider, int days);
+
+  /// No description provided for @watcherDisclosureContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get watcherDisclosureContinue;
 
   /// No description provided for @settingsRowLookback.
   ///
@@ -644,6 +648,18 @@ abstract class AppLocalizations {
   /// **'Import Data…'**
   String get settingsRowImport;
 
+  /// No description provided for @settingsRowPrivacy.
+  ///
+  /// In en, this message translates to:
+  /// **'Privacy Policy'**
+  String get settingsRowPrivacy;
+
+  /// No description provided for @privacyOpenFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not open the privacy policy. It is at {url}'**
+  String privacyOpenFailed(String url);
+
   /// No description provided for @settingsRowLanguage.
   ///
   /// In en, this message translates to:
@@ -781,6 +797,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'The key saves as you type. Stored securely on this device only.'**
   String get apiKeyFooterDefault;
+
+  /// No description provided for @apiKeyFooterGemini.
+  ///
+  /// In en, this message translates to:
+  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.'**
+  String get apiKeyFooterGemini;
+
+  /// No description provided for @apiKeyFooterOpenai.
+  ///
+  /// In en, this message translates to:
+  /// **'From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.'**
+  String get apiKeyFooterOpenai;
+
+  /// No description provided for @apiKeyFooterAnthropic.
+  ///
+  /// In en, this message translates to:
+  /// **'From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.'**
+  String get apiKeyFooterAnthropic;
 
   /// No description provided for @apiKeyFooterQwen.
   ///
@@ -1166,18 +1200,6 @@ abstract class AppLocalizations {
   /// **'Logged with Bitewise'**
   String get reportFooter;
 
-  /// No description provided for @typicalDayHeadroom.
-  ///
-  /// In en, this message translates to:
-  /// **'Typical day: ~{typical} kcal · ~{delta} kcal headroom'**
-  String typicalDayHeadroom(String typical, String delta);
-
-  /// No description provided for @typicalDayOver.
-  ///
-  /// In en, this message translates to:
-  /// **'Typical day: ~{typical} kcal · ~{delta} kcal above typical'**
-  String typicalDayOver(String typical, String delta);
-
   /// intl DateFormat PATTERN for dated history-day labels, not display text. en: "Tuesday, Jul 15"; zh: "7月15日 星期二".
   ///
   /// In en, this message translates to:
@@ -1469,13 +1491,13 @@ abstract class AppLocalizations {
   /// Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.'**
+  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in Bitewise.'**
   String coachPartialGoal(String delta);
 
   /// Coach line for a day logged far below the usual day: more likely missing meals than a real cut.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.'**
+  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in Bitewise.'**
   String coachPartialTypical(String delta);
 
   /// No description provided for @coachOnTarget.
@@ -2120,6 +2142,18 @@ abstract class AppLocalizations {
   /// **'Leftovers deducted: {summary}'**
   String outcomeLeftoverMsg(String summary);
 
+  /// The {summary} of outcomeSavedMsg: the meal and its calories.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} — ~{kcal} kcal'**
+  String outcomeSavedSummary(String name, String kcal);
+
+  /// The {summary} of outcomeLeftoverMsg: the meal, the calories cut and its new total.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} — −{delta} kcal, now ~{total} kcal'**
+  String outcomeLeftoverSummary(String name, String delta, String total);
+
   /// No description provided for @outcomeFailedKeptMsg.
   ///
   /// In en, this message translates to:
@@ -2198,6 +2232,30 @@ abstract class AppLocalizations {
   /// **'The provider rejected the model — check the model name in Settings.'**
   String get errBadModel;
 
+  /// No description provided for @errBadModelDoubao.
+  ///
+  /// In en, this message translates to:
+  /// **'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.'**
+  String get errBadModelDoubao;
+
+  /// No description provided for @errBadModelOpenRouter.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.'**
+  String get errBadModelOpenRouter;
+
+  /// No description provided for @errBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider account is out of balance or credits — top it up in the provider\'s console. After topping up you can analyze this photo again.'**
+  String get errBilling;
+
+  /// No description provided for @errBillingText.
+  ///
+  /// In en, this message translates to:
+  /// **'The provider account is out of balance or credits — top it up in the provider\'s console.'**
+  String get errBillingText;
+
   /// No description provided for @errBadResponse.
   ///
   /// In en, this message translates to:
@@ -2221,6 +2279,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'🍽️ Meal logged automatically'**
   String get mealCardAutoTitle;
+
+  /// No description provided for @mealCardLeftoverTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'🍽️ Leftovers deducted'**
+  String get mealCardLeftoverTitle;
 
   /// Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
   ///
@@ -2323,6 +2387,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not save: {error}'**
   String editorSaveFailed(String error);
+
+  /// No description provided for @editorPhotoAlreadyLogged.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was already logged — your numbers were not saved; open that meal from Today to edit it.'**
+  String get editorPhotoAlreadyLogged;
 
   /// No description provided for @editorDeleteFailed.
   ///
@@ -2846,10 +2916,130 @@ abstract class AppLocalizations {
   /// **'Your server could not analyze this photo this time — it is kept and retried later.'**
   String get errServerFailed;
 
+  /// No description provided for @errServerFailedFinal.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server could not analyze this photo: {reason}. You can retry it from Settings › Photo Coverage.'**
+  String errServerFailedFinal(String reason);
+
+  /// No description provided for @serverReasonNoResult.
+  ///
+  /// In en, this message translates to:
+  /// **'the AI\'s answer was unusable'**
+  String get serverReasonNoResult;
+
+  /// No description provided for @errServerModelRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.'**
+  String errServerModelRefused(String reason);
+
+  /// No description provided for @nlServerModelRefused.
+  ///
+  /// In en, this message translates to:
+  /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.'**
+  String nlServerModelRefused(String reason);
+
+  /// No description provided for @outcomeRetryLaterMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was not analyzed this time ({reason}) — tap Retry, or pick it again later.'**
+  String outcomeRetryLaterMsg(String reason);
+
+  /// No description provided for @outcomeShareRetryMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'The shared photo was not analyzed this time ({reason}) — share it again later.'**
+  String outcomeShareRetryMsg(String reason);
+
+  /// No description provided for @outcomePickRetryMsg.
+  ///
+  /// In en, this message translates to:
+  /// **'This photo was not analyzed ({reason}) — pick it again later.'**
+  String outcomePickRetryMsg(String reason);
+
+  /// No description provided for @reasonRateLimited.
+  ///
+  /// In en, this message translates to:
+  /// **'the provider is rate-limiting'**
+  String get reasonRateLimited;
+
+  /// No description provided for @reasonQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'the daily quota was hit'**
+  String get reasonQuotaPaused;
+
+  /// No description provided for @reasonBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'the provider account is out of balance — top it up first'**
+  String get reasonBilling;
+
+  /// No description provided for @reasonNetwork.
+  ///
+  /// In en, this message translates to:
+  /// **'network or service issue'**
+  String get reasonNetwork;
+
+  /// No description provided for @reasonServerBusy.
+  ///
+  /// In en, this message translates to:
+  /// **'your server is busy with another analysis'**
+  String get reasonServerBusy;
+
+  /// No description provided for @reasonServerFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'your server could not analyze it'**
+  String get reasonServerFailed;
+
+  /// No description provided for @reasonNoApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'no API key is set'**
+  String get reasonNoApiKey;
+
+  /// No description provided for @reasonNoServerKey.
+  ///
+  /// In en, this message translates to:
+  /// **'no server address or upload key is set'**
+  String get reasonNoServerKey;
+
+  /// No description provided for @errRegionBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).'**
+  String errRegionBlocked(String provider);
+
+  /// No description provided for @errContentBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'Gemini declined to analyze this photo — you can log it manually.'**
+  String get errContentBlocked;
+
+  /// No description provided for @reasonRegionBlocked.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider} is not available from this network region'**
+  String reasonRegionBlocked(String provider);
+
+  /// No description provided for @diagFixVpnRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch the VPN to a node in a region {provider} serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.'**
+  String diagFixVpnRegion(String provider);
+
+  /// No description provided for @regionProviderFallback.
+  ///
+  /// In en, this message translates to:
+  /// **'This AI service'**
+  String get regionProviderFallback;
+
   /// No description provided for @errServerRejected.
   ///
   /// In en, this message translates to:
-  /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Coverage.'**
+  /// **'Your server rejected this request ({code}). Update the app and the server to matching versions, then retry from Settings › Photo Coverage.'**
   String errServerRejected(String code);
 
   /// No description provided for @watcherPermissionDenied.
@@ -2869,6 +3059,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Watching is on, but photos won\'t be analyzed until a working API key is set above.'**
   String get watcherOnNoKey;
+
+  /// No description provided for @autoScanPausedKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch Camera Roll is paused: the AI service rejected the API key. Photos are kept — changing the key in AI Provider, or a passing Test This Provider, resumes it now (next try: {time}).'**
+  String autoScanPausedKey(String time);
+
+  /// No description provided for @autoScanPausedRegion.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).'**
+  String autoScanPausedRegion(String provider, String time);
+
+  /// No description provided for @autoScanPausedTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos are not being logged automatically'**
+  String get autoScanPausedTitle;
 
   /// No description provided for @watcherLimitedAccess.
   ///
@@ -2933,7 +3141,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportShareSubject.
   ///
   /// In en, this message translates to:
-  /// **'CalorieTracker data export'**
+  /// **'Bitewise data export'**
   String get exportShareSubject;
 
   /// No description provided for @importErrNotJson.
@@ -2945,13 +3153,13 @@ abstract class AppLocalizations {
   /// No description provided for @importErrNotExport.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a CalorieTracker export.'**
+  /// **'That file is not a Bitewise export.'**
   String get importErrNotExport;
 
   /// No description provided for @importErrWrongFormatTag.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a CalorieTracker export (wrong format tag).'**
+  /// **'That file is not a Bitewise export (wrong format tag).'**
   String get importErrWrongFormatTag;
 
   /// No description provided for @importErrBadVersion.
@@ -2965,6 +3173,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'That export has no tables section.'**
   String get importErrNoTables;
+
+  /// No description provided for @importFromClipboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Import from clipboard'**
+  String get importFromClipboard;
+
+  /// No description provided for @importClipboardRead.
+  ///
+  /// In en, this message translates to:
+  /// **'Read {size} from the clipboard'**
+  String importClipboardRead(String size);
+
+  /// No description provided for @importClipboardEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'There is no text on the clipboard.'**
+  String get importClipboardEmpty;
 
   /// No description provided for @nlSomethingWrong.
   ///

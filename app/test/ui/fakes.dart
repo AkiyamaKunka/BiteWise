@@ -132,6 +132,20 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   DateTime? quotaPauseUntil;
   @override
   bool get canAnalyze => apiKey.trim().isNotEmpty && !isQuotaPaused;
+  @override
+  bool get canAutoAnalyze => canAnalyze && autoScanBlockedKind == null;
+  @override
+  String? autoScanBlockedKind;
+  @override
+  DateTime? autoScanBlockedUntil;
+  int reloadAutoScanBlockCalls = 0;
+  @override
+  Future<void> reloadAutoScanBlock() async => reloadAutoScanBlockCalls++;
+  /// One entry per [credentialsProven] call: its reachedGeneration.
+  final List<bool> credentialsProvenCalls = [];
+  @override
+  Future<void> credentialsProven({required bool reachedGeneration}) async =>
+      credentialsProvenCalls.add(reachedGeneration);
   /// Provider-scoped MODELS too — the real store keeps one per provider,
   /// and a shared field made provider-switch tests pass while production
   /// would have shown Gemini's model under Doubao (review 2026-07-31).
@@ -149,6 +163,8 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   @override
   bool watcherEnabled;
   @override
+  bool watcherDisclosureSeen;
+  @override
   String dietaryProfile;
   @override
   String serverBaseUrl = '';
@@ -165,6 +181,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     this.reportTime = '21:00',
     this.summaryEnabled = true,
     this.watcherEnabled = false,
+    this.watcherDisclosureSeen = false,
     this.dietaryProfile = '',
   })  : keysByProvider = keys ?? {'gemini': apiKey},
         modelsByProvider = models ??
@@ -202,6 +219,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     String? reportTime,
     bool? summaryEnabled,
     bool? watcherEnabled,
+    bool? watcherDisclosureSeen,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -224,6 +242,9 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     if (reportTime != null) this.reportTime = reportTime;
     if (summaryEnabled != null) this.summaryEnabled = summaryEnabled;
     if (watcherEnabled != null) this.watcherEnabled = watcherEnabled;
+    if (watcherDisclosureSeen != null) {
+      this.watcherDisclosureSeen = watcherDisclosureSeen;
+    }
     if (dietaryProfile != null) this.dietaryProfile = dietaryProfile;
     if (serverBaseUrl != null) this.serverBaseUrl = serverBaseUrl;
     if (serverBackend != null) this.serverBackend = serverBackend;
@@ -318,6 +339,7 @@ UiServices makeServices({
   FakeIntake? intake,
   bool grantPhotoPermission = true,
   Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto,
+  void Function(PhotoOutcome outcome)? announceOutcome,
   Future<void> Function()? openSystemSettings,
   PhotoLibrary? photoLibrary,
 }) {
@@ -335,6 +357,7 @@ UiServices makeServices({
     reports: FakeReports(),
     requestPhotoPermission: () async => grantPhotoPermission,
     processPhoto: processPhoto,
+    announceOutcome: announceOutcome,
     openSystemSettings: openSystemSettings,
     photoLibrary: photoLibrary,
   );

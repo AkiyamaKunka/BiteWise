@@ -9,9 +9,10 @@ library;
 import 'package:intl/intl.dart';
 
 import '../core/coerce.dart';
-import '../data/meals_logic.dart' as logic;
 import '../core/contracts.dart';
 import 'meal_edit_logic.dart' show isRealIsoDate, parseClock;
+
+export '../core/coerce.dart' show isFoodTruthy, isoDate;
 
 final NumberFormat _thousands = NumberFormat('#,##0');
 
@@ -22,27 +23,27 @@ final NumberFormat _thousands = NumberFormat('#,##0');
 String formatKcal(num v) =>
     _thousands.format(v is double && !v.isFinite ? 0 : v.round());
 
-/// Python truthiness for is_food (spec §3.5): false, 0, 0.0, '', [], {},
-/// null → false; every other value → true. Food filtering uses THIS, never
-/// `== true`.
-bool isFoodTruthy(dynamic v) {
-  if (v == null || v == false) return false;
-  if (v == true) return true;
-  if (v is num) return v != 0;
-  if (v is String) return v.isNotEmpty;
-  if (v is List) return v.isNotEmpty;
-  if (v is Map) return v.isNotEmpty;
-  return true;
-}
-
 bool isFoodMeal(Meal m) => isFoodTruthy(m.analysis['is_food']);
 
 /// Meal description with a plain fallback (renderers never assume a string).
-String mealDescription(Map<String, dynamic> analysis) {
+/// Screens pass `fallback: l.nlUnnamedMeal` so an analysis without a
+/// description reads 未命名的一餐 in the Chinese UI; the default 'Meal'
+/// stays for the pipeline's English prose ([PhotoOutcome.message]).
+String mealDescription(Map<String, dynamic> analysis,
+    {String fallback = 'Meal'}) {
   final d = analysis['meal_description'];
-  if (d is String && d.trim().isNotEmpty) return d.trim();
-  return 'Meal';
+  // 'Meal' is the placeholder the editor (meal_edit_logic) and the leftover
+  // rewrite (leftover_logic) store for a meal with no name; show it as the
+  // caller's localized "unnamed" text like a missing name. The stored value
+  // stays as is (leftover prompts and Python parity read it).
+  if (d is String && d.trim().isNotEmpty && d.trim() != kStoredMealPlaceholder) {
+    return d.trim();
+  }
+  return fallback;
 }
+
+/// The literal name stored for a meal that has none (see [mealDescription]).
+const kStoredMealPlaceholder = 'Meal';
 
 /// Card total calories: the raw stringified value, '?' only when there IS no
 /// value (spec §3.5 display fallbacks: null, absent, '', false and empty
@@ -142,14 +143,6 @@ int? typicalDayKcal(Map<String, num> perDay) {
       vals.length.isOdd ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
   return median.truncate(); // int(median) truncation, spec §5.1
 }
-
-/// Re-exported from the data layer on purpose: this value is WRITTEN to
-/// meals.date and compared with string ranges in SQL, so it must be
-/// Gregorian with ASCII digits regardless of the device locale.
-/// `DateFormat('yyyy-MM-dd')` is locale-sensitive (Buddhist-era years,
-/// Eastern-Arabic digits), which on the photo/editor write paths would
-/// persist dates that no query could match.
-String isoDate(DateTime d) => logic.isoDate(d);
 
 /// History day label: [todayLabel] for today, else [pattern] via intl —
 /// defaults reproduce the original English `%A, %b %d` e.g.

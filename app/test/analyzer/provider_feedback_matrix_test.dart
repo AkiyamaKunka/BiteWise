@@ -173,6 +173,14 @@ void main() {
             'not found for API version v1beta, or is not supported for '
             'generateContent.", "status": "NOT_FOUND"}}',
             expectSays: 'model'),
+        // Gemini withholds a refused answer in an HTTP 200.
+        Scenario.contentFilter: const Fx(
+            200,
+            '{"candidates": [{"finishReason": "SAFETY", "index": 0, '
+            '"safetyRatings": [{"category": '
+            '"HARM_CATEGORY_DANGEROUS_CONTENT", "probability": "HIGH"}]}]}',
+            expectSays: 'declined',
+            expectCalls: 1),
       },
     ),
     ProviderSpec(
@@ -649,6 +657,10 @@ void main() {
                 headers: {'content-type': 'text/html; charset=utf-8'}),
             '302': () => http.Response('', 302,
                 headers: {'location': 'http://portal.example/login'}),
+            // Every vendor's 401/403 is JSON: an HTML one is a web filter.
+            'HTML 403': () => http.Response(
+                '<html><body>403 Forbidden</body></html>', 403,
+                headers: {'content-type': 'text/html'}),
           };
           for (final entry in portal.entries) {
             final s = await p.settings();

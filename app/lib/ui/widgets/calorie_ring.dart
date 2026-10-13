@@ -16,9 +16,11 @@ library;
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 
 import '../format.dart';
 import '../l10n.dart';
+import '../large_text.dart';
 
 class CalorieRing extends StatelessWidget {
   const CalorieRing({
@@ -67,12 +69,18 @@ class CalorieRing extends StatelessWidget {
     // The spoken sentence follows the app language like the visible
     // labels do (a zh VoiceOver user heard English here), and keeps the
     // neutral 'above typical' wording — no shame state in speech either.
+    // It names the Typical row's number, not the budget: with Garmin burn
+    // VoiceOver said 'typical day 2,500' beside a row showing 2,100, so the
+    // burn is its own clause.
+    final burn = burnKcal.round();
+    final burnClause = burn > 0 ? l.ringSemanticsBurn(formatKcal(burn)) : '';
     final semantics = budget == null
         ? l.ringSemantics(formatKcal(_eaten))
         : over
-            ? l.ringSemanticsAboveTypical(
-                formatKcal(_eaten), formatKcal(budget))
-            : l.ringSemanticsTypical(formatKcal(_eaten), formatKcal(budget));
+            ? l.ringSemanticsAboveTypical(formatKcal(_eaten),
+                formatKcal(typicalKcal!.round()), burnClause)
+            : l.ringSemanticsTypical(formatKcal(_eaten),
+                formatKcal(typicalKcal!.round()), burnClause);
     return SizedBox(
       width: size,
       height: size,
@@ -88,36 +96,113 @@ class CalorieRing extends StatelessWidget {
               scheme.surfaceContainerLow),
         ),
         child: Center(
-          // FittedBox: the ring is a fixed box; large system font scales
-          // (or 5-digit values) must shrink to fit, never clip the arc.
+          // The ring is a fixed box; large system font scales (or 5-digit
+          // values) must shrink to fit inside the stroke, never run over
+          // it. A square box let the two-line column use the full height,
+          // so at the largest size '千卡' sat on the bottom of the ring.
           child: Semantics(
             label: semantics,
             excludeSemantics: true,
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Padding(
-                padding: EdgeInsets.symmetric(horizontal: size * 0.14),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(centerBig,
-                        key: const Key('ringCenterValue'),
-                        maxLines: 1,
-                        softWrap: false,
-                        style: theme.textTheme.headlineMedium),
-                    Text(centerSmall,
-                        maxLines: 1,
-                        softWrap: false,
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
-                  ],
-                ),
+            child: _FitInCircle(
+              diameter: size - 2 * _RingPainter.stroke,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(centerBig,
+                      key: const Key('ringCenterValue'),
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.headlineMedium),
+                  Text(centerSmall,
+                      maxLines: 1,
+                      softWrap: false,
+                      style: theme.textTheme.labelSmall
+                          ?.copyWith(color: scheme.onSurfaceVariant)),
+                ],
               ),
             ),
           ),
         ),
       ),
     );
+  }
+}
+
+/// Scales its child down (never up) until the child's box, corners
+/// included, lies inside a centred circle of [diameter]: a w×h box centred
+/// in a circle fits iff w² + h² ≤ d². Not the inscribed square (d/√2 a
+/// side): that would shrink the day report's 1.0x '1,240' for no reason.
+class _FitInCircle extends SingleChildRenderObjectWidget {
+  const _FitInCircle({required this.diameter, super.child});
+  final double diameter;
+
+  @override
+  _RenderFitInCircle createRenderObject(BuildContext context) =>
+      _RenderFitInCircle(diameter);
+
+  @override
+  void updateRenderObject(BuildContext context, _RenderFitInCircle r) =>
+      r.diameter = diameter;
+}
+
+class _RenderFitInCircle extends RenderProxyBox {
+  _RenderFitInCircle(this._diameter);
+
+  double _diameter;
+  set diameter(double v) {
+    if (v == _diameter) return;
+    _diameter = v;
+    markNeedsLayout();
+  }
+
+  double _scale = 1;
+  Matrix4 get _transform => Matrix4.diagonal3Values(_scale, _scale, 1);
+
+  double _scaleFor(Size s) {
+    final diagonal = math.sqrt(s.width * s.width + s.height * s.height);
+    return diagonal <= _diameter ? 1.0 : _diameter / diagonal;
+  }
+
+  @override
+  Size computeDryLayout(BoxConstraints constraints) {
+    final c = child;
+    if (c == null) return constraints.smallest;
+    final s = c.getDryLayout(const BoxConstraints());
+    return constraints.constrain(s * _scaleFor(s));
+  }
+
+  @override
+  void performLayout() {
+    final c = child;
+    if (c == null) {
+      size = constraints.smallest;
+      return;
+    }
+    c.layout(const BoxConstraints(), parentUsesSize: true);
+    _scale = _scaleFor(c.size);
+    size = constraints.constrain(c.size * _scale);
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) {
+    if (child == null) return;
+    layer = context.pushTransform(needsCompositing, offset, _transform,
+        super.paint,
+        oldLayer: layer is TransformLayer ? layer as TransformLayer : null);
+  }
+
+  @override
+  void applyPaintTransform(RenderBox child, Matrix4 transform) =>
+      transform.multiply(_transform);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
+    final c = child;
+    if (c == null) return false;
+    return result.addWithPaintTransform(
+        transform: _transform,
+        position: position,
+        hitTest: (result, p) => c.hitTest(result, position: p));
   }
 }
 
@@ -132,9 +217,10 @@ class _RingPainter extends CustomPainter {
   final Color arc;
   final Color track;
 
+  static const stroke = 11.0;
+
   @override
   void paint(Canvas canvas, Size size) {
-    const stroke = 11.0;
     final center = size.center(Offset.zero);
     final radius = (math.min(size.width, size.height) - stroke) / 2;
     final rect = Rect.fromCircle(center: center, radius: radius);
@@ -187,36 +273,63 @@ class ArithmeticRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final dotBox = Container(
+      width: 8,
+      height: 8,
+      decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
+    );
+    final labelStyle = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    // FittedBox: at narrow widths × large font scale the number wins
+    // over the label, shrinking instead of overflowing the row.
+    final valueBox = FittedBox(
+      fit: BoxFit.scaleDown,
+      child: Text(value,
+          maxLines: 1,
+          softWrap: false,
+          style: (emphasized
+                  ? theme.textTheme.titleSmall
+                  : theme.textTheme.labelLarge)
+              ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+    );
+    if (isLargeText(context)) {
+      // At accessibility sizes the one-line label was cut to '已…', and
+      // with three rows (日常 / 消耗 / 已摄入) the numbers lost their
+      // meaning: the label gets the full width and wraps, the number
+      // sits under it.
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                dotBox,
+                const SizedBox(width: 8),
+                Flexible(child: Text(label, style: labelStyle)),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.only(left: 16),
+              child: valueBox,
+            ),
+          ],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
         children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
-          ),
+          dotBox,
           const SizedBox(width: 8),
           Expanded(
             child: Text(label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                style: labelStyle),
           ),
-          // FittedBox: at narrow widths × large font scale the number wins
-          // over the label, shrinking instead of overflowing the row.
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(value,
-                maxLines: 1,
-                softWrap: false,
-                style: (emphasized
-                        ? theme.textTheme.titleSmall
-                        : theme.textTheme.labelLarge)
-                    ?.copyWith(
-                        fontFeatures: const [FontFeature.tabularFigures()])),
-          ),
+          valueBox,
         ],
       ),
     );

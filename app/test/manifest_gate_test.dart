@@ -102,21 +102,25 @@ void main() {
   // safe-area insets: rotated, an iPhone drew the calorie ring and the first
   // History bar under the Dynamic Island, and the large title plus the tab bar
   // left only the top of one card visible. The iPhone list is portrait-only.
-  // The ~ipad list keeps every orientation, because iPad multitasking
-  // requires all four and the wider screen has room for the layout.
-  test('Info.plist locks iPhone to portrait and leaves iPad free', () {
+  // The app is iPhone-only (2026-10-12, owner's App Store decision): both
+  // targets are TARGETED_DEVICE_FAMILY = 1 and there is no ~ipad list, so
+  // App Review never sees a stretched phone layout on an iPad. Adding iPad
+  // back is allowed later; removing it after an iPad build shipped is not.
+  test('Info.plist locks iPhone to portrait and the app is iPhone-only', () {
     final plist = File('${_appRoot().path}/ios/Runner/Info.plist')
         .readAsStringSync();
     expect(_plistStrings(plist, 'UISupportedInterfaceOrientations'),
         ['UIInterfaceOrientationPortrait']);
-    expect(
-        _plistStrings(plist, 'UISupportedInterfaceOrientations~ipad'),
-        containsAll([
-          'UIInterfaceOrientationPortrait',
-          'UIInterfaceOrientationPortraitUpsideDown',
-          'UIInterfaceOrientationLandscapeLeft',
-          'UIInterfaceOrientationLandscapeRight',
-        ]));
+    expect(plist.contains('UISupportedInterfaceOrientations~ipad'), isFalse);
+    final pbxproj =
+        File('${_appRoot().path}/ios/Runner.xcodeproj/project.pbxproj')
+            .readAsStringSync();
+    final families = RegExp(r'TARGETED_DEVICE_FAMILY = ([^;]+);')
+        .allMatches(pbxproj)
+        .map((m) => m.group(1))
+        .toList();
+    expect(families, isNotEmpty);
+    expect(families, everyElement('1'));
   });
   // App Store Connect scans every executable in the IPA for "required
   // reason" APIs and emails ITMS-91053 for each bundle that uses one without

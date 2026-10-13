@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
@@ -129,11 +130,14 @@ void main() {
   });
 
   testWidgets('a photo still being analyzed elsewhere says so — not '
-      '"Already logged", and no manual-log offer', (tester) async {
+      '"Already logged" — and can be logged by hand', (tester) async {
     // The watcher (or an iOS background run cut off mid-analysis) holds
     // this photo's reservation; the user picks the same photo. It is not
-    // logged yet, so "Already logged" was wrong, and it is not a refusal
-    // either, so there is nothing to log by hand (2026-10-07).
+    // logged yet, so "Already logged" was wrong (2026-10-07). The holder
+    // may be a run iOS killed, and its row stays in the way for up to
+    // 30 min: OK alone was a dead end for a meal the user is looking at
+    // (2026-10-12), so the dialog offers the manual log — without the
+    // "if this IS food" hint, which presumes a verdict.
     final picker = FakePicker()..photos = [_photo('a0')];
     final services = makeServices(
         picker: picker,
@@ -150,7 +154,54 @@ void main() {
     expect(find.text('Still analyzing'), findsOneWidget);
     expect(find.text('Already logged'), findsNothing);
     expect(find.textContaining('still being analyzed'), findsOneWidget);
-    expect(find.byKey(const Key('logManuallyButton')), findsNothing);
+    expect(find.textContaining('If this IS food'), findsNothing);
+    await tester.tap(find.byKey(const Key('logManuallyButton')));
+    await tester.pumpAndSettle();
+    final editor =
+        tester.widget<MealEditorScreen>(find.byType(MealEditorScreen));
+    expect(editor.fromPhoto?.assetId, 'a0',
+        reason: 'the manual log keeps the photo attached');
+  });
+
+  testWidgets('a transient failure promises no automatic retry and offers '
+      'Retry, which runs the SAME photo once more', (tester) async {
+    // The picked photo is released on a 429; only the automatic scan (off
+    // by default, window-bound) could re-offer it, so "照片已保留，稍后会自动
+    // 重试" promised a retry that never came (2026-10-12).
+    final picker = FakePicker()..photos = [_photo('a0')];
+    final processed = <IntakePhoto>[];
+    final services = makeServices(
+        picker: picker,
+        processPhoto: (photo) async {
+          processed.add(photo);
+          return processed.length == 1
+              ? const PhotoOutcome(PhotoOutcomeKind.failed,
+                  'Provider rate/spend limit hit — will retry later.',
+                  retryable: true,
+                  errorKind: AnalysisErrorKind.rateLimited,
+                  detail: 'Provider rate/spend limit hit — will retry later.')
+              : const PhotoOutcome(PhotoOutcomeKind.saved, 'ok');
+        });
+    await tester.pumpWidget(MaterialApp(
+        locale: const Locale('zh'),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: AddPhotoScreen(services: services)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('recentPhoto0')));
+    await tester.pumpAndSettle();
+
+    expect(find.text('分析失败'), findsOneWidget);
+    expect(find.textContaining('自动重试'), findsNothing);
+    expect(find.textContaining('服务正在限流'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('retryAnalysisButton')));
+    await tester.pumpAndSettle();
+
+    expect(processed, hasLength(2), reason: 'Retry re-enqueues exactly once');
+    expect(identical(processed[0], processed[1]), isTrue,
+        reason: 'the same IntakePhoto — no second original read');
+    expect(picker.loadedOriginals, ['a0']);
+    expect(find.byKey(const Key('retryAnalysisButton')), findsNothing);
   });
 
   testWidgets('an unreadable original says so instead of hanging on the '

@@ -14,6 +14,10 @@ void main() {
         AnalysisErrorKind.rejectedKey,
     'The provider rejected the API key. Check Settings.':
         AnalysisErrorKind.rejectedKey,
+    'Gemini is not available from your current network region (check the '
+            'VPN).':
+        AnalysisErrorKind.regionBlocked,
+    'Gemini declined to analyze this photo.': AnalysisErrorKind.contentBlocked,
     'Gemini rate limit hit — please try again shortly.':
         AnalysisErrorKind.rateLimited,
     'Provider rate/spend limit hit — will retry later.':
@@ -21,6 +25,8 @@ void main() {
     'Gemini daily quota exhausted — analysis paused.':
         AnalysisErrorKind.quotaPaused,
     'Analysis paused (quota) — retrying later.': AnalysisErrorKind.quotaPaused,
+    'Provider balance or credits exhausted — check your Qwen billing.':
+        AnalysisErrorKind.billing,
     'Error contacting Gemini (network or service issue). Please try again.':
         AnalysisErrorKind.network,
     'Error contacting the provider (network or service issue).':
@@ -32,6 +38,30 @@ void main() {
         AnalysisErrorKind.badModel,
     'Anthropic model "claude-3-opus-20240229" not found (unknown or '
             'retired) — check the model name in Settings.':
+        AnalysisErrorKind.badModel,
+    // Every OpenAI-compatible notFoundHint, verbatim (provider_analyzers):
+    // Doubao and OpenRouter name neither "model name" nor "model error".
+    'Qwen model not found — check the model name in Settings (stable IDs '
+            'like qwen3-vl-flash; -latest snapshots lack JSON mode).':
+        AnalysisErrorKind.badModel,
+    'Doubao model not found — Ark needs the EXACT versioned ID from its '
+            'model list, and the model must be activated (开通管理) in the '
+            'Volcengine console.':
+        AnalysisErrorKind.badModel,
+    'GLM model not found — check the model name in Settings (glm-4.6v '
+            'family; older glm-4v IDs are retired).':
+        AnalysisErrorKind.badModel,
+    'DeepSeek model not found — check the model name in Settings. Only '
+            'deepseek-flash accepts photos; deepseek-v4-pro is text-only.':
+        AnalysisErrorKind.badModel,
+    'xAI model not found — check the model name in Settings (for example '
+            'grok-4.7).':
+        AnalysisErrorKind.badModel,
+    'OpenRouter model not found — use the full slug from '
+            'openrouter.ai/models (vendor/model, for example '
+            'google/gemini-3.8-flash) and pick one that accepts images.':
+        AnalysisErrorKind.badModel,
+    'GLM model not found — check the model name in Settings.':
         AnalysisErrorKind.badModel,
     "Couldn't understand the AI response.": AnalysisErrorKind.badResponse,
     'The AI returned an unusable analysis.': AnalysisErrorKind.badResponse,

@@ -9,15 +9,11 @@
   "rowTypical": "日常",
   "rowBurn": "消耗",
   "rowEaten": "已摄入",
-  "rowResultLeft": "= 剩余",
-  "rowResultOver": "= 超出日常",
-  "ringHeadroom": "剩余",
-  "ringLeftToday": "今日剩余",
-  "ringAboveTypical": "超出日常",
   "ringKcalToday": "千卡",
   "ringSemantics": "今天已摄入 {kcal} 千卡",
-  "ringSemanticsTypical": "今天已摄入 {kcal} 千卡，日常一天约 {typical} 千卡",
-  "ringSemanticsAboveTypical": "今天已摄入 {kcal} 千卡，日常一天约 {typical} 千卡（高于日常）",
+  "ringSemanticsTypical": "今天已摄入 {kcal} 千卡，日常一天约 {typical} 千卡{burnClause}",
+  "ringSemanticsBurn": "，含活动消耗 {burn} 千卡",
+  "ringSemanticsAboveTypical": "今天已摄入 {kcal} 千卡，日常一天约 {typical} 千卡{burnClause}（高于日常）",
   "todayEmptyTitle": "今天还没有记录。",
   "todayEmptyHint": "点击下方\"记录\"，用照片或文字添加一餐；也可以在设置里打开\"监控相册\"，新的食物照片会自动记录。",
   "fabLog": "记录",
@@ -65,8 +61,11 @@
   "settingsAiFooter": "照片由你选择的服务分析 — 它的 Key 不会离开这台手机。",
   "settingsRowAiProvider": "AI 服务",
   "settingsSectionPhotos": "照片",
-  "settingsPhotosFooter": "监控会自动记录新的食物照片；回溯窗口决定补扫时往回看多少天。",
+  "settingsPhotosFooter": "监控会自动记录新的食物照片；回溯窗口决定补扫时往回看多少天。开启监控相册时，之后的新照片，以及最近 {days} 天内的照片，都会发送给你选择的 AI 服务。",
   "settingsRowWatch": "监控相册",
+  "watcherDisclosureTitle": "照片会发送给 AI 服务",
+  "watcherDisclosureBody": "开启监控相册后，相册里之后的新照片，以及最近 {days} 天内的照片（包括不是食物的照片），都会发送给 {provider}，由它判断是不是食物。不会发送给本应用的开发者。你可以随时关闭。",
+  "watcherDisclosureContinue": "继续",
   "settingsRowLookback": "补扫回溯",
   "lookbackDays": "{count} 天",
   "settingsRowCoverage": "照片覆盖检查",
@@ -112,6 +111,9 @@
   "settingsDataFooter": "导入会把导出的文件合并进这台手机：已有的餐不会被改动，导入两次也不会让热量翻倍。",
   "settingsRowExport": "导出数据…",
   "settingsRowImport": "导入数据…",
+  "settingsRowPrivacy": "隐私政策",
+  "privacyOpenFailed": "无法打开隐私政策，网址：{url}",
+  "privacyCopyAction": "复制",
   "settingsRowLanguage": "语言",
   "languageSystem": "跟随系统",
   "languageSheetTitle": "语言",
@@ -135,6 +137,9 @@
   "apiKeyHeader": "API Key",
   "apiKeyLabel": "{provider} API Key",
   "apiKeyFooterDefault": "输入即保存。仅安全存储在本机。",
+  "apiKeyFooterGemini": "从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。仅安全存储在本机。",
+  "apiKeyFooterOpenai": "从 platform.openai.com/api-keys 获取。按量付费。仅安全存储在本机。",
+  "apiKeyFooterAnthropic": "从 console.anthropic.com 获取（API keys）。按量付费。仅安全存储在本机。",
   "apiKeyFooterQwen": "从 bailian.console.aliyun.com（阿里云百炼 → API-KEY）获取。新账户每个模型约有 100 万免费 tokens。仅安全存储在本机。",
   "apiKeyFooterDoubao": "从 console.volcengine.com/ark 获取（API Key + 开通管理里激活模型）。每个模型 50 万免费 tokens。仅安全存储在本机。",
   "apiKeyFooterGlm": "从 open.bigmodel.cn 获取（需实名认证）。默认 flash 模型免费。仅安全存储在本机。",
@@ -199,8 +204,6 @@
   "reportMeals": "{count} 餐",
   "reportNoMeals": "没有记录。",
   "reportFooter": "由筷拍记录",
-  "typicalDayHeadroom": "日常：~{typical} 千卡 · 剩余 ~{delta} 千卡",
-  "typicalDayOver": "日常：~{typical} 千卡 · 超出 ~{delta} 千卡",
   "historyDayPattern": "M月d日 EEEE",
   "garminBurnLine": "活动消耗：~{burn} 千卡（Garmin）· 净摄入 ~{net} 千卡",
   "garminBurnOnlyLine": "活动消耗：~{burn} 千卡（Garmin）",
@@ -358,6 +361,8 @@
   "notificationsOffHint": "通知已关闭 —— 每日总结无法送达。",
   "outcomeSavedMsg": "已记录：{summary}",
   "outcomeLeftoverMsg": "已扣除剩菜：{summary}",
+  "outcomeSavedSummary": "{name} —— 约 {kcal} 千卡",
+  "outcomeLeftoverSummary": "{name} —— 减 {delta} 千卡，现约 {total} 千卡",
   "outcomeFailedKeptMsg": "照片分析失败，已保留以便重试。{reason}",
   "backlogTruncatedWarning": "相册里待处理的照片太多 —— 一些较早的照片可能需要手动添加。",
   "outcomeNotFoodMsg": "这张照片里没有识别到食物。",
@@ -365,16 +370,21 @@
   "outcomeAlreadyTrackedMsg": "这张照片已经记录过了。",
   "outcomeInFlightMsg": "这张照片还在分析中，稍等片刻再看。",
   "errNoApiKey": "当前服务还没有设置 API Key —— 请在设置里添加。",
-  "errNoServerKey": "还没有设置服务器地址或上传 Key —— 请在设置里添加。",
+  "errNoServerKey": "还没有设置服务器地址或上传密钥 —— 请在设置里添加。",
   "errRejectedKey": "服务拒绝了 API Key，请在设置里检查。",
   "errRateLimited": "服务正在限流 —— 照片已保留，稍后会自动重试。",
   "errQuotaPaused": "分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。",
   "errNetwork": "连不上服务（网络或服务问题）。照片已保留，稍后会自动重试。",
   "errBadModel": "服务不接受这个模型 —— 请在设置里检查模型名。",
+  "errBadModelDoubao": "豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的“开通管理”里开通。",
+  "errBadModelOpenRouter": "OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整模型 ID（厂商/模型），并选择支持图片的模型。",
+  "errBilling": "账户余额或额度已用完 —— 请到服务商控制台充值。充值后可以重新分析这张照片。",
+  "errBillingText": "账户余额或额度已用完 —— 请到服务商控制台充值。",
   "errBadResponse": "AI 返回的内容应用无法使用。",
   "errBadPhoto": "无法处理这张照片（解码失败）。",
   "errServerBusy": "你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。",
   "mealCardAutoTitle": "🍽️ 已自动记录一餐",
+  "mealCardLeftoverTitle": "🍽️ 已扣除剩菜",
   "notificationChannelName": "总结与餐食",
   "notificationChannelDescription": "每日热量总结和自动记录的餐食卡片",
   "dayLoadFailed": "无法加载这一天：{error}",
@@ -392,6 +402,7 @@
   "fixApply": "应用修改",
   "fixAppliedHeader": "本次已应用",
   "editorSaveFailed": "保存失败：{error}",
+  "editorPhotoAlreadyLogged": "这张照片已经记录过了 —— 你填的数字没有保存，可以在今天里打开那一餐修改。",
   "editorDeleteFailed": "删除失败：{error}",
   "editorDeleteTitle": "删除这一餐？",
   "editorDeleteBody": "它会从历史和总计中移除。此操作无法撤销。",
@@ -478,7 +489,90 @@
   "serverLoginChecking": "检查中…",
   "serverLoginFooter": "已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。",
   "errServerFailed": "你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。",
-  "errServerRejected": "你的服务器拒绝了这次请求（{code}）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 覆盖检查 里重试。",
+  "errServerFailedFinal": "你的服务器没能分析这张照片：{reason}。可在 设置 › 照片覆盖检查 里重试。",
+  "@errServerFailedFinal": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "serverReasonNoResult": "AI 的回答无法使用",
+  "errServerModelRefused": "你的服务器无法使用所选模型：{reason} —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。",
+  "@errServerModelRefused": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "nlServerModelRefused": "❌ 你的服务器无法使用所选模型：{reason} —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。",
+  "@nlServerModelRefused": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeRetryLaterMsg": "这次没有分析成功（{reason}）—— 可以点“重试”，或稍后再选这张照片。",
+  "@outcomeRetryLaterMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeShareRetryMsg": "分享的照片这次没能分析（{reason}）—— 请稍后重新分享。",
+  "@outcomeShareRetryMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomePickRetryMsg": "这张照片没能分析（{reason}）—— 请稍后重新选择它。",
+  "@outcomePickRetryMsg": {
+    "placeholders": {
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "reasonRateLimited": "服务正在限流",
+  "reasonQuotaPaused": "今天的额度已用完",
+  "reasonBilling": "账户余额或额度已用完，请先充值",
+  "reasonNetwork": "网络或服务问题",
+  "reasonServerBusy": "你的服务器正在处理另一张照片",
+  "reasonServerFailed": "你的服务器这次没能分析",
+  "reasonNoApiKey": "还没有设置 API Key",
+  "reasonNoServerKey": "还没有设置服务器地址或上传密钥",
+  "errRegionBlocked": "{provider} 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。",
+  "@errRegionBlocked": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "errContentBlocked": "Gemini 拒绝分析这张照片 —— 可以手动记录。",
+  "reasonRegionBlocked": "{provider} 在当前网络地区不可用",
+  "@reasonRegionBlocked": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "diagFixVpnRegion": "把 VPN 换到 {provider} 支持的地区的节点（如美国、日本、新加坡；香港不支持），或改用 DeepSeek / 通义千问 / 豆包 / 智谱 GLM（无需 VPN）。",
+  "@diagFixVpnRegion": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "regionProviderFallback": "当前 AI 服务",
+  "errServerRejected": "你的服务器拒绝了这次请求（{code}）。请把 App 和服务器更新到匹配的版本，然后在 设置 › 照片覆盖检查 里重试。",
   "@errServerRejected": {
     "placeholders": {
       "code": {
@@ -489,6 +583,26 @@
   "watcherPermissionDenied": "自动记录需要相册访问权限。",
   "watcherOnQuotaPaused": "监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。",
   "watcherOnNoKey": "监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。",
+  "autoScanPausedKey": "监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（{time} 自动再试）。",
+  "@autoScanPausedKey": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "autoScanPausedRegion": "监控相册已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
+  "@autoScanPausedRegion": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "autoScanPausedTitle": "照片暂时不会自动记录",
   "watcherLimitedAccess": "目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。",
   "fixAction": "去修复",
   "importDialogTitle": "导入已导出的数据",
@@ -505,6 +619,9 @@
   "importErrWrongFormatTag": "这个文件不是筷拍的导出文件（格式标记不对）。",
   "importErrBadVersion": "这份导出文件的版本标记无法使用。",
   "importErrNoTables": "这份导出文件没有 tables 部分。",
+  "importFromClipboard": "从剪贴板导入",
+  "importClipboardRead": "已读取 {size}",
+  "importClipboardEmpty": "剪贴板里没有文本。",
   "nlSomethingWrong": "❌ 处理这条消息时出了点问题，请重试。",
   "nlMissingServer": "❌ 还没有配置服务器——请先在「设置」里填写服务器地址和上传密钥。",
   "nlMissingKey": "❌ 还没有 {provider} 的 API 密钥——请先在「设置」里添加，才能用文字记录。",

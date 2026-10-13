@@ -9,11 +9,14 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
 import 'package:calorie_tracker/ui/background_glue.dart';
+import 'package:calorie_tracker/ui/coach_strings.dart' show localizationsFor;
+import 'package:calorie_tracker/ui/outcome_text.dart' show autoScanPausedLine;
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
@@ -102,15 +105,30 @@ class RecordingScheduler implements BackgroundScheduler {
 IntakePhoto photo(int n) => IntakePhoto(
     Uint8List.fromList([n, n, n]), 'asset$n', 'IMG_$n.jpg');
 
+/// A pipeline that answers each photo with the next scripted outcome —
+/// for outcome kinds a FakeAnalyzer cannot reach on its own.
+class _ScriptedPipeline extends PhotoPipeline {
+  _ScriptedPipeline(this.outcomes)
+      : super(dao: FakeDao(), analyzer: FakeAnalyzer());
+  final List<PhotoOutcome> outcomes;
+  var _next = 0;
+
+  @override
+  Future<PhotoOutcome> process(IntakePhoto photo) async =>
+      outcomes[_next++];
+}
+
 /// FakeDao that fires a callback on each saveMeal — used to observe the
 /// watermark state at the moment each photo lands.
 class _CheckpointSpyDao extends FakeDao {
   _CheckpointSpyDao(this.onSave);
   final void Function() onSave;
   @override
-  Future<int> saveMeal(Meal meal, {IngestionStatus? markStatus}) {
+  Future<int> saveMeal(Meal meal,
+      {IngestionStatus? markStatus, String? ownerStamp}) {
     onSave();
-    return super.saveMeal(meal, markStatus: markStatus);
+    return super
+        .saveMeal(meal, markStatus: markStatus, ownerStamp: ownerStamp);
   }
 }
 
@@ -466,6 +484,199 @@ void main() {
           frontierMark.toUtc().toIso8601String());
     });
 
+    test('a rejected key burns nothing and holds the watermark: the photos '
+        'are scanned again next run', () async {
+      // The analyzer calls a 401 non-retryable; the automatic scan used to
+      // mark every photo 'failed' and checkpoint past them, so fixing the
+      // key brought none of them back (2026-10-12).
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [
+          DateTime(2026, 7, 24, 1, 0),
+          DateTime(2026, 7, 24, 2, 0),
+        ]; // frontier null: the real intake halts at the released photo 1
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero);
+      Future<void> run() => headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: intake,
+            pipeline: () async => PhotoPipeline(dao: dao, analyzer: analyzer),
+            showMealCard: (_, _) async {},
+            clock: () => DateTime(2026, 7, 24, 5, 0),
+          );
+      await run();
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
+      expect(dao.ledger, isEmpty);
+
+      // Key fixed: the next run analyzes and saves both.
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+      await run();
+      expect(dao.meals, hasLength(2));
+      expect(prefs.getString(backgroundWatermarkPrefsKey),
+          DateTime(2026, 7, 24, 2, 0).toUtc().toIso8601String());
+    });
+
+    test('a rejected key LATCHES the scan: the rest of the run makes no '
+        'analyzer call, the next run reads no bytes, a key edit lifts it',
+        () async {
+      // Every 30 minutes the job re-uploaded the whole window against a
+      // key that refuses every photo (~20 MB a run, review 2026-10-12).
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final dao = FakeDao();
+      var calls = 0;
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero)
+        ..onAnalyze = () async => calls++;
+      Future<void> run() => headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: intake,
+            // Production wiring (runHeadlessBackfill): the settings latch.
+            pipeline: () async => PhotoPipeline(
+                dao: dao,
+                analyzer: analyzer,
+                latch: autoScanLatchFor(settings)),
+            showMealCard: (_, _) async {},
+            clock: () => DateTime(2026, 7, 24, 5, 0),
+          );
+      await run();
+      expect(calls, 1, reason: 'photos 2 and 3 never uploaded');
+      expect(settings.analysisBlockedKind, 'rejectedKey');
+      expect(dao.ledger, isEmpty);
+      expect(intake.scans, 1);
+
+      await run();
+      expect(intake.scans, 1, reason: 'guarded out before reading bytes');
+      expect(calls, 1);
+
+      // The user fixes the key: the next run analyzes every photo.
+      await settings.setGeminiApiKey('k2');
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+      await run();
+      expect(intake.scans, 2);
+      expect(dao.meals, hasLength(3));
+    });
+
+    test('a run that ARMS the pause posts one notice saying so; the runs '
+        'it guards out post nothing more', () async {
+      // The background has no snackbar: the scan used to just stop, for up
+      // to a day, with only a Settings footer to say why (review
+      // 2026-10-12).
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final cards = <(String, String)>[];
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero);
+      Future<void> run() => headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: intake,
+            pipeline: () async => PhotoPipeline(
+                dao: FakeDao(),
+                analyzer: analyzer,
+                latch: autoScanLatchFor(settings)),
+            showMealCard: (t, b) async => cards.add((t, b)),
+            clock: () => DateTime(2026, 7, 24, 5, 0),
+          );
+      await run();
+      expect(cards, hasLength(1));
+      final l = localizationsFor(settings.appLanguage);
+      expect(cards.single.$1, l.autoScanPausedTitle);
+      expect(
+          cards.single.$2,
+          autoScanPausedLine(l,
+              kind: 'rejectedKey',
+              until: settings.analysisBlockedUntil!,
+              provider: settings.provider.name,
+              serverBackend: settings.serverBackend));
+      await run();
+      await run();
+      expect(cards, hasLength(1), reason: 'one notice per arm');
+
+      // A run that releases photos WITHOUT arming (a network failure)
+      // says nothing.
+      await settings.setGeminiApiKey('k2');
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          error: 'Error contacting the provider (network or service issue).',
+          retryable: true,
+          wall: Duration.zero);
+      await run();
+      expect(cards, hasLength(1));
+      expect(settings.isAnalysisBlocked, isFalse);
+    });
+
+    test('no pause notice when the foreground edited the key during the run',
+        () async {
+      // The arm landed, then the user saved a new key in the app (another
+      // isolate, its own preferences cache): the pause is gone on disk, and
+      // "photos will not be logged automatically" would be stale.
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final cards = <(String, String)>[];
+      final real = autoScanLatchFor(settings);
+      final latch = AutoScanLatch(
+        blockedKind: real.blockedKind,
+        revision: real.revision,
+        block: (kind, revision) async {
+          await real.block(kind, revision);
+          SharedPreferences.resetStatic(); // the foreground isolate
+          final fg = await AppSettings.load(
+              prefs: await SharedPreferences.getInstance(),
+              keyStore: MemoryKeyStore());
+          await fg.setGeminiApiKey('k2');
+        },
+        clear: real.clear,
+      );
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'The provider rejected the API key. Check Settings.',
+            wall: Duration.zero);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(
+            dao: FakeDao(), analyzer: analyzer, latch: latch),
+        showMealCard: (t, b) async => cards.add((t, b)),
+        clock: () => DateTime(2026, 7, 24, 5, 0),
+      );
+      expect(cards, isEmpty);
+      expect(settings.isAnalysisBlocked, isFalse);
+    });
+
+    test('does nothing while a blocked region latched the scan', () async {
+      final settings = await settingsWith(key: 'k');
+      await settings.blockAutomaticAnalysis('regionBlocked');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final ok = await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async =>
+            PhotoPipeline(dao: FakeDao(), analyzer: FakeAnalyzer()),
+        showMealCard: (_, _) async {},
+      );
+      expect(ok, isTrue);
+      expect(intake.scans, 0);
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull);
+    });
+
     test('a photo another run is still analyzing holds the watermark in '
         'front of it', () async {
       // iOS expired the PREVIOUS run's grant mid-analysis: its 'processing'
@@ -567,6 +778,45 @@ void main() {
       );
       expect(cards, isEmpty);
     });
+
+    for (final (lang, title, body) in const [
+      // The card's summary is in the app language too (zh 千卡).
+      ('zh', '🍽️ 已扣除剩菜', '已扣除剩菜：Noodles —— 减 300 千卡，现约 300 千卡'),
+      ('en', '🍽️ Leftovers deducted',
+          'Leftovers deducted: Noodles — −300 kcal, now ~300 kcal'),
+    ]) {
+      test('[$lang] a leftover deduction posts ONE card; not-food and '
+          'failures still post none', () async {
+        // A second photo of the same plate cuts a logged meal's calories
+        // unattended — it used to happen with no card at all.
+        final settings = await settingsWith(key: 'k');
+        await settings.setAppLanguage(lang);
+        final intake = EmittingIntake()
+          ..batch = [photo(1), photo(2), photo(3)];
+        final cards = <(String, String)>[];
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: intake,
+          pipeline: () async => _ScriptedPipeline([
+            const PhotoOutcome(PhotoOutcomeKind.leftoverApplied,
+                'Leftovers deducted: Noodles — −300 kcal, now ~300 kcal',
+                detail: 'Noodles — −300 kcal, now ~300 kcal',
+                mealName: 'Noodles',
+                kcal: '300',
+                deductedKcal: 300,
+                mealId: 7,
+                mealDate: '2026-10-12',
+                previousAnalysis: {'is_food': true}),
+            const PhotoOutcome(PhotoOutcomeKind.skipped, 'not food'),
+            const PhotoOutcome(PhotoOutcomeKind.failed, 'bad photo',
+                errorKind: AnalysisErrorKind.badPhoto),
+          ]),
+          showMealCard: (title, body) async => cards.add((title, body)),
+        );
+        expect(cards, [(title, body)]);
+      });
+    }
   });
 
   group('syncBackgroundScan', () {

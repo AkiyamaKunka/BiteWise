@@ -178,18 +178,22 @@ class AppServices {
 
     // Photo pipeline glue (spec §2.3/§3/§6): intake streams → md5 → reserve
     // → analyze → save/skip/fail, notification-style snackbar on save.
+    // Worded HERE, in the app language read live at each call, so a
+    // language switch applies to the next snackbar; main.dart stays a
+    // plain String sink. The add flow gets the same sink for a verdict
+    // that lands after the user backed out.
+    final void Function(PhotoOutcome)? announce = notify == null
+        ? null
+        : (o) =>
+            notify(outcomeSnackbar(localizationsFor(settings.appLanguage), o));
     final pipeline = PhotoPipeline(
         dao: dao,
         analyzer: analyzer,
-        // Worded HERE, in the app language read live at each call, so a
-        // language switch applies to the next snackbar; main.dart stays a
-        // plain String sink.
-        notify: notify == null
-            ? null
-            : (o) => notify(
-                outcomeSnackbar(localizationsFor(settings.appLanguage), o)),
+        notify: announce,
         // Open screens re-query instead of showing pre-save data.
-        onMealSaved: signalMealsChanged);
+        onMealSaved: signalMealsChanged,
+        // A rejected key / blocked region parks the automatic scan.
+        latch: autoScanLatchFor(settings));
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -223,6 +227,7 @@ class AppServices {
       // The audit's log/retry actions share the pipeline's global FIFO —
       // enqueue() chains onto the tail; process() would race it.
       processPhoto: pipeline.enqueue,
+      announceOutcome: announce,
       photoLibrary: photoLibrary,
       startClaudeAuth: serverAnalyzer.startClaudeAuth,
       completeClaudeAuth: serverAnalyzer.completeClaudeAuth,
@@ -258,8 +263,9 @@ class AppServices {
       // fires while the process lives, and EMUI-class OS freezing kills it
       // minutes after backgrounding — photos taken since are picked up here.
       // Fire-and-forget: startup must not block on Gemini analyses. Key
-      // guard: without a key nothing can succeed, so don't read photo bytes.
-      if (settings.canAnalyze) {
+      // guard: without a key nothing can succeed, so don't read photo bytes
+      // (nor while a rejected key / blocked region latched the scan).
+      if (settings.canAutoAnalyze) {
         unawaited(photoIntake.backfillScan().then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
@@ -321,6 +327,17 @@ class _AppSettingsStore implements SettingsStore {
   @override
   bool get canAnalyze => _s.canAnalyze;
   @override
+  bool get canAutoAnalyze => _s.canAutoAnalyze;
+  @override
+  String? get autoScanBlockedKind => _s.analysisBlockedKind;
+  @override
+  DateTime? get autoScanBlockedUntil => _s.analysisBlockedUntil;
+  @override
+  Future<void> reloadAutoScanBlock() => _s.reloadAnalysisBlock();
+  @override
+  Future<void> credentialsProven({required bool reachedGeneration}) =>
+      _s.credentialsProven(reachedGeneration: reachedGeneration);
+  @override
   String get provider => _s.provider.name;
   @override
   bool get isQuotaPaused => _s.isQuotaPaused;
@@ -336,6 +353,8 @@ class _AppSettingsStore implements SettingsStore {
   bool get summaryEnabled => _s.summaryEnabled;
   @override
   bool get watcherEnabled => _s.watcherEnabled;
+  @override
+  bool get watcherDisclosureSeen => _s.watcherDisclosureSeen;
   @override
   String get dietaryProfile => _s.dietaryProfile ?? '';
   @override
@@ -362,6 +381,7 @@ class _AppSettingsStore implements SettingsStore {
     String? reportTime,
     bool? summaryEnabled,
     bool? watcherEnabled,
+    bool? watcherDisclosureSeen,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -438,6 +458,9 @@ class _AppSettingsStore implements SettingsStore {
     if (watcherEnabled != null) {
       await _s.setWatcherEnabled(watcherEnabled);
       await syncBackgroundScan(_s); // register/cancel the periodic job
+    }
+    if (watcherDisclosureSeen != null) {
+      await _s.setWatcherDisclosureSeen(watcherDisclosureSeen);
     }
     if (dietaryProfile != null) await _s.setDietaryProfile(dietaryProfile);
     if (serverBaseUrl != null) await _s.setServerBaseUrl(serverBaseUrl);

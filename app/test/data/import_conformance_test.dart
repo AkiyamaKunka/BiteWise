@@ -213,7 +213,7 @@ void main() {
     // pipeline's saveMeal(markStatus: saved) must then recognise the
     // imported row instead of inserting a second one (2026-10-07).
     await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
-    expect(await daoB.reservePhotoHash('h1', source: MealSource.appWatch),
+    expect((await daoB.reservePhotoHash('h1', source: MealSource.appWatch)).kind,
         PhotoReservation.reserved);
     final summary = await daoB.importJson(await daoA.exportJson());
     expect(summary.added['meals'], 1);
@@ -349,6 +349,59 @@ void main() {
       final summary = await daoB.importJson(payload);
       expect(summary.added['meals'], 1, reason: 'the good row lands');
       expect(summary.skipped['meals'], 1, reason: 'the junk row does not');
+    });
+  });
+
+  group('a large export (a year of meals)', () {
+    test('decodes off the UI isolate and imports every row', () async {
+      for (var d = 0; d < 365; d++) {
+        final date = DateTime(2025, 8, 1).add(Duration(days: d));
+        final iso = '${date.year.toString().padLeft(4, '0')}-'
+            '${date.month.toString().padLeft(2, '0')}-'
+            '${date.day.toString().padLeft(2, '0')}';
+        for (var m = 0; m < 3; m++) {
+          await daoA.saveMeal(Meal(
+            id: 0,
+            date: iso,
+            time: '0${m + 7}:00 AM',
+            timestamp: '${iso}T0${m + 7}:00:00.000',
+            source: MealSource.appPhoto,
+            imageHash: 'h$d-$m',
+            analysis: {
+              'is_food': true,
+              'meal_description': '番茄炒蛋盖饭 $d-$m',
+              'total_calories': 600,
+              'food_items': [
+                for (var i = 0; i < 4; i++)
+                  {'name': 'item $i ' * 20, 'estimated_calories': 150},
+              ],
+            },
+          ));
+        }
+      }
+      final backup = await daoA.exportJson();
+      expect(backup.length,
+          greaterThan(SqfliteMealsDao.importParseOffIsolateChars),
+          reason: 'this must take the worker-isolate path');
+      final summary = await daoB.importJson(backup);
+      expect(summary.added['meals'], 365 * 3);
+      expect(summary.exportedAt, isNotNull);
+    });
+
+    test('a large payload that is not an export is still refused with its '
+        'reason across the isolate', () async {
+      final junk = jsonEncode({
+        'format': 'something_else',
+        'pad': 'x' * (SqfliteMealsDao.importParseOffIsolateChars + 1),
+      });
+      await expectLater(
+          daoB.importJson(junk),
+          throwsA(isA<ExportFormatException>().having(
+              (e) => e.refusal, 'refusal', ExportRefusal.wrongFormatTag)));
+      await expectLater(
+          daoB.importJson('x' * (SqfliteMealsDao.importParseOffIsolateChars + 1)),
+          throwsA(isA<ExportFormatException>().having(
+              (e) => e.refusal, 'refusal', ExportRefusal.notJson)));
     });
   });
 }
