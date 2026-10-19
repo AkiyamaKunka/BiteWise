@@ -274,6 +274,49 @@ void main() {
       expect(frontier, DateTime(2026, 7, 17, 8));
     });
 
+    test('onCovered hears each terminal delivery\'s safeFrontier, halted at '
+        'a release — what the app checkpoints mid-scan', () async {
+      library.assets = [
+        for (final (id, h) in [('a', 8), ('b', 9), ('c', 10)])
+          FakeAsset(id, 'IMG_$id.jpg', DateTime(2026, 7, 17, h), bytesOf(h)),
+      ];
+      intake.attachSink((p, _) async => p.assetId != 'b'); // b released
+      final heard = <DateTime>[];
+      final frontier = await intake.backfillScan(
+          lookbackDays: 2, onCovered: (f) async => heard.add(f));
+      expect(heard, [DateTime(2026, 7, 17, 8), DateTime(2026, 7, 17, 8)],
+          reason: 'c terminated, but nothing may pass the released b');
+      expect(frontier, DateTime(2026, 7, 17, 8));
+    });
+
+    test('onCovered is never called for a truncated window, and a throwing '
+        'one never stops the scan', () async {
+      library.assets = [
+        for (var i = 0; i < backfillQueryLimit; i++)
+          FakeAsset('t$i', 'IMG_$i.jpg',
+              DateTime(2026, 7, 17, 8).add(Duration(seconds: i)), bytesOf(1)),
+      ];
+      var delivered = 0;
+      intake.attachSink((p, _) async {
+        delivered++;
+        return true;
+      });
+      await expectLater(
+          intake.backfillScan(
+              lookbackDays: 2,
+              onCovered: (_) async => fail('no frontier for a truncated scan')),
+          throwsA(isA<BackfillWindowTruncated>()));
+      expect(delivered, backfillQueryLimit);
+
+      library.assets = [
+        FakeAsset('x', 'IMG_x.jpg', DateTime(2026, 7, 17, 11), bytesOf(2)),
+        FakeAsset('y', 'IMG_y.jpg', DateTime(2026, 7, 17, 12), bytesOf(3)),
+      ];
+      final frontier = await intake.backfillScan(
+          lookbackDays: 2, onCovered: (_) async => throw StateError('prefs'));
+      expect(frontier, DateTime(2026, 7, 17, 12));
+    });
+
     test('frontier halts at the first failure and at retryable releases',
         () async {
       library.assets = [

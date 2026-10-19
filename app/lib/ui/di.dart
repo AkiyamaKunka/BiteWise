@@ -269,8 +269,10 @@ class AppServices {
       // Fire-and-forget: startup must not block on Gemini analyses. Key
       // guard: without a key nothing can succeed, so don't read photo bytes
       // (nor while a rejected key / blocked region latched the scan).
+      // It also moves the background watermark over what it covers, so the
+      // next background run starts from here (foregroundCatchUp).
       if (settings.canAutoAnalyze) {
-        unawaited(photoIntake.backfillScan().then((_) {},
+        unawaited(foregroundCatchUp(photoIntake).then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
           // the catch-up cannot promise full coverage.

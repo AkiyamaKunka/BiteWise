@@ -497,8 +497,16 @@ abstract class PhotoIntake {
   /// UNREAD: not offered, not marked seen, not covered — the frontier stops
   /// in front of it and a later scan offers it. Every later unread photo is
   /// asked about too, so the caller can count what it left.
+  ///
+  /// [onCovered] hears the safeFrontier (see [attachSink]) each time a
+  /// delivered photo terminates — the value a caller may persist as a
+  /// watermark mid-scan, before the final frontier is known. Never called
+  /// for a truncated window. A throwing callback never stops the scan.
   Future<DateTime?> backfillScan(
-      {int lookbackDays, DateTime? since, bool Function()? shouldContinue});
+      {int lookbackDays,
+      DateTime? since,
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered});
   Future<void> start();
   Future<void> stop();
 }

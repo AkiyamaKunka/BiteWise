@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart'
 
 import 'package:flutter/material.dart';
 
+import 'background_glue.dart' show foregroundCatchUp;
 import 'screens/add_flow.dart';
 import 'screens/body_screen.dart';
 import 'l10n.dart';
@@ -320,9 +321,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // frozen with the process on EMUI-class OSes, so photos taken while the
     // app was backgrounded surface here. The md5 ledger + in-session seen
     // set make repeat resumes near-free. Refresh again once the scan's
-    // emissions have had a chance to process.
-    await s.photoIntake
-        ?.backfillScan()
+    // emissions have had a chance to process. What it covers moves the
+    // background watermark too (foregroundCatchUp).
+    final intake = s.photoIntake;
+    if (intake == null) return;
+    await foregroundCatchUp(intake)
         .then((_) {}, onError: (Object _) {})
         .then((_) => Future<void>.delayed(const Duration(seconds: 15)))
         .then((_) {

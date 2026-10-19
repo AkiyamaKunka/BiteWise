@@ -172,7 +172,8 @@ class LibraryPhotoIntake implements PhotoIntake {
   Future<DateTime?> backfillScan(
       {int lookbackDays = 0,
       DateTime? since,
-      bool Function()? shouldContinue}) async {
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
     // 0 (unset) → the configured §8 default from settings.
     final days = lookbackDays > 0 ? lookbackDays : _lookbackDays();
     var cutoff = lookbackCutoff(_clock(), days);
@@ -194,7 +195,9 @@ class LibraryPhotoIntake implements PhotoIntake {
     // or final — may be reported for this scan.
     final truncated = assets.length >= backfillQueryLimit;
     final frontier = await _emit(assets,
-        reportFrontier: !truncated, shouldContinue: shouldContinue);
+        reportFrontier: !truncated,
+        shouldContinue: shouldContinue,
+        onCovered: onCovered);
     // Signal AFTER emitting: the caller processes what was seen, but a
     // watermark must not advance over the unseen tail.
     if (truncated) throw const BackfillWindowTruncated();
@@ -209,10 +212,12 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// retry. Null = nothing covered.
   /// [reportFrontier] false (truncated window): every delivery carries
   /// safeFrontier null — the unseen OLDER tail forbids any watermark claim.
-  /// [shouldContinue] false: the photo is left unread (see
-  /// [PhotoIntake.backfillScan]).
+  /// [shouldContinue] false: the photo is left unread; [onCovered] hears
+  /// each terminal delivery's safeFrontier (see [PhotoIntake.backfillScan]).
   Future<DateTime?> _emit(List<LibraryAsset> assets,
-      {bool reportFrontier = true, bool Function()? shouldContinue}) async {
+      {bool reportFrontier = true,
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
     // §6: newest-LAST emission — oldest first, so downstream meal rows land
     // in chronological order.
     final ordered = [...assets]
@@ -300,6 +305,11 @@ class LibraryPhotoIntake implements PhotoIntake {
           final terminal = await sink(photo, safe);
           if (terminal) {
             cover(asset);
+            if (onCovered != null && safe != null) {
+              try {
+                await onCovered(safe);
+              } catch (_) {}
+            }
           } else {
             _seenAssetIds.remove(asset.id); // released: re-offer next scan
             frontierOpen = false;

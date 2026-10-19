@@ -62,7 +62,8 @@ class EmittingIntake implements PhotoIntake {
   Future<DateTime?> backfillScan(
       {int lookbackDays = 0,
       DateTime? since,
-      bool Function()? shouldContinue}) async {
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
     scans++;
     sinceArgs.add(since);
     for (var i = 0; i < batch.length; i++) {
@@ -74,7 +75,9 @@ class EmittingIntake implements PhotoIntake {
       final sink = _sink;
       final safe = i < safeFrontiers.length ? safeFrontiers[i] : null;
       if (sink != null) {
-        await sink(batch[i], safe); // backpressured, like the real intake
+        // Backpressured, like the real intake.
+        final terminal = await sink(batch[i], safe);
+        if (terminal && safe != null) await onCovered?.call(safe);
       } else {
         _controller.add(batch[i]);
       }
@@ -144,7 +147,8 @@ class _LateIntake implements PhotoIntake {
   Future<DateTime?> backfillScan(
       {int lookbackDays = 0,
       DateTime? since,
-      bool Function()? shouldContinue}) async {
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
     await Future<void>.delayed(before);
     await _sink?.call(photo, null);
     return null;
@@ -568,6 +572,99 @@ void main() {
         expect(iosRunDeadline, const Duration(seconds: 25));
         expect(iosRunDeadline > iosBackgroundBudget, isTrue);
       });
+    });
+  });
+
+  // 2026-10-19: every successful foreground sweep left the background
+  // watermark days behind, and the next background run re-read everything
+  // the app had just logged before reaching a new photo.
+  group('the foreground catch-up moves the background watermark', () {
+    final t1 = DateTime.utc(2026, 10, 18, 10);
+    final t2 = DateTime.utc(2026, 10, 18, 11);
+    final t3 = DateTime.utc(2026, 10, 18, 12);
+    late SharedPreferences prefs;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    DateTime? storedMark() =>
+        readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey))
+            ?.toUtc();
+
+    test('advanceBackgroundWatermark re-reads the store: a stale cache never '
+        'moves it back over the other engine\'s progress', () async {
+      final app = prefs; // this engine's cache
+      SharedPreferences.resetStatic(); // the background engine: its own
+      final background = await SharedPreferences.getInstance();
+      await background.setString(
+          backgroundWatermarkPrefsKey, t2.toIso8601String());
+      expect(await advanceBackgroundWatermark(app, t1, cap: t3), isNull);
+      expect(app.getString(backgroundWatermarkPrefsKey), t2.toIso8601String(),
+          reason: 'still the later mark');
+      expect(await advanceBackgroundWatermark(app, t3, cap: t3), t3);
+      await background.reload();
+      expect(background.getString(backgroundWatermarkPrefsKey),
+          t3.toIso8601String(),
+          reason: 'forward, and written as a UTC instant');
+    });
+
+    test('never past the cap (the scan start)', () async {
+      expect(await advanceBackgroundWatermark(prefs, t3, cap: t2), t2);
+      expect(storedMark(), t2);
+    });
+
+    test('checkpoints each covered photo as it terminates, then the final '
+        'frontier — never past the scan start', () async {
+      final seenMidScan = <DateTime?>[];
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [t1, t2]
+        ..frontier = t3;
+      intake.attachSink((p, _) async {
+        seenMidScan.add(storedMark());
+        return true;
+      });
+      final scanStart = t3.subtract(const Duration(minutes: 1));
+      final frontier = await foregroundCatchUp(intake,
+          clock: () => scanStart, loadPrefs: () async => prefs);
+      expect(frontier, t3);
+      expect(seenMidScan, [null, t1],
+          reason: 'photo 1\'s checkpoint landed before photo 2 started');
+      expect(storedMark(), scanStart, reason: 'capped at the scan start');
+    });
+
+    test('a released photo is not checkpointed, and a scan that throws '
+        '(truncated window) writes no final frontier', () async {
+      final intake = EmittingIntake()
+        ..batch = [photo(1)]
+        ..safeFrontiers = [t1]
+        ..frontier = t3
+        ..throwAfterEmit = true;
+      intake.attachSink((p, _) async => false); // released
+      await expectLater(
+          foregroundCatchUp(intake,
+              clock: () => t3, loadPrefs: () async => prefs),
+          throwsStateError);
+      expect(storedMark(), isNull);
+    });
+
+    test('a preferences failure never stops the scan', () async {
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [t1, t2]
+        ..frontier = t2;
+      final delivered = <String>[];
+      intake.attachSink((p, _) async {
+        delivered.add(p.assetId);
+        return true;
+      });
+      final frontier = await foregroundCatchUp(intake,
+          clock: () => t3,
+          loadPrefs: () async => throw StateError('no store'));
+      expect(delivered, ['asset1', 'asset2']);
+      expect(frontier, t2);
     });
   });
 

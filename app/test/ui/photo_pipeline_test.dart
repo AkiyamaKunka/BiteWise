@@ -903,7 +903,8 @@ class _SinkCapturingIntake implements PhotoIntake {
   Future<DateTime?> backfillScan(
           {int lookbackDays = 0,
           DateTime? since,
-          bool Function()? shouldContinue}) async =>
+          bool Function()? shouldContinue,
+          Future<void> Function(DateTime safeFrontier)? onCovered}) async =>
       null;
   @override
   Future<void> start() async {}

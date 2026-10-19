@@ -193,6 +193,60 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
       refresh: settings.reloadAnalysisBlock,
     );
 
+/// Moves the background watermark forward to [mark], never past [cap] and
+/// never back; returns the value written, or null when it did not move.
+///
+/// Both engines write it (2026-10-19): the background run as it scans,
+/// and the app's launch/resume catch-ups ([foregroundCatchUp]), each
+/// through its own preferences cache — so the stored value is re-read
+/// first, and a stale cache can never carry it backwards over the other
+/// engine's progress. (Two writers interleaving between the read and the
+/// write can at worst leave the EARLIER mark: a re-scan, never a skip.)
+/// Written as UTC (see [readStoredInstant]).
+Future<DateTime?> advanceBackgroundWatermark(
+    SharedPreferences prefs, DateTime mark,
+    {required DateTime cap}) async {
+  final capped = mark.isAfter(cap) ? cap : mark;
+  try {
+    await prefs.reload();
+  } catch (_) {
+    // Unreadable store: compare against this engine's own copy.
+  }
+  final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
+  if (cur != null && !capped.isAfter(cur)) return null;
+  await prefs.setString(
+      backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
+  return capped;
+}
+
+/// The app's launch/resume catch-up over the full lookback window — the
+/// pipeline [PhotoPipeline.bind] attached processes each photo — which
+/// also moves the BACKGROUND watermark over what it covered. It used to
+/// leave it days behind: the next background run then spent its grant
+/// re-reading and re-hashing every photo the app had just logged before
+/// it reached a new one (2026-10-19).
+///
+/// Only the intake's safeFrontier is persisted — per photo as it
+/// terminates (the app may be suspended mid-scan), then the final
+/// frontier — never past this scan's start. A truncated window reports
+/// none and throws [BackfillWindowTruncated], which propagates. A
+/// preferences failure never stops the scan.
+Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
+    {DateTime Function() clock = DateTime.now,
+    Future<SharedPreferences> Function()? loadPrefs}) async {
+  final scanStart = clock();
+  Future<void> checkpoint(DateTime mark) async {
+    try {
+      final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+      await advanceBackgroundWatermark(prefs, mark, cap: scanStart);
+    } catch (_) {}
+  }
+
+  final frontier = await intake.backfillScan(onCovered: checkpoint);
+  if (frontier != null) await checkpoint(frontier);
+  return frontier;
+}
+
 /// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
 /// Written as UTC (see [readStoredInstant]).
 Future<void> recordBackgroundLaunch(
@@ -256,13 +310,8 @@ Future<bool> headlessBackfillWith({
 
   Future<void> checkpoint(DateTime mark) async {
     // Monotonic forward only, never past this scan's start.
-    final capped = mark.isAfter(scanStart) ? scanStart : mark;
-    final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
-    if (cur == null || capped.isAfter(cur)) {
-      await prefs.setString(
-          backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
-      await recorder?.checkpoint(capped);
-    }
+    final moved = await advanceBackgroundWatermark(prefs, mark, cap: scanStart);
+    if (moved != null) await recorder?.checkpoint(moved);
   }
 
   // The pipeline (and its database handle) is built ONLY past the guards:
