@@ -7,6 +7,10 @@
 /// deferred it again — one odd file froze the watermark, and every photo
 /// shot after it waited behind it.
 ///
+/// The same holds for a photo the iOS run's deadline cuts off mid-analysis
+/// (finishWithinGrant releases it): one too slow for what a run has left
+/// would be met first, and cut off, by every run after.
+///
 /// So the run notes each deferral here, and a photo deferred
 /// [deferralsBeforePassOver] times is passed over by later background runs:
 /// counted covered for the watermark without being read. Nothing is written
@@ -99,7 +103,7 @@ class DeferredAssets {
   /// Whether this run counts [assetId] covered without reading it.
   bool passOver(String assetId) => _passOver.contains(assetId);
 
-  /// This run deferred [assetId] (again).
+  /// This run deferred [assetId] (again), or its deadline cut it off.
   Future<void> deferred(String assetId) {
     _known.add(assetId);
     return _rewrite(_prefs, (list) {

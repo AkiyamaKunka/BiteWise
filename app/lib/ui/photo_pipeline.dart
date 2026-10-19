@@ -223,6 +223,13 @@ class PhotoPipeline {
 
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
+  /// The 'processing' reservation the photo in flight holds right now, and
+  /// that photo's asset id — what [abandon] gives back.
+  ({String hash, String stamp, String assetId})? _held;
+
+  /// Set by [abandon]: nothing more is uploaded, settled or saved.
+  bool _abandoned = false;
+
   // FIFO tail: bound-stream photos process ONE at a time. A backfill batch
   // fired concurrently self-inflicts Gemini RPM 429s (free tier) and piles
   // write contention onto the ledger; the server processed sequentially too.
@@ -344,6 +351,50 @@ class PhotoPipeline {
     _subs.clear();
   }
 
+  /// Ends this pipeline's work for good (2026-10-19): the iOS background
+  /// run's deadline (finishWithinGrant) replies to workmanager, which
+  /// destroys the engine right after — so a photo still in flight would
+  /// never finish, and its 'processing' row would answer every later run
+  /// (and the open app) "still analyzing" for appProcessingStaleAge,
+  /// holding the background watermark in front of it.
+  ///
+  /// Releases the reservation the photo in flight holds, with its
+  /// ownership stamp (a row another run took is left alone), waiting at
+  /// most [limit]; from then on process() uploads, settles and saves
+  /// nothing — a late reply is dropped, the photo stays eligible. Returns
+  /// the released photo's asset id, or null when none was held. Never
+  /// throws.
+  Future<String?> abandon(
+      {Duration limit = const Duration(seconds: 1)}) async {
+    _abandoned = true;
+    final held = _held;
+    _held = null;
+    if (held == null) return null;
+    try {
+      await dao
+          .releasePhotoHash(held.hash, ownerStamp: held.stamp)
+          .timeout(limit);
+    } catch (_) {
+      // Lost to another run already, or the store is busy: nothing more
+      // this run can do before its engine goes.
+    }
+    return held.assetId;
+  }
+
+  /// The photo's verdict once [abandon] ran: retryable, so the intake
+  /// releases it and the frontier halts in front of it. Releases the
+  /// reservation itself when [abandon] could not (it was taken after).
+  Future<PhotoOutcome> _whenAbandoned() async {
+    final held = _held;
+    _held = null;
+    if (held != null) {
+      try {
+        await dao.releasePhotoHash(held.hash, ownerStamp: held.stamp);
+      } catch (_) {}
+    }
+    return _outOfTime;
+  }
+
   /// One photo through the full pipeline. Never throws.
   ///
   /// Every intake comes through here (watcher, share sheet, add flow,
@@ -355,6 +406,8 @@ class PhotoPipeline {
     final outcome = await (time == null
         ? _process(photo)
         : time.guard('photo', () => _process(photo)));
+    // Settled or released by now: no reservation is held past process().
+    _held = null;
     try {
       onOutcome?.call(photo, outcome);
     } catch (_) {}
@@ -386,6 +439,7 @@ class PhotoPipeline {
     // The verdict this run holds once the analyzer answered.
     _HeldVerdict? verdict;
     try {
+      if (_abandoned) return _outOfTime;
       // The automatic-analysis latch is armed: release the photo before
       // even hashing it — no ledger row, no analyzer call, no upload. It
       // stays eligible (retryable), so the scan after the fix picks it up.
@@ -431,7 +485,11 @@ class PhotoPipeline {
         case PhotoReservation.reserved:
           reserved = true;
           stamp = reservation.stamp;
+          if (stamp != null) {
+            _held = (hash: hash, stamp: stamp, assetId: photo.assetId);
+          }
       }
+      if (_abandoned) return _whenAbandoned();
 
       // The day this photo belongs to. validateCapturedAt is NOT optional:
       // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
@@ -473,8 +531,12 @@ class PhotoPipeline {
       ];
 
       final revision = latch?.revision();
+      if (_abandoned) return _whenAbandoned(); // no upload
       final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
+      // The run's deadline passed during the analysis: abandon() released
+      // the photo, and nothing below may write for it.
+      if (_abandoned) return _whenAbandoned();
       verdict = (outcome: outcome, recent: recent);
       if (outcome.analysis == null) {
         final why = outcome.error ?? 'Analysis failed.';
@@ -628,19 +690,23 @@ class PhotoPipeline {
         markStatus: IngestionStatus.saved, // atomic saved mark (spec §2.3)
         ownerStamp: stamp,
       );
+      _held = null; // saved: no longer a reservation
       // History thumbnail from the ORIGINAL bytes we already hold (spec §9
       // app-only). Best-effort AND awaited: the pipeline is serialized, so
       // finishing the thumb before the next photo keeps memory flat; any
       // failure must never un-save the meal, and in the iOS background run
       // a thumb that never comes must not hold the verdict past
       // [thumbnailTimeout].
-      try {
-        final pending = _thumb(photo.bytes);
-        final thumb = await (deferUndecodable
-            ? orNullAfter(pending, thumbnailTimeout)
-            : pending);
-        if (thumb != null) await dao.saveMealThumb(id, thumb);
-      } catch (_) {}
+      // An abandoned run (its engine about to go) starts no thumbnail.
+      if (!_abandoned) {
+        try {
+          final pending = _thumb(photo.bytes);
+          final thumb = await (deferUndecodable
+              ? orNullAfter(pending, thumbnailTimeout)
+              : pending);
+          if (thumb != null) await dao.saveMealThumb(id, thumb);
+        } catch (_) {}
+      }
       final name = mealDescription(analysis);
       final kcal = displayTotalCalories(analysis);
       final summary = '$name — ~$kcal kcal';
@@ -740,6 +806,13 @@ class PhotoPipeline {
   static const _inFlight = PhotoOutcome(PhotoOutcomeKind.inFlight,
       'This photo is still being analyzed — check back in a moment.',
       retryable: true);
+
+  /// [abandon]'s verdict: released, offered again by a later scan.
+  static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The background run ran out of time before this photo was done.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'out of time');
 
   static const _latchedMessage =
       'Automatic analysis is paused: the AI service refused the last '

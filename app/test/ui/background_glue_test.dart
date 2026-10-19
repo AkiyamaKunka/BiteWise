@@ -526,21 +526,31 @@ void main() {
         final never = Completer<void>();
         final analyzer = FakeAnalyzer()..onAnalyze = () => never.future;
         final recorder = await begun();
+        final dao = FakeDao();
+        final pipeline = PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (b) async => md5.convert(b).toString());
         final stuck = headlessBackfillWith(
           settings: settings,
           prefs: prefs,
           intake: EmittingIntake()..batch = [photo(1), photo(2)],
-          pipeline: () async => PhotoPipeline(
-              dao: FakeDao(),
-              analyzer: analyzer,
-              hasher: (b) async => md5.convert(b).toString()),
+          pipeline: () async => pipeline,
           showMealCard: (_, _) async {},
           clock: () => t0,
           recorder: recorder,
         );
         final ok = await finishWithinGrant(stuck,
-            left: const Duration(milliseconds: 40), recorder: recorder);
+            left: const Duration(milliseconds: 40),
+            recorder: recorder,
+            abandon: () async {
+              await pipeline.abandon();
+            });
         expect(ok, isTrue, reason: 'the reply is what completes the BGTask');
+        // The reply destroys the engine: the photo in flight would never
+        // finish, so its reservation is released BEFORE the reply — no
+        // 'processing' row to refuse the next run and the app for 30 min.
+        expect(dao.ledger.values, isNot(contains(IngestionStatus.processing)));
         var r = stored();
         expect(r.finished, isTrue);
         expect(r.stopReason, BackgroundStop.budget);
@@ -551,6 +561,95 @@ void main() {
         r = stored();
         expect((r.stage, r.analyzed, r.saved),
             (BackgroundRunStage.done, 0, 0));
+      });
+
+      test('a stuck abandon cannot hold the reply past its limit', () async {
+        final recorder = await begun();
+        final ok = await finishWithinGrant(Completer<bool>().future,
+            left: Duration.zero,
+            recorder: recorder,
+            abandon: () => Completer<void>().future,
+            abandonLimit: const Duration(milliseconds: 20));
+        expect(ok, isTrue);
+        expect(stored().stopReason, BackgroundStop.budget);
+      });
+
+      test('RunInFlight: releases the photo in flight and notes it deferred; '
+          'cut off twice, later runs pass it over', () async {
+        final dao = FakeDao();
+        final hang = Completer<void>();
+        final pipeline = PhotoPipeline(
+            dao: dao,
+            analyzer: FakeAnalyzer()..onAnalyze = () => hang.future,
+            hasher: (b) async => md5.convert(b).toString());
+        Future<void> cutOff() async {
+          final run = RunInFlight()
+            ..pipeline = pipeline
+            ..deferred = await DeferredAssets.load(prefs);
+          unawaited(pipeline.process(photo(1)));
+          while (!dao.ledger.values.contains(IngestionStatus.processing)) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          await run.abandon();
+          expect(dao.ledger.values,
+              isNot(contains(IngestionStatus.processing)));
+        }
+
+        await cutOff();
+        expect((await DeferredAssets.load(prefs)).passOver('asset1'), isFalse,
+            reason: 'once may be a late offer');
+        // A fresh pipeline per run, as each run builds its own.
+        final second = PhotoPipeline(
+            dao: dao,
+            analyzer: FakeAnalyzer()..onAnalyze = () => hang.future,
+            hasher: (b) async => md5.convert(b).toString());
+        final run = RunInFlight()
+          ..pipeline = second
+          ..deferred = await DeferredAssets.load(prefs);
+        unawaited(second.process(photo(1)));
+        while (!dao.ledger.values.contains(IngestionStatus.processing)) {
+          await Future<void>.delayed(const Duration(milliseconds: 1));
+        }
+        await run.abandon();
+        expect((await DeferredAssets.load(prefs)).passOver('asset1'), isTrue,
+            reason: 'twice: too slow for any run, the app logs it');
+        // Nothing built yet (the deadline hit during the settings load):
+        // nothing to release, nothing noted.
+        await RunInFlight().abandon();
+      });
+
+      test('runHeadlessBackfill on iOS ends at the deadline even when the '
+          'settings load never returns', () async {
+        addTearDown(() => isHeadlessEngine = false);
+        // Dart entry at t0; every later reading is 40 ms short of the
+        // deadline, so the wrapper has 40 ms of real time left.
+        var calls = 0;
+        DateTime clock() => calls++ == 0
+            ? t0
+            : t0.add(iosRunDeadline - const Duration(milliseconds: 40));
+        final ok = await runHeadlessBackfill(
+          isIOS: true,
+          loadPrefs: () async => prefs,
+          clock: clock,
+          loadSettings: () => Completer<AppSettings>().future,
+        ).timeout(const Duration(seconds: 5));
+        expect(ok, isTrue, reason: 'the reply completes the BGTask');
+        final run =
+            decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
+                .first;
+        expect(run.stopReason, BackgroundStop.budget);
+        // Android has no such wrapper: the same hang is WorkManager's to end.
+        calls = 0;
+        final android = runHeadlessBackfill(
+          isIOS: false,
+          loadPrefs: () async => prefs,
+          clock: clock,
+          loadSettings: () => Completer<AppSettings>().future,
+        );
+        var ended = false;
+        unawaited(android.then((_) => ended = true));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        expect(ended, isFalse);
       });
 
       test('a run that ends first is the answer, and the deadline never '

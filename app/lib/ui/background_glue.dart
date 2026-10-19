@@ -509,17 +509,39 @@ Future<bool> runHeadlessBackfill({
   await recorder.begin(
       watermarkBefore:
           readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+  final inFlight = RunInFlight();
   final run = _runAfterLaunch(
       ios: ios,
       prefs: prefs,
       recorder: recorder,
       startedAt: startedAt,
+      inFlight: inFlight,
       loadSettings: loadSettings);
   // iOS: the whole run ends inside the grant, whatever it is stuck on.
   if (!ios) return run;
   return finishWithinGrant(run,
       left: startedAt.add(iosRunDeadline).difference(clock()),
-      recorder: recorder);
+      recorder: recorder,
+      abandon: inFlight.abandon);
+}
+
+/// What the iOS deadline needs from a run still going: its pipeline once
+/// built, and its deferral notes once loaded.
+@visibleForTesting
+class RunInFlight {
+  PhotoPipeline? pipeline;
+  DeferredAssets? deferred;
+
+  /// Releases the photo in flight ([PhotoPipeline.abandon]) and notes it
+  /// as deferred: a photo the deadline cuts off twice — too slow for what
+  /// a run has left — is then passed over like an undecodable one, so it
+  /// no longer holds the watermark, and the app's catch-up logs it.
+  Future<void> abandon() async {
+    final assetId = await pipeline?.abandon();
+    if (assetId != null && assetId.isNotEmpty) {
+      await deferred?.deferred(assetId);
+    }
+  }
 }
 
 /// [runHeadlessBackfill] past the launch stamp: settings, the Android
@@ -529,6 +551,7 @@ Future<bool> _runAfterLaunch({
   required SharedPreferences prefs,
   required BackgroundRunRecorder recorder,
   required DateTime startedAt,
+  required RunInFlight inFlight,
   Future<AppSettings> Function()? loadSettings,
 }) async {
   final AppSettings settings;
@@ -544,7 +567,7 @@ Future<bool> _runAfterLaunch({
     return true;
   }
   await recorder.stage(BackgroundRunStage.settings);
-  final deferred = await DeferredAssets.load(prefs);
+  final deferred = inFlight.deferred = await DeferredAssets.load(prefs);
   // Time-derived id seed: cards from successive runs stack instead of
   // overwriting each other. Base 10000 keeps the whole range clear of the
   // fixed daily-report id 9001 (a colliding meal card would silently
@@ -579,7 +602,7 @@ Future<bool> _runAfterLaunch({
       prefs: prefs,
       intake: createPhotoIntake(settings,
           onBackfillListed: recorder.listed, passOver: deferred.passOver),
-      pipeline: () async => PhotoPipeline(
+      pipeline: () async => inFlight.pipeline = PhotoPipeline(
           dao: await createMealsDao(),
           analyzer: createMultiProviderAnalyzer(settings),
           latch: autoScanLatchFor(settings),
@@ -630,19 +653,32 @@ const Duration iosRunDeadline = Duration(seconds: 25);
 /// setTaskCompleted; workmanager_apple 0.9.1+2 BackgroundWorker.swift)
 /// instead of iOS killing the process at expiry.
 ///
-/// The abandoned run is not cancelled — Dart cannot — but it can do no
-/// harm: the offer budget has passed, so it starts no new photo; the
-/// photo in flight carries its reservation's ownership stamp, so a late
-/// finish settles only a row that is still its own (and otherwise drops
-/// the verdict); and the engine is torn down right after the reply.
-/// Its diagnostics entry is frozen once finished.
+/// The reply destroys the engine (cleanupFlutterResources →
+/// destroyContext), so the abandoned run never gets to finish anything —
+/// a photo in flight would keep its 'processing' row, and that row would
+/// refuse every later run and the open app for appProcessingStaleAge
+/// (simulator, 2026-10-19). So before replying, [abandon] releases that
+/// reservation and stops the pipeline from writing anything more
+/// ([PhotoPipeline.abandon]), waiting at most [abandonLimit]. The offer
+/// budget has passed by then, so the run starts no new photo either. Its
+/// diagnostics entry is frozen once finished.
 @visibleForTesting
 Future<bool> finishWithinGrant(Future<bool> run,
-    {required Duration left, required BackgroundRunRecorder recorder}) {
+    {required Duration left,
+    required BackgroundRunRecorder recorder,
+    Future<void> Function()? abandon,
+    Duration abandonLimit = const Duration(milliseconds: 1500)}) {
   final done = Completer<bool>();
   final timer = Timer(left.isNegative ? Duration.zero : left, () {
     if (done.isCompleted) return;
     done.complete(() async {
+      if (abandon != null) {
+        try {
+          await abandon().timeout(abandonLimit);
+        } catch (_) {
+          // Out of time for it: the reply matters more.
+        }
+      }
       await recorder.finish(BackgroundStop.budget);
       return true;
     }());

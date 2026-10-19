@@ -381,6 +381,98 @@ void main() {
     });
   });
 
+  // 2026-10-19: the iOS run's deadline replies to workmanager, which
+  // destroys the engine — the photo in flight never finished, and its
+  // 'processing' row refused every later run and the app for 30 minutes.
+  group('abandon() (the iOS run deadline)', () {
+    Future<String> syncMd5(Uint8List b) async =>
+        md5.convert(b).toString().toLowerCase();
+
+    test('mid-analysis: the reservation is released at once, and the late '
+        'reply writes nothing', () async {
+      final dao = FakeDao();
+      final reply = Completer<void>();
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = (() => reply.future)
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, hasher: syncMd5);
+      final pending = pipeline.process(_photo());
+      await _until(() => dao.ledger[_hash] == IngestionStatus.processing);
+      expect(await pipeline.abandon(), 'asset1');
+      expect(dao.ledger.containsKey(_hash), isFalse,
+          reason: 'released with its stamp: no orphan processing row');
+      reply.complete();
+      final out = await pending;
+      expect(out.retryable, isTrue, reason: 'offered again by a later scan');
+      expect(dao.meals, isEmpty);
+      expect(dao.ledger.containsKey(_hash), isFalse);
+    });
+
+    test('nothing in flight: null, and later photos are not even hashed',
+        () async {
+      final dao = FakeDao();
+      var hashed = 0;
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: FakeAnalyzer(),
+          hasher: (b) async {
+            hashed++;
+            return syncMd5(b);
+          });
+      expect(await pipeline.abandon(), isNull);
+      final out = await pipeline.process(_photo());
+      expect(out.retryable, isTrue);
+      expect(hashed, 0);
+      expect(dao.ledger, isEmpty);
+    });
+
+    test('during the reservation itself: the pipeline releases what it got '
+        'and uploads nothing', () async {
+      final gate = Completer<void>();
+      final dao = _SlowReserveDao(gate.future);
+      var uploads = 0;
+      final analyzer = FakeAnalyzer()..onAnalyze = () async => uploads++;
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, hasher: syncMd5);
+      final pending = pipeline.process(_photo());
+      await _until(() => dao.reserving);
+      expect(await pipeline.abandon(), isNull,
+          reason: 'not yet reserved when the deadline hit');
+      gate.complete();
+      final out = await pending;
+      expect(out.retryable, isTrue);
+      expect(uploads, 0);
+      expect(dao.ledger.containsKey(_hash), isFalse);
+    });
+
+    test('a meal already saved stays saved; no thumbnail is started after',
+        () async {
+      final dao = FakeDao();
+      final thumbStarted = Completer<void>();
+      final thumbDone = Completer<Uint8List?>();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: analyzer,
+          hasher: syncMd5,
+          thumbnailer: (_) {
+            thumbStarted.complete();
+            return thumbDone.future;
+          });
+      final pending = pipeline.process(_photo());
+      await thumbStarted.future;
+      expect(await pipeline.abandon(), isNull,
+          reason: 'the row is saved, not a reservation');
+      thumbDone.complete(null);
+      expect((await pending).kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger[_hash], IngestionStatus.saved);
+    });
+  });
+
   group('a rejected key on the automatic scan', () {
     // A 401/403 (xAI's 400 'Incorrect API key', Gemini auth) used to burn
     // EVERY scanned photo to 'failed' — watch intake never reclaims, so the
@@ -949,5 +1041,20 @@ class _ThumbThrowingDao extends FakeDao {
   @override
   Future<void> saveMealThumb(int mealId, Uint8List jpeg) async {
     throw StateError('disk full');
+  }
+}
+
+/// Holds reservePhotoHash open until [gate] completes.
+class _SlowReserveDao extends FakeDao {
+  _SlowReserveDao(this.gate);
+  final Future<void> gate;
+  bool reserving = false;
+  @override
+  Future<PhotoReservationResult> reservePhotoHash(String imageHash,
+      {required String source, bool reclaimDeliberate = false}) async {
+    reserving = true;
+    await gate;
+    return super.reservePhotoHash(imageHash,
+        source: source, reclaimDeliberate: reclaimDeliberate);
   }
 }
