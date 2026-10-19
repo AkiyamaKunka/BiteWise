@@ -410,6 +410,33 @@ void main() {
       expect(dao.ledger.containsKey(_hash), isFalse);
     });
 
+    // The test above passes even without the post-analysis guard: the
+    // released row makes the save lose its reservation. Here the release
+    // fails (a busy store, or abandon's 1 s limit), the row is still ours,
+    // and only the guard keeps the late reply from saving.
+    test('mid-analysis, the release failing: the late reply still saves '
+        'nothing', () async {
+      final dao = _FailingReleaseDao();
+      final reply = Completer<void>();
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = (() => reply.future)
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, hasher: syncMd5);
+      final pending = pipeline.process(_photo());
+      await _until(() => dao.ledger[_hash] == IngestionStatus.processing);
+      expect(await pipeline.abandon(), 'asset1');
+      expect(dao.ledger[_hash], IngestionStatus.processing,
+          reason: 'the release failed: the row is still this run\'s');
+      reply.complete();
+      final out = await pending;
+      expect(out.retryable, isTrue);
+      expect(dao.meals, isEmpty);
+      expect(dao.ledger[_hash], IngestionStatus.processing,
+          reason: 'not saved; the stale reclaim frees it in time');
+    });
+
     test('nothing in flight: null, and later photos are not even hashed',
         () async {
       final dao = FakeDao();
@@ -1045,6 +1072,13 @@ class _ThumbThrowingDao extends FakeDao {
 }
 
 /// Holds reservePhotoHash open until [gate] completes.
+/// A store too busy to release anything.
+class _FailingReleaseDao extends FakeDao {
+  @override
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp}) =>
+      Future.error(StateError('database is locked'));
+}
+
 class _SlowReserveDao extends FakeDao {
   _SlowReserveDao(this.gate);
   final Future<void> gate;
