@@ -1096,6 +1096,18 @@ void planTuningTests() {
         await tester.pumpAndSettle();
         expect(find.textContaining(hint), findsNothing);
       }
+      // Watcher off: no red row either, since nothing would explain it.
+      await tester.pumpWidget(bg(watcher: false));
+      await tester.pumpAndSettle();
+      final calm = tester.widget<RowBadge>(find.descendant(
+          of: find.byKey(const Key('backgroundScanRow')),
+          matching: find.byType(RowBadge)));
+      expect(
+          calm.color,
+          isNot(Theme.of(tester.element(
+                  find.byKey(const Key('backgroundScanRow'))))
+              .colorScheme
+              .error));
     });
 
     // 2026-10-10: iOS alone decides when BGAppRefresh launches the scan (a

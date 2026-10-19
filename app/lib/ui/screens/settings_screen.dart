@@ -553,7 +553,9 @@ class _SettingsScreenState extends State<SettingsScreen>
               GroupedRow(
                 key: const Key('backgroundScanRow'),
                 icon: Icons.update,
-                iconColor: _backgroundRefreshOff || _backgroundStuck
+                // Stuck only while the watcher is on, like its footer line.
+                iconColor: _backgroundRefreshOff ||
+                        (_watcherEnabled && _backgroundStuck)
                     ? theme.colorScheme.error
                     : theme.colorScheme.secondary,
                 title: context.l10n.settingsRowBackgroundScan,
