@@ -93,16 +93,23 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// 2026-10-19).
 const Duration iosBackgroundBudget = Duration(seconds: 15);
 
-/// When workmanager created this run's headless engine, as an ISO instant:
-/// written natively by the AppDelegate's registrant callback, before the
-/// engine boots and long before Dart runs (2026-10-19). iOS's grant is
-/// already running then; Dart's own clock starts a boot later.
+/// When workmanager started this run's headless engine, as an ISO instant:
+/// written natively by the AppDelegate's registrant callback, which
+/// workmanager calls right after it creates and starts the engine, before
+/// Dart's task runs (2026-10-19). iOS's grant is already running then —
+/// since the process launch and the shell's creation, which the stamp
+/// misses — and Dart's own clock starts later still.
 const String backgroundNativeLaunchPrefsKey = 'background.native_launch_iso';
 
 /// The most a native launch stamp may lead the run's entry into Dart and
-/// still count as this run's (an engine boots in a second or two). Older,
-/// it is an earlier run's and says nothing about this one.
-const Duration nativeLaunchMaxLead = Duration(seconds: 20);
+/// still count as this run's. Every iOS run stamps before its Dart can read
+/// the store, and runs are 15 min or more apart, so a stamp within the
+/// grant (~30 s) is this run's, however slow its boot was: counted from
+/// it, a run that booted for 25 s offers nothing and ends at once, where
+/// counting from the Dart entry would run on long past the grant and be
+/// killed mid-photo. Older, it is an earlier run's and says nothing about
+/// this one.
+const Duration nativeLaunchMaxLead = Duration(seconds: 30);
 
 /// Where this run's time budgets count from: the native launch stamp
 /// ([backgroundNativeLaunchPrefsKey]) when it belongs to this run — not
@@ -779,13 +786,13 @@ Future<bool> _runAfterLaunch({
 /// upload, a stalled decode) or the steps around the scan.
 ///
 /// 22 s, not 25: what the start misses is unmeasured — the process launch
-/// before the BGTask handler always, and the engine boot too when no
-/// native stamp came — and the teardown and completion come after. A photo
-/// offered at the end of the offer budget would have 7 s, so after the
-/// first, drainBackfill starts one only if it can finish by this at the
-/// run's pace. One the deadline cuts off anyway
-/// is released (finishWithinGrant) and offered again by a later run —
-/// behind any older photo still waiting, not necessarily first.
+/// before the BGTask handler and the engine's creation always, and the
+/// engine boot too when no native stamp came — and the teardown and
+/// completion come after. A photo offered at the end of the offer budget
+/// would have 7 s, so after the first, drainBackfill starts one only if
+/// it can finish by this at the run's pace. One the deadline cuts off
+/// anyway is released (finishWithinGrant) and offered again by a later
+/// run — behind any older photo still waiting, not necessarily first.
 const Duration iosRunDeadline = Duration(seconds: 22);
 
 /// [run] or, once [left] has passed, an end to the run anyway: the

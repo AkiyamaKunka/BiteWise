@@ -921,10 +921,26 @@ void main() {
             '',
             'garbage',
             '2026-10-19T03:00:10.001Z', // after the entry
+            '2026-10-19T02:59:39.999Z', // 30.001 s: past the grant
+            '2026-10-19T02:59:39.000Z', // 31 s
             '2026-10-19T02:30:00.000Z', // an earlier run's
           ]) {
             expect(backgroundRunStart(stamp, entry), entry, reason: '$stamp');
           }
+        });
+        // Review, 2026-10-19: a stamp 20-30 s old is this run's after a
+        // slow boot. Falling back to the Dart entry gave that run a fresh
+        // window that iOS's grant had already spent, and it was killed
+        // mid-photo.
+        test('a slow boot, up to the grant (30 s), still counts from the '
+            'stamp', () {
+          expect(nativeLaunchMaxLead, const Duration(seconds: 30));
+          for (final lead in [20, 25, 30]) {
+            final stamp = entry.subtract(Duration(seconds: lead));
+            expect(backgroundRunStart(stamp.toIso8601String(), entry), stamp,
+                reason: '$lead s');
+          }
+          expect(backgroundRunStart(entry.toIso8601String(), entry), entry);
         });
       });
 

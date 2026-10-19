@@ -330,9 +330,10 @@ void main() {
   });
 
   // The iOS background run counts its time budgets from the moment
-  // workmanager created its engine (2026-10-19): the AppDelegate stamps it
-  // in the registrant callback, under the name shared_preferences gives the
-  // Dart key. A renamed key, or a stamp written later in the callback,
+  // workmanager started its engine (2026-10-19): the AppDelegate stamps it
+  // in the registrant callback, which runs right after the engine is
+  // created and started and before Dart's task, under the name
+  // shared_preferences gives the Dart key. A renamed key, or a stamp written later in the callback,
   // silently falls back to the Dart entry and the boot is uncounted again.
   test('the background launch stamp is written first, under the Dart key',
       () {

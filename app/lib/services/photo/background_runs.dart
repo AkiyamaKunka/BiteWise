@@ -104,9 +104,11 @@ class BackgroundRunRecord {
   final DateTime? watermarkBefore;
   final DateTime? watermarkAfter;
 
-  /// iOS: milliseconds from the native launch stamp (the engine's creation)
-  /// to the run's entry into Dart — the boot the time budgets now count
-  /// (2026-10-19). Null without a stamp for this run.
+  /// iOS: milliseconds from the native launch stamp to the run's entry into
+  /// Dart — the boot the time budgets now count (2026-10-19). A floor: the
+  /// stamp comes right after workmanager creates and starts the engine, so
+  /// the process launch and the shell's creation before it are not in it.
+  /// Null without a stamp for this run.
   final int? bootMs;
 
   bool get finished => end != null;
