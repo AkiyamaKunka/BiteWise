@@ -27,10 +27,26 @@ import UIKit
 final class BackgroundTimePlugin: NSObject, FlutterPlugin {
   static let channelName = "dev.calorietracker/bgtime"
 
+  /// One task's identifier, shared by the plugin and the task's expiration
+  /// handler: the handler can end the task through it even when the plugin
+  /// is gone by then (its engine destroyed), and whoever ends it first
+  /// marks it ended, so it is never ended twice.
+  private final class OpenTask {
+    var id: UIBackgroundTaskIdentifier = .invalid
+    func end() {
+      guard id != .invalid else { return }
+      UIApplication.shared.endBackgroundTask(id)
+      id = .invalid
+    }
+  }
+
   /// Open tasks by the token handed to Dart. Touched only on the main
   /// thread: channel calls and expiration handlers both arrive there.
-  private var open: [Int: UIBackgroundTaskIdentifier] = [:]
+  private var open: [Int: OpenTask] = [:]
   private var lastToken = 0
+
+  /// How many tasks are open (RunnerTests).
+  var openTaskCount: Int { open.count }
 
   static func register(with registrar: FlutterPluginRegistrar) {
     let channel = FlutterMethodChannel(
@@ -45,16 +61,19 @@ final class BackgroundTimePlugin: NSObject, FlutterPlugin {
       let name = args?["name"] as? String ?? "photo"
       lastToken += 1
       let token = lastToken
+      let task = OpenTask()
       // The handler runs later on the main thread (never inside this call),
-      // so the task is in `open` by the time it can fire.
-      let id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
+      // so the task is in `open` by the time it can fire. Without the
+      // plugin it still ends the task: one left open gets the app killed.
+      task.id = UIApplication.shared.beginBackgroundTask(withName: name) { [weak self] in
         self?.end(token)
+        task.end()
       }
-      if id == .invalid {
+      if task.id == .invalid {
         result(nil)
         return
       }
-      open[token] = id
+      open[token] = task
       result(token)
     case "end":
       if let token = (args?["id"] as? NSNumber)?.intValue {
@@ -67,7 +86,6 @@ final class BackgroundTimePlugin: NSObject, FlutterPlugin {
   }
 
   private func end(_ token: Int) {
-    guard let id = open.removeValue(forKey: token) else { return }
-    UIApplication.shared.endBackgroundTask(id)
+    open.removeValue(forKey: token)?.end()
   }
 }

@@ -289,9 +289,11 @@ void main() {
     expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
     final source = swift.readAsStringSync();
     expect(source, contains('"$backgroundTimeChannelName"'));
-    // The expiration handler must END the task, or iOS kills the app.
+    // The expiration handler must END the task, or iOS kills the app —
+    // through the plugin, and without it too (its engine gone).
     expect(
-        RegExp(r'beginBackgroundTask\(withName: name\) \{[^}]*end\(token\)')
+        RegExp(r'beginBackgroundTask\(withName: name\) \{[^}]*end\(token\)'
+                r'[^}]*task\.end\(\)')
             .hasMatch(source),
         isTrue);
     final pbxproj =

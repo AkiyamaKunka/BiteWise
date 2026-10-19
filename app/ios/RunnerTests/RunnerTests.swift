@@ -395,3 +395,53 @@ class BackgroundLaunchStampTests: XCTestCase {
       accuracy: 0.001)
   }
 }
+
+/// The background-time channel (Runner/BackgroundTimePlugin.swift): one
+/// task per photo, begun and ended from Dart (background_time.dart). A
+/// task left open gets the app killed, so every way of ending one is
+/// pinned here. Hosted in the running app, so UIApplication is real.
+class BackgroundTimePluginTests: XCTestCase {
+  private func call(
+    _ plugin: BackgroundTimePlugin, _ method: String, _ args: Any?
+  ) -> Any? {
+    var reply: Any? = "unset"
+    plugin.handle(FlutterMethodCall(methodName: method, arguments: args)) { reply = $0 }
+    return reply
+  }
+
+  func testBeginHandsOutDistinctTokensAndEndClosesEach() {
+    let plugin = BackgroundTimePlugin()
+    let first = call(plugin, "begin", ["name": "photo"]) as? Int
+    let second = call(plugin, "begin", ["name": "photo"]) as? Int
+    XCTAssertNotNil(first)
+    XCTAssertNotNil(second)
+    XCTAssertNotEqual(first, second)
+    XCTAssertEqual(plugin.openTaskCount, 2)
+    XCTAssertNil(call(plugin, "end", ["id": first!]))
+    XCTAssertEqual(plugin.openTaskCount, 1)
+    XCTAssertNil(call(plugin, "end", ["id": second!]))
+    XCTAssertEqual(plugin.openTaskCount, 0)
+  }
+
+  func testEndIsNeverDoubledAndUnknownTokensAreIgnored() {
+    let plugin = BackgroundTimePlugin()
+    let token = call(plugin, "begin", ["name": "photo"]) as! Int
+    XCTAssertNil(call(plugin, "end", ["id": token]))
+    XCTAssertNil(call(plugin, "end", ["id": token]))
+    XCTAssertNil(call(plugin, "end", ["id": token + 1000]))
+    XCTAssertNil(call(plugin, "end", nil))
+    XCTAssertEqual(plugin.openTaskCount, 0)
+  }
+
+  func testBeginWithoutANameStillBegins() {
+    let plugin = BackgroundTimePlugin()
+    let token = call(plugin, "begin", nil) as? Int
+    XCTAssertNotNil(token)
+    XCTAssertNil(call(plugin, "end", ["id": token!]))
+  }
+
+  func testUnknownMethodIsNotImplemented() {
+    let reply = call(BackgroundTimePlugin(), "nope", nil)
+    XCTAssertTrue((reply as AnyObject?) === FlutterMethodNotImplemented)
+  }
+}
