@@ -771,6 +771,27 @@ Future<void> syncBackgroundScan(AppSettings settings) =>
         frequency: backgroundScanFrequency,
         dispatcher: appBackgroundDispatcher);
 
+/// Settings' "the background scan is stuck" probe (2026-10-19): the
+/// stored runs and the watermark, both read FRESH (the background engine
+/// writes the runs; either engine moves the watermark), so a catch-up the
+/// app just finished clears the hint (backgroundScanLooksStuck). An
+/// unreadable store is not stuck.
+Future<bool> backgroundScanStuckNow(
+    {DateTime Function() clock = DateTime.now,
+    Future<SharedPreferences> Function()? loadPrefs}) async {
+  try {
+    final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+    await prefs.reload();
+    return backgroundScanLooksStuck(
+        decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey)),
+        now: clock(),
+        watermark:
+            readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+  } catch (_) {
+    return false;
+  }
+}
+
 /// The last background launch, read FRESH: the run wrote it from another
 /// isolate, and this isolate's SharedPreferences cache would not know.
 Future<DateTime?> lastBackgroundRun() async {

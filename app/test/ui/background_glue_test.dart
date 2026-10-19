@@ -795,6 +795,45 @@ void main() {
 
     // 2026-10-19: once the user leaves (iOS), only the photo in flight may
     // spend the background time; the scan reads nothing more.
+    test('the stuck hint clears once the catch-up moved the watermark past '
+        'the hung runs (backgroundScanStuckNow reads both fresh)', () async {
+      final wm = t1;
+      // Three runs hung on a photo, written by the background engine.
+      SharedPreferences.resetStatic();
+      final background = await SharedPreferences.getInstance();
+      await background.setString(backgroundWatermarkPrefsKey,
+          wm.toIso8601String());
+      for (var i = 0; i < 3; i++) {
+        final r = BackgroundRunRecorder(background,
+            platform: 'ios', clock: () => t2.add(Duration(minutes: i)));
+        await r.begin(watermarkBefore: wm);
+        await r.offered();
+      }
+      SharedPreferences.resetStatic();
+      final app = await SharedPreferences.getInstance();
+      expect(
+          await backgroundScanStuckNow(
+              clock: () => t3, loadPrefs: () async => app),
+          isTrue);
+      // The app opens and its catch-up logs everything up to t2.
+      final intake = EmittingIntake()
+        ..batch = [photo(1)]
+        ..safeFrontiers = [t2]
+        ..frontier = t2;
+      intake.attachSink((_, _) async => true);
+      await foregroundCatchUp(intake,
+          clock: () => t3, loadPrefs: () async => app);
+      expect(
+          await backgroundScanStuckNow(
+              clock: () => t3, loadPrefs: () async => app),
+          isFalse,
+          reason: 'the hint would tell the user to open the app they are in');
+      expect(
+          await backgroundScanStuckNow(
+              loadPrefs: () async => throw StateError('no store')),
+          isFalse);
+    });
+
     test('shouldContinue reaches the intake: past it nothing more is read',
         () async {
       var open = true;

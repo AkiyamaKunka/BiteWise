@@ -226,9 +226,22 @@ Future<List<BackgroundRunRecord>> readBackgroundRuns(
 /// finished its scan with nothing left over. A run its guard stopped (no
 /// key, the watcher off, paused, no photo access) counts as fine: Settings
 /// explains those elsewhere, and opening the app would not fix them.
+///
+/// [watermark] is the stored background watermark, read fresh. Later than
+/// the newest run left it, something moved it since — the app's own
+/// catch-up (foregroundCatchUp), which is exactly the remedy the hint
+/// names — so the runs before that say nothing about now: not stuck until
+/// later runs show it again. Without this the hint stayed on after the
+/// user opened the app and everything was logged, telling them to open
+/// the app while they were in it (2026-10-19).
 bool backgroundScanLooksStuck(List<BackgroundRunRecord> runs,
-    {required DateTime now}) {
+    {required DateTime now, DateTime? watermark}) {
   if (runs.length < 3) return false;
+  if (watermark != null) {
+    final newest = runs.first;
+    final left = newest.watermarkAfter ?? newest.watermarkBefore;
+    if (left == null || watermark.isAfter(left)) return false;
+  }
   if (runs.take(3).every((r) => r.offered > 0 && r.analyzed == 0)) {
     return true;
   }

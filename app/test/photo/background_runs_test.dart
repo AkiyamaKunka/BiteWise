@@ -267,6 +267,44 @@ void main() {
           reason: 'fewer than 3 runs in 2 days: not "keep starting"');
     });
 
+    // 2026-10-19: the hint says opening the app catches up — and kept
+    // saying it after the app had, until a background run made progress.
+    test('a watermark moved past where the newest run left it (the app '
+        'caught up) clears both signs, until later runs show them again', () {
+      final wm = DateTime.utc(2026, 10, 11, 2, 26);
+      final hung = [
+        for (final ago in [1, 2, 3])
+          run(h * ago, offered: 1, stop: null, before: wm),
+      ];
+      expect(backgroundScanLooksStuck(hung, now: now, watermark: wm), isTrue,
+          reason: 'nothing moved it since');
+      expect(
+          backgroundScanLooksStuck(hung,
+              now: now, watermark: DateTime.utc(2026, 10, 19, 11)),
+          isFalse);
+      final dying = [
+        run(h * 2, stop: null, before: wm),
+        run(h * 10, stop: 'error:PlatformException', before: wm),
+        run(h * 20, stop: null, before: wm),
+        run(h * 60, stop: null, before: wm),
+      ];
+      expect(backgroundScanLooksStuck(dying, now: now, watermark: wm), isTrue);
+      expect(
+          backgroundScanLooksStuck(dying,
+              now: now, watermark: wm.add(const Duration(seconds: 1))),
+          isFalse);
+      // The next runs start from the moved watermark and hang again.
+      final moved = DateTime.utc(2026, 10, 19, 11);
+      final again = [
+        for (final ago in [1, 2, 3])
+          run(Duration(minutes: 10 * ago),
+              offered: 1, stop: null, before: moved),
+        ...hung,
+      ];
+      expect(backgroundScanLooksStuck(again, now: now, watermark: moved),
+          isTrue);
+    });
+
     test('runs a guard stopped (no key, paused…) are not "stuck": opening '
         'the app would not fix them', () {
       final guarded = [
