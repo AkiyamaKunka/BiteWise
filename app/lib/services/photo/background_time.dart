@@ -73,6 +73,14 @@ class BackgroundTime {
 /// 'inactive' is not background: Control Center or the app switcher over
 /// a visible app leaves the GPU on. No binding (yet), or no state yet,
 /// reads as the foreground: the app keeps logging as it did before.
+///
+/// The framework's state, not UIApplication's, and the two can differ
+/// (review, 2026-10-19; Flutter engine c9a6c48423): a full-screen modal
+/// over the Flutter view sends 'paused' (viewDidDisappear) though the app
+/// is open — none is presented today, and photos released then are offered
+/// again on 'resumed'; and a scene iOS connected in the background would
+/// send 'inactive' (viewWillAppear) though the GPU is off — not seen for
+/// BGAppRefresh launches, which run the headless engine.
 bool appEngineBackgrounded() {
   final AppLifecycleState? state;
   try {

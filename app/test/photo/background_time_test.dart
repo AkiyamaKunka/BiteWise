@@ -9,6 +9,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show decodeForUpload;
 import 'package:calorie_tracker/services/photo/background_time.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 
@@ -235,6 +237,45 @@ void main() {
           hasher: (b) async => 'h${b.first}');
       expect((await again.process(_photo(1))).retryable, isFalse);
       expect(dao.ledger['h1'], IngestionStatus.failed);
+    });
+
+    // Review, 2026-10-19: the decode read the lifecycle as background and
+    // skipped dart:ui; the user was back by the verdict, and the photo was
+    // burned to 'failed', lost to automatic logging.
+    test('a decode that skipped dart:ui for the GPU defers the verdict, even '
+        'with the app back in the foreground by then', () async {
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'Could not process this photo (decode failed).',
+            wall: Duration.zero);
+      // The analyzer's own decode chain, ImageIO refusing the photo, while
+      // the app is in the background.
+      analyzer.onAnalyze = () async {
+        expect(
+            await decodeForUpload(Uint8List.fromList([1, 2, 3]),
+                pureDart: (_) => null,
+                longSidePx: 1568,
+                jpegQuality: 85,
+                isolate: (_, _) async => null,
+                native: (_, {required longSidePx, required jpegQuality}) async =>
+                    null,
+                engine: (_, {required longSidePx, required jpegQuality}) =>
+                    fail('dart:ui must not run with the GPU off'),
+                ios: true,
+                headless: false,
+                backgrounded: true),
+            isNull);
+      };
+      final out = await PhotoPipeline(
+              dao: dao,
+              analyzer: analyzer,
+              backgrounded: () => false, // back by the verdict
+              hasher: (b) async => 'h${b.first}')
+          .process(_photo(1));
+      expect(out.errorKind, AnalysisErrorKind.badPhoto);
+      expect(out.retryable, isTrue);
+      expect(dao.ledger, isEmpty, reason: 'released, not failed');
     });
 
     test('a throwing probe reads as the foreground', () async {

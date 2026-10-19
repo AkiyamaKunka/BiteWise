@@ -555,6 +555,7 @@ class PhotoPipeline {
 
       final revision = latch?.revision();
       if (_abandoned) return _whenAbandoned(); // no upload
+      final gpuOffSkips = gpuOffDecodeSkips;
       final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
       // The run's deadline passed during the analysis: abandon() released
@@ -598,11 +599,15 @@ class PhotoPipeline {
         }
         // The analyzer's "could not process this photo (decode failed …)":
         // nothing was sent. In the iOS background engine — or the app's
-        // own while it is in the background ([backgrounded]) — that says
-        // more about the engine than the photo: defer it to a run that has
-        // every decoder ([deferUndecodable]). Everywhere else the permanent
-        // verdict below stands.
-        final deferred = (deferUndecodable || _inBackground()) &&
+        // own while it is in the background ([backgrounded]), or when its
+        // decode skipped dart:ui because it was then ([gpuOffDecodeSkips];
+        // the user may be back already) — that says more about the engine
+        // than the photo: defer it to a run that has every decoder
+        // ([deferUndecodable]). Everywhere else the permanent verdict below
+        // stands.
+        final deferred = (deferUndecodable ||
+                _inBackground() ||
+                gpuOffDecodeSkips != gpuOffSkips) &&
             errorKind == AnalysisErrorKind.badPhoto;
         if (outcome.retryable || deferred) {
           // Transient trouble (rate limit / network / quota pause / no key):

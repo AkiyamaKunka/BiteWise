@@ -92,6 +92,16 @@ bool isHeadlessEngine = false;
 bool Function() isEngineBackgrounded = _never;
 bool _never() => false;
 
+/// How many times [decodeForUpload] gave up on a photo only because the
+/// iOS app engine was in the background (dart:ui skipped, GPU off) — not
+/// because the photo cannot be decoded. PhotoPipeline reads it around each
+/// analysis: a skip during the photo's own analysis defers its badPhoto
+/// verdict even when the app is back in the foreground by the time the
+/// verdict lands (review, 2026-10-19: the decode and the verdict read the
+/// lifecycle at different moments, and a user returning between them got
+/// the photo burned to 'failed', which automatic intake never retries).
+int gpuOffDecodeSkips = 0;
+
 /// One step of the decode chain: [original] → a JPEG whose long side is at
 /// most [longSidePx], or null.
 typedef UploadDecoder = Future<Uint8List?> Function(Uint8List original,
@@ -280,7 +290,10 @@ Future<Uint8List?> decodeForUpload(
         gpuOff = false;
       }
     }
-    if (gpuOff) return null;
+    if (gpuOff) {
+      gpuOffDecodeSkips++;
+      return null;
+    }
   }
   try {
     return await orNullAfter(

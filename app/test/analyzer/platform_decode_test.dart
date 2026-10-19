@@ -184,10 +184,18 @@ void main() {
           isNull);
       expect((steps.nativeCalls, steps.engineCalls), (1, 0));
       final viaImageIO = _Steps(nativeOut: jpeg);
+      final skips = gpuOffDecodeSkips;
       expect(
           await viaImageIO.run(
               ios: true, headless: false, backgrounded: true),
           same(jpeg));
+      expect(gpuOffDecodeSkips, skips, reason: 'decoded: nothing skipped');
+      // Only a give-up for the GPU counts (PhotoPipeline defers on it).
+      await _Steps().run(ios: true, headless: false, backgrounded: true);
+      expect(gpuOffDecodeSkips, skips + 1);
+      await _Steps().run(ios: true, headless: true);
+      await _Steps().run(ios: true, headless: false, backgrounded: false);
+      expect(gpuOffDecodeSkips, skips + 1);
     });
 
     test('the background probe di.dart installs (isEngineBackgrounded) is '
