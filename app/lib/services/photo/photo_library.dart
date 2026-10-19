@@ -73,6 +73,19 @@ class _PhotoManagerAsset implements LibraryAsset {
   Future<Uint8List?> originBytes() => _entity.originBytes;
 }
 
+/// Whether the app may read the photo library at all (full or limited),
+/// asked WITHOUT a prompt; null when the platform cannot say. The background
+/// run's diagnostics use it to tell "no photo access" from "no new photos".
+Future<bool?> photoLibraryAccess() async {
+  try {
+    final state = await PhotoManager.getPermissionState(
+        requestOption: PhotoManagerLibrary._photosOnly);
+    return state.hasAccess;
+  } catch (_) {
+    return null;
+  }
+}
+
 class PhotoManagerLibrary implements PhotoLibrary {
   /// Ask Android for images only. The manifest declares READ_MEDIA_IMAGES
   /// (+ VISUAL_USER_SELECTED) and no video permission; photo_manager's

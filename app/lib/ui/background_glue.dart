@@ -29,6 +29,8 @@ import '../data/meals_dao_impl.dart';
 import '../services/analyzer/platform_decode.dart' show isHeadlessEngine;
 import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
+import '../services/photo/background_runs.dart';
+import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
@@ -92,8 +94,19 @@ class BackfillDrain {
   /// unoffered — they were RELEASED (not burned), so the next run
   /// re-offers them; the watermark stops short of them by construction.
   final bool cutShort;
+
+  /// How many photos the deadline released unprocessed.
+  final int deadlineReleases;
+
+  /// What aborted the scan when [scanCompleted] is false (its class is all
+  /// the diagnostics record keeps).
+  final Object? scanError;
   const BackfillDrain(this.outcomes,
-      {required this.scanCompleted, this.frontier, this.cutShort = false});
+      {required this.scanCompleted,
+      this.frontier,
+      this.cutShort = false,
+      this.deadlineReleases = 0,
+      this.scanError});
 }
 
 /// Run one backfill through the pipeline with FULL backpressure: the
@@ -110,16 +123,20 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     DateTime? since,
     DateTime? deadline,
     DateTime Function() clock = DateTime.now,
+    Future<void> Function(IntakePhoto photo)? onOffer,
     Future<void> Function(
             IntakePhoto photo, PhotoOutcome outcome, DateTime? safeFrontier)?
         onOutcome}) async {
   final outcomes = <PhotoOutcome>[];
   var cutShort = false;
+  var deadlineReleases = 0;
   intake.attachSink((p, safeFrontier) async {
     if (deadline != null && !clock().isBefore(deadline)) {
       cutShort = true;
+      deadlineReleases++;
       return false; // released, not burned: the next run re-offers it
     }
+    if (onOffer != null) await onOffer(p);
     final o = await pipeline.process(p);
     outcomes.add(o);
     if (onOutcome != null) await onOutcome(p, o, safeFrontier);
@@ -127,19 +144,25 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
   });
   var scanCompleted = false;
   DateTime? frontier;
+  Object? scanError;
   try {
     frontier = await intake.backfillScan(
         lookbackDays: lookbackDays, since: since);
     scanCompleted = true;
-  } catch (_) {
+  } catch (e) {
     // Library query died / window truncated. Photos delivered before the
     // throw are already fully processed (sink is awaited inline); the
     // false flag tells the caller the window was NOT fully covered.
+    scanError = e;
   } finally {
     intake.attachSink(null);
   }
   return BackfillDrain(outcomes,
-      scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
+      scanCompleted: scanCompleted,
+      frontier: frontier,
+      cutShort: cutShort,
+      deadlineReleases: deadlineReleases,
+      scanError: scanError);
 }
 
 /// The pipeline's view of [AppSettings]' automatic-analysis latch — one
@@ -167,6 +190,10 @@ Future<void> recordBackgroundLaunch(
 /// The headless scan body, dependency-injected so tests can drive it with
 /// fakes. Returns WorkManager success (true) in every recoverable state —
 /// background.dart's no-retry-storm rule.
+///
+/// [recorder] (begun by the caller) gets every step of this run, as it
+/// happens (background_runs.dart); [photoAccess] tells a run that found no
+/// photos because it may not read any.
 @visibleForTesting
 Future<bool> headlessBackfillWith({
   required AppSettings settings,
@@ -177,24 +204,36 @@ Future<bool> headlessBackfillWith({
   DateTime Function() clock = DateTime.now,
   Duration? budget,
   bool launchRecorded = false,
+  BackgroundRunRecorder? recorder,
+  Future<bool?> Function()? photoAccess,
 }) async {
   // First, unconditionally: "the OS ran us" is what Settings reports,
   // whatever the guards below decide. Skipped when [runHeadlessBackfill]
   // already wrote it before loading the settings — one launch, one stamp.
   if (!launchRecorded) await recordBackgroundLaunch(prefs, clock);
+  await recorder?.stage(BackgroundRunStage.settings);
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
-  if (!settings.watcherEnabled) return true;
+  if (!settings.watcherEnabled) {
+    await recorder?.finish(BackgroundStop.watcherOff);
+    return true;
+  }
   // No key yet / quota latch armed / an earlier automatic photo came back
   // 'key rejected' or 'region blocked' (the automatic-analysis latch):
   // analyses cannot succeed, so don't even read photo bytes — every 30
   // minutes this used to re-upload the whole window. The watermark stays
   // put — those photos are scanned once the blocker clears
   // (release-not-burn keeps them eligible).
-  if (!settings.canAutoAnalyze) return true;
+  if (!settings.canAutoAnalyze) {
+    await recorder?.finish((settings.activeApiKey ?? '').trim().isEmpty
+        ? BackgroundStop.noKey
+        : BackgroundStop.paused);
+    return true;
+  }
 
   final scanStart = clock();
   final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
+  await recorder?.stage(BackgroundRunStage.scan);
 
   Future<void> checkpoint(DateTime mark) async {
     // Monotonic forward only, never past this scan's start.
@@ -203,6 +242,7 @@ Future<bool> headlessBackfillWith({
     if (cur == null || capped.isAfter(cur)) {
       await prefs.setString(
           backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
+      await recorder?.checkpoint(capped);
     }
   }
 
@@ -215,7 +255,12 @@ Future<bool> headlessBackfillWith({
     since: since?.subtract(backgroundScanOverlap),
     deadline: budget == null ? null : scanStart.add(budget),
     clock: clock,
+    onOffer: recorder == null ? null : (_) => recorder.offered(),
     onOutcome: (photo, o, safeFrontier) async {
+      await recorder?.processed(
+          saved: o.kind == PhotoOutcomeKind.saved ||
+              o.kind == PhotoOutcomeKind.leftoverApplied,
+          released: o.retryable);
       // Per photo, BEFORE the next one: a WorkManager hard-stop mid-batch
       // must not lose the notification for an already-saved meal, nor the
       // progress the run already made.
@@ -249,6 +294,7 @@ Future<bool> headlessBackfillWith({
   // frontier is the single honest source. Cost: the next run re-offers at
   // most the newest covered photo (ledger absorbs it without a model call).
   if (drain.frontier != null) await checkpoint(drain.frontier!);
+  await recorder?.releasedUnprocessed(drain.deadlineReleases);
   // This run ARMED the automatic-scan pause (it started unpaused — see the
   // guard above): the background has no snackbar, and without a word the
   // scan just stops for up to a day. One notice per arm: every later run
@@ -270,7 +316,38 @@ Future<bool> headlessBackfillWith({
       } catch (_) {}
     }
   }
+  if (recorder != null) {
+    await recorder.finish(
+        await _stopReason(drain,
+            pausedNow: pausedUntil != null,
+            listedNothing: recorder.current?.enumerated == 0,
+            photoAccess: photoAccess),
+        watermarkAfter:
+            readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+  }
   return true;
+}
+
+/// How a scan that ran to the end of [headlessBackfillWith] stopped, for
+/// the diagnostics record. The budget first (photos are waiting), then a
+/// pause this run armed (the rest were released), then a scan that died or
+/// listed nothing because the app may not read the library.
+Future<String> _stopReason(BackfillDrain drain,
+    {required bool pausedNow,
+    required bool listedNothing,
+    Future<bool?> Function()? photoAccess}) async {
+  if (drain.cutShort) return BackgroundStop.budget;
+  if (pausedNow) return BackgroundStop.paused;
+  if (!drain.scanCompleted || listedNothing) {
+    bool? access;
+    try {
+      access = await photoAccess?.call();
+    } catch (_) {}
+    if (access == false) return BackgroundStop.noPermission;
+  }
+  final error = drain.scanError;
+  if (!drain.scanCompleted && error != null) return BackgroundStop.error(error);
+  return BackgroundStop.done;
 }
 
 /// The Android heartbeat's half of the daily summary: post it when the
@@ -337,17 +414,26 @@ Future<bool> runHeadlessBackfill({
   final ios = isIOS ?? Platform.isIOS;
   final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
   await recordBackgroundLaunch(prefs, clock);
+  // This run's diagnostics entry, rewritten at every step so a run iOS
+  // kills still shows how far it got (background_runs.dart).
+  final recorder = BackgroundRunRecorder(prefs,
+      platform: ios ? 'ios' : 'android', clock: clock);
+  await recorder.begin(
+      watermarkBefore:
+          readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
   final AppSettings settings;
   try {
     // Read-only key store: only the UI engine moves keys between keychain
     // classes, so the two engines can never race on the one-time move.
     settings = await (loadSettings ??
         () => AppSettings.load(keyStore: platformKeyStore(migrate: false)))();
-  } catch (_) {
+  } catch (e) {
+    await recorder.finish(BackgroundStop.error(e));
     // Success, not a retry: the next scheduled run tries again, and a
     // WorkManager retry storm helps nobody (background.dart's rule).
     return true;
   }
+  await recorder.stage(BackgroundRunStage.settings);
   // Time-derived id seed: cards from successive runs stack instead of
   // overwriting each other. Base 10000 keeps the whole range clear of the
   // fixed daily-report id 9001 (a colliding meal card would silently
@@ -375,23 +461,33 @@ Future<bool> runHeadlessBackfill({
       // A summary must never take the photo scan down with it.
     }
   }
-  final ok = await headlessBackfillWith(
-    settings: settings,
-    prefs: prefs,
-    intake: createPhotoIntake(settings),
-    pipeline: () async => PhotoPipeline(
-        dao: await createMealsDao(),
-        analyzer: createMultiProviderAnalyzer(settings),
-        latch: autoScanLatchFor(settings),
-        // iOS only: there dart:ui cannot decode (platform_decode.dart).
-        deferUndecodable: ios),
-    showMealCard: (title, body) async {
-      await notifier.init(); // idempotent; deferred until a card exists
-      await notifier.showMealCard(title, body);
-    },
-    budget: ios ? iosBackgroundBudget : null,
-    launchRecorded: true,
-  );
+  final bool ok;
+  try {
+    ok = await headlessBackfillWith(
+      settings: settings,
+      prefs: prefs,
+      intake: createPhotoIntake(settings, onBackfillListed: recorder.listed),
+      pipeline: () async => PhotoPipeline(
+          dao: await createMealsDao(),
+          analyzer: createMultiProviderAnalyzer(settings),
+          latch: autoScanLatchFor(settings),
+          // iOS only: there dart:ui cannot decode (platform_decode.dart).
+          deferUndecodable: ios),
+      showMealCard: (title, body) async {
+        await notifier.init(); // idempotent; deferred until a card exists
+        await notifier.showMealCard(title, body);
+      },
+      budget: ios ? iosBackgroundBudget : null,
+      launchRecorded: true,
+      recorder: recorder,
+      photoAccess: photoLibraryAccess,
+    );
+  } catch (e) {
+    // A throw the scan did not contain (the database would not open, say):
+    // the entry names its class, and WorkManager still sees the failure.
+    await recorder.finish(BackgroundStop.error(e));
+    rethrow;
+  }
   if (ios) {
     try {
       await armOsDailySummary(

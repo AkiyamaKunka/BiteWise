@@ -756,6 +756,81 @@
   },
   "diagFixQuota": "Wait it out (photos are kept), or change the key or provider to resume immediately.",
   "diagQuotaOk": "No quota pause is active.",
+  "diagBgRunsTitle": "Recent background scans",
+  "@diagBgRunsTitle": {
+    "description": "Heading of the background-scan history on the Test AI provider page."
+  },
+  "diagBgRunsIntro": "What the last background scans did, newest first. A scan with no end time was stopped by the system part-way; its last step shows where.",
+  "diagBgRunsNone": "No background scan has been recorded yet.",
+  "diagBgRunUnfinished": "did not finish",
+  "diagBgRunSeconds": "{seconds} s",
+  "@diagBgRunSeconds": {
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "diagBgRunCounts": "Photos: {listed} listed, {read} read, {processed} processed, {logged} logged, {later} left for later",
+  "@diagBgRunCounts": {
+    "placeholders": {
+      "listed": {
+        "type": "int"
+      },
+      "read": {
+        "type": "int"
+      },
+      "processed": {
+        "type": "int"
+      },
+      "logged": {
+        "type": "int"
+      },
+      "later": {
+        "type": "int"
+      }
+    }
+  },
+  "diagBgRunKilled": "Ended by the system before it finished — last step: {step}.",
+  "@diagBgRunKilled": {
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
+  },
+  "diagBgStageBoot": "starting",
+  "diagBgStageSettings": "loading settings",
+  "diagBgStageScan": "listing photos",
+  "diagBgStagePhoto": "processing a photo",
+  "diagBgStageCheckpoint": "saving progress",
+  "diagBgStageDone": "finished",
+  "diagBgStopDone": "Finished.",
+  "diagBgStopBudget": "Used its time; the rest waits for the next scan.",
+  "diagBgStopPaused": "Automatic analysis is paused.",
+  "diagBgStopNoKey": "No API key is set.",
+  "diagBgStopWatcherOff": "Watch Camera Roll is off.",
+  "diagBgStopNoPermission": "No access to photos.",
+  "diagBgStopError": "Stopped by an error ({kind}).",
+  "@diagBgStopError": {
+    "placeholders": {
+      "kind": {
+        "type": "String"
+      }
+    }
+  },
+  "diagBgRunWatermark": "Scanned up to: {before} → {after}",
+  "@diagBgRunWatermark": {
+    "placeholders": {
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "diagBgRunWatermarkNone": "none",
   "addPhotosTitle": "Recent photos",
   "addPhotoUnreadable": "That photo could not be read (too large or removed).",
   "addPhotosLoadFailed": "Could not load photos: {error}",

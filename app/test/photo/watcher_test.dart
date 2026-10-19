@@ -122,6 +122,42 @@ void main() {
       intake.photos.listen(emitted.add);
     });
 
+    test('onBackfillListed hears how many photos the scan listed, before '
+        'any is read (background-run diagnostics)', () async {
+      final events = <String>[];
+      library.assets = [
+        FakeAsset('a', 'IMG_a.jpg', DateTime(2026, 7, 17, 8), bytesOf(1),
+            onRead: () => events.add('read')),
+        FakeAsset('b', 'IMG_b.jpg', DateTime(2026, 7, 17, 9), bytesOf(2),
+            onRead: () => events.add('read')),
+      ];
+      final listed = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          onBackfillListed: (n) async => events.add('listed:$n'));
+      await listed.backfillScan(lookbackDays: 2);
+      expect(events, ['listed:2', 'read', 'read']);
+    });
+
+    test('a throwing onBackfillListed never stops the scan', () async {
+      library.assets = [
+        FakeAsset('a', 'IMG_a.jpg', DateTime(2026, 7, 17, 8), bytesOf(1)),
+      ];
+      final delivered = <String>[];
+      final listed = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          onBackfillListed: (_) => throw StateError('prefs'));
+      listed.attachSink((p, _) async {
+        delivered.add(p.assetId);
+        return true;
+      });
+      await listed.backfillScan(lookbackDays: 2);
+      expect(delivered, ['a']);
+    });
+
     test('since AFTER the window cutoff narrows the scan (watermark)',
         () async {
       final mark = DateTime(2026, 7, 17, 9, 30);

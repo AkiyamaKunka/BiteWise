@@ -13,6 +13,7 @@ import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
     show isHeadlessEngine;
 import 'package:calorie_tracker/services/photo/background.dart';
+import 'package:calorie_tracker/services/photo/background_runs.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
@@ -233,6 +234,196 @@ void main() {
     });
   });
 
+  // 2026-10-18: one entry per background run, rewritten at every step
+  // (background_runs.dart) — the record the frozen-watermark days lacked.
+  group('the background-run record', () {
+    late SharedPreferences prefs;
+    final t0 = DateTime.utc(2026, 10, 18, 3, 0);
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    Future<BackgroundRunRecorder> begun() async {
+      final r = BackgroundRunRecorder(prefs, platform: 'ios', clock: () => t0);
+      await r.begin();
+      return r;
+    }
+
+    BackgroundRunRecord stored() =>
+        decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey)).single;
+
+    AnalyzerService food() => FakeAnalyzer()
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+
+    test('a full run: every count, the watermark it reached, "done"',
+        () async {
+      final settings = await settingsWith(key: 'k');
+      final frontier = DateTime.utc(2026, 10, 18, 2, 40);
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [DateTime.utc(2026, 10, 18, 2, 30), frontier]
+        ..frontier = frontier;
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+        photoAccess: () async => true,
+      );
+      final r = stored();
+      expect(r.finished, isTrue);
+      expect(r.stopReason, BackgroundStop.done);
+      expect((r.offered, r.analyzed, r.saved, r.released), (2, 2, 2, 0));
+      expect(r.watermarkAfter, frontier);
+    });
+
+    test('killed mid-analysis (iOS expired the grant): the entry already '
+        'says "processing a photo", 1 read, 0 processed', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final never = Completer<void>();
+      final analyzer = FakeAnalyzer()..onAnalyze = () => never.future;
+      final recorder = await begun();
+      unawaited(headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(
+            dao: FakeDao(),
+            analyzer: analyzer,
+            hasher: (b) async => md5.convert(b).toString()),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+      ));
+      for (var i = 0; i < 50 && recorder.current!.offered == 0; i++) {
+        await pumpEventQueue();
+      }
+      // The process dies here; only what reached the store survives.
+      final r = stored();
+      expect(r.finished, isFalse);
+      expect(r.stage, BackgroundRunStage.photo);
+      expect((r.offered, r.analyzed), (1, 0));
+    });
+
+    test('the time budget: the photo it never started counts as left for '
+        'later, and the reason is "budget"', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2)];
+      var now = t0;
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async =>
+            now = now.add(const Duration(seconds: 20)),
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+        recorder: recorder,
+      );
+      final r = stored();
+      expect(r.stopReason, BackgroundStop.budget);
+      expect((r.offered, r.analyzed, r.saved, r.released), (1, 1, 1, 1));
+    });
+
+    test('a deferred photo (retryable) counts as left for later', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'rate limit', retryable: true, wall: Duration.zero);
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: analyzer),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+      );
+      expect((stored().analyzed, stored().released), (1, 1));
+    });
+
+    test('the guards name themselves: watcher off, no key, paused',
+        () async {
+      Future<String?> stopFor(AppSettings settings) async {
+        final recorder = await begun();
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake()..batch = [photo(1)],
+          pipeline: () async => fail('no pipeline past a guard'),
+          showMealCard: (_, _) async {},
+          clock: () => t0,
+          recorder: recorder,
+        );
+        return recorder.current!.stopReason;
+      }
+
+      expect(await stopFor(await settingsWith(key: 'k', watcher: false)),
+          BackgroundStop.watcherOff);
+      expect(await stopFor(await settingsWith(key: null)),
+          BackgroundStop.noKey);
+      expect(
+          await stopFor(await settingsWith(
+              key: 'k',
+              quotaPauseUntil: DateTime.now().add(const Duration(hours: 3)))),
+          BackgroundStop.paused);
+    });
+
+    test('nothing listed + no photo access → "no_permission"; with access '
+        'it is just a quiet "done"', () async {
+      Future<String?> stopFor(bool? access) async {
+        final settings = await settingsWith(key: 'k');
+        final recorder = await begun();
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake(),
+          pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+          showMealCard: (_, _) async {},
+          clock: () => t0,
+          recorder: recorder,
+          photoAccess: () async => access,
+        );
+        return recorder.current!.stopReason;
+      }
+
+      expect(await stopFor(false), BackgroundStop.noPermission);
+      expect(await stopFor(true), BackgroundStop.done);
+      expect(await stopFor(null), BackgroundStop.done,
+          reason: 'unknown access is not a verdict');
+    });
+
+    test('a scan that died is recorded by its error class', () async {
+      final settings = await settingsWith(key: 'k');
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: EmittingIntake()..throwAfterEmit = true,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+        photoAccess: () async => true,
+      );
+      expect(stored().stopReason, 'error:StateError');
+    });
+  });
+
   group('headlessBackfillWith', () {
     late SharedPreferences prefs;
 
@@ -434,6 +625,15 @@ void main() {
       // decode in this engine never finishes (2026-10-18).
       expect(headlessBeforePrefs, isTrue);
       expect(stampSeenByLoad, launched.toIso8601String());
+      // And the run says so on the diagnostics page: it got as far as the
+      // launch, and the settings load ended it (by class, no message).
+      final run = decodeBackgroundRuns(
+              prefs.getString(backgroundRunsPrefsKey))
+          .single;
+      expect(run.platform, 'ios');
+      expect(run.start, launched);
+      expect(run.stage, BackgroundRunStage.done);
+      expect(run.stopReason, 'error:PlatformException');
       // The 后台扫描 row shows iOS ran the task, keys readable or not.
       expect(prefs.getString(backgroundLastRunPrefsKey),
           launched.toIso8601String());

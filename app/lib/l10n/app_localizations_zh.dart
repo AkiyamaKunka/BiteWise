@@ -1088,6 +1088,89 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagQuotaOk => '没有额度暂停。';
 
   @override
+  String get diagBgRunsTitle => '最近的后台扫描';
+
+  @override
+  String get diagBgRunsIntro =>
+      '最近几次后台扫描做了什么，最新的在前。没有结束时间的一次是被系统中途停止的，“最后一步”说明停在了哪里。';
+
+  @override
+  String get diagBgRunsNone => '还没有后台扫描记录。';
+
+  @override
+  String get diagBgRunUnfinished => '未完成';
+
+  @override
+  String diagBgRunSeconds(int seconds) {
+    return '$seconds 秒';
+  }
+
+  @override
+  String diagBgRunCounts(
+    int listed,
+    int read,
+    int processed,
+    int logged,
+    int later,
+  ) {
+    return '照片：列出 $listed，读取 $read，处理完 $processed，记录 $logged，留待之后 $later';
+  }
+
+  @override
+  String diagBgRunKilled(String step) {
+    return '在完成前被系统结束，最后一步：$step。';
+  }
+
+  @override
+  String get diagBgStageBoot => '启动';
+
+  @override
+  String get diagBgStageSettings => '读取设置';
+
+  @override
+  String get diagBgStageScan => '列出照片';
+
+  @override
+  String get diagBgStagePhoto => '处理照片';
+
+  @override
+  String get diagBgStageCheckpoint => '保存进度';
+
+  @override
+  String get diagBgStageDone => '结束';
+
+  @override
+  String get diagBgStopDone => '正常结束。';
+
+  @override
+  String get diagBgStopBudget => '用完了时间，剩下的留给下一次扫描。';
+
+  @override
+  String get diagBgStopPaused => '自动分析已暂停。';
+
+  @override
+  String get diagBgStopNoKey => '未设置 API Key。';
+
+  @override
+  String get diagBgStopWatcherOff => '监控相册已关闭。';
+
+  @override
+  String get diagBgStopNoPermission => '没有照片访问权限。';
+
+  @override
+  String diagBgStopError(String kind) {
+    return '因错误停止（$kind）。';
+  }
+
+  @override
+  String diagBgRunWatermark(String before, String after) {
+    return '扫描进度：$before → $after';
+  }
+
+  @override
+  String get diagBgRunWatermarkNone => '无';
+
+  @override
   String get addPhotosTitle => '最近照片';
 
   @override

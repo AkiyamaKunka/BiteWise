@@ -46,9 +46,13 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// Integration-contract factory: the integrator wires this with the
 /// settings module's [AppSettings]. The lookback window is read through a
 /// closure so later settings edits apply to the next scan without rewiring.
-PhotoIntake createPhotoIntake(AppSettings settings) => LibraryPhotoIntake(
-    lookbackDays: () => settings.lookbackDays,
-    library: PhotoManagerLibrary());
+/// [onBackfillListed]: see [LibraryPhotoIntake.onBackfillListed].
+PhotoIntake createPhotoIntake(AppSettings settings,
+        {FutureOr<void> Function(int count)? onBackfillListed}) =>
+    LibraryPhotoIntake(
+        lookbackDays: () => settings.lookbackDays,
+        library: PhotoManagerLibrary(),
+        onBackfillListed: onBackfillListed);
 
 class LibraryPhotoIntake implements PhotoIntake {
   LibraryPhotoIntake(
@@ -56,8 +60,14 @@ class LibraryPhotoIntake implements PhotoIntake {
       required this._library,
       DateTime Function()? clock,
       // §8 CAPTURED_AT_MAX_AGE_DAYS: default 45, not user-editable.
-      this._capturedAtMaxAgeDays = 45})
+      this._capturedAtMaxAgeDays = 45,
+      this.onBackfillListed})
       : _clock = clock ?? DateTime.now;
+
+  /// Told how many photos each [backfillScan] listed, before any is read
+  /// — the background run's diagnostics record (background_runs.dart).
+  /// A throwing hook never stops the scan.
+  final FutureOr<void> Function(int count)? onBackfillListed;
 
   final int Function() _lookbackDays;
   final PhotoLibrary _library;
@@ -174,6 +184,9 @@ class LibraryPhotoIntake implements PhotoIntake {
     // (a truncated scan under a watermark skips the tail forever).
     final assets =
         await _library.imagesCreatedAfter(cutoff, limit: backfillQueryLimit);
+    try {
+      await onBackfillListed?.call(assets.length);
+    } catch (_) {}
     // Truncation is known BEFORE emission (query hit its cap): the unseen
     // tail is OLDER than everything returned, so no frontier — per-photo
     // or final — may be reported for this scan.
