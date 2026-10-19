@@ -507,6 +507,68 @@ void main() {
       );
       expect(stored().stopReason, 'error:StateError');
     });
+
+    // 2026-10-19: iOS kills a run still going ~30 s after launch; the
+    // BGTask then never completes and the photo stays reserved.
+    group('the whole-run deadline (finishWithinGrant)', () {
+      test('a photo stuck in flight still ends the run: success, recorded '
+          'as budget, and the entry stays final', () async {
+        final settings = await settingsWith(key: 'k');
+        final never = Completer<void>();
+        final analyzer = FakeAnalyzer()..onAnalyze = () => never.future;
+        final recorder = await begun();
+        final stuck = headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake()..batch = [photo(1), photo(2)],
+          pipeline: () async => PhotoPipeline(
+              dao: FakeDao(),
+              analyzer: analyzer,
+              hasher: (b) async => md5.convert(b).toString()),
+          showMealCard: (_, _) async {},
+          clock: () => t0,
+          recorder: recorder,
+        );
+        final ok = await finishWithinGrant(stuck,
+            left: const Duration(milliseconds: 40), recorder: recorder);
+        expect(ok, isTrue, reason: 'the reply is what completes the BGTask');
+        var r = stored();
+        expect(r.finished, isTrue);
+        expect(r.stopReason, BackgroundStop.budget);
+        expect((r.offered, r.analyzed), (1, 0));
+        // The abandoned run reporting late cannot reopen the entry.
+        await recorder.processed(saved: true, released: false);
+        await recorder.checkpoint(t0);
+        r = stored();
+        expect((r.stage, r.analyzed, r.saved),
+            (BackgroundRunStage.done, 0, 0));
+      });
+
+      test('a run that ends first is the answer, and the deadline never '
+          'fires', () async {
+        final recorder = await begun();
+        final ok = await finishWithinGrant(Future.value(false),
+            left: const Duration(milliseconds: 20), recorder: recorder);
+        expect(ok, isFalse);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(stored().finished, isFalse);
+      });
+
+      test('a run that throws first throws (handleBackgroundTask contains '
+          'it)', () async {
+        final recorder = await begun();
+        await expectLater(
+            finishWithinGrant(Future<bool>.error(StateError('db')),
+                left: const Duration(seconds: 25), recorder: recorder),
+            throwsStateError);
+      });
+
+      test('the deadline is 25 s from Dart entry: inside the ~30 s grant, '
+          'after the 15 s offer budget', () {
+        expect(iosRunDeadline, const Duration(seconds: 25));
+        expect(iosRunDeadline > iosBackgroundBudget, isTrue);
+      });
+    });
   });
 
   group('headlessBackfillWith', () {

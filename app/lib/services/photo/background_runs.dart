@@ -271,10 +271,13 @@ class BackgroundRunRecorder {
               stopReason: stopReason,
               watermarkAfter: watermarkAfter?.toUtc()));
 
+  /// A finished entry is final: a run abandoned at the iOS deadline
+  /// (finishWithinGrant) may still report a step before its engine goes,
+  /// and must not reopen the entry that already says how it ended.
   Future<void> _update(
       BackgroundRunRecord Function(BackgroundRunRecord r) change) async {
     final cur = _current;
-    if (cur == null) return;
+    if (cur == null || cur.finished) return;
     _current = change(cur);
     await _write();
   }

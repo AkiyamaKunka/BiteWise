@@ -442,6 +442,28 @@ Future<bool> runHeadlessBackfill({
   await recorder.begin(
       watermarkBefore:
           readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+  final run = _runAfterLaunch(
+      ios: ios,
+      prefs: prefs,
+      recorder: recorder,
+      startedAt: startedAt,
+      loadSettings: loadSettings);
+  // iOS: the whole run ends inside the grant, whatever it is stuck on.
+  if (!ios) return run;
+  return finishWithinGrant(run,
+      left: startedAt.add(iosRunDeadline).difference(clock()),
+      recorder: recorder);
+}
+
+/// [runHeadlessBackfill] past the launch stamp: settings, the Android
+/// summary, the scan, the iOS summary card.
+Future<bool> _runAfterLaunch({
+  required bool ios,
+  required SharedPreferences prefs,
+  required BackgroundRunRecorder recorder,
+  required DateTime startedAt,
+  Future<AppSettings> Function()? loadSettings,
+}) async {
   final AppSettings settings;
   try {
     // Read-only key store: only the UI engine moves keys between keychain
@@ -519,6 +541,50 @@ Future<bool> runHeadlessBackfill({
     }
   }
   return ok;
+}
+
+/// The whole iOS background run, from its entry into Dart, ends within
+/// this (2026-10-19). iOS expires a BGAppRefresh grant about 30 s after
+/// launching it, and the engine boot comes before Dart's clock starts; a
+/// run still going then is killed, the task never completes, and its photo
+/// stays reserved. The offer budget ([iosBackgroundBudget]) stops new
+/// photos at 15 s, but nothing bounded the photo already in flight (a slow
+/// upload, a stalled decode) or the steps around the scan. What is left
+/// after this — the engine teardown and the completion — fits in the
+/// remaining seconds.
+const Duration iosRunDeadline = Duration(seconds: 25);
+
+/// [run] or, once [left] has passed, an end to the run anyway: the
+/// diagnostics entry says 'budget' and the result is success, so
+/// workmanager completes the BGTask (its executeTask reply is what calls
+/// setTaskCompleted; workmanager_apple 0.9.1+2 BackgroundWorker.swift)
+/// instead of iOS killing the process at expiry.
+///
+/// The abandoned run is not cancelled — Dart cannot — but it can do no
+/// harm: the offer budget has passed, so it starts no new photo; the
+/// photo in flight carries its reservation's ownership stamp, so a late
+/// finish settles only a row that is still its own (and otherwise drops
+/// the verdict); and the engine is torn down right after the reply.
+/// Its diagnostics entry is frozen once finished.
+@visibleForTesting
+Future<bool> finishWithinGrant(Future<bool> run,
+    {required Duration left, required BackgroundRunRecorder recorder}) {
+  final done = Completer<bool>();
+  final timer = Timer(left.isNegative ? Duration.zero : left, () {
+    if (done.isCompleted) return;
+    done.complete(() async {
+      await recorder.finish(BackgroundStop.budget);
+      return true;
+    }());
+  });
+  run.then((ok) {
+    timer.cancel();
+    if (!done.isCompleted) done.complete(ok);
+  }, onError: (Object e, StackTrace st) {
+    timer.cancel();
+    if (!done.isCompleted) done.completeError(e, st);
+  });
+  return done.future;
 }
 
 /// WorkManager background entrypoint. Must stay top-level with the
