@@ -220,16 +220,26 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
     );
 
 /// Moves the background watermark forward to [mark], never past [cap] and
-/// never back; returns the value written, or null when it did not move.
+/// never back over the value it reads; returns the value written, or null
+/// when it did not move.
 ///
 /// Both engines write it (2026-10-19): the background run as it scans,
 /// and the app's launch/resume catch-ups ([foregroundCatchUp]), each
 /// through its own preferences cache — so the stored value is re-read
 /// first, and a stale cache can never carry it backwards over the other
-/// engine's progress. (Two writers interleaving between the read and the
-/// write can at worst leave the EARLIER mark: a re-scan, never a skip.)
-/// Written as UTC (see [readStoredInstant]).
+/// engine's progress. The read and the write are not one step, though:
+/// two writers interleaving between them (A reads X, B writes Y, A writes
+/// Z < Y) can leave the EARLIER mark. That direction is safe — a re-scan
+/// the ledger absorbs, never a skip — so "forward only" holds for what
+/// each writer can see, not strictly across the two engines. Written as
+/// UTC (see [readStoredInstant]).
 Future<DateTime?> advanceBackgroundWatermark(
+        SharedPreferences prefs, DateTime mark,
+        {required DateTime cap}) async =>
+    (await _advanceWatermark(prefs, mark, cap: cap)).written;
+
+/// [advanceBackgroundWatermark], also saying what the store held.
+Future<({DateTime? written, DateTime? stored})> _advanceWatermark(
     SharedPreferences prefs, DateTime mark,
     {required DateTime cap}) async {
   final capped = mark.isAfter(cap) ? cap : mark;
@@ -239,10 +249,10 @@ Future<DateTime?> advanceBackgroundWatermark(
     // Unreadable store: compare against this engine's own copy.
   }
   final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
-  if (cur != null && !capped.isAfter(cur)) return null;
+  if (cur != null && !capped.isAfter(cur)) return (written: null, stored: cur);
   await prefs.setString(
       backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
-  return capped;
+  return (written: capped, stored: cur);
 }
 
 /// The app's launch/resume catch-up over the full lookback window — the
@@ -272,10 +282,24 @@ Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
     Future<SharedPreferences> Function()? loadPrefs,
     bool Function()? shouldContinue}) async {
   final scanStart = clock();
+  // The latest mark this catch-up knows the store holds, read or written.
+  // A covered photo at or before it would move nothing, so it costs no
+  // reload: a cold launch walks a week of already-logged photos, most of
+  // them older than the background run's own watermark, and each reload
+  // is a full read of the store over the platform channel.
+  DateTime? known;
   Future<void> checkpoint(DateTime mark) async {
+    final capped = mark.isAfter(scanStart) ? scanStart : mark;
+    final seen = known;
+    if (seen != null && !capped.isAfter(seen)) return;
     try {
       final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
-      await advanceBackgroundWatermark(prefs, mark, cap: scanStart);
+      final r = await _advanceWatermark(prefs, mark, cap: scanStart);
+      final latest = r.written ?? r.stored;
+      final now = known;
+      if (latest != null && (now == null || latest.isAfter(now))) {
+        known = latest;
+      }
     } catch (_) {}
   }
 

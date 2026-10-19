@@ -793,6 +793,31 @@ void main() {
       expect(storedMark(), scanStart, reason: 'capped at the scan start');
     });
 
+    test('a covered photo at or before the mark the store already holds '
+        'costs no store round-trip', () async {
+      final background = DateTime.utc(2026, 10, 18, 11, 30);
+      await prefs.setString(
+          backgroundWatermarkPrefsKey, background.toIso8601String());
+      var loads = 0;
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2), photo(3), photo(4)]
+        // A week of already-logged photos older than the background
+        // run's own watermark, then one newer.
+        ..safeFrontiers = [t1, t1.add(const Duration(minutes: 5)), t2, t3]
+        ..frontier = t3;
+      intake.attachSink((_, _) async => true);
+      await foregroundCatchUp(intake,
+          clock: () => t3.add(const Duration(minutes: 1)),
+          loadPrefs: () async {
+            loads++;
+            return prefs;
+          });
+      expect(loads, 2,
+          reason: 'the first read learns 11:30; t1+5 min and t2 are at or '
+              'before it; t3 moves it; the final frontier t3 is known');
+      expect(storedMark(), t3);
+    });
+
     // 2026-10-19: once the user leaves (iOS), only the photo in flight may
     // spend the background time; the scan reads nothing more.
     test('the stuck hint clears once the catch-up moved the watermark past '
