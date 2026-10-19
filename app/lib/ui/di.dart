@@ -23,6 +23,7 @@ import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
     show androidBackgroundAllowed;
 import '../services/photo/background_time.dart';
+import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
@@ -197,7 +198,15 @@ class AppServices {
         latch: autoScanLatchFor(settings),
         // iOS suspends the app seconds after the user leaves it: each photo
         // asks for the time to finish its upload and save first.
-        backgroundTime: Platform.isIOS ? const BackgroundTime() : null);
+        backgroundTime: Platform.isIOS ? const BackgroundTime() : null,
+        // A photo the background run kept deferring is forgotten once it
+        // has a verdict here. 'Already logged' was settled by an earlier
+        // run, which forgot it then.
+        onOutcome: (photo, o) {
+          if (!o.retryable && o.kind != PhotoOutcomeKind.alreadyTracked) {
+            unawaited(clearDeferredAsset(photo.assetId));
+          }
+        });
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's

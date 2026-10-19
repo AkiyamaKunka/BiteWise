@@ -30,6 +30,7 @@ import '../services/analyzer/platform_decode.dart' show isHeadlessEngine;
 import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
 import '../services/photo/background_runs.dart';
+import '../services/photo/deferred_assets.dart';
 import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
@@ -267,6 +268,10 @@ Future<void> recordBackgroundLaunch(
 /// happens (background_runs.dart); [photoAccess] tells a run that found no
 /// photos because it may not read any.
 ///
+/// [deferred] notes each photo this run defers and forgets each one it
+/// gives a verdict (deferred_assets.dart); the run's intake was built to
+/// pass over the ones deferred too often.
+///
 /// [budget] counts from [startedAt] — the moment the OS-launched run
 /// entered Dart ([runHeadlessBackfill]) — so the keychain read, the
 /// settings load and the database open spend it too; it used to start at
@@ -281,6 +286,7 @@ Future<bool> headlessBackfillWith({
   DateTime Function() clock = DateTime.now,
   Duration? budget,
   DateTime? startedAt,
+  DeferredAssets? deferred,
   bool launchRecorded = false,
   BackgroundRunRecorder? recorder,
   Future<bool?> Function()? photoAccess,
@@ -334,6 +340,13 @@ Future<bool> headlessBackfillWith({
           saved: o.kind == PhotoOutcomeKind.saved ||
               o.kind == PhotoOutcomeKind.leftoverApplied,
           released: o.retryable);
+      // A photo this engine could not decode (deferUndecodable) is counted;
+      // twice, and later runs pass it over instead of halting on it again.
+      if (o.retryable && o.errorKind == AnalysisErrorKind.badPhoto) {
+        await deferred?.deferred(photo.assetId);
+      } else if (!o.retryable) {
+        await deferred?.settled(photo.assetId);
+      }
       // Per photo, BEFORE the next one: a WorkManager hard-stop mid-batch
       // must not lose the notification for an already-saved meal, nor the
       // progress the run already made.
@@ -531,6 +544,7 @@ Future<bool> _runAfterLaunch({
     return true;
   }
   await recorder.stage(BackgroundRunStage.settings);
+  final deferred = await DeferredAssets.load(prefs);
   // Time-derived id seed: cards from successive runs stack instead of
   // overwriting each other. Base 10000 keeps the whole range clear of the
   // fixed daily-report id 9001 (a colliding meal card would silently
@@ -563,7 +577,8 @@ Future<bool> _runAfterLaunch({
     ok = await headlessBackfillWith(
       settings: settings,
       prefs: prefs,
-      intake: createPhotoIntake(settings, onBackfillListed: recorder.listed),
+      intake: createPhotoIntake(settings,
+          onBackfillListed: recorder.listed, passOver: deferred.passOver),
       pipeline: () async => PhotoPipeline(
           dao: await createMealsDao(),
           analyzer: createMultiProviderAnalyzer(settings),
@@ -576,6 +591,7 @@ Future<bool> _runAfterLaunch({
       },
       budget: ios ? iosBackgroundBudget : null,
       startedAt: startedAt,
+      deferred: deferred,
       launchRecorded: true,
       recorder: recorder,
       photoAccess: photoLibraryAccess,

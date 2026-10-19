@@ -46,13 +46,15 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// Integration-contract factory: the integrator wires this with the
 /// settings module's [AppSettings]. The lookback window is read through a
 /// closure so later settings edits apply to the next scan without rewiring.
-/// [onBackfillListed]: see [LibraryPhotoIntake.onBackfillListed].
+/// [onBackfillListed], [passOver]: see [LibraryPhotoIntake].
 PhotoIntake createPhotoIntake(AppSettings settings,
-        {FutureOr<void> Function(int count)? onBackfillListed}) =>
+        {FutureOr<void> Function(int count)? onBackfillListed,
+        bool Function(String assetId)? passOver}) =>
     LibraryPhotoIntake(
         lookbackDays: () => settings.lookbackDays,
         library: PhotoManagerLibrary(),
-        onBackfillListed: onBackfillListed);
+        onBackfillListed: onBackfillListed,
+        passOver: passOver);
 
 class LibraryPhotoIntake implements PhotoIntake {
   LibraryPhotoIntake(
@@ -61,8 +63,15 @@ class LibraryPhotoIntake implements PhotoIntake {
       DateTime Function()? clock,
       // §8 CAPTURED_AT_MAX_AGE_DAYS: default 45, not user-editable.
       this._capturedAtMaxAgeDays = 45,
-      this.onBackfillListed})
+      this.onBackfillListed,
+      this.passOver})
       : _clock = clock ?? DateTime.now;
+
+  /// The background run's photos to count covered WITHOUT reading them:
+  /// the ones it has deferred too often (deferred_assets.dart), so one file
+  /// it cannot decode no longer holds its watermark. Nothing is marked
+  /// seen; the app's own intake has none of these.
+  final bool Function(String assetId)? passOver;
 
   /// Told how many photos each [backfillScan] listed, before any is read
   /// — the background run's diagnostics record (background_runs.dart).
@@ -275,6 +284,12 @@ class LibraryPhotoIntake implements PhotoIntake {
       if (_generation != generation) break; // stop(): quiesce mid-batch
       if (released != null && released.contains(asset.id)) {
         frontierOpen = false; // tried once this scan; the next scan retries
+        continue;
+      }
+      if (passOver != null &&
+          !_seenAssetIds.contains(asset.id) &&
+          passOver!(asset.id)) {
+        cover(asset);
         continue;
       }
       // The caller's time budget, asked BEFORE the original is read: past

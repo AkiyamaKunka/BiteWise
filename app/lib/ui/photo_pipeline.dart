@@ -216,6 +216,11 @@ class PhotoPipeline {
   /// suspend this way, tests opt in.
   final BackgroundTime? backgroundTime;
 
+  /// Every verdict, after process() reached it (any intake). The app engine
+  /// uses it to forget a photo the background run kept deferring once the
+  /// app settled it (deferred_assets.dart). A throw is contained.
+  final void Function(IntakePhoto photo, PhotoOutcome outcome)? onOutcome;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
   // FIFO tail: bound-stream photos process ONE at a time. A backfill batch
@@ -232,6 +237,7 @@ class PhotoPipeline {
       this.latch,
       this.deferUndecodable = false,
       this.backgroundTime,
+      this.onOutcome,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
@@ -344,11 +350,15 @@ class PhotoPipeline {
   /// coverage), one photo at a time off the FIFO, so [backgroundTime] holds
   /// exactly one task per photo. A lost reservation's second settle
   /// ([_afterLost]) stays inside the same task.
-  Future<PhotoOutcome> process(IntakePhoto photo) {
+  Future<PhotoOutcome> process(IntakePhoto photo) async {
     final time = backgroundTime;
-    return time == null
+    final outcome = await (time == null
         ? _process(photo)
-        : time.guard('photo', () => _process(photo));
+        : time.guard('photo', () => _process(photo)));
+    try {
+      onOutcome?.call(photo, outcome);
+    } catch (_) {}
+    return outcome;
   }
 
   /// [held]: a verdict this photo ALREADY got, with the meal snapshot its

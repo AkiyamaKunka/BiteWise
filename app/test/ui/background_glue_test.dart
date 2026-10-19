@@ -18,6 +18,7 @@ import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
     show decodeForUpload, imageIOChannel, isHeadlessEngine;
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/photo/background_runs.dart';
+import 'package:calorie_tracker/services/photo/deferred_assets.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
@@ -769,6 +770,59 @@ void main() {
       );
       expect(intake.unread, 1, reason: '16 s in: nothing may be read');
       expect(dao.meals, isEmpty);
+    });
+
+    // 2026-10-19: one photo the background engine cannot decode froze its
+    // watermark until the app next opened.
+    test('a photo this engine keeps deferring is passed over by later runs; '
+        'a verdict forgets it', () async {
+      final settings = await settingsWith(key: 'k');
+      final undecodable = FakeAnalyzer()
+        ..nextPhotoOutcome =
+            const AnalysisOutcome(error: 'decode failed', wall: Duration.zero);
+      Future<void> runWith(AnalyzerService analyzer) async =>
+          headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: EmittingIntake()..batch = [photo(1)],
+            pipeline: () async => PhotoPipeline(
+                dao: FakeDao(), analyzer: analyzer, deferUndecodable: true),
+            showMealCard: (_, _) async {},
+            deferred: await DeferredAssets.load(prefs),
+          );
+      await runWith(undecodable);
+      expect((await DeferredAssets.load(prefs)).passOver('asset1'), isFalse);
+      await runWith(undecodable);
+      expect((await DeferredAssets.load(prefs)).passOver('asset1'), isTrue,
+          reason: 'deferred twice: the next run counts it covered');
+      expect(
+          decodeDeferredAssets(prefs.getString(deferredAssetsPrefsKey))
+              .single
+              .count,
+          2);
+      // A run that settles it (any verdict) forgets it.
+      await runWith(FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': false}, isFood: false, wall: Duration.zero));
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+    });
+
+    test('other retryable outcomes (rate limit) are not deferrals', () async {
+      final settings = await settingsWith(key: 'k');
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: EmittingIntake()..batch = [photo(1)],
+        pipeline: () async => PhotoPipeline(
+            dao: FakeDao(),
+            analyzer: FakeAnalyzer()
+              ..nextPhotoOutcome = const AnalysisOutcome(
+                  error: 'rate limit', retryable: true, wall: Duration.zero),
+            deferUndecodable: true),
+        showMealCard: (_, _) async {},
+        deferred: await DeferredAssets.load(prefs),
+      );
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
     });
 
     test('passes the persisted watermark minus the overlap', () async {

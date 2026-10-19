@@ -698,6 +698,29 @@ void main() {
         reason: 'a real verdict stays terminal — coverage may pass it');
   });
 
+  test('onOutcome hears every verdict once, and a throwing one is contained',
+      () async {
+    final heard = <(String, PhotoOutcomeKind)>[];
+    final analyzer = FakeAnalyzer()
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': false}, isFood: false, wall: Duration.zero);
+    final pipeline = PhotoPipeline(
+        dao: FakeDao(),
+        analyzer: analyzer,
+        onOutcome: (p, o) {
+          heard.add((p.assetId, o.kind));
+          throw StateError('listener died');
+        });
+    final first = await pipeline.process(_photo());
+    final again = await pipeline.process(_photo());
+    expect(first.kind, PhotoOutcomeKind.skipped);
+    expect(again.kind, PhotoOutcomeKind.alreadyTracked);
+    expect(heard, [
+      ('asset1', PhotoOutcomeKind.skipped),
+      ('asset1', PhotoOutcomeKind.alreadyTracked),
+    ]);
+  });
+
   test('deliberate add inside the 5-minute duplicate window is refused',
       () async {
     final dao = FakeDao()..duplicatePhoto = true;

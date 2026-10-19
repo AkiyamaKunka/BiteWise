@@ -398,6 +398,31 @@ void main() {
       });
     });
 
+    test('passOver (the background run\'s too-often-deferred photos): '
+        'counted covered without being read, so the frontier passes it',
+        () async {
+      final reads = <String>[];
+      library.assets = [
+        for (final (id, h) in [('a', 8), ('stuck', 9), ('c', 10)])
+          FakeAsset(id, 'IMG_$id.jpg', DateTime(2026, 7, 17, h), bytesOf(h),
+              onRead: () => reads.add(id)),
+      ];
+      final passing = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          passOver: (id) => id == 'stuck');
+      final safes = <DateTime?>[];
+      passing.attachSink((p, safe) async {
+        safes.add(safe);
+        return true;
+      });
+      final frontier = await passing.backfillScan(lookbackDays: 2);
+      expect(reads, ['a', 'c']);
+      expect(safes, [DateTime(2026, 7, 17, 8), DateTime(2026, 7, 17, 10)]);
+      expect(frontier, DateTime(2026, 7, 17, 10));
+    });
+
     test('frontier halts at the first failure and at retryable releases',
         () async {
       library.assets = [
