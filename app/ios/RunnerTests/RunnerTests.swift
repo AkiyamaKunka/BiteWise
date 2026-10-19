@@ -368,3 +368,30 @@ class ImageIODownscaleTests: XCTestCase {
     XCTAssertTrue((reply as AnyObject?) === FlutterMethodNotImplemented)
   }
 }
+
+/// The background run's launch stamp (AppDelegate.stampBackgroundLaunch):
+/// Dart reads it as prefs 'background.native_launch_iso' and counts the
+/// run's time budgets from it (lib/ui/background_glue.dart).
+class BackgroundLaunchStampTests: XCTestCase {
+  func testStampIsUtcIsoWithMillisecondsUnderTheSharedPreferencesKey() {
+    XCTAssertEqual(
+      AppDelegate.backgroundLaunchDefaultsKey, "flutter.background.native_launch_iso")
+    let suite = "BackgroundLaunchStampTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suite)!
+    defer { defaults.removePersistentDomain(forName: suite) }
+    let now = Date(timeIntervalSince1970: 1_792_400_000.25)
+    AppDelegate.stampBackgroundLaunch(defaults, now: now)
+    let stamp = defaults.string(forKey: AppDelegate.backgroundLaunchDefaultsKey)
+    XCTAssertNotNil(stamp)
+    // The shape Dart's DateTime.parse reads as a UTC instant.
+    XCTAssertNotNil(
+      stamp!.range(
+        of: #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$"#, options: .regularExpression),
+      stamp!)
+    let parse = ISO8601DateFormatter()
+    parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    XCTAssertEqual(
+      parse.date(from: stamp!)!.timeIntervalSince1970, now.timeIntervalSince1970,
+      accuracy: 0.001)
+  }
+}

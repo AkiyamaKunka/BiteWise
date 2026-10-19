@@ -5,6 +5,8 @@ import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
 import 'package:calorie_tracker/services/photo/background_time.dart'
     show backgroundTimeChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
+import 'package:calorie_tracker/ui/background_glue.dart'
+    show backgroundNativeLaunchPrefsKey;
 import 'package:flutter_test/flutter_test.dart';
 
 Directory _appRoot() {
@@ -323,5 +325,22 @@ void main() {
         .firstMatch(delegate)
         ?.group(0);
     expect(register, contains('BackgroundTimePlugin.register(with:'));
+  });
+
+  // The iOS background run counts its time budgets from the moment
+  // workmanager created its engine (2026-10-19): the AppDelegate stamps it
+  // in the registrant callback, under the name shared_preferences gives the
+  // Dart key. A renamed key, or a stamp written later in the callback,
+  // silently falls back to the Dart entry and the boot is uncounted again.
+  test('the background launch stamp is written first, under the Dart key',
+      () {
+    final delegate = File('${_appRoot().path}/ios/Runner/AppDelegate.swift')
+        .readAsStringSync();
+    expect(delegate,
+        contains('"flutter.$backgroundNativeLaunchPrefsKey"'));
+    final callback = RegExp(
+            r'setPluginRegistrantCallback \{ registry in\s*\n(\s*)(\S[^\n]*)')
+        .firstMatch(delegate);
+    expect(callback?.group(2), 'AppDelegate.stampBackgroundLaunch()');
   });
 }

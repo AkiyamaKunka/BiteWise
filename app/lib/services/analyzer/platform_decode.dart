@@ -59,12 +59,13 @@ const Duration kNativeDecodeTimeout = Duration(seconds: 15);
 /// The native call's deadline in the headless background engine. iOS gives
 /// a BGAppRefresh run about 30 s, and `iosBackgroundBudget`
 /// (ui/background_glue.dart) admits a photo until 15 s after the run
-/// entered Dart, itself a moment into the grant. A stalled reply
-/// held for [kNativeDecodeTimeout] would come back past the grant, after
-/// iOS had killed the run, and the photo's reservation would be left
-/// 'processing' — the orphan this engine's rules exist to prevent. ImageIO
-/// needs well under a second for a 48 MP HEIC; a miss here only defers the
-/// photo (PhotoPipeline.deferUndecodable), so the deadline can be short.
+/// started (`backgroundRunStart`), itself a moment into the grant. A
+/// stalled reply held for [kNativeDecodeTimeout] would come back past the
+/// grant, after iOS had killed the run, and the photo's reservation would
+/// be left 'processing' — the orphan this engine's rules exist to prevent.
+/// ImageIO needs well under a second for a 48 MP HEIC; a miss here only
+/// defers the photo (PhotoPipeline.deferUndecodable), so the deadline can
+/// be short.
 const Duration kHeadlessNativeDecodeTimeout = Duration(seconds: 5);
 
 /// The native deadline for this engine: [kHeadlessNativeDecodeTimeout] in

@@ -671,10 +671,62 @@ void main() {
             throwsStateError);
       });
 
-      test('the deadline is 25 s from Dart entry: inside the ~30 s grant, '
-          'after the 15 s offer budget', () {
-        expect(iosRunDeadline, const Duration(seconds: 25));
-        expect(iosRunDeadline > iosBackgroundBudget, isTrue);
+      test('the deadline is 22 s from the run start: room for the unmeasured '
+          'launch and the teardown inside the ~30 s grant, after the 15 s '
+          'offer budget', () {
+        expect(iosRunDeadline, const Duration(seconds: 22));
+        expect(iosRunDeadline - iosBackgroundBudget,
+            greaterThanOrEqualTo(const Duration(seconds: 7)));
+      });
+
+      group('the run start (backgroundRunStart)', () {
+        final entry = DateTime.utc(2026, 10, 19, 3, 0, 10);
+        test("the native stamp when it is this run's", () {
+          expect(
+              backgroundRunStart('2026-10-19T03:00:08.500Z', entry),
+              DateTime.utc(2026, 10, 19, 3, 0, 8, 500));
+        });
+        test('the Dart entry without one, or with one that is not this '
+            "run's", () {
+          for (final stamp in [
+            null,
+            '',
+            'garbage',
+            '2026-10-19T03:00:10.001Z', // after the entry
+            '2026-10-19T02:30:00.000Z', // an earlier run's
+          ]) {
+            expect(backgroundRunStart(stamp, entry), entry, reason: '$stamp');
+          }
+        });
+      });
+
+      test('runHeadlessBackfill counts the deadline from the native launch '
+          'stamp, and records the boot', () async {
+        addTearDown(() => isHeadlessEngine = false);
+        // The engine was created 2 s before Dart's first line.
+        await prefs.setString(backgroundNativeLaunchPrefsKey,
+            t0.subtract(const Duration(seconds: 2)).toIso8601String());
+        var calls = 0;
+        // 40 ms short of the deadline as counted from the STAMP; from the
+        // Dart entry 2.04 s would remain.
+        DateTime clock() => calls++ == 0
+            ? t0
+            : t0.add(iosRunDeadline -
+                const Duration(seconds: 2, milliseconds: 40));
+        final watch = Stopwatch()..start();
+        final ok = await runHeadlessBackfill(
+          isIOS: true,
+          loadPrefs: () async => prefs,
+          clock: clock,
+          loadSettings: () => Completer<AppSettings>().future,
+        ).timeout(const Duration(seconds: 5));
+        expect(ok, isTrue);
+        expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+        final run =
+            decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
+                .first;
+        expect(run.stopReason, BackgroundStop.budget);
+        expect(run.bootMs, 2000);
       });
     });
   });

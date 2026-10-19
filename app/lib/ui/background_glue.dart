@@ -80,10 +80,35 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// grant expires mid-analysis anyway, that orphaned row answers later runs
 /// as [PhotoReservation.inFlight] — a retryable outcome — so the frontier
 /// below waits in front of the photo instead of passing over it
-/// (2026-10-07). Counted from the run's entry into Dart, not from the scan
-/// start (2026-10-19): the settings load and the database open come out of
-/// the same grant.
+/// (2026-10-07). Counted from the run's start ([backgroundRunStart]), not
+/// from the scan start (2026-10-19): the engine boot, the settings load and
+/// the database open come out of the same grant.
 const Duration iosBackgroundBudget = Duration(seconds: 15);
+
+/// When workmanager created this run's headless engine, as an ISO instant:
+/// written natively by the AppDelegate's registrant callback, before the
+/// engine boots and long before Dart runs (2026-10-19). iOS's grant is
+/// already running then; Dart's own clock starts a boot later.
+const String backgroundNativeLaunchPrefsKey = 'background.native_launch_iso';
+
+/// The most a native launch stamp may lead the run's entry into Dart and
+/// still count as this run's (an engine boots in a second or two). Older,
+/// it is an earlier run's and says nothing about this one.
+const Duration nativeLaunchMaxLead = Duration(seconds: 20);
+
+/// Where this run's time budgets count from: the native launch stamp
+/// ([backgroundNativeLaunchPrefsKey]) when it belongs to this run — not
+/// after [enteredDart], at most [nativeLaunchMaxLead] before it — else
+/// [enteredDart] itself (Android writes no stamp; a missing or stale one
+/// changes nothing).
+@visibleForTesting
+DateTime backgroundRunStart(String? nativeStamp, DateTime enteredDart) {
+  final native = DateTime.tryParse(nativeStamp ?? '');
+  if (native == null) return enteredDart;
+  final lead = enteredDart.difference(native);
+  if (lead.isNegative || lead > nativeLaunchMaxLead) return enteredDart;
+  return native;
+}
 
 /// Result of one drained backfill: what happened to each photo, whether
 /// the SCAN itself completed (a scan abort means unseen photos remain),
@@ -272,10 +297,11 @@ Future<void> recordBackgroundLaunch(
 /// gives a verdict (deferred_assets.dart); the run's intake was built to
 /// pass over the ones deferred too often.
 ///
-/// [budget] counts from [startedAt] — the moment the OS-launched run
-/// entered Dart ([runHeadlessBackfill]) — so the keychain read, the
-/// settings load and the database open spend it too; it used to start at
-/// the scan, a second or more into iOS's grant. Null: from the scan start.
+/// [budget] counts from [startedAt] — the OS-launched run's start
+/// ([backgroundRunStart], in [runHeadlessBackfill]) — so the engine boot,
+/// the keychain read, the settings load and the database open spend it
+/// too; it used to start at the scan, a second or more into iOS's grant.
+/// Null: from the scan start.
 @visibleForTesting
 Future<bool> headlessBackfillWith({
   required AppSettings settings,
@@ -497,10 +523,16 @@ Future<bool> runHeadlessBackfill({
   // decode never finishes, so platform_decode must skip that step here
   // (2026-10-18).
   isHeadlessEngine = true;
-  // iOS's grant is already running: the time budget counts from here.
-  final startedAt = clock();
+  // iOS's grant is already running: the time budgets count from here, or
+  // from the native launch stamp when there is one for this run (the
+  // engine boot came out of the grant too).
+  final enteredDart = clock();
   final ios = isIOS ?? Platform.isIOS;
   final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+  final startedAt = ios
+      ? backgroundRunStart(
+          prefs.getString(backgroundNativeLaunchPrefsKey), enteredDart)
+      : enteredDart;
   await recordBackgroundLaunch(prefs, clock);
   // This run's diagnostics entry, rewritten at every step so a run iOS
   // kills still shows how far it got (background_runs.dart).
@@ -508,7 +540,8 @@ Future<bool> runHeadlessBackfill({
       platform: ios ? 'ios' : 'android', clock: clock);
   await recorder.begin(
       watermarkBefore:
-          readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+          readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)),
+      bootLead: enteredDart.difference(startedAt));
   final inFlight = RunInFlight();
   final run = _runAfterLaunch(
       ios: ios,
@@ -636,16 +669,21 @@ Future<bool> _runAfterLaunch({
   return ok;
 }
 
-/// The whole iOS background run, from its entry into Dart, ends within
-/// this (2026-10-19). iOS expires a BGAppRefresh grant about 30 s after
-/// launching it, and the engine boot comes before Dart's clock starts; a
-/// run still going then is killed, the task never completes, and its photo
-/// stays reserved. The offer budget ([iosBackgroundBudget]) stops new
-/// photos at 15 s, but nothing bounded the photo already in flight (a slow
-/// upload, a stalled decode) or the steps around the scan. What is left
-/// after this — the engine teardown and the completion — fits in the
-/// remaining seconds.
-const Duration iosRunDeadline = Duration(seconds: 25);
+/// The whole iOS background run, from its start ([backgroundRunStart]),
+/// ends within this (2026-10-19). iOS expires a BGAppRefresh grant about
+/// 30 s after launching it; a run still going then is killed, the task
+/// never completes (workmanager calls setTaskCompleted only on Dart's
+/// reply), its photo stays reserved, and iOS ranks the app lower for the
+/// next launch. The offer budget ([iosBackgroundBudget]) stops new photos
+/// at 15 s, but nothing bounded the photo already in flight (a slow
+/// upload, a stalled decode) or the steps around the scan.
+///
+/// 22 s, not 25: what the start misses is unmeasured — the process launch
+/// before the BGTask handler always, and the engine boot too when no
+/// native stamp came — and the teardown and completion come after. The
+/// last photo offered still gets 7 s, and one the deadline cuts off is
+/// released and offered first by the next run (finishWithinGrant).
+const Duration iosRunDeadline = Duration(seconds: 22);
 
 /// [run] or, once [left] has passed, an end to the run anyway: the
 /// diagnostics entry says 'budget' and the result is success, so

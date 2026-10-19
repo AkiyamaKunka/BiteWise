@@ -69,6 +69,7 @@ class BackgroundRunRecord {
     this.stopReason,
     this.watermarkBefore,
     this.watermarkAfter,
+    this.bootMs,
   });
 
   /// UTC instants.
@@ -103,6 +104,11 @@ class BackgroundRunRecord {
   final DateTime? watermarkBefore;
   final DateTime? watermarkAfter;
 
+  /// iOS: milliseconds from the native launch stamp (the engine's creation)
+  /// to the run's entry into Dart — the boot the time budgets now count
+  /// (2026-10-19). Null without a stamp for this run.
+  final int? bootMs;
+
   bool get finished => end != null;
 
   BackgroundRunRecord copyWith({
@@ -129,6 +135,7 @@ class BackgroundRunRecord {
         stopReason: stopReason ?? this.stopReason,
         watermarkBefore: watermarkBefore,
         watermarkAfter: watermarkAfter ?? this.watermarkAfter,
+        bootMs: bootMs,
       );
 
   Map<String, Object?> toJson() => {
@@ -144,6 +151,7 @@ class BackgroundRunRecord {
         'stop': stopReason,
         'wm_before': watermarkBefore?.toUtc().toIso8601String(),
         'wm_after': watermarkAfter?.toUtc().toIso8601String(),
+        if (bootMs != null) 'boot_ms': bootMs,
       };
 
   /// Null for an entry that cannot be read (a newer or damaged shape):
@@ -172,6 +180,7 @@ class BackgroundRunRecord {
       stopReason: stop is String ? stop : null,
       watermarkBefore: instant(json['wm_before']),
       watermarkAfter: instant(json['wm_after']),
+      bootMs: json['boot_ms'] is int ? count(json['boot_ms']) : null,
     );
   }
 }
@@ -272,13 +281,18 @@ class BackgroundRunRecorder {
   /// This run's entry as last written (tests, and the run itself).
   BackgroundRunRecord? get current => _current;
 
-  Future<void> begin({DateTime? watermarkBefore}) async {
+  /// [bootLead]: how long before the Dart entry the run started natively
+  /// (zero or null: no native stamp for this run).
+  Future<void> begin({DateTime? watermarkBefore, Duration? bootLead}) async {
     _older = decodeBackgroundRuns(_prefs.getString(backgroundRunsPrefsKey));
     _current = BackgroundRunRecord(
         start: _clock().toUtc(),
         platform: platform,
         watermarkBefore: watermarkBefore?.toUtc(),
-        watermarkAfter: watermarkBefore?.toUtc());
+        watermarkAfter: watermarkBefore?.toUtc(),
+        bootMs: bootLead == null || bootLead <= Duration.zero
+            ? null
+            : bootLead.inMilliseconds);
     await _write();
   }
 

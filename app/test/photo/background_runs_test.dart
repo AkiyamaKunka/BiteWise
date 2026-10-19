@@ -36,6 +36,28 @@ void main() {
     expect(r.watermarkAfter, watermark, reason: 'nothing moved it yet');
   });
 
+  test('the boot before Dart (iOS native launch stamp) is kept, through '
+      'every later write; none is stored without one', () async {
+    final prefs = await _prefs();
+    final rec = BackgroundRunRecorder(prefs, platform: 'ios', clock: () => t0);
+    await rec.begin(bootLead: const Duration(milliseconds: 1750));
+    await rec.offered();
+    await rec.finish(BackgroundStop.done);
+    expect(decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
+        .single
+        .bootMs, 1750);
+    expect(_stored(prefs).single['boot_ms'], 1750);
+    for (final lead in [null, Duration.zero]) {
+      final p = await _prefs();
+      await BackgroundRunRecorder(p, platform: 'android', clock: () => t0)
+          .begin(bootLead: lead);
+      expect(_stored(p).single.containsKey('boot_ms'), isFalse);
+      expect(decodeBackgroundRuns(p.getString(backgroundRunsPrefsKey))
+          .single
+          .bootMs, isNull);
+    }
+  });
+
   test('a run the OS kills keeps the last step it wrote (no final write)',
       () async {
     final prefs = await _prefs();
