@@ -179,6 +179,22 @@ void main() {
         ),
       );
     });
+
+    // Review, 2026-10-19: without these the run admits a photo that cannot
+    // finish, and every deadline cut counts against the photo, so a slow
+    // patch of the server passes photos over for good.
+    test('iOS: a photo that cannot finish by the deadline is not started, '
+        'and a cut counts only for a photo that had the full window', () {
+      expect(
+        launch(),
+        _wired(
+          r'final inFlight = RunInFlight\( deadline: ios \? '
+          r'startedAt\.add\(iosRunDeadline\) : null, clock: clock\);',
+        ),
+      );
+      expect(after(), _wired(r'\n\s*finishBy: inFlight\.deadline,'));
+      expect(after(), _wired(r'\n\s*photoOffered: inFlight\.offered,'));
+    });
   });
 
   // Behavioural where it can be: the factory's own fields are public.

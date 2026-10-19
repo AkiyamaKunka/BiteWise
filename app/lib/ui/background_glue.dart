@@ -83,6 +83,14 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// (2026-10-07). Counted from the run's start ([backgroundRunStart]), not
 /// from the scan start (2026-10-19): the engine boot, the settings load and
 /// the database open come out of the same grant.
+///
+/// It bounds the run's FIRST photo only loosely (7 s before the run's
+/// deadline at worst): every later one must also have, before
+/// [iosRunDeadline], as long as the slowest photo of the run took
+/// (drainBackfill finishBy). A Claude Plan analysis alone takes several
+/// seconds and can pass 15, so a second photo admitted with 7 s left was
+/// often analyzed on the server and then cut off unsaved (review,
+/// 2026-10-19).
 const Duration iosBackgroundBudget = Duration(seconds: 15);
 
 /// When workmanager created this run's headless engine, as an ISO instant:
@@ -147,10 +155,18 @@ class BackfillDrain {
 /// photo is processed — nor even read: the intake asks before each
 /// original's bytes, and a photo read just before the deadline is released
 /// at the sink. Both halt the frontier in front of the photo.
+///
+/// [finishBy] (iOS: [iosRunDeadline] from the run's start) is when the
+/// whole run must be over. A photo is started only if, at the pace of the
+/// slowest photo this drain has processed, it would be done by then — one
+/// that cannot finish is not started (an analysis cut off unsaved still
+/// costs the server, and the provider's quota). The first photo has no
+/// pace to go by: [deadline] alone admits it.
 Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     {int lookbackDays = 0,
     DateTime? since,
     DateTime? deadline,
+    DateTime? finishBy,
     DateTime Function() clock = DateTime.now,
     Future<void> Function(IntakePhoto photo)? onOffer,
     Future<void> Function(
@@ -159,11 +175,20 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
   final outcomes = <PhotoOutcome>[];
   var cutShort = false;
   var deadlineReleases = 0;
+  final timed = deadline != null || finishBy != null;
+  // The longest one photo has taken in this drain.
+  var slowest = Duration.zero;
   // Once past the deadline, past it for good (a clock step backwards must
   // not reopen the run), and every photo turned away is counted.
   bool budgetLeft() {
-    if (deadline == null) return true;
-    if (!cutShort && clock().isBefore(deadline)) return true;
+    if (!timed) return true;
+    if (!cutShort) {
+      final now = clock();
+      if ((deadline == null || now.isBefore(deadline)) &&
+          (finishBy == null || !now.add(slowest).isAfter(finishBy))) {
+        return true;
+      }
+    }
     cutShort = true;
     deadlineReleases++;
     return false;
@@ -174,7 +199,10 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
       return false; // released, not burned: the next run re-offers it
     }
     if (onOffer != null) await onOffer(p);
+    final began = clock();
     final o = await pipeline.process(p);
+    final took = clock().difference(began);
+    if (took > slowest) slowest = took;
     outcomes.add(o);
     if (onOutcome != null) await onOutcome(p, o, safeFrontier);
     return !o.retryable;
@@ -186,7 +214,7 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     frontier = await intake.backfillScan(
         lookbackDays: lookbackDays,
         since: since,
-        shouldContinue: deadline == null ? null : budgetLeft);
+        shouldContinue: timed ? budgetLeft : null);
     scanCompleted = true;
   } catch (e) {
     // Library query died / window truncated. Photos delivered before the
@@ -334,7 +362,10 @@ Future<void> recordBackgroundLaunch(
 /// ([backgroundRunStart], in [runHeadlessBackfill]) — so the engine boot,
 /// the keychain read, the settings load and the database open spend it
 /// too; it used to start at the scan, a second or more into iOS's grant.
-/// Null: from the scan start.
+/// Null: from the scan start. [finishBy]: see [drainBackfill].
+///
+/// [photoOffered] hears each photo handed to the pipeline, just before it
+/// is processed (RunInFlight.offered).
 @visibleForTesting
 Future<bool> headlessBackfillWith({
   required AppSettings settings,
@@ -345,6 +376,8 @@ Future<bool> headlessBackfillWith({
   DateTime Function() clock = DateTime.now,
   Duration? budget,
   DateTime? startedAt,
+  DateTime? finishBy,
+  void Function()? photoOffered,
   DeferredAssets? deferred,
   bool launchRecorded = false,
   BackgroundRunRecorder? recorder,
@@ -392,8 +425,12 @@ Future<bool> headlessBackfillWith({
     await pipeline(),
     since: since?.subtract(backgroundScanOverlap),
     deadline: budget == null ? null : (startedAt ?? scanStart).add(budget),
+    finishBy: finishBy,
     clock: clock,
-    onOffer: recorder == null ? null : (_) => recorder.offered(),
+    onOffer: (_) async {
+      photoOffered?.call();
+      await recorder?.offered();
+    },
     onOutcome: (photo, o, safeFrontier) async {
       await recorder?.processed(
           saved: o.kind == PhotoOutcomeKind.saved ||
@@ -575,7 +612,8 @@ Future<bool> runHeadlessBackfill({
       watermarkBefore:
           readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)),
       bootLead: enteredDart.difference(startedAt));
-  final inFlight = RunInFlight();
+  final inFlight = RunInFlight(
+      deadline: ios ? startedAt.add(iosRunDeadline) : null, clock: clock);
   final run = _runAfterLaunch(
       ios: ios,
       prefs: prefs,
@@ -591,22 +629,49 @@ Future<bool> runHeadlessBackfill({
       abandon: inFlight.abandon);
 }
 
+/// How long a photo must have had to itself, before the run's deadline,
+/// for a cut-off to count against it ([DeferredAssets.cutOff]): offered no
+/// later than 7 s into the run. Most first photos of a run have it; a photo
+/// offered after another was processed mostly has not, and its cut-off
+/// says nothing about the photo (review, 2026-10-19).
+const Duration slowPhotoWindow = Duration(seconds: 15);
+
 /// What the iOS deadline needs from a run still going: its pipeline once
-/// built, and its deferral notes once loaded.
+/// built, its deferral notes once loaded, and when the photo in flight was
+/// offered.
 @visibleForTesting
 class RunInFlight {
+  RunInFlight({this.deadline, DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now;
+
+  /// When the run must be over ([iosRunDeadline] from its start); null
+  /// where there is no such deadline (Android).
+  final DateTime? deadline;
+  final DateTime Function() _clock;
   PhotoPipeline? pipeline;
   DeferredAssets? deferred;
+  DateTime? _offeredAt;
 
-  /// Releases the photo in flight ([PhotoPipeline.abandon]) and notes it
-  /// as deferred: a photo the deadline cuts off twice — too slow for what
-  /// a run has left — is then passed over like an undecodable one, so it
-  /// no longer holds the watermark, and the app's catch-up logs it.
+  /// A photo was handed to the pipeline: the one in flight from now on
+  /// (the background pipeline takes one photo at a time).
+  void offered() => _offeredAt = _clock();
+
+  /// Releases the photo in flight ([PhotoPipeline.abandon]). It stays
+  /// eligible, and the next run offers it again. When it had at least
+  /// [slowPhotoWindow] to itself, the cut also counts against it: after
+  /// [cutsBeforePassOver] of those, later runs pass it over (the app's
+  /// catch-up still logs it), so a photo too slow for any run does not hold
+  /// the watermark — and every photo after it — until the app opens. A
+  /// photo offered late, or cut off while the server or the network hung,
+  /// costs nothing more than the retry.
   Future<void> abandon() async {
     final assetId = await pipeline?.abandon();
-    if (assetId != null && assetId.isNotEmpty) {
-      await deferred?.deferred(assetId);
+    if (assetId == null || assetId.isEmpty) return;
+    final at = _offeredAt, end = deadline;
+    if (at == null || end == null || end.difference(at) < slowPhotoWindow) {
+      return;
     }
+    await deferred?.cutOff(assetId);
   }
 }
 
@@ -680,6 +745,8 @@ Future<bool> _runAfterLaunch({
       },
       budget: ios ? iosBackgroundBudget : null,
       startedAt: startedAt,
+      finishBy: inFlight.deadline,
+      photoOffered: inFlight.offered,
       deferred: deferred,
       launchRecorded: true,
       recorder: recorder,
@@ -713,9 +780,12 @@ Future<bool> _runAfterLaunch({
 ///
 /// 22 s, not 25: what the start misses is unmeasured — the process launch
 /// before the BGTask handler always, and the engine boot too when no
-/// native stamp came — and the teardown and completion come after. The
-/// last photo offered still gets 7 s, and one the deadline cuts off is
-/// released and offered first by the next run (finishWithinGrant).
+/// native stamp came — and the teardown and completion come after. A photo
+/// offered at the end of the offer budget would have 7 s, so after the
+/// first, drainBackfill starts one only if it can finish by this at the
+/// run's pace. One the deadline cuts off anyway
+/// is released (finishWithinGrant) and offered again by a later run —
+/// behind any older photo still waiting, not necessarily first.
 const Duration iosRunDeadline = Duration(seconds: 22);
 
 /// [run] or, once [left] has passed, an end to the run anyway: the

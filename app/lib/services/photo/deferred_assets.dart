@@ -7,16 +7,24 @@
 /// deferred it again — one odd file froze the watermark, and every photo
 /// shot after it waited behind it.
 ///
-/// The same holds for a photo the iOS run's deadline cuts off mid-analysis
-/// (finishWithinGrant releases it): one too slow for what a run has left
-/// would be met first, and cut off, by every run after.
-///
 /// So the run notes each deferral here, and a photo deferred
 /// [deferralsBeforePassOver] times is passed over by later background runs:
 /// counted covered for the watermark without being read. Nothing is written
 /// to the ledger — not failed, not covered — so the app's lookback
 /// catch-up still offers it, and a verdict from either engine removes the
 /// entry.
+///
+/// A photo the iOS run's deadline cuts off mid-analysis (finishWithinGrant
+/// releases it) is counted apart, as a cut, and passed over only after
+/// [cutsBeforePassOver] of them. A cut is mostly not the photo's doing: a
+/// server or network that hangs for a while cuts off whatever photo each
+/// run meets, and a photo offered late in a run has only what the run has
+/// left. Passed over, it gets no background log or meal card until the app
+/// next opens, so a cut counts at all only when the photo had the run's
+/// full window to itself (background_glue.dart slowPhotoWindow), and it
+/// takes more of them: a photo really too slow for any run is still passed
+/// over in the end, instead of holding the watermark — and every photo shot
+/// after it — until the app opens.
 ///
 /// Asset ids, counts and the first deferral's time only. Both engines
 /// rewrite the list (read, change, write); two writes interleaving can at
@@ -28,7 +36,7 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// A JSON list of {id, n, first}.
+/// A JSON list of {id, n, first}, and c (the cuts) when there are any.
 const String deferredAssetsPrefsKey = 'background.deferred_assets_v1';
 
 /// How many photos are tracked; past it the earliest-deferred goes.
@@ -37,26 +45,52 @@ const int deferredAssetsKept = 50;
 /// Deferrals after which later background runs pass a photo over.
 const int deferralsBeforePassOver = 2;
 
+/// Deadline cuts (each with the run's full window) after which later
+/// background runs pass a photo over. More than [deferralsBeforePassOver]:
+/// a cut can be a slow patch of the server or the network, which the next
+/// run may not meet; an undecodable photo stays undecodable.
+const int cutsBeforePassOver = 3;
+
 class DeferredAsset {
-  const DeferredAsset(this.id, this.count, this.firstSeen);
+  const DeferredAsset(this.id, this.count, this.firstSeen, {this.cuts = 0});
   final String id;
+
+  /// Deferrals: the run could not decode it.
   final int count;
 
-  /// The first deferral (UTC).
+  /// Deadline cuts: the run's deadline released it mid-analysis.
+  final int cuts;
+
+  /// The first deferral or cut (UTC).
   final DateTime firstSeen;
 
-  Map<String, Object?> toJson() =>
-      {'id': id, 'n': count, 'first': firstSeen.toUtc().toIso8601String()};
+  bool get passedOver =>
+      count >= deferralsBeforePassOver || cuts >= cutsBeforePassOver;
+
+  Map<String, Object?> toJson() => {
+        'id': id,
+        'n': count,
+        'first': firstSeen.toUtc().toIso8601String(),
+        if (cuts > 0) 'c': cuts,
+      };
 
   static DeferredAsset? fromJson(Object? json) {
     if (json is! Map) return null;
     final id = json['id'];
     final n = json['n'];
+    final c = json['c'] ?? 0;
     final first = DateTime.tryParse('${json['first']}');
-    if (id is! String || id.isEmpty || n is! int || n < 1 || first == null) {
+    if (id is! String ||
+        id.isEmpty ||
+        n is! int ||
+        n < 0 ||
+        c is! int ||
+        c < 0 ||
+        n + c < 1 ||
+        first == null) {
       return null;
     }
-    return DeferredAsset(id, n, first);
+    return DeferredAsset(id, n, first, cuts: c);
   }
 }
 
@@ -73,13 +107,13 @@ List<DeferredAsset> decodeDeferredAssets(String? stored) {
 }
 
 /// The background run's view: loaded once at its start, so a photo is
-/// passed over only by runs AFTER the one that deferred it the second
-/// time. Writes never throw — bookkeeping must not take the scan down.
+/// passed over only by runs AFTER the one whose deferral or cut reached the
+/// threshold. Writes never throw — bookkeeping must not take the scan down.
 class DeferredAssets {
   DeferredAssets._(this._prefs, this._clock, List<DeferredAsset> entries)
       : _passOver = {
           for (final e in entries)
-            if (e.count >= deferralsBeforePassOver) e.id,
+            if (e.passedOver) e.id,
         },
         _known = {for (final e in entries) e.id};
 
@@ -103,16 +137,25 @@ class DeferredAssets {
   /// Whether this run counts [assetId] covered without reading it.
   bool passOver(String assetId) => _passOver.contains(assetId);
 
-  /// This run deferred [assetId] (again), or its deadline cut it off.
-  Future<void> deferred(String assetId) {
+  /// This run deferred [assetId] (again): it could not decode it.
+  Future<void> deferred(String assetId) => _note(assetId, cut: false);
+
+  /// This run's deadline cut [assetId] off mid-analysis after it had the
+  /// run's full window (RunInFlight.abandon decides that).
+  Future<void> cutOff(String assetId) => _note(assetId, cut: true);
+
+  Future<void> _note(String assetId, {required bool cut}) {
     _known.add(assetId);
     return _rewrite(_prefs, (list) {
         final i = list.indexWhere((e) => e.id == assetId);
         if (i >= 0) {
           final e = list[i];
-          list[i] = DeferredAsset(e.id, e.count + 1, e.firstSeen);
+          list[i] = DeferredAsset(
+              e.id, e.count + (cut ? 0 : 1), e.firstSeen,
+              cuts: e.cuts + (cut ? 1 : 0));
         } else {
-          list.add(DeferredAsset(assetId, 1, _clock().toUtc()));
+          list.add(DeferredAsset(assetId, cut ? 0 : 1, _clock().toUtc(),
+              cuts: cut ? 1 : 0));
         }
         if (list.length > deferredAssetsKept) {
           list.sort((a, b) => a.firstSeen.compareTo(b.firstSeen));

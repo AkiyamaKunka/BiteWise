@@ -1,5 +1,6 @@
 /// One undecodable photo must not freeze the background scan forever
 /// (2026-10-19): after two deferrals, later background runs pass it over.
+/// A photo the iOS deadline keeps cutting off takes three cuts.
 library;
 
 import 'dart:convert';
@@ -101,6 +102,51 @@ void main() {
     expect(ids, isNot(contains('a2')));
     expect(ids, contains('a3'));
     expect(stored().firstWhere((e) => e.id == 'a10').count, 2);
+  });
+
+  // Review, 2026-10-19: a deadline cut is mostly the server's or the
+  // network's doing, not the photo's. Two of them used to pass a photo
+  // over for good (the watermark moved past it) after a slow patch of two
+  // runs.
+  test('deadline cuts are counted apart, and pass a photo over only after '
+      'three', () async {
+    await (await run()).cutOff('A');
+    await (await run()).cutOff('A');
+    expect((await run()).passOver('A'), isFalse,
+        reason: 'two hung runs: the next one still offers it');
+    var e = stored().single;
+    expect((e.count, e.cuts), (0, 2));
+    // A deferral is its own count: one of each passes nothing over.
+    await (await run()).deferred('A');
+    expect((await run()).passOver('A'), isFalse);
+    await (await run()).cutOff('A');
+    expect((await run()).passOver('A'), isTrue,
+        reason: 'cut off three times with the full window');
+    e = stored().single;
+    expect((e.count, e.cuts, e.firstSeen), (1, 3, t0));
+  });
+
+  test('a cut is stored as c, and an entry without one reads as no cuts',
+      () async {
+    await (await run()).cutOff('A');
+    final raw = jsonDecode(prefs.getString(deferredAssetsPrefsKey)!) as List;
+    expect(raw.single,
+        {'id': 'A', 'n': 0, 'first': t0.toIso8601String(), 'c': 1});
+    await prefs.setString(
+        deferredAssetsPrefsKey,
+        jsonEncode([
+          {'id': 'B', 'n': 2, 'first': t0.toIso8601String()},
+          {'id': 'C', 'n': 0, 'first': t0.toIso8601String(), 'c': 3},
+          {'id': 'D', 'n': 0, 'first': t0.toIso8601String()}, // nothing
+          {'id': 'E', 'n': 1, 'first': t0.toIso8601String(), 'c': 'x'},
+        ]));
+    expect(stored().map((e) => (e.id, e.count, e.cuts)),
+        [('B', 2, 0), ('C', 0, 3)]);
+    final r = await run();
+    expect((r.passOver('B'), r.passOver('C')), (true, true));
+    // A verdict forgets cuts like deferrals.
+    await r.settled('C');
+    expect(stored().map((e) => e.id), ['B']);
   });
 
   test('a damaged store reads as empty, and damaged entries are skipped',

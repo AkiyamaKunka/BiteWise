@@ -60,6 +60,10 @@ class EmittingIntake implements PhotoIntake {
   /// Photos the scan left unread because shouldContinue said stop.
   int unread = 0;
 
+  /// Like the real intake's passOver (deferred_assets.dart): such a photo
+  /// is counted covered without being read or offered.
+  bool Function(String assetId)? passOver;
+
   @override
   Future<DateTime?> backfillScan(
       {int lookbackDays = 0,
@@ -71,6 +75,7 @@ class EmittingIntake implements PhotoIntake {
     sinceArgs.add(since);
     newestDayFirstArgs.add(newestDayFirst);
     for (var i = 0; i < batch.length; i++) {
+      if (passOver?.call(batch[i].assetId) ?? false) continue;
       // Asked before the (here notional) byte read, like the real intake.
       if (shouldContinue != null && !shouldContinue()) {
         unread++;
@@ -314,6 +319,93 @@ void main() {
       expect(intake.unread, 2, reason: 'photos 3 and 4 were never read');
       expect(drain.cutShort, isTrue);
       expect(drain.deadlineReleases, 2);
+    });
+
+    // Review, 2026-10-19: the offer budget let a second photo start with
+    // 7 s left before the run's deadline — mostly analyzed on the server,
+    // then cut off unsaved.
+    group('finishBy: a photo that cannot finish is not started', () {
+      final t0 = DateTime(2026, 10, 19, 12, 0, 0);
+      final deadline = t0.add(const Duration(seconds: 15));
+      final finishBy = t0.add(const Duration(seconds: 22));
+
+      /// Each photo's processing moves the clock by the next of [takes].
+      Future<(BackfillDrain, EmittingIntake, FakeDao)> drain(
+          List<Duration> takes,
+          {DateTime? start}) async {
+        var now = start ?? t0;
+        var i = 0;
+        final intake = EmittingIntake()
+          ..batch = [for (var n = 1; n <= takes.length; n++) photo(n)];
+        final dao = FakeDao();
+        final analyzer = FakeAnalyzer()
+          ..nextPhotoOutcome = const AnalysisOutcome(
+              analysis: {'is_food': true, 'food_items': []},
+              isFood: true,
+              wall: Duration.zero)
+          ..onAnalyze = () async => now = now.add(takes[i++]);
+        final d = await drainBackfill(
+            intake, PhotoPipeline(dao: dao, analyzer: analyzer),
+            deadline: deadline, finishBy: finishBy, clock: () => now);
+        return (d, intake, dao);
+      }
+
+      test('after a 10 s photo, one with 8 s left is not read, though the '
+          'offer budget is still open', () async {
+        final (d, intake, dao) = await drain(
+            [const Duration(seconds: 10), const Duration(seconds: 1)],
+            start: t0.add(const Duration(seconds: 4)));
+        expect(dao.meals, hasLength(1));
+        expect(intake.unread, 1, reason: 'at 14 s: 8 s left < 10 s');
+        expect((d.cutShort, d.deadlineReleases), (true, 1));
+      });
+
+      test('after a 13 s retry (busy server), nothing more starts',
+          () async {
+        final (d, intake, _) = await drain(
+            [const Duration(seconds: 13), const Duration(seconds: 1)],
+            start: t0.add(const Duration(seconds: 1)));
+        expect(d.outcomes, hasLength(1));
+        expect(intake.unread, 1, reason: 'at 14 s: 8 s left < 13 s');
+      });
+
+      test('fast photos keep going until the offer budget ends', () async {
+        final (d, _, dao) = await drain(
+            List.filled(8, const Duration(seconds: 3)),
+            start: t0.add(const Duration(seconds: 2)));
+        // Offered at 2, 5, 8, 11, 14 s; at 17 s the budget has ended.
+        expect(dao.meals, hasLength(5));
+        expect(d.deadlineReleases, 3);
+      });
+
+      test('the first photo has no pace to go by: the offer budget alone '
+          'admits it', () async {
+        final (d, _, dao) = await drain([const Duration(seconds: 20)],
+            start: t0.add(const Duration(seconds: 14)));
+        expect(dao.meals, hasLength(1));
+        expect(d.cutShort, isFalse);
+      });
+
+      test('no finishBy (Android): the offer budget alone, as before',
+          () async {
+        var now = t0.add(const Duration(seconds: 5));
+        final dao = FakeDao();
+        final d = await drainBackfill(
+            EmittingIntake()..batch = [photo(1), photo(2)],
+            PhotoPipeline(
+                dao: dao,
+                analyzer: FakeAnalyzer()
+                  ..nextPhotoOutcome = const AnalysisOutcome(
+                      analysis: {'is_food': true, 'food_items': []},
+                      isFood: true,
+                      wall: Duration.zero)
+                  ..onAnalyze =
+                      () async => now = now.add(const Duration(seconds: 9))),
+            deadline: deadline,
+            clock: () => now);
+        expect(dao.meals, hasLength(2), reason: 'offered at 5 s and 14 s');
+        expect(d.cutShort, isFalse);
+      });
     });
 
     test('unsubscribes its listener afterwards', () async {
@@ -574,48 +666,184 @@ void main() {
         expect(stored().stopReason, BackgroundStop.budget);
       });
 
-      test('RunInFlight: releases the photo in flight and notes it deferred; '
-          'cut off twice, later runs pass it over', () async {
-        final dao = FakeDao();
-        final hang = Completer<void>();
-        final pipeline = PhotoPipeline(
-            dao: dao,
-            analyzer: FakeAnalyzer()..onAnalyze = () => hang.future,
-            hasher: (b) async => md5.convert(b).toString());
-        Future<void> cutOff() async {
-          final run = RunInFlight()
+      group('RunInFlight: the photo the deadline cuts off', () {
+        final deadline = t0.add(iosRunDeadline);
+
+        /// One run cut off by the deadline while its analysis hangs, the
+        /// photo offered [offeredAfter] into the run.
+        Future<void> cutOff(FakeDao dao,
+            {Duration offeredAfter = const Duration(seconds: 5)}) async {
+          final pipeline = PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()
+                ..onAnalyze = () => Completer<void>().future,
+              hasher: (b) async => md5.convert(b).toString());
+          final run = RunInFlight(
+              deadline: deadline, clock: () => t0.add(offeredAfter))
             ..pipeline = pipeline
             ..deferred = await DeferredAssets.load(prefs);
+          run.offered();
           unawaited(pipeline.process(photo(1)));
           while (!dao.ledger.values.contains(IngestionStatus.processing)) {
             await Future<void>.delayed(const Duration(milliseconds: 1));
           }
           await run.abandon();
           expect(dao.ledger.values,
-              isNot(contains(IngestionStatus.processing)));
+              isNot(contains(IngestionStatus.processing)),
+              reason: 'released, so the next run can take it');
         }
 
-        await cutOff();
-        expect((await DeferredAssets.load(prefs)).passOver('asset1'), isFalse,
-            reason: 'once may be a late offer');
-        // A fresh pipeline per run, as each run builds its own.
-        final second = PhotoPipeline(
-            dao: dao,
-            analyzer: FakeAnalyzer()..onAnalyze = () => hang.future,
-            hasher: (b) async => md5.convert(b).toString());
-        final run = RunInFlight()
-          ..pipeline = second
-          ..deferred = await DeferredAssets.load(prefs);
-        unawaited(second.process(photo(1)));
-        while (!dao.ledger.values.contains(IngestionStatus.processing)) {
-          await Future<void>.delayed(const Duration(milliseconds: 1));
-        }
-        await run.abandon();
-        expect((await DeferredAssets.load(prefs)).passOver('asset1'), isTrue,
-            reason: 'twice: too slow for any run, the app logs it');
-        // Nothing built yet (the deadline hit during the settings load):
-        // nothing to release, nothing noted.
-        await RunInFlight().abandon();
+        test('with the full window, three cuts pass it over (too slow for '
+            'any run); two do not', () async {
+          final dao = FakeDao();
+          await cutOff(dao);
+          await cutOff(dao);
+          expect((await DeferredAssets.load(prefs)).passOver('asset1'),
+              isFalse);
+          await cutOff(dao);
+          expect((await DeferredAssets.load(prefs)).passOver('asset1'),
+              isTrue,
+              reason: 'the app logs it; newer photos stop waiting behind it');
+          final e = decodeDeferredAssets(
+                  prefs.getString(deferredAssetsPrefsKey))
+              .single;
+          expect((e.count, e.cuts), (0, 3));
+          // Nothing built yet (the deadline hit during the settings load):
+          // nothing to release, nothing noted.
+          await RunInFlight(deadline: deadline).abandon();
+        });
+
+        test('offered late (less than slowPhotoWindow left), the cut is '
+            'never counted against it', () async {
+          final dao = FakeDao();
+          final late = iosRunDeadline -
+              slowPhotoWindow +
+              const Duration(milliseconds: 1);
+          for (var run = 0; run < 4; run++) {
+            await cutOff(dao, offeredAfter: late);
+          }
+          expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+          // Exactly the window counts.
+          await cutOff(dao, offeredAfter: iosRunDeadline - slowPhotoWindow);
+          expect(
+              decodeDeferredAssets(prefs.getString(deferredAssetsPrefsKey))
+                  .single
+                  .cuts,
+              1);
+        });
+
+        // P1: the server (or a VPN, or the network) hangs through two
+        // runs. The photo used to be passed over for good in the third,
+        // healthy run: the watermark moved past it and it got no
+        // background log or meal card.
+        test('P1: after two hung runs, a healthy third run logs the photo',
+            () async {
+          final settings = await settingsWith(key: 'k');
+          final dao = FakeDao();
+          Future<void> runOnce(FakeAnalyzer analyzer, {Duration? cutAfter})
+              async {
+            final inFlight = RunInFlight(deadline: deadline, clock: () => t0);
+            final deferred = inFlight.deferred = await DeferredAssets.load(prefs);
+            final run = headlessBackfillWith(
+              settings: settings,
+              prefs: prefs,
+              intake: EmittingIntake()
+                ..batch = [photo(1)]
+                ..passOver = deferred.passOver,
+              pipeline: () async => inFlight.pipeline = PhotoPipeline(
+                  dao: dao,
+                  analyzer: analyzer,
+                  hasher: (b) async => md5.convert(b).toString()),
+              showMealCard: (_, _) async {},
+              clock: () => t0,
+              budget: iosBackgroundBudget,
+              startedAt: t0,
+              finishBy: deadline,
+              photoOffered: inFlight.offered,
+              deferred: deferred,
+              recorder: await begun(),
+            );
+            if (cutAfter == null) {
+              await run;
+            } else {
+              await finishWithinGrant(run,
+                  left: cutAfter,
+                  recorder: BackgroundRunRecorder(prefs, platform: 'ios'),
+                  abandon: inFlight.abandon);
+            }
+          }
+
+          for (var hung = 0; hung < 2; hung++) {
+            await runOnce(
+                FakeAnalyzer()..onAnalyze = () => Completer<void>().future,
+                cutAfter: const Duration(milliseconds: 40));
+            expect(dao.ledger.values,
+                isNot(contains(IngestionStatus.processing)));
+          }
+          expect(dao.meals, isEmpty);
+          await runOnce(FakeAnalyzer()
+            ..nextPhotoOutcome = const AnalysisOutcome(
+                analysis: {'is_food': true, 'food_items': []},
+                isFood: true,
+                wall: Duration.zero));
+          expect(dao.meals, hasLength(1),
+              reason: 'offered again, not passed over');
+          expect(prefs.getString(deferredAssetsPrefsKey), isNull,
+              reason: 'its verdict forgets the cuts');
+        });
+
+        // P2: an older photo eats the start of the run (a busy server's
+        // in-place retries), so the next one is offered late and cut off,
+        // run after run, though it was never slow.
+        test('P2: a photo offered after a slow one is never passed over',
+            () async {
+          final settings = await settingsWith(key: 'k');
+          final dao = FakeDao();
+          for (var run = 0; run < 4; run++) {
+            var now = t0.add(const Duration(seconds: 4));
+            var calls = 0;
+            final analyzer = FakeAnalyzer();
+            analyzer.onAnalyze = () async {
+              if (calls++ == 0) {
+                // The older photo: 6 s, then a retryable failure.
+                now = now.add(const Duration(seconds: 6));
+                analyzer.nextPhotoOutcome = const AnalysisOutcome(
+                    error: 'busy', retryable: true, wall: Duration.zero);
+                return;
+              }
+              await Completer<void>().future; // the newer one hangs
+            };
+            final inFlight = RunInFlight(deadline: deadline, clock: () => now);
+            final deferred = inFlight.deferred = await DeferredAssets.load(prefs);
+            final scan = headlessBackfillWith(
+              settings: settings,
+              prefs: prefs,
+              intake: EmittingIntake()
+                ..batch = [photo(1), photo(2)]
+                ..passOver = deferred.passOver,
+              pipeline: () async => inFlight.pipeline = PhotoPipeline(
+                  dao: dao,
+                  analyzer: analyzer,
+                  hasher: (b) async => md5.convert(b).toString()),
+              showMealCard: (_, _) async {},
+              clock: () => now,
+              budget: iosBackgroundBudget,
+              startedAt: t0,
+              finishBy: deadline,
+              photoOffered: inFlight.offered,
+              deferred: deferred,
+            );
+            await finishWithinGrant(scan,
+                left: const Duration(milliseconds: 40),
+                recorder: await begun(),
+                abandon: inFlight.abandon);
+            expect(calls, 2, reason: 'run $run: the newer photo was started');
+          }
+          expect(prefs.getString(deferredAssetsPrefsKey), isNull,
+              reason: 'offered 10 s in: 12 s left is not the full window');
+          expect(dao.ledger.values,
+              isNot(contains(IngestionStatus.processing)));
+        });
       });
 
       test('runHeadlessBackfill on iOS ends at the deadline even when the '
