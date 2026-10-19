@@ -36,11 +36,16 @@ import workmanager_apple
     AppDelegate.registerAppPlugins(with: engineBridge.pluginRegistry)
   }
 
-  /// The plugins that live in this target (ImageIOPlugin.swift), for every
-  /// engine: the app's own and workmanager's headless background engine.
+  /// The plugins that live in this target (ImageIOPlugin.swift,
+  /// BackgroundTimePlugin.swift), for every engine: the app's own and
+  /// workmanager's headless background engine. Only the app's engine calls
+  /// the background-time channel; registering it in both keeps one path.
   static func registerAppPlugins(with registry: FlutterPluginRegistry) {
     if let registrar = registry.registrar(forPlugin: "ImageIOPlugin") {
       ImageIOPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "BackgroundTimePlugin") {
+      BackgroundTimePlugin.register(with: registrar)
     }
   }
 }

@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
     show imageIOChannelName;
+import 'package:calorie_tracker/services/photo/background_time.dart'
+    show backgroundTimeChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -272,5 +274,54 @@ void main() {
     expect(implicit,
         contains('registerAppPlugins(with: engineBridge.pluginRegistry)'));
     expect(delegate, contains('ImageIOPlugin.register(with:'));
+  });
+
+  // The app's photo in flight asks iOS for time to finish when the user
+  // leaves (BackgroundTimePlugin.swift, 2026-10-19). A Swift file missing
+  // from Runner answers MissingPluginException, which the Dart side
+  // swallows by design — so nothing but this gate would notice.
+  test('the background-time plugin is built into Runner and registered',
+      () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/BackgroundTimePlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$backgroundTimeChannelName"'));
+    // The expiration handler must END the task, or iOS kills the app.
+    expect(
+        RegExp(r'beginBackgroundTask\(withName: name\) \{[^}]*end\(token\)')
+            .hasMatch(source),
+        isTrue);
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* BackgroundTimePlugin.swift '
+            r'\*/ = \{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* BackgroundTimePlugin.swift */'));
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* BackgroundTimePlugin.swift '
+            'in Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+        .firstMatch(
+            _pbxObject(pbxproj, comment: 'Runner', isa: 'PBXNativeTarget'))
+        ?.group(1);
+    expect(
+        _pbxObject(pbxproj,
+            id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase'),
+        contains('$buildFile /* BackgroundTimePlugin.swift in Sources */'));
+    // The app's engine registers app-local plugins through this one path.
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('BackgroundTimePlugin.register(with:'));
   });
 }

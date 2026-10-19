@@ -17,6 +17,7 @@ import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
 import '../services/analyzer/platform_decode.dart';
+import '../services/photo/background_time.dart';
 import '../services/photo/filename_dates.dart'
     show captureWallClock, exifCapturedAt, exifWallAndOffset,
         validateCapturedAt;
@@ -208,6 +209,13 @@ class PhotoPipeline {
   /// as they were (false).
   final bool deferUndecodable;
 
+  /// iOS, the app's own engine only (di.dart): each photo runs inside one
+  /// background task, so leaving the app mid-analysis lets that photo's
+  /// upload and save finish instead of freezing with it (2026-10-19). Null
+  /// everywhere else — the headless run has the OS grant, Android does not
+  /// suspend this way, tests opt in.
+  final BackgroundTime? backgroundTime;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
   // FIFO tail: bound-stream photos process ONE at a time. A backfill batch
@@ -223,6 +231,7 @@ class PhotoPipeline {
       this.onMealSaved,
       this.latch,
       this.deferUndecodable = false,
+      this.backgroundTime,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
@@ -330,7 +339,17 @@ class PhotoPipeline {
   }
 
   /// One photo through the full pipeline. Never throws.
-  Future<PhotoOutcome> process(IntakePhoto photo) => _process(photo);
+  ///
+  /// Every intake comes through here (watcher, share sheet, add flow,
+  /// coverage), one photo at a time off the FIFO, so [backgroundTime] holds
+  /// exactly one task per photo. A lost reservation's second settle
+  /// ([_afterLost]) stays inside the same task.
+  Future<PhotoOutcome> process(IntakePhoto photo) {
+    final time = backgroundTime;
+    return time == null
+        ? _process(photo)
+        : time.guard('photo', () => _process(photo));
+  }
 
   /// [held]: a verdict this photo ALREADY got, with the meal snapshot its
   /// leftover indexes resolve against — settled again instead of uploading
