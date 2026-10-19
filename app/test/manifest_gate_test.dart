@@ -206,4 +206,69 @@ void main() {
               'group, so its path would resolve elsewhere');
     });
   });
+
+  // The background scan decodes HEIC through ImageIOPlugin.swift: the
+  // headless engine's GPU is off for the whole run, and dart:ui decoding
+  // never finishes there (2026-10-18). Nothing in Dart can see a Swift file
+  // that is missing from the Runner target, or a channel registered only in
+  // the app's engine — the call just answers MissingPluginException and the
+  // photo is deferred on every run. So: compiled into Runner (and only
+  // Runner — the share extension has no Flutter engine), and registered in
+  // BOTH registrant paths.
+  test('the ImageIO plugin is built into Runner and registered for both '
+      'engines', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/ImageIOPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    expect(swift.readAsStringSync(),
+        contains('"dev.calorietracker/imageio"'));
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* ImageIOPlugin.swift \*/ = '
+            r'\{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* ImageIOPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* ImageIOPlugin.swift in '
+            'Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* ImageIOPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('ImageIOPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final workmanager = RegExp(
+            r'setPluginRegistrantCallback \{ registry in(.*?)\n    \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(1);
+    expect(workmanager, isNotNull);
+    expect(workmanager, contains('registerAppPlugins(with: registry)'),
+        reason: 'the headless background engine would lack the channel');
+    final implicit = RegExp(
+            r'func didInitializeImplicitFlutterEngine\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(implicit, isNotNull);
+    expect(implicit,
+        contains('registerAppPlugins(with: engineBridge.pluginRegistry)'));
+    expect(delegate, contains('ImageIOPlugin.register(with:'));
+  });
 }
