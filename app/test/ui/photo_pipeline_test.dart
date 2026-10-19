@@ -335,8 +335,8 @@ void main() {
       expect(dao.thumbs, isEmpty);
     });
 
-    testWidgets('a thumbnail that never comes does not hold the verdict '
-        'past thumbnailTimeout', (tester) async {
+    testWidgets('iOS background run: a thumbnail that never comes does not '
+        'hold the verdict past thumbnailTimeout', (tester) async {
       // Fake time (testWidgets). The meal is committed first, but in the
       // iOS background run its card and watermark checkpoint wait for
       // process() to return.
@@ -346,7 +346,8 @@ void main() {
               dao: dao,
               analyzer: food(),
               hasher: (b) async => md5.convert(b).toString(),
-              thumbnailer: (_) => Completer<Uint8List?>().future)
+              thumbnailer: (_) => Completer<Uint8List?>().future,
+              deferUndecodable: true)
           .process(_photo())
           .then((o) => out = o);
       await tester.pump(
@@ -356,6 +357,27 @@ void main() {
       await tester.pump(const Duration(milliseconds: 1));
       expect(out?.kind, PhotoOutcomeKind.saved);
       expect(dao.thumbs, isEmpty);
+    });
+
+    testWidgets('every other run waits for a slow thumbnail: an abandoned '
+        'decode would run beside the next photo', (tester) async {
+      final dao = FakeDao();
+      final thumb = Completer<Uint8List?>();
+      PhotoOutcome? out;
+      PhotoPipeline(
+              dao: dao,
+              analyzer: food(),
+              hasher: (b) async => md5.convert(b).toString(),
+              thumbnailer: (_) => thumb.future)
+          .process(_photo())
+          .then((o) => out = o);
+      await tester.pump(PhotoPipeline.thumbnailTimeout * 3);
+      expect(dao.meals, hasLength(1));
+      expect(out, isNull, reason: 'still waiting for the thumb');
+      thumb.complete(Uint8List.fromList([0xFF, 0xD8, 0xFF]));
+      await tester.pump();
+      expect(out?.kind, PhotoOutcomeKind.saved);
+      expect(dao.thumbs, hasLength(1));
     });
   });
 

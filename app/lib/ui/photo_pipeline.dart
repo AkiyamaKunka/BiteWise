@@ -237,11 +237,18 @@ class PhotoPipeline {
   /// can make it hang or throw.
   final Future<Uint8List?> Function(Uint8List original) _thumb;
 
-  /// How long a saved meal may wait for its thumbnail. The meal is already
-  /// committed, but process() has not returned: in the iOS background run
-  /// its notification card and the watermark checkpoint come only after
-  /// it, and the OS grant is ~30 s. A thumb that is not ready by then is
-  /// skipped (the meal shows without one), never waited on.
+  /// How long a saved meal may wait for its thumbnail in the iOS background
+  /// run (the one [deferUndecodable] marks). The meal is already committed,
+  /// but process() has not returned: its notification card and the
+  /// watermark checkpoint come only after it, and the OS grant is ~30 s. A
+  /// thumb that is not ready by then is skipped (the meal shows without
+  /// one), never waited on.
+  ///
+  /// Every other run awaits the thumb to the end, as before: platform_decode
+  /// bounds its own native and engine steps, and the pure-Dart step always
+  /// finishes. Abandoning that step (a 50 MP JPEG on a slow Android phone)
+  /// would leave its full decode running in the isolate while the next
+  /// photo's starts — the memory the serialized pipeline exists to save.
   static const thumbnailTimeout = Duration(seconds: 8);
 
   /// Injectable for the rejected-key notice throttle below.
@@ -595,11 +602,14 @@ class PhotoPipeline {
       // History thumbnail from the ORIGINAL bytes we already hold (spec §9
       // app-only). Best-effort AND awaited: the pipeline is serialized, so
       // finishing the thumb before the next photo keeps memory flat; any
-      // failure must never un-save the meal, and a thumb that never comes
-      // must not hold the verdict past [thumbnailTimeout].
+      // failure must never un-save the meal, and in the iOS background run
+      // a thumb that never comes must not hold the verdict past
+      // [thumbnailTimeout].
       try {
-        final thumb =
-            await orNullAfter(_thumb(photo.bytes), thumbnailTimeout);
+        final pending = _thumb(photo.bytes);
+        final thumb = await (deferUndecodable
+            ? orNullAfter(pending, thumbnailTimeout)
+            : pending);
         if (thumb != null) await dao.saveMealThumb(id, thumb);
       } catch (_) {}
       final name = mealDescription(analysis);
