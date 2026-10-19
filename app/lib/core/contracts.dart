@@ -491,7 +491,14 @@ abstract class PhotoIntake {
   /// at/before it terminally handled (a retryable release or transient read
   /// failure halts it) — watermarks must never advance past it. Null =
   /// nothing covered.
-  Future<DateTime?> backfillScan({int lookbackDays, DateTime? since});
+  ///
+  /// [shouldContinue] (the iOS background run's time budget) is asked
+  /// before each photo's original bytes are read. False leaves that photo
+  /// UNREAD: not offered, not marked seen, not covered — the frontier stops
+  /// in front of it and a later scan offers it. Every later unread photo is
+  /// asked about too, so the caller can count what it left.
+  Future<DateTime?> backfillScan(
+      {int lookbackDays, DateTime? since, bool Function()? shouldContinue});
   Future<void> start();
   Future<void> stop();
 }

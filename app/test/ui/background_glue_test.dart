@@ -55,12 +55,22 @@ class EmittingIntake implements PhotoIntake {
               sink) =>
       _sink = sink;
 
+  /// Photos the scan left unread because shouldContinue said stop.
+  int unread = 0;
+
   @override
   Future<DateTime?> backfillScan(
-      {int lookbackDays = 0, DateTime? since}) async {
+      {int lookbackDays = 0,
+      DateTime? since,
+      bool Function()? shouldContinue}) async {
     scans++;
     sinceArgs.add(since);
     for (var i = 0; i < batch.length; i++) {
+      // Asked before the (here notional) byte read, like the real intake.
+      if (shouldContinue != null && !shouldContinue()) {
+        unread++;
+        continue;
+      }
       final sink = _sink;
       final safe = i < safeFrontiers.length ? safeFrontiers[i] : null;
       if (sink != null) {
@@ -132,7 +142,9 @@ class _LateIntake implements PhotoIntake {
 
   @override
   Future<DateTime?> backfillScan(
-      {int lookbackDays = 0, DateTime? since}) async {
+      {int lookbackDays = 0,
+      DateTime? since,
+      bool Function()? shouldContinue}) async {
     await Future<void>.delayed(before);
     await _sink?.call(photo, null);
     return null;
@@ -269,6 +281,30 @@ void main() {
           EmittingIntake()..batch = [photo(4)],
           PhotoPipeline(dao: dao, analyzer: analyzer));
       expect(again.cutShort, isFalse);
+    });
+
+    test('past the deadline the intake is told to stop BEFORE reading, and '
+        'every photo it left counts as released', () async {
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2), photo(3), photo(4)];
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      var now = DateTime(2026, 9, 30, 12, 0, 0);
+      final drain = await drainBackfill(
+          intake, PhotoPipeline(dao: dao, analyzer: analyzer),
+          deadline: DateTime(2026, 9, 30, 12, 0, 15),
+          clock: () => now,
+          onOutcome: (_, _, _) async {
+            now = now.add(const Duration(seconds: 10));
+          });
+      expect(drain.outcomes, hasLength(2));
+      expect(intake.unread, 2, reason: 'photos 3 and 4 were never read');
+      expect(drain.cutShort, isTrue);
+      expect(drain.deadlineReleases, 2);
     });
 
     test('unsubscribes its listener afterwards', () async {
@@ -537,6 +573,37 @@ void main() {
       );
       expect(ok, isTrue, reason: 'cut short is still success — no retry storm');
       expect(cards, hasLength(1));
+    });
+
+    test('the budget counts from the run\'s entry (startedAt), so the '
+        'settings load and the database open spend it too', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final entry = DateTime(2026, 9, 30, 12, 0, 0);
+      // The keychain and settings took 10 s; opening the database 6 more.
+      var now = entry.add(const Duration(seconds: 10));
+      final dao = FakeDao();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async {
+          now = now.add(const Duration(seconds: 6));
+          return PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()
+                ..nextPhotoOutcome = const AnalysisOutcome(
+                    analysis: {'is_food': true, 'food_items': []},
+                    isFood: true,
+                    wall: Duration.zero));
+        },
+        showMealCard: (_, _) async {},
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+        startedAt: entry,
+      );
+      expect(intake.unread, 1, reason: '16 s in: nothing may be read');
+      expect(dao.meals, isEmpty);
     });
 
     test('passes the persisted watermark minus the overlap', () async {

@@ -307,7 +307,9 @@ class FakeIntake implements PhotoIntake {
 
   @override
   Future<DateTime?> backfillScan(
-      {int lookbackDays = 2, DateTime? since}) async {
+      {int lookbackDays = 2,
+      DateTime? since,
+      bool Function()? shouldContinue}) async {
     backfillScans++;
     return null;
   }

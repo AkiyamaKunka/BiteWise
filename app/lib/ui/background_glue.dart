@@ -79,7 +79,9 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// grant expires mid-analysis anyway, that orphaned row answers later runs
 /// as [PhotoReservation.inFlight] — a retryable outcome — so the frontier
 /// below waits in front of the photo instead of passing over it
-/// (2026-10-07).
+/// (2026-10-07). Counted from the run's entry into Dart, not from the scan
+/// start (2026-10-19): the settings load and the database open come out of
+/// the same grant.
 const Duration iosBackgroundBudget = Duration(seconds: 15);
 
 /// Result of one drained backfill: what happened to each photo, whether
@@ -116,8 +118,9 @@ class BackfillDrain {
 /// set it runs per photo BEFORE the next one starts, so progress
 /// (notifications, watermark checkpoints) survives a WorkManager
 /// hard-stop mid-batch. Past [deadline] (iOS's ~30 s grant) no further
-/// photo is processed: each is released back to the intake unprocessed,
-/// which halts the frontier in front of it.
+/// photo is processed — nor even read: the intake asks before each
+/// original's bytes, and a photo read just before the deadline is released
+/// at the sink. Both halt the frontier in front of the photo.
 Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     {int lookbackDays = 0,
     DateTime? since,
@@ -130,10 +133,18 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
   final outcomes = <PhotoOutcome>[];
   var cutShort = false;
   var deadlineReleases = 0;
+  // Once past the deadline, past it for good (a clock step backwards must
+  // not reopen the run), and every photo turned away is counted.
+  bool budgetLeft() {
+    if (deadline == null) return true;
+    if (!cutShort && clock().isBefore(deadline)) return true;
+    cutShort = true;
+    deadlineReleases++;
+    return false;
+  }
+
   intake.attachSink((p, safeFrontier) async {
-    if (deadline != null && !clock().isBefore(deadline)) {
-      cutShort = true;
-      deadlineReleases++;
+    if (!budgetLeft()) {
       return false; // released, not burned: the next run re-offers it
     }
     if (onOffer != null) await onOffer(p);
@@ -147,7 +158,9 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
   Object? scanError;
   try {
     frontier = await intake.backfillScan(
-        lookbackDays: lookbackDays, since: since);
+        lookbackDays: lookbackDays,
+        since: since,
+        shouldContinue: deadline == null ? null : budgetLeft);
     scanCompleted = true;
   } catch (e) {
     // Library query died / window truncated. Photos delivered before the
@@ -194,6 +207,11 @@ Future<void> recordBackgroundLaunch(
 /// [recorder] (begun by the caller) gets every step of this run, as it
 /// happens (background_runs.dart); [photoAccess] tells a run that found no
 /// photos because it may not read any.
+///
+/// [budget] counts from [startedAt] — the moment the OS-launched run
+/// entered Dart ([runHeadlessBackfill]) — so the keychain read, the
+/// settings load and the database open spend it too; it used to start at
+/// the scan, a second or more into iOS's grant. Null: from the scan start.
 @visibleForTesting
 Future<bool> headlessBackfillWith({
   required AppSettings settings,
@@ -203,6 +221,7 @@ Future<bool> headlessBackfillWith({
   required Future<void> Function(String title, String body) showMealCard,
   DateTime Function() clock = DateTime.now,
   Duration? budget,
+  DateTime? startedAt,
   bool launchRecorded = false,
   BackgroundRunRecorder? recorder,
   Future<bool?> Function()? photoAccess,
@@ -253,7 +272,7 @@ Future<bool> headlessBackfillWith({
     intake,
     await pipeline(),
     since: since?.subtract(backgroundScanOverlap),
-    deadline: budget == null ? null : scanStart.add(budget),
+    deadline: budget == null ? null : (startedAt ?? scanStart).add(budget),
     clock: clock,
     onOffer: recorder == null ? null : (_) => recorder.offered(),
     onOutcome: (photo, o, safeFrontier) async {
@@ -411,6 +430,8 @@ Future<bool> runHeadlessBackfill({
   // decode never finishes, so platform_decode must skip that step here
   // (2026-10-18).
   isHeadlessEngine = true;
+  // iOS's grant is already running: the time budget counts from here.
+  final startedAt = clock();
   final ios = isIOS ?? Platform.isIOS;
   final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
   await recordBackgroundLaunch(prefs, clock);
@@ -478,6 +499,7 @@ Future<bool> runHeadlessBackfill({
         await notifier.showMealCard(title, body);
       },
       budget: ios ? iosBackgroundBudget : null,
+      startedAt: startedAt,
       launchRecorded: true,
       recorder: recorder,
       photoAccess: photoLibraryAccess,

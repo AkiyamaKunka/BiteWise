@@ -228,6 +228,52 @@ void main() {
       expect(delivered, ['keep', 'retry', 'retry']);
     });
 
+    // 2026-10-19: past the iOS budget every remaining original used to be
+    // read in full just for the sink to release it, after the grant.
+    test('shouldContinue false: the rest is left UNREAD — not seen, not '
+        'covered — and the next scan offers it', () async {
+      final reads = <String>[];
+      library.assets = [
+        for (final (id, h) in [('a', 8), ('b', 9), ('c', 10)])
+          FakeAsset(id, 'IMG_$id.jpg', DateTime(2026, 7, 17, h), bytesOf(h),
+              onRead: () => reads.add(id)),
+      ];
+      final delivered = <String>[];
+      intake.attachSink((p, _) async {
+        delivered.add(p.assetId);
+        return true;
+      });
+      var asked = 0;
+      final frontier = await intake.backfillScan(
+          lookbackDays: 2,
+          shouldContinue: () => ++asked <= 1); // budget for one photo
+      expect(reads, ['a'], reason: 'b and c must not be read at all');
+      expect(delivered, ['a']);
+      expect(asked, 3, reason: 'asked once per unread photo, so the caller '
+          'can count what it left');
+      expect(frontier, DateTime(2026, 7, 17, 8),
+          reason: 'the frontier stops at the last covered photo');
+
+      final again = await intake.backfillScan(lookbackDays: 2);
+      expect(delivered, ['a', 'b', 'c'],
+          reason: 'unread photos were never marked seen');
+      expect(reads, ['a', 'b', 'c'], reason: 'a stays seen: not re-read');
+      expect(again, DateTime(2026, 7, 17, 10));
+    });
+
+    test('shouldContinue is not asked for a photo this session already '
+        'handled: it costs nothing and still counts as covered', () async {
+      library.assets = [
+        FakeAsset('a', 'IMG_a.jpg', DateTime(2026, 7, 17, 8), bytesOf(1)),
+      ];
+      intake.attachSink((p, _) async => true);
+      await intake.backfillScan(lookbackDays: 2);
+      final frontier = await intake.backfillScan(
+          lookbackDays: 2,
+          shouldContinue: () => fail('nothing to read, nothing to ask'));
+      expect(frontier, DateTime(2026, 7, 17, 8));
+    });
+
     test('frontier halts at the first failure and at retryable releases',
         () async {
       library.assets = [

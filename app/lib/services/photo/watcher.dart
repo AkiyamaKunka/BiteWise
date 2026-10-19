@@ -170,7 +170,9 @@ class LibraryPhotoIntake implements PhotoIntake {
 
   @override
   Future<DateTime?> backfillScan(
-      {int lookbackDays = 0, DateTime? since}) async {
+      {int lookbackDays = 0,
+      DateTime? since,
+      bool Function()? shouldContinue}) async {
     // 0 (unset) → the configured §8 default from settings.
     final days = lookbackDays > 0 ? lookbackDays : _lookbackDays();
     var cutoff = lookbackCutoff(_clock(), days);
@@ -191,7 +193,8 @@ class LibraryPhotoIntake implements PhotoIntake {
     // tail is OLDER than everything returned, so no frontier — per-photo
     // or final — may be reported for this scan.
     final truncated = assets.length >= backfillQueryLimit;
-    final frontier = await _emit(assets, reportFrontier: !truncated);
+    final frontier = await _emit(assets,
+        reportFrontier: !truncated, shouldContinue: shouldContinue);
     // Signal AFTER emitting: the caller processes what was seen, but a
     // watermark must not advance over the unseen tail.
     if (truncated) throw const BackfillWindowTruncated();
@@ -206,8 +209,10 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// retry. Null = nothing covered.
   /// [reportFrontier] false (truncated window): every delivery carries
   /// safeFrontier null — the unseen OLDER tail forbids any watermark claim.
+  /// [shouldContinue] false: the photo is left unread (see
+  /// [PhotoIntake.backfillScan]).
   Future<DateTime?> _emit(List<LibraryAsset> assets,
-      {bool reportFrontier = true}) async {
+      {bool reportFrontier = true, bool Function()? shouldContinue}) async {
     // §6: newest-LAST emission — oldest first, so downstream meal rows land
     // in chronological order.
     final ordered = [...assets]
@@ -223,6 +228,18 @@ class LibraryPhotoIntake implements PhotoIntake {
     for (final asset in ordered) {
       if (_controller.isClosed) break;
       if (_generation != generation) break; // stop(): quiesce mid-batch
+      // The caller's time budget, asked BEFORE the original is read: past
+      // it, each remaining photo used to be read in full (multi-MB, an
+      // iCloud fetch for some) only for the sink to release it, long after
+      // iOS's grant. Unread means not seen and not covered, so the frontier
+      // halts here and the next scan offers it. A photo this session
+      // already handled costs nothing and still counts below.
+      if (shouldContinue != null &&
+          !_seenAssetIds.contains(asset.id) &&
+          !shouldContinue()) {
+        frontierOpen = false;
+        continue;
+      }
       if (!_seenAssetIds.add(asset.id)) {
         if (_inFlightIds.contains(asset.id)) {
           // A concurrent scan is still delivering it — its release may be
