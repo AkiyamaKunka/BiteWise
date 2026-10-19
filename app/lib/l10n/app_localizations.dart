@@ -600,6 +600,12 @@ abstract class AppLocalizations {
   /// **'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.'**
   String get backgroundScanIosHint;
 
+  /// Photos footer line in Settings when the recorded background runs keep starting but log nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scan is stuck — opening Bitewise once catches up.'**
+  String get backgroundScanStuck;
+
   /// No description provided for @settingsSectionProfile.
   ///
   /// In en, this message translates to:

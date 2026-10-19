@@ -22,6 +22,8 @@ import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
     show androidBackgroundAllowed;
+import '../services/photo/background_runs.dart'
+    show backgroundScanLooksStuck, readBackgroundRuns;
 import '../services/photo/background_time.dart';
 import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
 import '../services/photo/coverage.dart';
@@ -254,6 +256,10 @@ class AppServices {
         return notifier.scheduledDailyAt();
       },
       lastBackgroundScan: lastBackgroundRun,
+      // Read fresh: the background engine writes the runs.
+      backgroundScanStuck: () async => backgroundScanLooksStuck(
+          await readBackgroundRuns(),
+          now: DateTime.now()),
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the
       // row would say "not run yet" forever and never say why. Android's

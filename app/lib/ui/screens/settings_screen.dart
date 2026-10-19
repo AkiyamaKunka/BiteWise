@@ -69,6 +69,10 @@ class SettingsScreen extends StatefulWidget {
   /// turns the background-scan row into the remedy (opens system settings).
   final Future<bool?> Function()? backgroundRefreshEnabled;
 
+  /// Whether the recorded background runs say the scan is stuck: the row
+  /// turns red and the Photos footer says to open the app once.
+  final Future<bool> Function()? backgroundScanStuck;
+
   /// Coverage-audit pieces; all three null in tests → the tile is hidden.
   final CoverageAuditor? coverage;
   final Future<PhotoOutcome> Function(IntakePhoto photo)? processPhoto;
@@ -99,6 +103,7 @@ class SettingsScreen extends StatefulWidget {
     this.nextSummaryAt,
     this.lastBackgroundScan,
     this.backgroundRefreshEnabled,
+    this.backgroundScanStuck,
     this.changes,
   });
 
@@ -132,6 +137,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// Background App Refresh off, or Android's 电池 › 受限 bucket.
   bool _backgroundRefreshOff = false;
 
+  /// The recorded runs show no progress (backgroundScanLooksStuck).
+  bool _backgroundStuck = false;
+
   @override
   void initState() {
     super.initState();
@@ -153,9 +161,11 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (probe == null) return;
     DateTime? when;
     bool? refresh;
+    var stuck = false;
     try {
       when = await probe();
       refresh = await widget.backgroundRefreshEnabled?.call();
+      stuck = await widget.backgroundScanStuck?.call() ?? false;
     } catch (_) {
       return;
     }
@@ -164,6 +174,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       _lastBackgroundScan = when;
       _lastBackgroundProbed = true;
       _backgroundRefreshOff = refresh == false;
+      _backgroundStuck = stuck;
     });
   }
 
@@ -491,7 +502,16 @@ class _SettingsScreenState extends State<SettingsScreen>
     // in a background run, which has no snackbar): without this line the
     // scan just stops, silently, for up to a day.
     final paused = _watcherEnabled ? _autoScanPausedText() : null;
-    return paused == null ? footer : '$paused\n$footer';
+    // The runs keep starting but log nothing (backgroundScanLooksStuck):
+    // the launch time alone looked healthy through the Oct 11 and Oct 15
+    // stalls. Not over the Off remedy, which says what to do already.
+    final stuck = _watcherEnabled &&
+            _backgroundStuck &&
+            !_backgroundRefreshOff &&
+            widget.lastBackgroundScan != null
+        ? l10n.backgroundScanStuck
+        : null;
+    return [?paused, ?stuck, footer].join('\n');
   }
 
   /// Why the automatic scan is latched, with its next try; null when not.
@@ -533,7 +553,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               GroupedRow(
                 key: const Key('backgroundScanRow'),
                 icon: Icons.update,
-                iconColor: _backgroundRefreshOff
+                iconColor: _backgroundRefreshOff || _backgroundStuck
                     ? theme.colorScheme.error
                     : theme.colorScheme.secondary,
                 title: context.l10n.settingsRowBackgroundScan,

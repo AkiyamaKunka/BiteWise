@@ -314,6 +314,9 @@ class AppLocalizationsZh extends AppLocalizations {
       '后台扫描由 iOS 决定何时运行（通常一天几次）。在多任务界面上滑关闭筷拍后，后台扫描会停止，直到下次打开筷拍；期间拍的照片会在打开时补扫。';
 
   @override
+  String get backgroundScanStuck => '后台扫描卡住了 —— 打开筷拍一次即可补上。';
+
+  @override
   String get settingsSectionProfile => '个人资料';
 
   @override

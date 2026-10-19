@@ -204,6 +204,52 @@ Future<List<BackgroundRunRecord>> readBackgroundRuns(
   }
 }
 
+/// Whether the stored runs (newest first) say the background scan is
+/// stuck — for the Settings 后台扫描 row, which otherwise shows only the
+/// last launch time: the time kept advancing through Oct 11 and Oct 15
+/// while no run logged a thing (2026-10-19). Two signs, nothing else, so a
+/// quiet week of no photos never reads as trouble:
+///   * the 3 newest runs each took a photo and finished none (hung on it,
+///     killed on it, or out of time on it);
+///   * runs keep starting — 3 or more in the last 2 days — yet no run has
+///     made progress for 2 days.
+/// A run made progress when it moved the watermark, saved a meal, or
+/// finished its scan with nothing left over. A run its guard stopped (no
+/// key, the watcher off, paused, no photo access) counts as fine: Settings
+/// explains those elsewhere, and opening the app would not fix them.
+bool backgroundScanLooksStuck(List<BackgroundRunRecord> runs,
+    {required DateTime now}) {
+  if (runs.length < 3) return false;
+  if (runs.take(3).every((r) => r.offered > 0 && r.analyzed == 0)) {
+    return true;
+  }
+  final since = now.subtract(const Duration(days: 2));
+  final recent = runs.where((r) => r.start.isAfter(since)).toList();
+  if (recent.length < 3 || recent.any(_madeProgress)) return false;
+  // No progress in 2 days — known only if a run older than that shows it,
+  // or the record reaches back that far.
+  final older = runs.where((r) => !r.start.isAfter(since));
+  return older.isNotEmpty;
+}
+
+const _guardStops = {
+  BackgroundStop.watcherOff,
+  BackgroundStop.noKey,
+  BackgroundStop.paused,
+  BackgroundStop.noPermission,
+};
+
+bool _madeProgress(BackgroundRunRecord r) {
+  if (_guardStops.contains(r.stopReason)) return true;
+  if (r.saved > 0) return true;
+  final before = r.watermarkBefore, after = r.watermarkAfter;
+  if (after != null && (before == null || after.isAfter(before))) return true;
+  return r.finished &&
+      r.stopReason == BackgroundStop.done &&
+      r.released == 0 &&
+      r.offered == r.analyzed;
+}
+
 /// Writes THIS run's entry, incrementally: every call rewrites the entry
 /// at once, so whatever the OS cuts short keeps the last step reached.
 /// Never throws — a diagnostics write must not take the scan down — and

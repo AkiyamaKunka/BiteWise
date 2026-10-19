@@ -339,6 +339,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.';
 
   @override
+  String get backgroundScanStuck =>
+      'Background scan is stuck — opening Bitewise once catches up.';
+
+  @override
   String get settingsSectionProfile => 'Profile';
 
   @override

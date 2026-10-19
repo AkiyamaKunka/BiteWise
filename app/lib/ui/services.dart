@@ -211,6 +211,10 @@ class UiServices {
   /// scheduled. Null probe/answer = not applicable or unknown.
   final Future<bool?> Function()? backgroundRefreshEnabled;
 
+  /// Whether the recorded background runs say the scan is stuck
+  /// (backgroundScanLooksStuck). Null probe: never said.
+  final Future<bool> Function()? backgroundScanStuck;
+
   /// Re-arms the OS-scheduled daily summary (iOS). The shell calls it on
   /// every lifecycle transition so the pending card is never staler than
   /// the last time the user had the app open. Null on Android (the
@@ -250,5 +254,6 @@ class UiServices {
     this.nextSummaryAt,
     this.lastBackgroundScan,
     this.backgroundRefreshEnabled,
+    this.backgroundScanStuck,
   });
 }

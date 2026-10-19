@@ -153,4 +153,105 @@ void main() {
         await readBackgroundRuns(prefs: () async => throw StateError('no')),
         isEmpty);
   });
+
+  // 2026-10-19: the Settings 后台扫描 row says when the runs show no
+  // progress — and never for a quiet stretch with no photos.
+  group('backgroundScanLooksStuck', () {
+    final now = DateTime.utc(2026, 10, 19, 12);
+    BackgroundRunRecord run(Duration ago,
+            {int offered = 0,
+            int analyzed = 0,
+            int saved = 0,
+            int released = 0,
+            String? stop = BackgroundStop.done,
+            DateTime? before,
+            DateTime? after}) =>
+        BackgroundRunRecord(
+          start: now.subtract(ago),
+          end: stop == null ? null : now.subtract(ago),
+          platform: 'ios',
+          stage: stop == null
+              ? BackgroundRunStage.photo
+              : BackgroundRunStage.done,
+          offered: offered,
+          analyzed: analyzed,
+          saved: saved,
+          released: released,
+          stopReason: stop,
+          watermarkBefore: before,
+          watermarkAfter: after ?? before,
+        );
+    const h = Duration(hours: 1);
+
+    test('the 3 newest runs each took a photo and finished none', () {
+      final hung = [
+        for (final ago in [1, 2, 3]) run(h * ago, offered: 1, stop: null),
+      ];
+      expect(backgroundScanLooksStuck(hung, now: now), isTrue);
+      expect(backgroundScanLooksStuck(hung.take(2).toList(), now: now),
+          isFalse, reason: 'two is not a pattern yet');
+      expect(
+          backgroundScanLooksStuck(
+              [run(h, offered: 1, analyzed: 1), ...hung.skip(1)], now: now),
+          isFalse,
+          reason: 'the newest run finished its photo');
+      expect(
+          backgroundScanLooksStuck([
+            run(h, offered: 1, stop: BackgroundStop.budget),
+            ...hung.skip(1),
+          ], now: now),
+          isTrue,
+          reason: 'out of time on it is no progress either');
+    });
+
+    test('a quiet week with no new photos is never stuck', () {
+      final wm = DateTime.utc(2026, 10, 12);
+      final quiet = [
+        for (var i = 1; i <= 20; i++)
+          run(h * (8 * i), offered: 1, analyzed: 1, before: wm),
+      ];
+      expect(backgroundScanLooksStuck(quiet, now: now), isFalse);
+    });
+
+    test('runs keep starting but none made progress for 2 days', () {
+      final dying = [
+        run(h * 2, stop: null), // killed at boot: nothing offered
+        run(h * 10, stop: 'error:PlatformException'),
+        run(h * 30, offered: 1, analyzed: 1, released: 1),
+        run(h * 60, stop: null),
+      ];
+      expect(backgroundScanLooksStuck(dying, now: now), isTrue);
+      expect(backgroundScanLooksStuck(dying.take(3).toList(), now: now),
+          isFalse, reason: 'the record does not reach back 2 days');
+      expect(
+          backgroundScanLooksStuck(
+              [run(h, saved: 1, offered: 1, analyzed: 1), ...dying],
+              now: now),
+          isFalse,
+          reason: 'a meal saved is progress');
+      expect(
+          backgroundScanLooksStuck([
+            run(h,
+                before: DateTime.utc(2026, 10, 18),
+                after: DateTime.utc(2026, 10, 19)),
+            ...dying
+          ], now: now),
+          isFalse,
+          reason: 'a watermark moved is progress');
+      expect(
+          backgroundScanLooksStuck(
+              [dying.first, dying.last], now: now),
+          isFalse,
+          reason: 'fewer than 3 runs in 2 days: not "keep starting"');
+    });
+
+    test('runs a guard stopped (no key, paused…) are not "stuck": opening '
+        'the app would not fix them', () {
+      final guarded = [
+        for (var i = 1; i <= 6; i++)
+          run(h * (12 * i), stop: BackgroundStop.noKey),
+      ];
+      expect(backgroundScanLooksStuck(guarded, now: now), isFalse);
+    });
+  });
 }
