@@ -51,9 +51,29 @@ const MethodChannel imageIOChannel = MethodChannel(imageIOChannelName);
 /// until the OS kills the process.
 const Duration kPlatformDecodeTimeout = Duration(seconds: 8);
 
-/// The native call's deadline: generous (ImageIO is CPU-only and finishes),
-/// but a reply that never comes must not hang the pipeline either.
+/// The native call's deadline in the app's engine: generous (ImageIO is
+/// CPU-only and finishes), but a reply that never comes must not hang the
+/// pipeline either; past it the engine codec still gets its turn.
 const Duration kNativeDecodeTimeout = Duration(seconds: 15);
+
+/// The native call's deadline in the headless background engine. iOS gives
+/// a BGAppRefresh run about 30 s, and `iosBackgroundBudget`
+/// (ui/background_glue.dart) admits a photo until 15 s after the scan
+/// starts, which is itself a second or two into the grant. A stalled reply
+/// held for [kNativeDecodeTimeout] would come back past the grant, after
+/// iOS had killed the run, and the photo's reservation would be left
+/// 'processing' — the orphan this engine's rules exist to prevent. ImageIO
+/// needs well under a second for a 48 MP HEIC; a miss here only defers the
+/// photo (PhotoPipeline.deferUndecodable), so the deadline can be short.
+const Duration kHeadlessNativeDecodeTimeout = Duration(seconds: 5);
+
+/// The native deadline for this engine: [kHeadlessNativeDecodeTimeout] in
+/// the headless one ([headless], else [isHeadlessEngine]), otherwise
+/// [kNativeDecodeTimeout].
+Duration nativeDecodeTimeoutFor({bool? headless}) =>
+    (headless ?? isHeadlessEngine)
+        ? kHeadlessNativeDecodeTimeout
+        : kNativeDecodeTimeout;
 
 /// True in the headless background engine. Set first thing by
 /// runHeadlessBackfill (ui/background_glue.dart) and never cleared: a
@@ -190,7 +210,8 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
 /// The seams default to production: [isolate] runs [pureDart] (compute),
 /// [native] is [downscaleViaImageIO], [engine] is [decodeViaPlatform];
 /// [ios] / [headless] default to the target platform and
-/// [isHeadlessEngine].
+/// [isHeadlessEngine]. The native step is bounded here as well
+/// ([nativeDecodeTimeoutFor]), whatever [native] does itself.
 ///
 /// The native JPEG is used as is: ImageIO already baked the orientation,
 /// capped the long side and re-encoded at [jpegQuality]. Piping it through
@@ -225,15 +246,17 @@ Future<Uint8List?> decodeForUpload(
   }
   final onIOS = ios ?? defaultTargetPlatform == TargetPlatform.iOS;
   if (onIOS) {
+    final inHeadless = headless ?? isHeadlessEngine;
     try {
-      final viaImageIO = await native(original,
-          longSidePx: longSidePx, jpegQuality: jpegQuality);
+      final viaImageIO = await orNullAfter(
+          native(original, longSidePx: longSidePx, jpegQuality: jpegQuality),
+          nativeDecodeTimeoutFor(headless: inHeadless));
       if (viaImageIO != null) return viaImageIO;
     } catch (_) {}
     // The iOS background engine: dart:ui would park behind the disabled
     // GPU. Undecodable HERE; the pipeline defers the photo to a run that
     // has a GPU (PhotoPipeline.deferUndecodable).
-    if (headless ?? isHeadlessEngine) return null;
+    if (inHeadless) return null;
   }
   try {
     return await orNullAfter(
@@ -252,7 +275,8 @@ Future<Uint8List?> _inIsolate(
 /// long side ≤ [longSidePx], JPEG at [jpegQuality], no source metadata.
 /// Null on ANY failure — no plugin in this engine (MissingPluginException),
 /// a PlatformException, a reply that is not a JPEG, or no reply within
-/// [kNativeDecodeTimeout] — so the chain falls through; never throws.
+/// [timeout] (default: this engine's, [nativeDecodeTimeoutFor]) — so the
+/// chain falls through; never throws.
 ///
 /// The reply goes through [stripJpegMetadata] as well: ImageIO copies no
 /// source properties, but its encoder still writes its own small EXIF
@@ -263,7 +287,7 @@ Future<Uint8List?> downscaleViaImageIO(Uint8List original,
     {required int longSidePx,
     required int jpegQuality,
     MethodChannel channel = imageIOChannel,
-    Duration timeout = kNativeDecodeTimeout}) async {
+    Duration? timeout}) async {
   try {
     final out = await orNullAfter(
         channel.invokeMethod<Uint8List>('downscaleJpeg', {
@@ -271,7 +295,7 @@ Future<Uint8List?> downscaleViaImageIO(Uint8List original,
           'maxPx': longSidePx,
           'quality': jpegQuality,
         }),
-        timeout);
+        timeout ?? nativeDecodeTimeoutFor());
     if (out == null || !looksLikeJpeg(out)) return null;
     return stripJpegMetadata(out);
   } catch (_) {

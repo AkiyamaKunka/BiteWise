@@ -10,8 +10,12 @@ import 'package:crypto/crypto.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
+import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart'
+    show GeminiAnalyzer;
+import 'package:calorie_tracker/services/analyzer/normalize.dart'
+    show kAnalysisJpegQuality, kAnalysisLongSidePx, normalizeForAnalysis;
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
-    show isHeadlessEngine;
+    show decodeForUpload, imageIOChannel, isHeadlessEngine;
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/photo/background_runs.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
@@ -25,6 +29,7 @@ import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart' show MockClient;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
@@ -107,6 +112,50 @@ class RecordingScheduler implements BackgroundScheduler {
 
 IntakePhoto photo(int n) => IntakePhoto(
     Uint8List.fromList([n, n, n]), 'asset$n', 'IMG_$n.jpg');
+
+/// Intake that spends [before] (reading and hashing the photos ahead of
+/// it, iCloud downloads included) and only then offers [photo].
+class _LateIntake implements PhotoIntake {
+  _LateIntake(this.photo, {required this.before});
+  final IntakePhoto photo;
+  final Duration before;
+  Future<bool> Function(IntakePhoto, DateTime?)? _sink;
+
+  @override
+  Stream<IntakePhoto> get photos => const Stream.empty();
+
+  @override
+  void attachSink(
+          Future<bool> Function(IntakePhoto photo, DateTime? safeFrontier)?
+              sink) =>
+      _sink = sink;
+
+  @override
+  Future<DateTime?> backfillScan(
+      {int lookbackDays = 0, DateTime? since}) async {
+    await Future<void>.delayed(before);
+    await _sink?.call(photo, null);
+    return null;
+  }
+
+  @override
+  Future<void> start() async {}
+  @override
+  Future<void> stop() async {}
+}
+
+/// A FakeDao that notes WHEN a reservation was released.
+class _ReleaseClockDao extends FakeDao {
+  _ReleaseClockDao(this.clock);
+  final DateTime Function() clock;
+  DateTime? releasedAt;
+
+  @override
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp}) {
+    releasedAt = clock();
+    return super.releasePhotoHash(imageHash, ownerStamp: ownerStamp);
+  }
+}
 
 /// A pipeline that answers each photo with the next scripted outcome —
 /// for outcome kinds a FakeAnalyzer cannot reach on its own.
@@ -1028,6 +1077,82 @@ void main() {
         expect(cards, [(title, body)]);
       });
     }
+  });
+
+  // 2026-10-19 (review): the budget admits a photo until 15 s after the
+  // scan starts, a second or two into iOS's ~30 s grant. A stalled ImageIO
+  // reply held for the app engine's 15 s deadline came back at ~30 s, after
+  // iOS had killed the run, and left the photo 'processing'.
+  group('the iOS grant and a stalled native decode', () {
+    testWidgets('a HEIC offered at the end of the budget, whose ImageIO reply '
+        'never comes, is released inside an assumed 30 s grant',
+        (tester) async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+          imageIOChannel, (_) => Completer<Object?>().future);
+      addTearDown(
+          () => messenger.setMockMethodCallHandler(imageIOChannel, null));
+      isHeadlessEngine = true; // what runHeadlessBackfill sets first
+      addTearDown(() => isHeadlessEngine = false);
+
+      // Fake time (testWidgets): the binding's clock moves with pump().
+      DateTime now() => tester.binding.clock.now();
+      // Engine boot and the settings load spend ~2 s of the grant before
+      // the scan, and its budget, start.
+      final grantEnds = now().add(const Duration(seconds: 28));
+      final settings = await settingsWith(key: 'k');
+      final prefs = await SharedPreferences.getInstance();
+      final dao = _ReleaseClockDao(now);
+      // ftyp/heic: not anything the pure-Dart decoder or the unprocessed
+      // fallback will take.
+      final heic = IntakePhoto(
+          Uint8List.fromList(
+              [0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63]),
+          'asset9',
+          'IMG_9.HEIC');
+      var finished = false;
+      unawaited(headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: _LateIntake(heic,
+            before: iosBackgroundBudget - const Duration(milliseconds: 100)),
+        pipeline: () async => PhotoPipeline(
+            dao: dao,
+            analyzer: GeminiAnalyzer(settings,
+                client: MockClient((_) async {
+                  fail('nothing decodable, so nothing may be sent');
+                }),
+                sleep: (_) async {},
+                // Production's chain (platform defaults: headless from the
+                // flag above, the real channel). Only the pure-Dart step
+                // is stubbed with what it answers for HEIC, null: it runs
+                // in an isolate, which fake time cannot drive.
+                normalizer: (b) => decodeForUpload(b,
+                    pureDart: normalizeForAnalysis,
+                    longSidePx: kAnalysisLongSidePx,
+                    jpegQuality: kAnalysisJpegQuality,
+                    isolate: (_, _) async => null,
+                    ios: true)),
+            hasher: (b) async => md5.convert(b).toString(),
+            deferUndecodable: true),
+        showMealCard: (_, _) async {},
+        clock: now,
+        budget: iosBackgroundBudget,
+      ).then((_) => finished = true));
+      final giveUp = grantEnds.add(const Duration(seconds: 30));
+      while (!finished && now().isBefore(giveUp)) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(finished, isTrue);
+      expect(dao.releasedAt, isNotNull, reason: 'deferred, so released');
+      expect(dao.releasedAt!.isBefore(grantEnds), isTrue,
+          reason: 'released at ${dao.releasedAt}, the grant ends at '
+              '$grantEnds: past it iOS has killed the run and the row '
+              'stays processing');
+      expect(dao.ledger, isEmpty,
+          reason: 'neither processing nor failed: the next run re-offers it');
+    });
   });
 
   group('syncBackgroundScan', () {

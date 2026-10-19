@@ -197,6 +197,68 @@ void main() {
       expect(result, isNull);
     });
 
+    // A BGAppRefresh grant is ~30 s and the budget admits a photo until
+    // 15 s after the scan starts: a stalled ImageIO reply held for the app
+    // engine's 15 s would return after iOS had killed the run, leaving the
+    // photo 'processing'.
+    group('a native reply that never comes', () {
+      Future<Uint8List?> stalled(Uint8List original,
+              {required int longSidePx, required int jpegQuality}) =>
+          Completer<Uint8List?>().future;
+
+      testWidgets('iOS background engine: null at the SHORT headless '
+          'deadline, and still no dart:ui', (tester) async {
+        expect(kHeadlessNativeDecodeTimeout,
+            lessThanOrEqualTo(const Duration(seconds: 5)));
+        var engineCalls = 0;
+        var done = false;
+        Uint8List? result = Uint8List(1);
+        decodeForUpload(Uint8List.fromList([1, 2]),
+            pureDart: normalizeForAnalysis,
+            longSidePx: kAnalysisLongSidePx,
+            jpegQuality: kAnalysisJpegQuality,
+            isolate: (_, _) async => null,
+            native: stalled,
+            engine: (_, {required longSidePx, required jpegQuality}) async {
+              engineCalls++;
+              return Uint8List(1);
+            },
+            ios: true,
+            headless: true).then((r) {
+          done = true;
+          result = r;
+        });
+        await tester.pump(
+            kHeadlessNativeDecodeTimeout - const Duration(milliseconds: 1));
+        expect(done, isFalse);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(done, isTrue);
+        expect(result, isNull);
+        expect(engineCalls, 0);
+      });
+
+      testWidgets("iOS app engine: the longer deadline, then the engine "
+          'codec gets its turn', (tester) async {
+        final jpeg =
+            Uint8List.fromList(img.encodeJpg(img.Image(width: 4, height: 4)));
+        Uint8List? result;
+        decodeForUpload(Uint8List.fromList([1, 2]),
+            pureDart: normalizeForAnalysis,
+            longSidePx: kAnalysisLongSidePx,
+            jpegQuality: kAnalysisJpegQuality,
+            isolate: (_, _) async => null,
+            native: stalled,
+            engine: (_, {required longSidePx, required jpegQuality}) async =>
+                jpeg,
+            ios: true,
+            headless: false).then((r) => result = r);
+        await tester.pump(kHeadlessNativeDecodeTimeout);
+        expect(result, isNull, reason: 'the app engine is not hurried');
+        await tester.pump(kNativeDecodeTimeout - kHeadlessNativeDecodeTimeout);
+        expect(result, same(jpeg));
+      });
+    });
+
     test('a step that throws is a step that failed — never a throw',
         () async {
       final out = await decodeForUpload(Uint8List.fromList([1]),
@@ -330,6 +392,23 @@ void main() {
       await tester.pump(kNativeDecodeTimeout);
       expect(done, isTrue);
       expect(result, isNull);
+    });
+
+    testWidgets('in the headless engine its deadline is the short one',
+        (tester) async {
+      isHeadlessEngine = true;
+      addTearDown(() => isHeadlessEngine = false);
+      messenger.setMockMethodCallHandler(
+          imageIOChannel, (_) => Completer<Object?>().future);
+      var done = false;
+      call().then((_) => done = true);
+      await tester.pump(
+          kHeadlessNativeDecodeTimeout - const Duration(milliseconds: 1));
+      expect(done, isFalse);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(done, isTrue,
+          reason: 'and no longer timer is left behind (testWidgets fails '
+              'on a pending one)');
     });
 
     test('end to end on the iOS background engine: the channel fails and '
