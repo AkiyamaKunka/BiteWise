@@ -173,7 +173,8 @@ class LibraryPhotoIntake implements PhotoIntake {
       {int lookbackDays = 0,
       DateTime? since,
       bool Function()? shouldContinue,
-      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
     // 0 (unset) → the configured §8 default from settings.
     final days = lookbackDays > 0 ? lookbackDays : _lookbackDays();
     var cutoff = lookbackCutoff(_clock(), days);
@@ -194,14 +195,49 @@ class LibraryPhotoIntake implements PhotoIntake {
     // tail is OLDER than everything returned, so no frontier — per-photo
     // or final — may be reported for this scan.
     final truncated = assets.length >= backfillQueryLimit;
+    // The newest day first (2026-10-19): a cold launch used to walk ~100
+    // already-logged originals of the past week, oldest first, before the
+    // first new photo — and a quick "did it log?" open was suspended long
+    // before it reached today's meal. That pass reports no frontier; what
+    // it handled is "seen" by the pass after it, which counts it covered
+    // without reading it again, and what it released stays out of that
+    // pass (one try per scan) and halts the frontier there.
+    final released = <String>{};
+    if (newestDayFirst) {
+      await _emit(_newestDay(assets),
+          reportFrontier: false,
+          shouldContinue: shouldContinue,
+          released: released);
+    }
     final frontier = await _emit(assets,
         reportFrontier: !truncated,
         shouldContinue: shouldContinue,
-        onCovered: onCovered);
+        onCovered: onCovered,
+        released: released);
     // Signal AFTER emitting: the caller processes what was seen, but a
     // watermark must not advance over the unseen tail.
     if (truncated) throw const BackfillWindowTruncated();
     return frontier;
+  }
+
+  /// The photos not yet handled this session that were taken on the same
+  /// local day as the newest of them.
+  List<LibraryAsset> _newestDay(List<LibraryAsset> assets) {
+    final unseen = [
+      for (final a in assets)
+        if (!_seenAssetIds.contains(a.id)) a,
+    ];
+    if (unseen.isEmpty) return const [];
+    final newest = unseen
+        .map((a) => a.createDateTime)
+        .reduce((a, b) => b.isAfter(a) ? b : a);
+    return [
+      for (final a in unseen)
+        if (a.createDateTime.year == newest.year &&
+            a.createDateTime.month == newest.month &&
+            a.createDateTime.day == newest.day)
+          a,
+    ];
   }
 
   /// Delivers [assets] oldest-first and returns the coverage FRONTIER: the
@@ -214,10 +250,14 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// safeFrontier null — the unseen OLDER tail forbids any watermark claim.
   /// [shouldContinue] false: the photo is left unread; [onCovered] hears
   /// each terminal delivery's safeFrontier (see [PhotoIntake.backfillScan]).
+  /// [released]: photos an earlier pass of the same scan left eligible —
+  /// skipped here (uncovered, so the frontier halts) — and this pass adds
+  /// its own.
   Future<DateTime?> _emit(List<LibraryAsset> assets,
       {bool reportFrontier = true,
       bool Function()? shouldContinue,
-      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      Set<String>? released}) async {
     // §6: newest-LAST emission — oldest first, so downstream meal rows land
     // in chronological order.
     final ordered = [...assets]
@@ -233,6 +273,10 @@ class LibraryPhotoIntake implements PhotoIntake {
     for (final asset in ordered) {
       if (_controller.isClosed) break;
       if (_generation != generation) break; // stop(): quiesce mid-batch
+      if (released != null && released.contains(asset.id)) {
+        frontierOpen = false; // tried once this scan; the next scan retries
+        continue;
+      }
       // The caller's time budget, asked BEFORE the original is read: past
       // it, each remaining photo used to be read in full (multi-MB, an
       // iCloud fetch for some) only for the sink to release it, long after
@@ -267,6 +311,7 @@ class LibraryPhotoIntake implements PhotoIntake {
           if (bytes == null || bytes.isEmpty) {
             _seenAssetIds
                 .remove(asset.id); // transient read failure: retryable
+            released?.add(asset.id);
             frontierOpen = false;
             continue;
           }
@@ -282,6 +327,7 @@ class LibraryPhotoIntake implements PhotoIntake {
           // it AND, in the background job, kills the run before its
           // watermark logic).
           _seenAssetIds.remove(asset.id);
+          released?.add(asset.id);
           frontierOpen = false;
           continue;
         }
@@ -312,6 +358,7 @@ class LibraryPhotoIntake implements PhotoIntake {
             }
           } else {
             _seenAssetIds.remove(asset.id); // released: re-offer next scan
+            released?.add(asset.id);
             frontierOpen = false;
           }
         } else {

@@ -41,6 +41,7 @@ class EmittingIntake implements PhotoIntake {
   List<IntakePhoto> batch = const [];
   List<DateTime?> safeFrontiers = const []; // parallel to batch; pads null
   final List<DateTime?> sinceArgs = [];
+  final List<bool> newestDayFirstArgs = [];
   int scans = 0;
   bool throwAfterEmit = false; // scan-abort simulation (library query died)
   DateTime? frontier; // returned from a completed scan
@@ -63,9 +64,11 @@ class EmittingIntake implements PhotoIntake {
       {int lookbackDays = 0,
       DateTime? since,
       bool Function()? shouldContinue,
-      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
     scans++;
     sinceArgs.add(since);
+    newestDayFirstArgs.add(newestDayFirst);
     for (var i = 0; i < batch.length; i++) {
       // Asked before the (here notional) byte read, like the real intake.
       if (shouldContinue != null && !shouldContinue()) {
@@ -148,7 +151,8 @@ class _LateIntake implements PhotoIntake {
       {int lookbackDays = 0,
       DateTime? since,
       bool Function()? shouldContinue,
-      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
     await Future<void>.delayed(before);
     await _sink?.call(photo, null);
     return null;
@@ -630,6 +634,8 @@ void main() {
       final frontier = await foregroundCatchUp(intake,
           clock: () => scanStart, loadPrefs: () async => prefs);
       expect(frontier, t3);
+      expect(intake.newestDayFirstArgs, [true],
+          reason: 'a quick open logs today\'s meal first');
       expect(seenMidScan, [null, t1],
           reason: 'photo 1\'s checkpoint landed before photo 2 started');
       expect(storedMark(), scanStart, reason: 'capped at the scan start');
@@ -780,6 +786,8 @@ void main() {
         showMealCard: (_, _) async {},
       );
       expect(intake.sinceArgs.single, mark.subtract(backgroundScanOverlap));
+      expect(intake.newestDayFirstArgs.single, isFalse,
+          reason: 'the background drain stays oldest-first from its mark');
     });
 
     test('the watermark is stored as a UTC instant and read back as the '

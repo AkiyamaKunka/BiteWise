@@ -317,6 +317,87 @@ void main() {
       expect(frontier, DateTime(2026, 7, 17, 12));
     });
 
+    // 2026-10-19: a quick open walked the past week's already-logged
+    // originals, oldest first, before it reached today's meal.
+    group('newestDayFirst (the app\'s catch-up)', () {
+      List<FakeAsset> week(List<String> reads) => [
+            for (final (id, d, h) in [
+              ('mon8', 16, 8),
+              ('mon12', 16, 12),
+              ('tue9', 17, 9),
+              ('tue11', 17, 11),
+            ])
+              FakeAsset(id, 'IMG_$id.jpg', DateTime(2026, 7, d, h), bytesOf(h),
+                  onRead: () => reads.add(id)),
+          ];
+
+      test('the newest day goes first, in shooting order (the leftover '
+          'check needs that day\'s earlier meals logged), then the rest '
+          'oldest-first — each read once', () async {
+        final reads = <String>[];
+        library.assets = week(reads);
+        final delivered = <String>[];
+        final safes = <DateTime?>[];
+        intake.attachSink((p, safe) async {
+          delivered.add(p.assetId);
+          safes.add(safe);
+          return true;
+        });
+        final heard = <DateTime>[];
+        final frontier = await intake.backfillScan(
+            lookbackDays: 2,
+            newestDayFirst: true,
+            onCovered: (f) async => heard.add(f));
+        expect(delivered, ['tue9', 'tue11', 'mon8', 'mon12']);
+        expect(reads, delivered, reason: 'no photo read twice');
+        expect(safes.take(2), [null, null],
+            reason: 'the first pass claims no coverage');
+        expect(heard, [DateTime(2026, 7, 16, 8), DateTime(2026, 7, 16, 12)]);
+        expect(frontier, DateTime(2026, 7, 17, 11),
+            reason: 'tue photos are seen, so the coverage pass counts them');
+      });
+
+      test('a photo the first pass released is not offered again in the same '
+          'scan, and the frontier stops in front of it', () async {
+        final reads = <String>[];
+        library.assets = week(reads);
+        final delivered = <String>[];
+        intake.attachSink((p, _) async {
+          delivered.add(p.assetId);
+          return p.assetId != 'tue9'; // a transient failure
+        });
+        final heard = <DateTime>[];
+        final frontier = await intake.backfillScan(
+            lookbackDays: 2,
+            newestDayFirst: true,
+            onCovered: (f) async => heard.add(f));
+        expect(delivered, ['tue9', 'tue11', 'mon8', 'mon12']);
+        expect(heard, [DateTime(2026, 7, 16, 8), DateTime(2026, 7, 16, 12)]);
+        expect(frontier, DateTime(2026, 7, 16, 12));
+
+        await intake.backfillScan(lookbackDays: 2, newestDayFirst: true);
+        expect(delivered.skip(4), ['tue9'], reason: 'the next scan retries');
+      });
+
+      test('the newest day is the newest NOT yet handled this session', () async {
+        final reads = <String>[];
+        library.assets = week(reads);
+        final delivered = <String>[];
+        intake.attachSink((p, _) async {
+          delivered.add(p.assetId);
+          return true;
+        });
+        await intake.backfillScan(lookbackDays: 2);
+        library.assets = [
+          ...library.assets,
+          FakeAsset('mon20', 'IMG_mon20.jpg', DateTime(2026, 7, 16, 20),
+              bytesOf(20)),
+        ];
+        await intake.backfillScan(lookbackDays: 2, newestDayFirst: true);
+        expect(delivered.skip(4), ['mon20']);
+      });
+    });
+
     test('frontier halts at the first failure and at retryable releases',
         () async {
       library.assets = [

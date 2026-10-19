@@ -226,6 +226,10 @@ Future<DateTime?> advanceBackgroundWatermark(
 /// re-reading and re-hashing every photo the app had just logged before
 /// it reached a new one (2026-10-19).
 ///
+/// The newest day's photos go first, so a quick open logs today's meal
+/// before the rest of the week (PhotoIntake.backfillScan newestDayFirst);
+/// the background run keeps strict oldest-first from its watermark.
+///
 /// Only the intake's safeFrontier is persisted — per photo as it
 /// terminates (the app may be suspended mid-scan), then the final
 /// frontier — never past this scan's start. A truncated window reports
@@ -242,7 +246,8 @@ Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
     } catch (_) {}
   }
 
-  final frontier = await intake.backfillScan(onCovered: checkpoint);
+  final frontier =
+      await intake.backfillScan(onCovered: checkpoint, newestDayFirst: true);
   if (frontier != null) await checkpoint(frontier);
   return frontier;
 }

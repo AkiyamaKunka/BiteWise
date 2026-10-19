@@ -502,11 +502,20 @@ abstract class PhotoIntake {
   /// delivered photo terminates — the value a caller may persist as a
   /// watermark mid-scan, before the final frontier is known. Never called
   /// for a truncated window. A throwing callback never stops the scan.
+  ///
+  /// [newestDayFirst] (the app's launch/resume catch-up): the photos of the
+  /// newest day not yet handled this session go first, in shooting order,
+  /// then the usual oldest-first pass. Each photo is offered at most once
+  /// per scan, and only the second pass reports frontiers, so coverage is
+  /// exactly as without it. A whole day, in order, because the automatic
+  /// leftover check compares a photo with the meals already logged on its
+  /// own day.
   Future<DateTime?> backfillScan(
       {int lookbackDays,
       DateTime? since,
       bool Function()? shouldContinue,
-      Future<void> Function(DateTime safeFrontier)? onCovered});
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst});
   Future<void> start();
   Future<void> stop();
 }

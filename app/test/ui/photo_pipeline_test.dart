@@ -904,7 +904,8 @@ class _SinkCapturingIntake implements PhotoIntake {
           {int lookbackDays = 0,
           DateTime? since,
           bool Function()? shouldContinue,
-          Future<void> Function(DateTime safeFrontier)? onCovered}) async =>
+          Future<void> Function(DateTime safeFrontier)? onCovered,
+          bool newestDayFirst = false}) async =>
       null;
   @override
   Future<void> start() async {}

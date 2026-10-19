@@ -310,7 +310,8 @@ class FakeIntake implements PhotoIntake {
       {int lookbackDays = 2,
       DateTime? since,
       bool Function()? shouldContinue,
-      Future<void> Function(DateTime safeFrontier)? onCovered}) async {
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
     backfillScans++;
     return null;
   }
