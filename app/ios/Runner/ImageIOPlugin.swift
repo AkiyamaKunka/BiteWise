@@ -18,9 +18,10 @@ import ImageIO
 /// Channel `dev.calorietracker/imageio`, method `downscaleJpeg`:
 ///   {bytes: Uint8List, maxPx: int, quality: int (1-100)} → Uint8List?
 /// The reply is a JPEG whose long side is at most maxPx (never upscaled),
-/// with the EXIF orientation baked into the pixels and NO metadata copied
-/// from the source (no EXIF, GPS, camera or times) — the same strip policy
-/// as the Dart path. nil on any failure; the Dart side then falls through.
+/// with the EXIF orientation baked into the pixels, sRGB pixels (a P3 HEIC
+/// is colour-converted, [imageIOSRGB]) and NO metadata copied from the
+/// source (no EXIF, GPS, camera or times) — the same strip policy as the
+/// Dart path. nil on any failure; the Dart side then falls through.
 ///
 /// Registered for BOTH engines in AppDelegate: the app's implicit engine and
 /// the headless one workmanager creates (GeneratedPluginRegistrant only
@@ -103,8 +104,9 @@ func imageIODownscaleJpeg(_ data: Data, maxPx: Int, quality: Int) -> Data? {
         kCGImageSourceThumbnailMaxPixelSize: longSide,
         kCGImageSourceShouldCacheImmediately: true,
       ] as CFDictionary
-    guard let image = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions)
+    guard let thumb = CGImageSourceCreateThumbnailAtIndex(source, 0, thumbOptions)
     else { return nil }
+    let image = imageIOSRGB(thumb) ?? thumb
     let out = NSMutableData()
     guard
       let dest = CGImageDestinationCreateWithData(
@@ -118,6 +120,30 @@ func imageIODownscaleJpeg(_ data: Data, maxPx: Int, quality: Int) -> Data? {
     guard CGImageDestinationFinalize(dest), out.length > 0 else { return nil }
     return out as Data
   }
+}
+
+/// [image] with its pixels converted to sRGB, or nil when it already is
+/// sRGB (or the context cannot be made; the caller then encodes [image]).
+///
+/// Every iPhone camera HEIC is Display P3. Encoded as is, the JPEG holds P3
+/// pixel values plus a P3 ICC profile, and anything that re-encodes it
+/// without that profile reads P3 values as sRGB: washed-out colour. The
+/// owner's server does exactly that (PIL `convert("RGB").save`, no
+/// icc_profile). The engine codec this replaced handed over sRGB pixels;
+/// so does this. A CoreGraphics bitmap context draws on the CPU, so the
+/// GPU-less background engine can run it. Opaque output: a JPEG has no
+/// alpha.
+func imageIOSRGB(_ image: CGImage) -> CGImage? {
+  guard let srgb = CGColorSpace(name: CGColorSpace.sRGB),
+    image.colorSpace?.name != CGColorSpace.sRGB,
+    let ctx = CGContext(
+      data: nil, width: image.width, height: image.height, bitsPerComponent: 8,
+      bytesPerRow: 0, space: srgb,
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+  else { return nil }
+  ctx.interpolationQuality = .none  // same size: a copy, colour-matched
+  ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+  return ctx.makeImage()
 }
 
 // MARK: - core end

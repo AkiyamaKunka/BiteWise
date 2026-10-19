@@ -232,6 +232,57 @@ class ImageIODownscaleTests: XCTestCase {
     assertUploadJpeg(out, srcW: 400, srcH: 300, maxPx: 1568)
   }
 
+  // MARK: - colour (every iPhone camera HEIC is Display P3)
+
+  /// The centre pixel's RAW values — drawn into the image's own colour
+  /// space, so nothing is colour-matched — and that space's name.
+  private func rawCentre(of data: Data) -> (space: String?, rgb: (r: Int, g: Int, b: Int)) {
+    let src = CGImageSourceCreateWithData(data as CFData, nil)!
+    let image = CGImageSourceCreateImageAtIndex(src, 0, nil)!
+    let space = image.colorSpace!
+    let w = image.width
+    let h = image.height
+    var buf = [UInt8](repeating: 0, count: w * h * 4)
+    let ctx = CGContext(
+      data: &buf, width: w, height: h, bitsPerComponent: 8, bytesPerRow: w * 4,
+      space: space, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.draw(image, in: CGRect(x: 0, y: 0, width: w, height: h))
+    let i = ((h / 2) * w + w / 2) * 4
+    return (space.name as String?, (Int(buf[i]), Int(buf[i + 1]), Int(buf[i + 2])))
+  }
+
+  /// A P3 upload keeps P3 values behind a P3 profile, and whatever drops
+  /// the profile (the owner's server re-encodes with PIL, which does) reads
+  /// them as sRGB: washed-out colour. The engine codec ImageIO replaced
+  /// handed over sRGB pixels; the downscaler must too.
+  func testDisplayP3HeicBecomesSRGBPixels() throws {
+    let p3 = CGColorSpace(name: CGColorSpace.displayP3)!
+    let ctx = CGContext(
+      data: nil, width: 2000, height: 1500, bitsPerComponent: 8, bytesPerRow: 0,
+      space: p3, bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    // Pure sRGB red, which CoreGraphics stores in P3 as about (234, 51, 35).
+    ctx.setFillColor(
+      CGColor(colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!, components: [1, 0, 0, 1])!)
+    ctx.fill(CGRect(x: 0, y: 0, width: 2000, height: 1500))
+    let heic = try encode(ctx.makeImage()!, as: .heic, properties: [:])
+
+    // The fixture really is P3, its raw red visibly not sRGB red.
+    let source = rawCentre(of: heic)
+    XCTAssertEqual(source.space, CGColorSpace.displayP3 as String, "fixture colour space")
+    XCTAssertGreaterThan(source.rgb.g, 35, "fixture raw green \(source.rgb)")
+
+    let out = try XCTUnwrap(imageIODownscaleJpeg(heic, maxPx: 1568, quality: 85))
+    let result = rawCentre(of: out)
+    XCTAssertEqual(result.space, CGColorSpace.sRGB as String, "output colour space")
+    let profile = properties(of: out)[kCGImagePropertyProfileName] as? String ?? ""
+    XCTAssertTrue(profile.hasPrefix("sRGB"), "output profile \(profile)")
+    // The raw values themselves are sRGB red: right even with the profile
+    // thrown away.
+    XCTAssertTrue(
+      result.rgb.r > 240 && result.rgb.g < 25 && result.rgb.b < 25,
+      "raw output pixel \(result.rgb)")
+  }
+
   // MARK: - failures answer nil, never crash
 
   func testUnusableInputsReturnNil() {
