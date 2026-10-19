@@ -1898,6 +1898,10 @@ void main() {
           .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
       expect(intake.backfillScans, before + 1);
+      // Through foregroundCatchUp: today's photos first, and the coverage
+      // moves the background watermark (a bare backfillScan did neither).
+      expect(intake.newestDayFirstArgs.last, isTrue);
+      expect(intake.checkpointed.last, isTrue);
       // Flush the delayed post-scan UI refresh so no timer is left pending.
       await tester.pump(const Duration(seconds: 16));
     });
