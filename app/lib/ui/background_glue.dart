@@ -261,9 +261,16 @@ Future<DateTime?> advanceBackgroundWatermark(
 /// frontier — never past this scan's start. A truncated window reports
 /// none and throws [BackfillWindowTruncated], which propagates. A
 /// preferences failure never stops the scan.
+///
+/// [shouldContinue] is asked before each photo's original is read; false
+/// ends the scan there, unread photos uncovered. iOS passes "the app is
+/// still in the foreground" (appEngineBackgrounded): once the user leaves,
+/// the photo in flight finishes in its background task and nothing more
+/// is read (2026-10-19).
 Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
     {DateTime Function() clock = DateTime.now,
-    Future<SharedPreferences> Function()? loadPrefs}) async {
+    Future<SharedPreferences> Function()? loadPrefs,
+    bool Function()? shouldContinue}) async {
   final scanStart = clock();
   Future<void> checkpoint(DateTime mark) async {
     try {
@@ -272,8 +279,10 @@ Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
     } catch (_) {}
   }
 
-  final frontier =
-      await intake.backfillScan(onCovered: checkpoint, newestDayFirst: true);
+  final frontier = await intake.backfillScan(
+      onCovered: checkpoint,
+      newestDayFirst: true,
+      shouldContinue: shouldContinue);
   if (frontier != null) await checkpoint(frontier);
   return frontier;
 }

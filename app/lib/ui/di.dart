@@ -16,6 +16,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/contracts.dart';
 import '../data/meals_dao_impl.dart';
+import '../services/analyzer/platform_decode.dart' show isEngineBackgrounded;
 import '../services/analyzer/provider_analyzers.dart'
     show ServerAnalyzer, createMultiProviderAnalyzer;
 import '../services/nl/executor.dart';
@@ -68,6 +69,9 @@ class AppServices {
     // before services start (spec §2.3 single-process simplification).
     await dao.reclaimStaleProcessing();
     if (Platform.isIOS) {
+      // This engine's GPU goes off whenever the app is in the background:
+      // no dart:ui decode may start there (platform_decode.dart).
+      isEngineBackgrounded = appEngineBackgrounded;
       try {
         // iPhone photos are HEIC; earlier builds showed them to the model
         // unreadable. Forget those verdicts once (migrations.dart).
@@ -199,8 +203,10 @@ class AppServices {
         // A rejected key / blocked region parks the automatic scan.
         latch: autoScanLatchFor(settings),
         // iOS suspends the app seconds after the user leaves it: each photo
-        // asks for the time to finish its upload and save first.
+        // asks for the time to finish its upload and save first, and no
+        // automatic photo starts once the app is in the background.
         backgroundTime: Platform.isIOS ? const BackgroundTime() : null,
+        backgrounded: Platform.isIOS ? appEngineBackgrounded : null,
         // A photo the background run kept deferring is forgotten once it
         // has a verdict here. 'Already logged' was settled by an earlier
         // run, which forgot it then.
@@ -287,7 +293,9 @@ class AppServices {
       // It also moves the background watermark over what it covers, so the
       // next background run starts from here (foregroundCatchUp).
       if (settings.canAutoAnalyze) {
-        unawaited(foregroundCatchUp(photoIntake).then((_) {},
+        unawaited(foregroundCatchUp(photoIntake,
+                shouldContinue: Platform.isIOS ? appEngineInForeground : null)
+            .then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
           // the catch-up cannot promise full coverage.

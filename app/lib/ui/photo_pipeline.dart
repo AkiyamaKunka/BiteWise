@@ -216,6 +216,17 @@ class PhotoPipeline {
   /// suspend this way, tests opt in.
   final BackgroundTime? backgroundTime;
 
+  /// iOS, the app's own engine only (di.dart: appEngineBackgrounded):
+  /// whether the app is in the background right now. Then an AUTOMATIC
+  /// photo is not started at all — released before it is hashed, reserved
+  /// or given a task, so only the photo already in flight spends the time
+  /// iOS gives; the next open or background run offers the rest
+  /// (2026-10-19). And an undecodable verdict reached there is deferred,
+  /// not burned: dart:ui cannot decode with the GPU off, and the same photo
+  /// decodes in the foreground. Deliberate photos (picked, shared) always
+  /// run. Null everywhere else.
+  final bool Function()? backgrounded;
+
   /// Every verdict, after process() reached it (any intake). The app engine
   /// uses it to forget a photo the background run kept deferring once the
   /// app settled it (deferred_assets.dart). A throw is contained.
@@ -244,6 +255,7 @@ class PhotoPipeline {
       this.latch,
       this.deferUndecodable = false,
       this.backgroundTime,
+      this.backgrounded,
       this.onOutcome,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
@@ -381,6 +393,15 @@ class PhotoPipeline {
     return held.assetId;
   }
 
+  /// [backgrounded], contained: a throwing probe reads as the foreground.
+  bool _inBackground() {
+    try {
+      return backgrounded?.call() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// The photo's verdict once [abandon] ran: retryable, so the intake
   /// releases it and the frontier halts in front of it. Releases the
   /// reservation itself when [abandon] could not (it was taken after).
@@ -403,9 +424,11 @@ class PhotoPipeline {
   /// ([_afterLost]) stays inside the same task.
   Future<PhotoOutcome> process(IntakePhoto photo) async {
     final time = backgroundTime;
-    final outcome = await (time == null
-        ? _process(photo)
-        : time.guard('photo', () => _process(photo)));
+    final outcome = !photo.deliberate && _inBackground()
+        ? _waitsForForeground
+        : await (time == null
+            ? _process(photo)
+            : time.guard('photo', () => _process(photo)));
     // Settled or released by now: no reservation is held past process().
     _held = null;
     try {
@@ -574,12 +597,13 @@ class PhotoPipeline {
           return held;
         }
         // The analyzer's "could not process this photo (decode failed …)":
-        // nothing was sent. In the iOS background engine that says more
-        // about the engine than the photo — defer it to a run that has every
-        // decoder ([deferUndecodable]); everywhere else the permanent
+        // nothing was sent. In the iOS background engine — or the app's
+        // own while it is in the background ([backgrounded]) — that says
+        // more about the engine than the photo: defer it to a run that has
+        // every decoder ([deferUndecodable]). Everywhere else the permanent
         // verdict below stands.
-        final deferred =
-            deferUndecodable && errorKind == AnalysisErrorKind.badPhoto;
+        final deferred = (deferUndecodable || _inBackground()) &&
+            errorKind == AnalysisErrorKind.badPhoto;
         if (outcome.retryable || deferred) {
           // Transient trouble (rate limit / network / quota pause / no key):
           // RELEASE the reservation so the next scan simply re-offers the
@@ -806,6 +830,15 @@ class PhotoPipeline {
   static const _inFlight = PhotoOutcome(PhotoOutcomeKind.inFlight,
       'This photo is still being analyzed — check back in a moment.',
       retryable: true);
+
+  /// An automatic photo met while the app is in the background
+  /// ([backgrounded]): released untouched, offered again by the next open
+  /// or background run.
+  static const _waitsForForeground = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The app is in the background: this photo waits for the next scan.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'in the background');
 
   /// [abandon]'s verdict: released, offered again by a later scan.
   static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,

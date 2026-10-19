@@ -3,7 +3,7 @@
 library;
 
 import 'dart:async' show StreamSubscription, unawaited;
-import 'dart:io' show File;
+import 'dart:io' show File, Platform;
 
 import '../core/setup_link.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart'
 
 import 'package:flutter/material.dart';
 
+import '../services/photo/background_time.dart' show appEngineInForeground;
 import 'background_glue.dart' show foregroundCatchUp;
 import 'screens/add_flow.dart';
 import 'screens/body_screen.dart';
@@ -322,10 +323,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // app was backgrounded surface here. The md5 ledger + in-session seen
     // set make repeat resumes near-free. Refresh again once the scan's
     // emissions have had a chance to process. What it covers moves the
-    // background watermark too (foregroundCatchUp).
+    // background watermark too (foregroundCatchUp). iOS: it reads no more
+    // photos once the user leaves again.
     final intake = s.photoIntake;
     if (intake == null) return;
-    await foregroundCatchUp(intake)
+    await foregroundCatchUp(intake,
+            shouldContinue: Platform.isIOS ? appEngineInForeground : null)
         .then((_) {}, onError: (Object _) {})
         .then((_) => Future<void>.delayed(const Duration(seconds: 15)))
         .then((_) {

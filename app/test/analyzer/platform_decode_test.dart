@@ -54,7 +54,8 @@ class _Steps {
     return engineOut ?? Future.value(null);
   }
 
-  Future<Uint8List?> run({required bool ios, required bool headless}) =>
+  Future<Uint8List?> run(
+          {required bool ios, required bool headless, bool? backgrounded}) =>
       decodeForUpload(Uint8List.fromList([1, 2, 3]),
           pureDart: normalizeForAnalysis,
           longSidePx: kAnalysisLongSidePx,
@@ -63,7 +64,8 @@ class _Steps {
           native: native,
           engine: engine,
           ios: ios,
-          headless: headless);
+          headless: headless,
+          backgrounded: backgrounded);
 }
 
 Future<Uint8List?> _noDecoder(Uint8List original,
@@ -169,6 +171,39 @@ void main() {
       final steps = _Steps(engineOut: Future.value(jpeg));
       expect(await steps.run(ios: true, headless: false), same(jpeg));
       expect((steps.nativeCalls, steps.engineCalls), (1, 1));
+    });
+
+    // 2026-10-19: iOS switches the APP engine's GPU off too once the user
+    // leaves; a 105 MP HEIC ImageIO refuses hung the full deadline there
+    // and was burned to 'failed'.
+    test('iOS app engine in the background: ImageIO still runs, dart:ui '
+        'never', () async {
+      final steps = _Steps(engineOut: Future.value(jpeg));
+      expect(
+          await steps.run(ios: true, headless: false, backgrounded: true),
+          isNull);
+      expect((steps.nativeCalls, steps.engineCalls), (1, 0));
+      final viaImageIO = _Steps(nativeOut: jpeg);
+      expect(
+          await viaImageIO.run(
+              ios: true, headless: false, backgrounded: true),
+          same(jpeg));
+    });
+
+    test('the background probe di.dart installs (isEngineBackgrounded) is '
+        'what decides by default; a throwing one reads as the foreground',
+        () async {
+      addTearDown(() => isEngineBackgrounded = () => false);
+      isEngineBackgrounded = () => true;
+      final away = _Steps(engineOut: Future.value(jpeg));
+      expect(await away.run(ios: true, headless: false), isNull);
+      expect(away.engineCalls, 0);
+      // Android never consults it: its GPU stays on.
+      final android = _Steps(engineOut: Future.value(jpeg));
+      expect(await android.run(ios: false, headless: false), same(jpeg));
+      isEngineBackgrounded = () => throw StateError('no binding');
+      final broken = _Steps(engineOut: Future.value(jpeg));
+      expect(await broken.run(ios: true, headless: false), same(jpeg));
     });
 
     test('Android (background too) keeps the engine codec and never asks '

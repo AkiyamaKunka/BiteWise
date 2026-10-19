@@ -15,6 +15,9 @@
 /// does not suspend an app this way (no instance there).
 library;
 
+import 'dart:ui' show AppLifecycleState;
+
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/services.dart' show MethodChannel;
 
 /// ios/Runner/BackgroundTimePlugin.swift.
@@ -55,3 +58,32 @@ class BackgroundTime {
     }
   }
 }
+
+/// Whether the app's own engine is in the background right now (paused or
+/// hidden) — the only time a [BackgroundTime] task matters (2026-10-19).
+///
+/// Then the photo already in flight finishes inside its task, but nothing
+/// new may start: the next photo of a catch-up began a task from the
+/// background, shared the same ~30 s, and froze reserved or mid-upload
+/// when the time ran out, one or two photos later (simulator: three
+/// photos begun after expiry). And iOS has switched the engine's GPU off
+/// there (FlutterEngine.mm, on didEnterBackground), so a dart:ui decode
+/// parks exactly as in the headless engine (platform_decode.dart).
+///
+/// 'inactive' is not background: Control Center or the app switcher over
+/// a visible app leaves the GPU on. No binding (yet), or no state yet,
+/// reads as the foreground: the app keeps logging as it did before.
+bool appEngineBackgrounded() {
+  final AppLifecycleState? state;
+  try {
+    state = SchedulerBinding.instance.lifecycleState;
+  } catch (_) {
+    return false;
+  }
+  return state == AppLifecycleState.paused ||
+      state == AppLifecycleState.hidden;
+}
+
+/// [appEngineBackgrounded]'s complement, for a catch-up's shouldContinue
+/// (foregroundCatchUp): read the next photo only while the app is open.
+bool appEngineInForeground() => !appEngineBackgrounded();

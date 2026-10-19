@@ -793,6 +793,24 @@ void main() {
       expect(storedMark(), scanStart, reason: 'capped at the scan start');
     });
 
+    // 2026-10-19: once the user leaves (iOS), only the photo in flight may
+    // spend the background time; the scan reads nothing more.
+    test('shouldContinue reaches the intake: past it nothing more is read',
+        () async {
+      var open = true;
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final processed = <String>[];
+      intake.attachSink((p, _) async {
+        processed.add(p.assetId);
+        open = false; // the user leaves during the first photo
+        return true;
+      });
+      await foregroundCatchUp(intake,
+          loadPrefs: () async => prefs, shouldContinue: () => open);
+      expect(processed, ['asset1']);
+      expect(intake.unread, 2);
+    });
+
     test('a released photo is not checkpointed, and a scan that throws '
         '(truncated window) writes no final frontier', () async {
       final intake = EmittingIntake()

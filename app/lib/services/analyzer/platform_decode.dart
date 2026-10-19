@@ -82,6 +82,16 @@ Duration nativeDecodeTimeoutFor({bool? headless}) =>
 /// runs nothing but that one task. The app's own engine leaves it false.
 bool isHeadlessEngine = false;
 
+/// iOS, the app's own engine: whether it is in the background right now,
+/// where iOS has switched its GPU off just like the headless engine's
+/// (FlutterEngine.mm, on didEnterBackground) and a dart:ui decode parks
+/// the same way (2026-10-19: a 105 MP HEIC ImageIO refuses hung the full
+/// [kPlatformDecodeTimeout] and was burned to 'failed'; in the foreground
+/// it decodes in under a second). Set by di.dart (appEngineBackgrounded);
+/// never true elsewhere.
+bool Function() isEngineBackgrounded = _never;
+bool _never() => false;
+
 /// One step of the decode chain: [original] → a JPEG whose long side is at
 /// most [longSidePx], or null.
 typedef UploadDecoder = Future<Uint8List?> Function(Uint8List original,
@@ -210,8 +220,9 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
 ///
 /// The seams default to production: [isolate] runs [pureDart] (compute),
 /// [native] is [downscaleViaImageIO], [engine] is [decodeViaPlatform];
-/// [ios] / [headless] default to the target platform and
-/// [isHeadlessEngine]. The native step is bounded here as well
+/// [ios] / [headless] / [backgrounded] default to the target platform,
+/// [isHeadlessEngine] and [isEngineBackgrounded]. The native step is
+/// bounded here as well
 /// ([nativeDecodeTimeoutFor]), whatever [native] does itself.
 ///
 /// The native JPEG is used as is: ImageIO already baked the orientation,
@@ -222,7 +233,8 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
 /// unprocessed fallback uses.
 ///
 /// The engine codec stays the last resort everywhere EXCEPT the iOS
-/// background engine, where it cannot finish (library docs). Android never
+/// background engine, and the iOS app engine while it is in the
+/// background: there it cannot finish (library docs). Android never
 /// switches its engine's GPU off, so its background run keeps it — under the
 /// same deadline as every other caller.
 Future<Uint8List?> decodeForUpload(
@@ -237,6 +249,7 @@ Future<Uint8List?> decodeForUpload(
   UploadDecoder engine = decodeViaPlatform,
   bool? ios,
   bool? headless,
+  bool? backgrounded,
   Duration engineTimeout = kPlatformDecodeTimeout,
 }) async {
   try {
@@ -254,10 +267,20 @@ Future<Uint8List?> decodeForUpload(
           nativeDecodeTimeoutFor(headless: inHeadless));
       if (viaImageIO != null) return viaImageIO;
     } catch (_) {}
-    // The iOS background engine: dart:ui would park behind the disabled
-    // GPU. Undecodable HERE; the pipeline defers the photo to a run that
-    // has a GPU (PhotoPipeline.deferUndecodable).
+    // The iOS background engine, or the app's own while it is in the
+    // background: dart:ui would park behind the disabled GPU. Undecodable
+    // HERE; the pipeline defers the photo to a run that has a GPU
+    // (PhotoPipeline.deferUndecodable / backgrounded).
     if (inHeadless) return null;
+    var gpuOff = backgrounded;
+    if (gpuOff == null) {
+      try {
+        gpuOff = isEngineBackgrounded();
+      } catch (_) {
+        gpuOff = false;
+      }
+    }
+    if (gpuOff) return null;
   }
   try {
     return await orNullAfter(
