@@ -1,24 +1,80 @@
-/// Second-chance image decode through the PLATFORM codec (dart:ui).
+/// Second-chance image decodes for what the pure-Dart `image` package
+/// (normalize.dart) cannot read.
 ///
-/// The pure-Dart `image` package (normalize.dart) has no HEIC/HEIF decoder,
-/// and every iPhone camera photo is HEIC. Until 2026-09-30 a failed decode
-/// fell back to "send the original bytes" — raw HEIC, which every provider
-/// path labels image/jpeg. The model cannot read that and answers
-/// `is_food: false`, so on the owner's iPhone 94 of 102 photos were
-/// silently "not food" (the same test image: JPEG → food, HEIC → not food).
+/// That package has no HEIC/HEIF decoder, and every iPhone camera photo is
+/// HEIC. Until 2026-09-30 a failed decode fell back to "send the original
+/// bytes" — raw HEIC, which every provider path labels image/jpeg. The
+/// model cannot read that and answers `is_food: false`, so on the owner's
+/// iPhone 94 of 102 photos were silently "not food" (the same test image:
+/// JPEG → food, HEIC → not food).
 ///
-/// The engine's own codec decodes whatever the OS can (HEIC/HEIF/AVIF on
-/// iOS and modern Android), with orientation applied, at a reduced target
-/// size; the RGBA frame is then JPEG-encoded off the UI isolate.
+/// The chain, in order ([decodeForUpload]):
+///   1. pure Dart in an isolate (unchanged);
+///   2. iOS only: ImageIO over a platform channel
+///      (ios/Runner/ImageIOPlugin.swift) — CPU only;
+///   3. the engine codec (dart:ui), which decodes whatever the OS can
+///      (HEIC/HEIF/AVIF on iOS and modern Android), with orientation
+///      applied, at a reduced target size — never in the iOS background
+///      engine, and always under [kPlatformDecodeTimeout].
+///
+/// WHY 2 AND THE RULES ON 3 (2026-10-18): the background scan runs in a
+/// headless engine, and on iOS that engine's GPU switch is off for the whole
+/// BGAppRefresh run (FlutterEngine.mm sets it from the application state;
+/// only entering the foreground clears it). dart:ui decodes the pixels on
+/// the CPU but parks the texture upload until the GPU returns, so
+/// `getNextFrame()` neither completed nor threw. The photo was already
+/// reserved, no request ever left the phone, iOS expired the run, and every
+/// run after it reclaimed the same photo and hung again — the background
+/// watermark froze on Oct 11 and Oct 15 while runs kept starting.
 library;
 
+import 'dart:async';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, compute, defaultTargetPlatform;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:image/image.dart' as img;
 
 import 'normalize.dart';
+
+/// The native ImageIO downscaler (ios/Runner/ImageIOPlugin.swift),
+/// registered for the app's engine and the headless background one.
+const String imageIOChannelName = 'dev.calorietracker/imageio';
+const MethodChannel imageIOChannel = MethodChannel(imageIOChannelName);
+
+/// The engine codec's deadline. A healthy decode of a phone photo at the
+/// analysis size takes well under a second; a texture upload parked behind
+/// a disabled GPU never finishes at all. Past this the photo counts as
+/// undecodable for this attempt (null), instead of holding its reservation
+/// until the OS kills the process.
+const Duration kPlatformDecodeTimeout = Duration(seconds: 8);
+
+/// The native call's deadline: generous (ImageIO is CPU-only and finishes),
+/// but a reply that never comes must not hang the pipeline either.
+const Duration kNativeDecodeTimeout = Duration(seconds: 15);
+
+/// True in the headless background engine. Set first thing by
+/// runHeadlessBackfill (ui/background_glue.dart) and never cleared: a
+/// top-level variable is per-isolate, and the background engine's isolate
+/// runs nothing but that one task. The app's own engine leaves it false.
+bool isHeadlessEngine = false;
+
+/// One step of the decode chain: [original] → a JPEG whose long side is at
+/// most [longSidePx], or null.
+typedef UploadDecoder = Future<Uint8List?> Function(Uint8List original,
+    {required int longSidePx, required int jpegQuality});
+
+/// [future]'s value, or null once [limit] passes without one; its error
+/// still surfaces to the awaiting caller. Re-typed through `then` FIRST:
+/// a future whose runtime type is narrower than its static one (an
+/// `async => throw` closure is a `Future<Never>`) rejects `onTimeout: () =>
+/// null` with a TypeError at the `timeout` call itself — before any
+/// listener is attached, so its own error escaped every try/catch as an
+/// unhandled one.
+Future<T?> orNullAfter<T>(Future<T?> future, Duration limit) =>
+    future.then<T?>((v) => v).timeout(limit, onTimeout: () => null);
 
 /// JPEG magic. The ONLY originals the "send it unprocessed" fallback may
 /// ship: every request labels its upload image/jpeg.
@@ -114,22 +170,122 @@ Uint8List? stripJpegMetadata(Uint8List jpeg) {
   return null; // no EOI: there is no complete image to send
 }
 
-/// The analysis JPEG: pure-Dart decode first (unchanged, runs in an
-/// isolate), platform codec second.
-Future<Uint8List?> normalizeAnyForAnalysis(Uint8List original) async =>
-    await compute(normalizeForAnalysis, original) ??
-    await decodeViaPlatform(original,
-        longSidePx: kAnalysisLongSidePx, jpegQuality: kAnalysisJpegQuality);
+/// The analysis JPEG (1568 px, q85 — the shared constants).
+Future<Uint8List?> normalizeAnyForAnalysis(Uint8List original) =>
+    decodeForUpload(original,
+        pureDart: normalizeForAnalysis,
+        longSidePx: kAnalysisLongSidePx,
+        jpegQuality: kAnalysisJpegQuality);
 
-/// The history thumbnail, with the same second chance.
-Future<Uint8List?> makeMealThumbAny(Uint8List original) async =>
-    await compute(makeMealThumb, original) ??
-    await decodeViaPlatform(original,
-        longSidePx: kThumbLongSidePx, jpegQuality: kThumbJpegQuality);
+/// The history thumbnail, through the same chain.
+Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
+    decodeForUpload(original,
+        pureDart: makeMealThumb,
+        longSidePx: kThumbLongSidePx,
+        jpegQuality: kThumbJpegQuality);
+
+/// The decode chain (library docs). Null when every allowed step failed —
+/// the caller reports an undecodable photo. Never throws.
+///
+/// The seams default to production: [isolate] runs [pureDart] (compute),
+/// [native] is [downscaleViaImageIO], [engine] is [decodeViaPlatform];
+/// [ios] / [headless] default to the target platform and
+/// [isHeadlessEngine].
+///
+/// The native JPEG is used as is: ImageIO already baked the orientation,
+/// capped the long side and re-encoded at [jpegQuality]. Piping it through
+/// the pure-Dart step again would only re-compress it (a second lossy
+/// pass) and spend a second decode of the background grant; its metadata
+/// is dropped by [downscaleViaImageIO] with the same byte walk the
+/// unprocessed fallback uses.
+///
+/// The engine codec stays the last resort everywhere EXCEPT the iOS
+/// background engine, where it cannot finish (library docs). Android never
+/// switches its engine's GPU off, so its background run keeps it — under the
+/// same deadline as every other caller.
+Future<Uint8List?> decodeForUpload(
+  Uint8List original, {
+  required Uint8List? Function(Uint8List) pureDart,
+  required int longSidePx,
+  required int jpegQuality,
+  Future<Uint8List?> Function(
+          Uint8List? Function(Uint8List) callback, Uint8List original)?
+      isolate,
+  UploadDecoder native = downscaleViaImageIO,
+  UploadDecoder engine = decodeViaPlatform,
+  bool? ios,
+  bool? headless,
+  Duration engineTimeout = kPlatformDecodeTimeout,
+}) async {
+  try {
+    final viaDart = await (isolate ?? _inIsolate)(pureDart, original);
+    if (viaDart != null) return viaDart;
+  } catch (_) {
+    // compute() can fail to spawn on a low-memory device: try the others.
+  }
+  final onIOS = ios ?? defaultTargetPlatform == TargetPlatform.iOS;
+  if (onIOS) {
+    try {
+      final viaImageIO = await native(original,
+          longSidePx: longSidePx, jpegQuality: jpegQuality);
+      if (viaImageIO != null) return viaImageIO;
+    } catch (_) {}
+    // The iOS background engine: dart:ui would park behind the disabled
+    // GPU. Undecodable HERE; the pipeline defers the photo to a run that
+    // has a GPU (PhotoPipeline.deferUndecodable).
+    if (headless ?? isHeadlessEngine) return null;
+  }
+  try {
+    return await orNullAfter(
+        engine(original, longSidePx: longSidePx, jpegQuality: jpegQuality),
+        engineTimeout);
+  } catch (_) {
+    return null;
+  }
+}
+
+Future<Uint8List?> _inIsolate(
+        Uint8List? Function(Uint8List) callback, Uint8List original) =>
+    compute(callback, original);
+
+/// ImageIO's downscale (ios/Runner/ImageIOPlugin.swift): orientation baked,
+/// long side ≤ [longSidePx], JPEG at [jpegQuality], no source metadata.
+/// Null on ANY failure — no plugin in this engine (MissingPluginException),
+/// a PlatformException, a reply that is not a JPEG, or no reply within
+/// [kNativeDecodeTimeout] — so the chain falls through; never throws.
+///
+/// The reply goes through [stripJpegMetadata] as well: ImageIO copies no
+/// source properties, but its encoder still writes its own small EXIF
+/// (colour space, pixel size) and an APP13 block for some inputs. Dropping
+/// them keeps the one rule every upload follows — no APP1, no APP13 — and
+/// the walk doubles as a structural check of what came back.
+Future<Uint8List?> downscaleViaImageIO(Uint8List original,
+    {required int longSidePx,
+    required int jpegQuality,
+    MethodChannel channel = imageIOChannel,
+    Duration timeout = kNativeDecodeTimeout}) async {
+  try {
+    final out = await orNullAfter(
+        channel.invokeMethod<Uint8List>('downscaleJpeg', {
+          'bytes': original,
+          'maxPx': longSidePx,
+          'quality': jpegQuality,
+        }),
+        timeout);
+    if (out == null || !looksLikeJpeg(out)) return null;
+    return stripJpegMetadata(out);
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Decode [original] with the engine codec, downscaled so the long side is
 /// at most [longSidePx] (never upscaled), and re-encode as JPEG. Null on
 /// any failure — an undecodable image is the caller's problem to report.
+///
+/// Can wait forever where the engine's GPU is off (the iOS background
+/// engine; see the library docs) — callers go through [decodeForUpload],
+/// which never calls it there and bounds it everywhere else.
 Future<Uint8List?> decodeViaPlatform(Uint8List original,
     {required int longSidePx, required int jpegQuality}) async {
   ui.ImmutableBuffer? buffer;

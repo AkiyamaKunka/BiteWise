@@ -10,6 +10,8 @@ import 'package:crypto/crypto.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show isHeadlessEngine;
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
@@ -412,9 +414,15 @@ void main() {
         () async {
       final launched = DateTime.utc(2026, 10, 9, 3, 15);
       String? stampSeenByLoad;
+      isHeadlessEngine = false;
+      addTearDown(() => isHeadlessEngine = false);
+      bool? headlessBeforePrefs;
       final ok = await runHeadlessBackfill(
         isIOS: true,
-        loadPrefs: () async => prefs,
+        loadPrefs: () async {
+          headlessBeforePrefs = isHeadlessEngine;
+          return prefs;
+        },
         clock: () => launched,
         loadSettings: () async {
           stampSeenByLoad = prefs.getString(backgroundLastRunPrefsKey);
@@ -422,6 +430,9 @@ void main() {
         },
       );
       expect(ok, isTrue, reason: 'no WorkManager retry storm');
+      // The decode guard is up before anything else runs: on iOS a dart:ui
+      // decode in this engine never finishes (2026-10-18).
+      expect(headlessBeforePrefs, isTrue);
       expect(stampSeenByLoad, launched.toIso8601String());
       // The 后台扫描 row shows iOS ran the task, keys readable or not.
       expect(prefs.getString(backgroundLastRunPrefsKey),

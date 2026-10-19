@@ -1,5 +1,7 @@
 import 'dart:io';
 
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show imageIOChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -220,8 +222,8 @@ void main() {
     final ios = '${_appRoot().path}/ios';
     final swift = File('$ios/Runner/ImageIOPlugin.swift');
     expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
-    expect(swift.readAsStringSync(),
-        contains('"dev.calorietracker/imageio"'));
+    // The Dart side's channel (platform_decode.dart) is the one Swift serves.
+    expect(swift.readAsStringSync(), contains('"$imageIOChannelName"'));
     final pbxproj =
         File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
     final fileRef = RegExp(r'([0-9A-F]{24}) /\* ImageIOPlugin.swift \*/ = '

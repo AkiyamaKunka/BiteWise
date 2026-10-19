@@ -196,6 +196,18 @@ class PhotoPipeline {
   /// automatic photo reaches the analyzer.
   final AutoScanLatch? latch;
 
+  /// True in the iOS background engine (runHeadlessBackfill): a photo the
+  /// analyzer could not turn into upload bytes is DEFERRED — released,
+  /// retryable — instead of burned to 'failed'. That engine lacks a decoder
+  /// the app has (its GPU is off, so platform_decode.dart never asks dart:ui
+  /// there), and the app's own run that re-offers the photo can still read
+  /// it; burning it lost the photo for good (watch intake never reclaims a
+  /// failure). The cost is a watermark that waits in front of that photo
+  /// until the app next opens, when the launch catch-up settles it either
+  /// way. Android's background run has every decoder, so its verdicts stay
+  /// as they were (false).
+  final bool deferUndecodable;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
   // FIFO tail: bound-stream photos process ONE at a time. A backfill batch
@@ -210,13 +222,27 @@ class PhotoPipeline {
       this.notify,
       this.onMealSaved,
       this.latch,
+      this.deferUndecodable = false,
       Future<String> Function(Uint8List bytes)? hasher,
+      Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
       : _hash = hasher ?? _computeMd5,
+        _thumb = thumbnailer ?? makeMealThumbAny,
         _clock = clock ?? DateTime.now;
 
   /// Injectable so tests stay synchronous; production hashes on a worker.
   final Future<String> Function(Uint8List bytes) _hash;
+
+  /// The history thumbnail (platform_decode's chain); injectable so tests
+  /// can make it hang or throw.
+  final Future<Uint8List?> Function(Uint8List original) _thumb;
+
+  /// How long a saved meal may wait for its thumbnail. The meal is already
+  /// committed, but process() has not returned: in the iOS background run
+  /// its notification card and the watermark checkpoint come only after
+  /// it, and the OS grant is ~30 s. A thumb that is not ready by then is
+  /// skipped (the meal shows without one), never waited on.
+  static const thumbnailTimeout = Duration(seconds: 8);
 
   /// Injectable for the rejected-key notice throttle below.
   final DateTime Function() _clock;
@@ -449,7 +475,14 @@ class PhotoPipeline {
           }
           return held;
         }
-        if (outcome.retryable) {
+        // The analyzer's "could not process this photo (decode failed …)":
+        // nothing was sent. In the iOS background engine that says more
+        // about the engine than the photo — defer it to a run that has every
+        // decoder ([deferUndecodable]); everywhere else the permanent
+        // verdict below stands.
+        final deferred =
+            deferUndecodable && errorKind == AnalysisErrorKind.badPhoto;
+        if (outcome.retryable || deferred) {
           // Transient trouble (rate limit / network / quota pause / no key):
           // RELEASE the reservation so the next scan simply re-offers the
           // photo. Burning it to 'failed' would drop it forever on the
@@ -562,9 +595,11 @@ class PhotoPipeline {
       // History thumbnail from the ORIGINAL bytes we already hold (spec §9
       // app-only). Best-effort AND awaited: the pipeline is serialized, so
       // finishing the thumb before the next photo keeps memory flat; any
-      // failure must never un-save the meal.
+      // failure must never un-save the meal, and a thumb that never comes
+      // must not hold the verdict past [thumbnailTimeout].
       try {
-        final thumb = await makeMealThumbAny(photo.bytes);
+        final thumb =
+            await orNullAfter(_thumb(photo.bytes), thumbnailTimeout);
         if (thumb != null) await dao.saveMealThumb(id, thumb);
       } catch (_) {}
       final name = mealDescription(analysis);

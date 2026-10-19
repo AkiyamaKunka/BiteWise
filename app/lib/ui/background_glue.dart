@@ -26,6 +26,7 @@ import 'package:workmanager/workmanager.dart';
 import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../data/meals_dao_impl.dart';
+import '../services/analyzer/platform_decode.dart' show isHeadlessEngine;
 import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
 import '../services/photo/watcher.dart';
@@ -328,6 +329,11 @@ Future<bool> runHeadlessBackfill({
   Future<SharedPreferences> Function()? loadPrefs,
   DateTime Function() clock = DateTime.now,
 }) async {
+  // FIRST, before anything can decode a photo: this isolate is the
+  // headless engine. On iOS its GPU is off for the whole run and a dart:ui
+  // decode never finishes, so platform_decode must skip that step here
+  // (2026-10-18).
+  isHeadlessEngine = true;
   final ios = isIOS ?? Platform.isIOS;
   final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
   await recordBackgroundLaunch(prefs, clock);
@@ -376,7 +382,9 @@ Future<bool> runHeadlessBackfill({
     pipeline: () async => PhotoPipeline(
         dao: await createMealsDao(),
         analyzer: createMultiProviderAnalyzer(settings),
-        latch: autoScanLatchFor(settings)),
+        latch: autoScanLatchFor(settings),
+        // iOS only: there dart:ui cannot decode (platform_decode.dart).
+        deferUndecodable: ios),
     showMealCard: (title, body) async {
       await notifier.init(); // idempotent; deferred until a card exists
       await notifier.showMealCard(title, body);
