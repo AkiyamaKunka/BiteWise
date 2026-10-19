@@ -131,11 +131,23 @@ class DeferredAssets {
 
 /// The app engine's half: [assetId] just got a verdict there (di.dart).
 /// Never throws.
+///
+/// Asks this engine's own copy of the list first and goes to the store
+/// (a full reload over the platform channel) only for an id it holds: the
+/// list is nearly always empty, and this runs for every verdict. A shared
+/// photo has no asset id and was never deferred. A copy too old to know an
+/// entry leaves it behind, which is harmless: the photo now has a verdict,
+/// so a background run passing it over, or meeting it as already logged
+/// (which forgets it), changes nothing.
 Future<void> clearDeferredAsset(String assetId,
     {Future<SharedPreferences> Function()? loadPrefs}) async {
+  if (assetId.isEmpty) return;
   try {
-    await forgetDeferredAsset(
-        await (loadPrefs ?? SharedPreferences.getInstance)(), assetId);
+    final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+    final cached =
+        decodeDeferredAssets(prefs.getString(deferredAssetsPrefsKey));
+    if (!cached.any((e) => e.id == assetId)) return;
+    await forgetDeferredAsset(prefs, assetId);
   } catch (_) {}
 }
 

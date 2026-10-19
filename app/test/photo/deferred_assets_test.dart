@@ -70,6 +70,24 @@ void main() {
     expect(prefs.getString(deferredAssetsPrefsKey), isNull);
   });
 
+  test("the app engine goes to the store only for an id its copy holds: "
+      "every other verdict (nearly all) costs no reload", () async {
+    SharedPreferences.resetStatic();
+    final app = await SharedPreferences.getInstance(); // empty copy
+    // The background run defers a photo after the app loaded its copy.
+    await (await run()).deferred('A');
+    await clearDeferredAsset('A', loadPrefs: () async => app);
+    await clearDeferredAsset('', loadPrefs: () async => app);
+    expect(stored().map((e) => e.id), ['A'],
+        reason: 'not reloaded, so left behind: harmless, the photo has a '
+            'verdict now');
+    // Once the copy knows it (any reload), the verdict forgets it.
+    await app.reload();
+    await clearDeferredAsset('A', loadPrefs: () async => app);
+    await prefs.reload();
+    expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+  });
+
   test('capped at 50: the earliest-deferred goes first', () async {
     final r = await run();
     for (var i = 0; i < deferredAssetsKept + 3; i++) {
