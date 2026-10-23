@@ -490,8 +490,9 @@ class PhotoPipeline {
 
       // Reservation: deliberate adds reclaim failed/skipped/deleted rows;
       // automated watch intake is strict (spec §2.3 caller policies).
-      final source =
-          photo.deliberate ? MealSource.appPhoto : MealSource.appWatch;
+      // app_photo / app_watch by [IntakePhoto.deliberate], unless the
+      // intake names its own (a glasses-session photo is app_glasses).
+      final source = photo.source;
       final reservation = await dao.reservePhotoHash(hash,
           source: source, reclaimDeliberate: photo.deliberate);
       switch (reservation.kind) {
