@@ -35,6 +35,8 @@ def env(monkeypatch):
 def _main(monkeypatch, tmp_path, steps, argv=(), exit_code=0):
     cli, record = make_cli(tmp_path, steps, exit_code=exit_code)
     configure(monkeypatch, cli)
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN",
+                       SECRETS["CLAUDE_CODE_OAUTH_TOKEN"])
     buf = io.StringIO()
     code = smoke.main(list(argv), out=buf)
     return code, buf.getvalue(), record

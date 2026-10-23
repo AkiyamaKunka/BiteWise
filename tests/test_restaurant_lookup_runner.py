@@ -367,8 +367,8 @@ def test_child_env_is_exactly_the_allowlist(monkeypatch):
 def test_child_process_never_sees_a_secret(monkeypatch, tmp_path):
     for key, value in SECRET_ENVS.items():
         monkeypatch.setenv(key, value)
-    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "oauth-test-value")
-    run, record = _run(monkeypatch, tmp_path, lines(FOUND))
+    run, record = _run(monkeypatch, tmp_path, lines(FOUND), env={
+        "CLAUDE_CODE_OAUTH_TOKEN": "oauth-test-value"})
     rec = read_record(record)
     blob = json.dumps(rec["env"])
     for value in SECRET_ENVS.values():
