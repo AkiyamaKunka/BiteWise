@@ -1,3 +1,5 @@
 /* Home-screen label. Mirrors Info.plist; the zh-Hans variant is the point. */
 "CFBundleDisplayName" = "Bitewise";
 "NSPhotoLibraryUsageDescription" = "Bitewise reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings.";
+"NSBluetoothAlwaysUsageDescription" = "Bitewise connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.";
+"NSBluetoothPeripheralUsageDescription" = "Bitewise connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.";
