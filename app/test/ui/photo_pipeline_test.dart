@@ -8,14 +8,45 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
+import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 
 import 'fakes.dart';
+
+class _MemoryKeyStore implements SecureKeyStore {
+  final Map<String, String> data = {};
+  @override
+  Future<String?> read(String key) async => data[key];
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+}
+
+/// A REAL analyzer whose normalizer can read nothing — what the iOS
+/// background engine answered for every HEIC once dart:ui was ruled out —
+/// and whose HTTP client fails the test if a request is ever made.
+Future<AnalyzerService> _analyzerThatCannotDecode() async {
+  SharedPreferences.setMockInitialValues({});
+  final settings = await AppSettings.load(
+      prefs: await SharedPreferences.getInstance(),
+      keyStore: _MemoryKeyStore());
+  await settings.setGeminiApiKey('test-key');
+  return GeminiAnalyzer(settings,
+      client: MockClient((_) async {
+        fail('nothing decodable, so nothing may be sent');
+      }),
+      sleep: (_) async {},
+      normalizer: (_) async => null);
+}
 
 IntakePhoto _photo({bool deliberate = false}) => IntakePhoto(
     Uint8List.fromList([1, 2, 3]), 'asset1', 'IMG_20260716_193042.jpg',
@@ -220,6 +251,253 @@ void main() {
     final retry = await pipeline.process(_photo());
     expect(retry.kind, PhotoOutcomeKind.saved);
     expect(dao.ledger[_hash], IngestionStatus.saved);
+  });
+
+  // 2026-10-18: the iOS background engine cannot decode HEIC through
+  // dart:ui (its GPU is off), and burning such a photo to 'failed' lost it
+  // for good — watch intake never reclaims a failure.
+  group('the iOS background engine (deferUndecodable)', () {
+    test('a photo the analyzer could not decode is DEFERRED: released, '
+        'retryable, no failed row, no request, no notice', () async {
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: await _analyzerThatCannotDecode(),
+          notify: notes.add,
+          deferUndecodable: true);
+      final out = await pipeline.process(_photo()); // [1,2,3]: not a JPEG
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.retryable, isTrue,
+          reason: 'the frontier waits and the next run re-offers it');
+      expect(out.errorKind, AnalysisErrorKind.badPhoto);
+      expect(dao.ledger.containsKey(_hash), isFalse,
+          reason: 'released — not failed, not left processing');
+      expect(dao.meals, isEmpty);
+      expect(notes, isEmpty);
+    });
+
+    test("the app's own run keeps the permanent verdict for the same photo",
+        () async {
+      final dao = FakeDao();
+      final out = await PhotoPipeline(
+              dao: dao, analyzer: await _analyzerThatCannotDecode())
+          .process(_photo());
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.retryable, isFalse);
+      expect(dao.ledger[_hash], IngestionStatus.failed);
+    });
+
+    test('the deferral is for undecodable photos only: other permanent '
+        'failures still burn', () async {
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome =
+            const AnalysisOutcome(error: 'bad key', wall: Duration.zero);
+      final out = await PhotoPipeline(
+              dao: dao, analyzer: analyzer, deferUndecodable: true)
+          .process(_photo());
+      expect(out.retryable, isFalse);
+      expect(dao.ledger[_hash], IngestionStatus.failed);
+    });
+
+    test('a deferred photo is saved once a run can decode it', () async {
+      final dao = FakeDao();
+      await PhotoPipeline(
+              dao: dao,
+              analyzer: await _analyzerThatCannotDecode(),
+              deferUndecodable: true)
+          .process(_photo());
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final out =
+          await PhotoPipeline(dao: dao, analyzer: analyzer).process(_photo());
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger[_hash], IngestionStatus.saved);
+    });
+  });
+
+  group('the thumbnail after a save', () {
+    AnalyzerService food() => FakeAnalyzer()
+      ..nextPhotoOutcome = AnalysisOutcome(
+          analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+
+    test('a throwing thumbnailer → saved, without a thumb', () async {
+      final dao = FakeDao();
+      final out = await PhotoPipeline(
+              dao: dao,
+              analyzer: food(),
+              thumbnailer: (_) async => throw StateError('decoder died'))
+          .process(_photo());
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(dao.meals, hasLength(1));
+      expect(dao.thumbs, isEmpty);
+    });
+
+    testWidgets('iOS background run: a thumbnail that never comes does not '
+        'hold the verdict past thumbnailTimeout', (tester) async {
+      // Fake time (testWidgets). The meal is committed first, but in the
+      // iOS background run its card and watermark checkpoint wait for
+      // process() to return.
+      final dao = FakeDao();
+      PhotoOutcome? out;
+      PhotoPipeline(
+              dao: dao,
+              analyzer: food(),
+              hasher: (b) async => md5.convert(b).toString(),
+              thumbnailer: (_) => Completer<Uint8List?>().future,
+              deferUndecodable: true)
+          .process(_photo())
+          .then((o) => out = o);
+      await tester.pump(
+          PhotoPipeline.thumbnailTimeout - const Duration(milliseconds: 1));
+      expect(dao.meals, hasLength(1), reason: 'saved before the thumb');
+      expect(out, isNull);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(out?.kind, PhotoOutcomeKind.saved);
+      expect(dao.thumbs, isEmpty);
+    });
+
+    testWidgets('every other run waits for a slow thumbnail: an abandoned '
+        'decode would run beside the next photo', (tester) async {
+      final dao = FakeDao();
+      final thumb = Completer<Uint8List?>();
+      PhotoOutcome? out;
+      PhotoPipeline(
+              dao: dao,
+              analyzer: food(),
+              hasher: (b) async => md5.convert(b).toString(),
+              thumbnailer: (_) => thumb.future)
+          .process(_photo())
+          .then((o) => out = o);
+      await tester.pump(PhotoPipeline.thumbnailTimeout * 3);
+      expect(dao.meals, hasLength(1));
+      expect(out, isNull, reason: 'still waiting for the thumb');
+      thumb.complete(Uint8List.fromList([0xFF, 0xD8, 0xFF]));
+      await tester.pump();
+      expect(out?.kind, PhotoOutcomeKind.saved);
+      expect(dao.thumbs, hasLength(1));
+    });
+  });
+
+  // 2026-10-19: the iOS run's deadline replies to workmanager, which
+  // destroys the engine — the photo in flight never finished, and its
+  // 'processing' row refused every later run and the app for 30 minutes.
+  group('abandon() (the iOS run deadline)', () {
+    Future<String> syncMd5(Uint8List b) async =>
+        md5.convert(b).toString().toLowerCase();
+
+    test('mid-analysis: the reservation is released at once, and the late '
+        'reply writes nothing', () async {
+      final dao = FakeDao();
+      final reply = Completer<void>();
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = (() => reply.future)
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, hasher: syncMd5);
+      final pending = pipeline.process(_photo());
+      await _until(() => dao.ledger[_hash] == IngestionStatus.processing);
+      expect(await pipeline.abandon(), 'asset1');
+      expect(dao.ledger.containsKey(_hash), isFalse,
+          reason: 'released with its stamp: no orphan processing row');
+      reply.complete();
+      final out = await pending;
+      expect(out.retryable, isTrue, reason: 'offered again by a later scan');
+      expect(dao.meals, isEmpty);
+      expect(dao.ledger.containsKey(_hash), isFalse);
+    });
+
+    // The test above passes even without the post-analysis guard: the
+    // released row makes the save lose its reservation. Here the release
+    // fails (a busy store, or abandon's 1 s limit), the row is still ours,
+    // and only the guard keeps the late reply from saving.
+    test('mid-analysis, the release failing: the late reply still saves '
+        'nothing', () async {
+      final dao = _FailingReleaseDao();
+      final reply = Completer<void>();
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = (() => reply.future)
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, hasher: syncMd5);
+      final pending = pipeline.process(_photo());
+      await _until(() => dao.ledger[_hash] == IngestionStatus.processing);
+      expect(await pipeline.abandon(), 'asset1');
+      expect(dao.ledger[_hash], IngestionStatus.processing,
+          reason: 'the release failed: the row is still this run\'s');
+      reply.complete();
+      final out = await pending;
+      expect(out.retryable, isTrue);
+      expect(dao.meals, isEmpty);
+      expect(dao.ledger[_hash], IngestionStatus.processing,
+          reason: 'not saved; the stale reclaim frees it in time');
+    });
+
+    test('nothing in flight: null, and later photos are not even hashed',
+        () async {
+      final dao = FakeDao();
+      var hashed = 0;
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: FakeAnalyzer(),
+          hasher: (b) async {
+            hashed++;
+            return syncMd5(b);
+          });
+      expect(await pipeline.abandon(), isNull);
+      final out = await pipeline.process(_photo());
+      expect(out.retryable, isTrue);
+      expect(hashed, 0);
+      expect(dao.ledger, isEmpty);
+    });
+
+    test('during the reservation itself: the pipeline releases what it got '
+        'and uploads nothing', () async {
+      final gate = Completer<void>();
+      final dao = _SlowReserveDao(gate.future);
+      var uploads = 0;
+      final analyzer = FakeAnalyzer()..onAnalyze = () async => uploads++;
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, hasher: syncMd5);
+      final pending = pipeline.process(_photo());
+      await _until(() => dao.reserving);
+      expect(await pipeline.abandon(), isNull,
+          reason: 'not yet reserved when the deadline hit');
+      gate.complete();
+      final out = await pending;
+      expect(out.retryable, isTrue);
+      expect(uploads, 0);
+      expect(dao.ledger.containsKey(_hash), isFalse);
+    });
+
+    test('a meal already saved stays saved; no thumbnail is started after',
+        () async {
+      final dao = FakeDao();
+      final thumbStarted = Completer<void>();
+      final thumbDone = Completer<Uint8List?>();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: analyzer,
+          hasher: syncMd5,
+          thumbnailer: (_) {
+            thumbStarted.complete();
+            return thumbDone.future;
+          });
+      final pending = pipeline.process(_photo());
+      await thumbStarted.future;
+      expect(await pipeline.abandon(), isNull,
+          reason: 'the row is saved, not a reservation');
+      thumbDone.complete(null);
+      expect((await pending).kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger[_hash], IngestionStatus.saved);
+    });
   });
 
   group('a rejected key on the automatic scan', () {
@@ -539,6 +817,29 @@ void main() {
         reason: 'a real verdict stays terminal — coverage may pass it');
   });
 
+  test('onOutcome hears every verdict once, and a throwing one is contained',
+      () async {
+    final heard = <(String, PhotoOutcomeKind)>[];
+    final analyzer = FakeAnalyzer()
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': false}, isFood: false, wall: Duration.zero);
+    final pipeline = PhotoPipeline(
+        dao: FakeDao(),
+        analyzer: analyzer,
+        onOutcome: (p, o) {
+          heard.add((p.assetId, o.kind));
+          throw StateError('listener died');
+        });
+    final first = await pipeline.process(_photo());
+    final again = await pipeline.process(_photo());
+    expect(first.kind, PhotoOutcomeKind.skipped);
+    expect(again.kind, PhotoOutcomeKind.alreadyTracked);
+    expect(heard, [
+      ('asset1', PhotoOutcomeKind.skipped),
+      ('asset1', PhotoOutcomeKind.alreadyTracked),
+    ]);
+  });
+
   test('deliberate add inside the 5-minute duplicate window is refused',
       () async {
     final dao = FakeDao()..duplicatePhoto = true;
@@ -741,7 +1042,12 @@ class _SinkCapturingIntake implements PhotoIntake {
   void attachSink(Future<bool> Function(IntakePhoto, DateTime?)? s) =>
       sink = s;
   @override
-  Future<DateTime?> backfillScan({int lookbackDays = 0, DateTime? since}) async =>
+  Future<DateTime?> backfillScan(
+          {int lookbackDays = 0,
+          DateTime? since,
+          bool Function()? shouldContinue,
+          Future<void> Function(DateTime safeFrontier)? onCovered,
+          bool newestDayFirst = false}) async =>
       null;
   @override
   Future<void> start() async {}
@@ -762,5 +1068,27 @@ class _ThumbThrowingDao extends FakeDao {
   @override
   Future<void> saveMealThumb(int mealId, Uint8List jpeg) async {
     throw StateError('disk full');
+  }
+}
+
+/// Holds reservePhotoHash open until [gate] completes.
+/// A store too busy to release anything.
+class _FailingReleaseDao extends FakeDao {
+  @override
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp}) =>
+      Future.error(StateError('database is locked'));
+}
+
+class _SlowReserveDao extends FakeDao {
+  _SlowReserveDao(this.gate);
+  final Future<void> gate;
+  bool reserving = false;
+  @override
+  Future<PhotoReservationResult> reservePhotoHash(String imageHash,
+      {required String source, bool reclaimDeliberate = false}) async {
+    reserving = true;
+    await gate;
+    return super.reservePhotoHash(imageHash,
+        source: source, reclaimDeliberate: reclaimDeliberate);
   }
 }

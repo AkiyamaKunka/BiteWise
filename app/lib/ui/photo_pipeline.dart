@@ -17,6 +17,7 @@ import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
 import '../services/analyzer/platform_decode.dart';
+import '../services/photo/background_time.dart';
 import '../services/photo/filename_dates.dart'
     show captureWallClock, exifCapturedAt, exifWallAndOffset,
         validateCapturedAt;
@@ -196,7 +197,49 @@ class PhotoPipeline {
   /// automatic photo reaches the analyzer.
   final AutoScanLatch? latch;
 
+  /// True in the iOS background engine (runHeadlessBackfill): a photo the
+  /// analyzer could not turn into upload bytes is DEFERRED — released,
+  /// retryable — instead of burned to 'failed'. That engine lacks a decoder
+  /// the app has (its GPU is off, so platform_decode.dart never asks dart:ui
+  /// there), and the app's own run that re-offers the photo can still read
+  /// it; burning it lost the photo for good (watch intake never reclaims a
+  /// failure). The cost is a watermark that waits in front of that photo
+  /// until the app next opens, when the launch catch-up settles it either
+  /// way. Android's background run has every decoder, so its verdicts stay
+  /// as they were (false).
+  final bool deferUndecodable;
+
+  /// iOS, the app's own engine only (di.dart): each photo runs inside one
+  /// background task, so leaving the app mid-analysis lets that photo's
+  /// upload and save finish instead of freezing with it (2026-10-19). Null
+  /// everywhere else — the headless run has the OS grant, Android does not
+  /// suspend this way, tests opt in.
+  final BackgroundTime? backgroundTime;
+
+  /// iOS, the app's own engine only (di.dart: appEngineBackgrounded):
+  /// whether the app is in the background right now. Then an AUTOMATIC
+  /// photo is not started at all — released before it is hashed, reserved
+  /// or given a task, so only the photo already in flight spends the time
+  /// iOS gives; the next open or background run offers the rest
+  /// (2026-10-19). And an undecodable verdict reached there is deferred,
+  /// not burned: dart:ui cannot decode with the GPU off, and the same photo
+  /// decodes in the foreground. Deliberate photos (picked, shared) always
+  /// run. Null everywhere else.
+  final bool Function()? backgrounded;
+
+  /// Every verdict, after process() reached it (any intake). The app engine
+  /// uses it to forget a photo the background run kept deferring once the
+  /// app settled it (deferred_assets.dart). A throw is contained.
+  final void Function(IntakePhoto photo, PhotoOutcome outcome)? onOutcome;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
+
+  /// The 'processing' reservation the photo in flight holds right now, and
+  /// that photo's asset id — what [abandon] gives back.
+  ({String hash, String stamp, String assetId})? _held;
+
+  /// Set by [abandon]: nothing more is uploaded, settled or saved.
+  bool _abandoned = false;
 
   // FIFO tail: bound-stream photos process ONE at a time. A backfill batch
   // fired concurrently self-inflicts Gemini RPM 429s (free tier) and piles
@@ -210,13 +253,37 @@ class PhotoPipeline {
       this.notify,
       this.onMealSaved,
       this.latch,
+      this.deferUndecodable = false,
+      this.backgroundTime,
+      this.backgrounded,
+      this.onOutcome,
       Future<String> Function(Uint8List bytes)? hasher,
+      Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
       : _hash = hasher ?? _computeMd5,
+        _thumb = thumbnailer ?? makeMealThumbAny,
         _clock = clock ?? DateTime.now;
 
   /// Injectable so tests stay synchronous; production hashes on a worker.
   final Future<String> Function(Uint8List bytes) _hash;
+
+  /// The history thumbnail (platform_decode's chain); injectable so tests
+  /// can make it hang or throw.
+  final Future<Uint8List?> Function(Uint8List original) _thumb;
+
+  /// How long a saved meal may wait for its thumbnail in the iOS background
+  /// run (the one [deferUndecodable] marks). The meal is already committed,
+  /// but process() has not returned: its notification card and the
+  /// watermark checkpoint come only after it, and the OS grant is ~30 s. A
+  /// thumb that is not ready by then is skipped (the meal shows without
+  /// one), never waited on.
+  ///
+  /// Every other run awaits the thumb to the end, as before: platform_decode
+  /// bounds its own native and engine steps, and the pure-Dart step always
+  /// finishes. Abandoning that step (a 50 MP JPEG on a slow Android phone)
+  /// would leave its full decode running in the isolate while the next
+  /// photo's starts — the memory the serialized pipeline exists to save.
+  static const thumbnailTimeout = Duration(seconds: 8);
 
   /// Injectable for the rejected-key notice throttle below.
   final DateTime Function() _clock;
@@ -296,8 +363,79 @@ class PhotoPipeline {
     _subs.clear();
   }
 
+  /// Ends this pipeline's work for good (2026-10-19): the iOS background
+  /// run's deadline (finishWithinGrant) replies to workmanager, which
+  /// destroys the engine right after — so a photo still in flight would
+  /// never finish, and its 'processing' row would answer every later run
+  /// (and the open app) "still analyzing" for appProcessingStaleAge,
+  /// holding the background watermark in front of it.
+  ///
+  /// Releases the reservation the photo in flight holds, with its
+  /// ownership stamp (a row another run took is left alone), waiting at
+  /// most [limit]; from then on process() uploads, settles and saves
+  /// nothing — a late reply is dropped, the photo stays eligible. Returns
+  /// the released photo's asset id, or null when none was held. Never
+  /// throws.
+  Future<String?> abandon(
+      {Duration limit = const Duration(seconds: 1)}) async {
+    _abandoned = true;
+    final held = _held;
+    _held = null;
+    if (held == null) return null;
+    try {
+      await dao
+          .releasePhotoHash(held.hash, ownerStamp: held.stamp)
+          .timeout(limit);
+    } catch (_) {
+      // Lost to another run already, or the store is busy: nothing more
+      // this run can do before its engine goes.
+    }
+    return held.assetId;
+  }
+
+  /// [backgrounded], contained: a throwing probe reads as the foreground.
+  bool _inBackground() {
+    try {
+      return backgrounded?.call() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The photo's verdict once [abandon] ran: retryable, so the intake
+  /// releases it and the frontier halts in front of it. Releases the
+  /// reservation itself when [abandon] could not (it was taken after).
+  Future<PhotoOutcome> _whenAbandoned() async {
+    final held = _held;
+    _held = null;
+    if (held != null) {
+      try {
+        await dao.releasePhotoHash(held.hash, ownerStamp: held.stamp);
+      } catch (_) {}
+    }
+    return _outOfTime;
+  }
+
   /// One photo through the full pipeline. Never throws.
-  Future<PhotoOutcome> process(IntakePhoto photo) => _process(photo);
+  ///
+  /// Every intake comes through here (watcher, share sheet, add flow,
+  /// coverage), one photo at a time off the FIFO, so [backgroundTime] holds
+  /// exactly one task per photo. A lost reservation's second settle
+  /// ([_afterLost]) stays inside the same task.
+  Future<PhotoOutcome> process(IntakePhoto photo) async {
+    final time = backgroundTime;
+    final outcome = !photo.deliberate && _inBackground()
+        ? _waitsForForeground
+        : await (time == null
+            ? _process(photo)
+            : time.guard('photo', () => _process(photo)));
+    // Settled or released by now: no reservation is held past process().
+    _held = null;
+    try {
+      onOutcome?.call(photo, outcome);
+    } catch (_) {}
+    return outcome;
+  }
 
   /// [held]: a verdict this photo ALREADY got, with the meal snapshot its
   /// leftover indexes resolve against — settled again instead of uploading
@@ -324,6 +462,7 @@ class PhotoPipeline {
     // The verdict this run holds once the analyzer answered.
     _HeldVerdict? verdict;
     try {
+      if (_abandoned) return _outOfTime;
       // The automatic-analysis latch is armed: release the photo before
       // even hashing it — no ledger row, no analyzer call, no upload. It
       // stays eligible (retryable), so the scan after the fix picks it up.
@@ -369,7 +508,11 @@ class PhotoPipeline {
         case PhotoReservation.reserved:
           reserved = true;
           stamp = reservation.stamp;
+          if (stamp != null) {
+            _held = (hash: hash, stamp: stamp, assetId: photo.assetId);
+          }
       }
+      if (_abandoned) return await _whenAbandoned();
 
       // The day this photo belongs to. validateCapturedAt is NOT optional:
       // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
@@ -411,8 +554,13 @@ class PhotoPipeline {
       ];
 
       final revision = latch?.revision();
+      if (_abandoned) return await _whenAbandoned(); // no upload
+      final gpuOffSkips = gpuOffDecodeSkips;
       final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
+      // The run's deadline passed during the analysis: abandon() released
+      // the photo, and nothing below may write for it.
+      if (_abandoned) return await _whenAbandoned();
       verdict = (outcome: outcome, recent: recent);
       if (outcome.analysis == null) {
         final why = outcome.error ?? 'Analysis failed.';
@@ -449,7 +597,19 @@ class PhotoPipeline {
           }
           return held;
         }
-        if (outcome.retryable) {
+        // The analyzer's "could not process this photo (decode failed …)":
+        // nothing was sent. In the iOS background engine — or the app's
+        // own while it is in the background ([backgrounded]), or when its
+        // decode skipped dart:ui because it was then ([gpuOffDecodeSkips];
+        // the user may be back already) — that says more about the engine
+        // than the photo: defer it to a run that has every decoder
+        // ([deferUndecodable]). Everywhere else the permanent verdict below
+        // stands.
+        final deferred = (deferUndecodable ||
+                _inBackground() ||
+                gpuOffDecodeSkips != gpuOffSkips) &&
+            errorKind == AnalysisErrorKind.badPhoto;
+        if (outcome.retryable || deferred) {
           // Transient trouble (rate limit / network / quota pause / no key):
           // RELEASE the reservation so the next scan simply re-offers the
           // photo. Burning it to 'failed' would drop it forever on the
@@ -559,14 +719,23 @@ class PhotoPipeline {
         markStatus: IngestionStatus.saved, // atomic saved mark (spec §2.3)
         ownerStamp: stamp,
       );
+      _held = null; // saved: no longer a reservation
       // History thumbnail from the ORIGINAL bytes we already hold (spec §9
       // app-only). Best-effort AND awaited: the pipeline is serialized, so
       // finishing the thumb before the next photo keeps memory flat; any
-      // failure must never un-save the meal.
-      try {
-        final thumb = await makeMealThumbAny(photo.bytes);
-        if (thumb != null) await dao.saveMealThumb(id, thumb);
-      } catch (_) {}
+      // failure must never un-save the meal, and in the iOS background run
+      // a thumb that never comes must not hold the verdict past
+      // [thumbnailTimeout].
+      // An abandoned run (its engine about to go) starts no thumbnail.
+      if (!_abandoned) {
+        try {
+          final pending = _thumb(photo.bytes);
+          final thumb = await (deferUndecodable
+              ? orNullAfter(pending, thumbnailTimeout)
+              : pending);
+          if (thumb != null) await dao.saveMealThumb(id, thumb);
+        } catch (_) {}
+      }
       final name = mealDescription(analysis);
       final kcal = displayTotalCalories(analysis);
       final summary = '$name — ~$kcal kcal';
@@ -666,6 +835,22 @@ class PhotoPipeline {
   static const _inFlight = PhotoOutcome(PhotoOutcomeKind.inFlight,
       'This photo is still being analyzed — check back in a moment.',
       retryable: true);
+
+  /// An automatic photo met while the app is in the background
+  /// ([backgrounded]): released untouched, offered again by the next open
+  /// or background run.
+  static const _waitsForForeground = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The app is in the background: this photo waits for the next scan.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'in the background');
+
+  /// [abandon]'s verdict: released, offered again by a later scan.
+  static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The background run ran out of time before this photo was done.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'out of time');
 
   static const _latchedMessage =
       'Automatic analysis is paused: the AI service refused the last '

@@ -6,13 +6,22 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../services/photo/background_runs.dart';
 import '../diagnostics.dart';
 import '../l10n.dart';
 import '../widgets/small_spinner.dart';
 
+/// How many background runs the page lists (20 are kept).
+const int diagBackgroundRunsShown = 5;
+
 class DiagnosticsScreen extends StatefulWidget {
   final ProviderDiagnostics diagnostics;
-  const DiagnosticsScreen({super.key, required this.diagnostics});
+
+  /// The background-scan history (background_runs.dart), newest first.
+  /// Null reads it from the device (readBackgroundRuns).
+  final Future<List<BackgroundRunRecord>> Function()? loadBackgroundRuns;
+  const DiagnosticsScreen(
+      {super.key, required this.diagnostics, this.loadBackgroundRuns});
 
   @override
   State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
@@ -22,6 +31,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   final List<DiagResult> _results = [];
   bool _running = false;
   bool _ran = false;
+  late final Future<List<BackgroundRunRecord>> _backgroundRuns =
+      (widget.loadBackgroundRuns ?? readBackgroundRuns)();
 
   Future<void> _run() async {
     setState(() {
@@ -154,8 +165,105 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 child: CircularProgressIndicator(
                     key: Key('diagRunning'))),
           ],
+          FutureBuilder<List<BackgroundRunRecord>>(
+            future: _backgroundRuns,
+            builder: (context, snap) => snap.hasData
+                ? _BackgroundRuns(snap.data!)
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
   }
+}
+
+/// "Recent background scans": what the last runs did, as recorded by the
+/// background engine itself — the only view of a run iOS killed part-way
+/// (2026-10-18).
+class _BackgroundRuns extends StatelessWidget {
+  const _BackgroundRuns(this.runs);
+  final List<BackgroundRunRecord> runs;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = context.l10n;
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Column(
+      key: const Key('diagBackgroundRuns'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(l.diagBgRunsTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(runs.isEmpty ? l.diagBgRunsNone : l.diagBgRunsIntro,
+            style: muted),
+        for (final r in runs.take(diagBackgroundRunsShown)) ...[
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('${localStamp(r.start)} · ${_took(l, r)}',
+                      style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(backgroundRunVerdict(l, r),
+                      style: theme.textTheme.bodyMedium),
+                  const SizedBox(height: 4),
+                  Text(
+                      l.diagBgRunCounts(r.enumerated, r.offered, r.analyzed,
+                          r.saved, r.released),
+                      style: muted),
+                  Text(
+                      l.diagBgRunWatermark(_stamp(l, r.watermarkBefore),
+                          _stamp(l, r.watermarkAfter)),
+                      style: muted),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  static String _stamp(AppLocalizations l, DateTime? t) =>
+      t == null ? l.diagBgRunWatermarkNone : localStamp(t);
+
+  static String _took(AppLocalizations l, BackgroundRunRecord r) {
+    final end = r.end;
+    return end == null
+        ? l.diagBgRunUnfinished
+        : l.diagBgRunSeconds(end.difference(r.start).inSeconds);
+  }
+}
+
+/// One line on how [r] ended: its stop reason, or — for a run the OS cut
+/// short — the step it was on.
+String backgroundRunVerdict(AppLocalizations l, BackgroundRunRecord r) {
+  if (!r.finished) {
+    final step = switch (r.stage) {
+      BackgroundRunStage.boot => l.diagBgStageBoot,
+      BackgroundRunStage.settings => l.diagBgStageSettings,
+      BackgroundRunStage.scan => l.diagBgStageScan,
+      BackgroundRunStage.photo => l.diagBgStagePhoto,
+      BackgroundRunStage.checkpoint => l.diagBgStageCheckpoint,
+      BackgroundRunStage.done => l.diagBgStageDone,
+    };
+    return l.diagBgRunKilled(step);
+  }
+  final stop = r.stopReason ?? BackgroundStop.done;
+  return switch (stop) {
+    BackgroundStop.done => l.diagBgStopDone,
+    BackgroundStop.budget => l.diagBgStopBudget,
+    BackgroundStop.paused => l.diagBgStopPaused,
+    BackgroundStop.noKey => l.diagBgStopNoKey,
+    BackgroundStop.watcherOff => l.diagBgStopWatcherOff,
+    BackgroundStop.noPermission => l.diagBgStopNoPermission,
+    _ => l.diagBgStopError(
+        stop.startsWith('error:') ? stop.substring('error:'.length) : stop),
+  };
 }

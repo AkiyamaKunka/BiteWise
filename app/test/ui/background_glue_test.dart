@@ -10,7 +10,15 @@ import 'package:crypto/crypto.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart' show AnalysisErrorKind;
+import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart'
+    show GeminiAnalyzer;
+import 'package:calorie_tracker/services/analyzer/normalize.dart'
+    show kAnalysisJpegQuality, kAnalysisLongSidePx, normalizeForAnalysis;
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show decodeForUpload, imageIOChannel, isHeadlessEngine;
 import 'package:calorie_tracker/services/photo/background.dart';
+import 'package:calorie_tracker/services/photo/background_runs.dart';
+import 'package:calorie_tracker/services/photo/deferred_assets.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
@@ -22,6 +30,7 @@ import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/testing.dart' show MockClient;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
@@ -33,6 +42,7 @@ class EmittingIntake implements PhotoIntake {
   List<IntakePhoto> batch = const [];
   List<DateTime?> safeFrontiers = const []; // parallel to batch; pads null
   final List<DateTime?> sinceArgs = [];
+  final List<bool> newestDayFirstArgs = [];
   int scans = 0;
   bool throwAfterEmit = false; // scan-abort simulation (library query died)
   DateTime? frontier; // returned from a completed scan
@@ -47,16 +57,36 @@ class EmittingIntake implements PhotoIntake {
               sink) =>
       _sink = sink;
 
+  /// Photos the scan left unread because shouldContinue said stop.
+  int unread = 0;
+
+  /// Like the real intake's passOver (deferred_assets.dart): such a photo
+  /// is counted covered without being read or offered.
+  bool Function(String assetId)? passOver;
+
   @override
   Future<DateTime?> backfillScan(
-      {int lookbackDays = 0, DateTime? since}) async {
+      {int lookbackDays = 0,
+      DateTime? since,
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
     scans++;
     sinceArgs.add(since);
+    newestDayFirstArgs.add(newestDayFirst);
     for (var i = 0; i < batch.length; i++) {
+      if (passOver?.call(batch[i].assetId) ?? false) continue;
+      // Asked before the (here notional) byte read, like the real intake.
+      if (shouldContinue != null && !shouldContinue()) {
+        unread++;
+        continue;
+      }
       final sink = _sink;
       final safe = i < safeFrontiers.length ? safeFrontiers[i] : null;
       if (sink != null) {
-        await sink(batch[i], safe); // backpressured, like the real intake
+        // Backpressured, like the real intake.
+        final terminal = await sink(batch[i], safe);
+        if (terminal && safe != null) await onCovered?.call(safe);
       } else {
         _controller.add(batch[i]);
       }
@@ -104,6 +134,54 @@ class RecordingScheduler implements BackgroundScheduler {
 
 IntakePhoto photo(int n) => IntakePhoto(
     Uint8List.fromList([n, n, n]), 'asset$n', 'IMG_$n.jpg');
+
+/// Intake that spends [before] (reading and hashing the photos ahead of
+/// it, iCloud downloads included) and only then offers [photo].
+class _LateIntake implements PhotoIntake {
+  _LateIntake(this.photo, {required this.before});
+  final IntakePhoto photo;
+  final Duration before;
+  Future<bool> Function(IntakePhoto, DateTime?)? _sink;
+
+  @override
+  Stream<IntakePhoto> get photos => const Stream.empty();
+
+  @override
+  void attachSink(
+          Future<bool> Function(IntakePhoto photo, DateTime? safeFrontier)?
+              sink) =>
+      _sink = sink;
+
+  @override
+  Future<DateTime?> backfillScan(
+      {int lookbackDays = 0,
+      DateTime? since,
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
+    await Future<void>.delayed(before);
+    await _sink?.call(photo, null);
+    return null;
+  }
+
+  @override
+  Future<void> start() async {}
+  @override
+  Future<void> stop() async {}
+}
+
+/// A FakeDao that notes WHEN a reservation was released.
+class _ReleaseClockDao extends FakeDao {
+  _ReleaseClockDao(this.clock);
+  final DateTime Function() clock;
+  DateTime? releasedAt;
+
+  @override
+  Future<void> releasePhotoHash(String imageHash, {String? ownerStamp}) {
+    releasedAt = clock();
+    return super.releasePhotoHash(imageHash, ownerStamp: ownerStamp);
+  }
+}
 
 /// A pipeline that answers each photo with the next scripted outcome —
 /// for outcome kinds a FakeAnalyzer cannot reach on its own.
@@ -219,6 +297,117 @@ void main() {
       expect(again.cutShort, isFalse);
     });
 
+    test('past the deadline the intake is told to stop BEFORE reading, and '
+        'every photo it left counts as released', () async {
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2), photo(3), photo(4)];
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': true, 'food_items': []},
+            isFood: true,
+            wall: Duration.zero);
+      var now = DateTime(2026, 9, 30, 12, 0, 0);
+      final drain = await drainBackfill(
+          intake, PhotoPipeline(dao: dao, analyzer: analyzer),
+          deadline: DateTime(2026, 9, 30, 12, 0, 15),
+          clock: () => now,
+          onOutcome: (_, _, _) async {
+            now = now.add(const Duration(seconds: 10));
+          });
+      expect(drain.outcomes, hasLength(2));
+      expect(intake.unread, 2, reason: 'photos 3 and 4 were never read');
+      expect(drain.cutShort, isTrue);
+      expect(drain.deadlineReleases, 2);
+    });
+
+    // Review, 2026-10-19: the offer budget let a second photo start with
+    // 7 s left before the run's deadline — mostly analyzed on the server,
+    // then cut off unsaved.
+    group('finishBy: a photo that cannot finish is not started', () {
+      final t0 = DateTime(2026, 10, 19, 12, 0, 0);
+      final deadline = t0.add(const Duration(seconds: 15));
+      final finishBy = t0.add(const Duration(seconds: 22));
+
+      /// Each photo's processing moves the clock by the next of [takes].
+      Future<(BackfillDrain, EmittingIntake, FakeDao)> drain(
+          List<Duration> takes,
+          {DateTime? start}) async {
+        var now = start ?? t0;
+        var i = 0;
+        final intake = EmittingIntake()
+          ..batch = [for (var n = 1; n <= takes.length; n++) photo(n)];
+        final dao = FakeDao();
+        final analyzer = FakeAnalyzer()
+          ..nextPhotoOutcome = const AnalysisOutcome(
+              analysis: {'is_food': true, 'food_items': []},
+              isFood: true,
+              wall: Duration.zero)
+          ..onAnalyze = () async => now = now.add(takes[i++]);
+        final d = await drainBackfill(
+            intake, PhotoPipeline(dao: dao, analyzer: analyzer),
+            deadline: deadline, finishBy: finishBy, clock: () => now);
+        return (d, intake, dao);
+      }
+
+      test('after a 10 s photo, one with 8 s left is not read, though the '
+          'offer budget is still open', () async {
+        final (d, intake, dao) = await drain(
+            [const Duration(seconds: 10), const Duration(seconds: 1)],
+            start: t0.add(const Duration(seconds: 4)));
+        expect(dao.meals, hasLength(1));
+        expect(intake.unread, 1, reason: 'at 14 s: 8 s left < 10 s');
+        expect((d.cutShort, d.deadlineReleases), (true, 1));
+      });
+
+      test('after a 13 s retry (busy server), nothing more starts',
+          () async {
+        final (d, intake, _) = await drain(
+            [const Duration(seconds: 13), const Duration(seconds: 1)],
+            start: t0.add(const Duration(seconds: 1)));
+        expect(d.outcomes, hasLength(1));
+        expect(intake.unread, 1, reason: 'at 14 s: 8 s left < 13 s');
+      });
+
+      test('fast photos keep going until the offer budget ends', () async {
+        final (d, _, dao) = await drain(
+            List.filled(8, const Duration(seconds: 3)),
+            start: t0.add(const Duration(seconds: 2)));
+        // Offered at 2, 5, 8, 11, 14 s; at 17 s the budget has ended.
+        expect(dao.meals, hasLength(5));
+        expect(d.deadlineReleases, 3);
+      });
+
+      test('the first photo has no pace to go by: the offer budget alone '
+          'admits it', () async {
+        final (d, _, dao) = await drain([const Duration(seconds: 20)],
+            start: t0.add(const Duration(seconds: 14)));
+        expect(dao.meals, hasLength(1));
+        expect(d.cutShort, isFalse);
+      });
+
+      test('no finishBy (Android): the offer budget alone, as before',
+          () async {
+        var now = t0.add(const Duration(seconds: 5));
+        final dao = FakeDao();
+        final d = await drainBackfill(
+            EmittingIntake()..batch = [photo(1), photo(2)],
+            PhotoPipeline(
+                dao: dao,
+                analyzer: FakeAnalyzer()
+                  ..nextPhotoOutcome = const AnalysisOutcome(
+                      analysis: {'is_food': true, 'food_items': []},
+                      isFood: true,
+                      wall: Duration.zero)
+                  ..onAnalyze =
+                      () async => now = now.add(const Duration(seconds: 9))),
+            deadline: deadline,
+            clock: () => now);
+        expect(dao.meals, hasLength(2), reason: 'offered at 5 s and 14 s');
+        expect(d.cutShort, isFalse);
+      });
+    });
+
     test('unsubscribes its listener afterwards', () async {
       final intake = EmittingIntake()..batch = [photo(1)];
       final dao = FakeDao();
@@ -228,6 +417,738 @@ void main() {
       await intake.backfillScan(); // nobody listening now
       await pumpEventQueue();
       expect(dao.ledger.length, before);
+    });
+  });
+
+  // 2026-10-18: one entry per background run, rewritten at every step
+  // (background_runs.dart) — the record the frozen-watermark days lacked.
+  group('the background-run record', () {
+    late SharedPreferences prefs;
+    final t0 = DateTime.utc(2026, 10, 18, 3, 0);
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    Future<BackgroundRunRecorder> begun() async {
+      final r = BackgroundRunRecorder(prefs, platform: 'ios', clock: () => t0);
+      await r.begin();
+      return r;
+    }
+
+    BackgroundRunRecord stored() =>
+        decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey)).single;
+
+    AnalyzerService food() => FakeAnalyzer()
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+
+    test('a full run: every count, the watermark it reached, "done"',
+        () async {
+      final settings = await settingsWith(key: 'k');
+      final frontier = DateTime.utc(2026, 10, 18, 2, 40);
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [DateTime.utc(2026, 10, 18, 2, 30), frontier]
+        ..frontier = frontier;
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+        photoAccess: () async => true,
+      );
+      final r = stored();
+      expect(r.finished, isTrue);
+      expect(r.stopReason, BackgroundStop.done);
+      expect((r.offered, r.analyzed, r.saved, r.released), (2, 2, 2, 0));
+      expect(r.watermarkAfter, frontier);
+    });
+
+    test('killed mid-analysis (iOS expired the grant): the entry already '
+        'says "processing a photo", 1 read, 0 processed', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final never = Completer<void>();
+      final analyzer = FakeAnalyzer()..onAnalyze = () => never.future;
+      final recorder = await begun();
+      unawaited(headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(
+            dao: FakeDao(),
+            analyzer: analyzer,
+            hasher: (b) async => md5.convert(b).toString()),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+      ));
+      for (var i = 0; i < 50 && recorder.current!.offered == 0; i++) {
+        await pumpEventQueue();
+      }
+      // The process dies here; only what reached the store survives.
+      final r = stored();
+      expect(r.finished, isFalse);
+      expect(r.stage, BackgroundRunStage.photo);
+      expect((r.offered, r.analyzed), (1, 0));
+    });
+
+    test('the time budget: the photo it never started counts as left for '
+        'later, and the reason is "budget"', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1), photo(2)];
+      var now = t0;
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async =>
+            now = now.add(const Duration(seconds: 20)),
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+        recorder: recorder,
+      );
+      final r = stored();
+      expect(r.stopReason, BackgroundStop.budget);
+      expect((r.offered, r.analyzed, r.saved, r.released), (1, 1, 1, 1));
+    });
+
+    test('a deferred photo (retryable) counts as left for later', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'rate limit', retryable: true, wall: Duration.zero);
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: analyzer),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+      );
+      expect((stored().analyzed, stored().released), (1, 1));
+    });
+
+    test('the guards name themselves: watcher off, no key, paused',
+        () async {
+      Future<String?> stopFor(AppSettings settings) async {
+        final recorder = await begun();
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake()..batch = [photo(1)],
+          pipeline: () async => fail('no pipeline past a guard'),
+          showMealCard: (_, _) async {},
+          clock: () => t0,
+          recorder: recorder,
+        );
+        return recorder.current!.stopReason;
+      }
+
+      expect(await stopFor(await settingsWith(key: 'k', watcher: false)),
+          BackgroundStop.watcherOff);
+      expect(await stopFor(await settingsWith(key: null)),
+          BackgroundStop.noKey);
+      expect(
+          await stopFor(await settingsWith(
+              key: 'k',
+              quotaPauseUntil: DateTime.now().add(const Duration(hours: 3)))),
+          BackgroundStop.paused);
+    });
+
+    test('nothing listed + no photo access → "no_permission"; with access '
+        'it is just a quiet "done"', () async {
+      Future<String?> stopFor(bool? access) async {
+        final settings = await settingsWith(key: 'k');
+        final recorder = await begun();
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake(),
+          pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+          showMealCard: (_, _) async {},
+          clock: () => t0,
+          recorder: recorder,
+          photoAccess: () async => access,
+        );
+        return recorder.current!.stopReason;
+      }
+
+      expect(await stopFor(false), BackgroundStop.noPermission);
+      expect(await stopFor(true), BackgroundStop.done);
+      expect(await stopFor(null), BackgroundStop.done,
+          reason: 'unknown access is not a verdict');
+    });
+
+    test('a scan that died is recorded by its error class', () async {
+      final settings = await settingsWith(key: 'k');
+      final recorder = await begun();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: EmittingIntake()..throwAfterEmit = true,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async {},
+        clock: () => t0,
+        recorder: recorder,
+        photoAccess: () async => true,
+      );
+      expect(stored().stopReason, 'error:StateError');
+    });
+
+    // 2026-10-19: iOS kills a run still going ~30 s after launch; the
+    // BGTask then never completes and the photo stays reserved.
+    group('the whole-run deadline (finishWithinGrant)', () {
+      test('a photo stuck in flight still ends the run: success, recorded '
+          'as budget, and the entry stays final', () async {
+        final settings = await settingsWith(key: 'k');
+        final never = Completer<void>();
+        final analyzer = FakeAnalyzer()..onAnalyze = () => never.future;
+        final recorder = await begun();
+        final dao = FakeDao();
+        final pipeline = PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (b) async => md5.convert(b).toString());
+        final stuck = headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake()..batch = [photo(1), photo(2)],
+          pipeline: () async => pipeline,
+          showMealCard: (_, _) async {},
+          clock: () => t0,
+          recorder: recorder,
+        );
+        final ok = await finishWithinGrant(stuck,
+            left: const Duration(milliseconds: 40),
+            recorder: recorder,
+            abandon: () async {
+              await pipeline.abandon();
+            });
+        expect(ok, isTrue, reason: 'the reply is what completes the BGTask');
+        // The reply destroys the engine: the photo in flight would never
+        // finish, so its reservation is released BEFORE the reply — no
+        // 'processing' row to refuse the next run and the app for 30 min.
+        expect(dao.ledger.values, isNot(contains(IngestionStatus.processing)));
+        var r = stored();
+        expect(r.finished, isTrue);
+        expect(r.stopReason, BackgroundStop.budget);
+        expect((r.offered, r.analyzed), (1, 0));
+        // The abandoned run reporting late cannot reopen the entry.
+        await recorder.processed(saved: true, released: false);
+        await recorder.checkpoint(t0);
+        r = stored();
+        expect((r.stage, r.analyzed, r.saved),
+            (BackgroundRunStage.done, 0, 0));
+      });
+
+      test('a stuck abandon cannot hold the reply past its limit', () async {
+        final recorder = await begun();
+        final ok = await finishWithinGrant(Completer<bool>().future,
+            left: Duration.zero,
+            recorder: recorder,
+            abandon: () => Completer<void>().future,
+            abandonLimit: const Duration(milliseconds: 20));
+        expect(ok, isTrue);
+        expect(stored().stopReason, BackgroundStop.budget);
+      });
+
+      group('RunInFlight: the photo the deadline cuts off', () {
+        final deadline = t0.add(iosRunDeadline);
+
+        /// One run cut off by the deadline while its analysis hangs, the
+        /// photo offered [offeredAfter] into the run.
+        Future<void> cutOff(FakeDao dao,
+            {Duration offeredAfter = const Duration(seconds: 5)}) async {
+          final pipeline = PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()
+                ..onAnalyze = () => Completer<void>().future,
+              hasher: (b) async => md5.convert(b).toString());
+          final run = RunInFlight(
+              deadline: deadline, clock: () => t0.add(offeredAfter))
+            ..pipeline = pipeline
+            ..deferred = await DeferredAssets.load(prefs);
+          run.offered();
+          unawaited(pipeline.process(photo(1)));
+          while (!dao.ledger.values.contains(IngestionStatus.processing)) {
+            await Future<void>.delayed(const Duration(milliseconds: 1));
+          }
+          await run.abandon();
+          expect(dao.ledger.values,
+              isNot(contains(IngestionStatus.processing)),
+              reason: 'released, so the next run can take it');
+        }
+
+        test('with the full window, three cuts pass it over (too slow for '
+            'any run); two do not', () async {
+          final dao = FakeDao();
+          await cutOff(dao);
+          await cutOff(dao);
+          expect((await DeferredAssets.load(prefs)).passOver('asset1'),
+              isFalse);
+          await cutOff(dao);
+          expect((await DeferredAssets.load(prefs)).passOver('asset1'),
+              isTrue,
+              reason: 'the app logs it; newer photos stop waiting behind it');
+          final e = decodeDeferredAssets(
+                  prefs.getString(deferredAssetsPrefsKey))
+              .single;
+          expect((e.count, e.cuts), (0, 3));
+          // Nothing built yet (the deadline hit during the settings load):
+          // nothing to release, nothing noted.
+          await RunInFlight(deadline: deadline).abandon();
+        });
+
+        test('offered late (less than slowPhotoWindow left), the cut is '
+            'never counted against it', () async {
+          final dao = FakeDao();
+          final late = iosRunDeadline -
+              slowPhotoWindow +
+              const Duration(milliseconds: 1);
+          for (var run = 0; run < 4; run++) {
+            await cutOff(dao, offeredAfter: late);
+          }
+          expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+          // Exactly the window counts.
+          await cutOff(dao, offeredAfter: iosRunDeadline - slowPhotoWindow);
+          expect(
+              decodeDeferredAssets(prefs.getString(deferredAssetsPrefsKey))
+                  .single
+                  .cuts,
+              1);
+        });
+
+        // P1: the server (or a VPN, or the network) hangs through two
+        // runs. The photo used to be passed over for good in the third,
+        // healthy run: the watermark moved past it and it got no
+        // background log or meal card.
+        test('P1: after two hung runs, a healthy third run logs the photo',
+            () async {
+          final settings = await settingsWith(key: 'k');
+          final dao = FakeDao();
+          Future<void> runOnce(FakeAnalyzer analyzer, {Duration? cutAfter})
+              async {
+            final inFlight = RunInFlight(deadline: deadline, clock: () => t0);
+            final deferred = inFlight.deferred = await DeferredAssets.load(prefs);
+            final run = headlessBackfillWith(
+              settings: settings,
+              prefs: prefs,
+              intake: EmittingIntake()
+                ..batch = [photo(1)]
+                ..passOver = deferred.passOver,
+              pipeline: () async => inFlight.pipeline = PhotoPipeline(
+                  dao: dao,
+                  analyzer: analyzer,
+                  hasher: (b) async => md5.convert(b).toString()),
+              showMealCard: (_, _) async {},
+              clock: () => t0,
+              budget: iosBackgroundBudget,
+              startedAt: t0,
+              finishBy: deadline,
+              photoOffered: inFlight.offered,
+              deferred: deferred,
+              recorder: await begun(),
+            );
+            if (cutAfter == null) {
+              await run;
+            } else {
+              await finishWithinGrant(run,
+                  left: cutAfter,
+                  recorder: BackgroundRunRecorder(prefs, platform: 'ios'),
+                  abandon: inFlight.abandon);
+            }
+          }
+
+          for (var hung = 0; hung < 2; hung++) {
+            await runOnce(
+                FakeAnalyzer()..onAnalyze = () => Completer<void>().future,
+                cutAfter: const Duration(milliseconds: 40));
+            expect(dao.ledger.values,
+                isNot(contains(IngestionStatus.processing)));
+          }
+          expect(dao.meals, isEmpty);
+          await runOnce(FakeAnalyzer()
+            ..nextPhotoOutcome = const AnalysisOutcome(
+                analysis: {'is_food': true, 'food_items': []},
+                isFood: true,
+                wall: Duration.zero));
+          expect(dao.meals, hasLength(1),
+              reason: 'offered again, not passed over');
+          expect(prefs.getString(deferredAssetsPrefsKey), isNull,
+              reason: 'its verdict forgets the cuts');
+        });
+
+        // P2: an older photo eats the start of the run (a busy server's
+        // in-place retries), so the next one is offered late and cut off,
+        // run after run, though it was never slow.
+        test('P2: a photo offered after a slow one is never passed over',
+            () async {
+          final settings = await settingsWith(key: 'k');
+          final dao = FakeDao();
+          for (var run = 0; run < 4; run++) {
+            var now = t0.add(const Duration(seconds: 4));
+            var calls = 0;
+            final analyzer = FakeAnalyzer();
+            analyzer.onAnalyze = () async {
+              if (calls++ == 0) {
+                // The older photo: 6 s, then a retryable failure.
+                now = now.add(const Duration(seconds: 6));
+                analyzer.nextPhotoOutcome = const AnalysisOutcome(
+                    error: 'busy', retryable: true, wall: Duration.zero);
+                return;
+              }
+              await Completer<void>().future; // the newer one hangs
+            };
+            final inFlight = RunInFlight(deadline: deadline, clock: () => now);
+            final deferred = inFlight.deferred = await DeferredAssets.load(prefs);
+            final scan = headlessBackfillWith(
+              settings: settings,
+              prefs: prefs,
+              intake: EmittingIntake()
+                ..batch = [photo(1), photo(2)]
+                ..passOver = deferred.passOver,
+              pipeline: () async => inFlight.pipeline = PhotoPipeline(
+                  dao: dao,
+                  analyzer: analyzer,
+                  hasher: (b) async => md5.convert(b).toString()),
+              showMealCard: (_, _) async {},
+              clock: () => now,
+              budget: iosBackgroundBudget,
+              startedAt: t0,
+              finishBy: deadline,
+              photoOffered: inFlight.offered,
+              deferred: deferred,
+            );
+            await finishWithinGrant(scan,
+                left: const Duration(milliseconds: 40),
+                recorder: await begun(),
+                abandon: inFlight.abandon);
+            expect(calls, 2, reason: 'run $run: the newer photo was started');
+          }
+          expect(prefs.getString(deferredAssetsPrefsKey), isNull,
+              reason: 'offered 10 s in: 12 s left is not the full window');
+          expect(dao.ledger.values,
+              isNot(contains(IngestionStatus.processing)));
+        });
+      });
+
+      test('runHeadlessBackfill on iOS ends at the deadline even when the '
+          'settings load never returns', () async {
+        addTearDown(() => isHeadlessEngine = false);
+        // Dart entry at t0; every later reading is 40 ms short of the
+        // deadline, so the wrapper has 40 ms of real time left.
+        var calls = 0;
+        DateTime clock() => calls++ == 0
+            ? t0
+            : t0.add(iosRunDeadline - const Duration(milliseconds: 40));
+        final ok = await runHeadlessBackfill(
+          isIOS: true,
+          loadPrefs: () async => prefs,
+          clock: clock,
+          loadSettings: () => Completer<AppSettings>().future,
+        ).timeout(const Duration(seconds: 5));
+        expect(ok, isTrue, reason: 'the reply completes the BGTask');
+        final run =
+            decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
+                .first;
+        expect(run.stopReason, BackgroundStop.budget);
+        // Android has no such wrapper: the same hang is WorkManager's to end.
+        calls = 0;
+        final android = runHeadlessBackfill(
+          isIOS: false,
+          loadPrefs: () async => prefs,
+          clock: clock,
+          loadSettings: () => Completer<AppSettings>().future,
+        );
+        var ended = false;
+        unawaited(android.then((_) => ended = true));
+        await Future<void>.delayed(const Duration(milliseconds: 120));
+        expect(ended, isFalse);
+      });
+
+      test('a run that ends first is the answer, and the deadline never '
+          'fires', () async {
+        final recorder = await begun();
+        final ok = await finishWithinGrant(Future.value(false),
+            left: const Duration(milliseconds: 20), recorder: recorder);
+        expect(ok, isFalse);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+        expect(stored().finished, isFalse);
+      });
+
+      test('a run that throws first throws (handleBackgroundTask contains '
+          'it)', () async {
+        final recorder = await begun();
+        await expectLater(
+            finishWithinGrant(Future<bool>.error(StateError('db')),
+                left: const Duration(seconds: 25), recorder: recorder),
+            throwsStateError);
+      });
+
+      test('the deadline is 22 s from the run start: room for the unmeasured '
+          'launch and the teardown inside the ~30 s grant, after the 15 s '
+          'offer budget', () {
+        expect(iosRunDeadline, const Duration(seconds: 22));
+        expect(iosRunDeadline - iosBackgroundBudget,
+            greaterThanOrEqualTo(const Duration(seconds: 7)));
+      });
+
+      group('the run start (backgroundRunStart)', () {
+        final entry = DateTime.utc(2026, 10, 19, 3, 0, 10);
+        test("the native stamp when it is this run's", () {
+          expect(
+              backgroundRunStart('2026-10-19T03:00:08.500Z', entry),
+              DateTime.utc(2026, 10, 19, 3, 0, 8, 500));
+        });
+        test('the Dart entry without one, or with one that is not this '
+            "run's", () {
+          for (final stamp in [
+            null,
+            '',
+            'garbage',
+            '2026-10-19T03:00:10.001Z', // after the entry
+            '2026-10-19T02:59:39.999Z', // 30.001 s: past the grant
+            '2026-10-19T02:59:39.000Z', // 31 s
+            '2026-10-19T02:30:00.000Z', // an earlier run's
+          ]) {
+            expect(backgroundRunStart(stamp, entry), entry, reason: '$stamp');
+          }
+        });
+        // Review, 2026-10-19: a stamp 20-30 s old is this run's after a
+        // slow boot. Falling back to the Dart entry gave that run a fresh
+        // window that iOS's grant had already spent, and it was killed
+        // mid-photo.
+        test('a slow boot, up to the grant (30 s), still counts from the '
+            'stamp', () {
+          expect(nativeLaunchMaxLead, const Duration(seconds: 30));
+          for (final lead in [20, 25, 30]) {
+            final stamp = entry.subtract(Duration(seconds: lead));
+            expect(backgroundRunStart(stamp.toIso8601String(), entry), stamp,
+                reason: '$lead s');
+          }
+          expect(backgroundRunStart(entry.toIso8601String(), entry), entry);
+        });
+      });
+
+      test('runHeadlessBackfill counts the deadline from the native launch '
+          'stamp, and records the boot', () async {
+        addTearDown(() => isHeadlessEngine = false);
+        // The engine was created 2 s before Dart's first line.
+        await prefs.setString(backgroundNativeLaunchPrefsKey,
+            t0.subtract(const Duration(seconds: 2)).toIso8601String());
+        var calls = 0;
+        // 40 ms short of the deadline as counted from the STAMP; from the
+        // Dart entry 2.04 s would remain.
+        DateTime clock() => calls++ == 0
+            ? t0
+            : t0.add(iosRunDeadline -
+                const Duration(seconds: 2, milliseconds: 40));
+        final watch = Stopwatch()..start();
+        final ok = await runHeadlessBackfill(
+          isIOS: true,
+          loadPrefs: () async => prefs,
+          clock: clock,
+          loadSettings: () => Completer<AppSettings>().future,
+        ).timeout(const Duration(seconds: 5));
+        expect(ok, isTrue);
+        expect(watch.elapsed, lessThan(const Duration(seconds: 1)));
+        final run =
+            decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
+                .first;
+        expect(run.stopReason, BackgroundStop.budget);
+        expect(run.bootMs, 2000);
+      });
+    });
+  });
+
+  // 2026-10-19: every successful foreground sweep left the background
+  // watermark days behind, and the next background run re-read everything
+  // the app had just logged before reaching a new photo.
+  group('the foreground catch-up moves the background watermark', () {
+    final t1 = DateTime.utc(2026, 10, 18, 10);
+    final t2 = DateTime.utc(2026, 10, 18, 11);
+    final t3 = DateTime.utc(2026, 10, 18, 12);
+    late SharedPreferences prefs;
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    DateTime? storedMark() =>
+        readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey))
+            ?.toUtc();
+
+    test('advanceBackgroundWatermark re-reads the store: a stale cache never '
+        'moves it back over the other engine\'s progress', () async {
+      final app = prefs; // this engine's cache
+      SharedPreferences.resetStatic(); // the background engine: its own
+      final background = await SharedPreferences.getInstance();
+      await background.setString(
+          backgroundWatermarkPrefsKey, t2.toIso8601String());
+      expect(await advanceBackgroundWatermark(app, t1, cap: t3), isNull);
+      expect(app.getString(backgroundWatermarkPrefsKey), t2.toIso8601String(),
+          reason: 'still the later mark');
+      expect(await advanceBackgroundWatermark(app, t3, cap: t3), t3);
+      await background.reload();
+      expect(background.getString(backgroundWatermarkPrefsKey),
+          t3.toIso8601String(),
+          reason: 'forward, and written as a UTC instant');
+    });
+
+    test('never past the cap (the scan start)', () async {
+      expect(await advanceBackgroundWatermark(prefs, t3, cap: t2), t2);
+      expect(storedMark(), t2);
+    });
+
+    test('checkpoints each covered photo as it terminates, then the final '
+        'frontier — never past the scan start', () async {
+      final seenMidScan = <DateTime?>[];
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [t1, t2]
+        ..frontier = t3;
+      intake.attachSink((p, _) async {
+        seenMidScan.add(storedMark());
+        return true;
+      });
+      final scanStart = t3.subtract(const Duration(minutes: 1));
+      final frontier = await foregroundCatchUp(intake,
+          clock: () => scanStart, loadPrefs: () async => prefs);
+      expect(frontier, t3);
+      expect(intake.newestDayFirstArgs, [true],
+          reason: 'a quick open logs today\'s meal first');
+      expect(seenMidScan, [null, t1],
+          reason: 'photo 1\'s checkpoint landed before photo 2 started');
+      expect(storedMark(), scanStart, reason: 'capped at the scan start');
+    });
+
+    test('a covered photo at or before the mark the store already holds '
+        'costs no store round-trip', () async {
+      final background = DateTime.utc(2026, 10, 18, 11, 30);
+      await prefs.setString(
+          backgroundWatermarkPrefsKey, background.toIso8601String());
+      var loads = 0;
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2), photo(3), photo(4)]
+        // A week of already-logged photos older than the background
+        // run's own watermark, then one newer.
+        ..safeFrontiers = [t1, t1.add(const Duration(minutes: 5)), t2, t3]
+        ..frontier = t3;
+      intake.attachSink((_, _) async => true);
+      await foregroundCatchUp(intake,
+          clock: () => t3.add(const Duration(minutes: 1)),
+          loadPrefs: () async {
+            loads++;
+            return prefs;
+          });
+      expect(loads, 2,
+          reason: 'the first read learns 11:30; t1+5 min and t2 are at or '
+              'before it; t3 moves it; the final frontier t3 is known');
+      expect(storedMark(), t3);
+    });
+
+    // 2026-10-19: once the user leaves (iOS), only the photo in flight may
+    // spend the background time; the scan reads nothing more.
+    test('the stuck hint clears once the catch-up moved the watermark past '
+        'the hung runs (backgroundScanStuckNow reads both fresh)', () async {
+      final wm = t1;
+      // Three runs hung on a photo, written by the background engine.
+      SharedPreferences.resetStatic();
+      final background = await SharedPreferences.getInstance();
+      await background.setString(backgroundWatermarkPrefsKey,
+          wm.toIso8601String());
+      for (var i = 0; i < 3; i++) {
+        final r = BackgroundRunRecorder(background,
+            platform: 'ios', clock: () => t2.add(Duration(minutes: i)));
+        await r.begin(watermarkBefore: wm);
+        await r.offered();
+      }
+      SharedPreferences.resetStatic();
+      final app = await SharedPreferences.getInstance();
+      expect(
+          await backgroundScanStuckNow(
+              clock: () => t3, loadPrefs: () async => app),
+          isTrue);
+      // The app opens and its catch-up logs everything up to t2.
+      final intake = EmittingIntake()
+        ..batch = [photo(1)]
+        ..safeFrontiers = [t2]
+        ..frontier = t2;
+      intake.attachSink((_, _) async => true);
+      await foregroundCatchUp(intake,
+          clock: () => t3, loadPrefs: () async => app);
+      expect(
+          await backgroundScanStuckNow(
+              clock: () => t3, loadPrefs: () async => app),
+          isFalse,
+          reason: 'the hint would tell the user to open the app they are in');
+      expect(
+          await backgroundScanStuckNow(
+              loadPrefs: () async => throw StateError('no store')),
+          isFalse);
+    });
+
+    test('shouldContinue reaches the intake: past it nothing more is read',
+        () async {
+      var open = true;
+      final intake = EmittingIntake()..batch = [photo(1), photo(2), photo(3)];
+      final processed = <String>[];
+      intake.attachSink((p, _) async {
+        processed.add(p.assetId);
+        open = false; // the user leaves during the first photo
+        return true;
+      });
+      await foregroundCatchUp(intake,
+          loadPrefs: () async => prefs, shouldContinue: () => open);
+      expect(processed, ['asset1']);
+      expect(intake.unread, 2);
+    });
+
+    test('a released photo is not checkpointed, and a scan that throws '
+        '(truncated window) writes no final frontier', () async {
+      final intake = EmittingIntake()
+        ..batch = [photo(1)]
+        ..safeFrontiers = [t1]
+        ..frontier = t3
+        ..throwAfterEmit = true;
+      intake.attachSink((p, _) async => false); // released
+      await expectLater(
+          foregroundCatchUp(intake,
+              clock: () => t3, loadPrefs: () async => prefs),
+          throwsStateError);
+      expect(storedMark(), isNull);
+    });
+
+    test('a preferences failure never stops the scan', () async {
+      final intake = EmittingIntake()
+        ..batch = [photo(1), photo(2)]
+        ..safeFrontiers = [t1, t2]
+        ..frontier = t2;
+      final delivered = <String>[];
+      intake.attachSink((p, _) async {
+        delivered.add(p.assetId);
+        return true;
+      });
+      final frontier = await foregroundCatchUp(intake,
+          clock: () => t3,
+          loadPrefs: () async => throw StateError('no store'));
+      expect(delivered, ['asset1', 'asset2']);
+      expect(frontier, t2);
     });
   });
 
@@ -297,6 +1218,90 @@ void main() {
       expect(cards, hasLength(1));
     });
 
+    test('the budget counts from the run\'s entry (startedAt), so the '
+        'settings load and the database open spend it too', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..batch = [photo(1)];
+      final entry = DateTime(2026, 9, 30, 12, 0, 0);
+      // The keychain and settings took 10 s; opening the database 6 more.
+      var now = entry.add(const Duration(seconds: 10));
+      final dao = FakeDao();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async {
+          now = now.add(const Duration(seconds: 6));
+          return PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()
+                ..nextPhotoOutcome = const AnalysisOutcome(
+                    analysis: {'is_food': true, 'food_items': []},
+                    isFood: true,
+                    wall: Duration.zero));
+        },
+        showMealCard: (_, _) async {},
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+        startedAt: entry,
+      );
+      expect(intake.unread, 1, reason: '16 s in: nothing may be read');
+      expect(dao.meals, isEmpty);
+    });
+
+    // 2026-10-19: one photo the background engine cannot decode froze its
+    // watermark until the app next opened.
+    test('a photo this engine keeps deferring is passed over by later runs; '
+        'a verdict forgets it', () async {
+      final settings = await settingsWith(key: 'k');
+      final undecodable = FakeAnalyzer()
+        ..nextPhotoOutcome =
+            const AnalysisOutcome(error: 'decode failed', wall: Duration.zero);
+      Future<void> runWith(AnalyzerService analyzer) async =>
+          headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: EmittingIntake()..batch = [photo(1)],
+            pipeline: () async => PhotoPipeline(
+                dao: FakeDao(), analyzer: analyzer, deferUndecodable: true),
+            showMealCard: (_, _) async {},
+            deferred: await DeferredAssets.load(prefs),
+          );
+      await runWith(undecodable);
+      expect((await DeferredAssets.load(prefs)).passOver('asset1'), isFalse);
+      await runWith(undecodable);
+      expect((await DeferredAssets.load(prefs)).passOver('asset1'), isTrue,
+          reason: 'deferred twice: the next run counts it covered');
+      expect(
+          decodeDeferredAssets(prefs.getString(deferredAssetsPrefsKey))
+              .single
+              .count,
+          2);
+      // A run that settles it (any verdict) forgets it.
+      await runWith(FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            analysis: {'is_food': false}, isFood: false, wall: Duration.zero));
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+    });
+
+    test('other retryable outcomes (rate limit) are not deferrals', () async {
+      final settings = await settingsWith(key: 'k');
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: EmittingIntake()..batch = [photo(1)],
+        pipeline: () async => PhotoPipeline(
+            dao: FakeDao(),
+            analyzer: FakeAnalyzer()
+              ..nextPhotoOutcome = const AnalysisOutcome(
+                  error: 'rate limit', retryable: true, wall: Duration.zero),
+            deferUndecodable: true),
+        showMealCard: (_, _) async {},
+        deferred: await DeferredAssets.load(prefs),
+      );
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+    });
+
     test('passes the persisted watermark minus the overlap', () async {
       final settings = await settingsWith(key: 'k');
       final mark = DateTime(2026, 7, 23, 11, 0);
@@ -312,6 +1317,8 @@ void main() {
         showMealCard: (_, _) async {},
       );
       expect(intake.sinceArgs.single, mark.subtract(backgroundScanOverlap));
+      expect(intake.newestDayFirstArgs.single, isFalse,
+          reason: 'the background drain stays oldest-first from its mark');
     });
 
     test('the watermark is stored as a UTC instant and read back as the '
@@ -412,9 +1419,15 @@ void main() {
         () async {
       final launched = DateTime.utc(2026, 10, 9, 3, 15);
       String? stampSeenByLoad;
+      isHeadlessEngine = false;
+      addTearDown(() => isHeadlessEngine = false);
+      bool? headlessBeforePrefs;
       final ok = await runHeadlessBackfill(
         isIOS: true,
-        loadPrefs: () async => prefs,
+        loadPrefs: () async {
+          headlessBeforePrefs = isHeadlessEngine;
+          return prefs;
+        },
         clock: () => launched,
         loadSettings: () async {
           stampSeenByLoad = prefs.getString(backgroundLastRunPrefsKey);
@@ -422,7 +1435,19 @@ void main() {
         },
       );
       expect(ok, isTrue, reason: 'no WorkManager retry storm');
+      // The decode guard is up before anything else runs: on iOS a dart:ui
+      // decode in this engine never finishes (2026-10-18).
+      expect(headlessBeforePrefs, isTrue);
       expect(stampSeenByLoad, launched.toIso8601String());
+      // And the run says so on the diagnostics page: it got as far as the
+      // launch, and the settings load ended it (by class, no message).
+      final run = decodeBackgroundRuns(
+              prefs.getString(backgroundRunsPrefsKey))
+          .single;
+      expect(run.platform, 'ios');
+      expect(run.start, launched);
+      expect(run.stage, BackgroundRunStage.done);
+      expect(run.stopReason, 'error:PlatformException');
       // The 后台扫描 row shows iOS ran the task, keys readable or not.
       expect(prefs.getString(backgroundLastRunPrefsKey),
           launched.toIso8601String());
@@ -819,6 +1844,82 @@ void main() {
     }
   });
 
+  // 2026-10-19 (review): the budget admits a photo until 15 s after the
+  // scan starts, a second or two into iOS's ~30 s grant. A stalled ImageIO
+  // reply held for the app engine's 15 s deadline came back at ~30 s, after
+  // iOS had killed the run, and left the photo 'processing'.
+  group('the iOS grant and a stalled native decode', () {
+    testWidgets('a HEIC offered at the end of the budget, whose ImageIO reply '
+        'never comes, is released inside an assumed 30 s grant',
+        (tester) async {
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      messenger.setMockMethodCallHandler(
+          imageIOChannel, (_) => Completer<Object?>().future);
+      addTearDown(
+          () => messenger.setMockMethodCallHandler(imageIOChannel, null));
+      isHeadlessEngine = true; // what runHeadlessBackfill sets first
+      addTearDown(() => isHeadlessEngine = false);
+
+      // Fake time (testWidgets): the binding's clock moves with pump().
+      DateTime now() => tester.binding.clock.now();
+      // Engine boot and the settings load spend ~2 s of the grant before
+      // the scan, and its budget, start.
+      final grantEnds = now().add(const Duration(seconds: 28));
+      final settings = await settingsWith(key: 'k');
+      final prefs = await SharedPreferences.getInstance();
+      final dao = _ReleaseClockDao(now);
+      // ftyp/heic: not anything the pure-Dart decoder or the unprocessed
+      // fallback will take.
+      final heic = IntakePhoto(
+          Uint8List.fromList(
+              [0, 0, 0, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63]),
+          'asset9',
+          'IMG_9.HEIC');
+      var finished = false;
+      unawaited(headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: _LateIntake(heic,
+            before: iosBackgroundBudget - const Duration(milliseconds: 100)),
+        pipeline: () async => PhotoPipeline(
+            dao: dao,
+            analyzer: GeminiAnalyzer(settings,
+                client: MockClient((_) async {
+                  fail('nothing decodable, so nothing may be sent');
+                }),
+                sleep: (_) async {},
+                // Production's chain (platform defaults: headless from the
+                // flag above, the real channel). Only the pure-Dart step
+                // is stubbed with what it answers for HEIC, null: it runs
+                // in an isolate, which fake time cannot drive.
+                normalizer: (b) => decodeForUpload(b,
+                    pureDart: normalizeForAnalysis,
+                    longSidePx: kAnalysisLongSidePx,
+                    jpegQuality: kAnalysisJpegQuality,
+                    isolate: (_, _) async => null,
+                    ios: true)),
+            hasher: (b) async => md5.convert(b).toString(),
+            deferUndecodable: true),
+        showMealCard: (_, _) async {},
+        clock: now,
+        budget: iosBackgroundBudget,
+      ).then((_) => finished = true));
+      final giveUp = grantEnds.add(const Duration(seconds: 30));
+      while (!finished && now().isBefore(giveUp)) {
+        await tester.pump(const Duration(milliseconds: 250));
+      }
+      expect(finished, isTrue);
+      expect(dao.releasedAt, isNotNull, reason: 'deferred, so released');
+      expect(dao.releasedAt!.isBefore(grantEnds), isTrue,
+          reason: 'released at ${dao.releasedAt}, the grant ends at '
+              '$grantEnds: past it iOS has killed the run and the row '
+              'stays processing');
+      expect(dao.ledger, isEmpty,
+          reason: 'neither processing nor failed: the next run re-offers it');
+    });
+  });
+
   group('syncBackgroundScan', () {
     late RecordingScheduler scheduler;
 
@@ -1066,6 +2167,10 @@ void main() {
           .handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await tester.pump();
       expect(intake.backfillScans, before + 1);
+      // Through foregroundCatchUp: today's photos first, and the coverage
+      // moves the background watermark (a bare backfillScan did neither).
+      expect(intake.newestDayFirstArgs.last, isTrue);
+      expect(intake.checkpointed.last, isTrue);
       // Flush the delayed post-scan UI refresh so no timer is left pending.
       await tester.pump(const Duration(seconds: 16));
     });

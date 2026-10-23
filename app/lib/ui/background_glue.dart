@@ -26,8 +26,12 @@ import 'package:workmanager/workmanager.dart';
 import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../data/meals_dao_impl.dart';
+import '../services/analyzer/platform_decode.dart' show isHeadlessEngine;
 import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
+import '../services/photo/background_runs.dart';
+import '../services/photo/deferred_assets.dart';
+import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
@@ -76,8 +80,50 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// grant expires mid-analysis anyway, that orphaned row answers later runs
 /// as [PhotoReservation.inFlight] — a retryable outcome — so the frontier
 /// below waits in front of the photo instead of passing over it
-/// (2026-10-07).
+/// (2026-10-07). Counted from the run's start ([backgroundRunStart]), not
+/// from the scan start (2026-10-19): the engine boot, the settings load and
+/// the database open come out of the same grant.
+///
+/// It bounds the run's FIRST photo only loosely (7 s before the run's
+/// deadline at worst): every later one must also have, before
+/// [iosRunDeadline], as long as the slowest photo of the run took
+/// (drainBackfill finishBy). A Claude Plan analysis alone takes several
+/// seconds and can pass 15, so a second photo admitted with 7 s left was
+/// often analyzed on the server and then cut off unsaved (review,
+/// 2026-10-19).
 const Duration iosBackgroundBudget = Duration(seconds: 15);
+
+/// When workmanager started this run's headless engine, as an ISO instant:
+/// written natively by the AppDelegate's registrant callback, which
+/// workmanager calls right after it creates and starts the engine, before
+/// Dart's task runs (2026-10-19). iOS's grant is already running then —
+/// since the process launch and the shell's creation, which the stamp
+/// misses — and Dart's own clock starts later still.
+const String backgroundNativeLaunchPrefsKey = 'background.native_launch_iso';
+
+/// The most a native launch stamp may lead the run's entry into Dart and
+/// still count as this run's. Every iOS run stamps before its Dart can read
+/// the store, and runs are 15 min or more apart, so a stamp within the
+/// grant (~30 s) is this run's, however slow its boot was: counted from
+/// it, a run that booted for 25 s offers nothing and ends at once, where
+/// counting from the Dart entry would run on long past the grant and be
+/// killed mid-photo. Older, it is an earlier run's and says nothing about
+/// this one.
+const Duration nativeLaunchMaxLead = Duration(seconds: 30);
+
+/// Where this run's time budgets count from: the native launch stamp
+/// ([backgroundNativeLaunchPrefsKey]) when it belongs to this run — not
+/// after [enteredDart], at most [nativeLaunchMaxLead] before it — else
+/// [enteredDart] itself (Android writes no stamp; a missing or stale one
+/// changes nothing).
+@visibleForTesting
+DateTime backgroundRunStart(String? nativeStamp, DateTime enteredDart) {
+  final native = DateTime.tryParse(nativeStamp ?? '');
+  if (native == null) return enteredDart;
+  final lead = enteredDart.difference(native);
+  if (lead.isNegative || lead > nativeLaunchMaxLead) return enteredDart;
+  return native;
+}
 
 /// Result of one drained backfill: what happened to each photo, whether
 /// the SCAN itself completed (a scan abort means unseen photos remain),
@@ -91,8 +137,19 @@ class BackfillDrain {
   /// unoffered — they were RELEASED (not burned), so the next run
   /// re-offers them; the watermark stops short of them by construction.
   final bool cutShort;
+
+  /// How many photos the deadline released unprocessed.
+  final int deadlineReleases;
+
+  /// What aborted the scan when [scanCompleted] is false (its class is all
+  /// the diagnostics record keeps).
+  final Object? scanError;
   const BackfillDrain(this.outcomes,
-      {required this.scanCompleted, this.frontier, this.cutShort = false});
+      {required this.scanCompleted,
+      this.frontier,
+      this.cutShort = false,
+      this.deadlineReleases = 0,
+      this.scanError});
 }
 
 /// Run one backfill through the pipeline with FULL backpressure: the
@@ -102,43 +159,84 @@ class BackfillDrain {
 /// set it runs per photo BEFORE the next one starts, so progress
 /// (notifications, watermark checkpoints) survives a WorkManager
 /// hard-stop mid-batch. Past [deadline] (iOS's ~30 s grant) no further
-/// photo is processed: each is released back to the intake unprocessed,
-/// which halts the frontier in front of it.
+/// photo is processed — nor even read: the intake asks before each
+/// original's bytes, and a photo read just before the deadline is released
+/// at the sink. Both halt the frontier in front of the photo.
+///
+/// [finishBy] (iOS: [iosRunDeadline] from the run's start) is when the
+/// whole run must be over. A photo is started only if, at the pace of the
+/// slowest photo this drain has processed, it would be done by then — one
+/// that cannot finish is not started (an analysis cut off unsaved still
+/// costs the server, and the provider's quota). The first photo has no
+/// pace to go by: [deadline] alone admits it.
 Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     {int lookbackDays = 0,
     DateTime? since,
     DateTime? deadline,
+    DateTime? finishBy,
     DateTime Function() clock = DateTime.now,
+    Future<void> Function(IntakePhoto photo)? onOffer,
     Future<void> Function(
             IntakePhoto photo, PhotoOutcome outcome, DateTime? safeFrontier)?
         onOutcome}) async {
   final outcomes = <PhotoOutcome>[];
   var cutShort = false;
+  var deadlineReleases = 0;
+  final timed = deadline != null || finishBy != null;
+  // The longest one photo has taken in this drain.
+  var slowest = Duration.zero;
+  // Once past the deadline, past it for good (a clock step backwards must
+  // not reopen the run), and every photo turned away is counted.
+  bool budgetLeft() {
+    if (!timed) return true;
+    if (!cutShort) {
+      final now = clock();
+      if ((deadline == null || now.isBefore(deadline)) &&
+          (finishBy == null || !now.add(slowest).isAfter(finishBy))) {
+        return true;
+      }
+    }
+    cutShort = true;
+    deadlineReleases++;
+    return false;
+  }
+
   intake.attachSink((p, safeFrontier) async {
-    if (deadline != null && !clock().isBefore(deadline)) {
-      cutShort = true;
+    if (!budgetLeft()) {
       return false; // released, not burned: the next run re-offers it
     }
+    if (onOffer != null) await onOffer(p);
+    final began = clock();
     final o = await pipeline.process(p);
+    final took = clock().difference(began);
+    if (took > slowest) slowest = took;
     outcomes.add(o);
     if (onOutcome != null) await onOutcome(p, o, safeFrontier);
     return !o.retryable;
   });
   var scanCompleted = false;
   DateTime? frontier;
+  Object? scanError;
   try {
     frontier = await intake.backfillScan(
-        lookbackDays: lookbackDays, since: since);
+        lookbackDays: lookbackDays,
+        since: since,
+        shouldContinue: timed ? budgetLeft : null);
     scanCompleted = true;
-  } catch (_) {
+  } catch (e) {
     // Library query died / window truncated. Photos delivered before the
     // throw are already fully processed (sink is awaited inline); the
     // false flag tells the caller the window was NOT fully covered.
+    scanError = e;
   } finally {
     intake.attachSink(null);
   }
   return BackfillDrain(outcomes,
-      scanCompleted: scanCompleted, frontier: frontier, cutShort: cutShort);
+      scanCompleted: scanCompleted,
+      frontier: frontier,
+      cutShort: cutShort,
+      deadlineReleases: deadlineReleases,
+      scanError: scanError);
 }
 
 /// The pipeline's view of [AppSettings]' automatic-analysis latch — one
@@ -156,6 +254,98 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
       refresh: settings.reloadAnalysisBlock,
     );
 
+/// Moves the background watermark forward to [mark], never past [cap] and
+/// never back over the value it reads; returns the value written, or null
+/// when it did not move.
+///
+/// Both engines write it (2026-10-19): the background run as it scans,
+/// and the app's launch/resume catch-ups ([foregroundCatchUp]), each
+/// through its own preferences cache — so the stored value is re-read
+/// first, and a stale cache can never carry it backwards over the other
+/// engine's progress. The read and the write are not one step, though:
+/// two writers interleaving between them (A reads X, B writes Y, A writes
+/// Z < Y) can leave the EARLIER mark. That direction is safe — a re-scan
+/// the ledger absorbs, never a skip — so "forward only" holds for what
+/// each writer can see, not strictly across the two engines. Written as
+/// UTC (see [readStoredInstant]).
+Future<DateTime?> advanceBackgroundWatermark(
+        SharedPreferences prefs, DateTime mark,
+        {required DateTime cap}) async =>
+    (await _advanceWatermark(prefs, mark, cap: cap)).written;
+
+/// [advanceBackgroundWatermark], also saying what the store held.
+Future<({DateTime? written, DateTime? stored})> _advanceWatermark(
+    SharedPreferences prefs, DateTime mark,
+    {required DateTime cap}) async {
+  final capped = mark.isAfter(cap) ? cap : mark;
+  try {
+    await prefs.reload();
+  } catch (_) {
+    // Unreadable store: compare against this engine's own copy.
+  }
+  final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
+  if (cur != null && !capped.isAfter(cur)) return (written: null, stored: cur);
+  await prefs.setString(
+      backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
+  return (written: capped, stored: cur);
+}
+
+/// The app's launch/resume catch-up over the full lookback window — the
+/// pipeline [PhotoPipeline.bind] attached processes each photo — which
+/// also moves the BACKGROUND watermark over what it covered. It used to
+/// leave it days behind: the next background run then spent its grant
+/// re-reading and re-hashing every photo the app had just logged before
+/// it reached a new one (2026-10-19).
+///
+/// The newest day's photos go first, so a quick open logs today's meal
+/// before the rest of the week (PhotoIntake.backfillScan newestDayFirst);
+/// the background run keeps strict oldest-first from its watermark.
+///
+/// Only the intake's safeFrontier is persisted — per photo as it
+/// terminates (the app may be suspended mid-scan), then the final
+/// frontier — never past this scan's start. A truncated window reports
+/// none and throws [BackfillWindowTruncated], which propagates. A
+/// preferences failure never stops the scan.
+///
+/// [shouldContinue] is asked before each photo's original is read; false
+/// ends the scan there, unread photos uncovered. iOS passes "the app is
+/// still in the foreground" (appEngineBackgrounded): once the user leaves,
+/// the photo in flight finishes in its background task and nothing more
+/// is read (2026-10-19).
+Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
+    {DateTime Function() clock = DateTime.now,
+    Future<SharedPreferences> Function()? loadPrefs,
+    bool Function()? shouldContinue}) async {
+  final scanStart = clock();
+  // The latest mark this catch-up knows the store holds, read or written.
+  // A covered photo at or before it would move nothing, so it costs no
+  // reload: a cold launch walks a week of already-logged photos, most of
+  // them older than the background run's own watermark, and each reload
+  // is a full read of the store over the platform channel.
+  DateTime? known;
+  Future<void> checkpoint(DateTime mark) async {
+    final capped = mark.isAfter(scanStart) ? scanStart : mark;
+    final seen = known;
+    if (seen != null && !capped.isAfter(seen)) return;
+    try {
+      final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+      final r = await _advanceWatermark(prefs, mark, cap: scanStart);
+      final latest = r.written ?? r.stored;
+      final now = known;
+      if (latest != null && (now == null || latest.isAfter(now))) {
+        known = latest;
+      }
+    } catch (_) {}
+  }
+
+  final frontier = await intake.backfillScan(
+      onCovered: checkpoint,
+      newestDayFirst: true,
+      shouldContinue: shouldContinue);
+  if (frontier != null) await checkpoint(frontier);
+  return frontier;
+}
+
 /// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
 /// Written as UTC (see [readStoredInstant]).
 Future<void> recordBackgroundLaunch(
@@ -166,6 +356,23 @@ Future<void> recordBackgroundLaunch(
 /// The headless scan body, dependency-injected so tests can drive it with
 /// fakes. Returns WorkManager success (true) in every recoverable state —
 /// background.dart's no-retry-storm rule.
+///
+/// [recorder] (begun by the caller) gets every step of this run, as it
+/// happens (background_runs.dart); [photoAccess] tells a run that found no
+/// photos because it may not read any.
+///
+/// [deferred] notes each photo this run defers and forgets each one it
+/// gives a verdict (deferred_assets.dart); the run's intake was built to
+/// pass over the ones deferred too often.
+///
+/// [budget] counts from [startedAt] — the OS-launched run's start
+/// ([backgroundRunStart], in [runHeadlessBackfill]) — so the engine boot,
+/// the keychain read, the settings load and the database open spend it
+/// too; it used to start at the scan, a second or more into iOS's grant.
+/// Null: from the scan start. [finishBy]: see [drainBackfill].
+///
+/// [photoOffered] hears each photo handed to the pipeline, just before it
+/// is processed (RunInFlight.offered).
 @visibleForTesting
 Future<bool> headlessBackfillWith({
   required AppSettings settings,
@@ -175,34 +382,46 @@ Future<bool> headlessBackfillWith({
   required Future<void> Function(String title, String body) showMealCard,
   DateTime Function() clock = DateTime.now,
   Duration? budget,
+  DateTime? startedAt,
+  DateTime? finishBy,
+  void Function()? photoOffered,
+  DeferredAssets? deferred,
   bool launchRecorded = false,
+  BackgroundRunRecorder? recorder,
+  Future<bool?> Function()? photoAccess,
 }) async {
   // First, unconditionally: "the OS ran us" is what Settings reports,
   // whatever the guards below decide. Skipped when [runHeadlessBackfill]
   // already wrote it before loading the settings — one launch, one stamp.
   if (!launchRecorded) await recordBackgroundLaunch(prefs, clock);
+  await recorder?.stage(BackgroundRunStage.settings);
   // Belt and braces: disabling the watcher cancels the job, but a stale
   // chain must never scan against the user's setting.
-  if (!settings.watcherEnabled) return true;
+  if (!settings.watcherEnabled) {
+    await recorder?.finish(BackgroundStop.watcherOff);
+    return true;
+  }
   // No key yet / quota latch armed / an earlier automatic photo came back
   // 'key rejected' or 'region blocked' (the automatic-analysis latch):
   // analyses cannot succeed, so don't even read photo bytes — every 30
   // minutes this used to re-upload the whole window. The watermark stays
   // put — those photos are scanned once the blocker clears
   // (release-not-burn keeps them eligible).
-  if (!settings.canAutoAnalyze) return true;
+  if (!settings.canAutoAnalyze) {
+    await recorder?.finish((settings.activeApiKey ?? '').trim().isEmpty
+        ? BackgroundStop.noKey
+        : BackgroundStop.paused);
+    return true;
+  }
 
   final scanStart = clock();
   final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
+  await recorder?.stage(BackgroundRunStage.scan);
 
   Future<void> checkpoint(DateTime mark) async {
     // Monotonic forward only, never past this scan's start.
-    final capped = mark.isAfter(scanStart) ? scanStart : mark;
-    final cur = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
-    if (cur == null || capped.isAfter(cur)) {
-      await prefs.setString(
-          backgroundWatermarkPrefsKey, capped.toUtc().toIso8601String());
-    }
+    final moved = await advanceBackgroundWatermark(prefs, mark, cap: scanStart);
+    if (moved != null) await recorder?.checkpoint(moved);
   }
 
   // The pipeline (and its database handle) is built ONLY past the guards:
@@ -212,9 +431,25 @@ Future<bool> headlessBackfillWith({
     intake,
     await pipeline(),
     since: since?.subtract(backgroundScanOverlap),
-    deadline: budget == null ? null : scanStart.add(budget),
+    deadline: budget == null ? null : (startedAt ?? scanStart).add(budget),
+    finishBy: finishBy,
     clock: clock,
+    onOffer: (_) async {
+      photoOffered?.call();
+      await recorder?.offered();
+    },
     onOutcome: (photo, o, safeFrontier) async {
+      await recorder?.processed(
+          saved: o.kind == PhotoOutcomeKind.saved ||
+              o.kind == PhotoOutcomeKind.leftoverApplied,
+          released: o.retryable);
+      // A photo this engine could not decode (deferUndecodable) is counted;
+      // twice, and later runs pass it over instead of halting on it again.
+      if (o.retryable && o.errorKind == AnalysisErrorKind.badPhoto) {
+        await deferred?.deferred(photo.assetId);
+      } else if (!o.retryable) {
+        await deferred?.settled(photo.assetId);
+      }
       // Per photo, BEFORE the next one: a WorkManager hard-stop mid-batch
       // must not lose the notification for an already-saved meal, nor the
       // progress the run already made.
@@ -248,6 +483,7 @@ Future<bool> headlessBackfillWith({
   // frontier is the single honest source. Cost: the next run re-offers at
   // most the newest covered photo (ledger absorbs it without a model call).
   if (drain.frontier != null) await checkpoint(drain.frontier!);
+  await recorder?.releasedUnprocessed(drain.deadlineReleases);
   // This run ARMED the automatic-scan pause (it started unpaused — see the
   // guard above): the background has no snackbar, and without a word the
   // scan just stops for up to a day. One notice per arm: every later run
@@ -269,7 +505,38 @@ Future<bool> headlessBackfillWith({
       } catch (_) {}
     }
   }
+  if (recorder != null) {
+    await recorder.finish(
+        await _stopReason(drain,
+            pausedNow: pausedUntil != null,
+            listedNothing: recorder.current?.enumerated == 0,
+            photoAccess: photoAccess),
+        watermarkAfter:
+            readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+  }
   return true;
+}
+
+/// How a scan that ran to the end of [headlessBackfillWith] stopped, for
+/// the diagnostics record. The budget first (photos are waiting), then a
+/// pause this run armed (the rest were released), then a scan that died or
+/// listed nothing because the app may not read the library.
+Future<String> _stopReason(BackfillDrain drain,
+    {required bool pausedNow,
+    required bool listedNothing,
+    Future<bool?> Function()? photoAccess}) async {
+  if (drain.cutShort) return BackgroundStop.budget;
+  if (pausedNow) return BackgroundStop.paused;
+  if (!drain.scanCompleted || listedNothing) {
+    bool? access;
+    try {
+      access = await photoAccess?.call();
+    } catch (_) {}
+    if (access == false) return BackgroundStop.noPermission;
+  }
+  final error = drain.scanError;
+  if (!drain.scanCompleted && error != null) return BackgroundStop.error(error);
+  return BackgroundStop.done;
 }
 
 /// The Android heartbeat's half of the daily summary: post it when the
@@ -328,20 +595,117 @@ Future<bool> runHeadlessBackfill({
   Future<SharedPreferences> Function()? loadPrefs,
   DateTime Function() clock = DateTime.now,
 }) async {
+  // FIRST, before anything can decode a photo: this isolate is the
+  // headless engine. On iOS its GPU is off for the whole run and a dart:ui
+  // decode never finishes, so platform_decode must skip that step here
+  // (2026-10-18).
+  isHeadlessEngine = true;
+  // iOS's grant is already running: the time budgets count from here, or
+  // from the native launch stamp when there is one for this run (the
+  // engine boot came out of the grant too).
+  final enteredDart = clock();
   final ios = isIOS ?? Platform.isIOS;
   final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+  final startedAt = ios
+      ? backgroundRunStart(
+          prefs.getString(backgroundNativeLaunchPrefsKey), enteredDart)
+      : enteredDart;
   await recordBackgroundLaunch(prefs, clock);
+  // This run's diagnostics entry, rewritten at every step so a run iOS
+  // kills still shows how far it got (background_runs.dart).
+  final recorder = BackgroundRunRecorder(prefs,
+      platform: ios ? 'ios' : 'android', clock: clock);
+  await recorder.begin(
+      watermarkBefore:
+          readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)),
+      bootLead: enteredDart.difference(startedAt));
+  final inFlight = RunInFlight(
+      deadline: ios ? startedAt.add(iosRunDeadline) : null, clock: clock);
+  final run = _runAfterLaunch(
+      ios: ios,
+      prefs: prefs,
+      recorder: recorder,
+      startedAt: startedAt,
+      inFlight: inFlight,
+      loadSettings: loadSettings);
+  // iOS: the whole run ends inside the grant, whatever it is stuck on.
+  if (!ios) return run;
+  return finishWithinGrant(run,
+      left: startedAt.add(iosRunDeadline).difference(clock()),
+      recorder: recorder,
+      abandon: inFlight.abandon);
+}
+
+/// How long a photo must have had to itself, before the run's deadline,
+/// for a cut-off to count against it ([DeferredAssets.cutOff]): offered no
+/// later than 7 s into the run. Most first photos of a run have it; a photo
+/// offered after another was processed mostly has not, and its cut-off
+/// says nothing about the photo (review, 2026-10-19).
+const Duration slowPhotoWindow = Duration(seconds: 15);
+
+/// What the iOS deadline needs from a run still going: its pipeline once
+/// built, its deferral notes once loaded, and when the photo in flight was
+/// offered.
+@visibleForTesting
+class RunInFlight {
+  RunInFlight({this.deadline, DateTime Function()? clock})
+      : _clock = clock ?? DateTime.now;
+
+  /// When the run must be over ([iosRunDeadline] from its start); null
+  /// where there is no such deadline (Android).
+  final DateTime? deadline;
+  final DateTime Function() _clock;
+  PhotoPipeline? pipeline;
+  DeferredAssets? deferred;
+  DateTime? _offeredAt;
+
+  /// A photo was handed to the pipeline: the one in flight from now on
+  /// (the background pipeline takes one photo at a time).
+  void offered() => _offeredAt = _clock();
+
+  /// Releases the photo in flight ([PhotoPipeline.abandon]). It stays
+  /// eligible, and the next run offers it again. When it had at least
+  /// [slowPhotoWindow] to itself, the cut also counts against it: after
+  /// [cutsBeforePassOver] of those, later runs pass it over (the app's
+  /// catch-up still logs it), so a photo too slow for any run does not hold
+  /// the watermark — and every photo after it — until the app opens. A
+  /// photo offered late, or cut off while the server or the network hung,
+  /// costs nothing more than the retry.
+  Future<void> abandon() async {
+    final assetId = await pipeline?.abandon();
+    if (assetId == null || assetId.isEmpty) return;
+    final at = _offeredAt, end = deadline;
+    if (at == null || end == null || end.difference(at) < slowPhotoWindow) {
+      return;
+    }
+    await deferred?.cutOff(assetId);
+  }
+}
+
+/// [runHeadlessBackfill] past the launch stamp: settings, the Android
+/// summary, the scan, the iOS summary card.
+Future<bool> _runAfterLaunch({
+  required bool ios,
+  required SharedPreferences prefs,
+  required BackgroundRunRecorder recorder,
+  required DateTime startedAt,
+  required RunInFlight inFlight,
+  Future<AppSettings> Function()? loadSettings,
+}) async {
   final AppSettings settings;
   try {
     // Read-only key store: only the UI engine moves keys between keychain
     // classes, so the two engines can never race on the one-time move.
     settings = await (loadSettings ??
         () => AppSettings.load(keyStore: platformKeyStore(migrate: false)))();
-  } catch (_) {
+  } catch (e) {
+    await recorder.finish(BackgroundStop.error(e));
     // Success, not a retry: the next scheduled run tries again, and a
     // WorkManager retry storm helps nobody (background.dart's rule).
     return true;
   }
+  await recorder.stage(BackgroundRunStage.settings);
+  final deferred = inFlight.deferred = await DeferredAssets.load(prefs);
   // Time-derived id seed: cards from successive runs stack instead of
   // overwriting each other. Base 10000 keeps the whole range clear of the
   // fixed daily-report id 9001 (a colliding meal card would silently
@@ -369,21 +733,38 @@ Future<bool> runHeadlessBackfill({
       // A summary must never take the photo scan down with it.
     }
   }
-  final ok = await headlessBackfillWith(
-    settings: settings,
-    prefs: prefs,
-    intake: createPhotoIntake(settings),
-    pipeline: () async => PhotoPipeline(
-        dao: await createMealsDao(),
-        analyzer: createMultiProviderAnalyzer(settings),
-        latch: autoScanLatchFor(settings)),
-    showMealCard: (title, body) async {
-      await notifier.init(); // idempotent; deferred until a card exists
-      await notifier.showMealCard(title, body);
-    },
-    budget: ios ? iosBackgroundBudget : null,
-    launchRecorded: true,
-  );
+  final bool ok;
+  try {
+    ok = await headlessBackfillWith(
+      settings: settings,
+      prefs: prefs,
+      intake: createPhotoIntake(settings,
+          onBackfillListed: recorder.listed, passOver: deferred.passOver),
+      pipeline: () async => inFlight.pipeline = PhotoPipeline(
+          dao: await createMealsDao(),
+          analyzer: createMultiProviderAnalyzer(settings),
+          latch: autoScanLatchFor(settings),
+          // iOS only: there dart:ui cannot decode (platform_decode.dart).
+          deferUndecodable: ios),
+      showMealCard: (title, body) async {
+        await notifier.init(); // idempotent; deferred until a card exists
+        await notifier.showMealCard(title, body);
+      },
+      budget: ios ? iosBackgroundBudget : null,
+      startedAt: startedAt,
+      finishBy: inFlight.deadline,
+      photoOffered: inFlight.offered,
+      deferred: deferred,
+      launchRecorded: true,
+      recorder: recorder,
+      photoAccess: photoLibraryAccess,
+    );
+  } catch (e) {
+    // A throw the scan did not contain (the database would not open, say):
+    // the entry names its class, and WorkManager still sees the failure.
+    await recorder.finish(BackgroundStop.error(e));
+    rethrow;
+  }
   if (ios) {
     try {
       await armOsDailySummary(
@@ -393,6 +774,71 @@ Future<bool> runHeadlessBackfill({
     }
   }
   return ok;
+}
+
+/// The whole iOS background run, from its start ([backgroundRunStart]),
+/// ends within this (2026-10-19). iOS expires a BGAppRefresh grant about
+/// 30 s after launching it; a run still going then is killed, the task
+/// never completes (workmanager calls setTaskCompleted only on Dart's
+/// reply), its photo stays reserved, and iOS ranks the app lower for the
+/// next launch. The offer budget ([iosBackgroundBudget]) stops new photos
+/// at 15 s, but nothing bounded the photo already in flight (a slow
+/// upload, a stalled decode) or the steps around the scan.
+///
+/// 22 s, not 25: what the start misses is unmeasured — the process launch
+/// before the BGTask handler and the engine's creation always, and the
+/// engine boot too when no native stamp came — and the teardown and
+/// completion come after. A photo offered at the end of the offer budget
+/// would have 7 s, so after the first, drainBackfill starts one only if
+/// it can finish by this at the run's pace. One the deadline cuts off
+/// anyway is released (finishWithinGrant) and offered again by a later
+/// run — behind any older photo still waiting, not necessarily first.
+const Duration iosRunDeadline = Duration(seconds: 22);
+
+/// [run] or, once [left] has passed, an end to the run anyway: the
+/// diagnostics entry says 'budget' and the result is success, so
+/// workmanager completes the BGTask (its executeTask reply is what calls
+/// setTaskCompleted; workmanager_apple 0.9.1+2 BackgroundWorker.swift)
+/// instead of iOS killing the process at expiry.
+///
+/// The reply destroys the engine (cleanupFlutterResources →
+/// destroyContext), so the abandoned run never gets to finish anything —
+/// a photo in flight would keep its 'processing' row, and that row would
+/// refuse every later run and the open app for appProcessingStaleAge
+/// (simulator, 2026-10-19). So before replying, [abandon] releases that
+/// reservation and stops the pipeline from writing anything more
+/// ([PhotoPipeline.abandon]), waiting at most [abandonLimit]. The offer
+/// budget has passed by then, so the run starts no new photo either. Its
+/// diagnostics entry is frozen once finished.
+@visibleForTesting
+Future<bool> finishWithinGrant(Future<bool> run,
+    {required Duration left,
+    required BackgroundRunRecorder recorder,
+    Future<void> Function()? abandon,
+    Duration abandonLimit = const Duration(milliseconds: 1500)}) {
+  final done = Completer<bool>();
+  final timer = Timer(left.isNegative ? Duration.zero : left, () {
+    if (done.isCompleted) return;
+    done.complete(() async {
+      if (abandon != null) {
+        try {
+          await abandon().timeout(abandonLimit);
+        } catch (_) {
+          // Out of time for it: the reply matters more.
+        }
+      }
+      await recorder.finish(BackgroundStop.budget);
+      return true;
+    }());
+  });
+  run.then((ok) {
+    timer.cancel();
+    if (!done.isCompleted) done.complete(ok);
+  }, onError: (Object e, StackTrace st) {
+    timer.cancel();
+    if (!done.isCompleted) done.completeError(e, st);
+  });
+  return done.future;
 }
 
 /// WorkManager background entrypoint. Must stay top-level with the
@@ -425,6 +871,27 @@ Future<void> syncBackgroundScan(AppSettings settings) =>
         lookbackDays: settings.lookbackDays,
         frequency: backgroundScanFrequency,
         dispatcher: appBackgroundDispatcher);
+
+/// Settings' "the background scan is stuck" probe (2026-10-19): the
+/// stored runs and the watermark, both read FRESH (the background engine
+/// writes the runs; either engine moves the watermark), so a catch-up the
+/// app just finished clears the hint (backgroundScanLooksStuck). An
+/// unreadable store is not stuck.
+Future<bool> backgroundScanStuckNow(
+    {DateTime Function() clock = DateTime.now,
+    Future<SharedPreferences> Function()? loadPrefs}) async {
+  try {
+    final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+    await prefs.reload();
+    return backgroundScanLooksStuck(
+        decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey)),
+        now: clock(),
+        watermark:
+            readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)));
+  } catch (_) {
+    return false;
+  }
+}
 
 /// The last background launch, read FRESH: the run wrote it from another
 /// isolate, and this isolate's SharedPreferences cache would not know.
