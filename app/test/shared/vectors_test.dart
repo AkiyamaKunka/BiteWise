@@ -11,7 +11,9 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:calorie_tracker/core/chain_match.dart';
 import 'package:calorie_tracker/core/coerce.dart';
+import 'package:calorie_tracker/core/restaurant_lookup_contract.dart';
 import 'package:calorie_tracker/core/shared_generated.dart';
 import 'package:calorie_tracker/services/nl/executor.dart';
 import 'package:calorie_tracker/services/photo/filename_dates.dart';
@@ -218,6 +220,39 @@ void main() {
           expect(actual, isNull);
         } else {
           expect(actual, closeTo((expected as num).toDouble(), 1e-9));
+        }
+      });
+    }
+  });
+
+  // The restaurant-assist lookup contract (stage R2a). The request is what
+  // leaves the phone for an AI provider, so the Dart composer must produce
+  // the Python composer's exact bytes — the prompt cases compare the whole
+  // prompt string, JSON encoding included.
+  group('restaurant_lookup.json', () {
+    final doc = loadVectors('restaurant_lookup');
+    for (final raw in (doc['cases'] as List).cast<Map>()) {
+      final c = raw.cast<String, dynamic>();
+      final id = '${c['id']}';
+      test(id, () {
+        final input = decodeSpecials(c['input']);
+        switch (c['fn']) {
+          case 'compose_lookup_request':
+            checkDeepEq(composeLookupRequest(input), c['expected'], id);
+            // Byte parity of what is actually sent.
+            expect(canonicalLookupJson(composeLookupRequest(input)),
+                jsonEncode(c['expected']),
+                reason: '[$id] JSON bytes');
+          case 'compose_lookup_prompt':
+            expect(composeLookupPrompt(input), c['expected'], reason: '[$id]');
+          case 'match_chain':
+            expect(matchChain(input, urlHost: c['url_host'] as String?),
+                c['expected'],
+                reason: '[$id]');
+          case 'chain_tokens':
+            expect(chainTokens(input), c['expected'], reason: '[$id]');
+          default:
+            fail('[$id] unknown fn ${c['fn']}');
         }
       });
     }

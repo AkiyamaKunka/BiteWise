@@ -283,6 +283,11 @@ String cleanOrderMerchant(dynamic value) =>
 /// [kUnitMaxChars] code points.
 String cleanUnit(dynamic value) => _cleanShortText(value, kUnitMaxChars);
 
+/// Any short text cleaned exactly like [cleanBrand], at most [maxChars]
+/// code points (the restaurant-lookup composer caps item names at 80).
+String cleanShortText(dynamic value, int maxChars) =>
+    _cleanShortText(value, maxChars);
+
 /// An item's count: a finite number in (0, [kQtyMax]], else 1 (the
 /// prompt's default). Bools and numeric strings are not counts.
 num coerceQty(dynamic value) {

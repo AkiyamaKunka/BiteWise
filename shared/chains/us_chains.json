@@ -1,0 +1,3807 @@
+{
+  "_comment": "BiteWise's own table of US restaurant chains with 20 or more locations (the FDA menu-labeling threshold, 21 CFR 101.11). The restaurant assist matches nearby places and printed brands against THIS table on the device and sends only the canonical name of a matched chain; 'domains' are the chain's own registrable web domains that may serve as an official nutrition source. Edit here, then run scripts/sync_shared.py. Refresh yearly.",
+  "source": "Curated 2026-10-23 for BiteWise. Chains and US unit counts from the public lists below; each domain was checked live on 2026-10-23 (HTTPS home page reachable with the chain's own name in its title, or a bot-protection page on a domain long known to be the chain's). Chains whose domain had lapsed, redirected to an unrelated site or could not be verified were left out, as were chains without a source showing 20+ US locations.",
+  "sources": [
+    {
+      "name": "Wikipedia: List of restaurant chains in the United States (US location counts, revision of 2026-10-23)",
+      "url": "https://en.wikipedia.org/wiki/List_of_restaurant_chains_in_the_United_States"
+    },
+    {
+      "name": "Technomic 2026 Top 500 Chain Restaurant Report press release (2026-04-15; names 7 Brew, Dutch Bros, Scooter's Coffee, Paris Baguette, Tous les Jours, Jollibee, bb.q Chicken, Kura Sushi among the 500 largest US chains)",
+      "url": "https://www.technomic.com/press-top-500-report/"
+    },
+    {
+      "name": "QSR Magazine, QSR 50 (2025 and 2026 editions)",
+      "url": "https://www.qsrmagazine.com/story/qsr-50-2026-top-50-fast-food-chains-ranked-by-sales/"
+    },
+    {
+      "name": "Wikipedia chain articles (infobox location counts) for chains missing from the list: Torchy's Tacos, On the Border, Just Salad, PJ's Coffee, Bahama Buck's, Kilwins, Ninety Nine, Main Event, True Food Kitchen, Long John Silver's, Cousins Subs, Bubba Gump, Buca di Beppo, Lee's Sandwiches, The Human Bean, Mendocino Farms, 7 Brew",
+      "url": "https://en.wikipedia.org/"
+    },
+    {
+      "name": "Company and trade-press counts found by web search on 2026-10-23: Black Rock Coffee Bar (200+, Aug 2026), Teriyaki Madness (215, Q2 2026), Eggs Up Grill (110, Jul 2026), Another Broken Egg (105, end 2025), Walk-On's (78, Franchise Times 2025), Costa Vida (~94), Velvet Taco (51), Snooze (~70, NRN Oct 2026), Honeygrow (71, end 2025), 85C Bakery Cafe (100, Sep 2026), Gyu-Kaku (64 US), Ziggi's Coffee (100), Captain D's (530+), Tudor's Biscuit World (74), Toppers Pizza (71, Franchise Times 2024), Nothing Bundt Cakes (800+), Tous les Jours (100+)",
+      "url": "https://www.nrn.com/top-500-restaurants"
+    },
+    {
+      "name": "21 CFR 101.11 (menu labeling for chains of 20 or more locations)",
+      "url": "https://www.law.cornell.edu/cfr/text/21/101.11"
+    }
+  ],
+  "as_of": "2026-10-23",
+  "chains": [
+    {
+      "key": "a_and_w",
+      "name": "A&W Restaurants",
+      "aliases": [
+        "A&W",
+        "A&W All American Food"
+      ],
+      "domains": [
+        "awrestaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "amatos",
+      "name": "Amato's Sandwich Shops",
+      "aliases": [],
+      "domains": [
+        "amatos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "andys",
+      "name": "Andy's Frozen Custard",
+      "aliases": [],
+      "domains": [
+        "eatandys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "another_broken_egg",
+      "name": "Another Broken Egg Cafe",
+      "aliases": [
+        "Another Broken Egg"
+      ],
+      "domains": [
+        "anotherbrokenegg.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "applebees",
+      "name": "Applebee's",
+      "aliases": [
+        "Applebee's Grill + Bar",
+        "Applebee's Neighborhood Grill & Bar"
+      ],
+      "domains": [
+        "applebees.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "arbys",
+      "name": "Arby's",
+      "aliases": [],
+      "domains": [
+        "arbys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "arctic_circle",
+      "name": "Arctic Circle",
+      "aliases": [],
+      "domains": [
+        "acburger.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "au_bon_pain",
+      "name": "Au Bon Pain",
+      "aliases": [],
+      "domains": [
+        "aubonpain.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "auntie_annes",
+      "name": "Auntie Anne's",
+      "aliases": [
+        "Auntie Anne's Pretzels"
+      ],
+      "domains": [
+        "auntieannes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bahama_bucks",
+      "name": "Bahama Buck's",
+      "aliases": [],
+      "domains": [
+        "bahamabucks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "baja_fresh",
+      "name": "Baja Fresh",
+      "aliases": [
+        "Baja Fresh Mexican Grill"
+      ],
+      "domains": [
+        "bajafresh.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bakers_drive_thru",
+      "name": "Baker's Drive-Thru",
+      "aliases": [],
+      "domains": [
+        "bakersdrivethru.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bar_louie",
+      "name": "Bar Louie",
+      "aliases": [],
+      "domains": [
+        "barlouie.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "baskin_robbins",
+      "name": "Baskin-Robbins",
+      "zh_name": "芭斯罗缤",
+      "aliases": [],
+      "domains": [
+        "baskinrobbins.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bbq_chicken",
+      "name": "bb.q Chicken",
+      "aliases": [],
+      "domains": [
+        "bbqchicken.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "beef_obradys",
+      "name": "Beef 'O' Brady's",
+      "aliases": [
+        "Beef O'Brady's"
+      ],
+      "domains": [
+        "beefobradys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ben_and_jerrys",
+      "name": "Ben & Jerry's",
+      "aliases": [],
+      "domains": [
+        "benjerry.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "benihana",
+      "name": "Benihana",
+      "aliases": [],
+      "domains": [
+        "benihana.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bennigans",
+      "name": "Bennigan's",
+      "aliases": [],
+      "domains": [
+        "bennigans.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "big_boy",
+      "name": "Big Boy",
+      "aliases": [],
+      "domains": [
+        "bigboy.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "biggby",
+      "name": "Biggby Coffee",
+      "aliases": [
+        "BIGGBY"
+      ],
+      "domains": [
+        "biggby.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bill_miller",
+      "name": "Bill Miller Bar-B-Q",
+      "aliases": [],
+      "domains": [
+        "billmillerbbq.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "biscuitville",
+      "name": "Biscuitville",
+      "aliases": [],
+      "domains": [
+        "biscuitville.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bjs",
+      "name": "BJ's Restaurant & Brewhouse",
+      "aliases": [
+        "BJ's Restaurant"
+      ],
+      "domains": [
+        "bjsrestaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "black_angus",
+      "name": "Black Angus Steakhouse",
+      "aliases": [],
+      "domains": [
+        "blackangus.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "black_bear_diner",
+      "name": "Black Bear Diner",
+      "aliases": [],
+      "domains": [
+        "blackbeardiner.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "black_rock",
+      "name": "Black Rock Coffee Bar",
+      "aliases": [],
+      "domains": [
+        "br.coffee"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "blackjack_pizza",
+      "name": "Blackjack Pizza",
+      "aliases": [],
+      "domains": [
+        "blackjackpizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "blakes_lotaburger",
+      "name": "Blake's Lotaburger",
+      "aliases": [],
+      "domains": [
+        "lotaburger.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "blaze_pizza",
+      "name": "Blaze Pizza",
+      "aliases": [],
+      "domains": [
+        "blazepizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "blimpie",
+      "name": "Blimpie",
+      "aliases": [],
+      "domains": [
+        "blimpie.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bob_evans",
+      "name": "Bob Evans",
+      "aliases": [],
+      "domains": [
+        "bobevans.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "boiling_crab",
+      "name": "The Boiling Crab",
+      "aliases": [],
+      "domains": [
+        "theboilingcrab.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bojangles",
+      "name": "Bojangles",
+      "aliases": [
+        "Bojangles' Famous Chicken 'n Biscuits"
+      ],
+      "domains": [
+        "bojangles.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bonchon",
+      "name": "Bonchon",
+      "aliases": [
+        "Bonchon Chicken"
+      ],
+      "domains": [
+        "bonchon.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bonefish_grill",
+      "name": "Bonefish Grill",
+      "aliases": [],
+      "domains": [
+        "bonefishgrill.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "boomarang",
+      "name": "Boomarang Diner",
+      "aliases": [],
+      "domains": [
+        "boomarangdiner.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "braums",
+      "name": "Braum's",
+      "aliases": [
+        "Braum's Ice Cream & Dairy Stores"
+      ],
+      "domains": [
+        "braums.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "brio",
+      "name": "Brio Italian Grille",
+      "aliases": [
+        "Brio Tuscan Grille"
+      ],
+      "domains": [
+        "brioitalian.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "brueggers",
+      "name": "Bruegger's Bagels",
+      "aliases": [
+        "Bruegger's"
+      ],
+      "domains": [
+        "brueggers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "brusters",
+      "name": "Bruster's Real Ice Cream",
+      "aliases": [
+        "Bruster's Ice Cream"
+      ],
+      "domains": [
+        "brusters.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bubba_gump",
+      "name": "Bubba Gump Shrimp Co.",
+      "aliases": [
+        "Bubba Gump Shrimp Company"
+      ],
+      "domains": [
+        "bubbagump.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "buca_di_beppo",
+      "name": "Buca di Beppo",
+      "aliases": [],
+      "domains": [
+        "dineatbuca.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "buffalo_wild_wings",
+      "name": "Buffalo Wild Wings",
+      "aliases": [
+        "BWW"
+      ],
+      "domains": [
+        "buffalowildwings.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "burger_king",
+      "name": "Burger King",
+      "zh_name": "汉堡王",
+      "aliases": [
+        "漢堡王"
+      ],
+      "domains": [
+        "bk.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "burgerfi",
+      "name": "BurgerFi",
+      "aliases": [],
+      "domains": [
+        "burgerfi.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "burgerville",
+      "name": "Burgerville",
+      "aliases": [],
+      "domains": [
+        "burgerville.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "bushs_chicken",
+      "name": "Bush's Chicken",
+      "aliases": [],
+      "domains": [
+        "bushschicken.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cafe_rio",
+      "name": "Cafe Rio",
+      "aliases": [
+        "Cafe Rio Mexican Grill"
+      ],
+      "domains": [
+        "caferio.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "california_tortilla",
+      "name": "California Tortilla",
+      "aliases": [],
+      "domains": [
+        "californiatortilla.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "capital_grille",
+      "name": "The Capital Grille",
+      "aliases": [],
+      "domains": [
+        "thecapitalgrille.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "capriottis",
+      "name": "Capriotti's Sandwich Shop",
+      "aliases": [
+        "Capriotti's"
+      ],
+      "domains": [
+        "capriottis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "captain_ds",
+      "name": "Captain D's",
+      "aliases": [
+        "Captain D's Seafood Kitchen"
+      ],
+      "domains": [
+        "captainds.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "caribou",
+      "name": "Caribou Coffee",
+      "aliases": [],
+      "domains": [
+        "cariboucoffee.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "carls_jr",
+      "name": "Carl's Jr.",
+      "aliases": [],
+      "domains": [
+        "carlsjr.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "carrabbas",
+      "name": "Carrabba's Italian Grill",
+      "aliases": [],
+      "domains": [
+        "carrabbas.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "carvel",
+      "name": "Carvel",
+      "aliases": [],
+      "domains": [
+        "carvel.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cava",
+      "name": "Cava",
+      "aliases": [],
+      "domains": [
+        "cava.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "charleys",
+      "name": "Charleys Cheesesteaks",
+      "aliases": [
+        "Charleys Philly Steaks"
+      ],
+      "domains": [
+        "charleys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "checkers_rallys",
+      "name": "Checkers & Rally's",
+      "aliases": [
+        "Checkers",
+        "Rally's",
+        "Checkers Drive-In"
+      ],
+      "domains": [
+        "checkersandrallys.com",
+        "checkers.com",
+        "rallys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cheddars",
+      "name": "Cheddar's Scratch Kitchen",
+      "aliases": [
+        "Cheddar's"
+      ],
+      "domains": [
+        "cheddars.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cheesecake_factory",
+      "name": "The Cheesecake Factory",
+      "aliases": [],
+      "domains": [
+        "thecheesecakefactory.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chevys",
+      "name": "Chevys Fresh Mex",
+      "aliases": [
+        "Chevys"
+      ],
+      "domains": [
+        "chevys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chick_fil_a",
+      "name": "Chick-fil-A",
+      "aliases": [
+        "Chick fil A"
+      ],
+      "domains": [
+        "chick-fil-a.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chicken_salad_chick",
+      "name": "Chicken Salad Chick",
+      "aliases": [],
+      "domains": [
+        "chickensaladchick.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chilis",
+      "name": "Chili's",
+      "aliases": [
+        "Chili's Grill & Bar"
+      ],
+      "domains": [
+        "chilis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chipotle",
+      "name": "Chipotle",
+      "aliases": [
+        "Chipotle Mexican Grill"
+      ],
+      "domains": [
+        "chipotle.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chopt",
+      "name": "Chopt Creative Salad Co.",
+      "aliases": [
+        "Chopt"
+      ],
+      "domains": [
+        "choptsalad.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chuck_e_cheese",
+      "name": "Chuck E. Cheese",
+      "aliases": [],
+      "domains": [
+        "chuckecheese.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "churchs",
+      "name": "Church's Texas Chicken",
+      "aliases": [
+        "Church's Chicken"
+      ],
+      "domains": [
+        "churchs.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "chuys",
+      "name": "Chuy's",
+      "aliases": [],
+      "domains": [
+        "chuys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cicis",
+      "name": "Cicis Pizza",
+      "aliases": [
+        "Cicis"
+      ],
+      "domains": [
+        "cicis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cinnabon",
+      "name": "Cinnabon",
+      "aliases": [],
+      "domains": [
+        "cinnabon.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "coffee_bean",
+      "name": "The Coffee Bean & Tea Leaf",
+      "zh_name": "香啡缤",
+      "aliases": [],
+      "domains": [
+        "coffeebean.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "coffee_beanery",
+      "name": "Coffee Beanery",
+      "aliases": [],
+      "domains": [
+        "coffeebeanery.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cold_stone",
+      "name": "Cold Stone Creamery",
+      "zh_name": "酷圣石",
+      "aliases": [
+        "Cold Stone"
+      ],
+      "domains": [
+        "coldstonecreamery.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cook_out",
+      "name": "Cook Out",
+      "aliases": [],
+      "domains": [
+        "cookout.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "coopers_hawk",
+      "name": "Cooper's Hawk Winery & Restaurants",
+      "aliases": [
+        "Cooper's Hawk"
+      ],
+      "domains": [
+        "chwinery.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "corner_bakery",
+      "name": "Corner Bakery Cafe",
+      "aliases": [],
+      "domains": [
+        "cornerbakerycafe.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "costa_vida",
+      "name": "Costa Vida",
+      "aliases": [
+        "Costa Vida Fresh Mexican Grill"
+      ],
+      "domains": [
+        "costavida.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cousins_subs",
+      "name": "Cousins Subs",
+      "aliases": [],
+      "domains": [
+        "cousinssubs.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cpk",
+      "name": "California Pizza Kitchen",
+      "aliases": [],
+      "domains": [
+        "cpk.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cracker_barrel",
+      "name": "Cracker Barrel",
+      "aliases": [
+        "Cracker Barrel Old Country Store"
+      ],
+      "domains": [
+        "crackerbarrel.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "crumbl",
+      "name": "Crumbl",
+      "aliases": [
+        "Crumbl Cookies"
+      ],
+      "domains": [
+        "crumblcookies.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "culvers",
+      "name": "Culver's",
+      "aliases": [],
+      "domains": [
+        "culvers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "cupbop",
+      "name": "Cupbop",
+      "aliases": [
+        "Cupbop Korean BBQ in a Cup"
+      ],
+      "domains": [
+        "cupbop.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dairy_queen",
+      "name": "Dairy Queen",
+      "zh_name": "冰雪皇后",
+      "aliases": [
+        "DQ",
+        "DQ Grill & Chill"
+      ],
+      "domains": [
+        "dairyqueen.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dangelo",
+      "name": "D'Angelo Grilled Sandwiches",
+      "aliases": [],
+      "domains": [
+        "dangelos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dave_and_busters",
+      "name": "Dave & Buster's",
+      "aliases": [],
+      "domains": [
+        "daveandbusters.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "daves_hot_chicken",
+      "name": "Dave's Hot Chicken",
+      "aliases": [],
+      "domains": [
+        "daveshotchicken.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "daylight_donuts",
+      "name": "Daylight Donuts",
+      "aliases": [],
+      "domains": [
+        "daylightdonuts.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "del_taco",
+      "name": "Del Taco",
+      "aliases": [],
+      "domains": [
+        "deltaco.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dennys",
+      "name": "Denny's",
+      "aliases": [],
+      "domains": [
+        "dennys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dibellas",
+      "name": "DiBella's Subs",
+      "aliases": [],
+      "domains": [
+        "dibellas.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dickeys",
+      "name": "Dickey's Barbecue Pit",
+      "aliases": [],
+      "domains": [
+        "dickeys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "din_tai_fung",
+      "name": "Din Tai Fung",
+      "zh_name": "鼎泰丰",
+      "aliases": [
+        "鼎泰豐"
+      ],
+      "domains": [
+        "dtf.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dominos",
+      "name": "Domino's",
+      "zh_name": "达美乐",
+      "aliases": [
+        "Domino's Pizza",
+        "達美樂"
+      ],
+      "domains": [
+        "dominos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "donatos",
+      "name": "Donatos Pizza",
+      "aliases": [
+        "Donatos"
+      ],
+      "domains": [
+        "donatos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dp_dough",
+      "name": "D.P. Dough",
+      "aliases": [],
+      "domains": [
+        "dpdough.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "duck_donuts",
+      "name": "Duck Donuts",
+      "aliases": [],
+      "domains": [
+        "duckdonuts.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dunkin",
+      "name": "Dunkin'",
+      "zh_name": "唐恩都乐",
+      "aliases": [
+        "Dunkin' Donuts",
+        "唐恩都樂"
+      ],
+      "domains": [
+        "dunkindonuts.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dunn_brothers",
+      "name": "Dunn Brothers Coffee",
+      "aliases": [],
+      "domains": [
+        "dunnbrothers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "dutch_bros",
+      "name": "Dutch Bros Coffee",
+      "aliases": [
+        "Dutch Bros"
+      ],
+      "domains": [
+        "dutchbros.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "earl_of_sandwich",
+      "name": "Earl of Sandwich",
+      "aliases": [],
+      "domains": [
+        "earlofsandwichusa.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "east_of_chicago",
+      "name": "East of Chicago Pizza",
+      "aliases": [],
+      "domains": [
+        "eastofchicago.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "eddie_vs",
+      "name": "Eddie V's Prime Seafood",
+      "aliases": [
+        "Eddie V's"
+      ],
+      "domains": [
+        "eddiev.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "eegees",
+      "name": "Eegee's",
+      "aliases": [],
+      "domains": [
+        "eegees.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "eggs_up_grill",
+      "name": "Eggs Up Grill",
+      "aliases": [],
+      "domains": [
+        "eggsupgrill.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "eighty_five_c",
+      "name": "85°C Bakery Cafe",
+      "zh_name": "85度C",
+      "aliases": [],
+      "domains": [
+        "85cbakerycafe.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "einstein_bros",
+      "name": "Einstein Bros. Bagels",
+      "aliases": [
+        "Einstein Bros"
+      ],
+      "domains": [
+        "einsteinbros.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "el_pollo_loco",
+      "name": "El Pollo Loco",
+      "aliases": [],
+      "domains": [
+        "elpolloloco.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "el_torito",
+      "name": "El Torito",
+      "aliases": [],
+      "domains": [
+        "eltorito.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "erbert_gerberts",
+      "name": "Erbert & Gerbert's",
+      "aliases": [],
+      "domains": [
+        "erbertandgerberts.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "famous_daves",
+      "name": "Famous Dave's",
+      "aliases": [
+        "Famous Dave's Bar-B-Que"
+      ],
+      "domains": [
+        "famousdaves.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "farmer_boys",
+      "name": "Farmer Boys",
+      "aliases": [],
+      "domains": [
+        "farmerboys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "fatburger",
+      "name": "Fatburger",
+      "aliases": [],
+      "domains": [
+        "fatburger.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "fazolis",
+      "name": "Fazoli's",
+      "aliases": [],
+      "domains": [
+        "fazolis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "firehouse_subs",
+      "name": "Firehouse Subs",
+      "aliases": [],
+      "domains": [
+        "firehousesubs.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "first_watch",
+      "name": "First Watch",
+      "aliases": [],
+      "domains": [
+        "firstwatch.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "five_guys",
+      "name": "Five Guys",
+      "aliases": [],
+      "domains": [
+        "fiveguys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "flemings",
+      "name": "Fleming's Prime Steakhouse & Wine Bar",
+      "aliases": [
+        "Fleming's Steakhouse"
+      ],
+      "domains": [
+        "flemingssteakhouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "fogo_de_chao",
+      "name": "Fogo de Chão",
+      "aliases": [
+        "Fogo de Chao Brazilian Steakhouse"
+      ],
+      "domains": [
+        "fogodechao.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "fords_garage",
+      "name": "Ford's Garage",
+      "aliases": [],
+      "domains": [
+        "fordsgarageusa.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "fosters_freeze",
+      "name": "Fosters Freeze",
+      "aliases": [],
+      "domains": [
+        "fostersfreeze.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "foxs_pizza",
+      "name": "Fox's Pizza Den",
+      "aliases": [],
+      "domains": [
+        "foxspizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "freddys",
+      "name": "Freddy's Frozen Custard & Steakburgers",
+      "aliases": [
+        "Freddy's Frozen Custard"
+      ],
+      "domains": [
+        "freddys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "friendlys",
+      "name": "Friendly's",
+      "aliases": [],
+      "domains": [
+        "friendlys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "frischs",
+      "name": "Frisch's Big Boy",
+      "aliases": [],
+      "domains": [
+        "frischs.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "fuzzys",
+      "name": "Fuzzy's Taco Shop",
+      "aliases": [],
+      "domains": [
+        "fuzzystacoshop.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "gen_korean_bbq",
+      "name": "Gen Korean BBQ House",
+      "aliases": [
+        "Gen Korean BBQ"
+      ],
+      "domains": [
+        "genkoreanbbq.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "giordanos",
+      "name": "Giordano's",
+      "aliases": [],
+      "domains": [
+        "giordanos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "godfathers",
+      "name": "Godfather's Pizza",
+      "aliases": [],
+      "domains": [
+        "godfathers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "gold_star_chili",
+      "name": "Gold Star Chili",
+      "aliases": [],
+      "domains": [
+        "goldstarchili.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "golden_chick",
+      "name": "Golden Chick",
+      "aliases": [],
+      "domains": [
+        "goldenchick.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "golden_corral",
+      "name": "Golden Corral",
+      "aliases": [
+        "Golden Corral Buffet & Grill"
+      ],
+      "domains": [
+        "goldencorral.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "golden_krust",
+      "name": "Golden Krust Caribbean Bakery & Grill",
+      "aliases": [
+        "Golden Krust"
+      ],
+      "domains": [
+        "goldenkrustbakery.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "gong_cha",
+      "name": "Gong cha",
+      "zh_name": "贡茶",
+      "aliases": [],
+      "domains": [
+        "gongchausa.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "good_times",
+      "name": "Good Times Burgers & Frozen Custard",
+      "aliases": [
+        "Good Times Burgers"
+      ],
+      "domains": [
+        "goodtimesburgers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "graeters",
+      "name": "Graeter's Ice Cream",
+      "aliases": [
+        "Graeter's"
+      ],
+      "domains": [
+        "graeters.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "great_american_cookies",
+      "name": "Great American Cookies",
+      "aliases": [],
+      "domains": [
+        "greatamericancookies.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "great_harvest",
+      "name": "Great Harvest Bread Co.",
+      "aliases": [
+        "Great Harvest Bread Company"
+      ],
+      "domains": [
+        "greatharvest.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "great_wraps",
+      "name": "Great Wraps",
+      "aliases": [],
+      "domains": [
+        "greatwraps.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "gregorys",
+      "name": "Gregorys Coffee",
+      "aliases": [],
+      "domains": [
+        "gregoryscoffee.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "gyu_kaku",
+      "name": "Gyu-Kaku Japanese BBQ",
+      "aliases": [
+        "Gyu-Kaku"
+      ],
+      "domains": [
+        "gyu-kaku.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "habit_burger",
+      "name": "The Habit Burger Grill",
+      "aliases": [
+        "Habit Burger Grill",
+        "Habit Burger"
+      ],
+      "domains": [
+        "habitburger.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "halal_guys",
+      "name": "The Halal Guys",
+      "aliases": [],
+      "domains": [
+        "thehalalguys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "handels",
+      "name": "Handel's Homemade Ice Cream",
+      "aliases": [
+        "Handel's Ice Cream"
+      ],
+      "domains": [
+        "handelsicecream.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "happy_joes",
+      "name": "Happy Joe's Pizza & Ice Cream",
+      "aliases": [
+        "Happy Joe's Pizza"
+      ],
+      "domains": [
+        "happyjoes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "happys_pizza",
+      "name": "Happy's Pizza",
+      "aliases": [],
+      "domains": [
+        "happyspizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hard_rock_cafe",
+      "name": "Hard Rock Cafe",
+      "aliases": [],
+      "domains": [
+        "hardrockcafe.com",
+        "hardrock.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hardees",
+      "name": "Hardee's",
+      "aliases": [],
+      "domains": [
+        "hardees.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "honey_dew",
+      "name": "Honey Dew Donuts",
+      "aliases": [],
+      "domains": [
+        "honeydewdonuts.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "honeybaked",
+      "name": "The Honey Baked Ham Company",
+      "aliases": [
+        "HoneyBaked Ham",
+        "Honey Baked Ham"
+      ],
+      "domains": [
+        "honeybaked.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "honeygrow",
+      "name": "Honeygrow",
+      "aliases": [],
+      "domains": [
+        "honeygrow.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hooters",
+      "name": "Hooters",
+      "aliases": [],
+      "domains": [
+        "hooters.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hot_dog_on_a_stick",
+      "name": "Hot Dog on a Stick",
+      "aliases": [],
+      "domains": [
+        "hotdogonastick.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "houlihans",
+      "name": "Houlihan's",
+      "aliases": [],
+      "domains": [
+        "houlihans.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "huddle_house",
+      "name": "Huddle House",
+      "aliases": [],
+      "domains": [
+        "huddlehouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "huhot",
+      "name": "HuHot Mongolian Grill",
+      "aliases": [
+        "HuHot"
+      ],
+      "domains": [
+        "huhot.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "human_bean",
+      "name": "The Human Bean",
+      "aliases": [],
+      "domains": [
+        "thehumanbean.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hungry_howies",
+      "name": "Hungry Howie's Pizza",
+      "aliases": [
+        "Hungry Howie's"
+      ],
+      "domains": [
+        "hungryhowies.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hunt_brothers",
+      "name": "Hunt Brothers Pizza",
+      "aliases": [],
+      "domains": [
+        "huntbrotherspizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hurricane_wings",
+      "name": "Hurricane Grill & Wings",
+      "aliases": [],
+      "domains": [
+        "hurricanewings.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "hwy_55",
+      "name": "Hwy 55 Burgers Shakes & Fries",
+      "aliases": [
+        "Hwy 55"
+      ],
+      "domains": [
+        "hwy55.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ihop",
+      "name": "IHOP",
+      "aliases": [
+        "International House of Pancakes"
+      ],
+      "domains": [
+        "ihop.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ikes",
+      "name": "Ike's Love & Sandwiches",
+      "aliases": [
+        "Ike's Sandwiches"
+      ],
+      "domains": [
+        "ikessandwich.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "imos",
+      "name": "Imo's Pizza",
+      "aliases": [],
+      "domains": [
+        "imospizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "in_n_out",
+      "name": "In-N-Out Burger",
+      "aliases": [
+        "In-N-Out"
+      ],
+      "domains": [
+        "in-n-out.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "insomnia_cookies",
+      "name": "Insomnia Cookies",
+      "aliases": [],
+      "domains": [
+        "insomniacookies.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "islands",
+      "name": "Islands Restaurant",
+      "aliases": [
+        "Islands Fine Burgers & Drinks"
+      ],
+      "domains": [
+        "islandsrestaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "its_boba_time",
+      "name": "It's Boba Time",
+      "aliases": [],
+      "domains": [
+        "itsbobatime.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "j_alexanders",
+      "name": "J. Alexander's",
+      "aliases": [],
+      "domains": [
+        "jalexanders.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jack_in_the_box",
+      "name": "Jack in the Box",
+      "aliases": [],
+      "domains": [
+        "jackinthebox.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jacks",
+      "name": "Jack's Family Restaurants",
+      "aliases": [],
+      "domains": [
+        "eatatjacks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jamba",
+      "name": "Jamba",
+      "aliases": [
+        "Jamba Juice"
+      ],
+      "domains": [
+        "jamba.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jasons_deli",
+      "name": "Jason's Deli",
+      "aliases": [],
+      "domains": [
+        "jasonsdeli.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jersey_mikes",
+      "name": "Jersey Mike's",
+      "aliases": [],
+      "domains": [
+        "jerseymikes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jets_pizza",
+      "name": "Jet's Pizza",
+      "aliases": [],
+      "domains": [
+        "jetspizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jimmy_johns",
+      "name": "Jimmy John's",
+      "aliases": [],
+      "domains": [
+        "jimmyjohns.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "joes_crab_shack",
+      "name": "Joe's Crab Shack",
+      "aliases": [],
+      "domains": [
+        "joescrabshack.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "johnny_carinos",
+      "name": "Johnny Carino's",
+      "aliases": [],
+      "domains": [
+        "carinos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "johnny_rockets",
+      "name": "Johnny Rockets",
+      "aliases": [],
+      "domains": [
+        "johnnyrockets.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "jollibee",
+      "name": "Jollibee",
+      "zh_name": "快乐蜂",
+      "aliases": [
+        "快樂蜂"
+      ],
+      "domains": [
+        "jollibeefoods.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "juice_it_up",
+      "name": "Juice It Up!",
+      "aliases": [],
+      "domains": [
+        "juiceitup.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "just_salad",
+      "name": "Just Salad",
+      "aliases": [],
+      "domains": [
+        "justsalad.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "kfc",
+      "name": "KFC",
+      "zh_name": "肯德基",
+      "aliases": [
+        "Kentucky Fried Chicken"
+      ],
+      "domains": [
+        "kfc.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "kickin_crab",
+      "name": "The Kickin' Crab",
+      "aliases": [],
+      "domains": [
+        "thekickincrab.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "kilwins",
+      "name": "Kilwins",
+      "aliases": [],
+      "domains": [
+        "kilwins.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "kona_grill",
+      "name": "Kona Grill",
+      "aliases": [],
+      "domains": [
+        "konagrill.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "krispy_kreme",
+      "name": "Krispy Kreme",
+      "aliases": [
+        "Krispy Kreme Doughnuts"
+      ],
+      "domains": [
+        "krispykreme.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "krystal",
+      "name": "Krystal",
+      "aliases": [],
+      "domains": [
+        "krystal.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "kung_fu_tea",
+      "name": "Kung Fu Tea",
+      "aliases": [],
+      "domains": [
+        "kungfutea.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "kura_sushi",
+      "name": "Kura Revolving Sushi Bar",
+      "zh_name": "藏寿司",
+      "aliases": [
+        "Kura Sushi",
+        "藏壽司"
+      ],
+      "domains": [
+        "kurasushi.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "l_and_l",
+      "name": "L&L Hawaiian Barbecue",
+      "aliases": [
+        "L&L Hawaiian BBQ"
+      ],
+      "domains": [
+        "hawaiianbarbecue.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "la_madeleine",
+      "name": "La Madeleine",
+      "aliases": [
+        "La Madeleine French Bakery & Cafe"
+      ],
+      "domains": [
+        "lamadeleine.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "landrys_seafood",
+      "name": "Landry's Seafood House",
+      "aliases": [
+        "Landry's Seafood"
+      ],
+      "domains": [
+        "landrysseafoodhouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "larosas",
+      "name": "LaRosa's Pizzeria",
+      "aliases": [
+        "LaRosa's Pizza"
+      ],
+      "domains": [
+        "larosas.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "lazy_dog",
+      "name": "Lazy Dog Restaurant & Bar",
+      "aliases": [],
+      "domains": [
+        "lazydogrestaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "le_pain_quotidien",
+      "name": "Le Pain Quotidien",
+      "aliases": [],
+      "domains": [
+        "lepainquotidien.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ledo_pizza",
+      "name": "Ledo Pizza",
+      "aliases": [],
+      "domains": [
+        "ledopizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "lees_famous_recipe",
+      "name": "Lee's Famous Recipe Chicken",
+      "aliases": [
+        "Lee's Famous Recipe"
+      ],
+      "domains": [
+        "leesfamousrecipe.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "lees_sandwiches",
+      "name": "Lee's Sandwiches",
+      "aliases": [],
+      "domains": [
+        "leesandwiches.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "legal_sea_foods",
+      "name": "Legal Sea Foods",
+      "aliases": [],
+      "domains": [
+        "legalseafoods.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "lennys",
+      "name": "Lenny's Grill & Subs",
+      "aliases": [],
+      "domains": [
+        "lennys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "lions_choice",
+      "name": "Lion's Choice",
+      "aliases": [],
+      "domains": [
+        "lionschoice.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "little_caesars",
+      "name": "Little Caesars",
+      "aliases": [],
+      "domains": [
+        "littlecaesars.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "logans_roadhouse",
+      "name": "Logan's Roadhouse",
+      "aliases": [],
+      "domains": [
+        "logansroadhouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "long_john_silvers",
+      "name": "Long John Silver's",
+      "aliases": [],
+      "domains": [
+        "ljsilvers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "longhorn",
+      "name": "LongHorn Steakhouse",
+      "aliases": [],
+      "domains": [
+        "longhornsteakhouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "lou_malnatis",
+      "name": "Lou Malnati's Pizzeria",
+      "aliases": [
+        "Lou Malnati's"
+      ],
+      "domains": [
+        "loumalnatis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "macaroni_grill",
+      "name": "Romano's Macaroni Grill",
+      "aliases": [
+        "Macaroni Grill"
+      ],
+      "domains": [
+        "macaronigrill.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "maggianos",
+      "name": "Maggiano's Little Italy",
+      "aliases": [
+        "Maggiano's"
+      ],
+      "domains": [
+        "maggianos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "maid_rite",
+      "name": "Maid-Rite",
+      "aliases": [],
+      "domains": [
+        "maid-rite.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "marble_slab",
+      "name": "Marble Slab Creamery",
+      "aliases": [],
+      "domains": [
+        "marbleslab.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "marcos_pizza",
+      "name": "Marco's Pizza",
+      "aliases": [],
+      "domains": [
+        "marcos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "marie_callenders",
+      "name": "Marie Callender's",
+      "aliases": [],
+      "domains": [
+        "mariecallenders.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mcalisters",
+      "name": "McAlister's Deli",
+      "aliases": [],
+      "domains": [
+        "mcalistersdeli.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mcdonalds",
+      "name": "McDonald's",
+      "zh_name": "麦当劳",
+      "aliases": [
+        "McDonald's Restaurant",
+        "McCafe",
+        "麥當勞"
+      ],
+      "domains": [
+        "mcdonalds.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mellow_mushroom",
+      "name": "Mellow Mushroom",
+      "aliases": [],
+      "domains": [
+        "mellowmushroom.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "melting_pot",
+      "name": "The Melting Pot",
+      "aliases": [],
+      "domains": [
+        "meltingpot.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "menchies",
+      "name": "Menchie's Frozen Yogurt",
+      "aliases": [
+        "Menchie's"
+      ],
+      "domains": [
+        "menchies.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mendocino_farms",
+      "name": "Mendocino Farms",
+      "aliases": [],
+      "domains": [
+        "mendocinofarms.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "metro_diner",
+      "name": "Metro Diner",
+      "aliases": [],
+      "domains": [
+        "metrodiner.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "millers_ale_house",
+      "name": "Miller's Ale House",
+      "aliases": [],
+      "domains": [
+        "millersalehouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mimis_cafe",
+      "name": "Mimi's Cafe",
+      "aliases": [],
+      "domains": [
+        "mimiscafe.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mission_bbq",
+      "name": "Mission BBQ",
+      "aliases": [],
+      "domains": [
+        "mission-bbq.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mixt",
+      "name": "Mixt",
+      "aliases": [],
+      "domains": [
+        "mixt.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mod_pizza",
+      "name": "MOD Pizza",
+      "aliases": [],
+      "domains": [
+        "modpizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "moes",
+      "name": "Moe's Southwest Grill",
+      "aliases": [],
+      "domains": [
+        "moes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "monicals",
+      "name": "Monical's Pizza",
+      "aliases": [],
+      "domains": [
+        "monicals.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mooyah",
+      "name": "Mooyah",
+      "aliases": [
+        "MOOYAH Burgers Fries & Shakes"
+      ],
+      "domains": [
+        "mooyah.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mortons",
+      "name": "Morton's The Steakhouse",
+      "aliases": [
+        "Morton's Steakhouse"
+      ],
+      "domains": [
+        "mortons.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mountain_mikes",
+      "name": "Mountain Mike's Pizza",
+      "aliases": [],
+      "domains": [
+        "mountainmikespizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mr_gattis",
+      "name": "Mr. Gatti's Pizza",
+      "aliases": [],
+      "domains": [
+        "mrgattispizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "mrs_fields",
+      "name": "Mrs. Fields",
+      "aliases": [],
+      "domains": [
+        "mrsfields.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "nathans",
+      "name": "Nathan's Famous",
+      "aliases": [],
+      "domains": [
+        "nathansfamous.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "newks",
+      "name": "Newk's Eatery",
+      "aliases": [],
+      "domains": [
+        "newks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ninety_nine",
+      "name": "Ninety Nine Restaurant & Pub",
+      "aliases": [
+        "99 Restaurant & Pub"
+      ],
+      "domains": [
+        "99restaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "noodles",
+      "name": "Noodles & Company",
+      "aliases": [],
+      "domains": [
+        "noodles.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "nothing_bundt_cakes",
+      "name": "Nothing Bundt Cakes",
+      "aliases": [],
+      "domains": [
+        "nothingbundtcakes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "oberweis",
+      "name": "Oberweis Ice Cream and Dairy Store",
+      "aliases": [
+        "Oberweis Dairy"
+      ],
+      "domains": [
+        "oberweis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ocean_prime",
+      "name": "Ocean Prime",
+      "aliases": [],
+      "domains": [
+        "ocean-prime.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ocharleys",
+      "name": "O'Charley's",
+      "aliases": [],
+      "domains": [
+        "ocharleys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "old_chicago",
+      "name": "Old Chicago Pizza & Taproom",
+      "aliases": [
+        "Old Chicago Pizza"
+      ],
+      "domains": [
+        "oldchicago.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "old_spaghetti_factory",
+      "name": "The Old Spaghetti Factory",
+      "aliases": [],
+      "domains": [
+        "osf.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "olgas_kitchen",
+      "name": "Olga's Kitchen",
+      "aliases": [],
+      "domains": [
+        "olgas.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "olive_garden",
+      "name": "Olive Garden",
+      "aliases": [
+        "Olive Garden Italian Restaurant"
+      ],
+      "domains": [
+        "olivegarden.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "on_the_border",
+      "name": "On The Border",
+      "aliases": [
+        "On The Border Mexican Grill & Cantina"
+      ],
+      "domains": [
+        "ontheborder.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ono_hawaiian",
+      "name": "Ono Hawaiian BBQ",
+      "aliases": [],
+      "domains": [
+        "onohawaiianbbq.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "original_pancake_house",
+      "name": "The Original Pancake House",
+      "aliases": [],
+      "domains": [
+        "originalpancakehouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "original_tommys",
+      "name": "Original Tommy's",
+      "aliases": [],
+      "domains": [
+        "originaltommys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "outback",
+      "name": "Outback Steakhouse",
+      "aliases": [],
+      "domains": [
+        "outback.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pancheros",
+      "name": "Pancheros Mexican Grill",
+      "aliases": [
+        "Pancheros"
+      ],
+      "domains": [
+        "pancheros.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "panda_express",
+      "name": "Panda Express",
+      "zh_name": "熊猫快餐",
+      "aliases": [
+        "熊貓快餐"
+      ],
+      "domains": [
+        "pandaexpress.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "panera",
+      "name": "Panera Bread",
+      "aliases": [
+        "Panera"
+      ],
+      "domains": [
+        "panerabread.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "papa_ginos",
+      "name": "Papa Gino's",
+      "aliases": [],
+      "domains": [
+        "papaginos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "papa_johns",
+      "name": "Papa John's",
+      "zh_name": "棒约翰",
+      "aliases": [],
+      "domains": [
+        "papajohns.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "papa_murphys",
+      "name": "Papa Murphy's",
+      "aliases": [
+        "Papa Murphy's Take 'N' Bake Pizza"
+      ],
+      "domains": [
+        "papamurphys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pappadeaux",
+      "name": "Pappadeaux Seafood Kitchen",
+      "aliases": [],
+      "domains": [
+        "pappadeaux.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pappasitos",
+      "name": "Pappasito's Cantina",
+      "aliases": [],
+      "domains": [
+        "pappasitos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "paris_baguette",
+      "name": "Paris Baguette",
+      "zh_name": "巴黎贝甜",
+      "aliases": [],
+      "domains": [
+        "parisbaguette.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "peets",
+      "name": "Peet's Coffee",
+      "zh_name": "皮爷咖啡",
+      "aliases": [],
+      "domains": [
+        "peets.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pei_wei",
+      "name": "Pei Wei Asian Kitchen",
+      "aliases": [
+        "Pei Wei Asian Diner",
+        "Pei Wei"
+      ],
+      "domains": [
+        "peiwei.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "penn_station",
+      "name": "Penn Station East Coast Subs",
+      "aliases": [],
+      "domains": [
+        "penn-station.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "perkins",
+      "name": "Perkins American Food Co.",
+      "aliases": [
+        "Perkins Restaurant & Bakery"
+      ],
+      "domains": [
+        "perkinsrestaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "peter_piper",
+      "name": "Peter Piper Pizza",
+      "aliases": [],
+      "domains": [
+        "peterpiperpizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pf_changs",
+      "name": "P.F. Chang's",
+      "aliases": [
+        "P.F. Chang's China Bistro"
+      ],
+      "domains": [
+        "pfchangs.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "philz",
+      "name": "Philz Coffee",
+      "aliases": [],
+      "domains": [
+        "philzcoffee.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pick_up_stix",
+      "name": "Pick Up Stix",
+      "aliases": [
+        "Pick Up Stix Fresh Asian Flavors"
+      ],
+      "domains": [
+        "pickupstix.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pieology",
+      "name": "Pieology Pizzeria",
+      "aliases": [
+        "Pieology"
+      ],
+      "domains": [
+        "pieology.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pinkberry",
+      "name": "Pinkberry",
+      "aliases": [],
+      "domains": [
+        "pinkberry.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pita_pit",
+      "name": "Pita Pit",
+      "aliases": [],
+      "domains": [
+        "pitapitusa.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pizza_hut",
+      "name": "Pizza Hut",
+      "zh_name": "必胜客",
+      "aliases": [
+        "必勝客"
+      ],
+      "domains": [
+        "pizzahut.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pizza_inn",
+      "name": "Pizza Inn",
+      "aliases": [],
+      "domains": [
+        "pizzainn.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pizza_patron",
+      "name": "Pizza Patrón",
+      "aliases": [],
+      "domains": [
+        "pizzapatron.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pizza_ranch",
+      "name": "Pizza Ranch",
+      "aliases": [],
+      "domains": [
+        "pizzaranch.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pjs_coffee",
+      "name": "PJ's Coffee",
+      "aliases": [
+        "PJ's Coffee of New Orleans"
+      ],
+      "domains": [
+        "pjscoffee.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "planet_smoothie",
+      "name": "Planet Smoothie",
+      "aliases": [],
+      "domains": [
+        "planetsmoothie.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pokeworks",
+      "name": "Pokeworks",
+      "aliases": [],
+      "domains": [
+        "pokeworks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pollo_campero",
+      "name": "Pollo Campero",
+      "aliases": [],
+      "domains": [
+        "campero.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pollo_tropical",
+      "name": "Pollo Tropical",
+      "aliases": [],
+      "domains": [
+        "pollotropical.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "popeyes",
+      "name": "Popeyes",
+      "aliases": [
+        "Popeyes Louisiana Kitchen",
+        "Popeyes Chicken"
+      ],
+      "domains": [
+        "popeyes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "port_of_subs",
+      "name": "Port of Subs",
+      "aliases": [],
+      "domains": [
+        "portofsubs.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "portillos",
+      "name": "Portillo's",
+      "aliases": [],
+      "domains": [
+        "portillos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "potbelly",
+      "name": "Potbelly",
+      "aliases": [
+        "Potbelly Sandwich Shop"
+      ],
+      "domains": [
+        "potbelly.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pret",
+      "name": "Pret A Manger",
+      "aliases": [
+        "Pret"
+      ],
+      "domains": [
+        "pret.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "pretzelmaker",
+      "name": "Pretzelmaker",
+      "aliases": [],
+      "domains": [
+        "pretzelmaker.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "primo_hoagies",
+      "name": "Primo Hoagies",
+      "aliases": [],
+      "domains": [
+        "primohoagies.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "qdoba",
+      "name": "Qdoba",
+      "aliases": [
+        "Qdoba Mexican Eats",
+        "Qdoba Mexican Grill"
+      ],
+      "domains": [
+        "qdoba.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "quiznos",
+      "name": "Quiznos",
+      "aliases": [
+        "Quiznos Sub"
+      ],
+      "domains": [
+        "quiznos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "raising_canes",
+      "name": "Raising Cane's",
+      "aliases": [],
+      "domains": [
+        "raisingcanes.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "red_lobster",
+      "name": "Red Lobster",
+      "aliases": [],
+      "domains": [
+        "redlobster.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "red_robin",
+      "name": "Red Robin Gourmet Burgers and Brews",
+      "aliases": [
+        "Red Robin"
+      ],
+      "domains": [
+        "redrobin.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ritas",
+      "name": "Rita's Italian Ice & Frozen Custard",
+      "aliases": [
+        "Rita's Italian Ice"
+      ],
+      "domains": [
+        "ritasice.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "robeks",
+      "name": "Robeks",
+      "aliases": [
+        "Robeks Fresh Juices & Smoothies"
+      ],
+      "domains": [
+        "robeks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "rosatis",
+      "name": "Rosati's Pizza",
+      "aliases": [],
+      "domains": [
+        "myrosatis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "round_table",
+      "name": "Round Table Pizza",
+      "aliases": [],
+      "domains": [
+        "roundtablepizza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "roy_rogers",
+      "name": "Roy Rogers",
+      "aliases": [],
+      "domains": [
+        "royrogersrestaurants.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "roys",
+      "name": "Roy's Restaurant",
+      "aliases": [],
+      "domains": [
+        "roysrestaurant.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "rubios",
+      "name": "Rubio's Coastal Grill",
+      "aliases": [
+        "Rubio's"
+      ],
+      "domains": [
+        "rubios.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ruby_tuesday",
+      "name": "Ruby Tuesday",
+      "aliases": [],
+      "domains": [
+        "rubytuesday.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "runza",
+      "name": "Runza",
+      "aliases": [],
+      "domains": [
+        "runza.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ruths_chris",
+      "name": "Ruth's Chris Steak House",
+      "aliases": [
+        "Ruth's Chris"
+      ],
+      "domains": [
+        "ruthschris.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "saladworks",
+      "name": "Saladworks",
+      "aliases": [],
+      "domains": [
+        "saladworks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "saltgrass",
+      "name": "Saltgrass Steak House",
+      "aliases": [],
+      "domains": [
+        "saltgrass.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sarku",
+      "name": "Sarku Japan",
+      "aliases": [],
+      "domains": [
+        "sarkujapan.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sbarro",
+      "name": "Sbarro",
+      "aliases": [],
+      "domains": [
+        "sbarro.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "schlotzskys",
+      "name": "Schlotzsky's",
+      "aliases": [],
+      "domains": [
+        "schlotzskys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "scooters",
+      "name": "Scooter's Coffee",
+      "aliases": [],
+      "domains": [
+        "scooterscoffee.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "seasons_52",
+      "name": "Seasons 52",
+      "aliases": [],
+      "domains": [
+        "seasons52.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "seven_brew",
+      "name": "7 Brew",
+      "aliases": [
+        "7 Brew Coffee"
+      ],
+      "domains": [
+        "7brew.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "seven_leaves",
+      "name": "7 Leaves Cafe",
+      "aliases": [],
+      "domains": [
+        "7leavescafe.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "shake_shack",
+      "name": "Shake Shack",
+      "aliases": [],
+      "domains": [
+        "shakeshack.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "shakeys",
+      "name": "Shakey's Pizza Parlor",
+      "aliases": [
+        "Shakey's Pizza"
+      ],
+      "domains": [
+        "shakeys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "shanes_rib_shack",
+      "name": "Shane's Rib Shack",
+      "aliases": [],
+      "domains": [
+        "shanesribshack.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sharis",
+      "name": "Shari's Cafe & Pies",
+      "aliases": [],
+      "domains": [
+        "sharis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "shipley",
+      "name": "Shipley Do-Nuts",
+      "aliases": [
+        "Shipley Donuts"
+      ],
+      "domains": [
+        "shipleydonuts.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "shoneys",
+      "name": "Shoney's",
+      "aliases": [],
+      "domains": [
+        "shoneys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sizzler",
+      "name": "Sizzler",
+      "aliases": [],
+      "domains": [
+        "sizzler.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "skyline_chili",
+      "name": "Skyline Chili",
+      "aliases": [],
+      "domains": [
+        "skylinechili.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "slim_chickens",
+      "name": "Slim Chickens",
+      "aliases": [],
+      "domains": [
+        "slimchickens.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "smashburger",
+      "name": "Smashburger",
+      "aliases": [],
+      "domains": [
+        "smashburger.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "smoothie_king",
+      "name": "Smoothie King",
+      "aliases": [],
+      "domains": [
+        "smoothieking.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "snooze",
+      "name": "Snooze, an A.M. Eatery",
+      "aliases": [
+        "Snooze AM Eatery"
+      ],
+      "domains": [
+        "snoozeeatery.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sonic",
+      "name": "Sonic Drive-In",
+      "aliases": [
+        "Sonic"
+      ],
+      "domains": [
+        "sonicdrivein.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sonnys_bbq",
+      "name": "Sonny's BBQ",
+      "aliases": [],
+      "domains": [
+        "sonnysbbq.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "starbucks",
+      "name": "Starbucks",
+      "zh_name": "星巴克",
+      "aliases": [
+        "Starbucks Coffee",
+        "Starbucks Reserve"
+      ],
+      "domains": [
+        "starbucks.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "steak_escape",
+      "name": "Steak Escape",
+      "aliases": [],
+      "domains": [
+        "steakescape.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "steak_n_shake",
+      "name": "Steak 'n Shake",
+      "aliases": [],
+      "domains": [
+        "steaknshake.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "subway",
+      "name": "Subway",
+      "zh_name": "赛百味",
+      "aliases": [
+        "Subway Restaurants",
+        "Subway Sandwiches",
+        "賽百味"
+      ],
+      "domains": [
+        "subway.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sweet_frog",
+      "name": "Sweet Frog",
+      "aliases": [
+        "sweetFrog Premium Frozen Yogurt"
+      ],
+      "domains": [
+        "sweetfrog.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "sweetgreen",
+      "name": "Sweetgreen",
+      "aliases": [],
+      "domains": [
+        "sweetgreen.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "swensons",
+      "name": "Swensons Drive-In",
+      "aliases": [],
+      "domains": [
+        "swensonsdriveins.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "swig",
+      "name": "Swig",
+      "aliases": [
+        "Swig Drinks"
+      ],
+      "domains": [
+        "swig.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_bell",
+      "name": "Taco Bell",
+      "zh_name": "塔可贝尔",
+      "aliases": [],
+      "domains": [
+        "tacobell.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_bueno",
+      "name": "Taco Bueno",
+      "aliases": [],
+      "domains": [
+        "tacobueno.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_cabana",
+      "name": "Taco Cabana",
+      "aliases": [],
+      "domains": [
+        "tacocabana.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_del_mar",
+      "name": "Taco del Mar",
+      "aliases": [],
+      "domains": [
+        "tacodelmar.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_johns",
+      "name": "Taco John's",
+      "aliases": [],
+      "domains": [
+        "tacojohns.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_mayo",
+      "name": "Taco Mayo",
+      "aliases": [],
+      "domains": [
+        "tacomayo.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "taco_palenque",
+      "name": "Taco Palenque",
+      "aliases": [],
+      "domains": [
+        "tacopalenque.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tazikis",
+      "name": "Taziki's Mediterranean Cafe",
+      "aliases": [],
+      "domains": [
+        "tazikis.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tcby",
+      "name": "TCBY",
+      "aliases": [],
+      "domains": [
+        "tcby.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "teds_montana_grill",
+      "name": "Ted's Montana Grill",
+      "aliases": [],
+      "domains": [
+        "tedsmontanagrill.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "teriyaki_madness",
+      "name": "Teriyaki Madness",
+      "aliases": [],
+      "domains": [
+        "teriyakimadness.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "texas_de_brazil",
+      "name": "Texas de Brazil",
+      "aliases": [],
+      "domains": [
+        "texasdebrazil.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "texas_roadhouse",
+      "name": "Texas Roadhouse",
+      "aliases": [],
+      "domains": [
+        "texasroadhouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tgi_fridays",
+      "name": "TGI Fridays",
+      "aliases": [],
+      "domains": [
+        "tgifridays.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tijuana_flats",
+      "name": "Tijuana Flats",
+      "aliases": [],
+      "domains": [
+        "tijuanaflats.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tim_hortons",
+      "name": "Tim Hortons",
+      "zh_name": "天好咖啡",
+      "aliases": [],
+      "domains": [
+        "timhortons.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "togos",
+      "name": "Togo's",
+      "aliases": [],
+      "domains": [
+        "togos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "topgolf",
+      "name": "Topgolf",
+      "aliases": [],
+      "domains": [
+        "topgolf.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "toppers",
+      "name": "Toppers Pizza",
+      "aliases": [],
+      "domains": [
+        "toppers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "torchys",
+      "name": "Torchy's Tacos",
+      "aliases": [],
+      "domains": [
+        "torchystacos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tous_les_jours",
+      "name": "Tous les Jours",
+      "zh_name": "多乐之日",
+      "aliases": [],
+      "domains": [
+        "tljus.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tropical_smoothie",
+      "name": "Tropical Smoothie Cafe",
+      "aliases": [
+        "Tropical Smoothie"
+      ],
+      "domains": [
+        "tropicalsmoothiecafe.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "true_food_kitchen",
+      "name": "True Food Kitchen",
+      "aliases": [],
+      "domains": [
+        "truefoodkitchen.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tubbys",
+      "name": "Tubby's Sub Shop",
+      "aliases": [
+        "Tubby's Grilled Submarines"
+      ],
+      "domains": [
+        "tubbys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "tudors",
+      "name": "Tudor's Biscuit World",
+      "aliases": [],
+      "domains": [
+        "tudorsbiscuitworld.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "twin_peaks",
+      "name": "Twin Peaks",
+      "aliases": [],
+      "domains": [
+        "twinpeaksrestaurant.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "uncle_maddios",
+      "name": "Uncle Maddio's Pizza",
+      "aliases": [],
+      "domains": [
+        "unclemaddios.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "uno",
+      "name": "Uno Pizzeria & Grill",
+      "aliases": [
+        "Pizzeria Uno"
+      ],
+      "domains": [
+        "unos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "velvet_taco",
+      "name": "Velvet Taco",
+      "aliases": [],
+      "domains": [
+        "velvettaco.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "village_inn",
+      "name": "Village Inn",
+      "aliases": [],
+      "domains": [
+        "villageinn.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "waba_grill",
+      "name": "WaBa Grill",
+      "aliases": [],
+      "domains": [
+        "wabagrill.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "waffle_house",
+      "name": "Waffle House",
+      "aliases": [],
+      "domains": [
+        "wafflehouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wahlburgers",
+      "name": "Wahlburgers",
+      "aliases": [],
+      "domains": [
+        "wahlburgers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wahoos",
+      "name": "Wahoo's Fish Taco",
+      "aliases": [],
+      "domains": [
+        "wahoos.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "walk_ons",
+      "name": "Walk-On's Sports Bistreaux",
+      "aliases": [
+        "Walk-On's"
+      ],
+      "domains": [
+        "walk-ons.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wayback_burgers",
+      "name": "Wayback Burgers",
+      "aliases": [],
+      "domains": [
+        "waybackburgers.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wendys",
+      "name": "Wendy's",
+      "zh_name": "温蒂汉堡",
+      "aliases": [
+        "Wendy's Old Fashioned Hamburgers"
+      ],
+      "domains": [
+        "wendys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "western_sizzlin",
+      "name": "Western Sizzlin",
+      "aliases": [],
+      "domains": [
+        "western-sizzlin.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wetzels",
+      "name": "Wetzel's Pretzels",
+      "aliases": [],
+      "domains": [
+        "wetzels.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "whataburger",
+      "name": "Whataburger",
+      "aliases": [],
+      "domains": [
+        "whataburger.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "which_wich",
+      "name": "Which Wich",
+      "aliases": [
+        "Which Wich Superior Sandwiches"
+      ],
+      "domains": [
+        "whichwich.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "white_castle",
+      "name": "White Castle",
+      "aliases": [],
+      "domains": [
+        "whitecastle.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wienerschnitzel",
+      "name": "Wienerschnitzel",
+      "aliases": [],
+      "domains": [
+        "wienerschnitzel.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "winchells",
+      "name": "Winchell's Donut House",
+      "aliases": [
+        "Winchell's Donuts",
+        "Winchell's"
+      ],
+      "domains": [
+        "winchells.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "winghouse",
+      "name": "WingHouse Bar & Grill",
+      "aliases": [
+        "WingHouse"
+      ],
+      "domains": [
+        "winghouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "wingstop",
+      "name": "Wingstop",
+      "aliases": [],
+      "domains": [
+        "wingstop.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "yard_house",
+      "name": "Yard House",
+      "aliases": [],
+      "domains": [
+        "yardhouse.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "yogurtland",
+      "name": "Yogurtland",
+      "aliases": [],
+      "domains": [
+        "yogurtland.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "yoshinoya",
+      "name": "Yoshinoya",
+      "zh_name": "吉野家",
+      "aliases": [],
+      "domains": [
+        "yoshinoyaamerica.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "zaxbys",
+      "name": "Zaxby's",
+      "aliases": [],
+      "domains": [
+        "zaxbys.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "ziggis",
+      "name": "Ziggi's Coffee",
+      "aliases": [],
+      "domains": [
+        "ziggiscoffee.com"
+      ],
+      "size": "20_plus"
+    },
+    {
+      "key": "zips",
+      "name": "Zip's Drive-In",
+      "aliases": [],
+      "domains": [
+        "zipsdrivein.com"
+      ],
+      "size": "20_plus"
+    }
+  ]
+}
