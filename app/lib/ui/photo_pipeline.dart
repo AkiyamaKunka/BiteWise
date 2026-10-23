@@ -512,7 +512,7 @@ class PhotoPipeline {
             _held = (hash: hash, stamp: stamp, assetId: photo.assetId);
           }
       }
-      if (_abandoned) return _whenAbandoned();
+      if (_abandoned) return await _whenAbandoned();
 
       // The day this photo belongs to. validateCapturedAt is NOT optional:
       // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
@@ -554,13 +554,13 @@ class PhotoPipeline {
       ];
 
       final revision = latch?.revision();
-      if (_abandoned) return _whenAbandoned(); // no upload
+      if (_abandoned) return await _whenAbandoned(); // no upload
       final gpuOffSkips = gpuOffDecodeSkips;
       final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
       // The run's deadline passed during the analysis: abandon() released
       // the photo, and nothing below may write for it.
-      if (_abandoned) return _whenAbandoned();
+      if (_abandoned) return await _whenAbandoned();
       verdict = (outcome: outcome, recent: recent);
       if (outcome.analysis == null) {
         final why = outcome.error ?? 'Analysis failed.';
