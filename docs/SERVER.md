@@ -207,7 +207,7 @@ sudo systemctl start caloriebot.service
 sudo systemctl status caloriebot.service
 ```
 
-If phones cannot reach port `5000`, put the service behind a reverse proxy, VPN, firewall rule, or port-forward. Prefer HTTPS or VPN for real deployments because plain HTTP exposes upload metadata and the upload key to the network path.
+If phones cannot reach port `5000`, put the service behind a reverse proxy, VPN, firewall rule, or port-forward. Prefer HTTPS or VPN for real deployments because plain HTTP exposes upload metadata and the upload key to the network path. [SERVER_TLS.md](SERVER_TLS.md) walks through Caddy with automatic certificates and `API_BIND_HOST=127.0.0.1` so port 5000 stops listening on the network.
 
 </details>
 
@@ -373,6 +373,8 @@ phone owns its own database.
 | `POST /api/auth_check` | Free readiness probe: validates the key and reports which analysis backends are available. Never spends a CLI run. |
 | `POST /api/analyze_photo` | Analyze one photo. The server composes the prompt from its own `shared/` copy — the phone may contribute only a bounded dietary-profile appendix, never the prompt itself. |
 | `POST /api/text_intent` | Natural-language intent parsing for corrections and text-described meals. |
+| `POST /api/restaurant_lookup` | Queue a published-nutrition lookup for chain-restaurant items (off unless `CLAUDE_LOOKUP_ENABLED=1`). Structured fields only; `202 {job_id}` or `200` from the 24 h cache. |
+| `POST /api/restaurant_lookup/status` | `{job_id}` → `queued` / `running` / `done` (with the result) / `failed` / `unknown`. |
 | `POST /api/claude_auth/start` / `complete` / `cancel` | Phone-initiated OAuth re-connect for the server's Claude subscription. The PKCE verifier and token never leave the server. |
 
 Response contract worth knowing:
@@ -384,6 +386,41 @@ Response contract worth knowing:
   single-flight CLI was busy, retry in place in a few seconds;
   `retry: false` — the run happened and produced nothing usable, more
   retries would only spend the subscription for the same junk.
+
+## Restaurant lookup (WebSearch, off by default)
+
+`/api/restaurant_lookup` looks up a chain restaurant's PUBLISHED
+nutrition for the app's restaurant assist. It is the only CLI path with
+a network tool, so it is fenced separately from the photo and text paths:
+
+- **Inputs are structured only**: item names, quantities and units, the
+  brand printed on an item or receipt, the receipt merchant, up to 3
+  chain KEYS from BiteWise's own US chain table (the server substitutes
+  its own canonical name), country and reply language. The request is
+  rebuilt from a whitelist and the prompt is composed on the server
+  (`lookup_contract.py`); location keys (`lat`, `lon`, `city`, `street`,
+  `distance`, …), `prompt`, `meal_description` and coordinate-shaped text
+  are refused with `400`.
+- **The CLI run** (`claude_analyzer.lookup_restaurant`): `--safe-mode`,
+  `--tools WebSearch` (the `--json-schema` answer adds the internal
+  `StructuredOutput`), WebFetch / MCP / every other tool disallowed,
+  `dontAsk`, no session persistence, a fresh scratch directory, and an
+  environment of only `PATH`, `HOME`, `LANG` and the OAuth token. The
+  first event the CLI prints must show exactly those tools, no MCP
+  server, no plugin and no memory path, or the process group is killed
+  before it does anything else.
+- **Jobs** (`lookup_jobs.py`): one at a time under the same single-flight
+  lock as photos, but a photo, leftover or text request always wins — it
+  kills a running lookup, which is requeued (3 strikes and it fails).
+  Results are cached for 24 h; at most 5 queued; at most
+  `CLAUDE_LOOKUP_DAILY_CAP` (30) runs a day.
+- **Logs** carry status, verdict, timings and counts only — never
+  restaurant names, dishes, queries or URLs.
+
+Knobs, the owner-run `scripts/lookup_smoke.py` and the order to switch
+it on in are in [SERVER_DEPLOY.md](SERVER_DEPLOY.md#restaurant-lookup-websearch-on-your-server).
+Put HTTPS in front first ([SERVER_TLS.md](SERVER_TLS.md)): over plain
+HTTP the app sends lookups by printed brand only.
 
 ## Subscription backends (Claude / GLM / Doubao)
 
