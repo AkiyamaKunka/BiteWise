@@ -6,6 +6,8 @@ import 'package:calorie_tracker/services/local_store.dart'
     show localStoreDirName;
 import 'package:calorie_tracker/services/photo/background_time.dart'
     show backgroundTimeChannelName;
+import 'package:calorie_tracker/services/photo/photo_changes.dart'
+    show photoChangesChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:calorie_tracker/ui/background_glue.dart'
     show backgroundNativeLaunchPrefsKey;
@@ -329,6 +331,75 @@ void main() {
         .firstMatch(delegate)
         ?.group(0);
     expect(register, contains('BackgroundTimePlugin.register(with:'));
+  });
+
+  // The photo library's change history (PhotoChangesPlugin.swift, design
+  // G1a, 2026-10-23) is how photos another app imports late — glasses
+  // photos the Meta AI app copies in hours later, keeping their capture
+  // time — are found at all. A Swift file missing from Runner, or a
+  // registration only one engine gets, answers MissingPluginException,
+  // which the Dart side turns into a quiet 'error' by design; so the wiring
+  // is pinned here. The background run reads the history too, hence both
+  // engines (registerAppPlugins; its two callers are pinned above). And it
+  // stays read-only: it never writes to the library, and never asks for
+  // access, which from a background run would be a prompt nobody sees.
+  test('the photo-changes plugin is built into Runner, registered for both '
+      'engines, and read-only', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/PhotoChangesPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$photoChangesChannelName"'));
+    for (final write in [
+      'performChanges',
+      'ChangeRequest',
+      'requestAuthorization',
+      'presentLimitedLibraryPicker',
+    ]) {
+      expect(source, isNot(contains(write)),
+          reason: 'PhotoChangesPlugin must stay read-only and never prompt');
+    }
+    expect(source, contains('PHPhotoLibrary.authorizationStatus(for: '
+        '.readWrite)'));
+
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* PhotoChangesPlugin.swift '
+            r'\*/ = \{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* PhotoChangesPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* PhotoChangesPlugin.swift '
+            'in Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* PhotoChangesPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('PhotoChangesPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('registrar(forPlugin: "PhotoChangesPlugin")'));
+    expect(register, contains('PhotoChangesPlugin.register(with:'));
   });
 
   // The iOS background run counts its time budgets from the moment
