@@ -64,7 +64,9 @@ class LookupCostPolicy {
     this.promptTokensAllowance = 3000,
     this.tokensPerSearchAllowance = 10000,
     this.unknownModelAllowanceUsd = 0.02,
-  });
+  })  : assert(maxSearches >= 1, 'a lookup needs at least one search'),
+        assert(maxContinuations >= 0),
+        assert(maxOutputTokens > 0);
 
   /// The hard ceiling for one lookup, all HTTP calls included.
   final double maxUsdPerLookup;
