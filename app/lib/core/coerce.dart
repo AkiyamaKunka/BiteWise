@@ -183,3 +183,252 @@ String isoDate(DateTime d) =>
 
 /// Lowercased, hex-normalized image hash (port of _normalize_image_hash).
 String normalizeImageHash(String? hash) => (hash ?? '').trim().toLowerCase();
+
+// ---------------------------------------------------------------------------
+// Meal-context fields of a photo analysis (restaurant assist, stage R1).
+//
+// The photo prompt (shared/prompts/food_detection_prompt.txt, MEAL CONTEXT)
+// asks for estimate_confidence, restaurant_context, portion_state and
+// order_merchant on the meal and brand/qty/unit on each item. All of them are
+// ADDITIVE and OPTIONAL: an old server, an analysis stored before this
+// change, or a model that skipped a field reads as null / "" / 1 here — and
+// an unknown value never triggers anything downstream. Analyses are stored
+// raw (spec §3.5: coercion happens on READ), so these are the one place a
+// consumer reads the fields from.
+//
+// The key 'confidence' is NOT one of them: it stays reserved for the
+// leftover verdict (core/leftover_logic.dart).
+// ---------------------------------------------------------------------------
+
+/// How well the photo supports the model's calorie numbers.
+enum EstimateConfidence { low, medium, high }
+
+/// Where the meal came from. The wire value "unknown" has no member: it
+/// reads as null, exactly like a missing or invalid value.
+enum RestaurantContext { restaurant, takeout, packaged, home }
+
+/// How much of a serving the photo shows.
+enum PortionState { whole, partial, shared, buffet }
+
+/// Every wire value the prompt allows for restaurant_context, "unknown"
+/// included (it coerces to null).
+const List<String> kRestaurantContextWireValues = [
+  'restaurant',
+  'takeout',
+  'packaged',
+  'home',
+  'unknown',
+];
+
+/// Longest kept brand / order_merchant, in Unicode code points.
+const int kBrandMaxChars = 60;
+
+/// Longest kept unit, in Unicode code points.
+const int kUnitMaxChars = 20;
+
+/// Largest believable item count; anything outside (0, kQtyMax] reads as 1.
+const num kQtyMax = 20;
+
+/// Case-insensitive English values, the Chinese 低/中/高 (a zh reply that
+/// translated the enum despite the directive), or a number in 0..1 bucketed
+/// into thirds. Anything else — a bool, NaN, a number outside 0..1, a
+/// numeric STRING, free text — is null (unknown).
+EstimateConfidence? coerceEstimateConfidence(dynamic value) {
+  if (value is bool) return null;
+  if (value is num) {
+    final d = value.toDouble();
+    if (!d.isFinite || d < 0 || d > 1) return null;
+    if (d < 1 / 3) return EstimateConfidence.low;
+    if (d < 2 / 3) return EstimateConfidence.medium;
+    return EstimateConfidence.high;
+  }
+  if (value is! String) return null;
+  return switch (value.trim().toLowerCase()) {
+    'low' || '低' => EstimateConfidence.low,
+    'medium' || '中' => EstimateConfidence.medium,
+    'high' || '高' => EstimateConfidence.high,
+    _ => null,
+  };
+}
+
+/// One of the listed values, case-insensitive; "unknown", a missing or an
+/// invalid value is null.
+RestaurantContext? coerceRestaurantContext(dynamic value) =>
+    _enumByName(RestaurantContext.values, value);
+
+/// One of the listed values, case-insensitive; anything else is null.
+PortionState? coercePortionState(dynamic value) =>
+    _enumByName(PortionState.values, value);
+
+T? _enumByName<T extends Enum>(List<T> values, dynamic value) {
+  if (value is! String) return null;
+  final v = value.trim().toLowerCase();
+  for (final e in values) {
+    if (e.name == v) return e;
+  }
+  return null;
+}
+
+/// An item's printed brand, cleaned for storage, display and (later) a
+/// lookup request: compatibility-folded ([nfkcLite]), control, invisible and
+/// bidi-override characters and every `<` `>` removed, whitespace collapsed,
+/// at most [kBrandMaxChars] code points. Non-strings are "".
+String cleanBrand(dynamic value) => _cleanShortText(value, kBrandMaxChars);
+
+/// order_merchant, cleaned exactly like [cleanBrand].
+String cleanOrderMerchant(dynamic value) =>
+    _cleanShortText(value, kBrandMaxChars);
+
+/// An item's unit ("cup", "slice"), cleaned like [cleanBrand] but at most
+/// [kUnitMaxChars] code points.
+String cleanUnit(dynamic value) => _cleanShortText(value, kUnitMaxChars);
+
+/// An item's count: a finite number in (0, [kQtyMax]], else 1 (the
+/// prompt's default). Bools and numeric strings are not counts.
+num coerceQty(dynamic value) {
+  if (value is bool || value is! num) return 1;
+  final d = value.toDouble();
+  if (!d.isFinite || d <= 0 || d > kQtyMax) return 1;
+  return value;
+}
+
+/// The meal-level context fields of [analysis], coerced. A non-map analysis
+/// reads as all-unknown.
+({
+  EstimateConfidence? estimateConfidence,
+  RestaurantContext? restaurantContext,
+  PortionState? portionState,
+  String orderMerchant,
+}) mealContextFields(dynamic analysis) {
+  final a = analysis is Map ? analysis : const {};
+  return (
+    estimateConfidence: coerceEstimateConfidence(a['estimate_confidence']),
+    restaurantContext: coerceRestaurantContext(a['restaurant_context']),
+    portionState: coercePortionState(a['portion_state']),
+    orderMerchant: cleanOrderMerchant(a['order_merchant']),
+  );
+}
+
+/// The item-level context fields of one food item, coerced. A non-map item
+/// reads as no brand, one unit, no unit name.
+({String brand, num qty, String unit}) itemContextFields(dynamic item) {
+  final m = item is Map ? item : const {};
+  return (
+    brand: cleanBrand(m['brand']),
+    qty: coerceQty(m['qty']),
+    unit: cleanUnit(m['unit']),
+  );
+}
+
+String _cleanShortText(dynamic value, int maxChars) {
+  if (value is! String) return '';
+  final out = StringBuffer();
+  var pendingSpace = false;
+  for (final rune in nfkcLite(value).runes) {
+    if (_isSpaceRune(rune)) {
+      pendingSpace = out.isNotEmpty;
+      continue;
+    }
+    if (_isStrippedRune(rune)) continue;
+    if (pendingSpace) {
+      out.write(' ');
+      pendingSpace = false;
+    }
+    out.writeCharCode(rune);
+  }
+  final runes = out.toString().runes;
+  if (runes.length <= maxChars) return out.toString();
+  return String.fromCharCodes(runes.take(maxChars)).trimRight();
+}
+
+/// Whitespace, including the C0 separators U+001C–U+001F that Python's
+/// str.split() also treats as whitespace (see [parseBoolish]).
+bool _isSpaceRune(int r) =>
+    r == 0x20 ||
+    (r >= 0x09 && r <= 0x0D) ||
+    (r >= 0x1C && r <= 0x1F) ||
+    r == 0x85 ||
+    r == 0xA0 ||
+    r == 0x1680 ||
+    (r >= 0x2000 && r <= 0x200A) ||
+    r == 0x2028 ||
+    r == 0x2029 ||
+    r == 0x202F ||
+    r == 0x205F ||
+    r == 0x3000;
+
+/// Dropped outright: the remaining C0/C1 controls, zero-width and bidi
+/// control characters (a reversed or invisible brand must not reach a
+/// prompt or a screen), unpaired surrogates (String.runes yields them as-is),
+/// and the angle brackets.
+bool _isStrippedRune(int r) =>
+    r < 0x20 ||
+    (r >= 0x7F && r <= 0x9F) ||
+    (r >= 0xD800 && r <= 0xDFFF) ||
+    r == 0x3C || // <
+    r == 0x3E || // >
+    r == 0x061C ||
+    (r >= 0x200B && r <= 0x200F) ||
+    (r >= 0x202A && r <= 0x202E) ||
+    (r >= 0x2060 && r <= 0x2064) ||
+    (r >= 0x2066 && r <= 0x2069) ||
+    r == 0xFEFF;
+
+/// The NFKC compatibility mappings that actually show up in brand and
+/// merchant text, applied code point by code point. Dart has no Unicode
+/// normalizer and the app takes no package for one, so this is a DELIBERATE
+/// SUBSET of Python's unicodedata.normalize('NFKC'): on every character it
+/// maps, the result is identical to NFKC; characters it does not list pass
+/// through unchanged (no canonical composition, no other compatibility
+/// forms). Covered: fullwidth ASCII (U+FF01–U+FF5E, the usual Chinese-IME
+/// "ＫＦＣ"), the ideographic and other compatibility spaces, the Latin
+/// ligatures U+FB00–U+FB06, ™ and ℠, the small < > (U+FE64/U+FE65) and the
+/// dot leaders U+2024–U+2026.
+String nfkcLite(String s) {
+  final out = StringBuffer();
+  for (final r in s.runes) {
+    if (r >= 0xFF01 && r <= 0xFF5E) {
+      out.writeCharCode(r - 0xFEE0);
+      continue;
+    }
+    final mapped = _nfkcLiteTable[r];
+    if (mapped != null) {
+      out.write(mapped);
+    } else {
+      out.writeCharCode(r);
+    }
+  }
+  return out.toString();
+}
+
+const Map<int, String> _nfkcLiteTable = {
+  0x00A0: ' ',
+  0x2000: ' ',
+  0x2001: ' ',
+  0x2002: ' ',
+  0x2003: ' ',
+  0x2004: ' ',
+  0x2005: ' ',
+  0x2006: ' ',
+  0x2007: ' ',
+  0x2008: ' ',
+  0x2009: ' ',
+  0x200A: ' ',
+  0x202F: ' ',
+  0x205F: ' ',
+  0x3000: ' ',
+  0xFB00: 'ff',
+  0xFB01: 'fi',
+  0xFB02: 'fl',
+  0xFB03: 'ffi',
+  0xFB04: 'ffl',
+  0xFB05: 'st',
+  0xFB06: 'st',
+  0x2122: 'TM',
+  0x2120: 'SM',
+  0xFE64: '<',
+  0xFE65: '>',
+  0x2024: '.',
+  0x2025: '..',
+  0x2026: '...',
+};
