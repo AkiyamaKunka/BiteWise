@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and lower (android:fullBackupContent; Android 12+ reads
+     data_extraction_rules.xml instead). Keeps the backup-excluded local
+     store (lib/services/local_store.dart, files/bitewise_local/) out of
+     Auto Backup and device-to-device transfer. Exclude-only on purpose:
+     with no <include>, everything else is backed up exactly as before. -->
+<full-backup-content>
+    <exclude domain="file" path="bitewise_local/"/>
+</full-backup-content>

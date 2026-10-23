@@ -396,6 +396,83 @@ class BackgroundLaunchStampTests: XCTestCase {
   }
 }
 
+/// The backup-excluded local store's directory (AppDelegate
+/// .prepareLocalStore, design F1): Dart's LocalNoBackupStore writes only
+/// into a directory this made and flagged, so a missing flag would put
+/// location hints and the device-bound photo change token into backups.
+class LocalStoreDirectoryTests: XCTestCase {
+  private var scratch: URL!
+
+  override func setUpWithError() throws {
+    scratch = FileManager.default.temporaryDirectory
+      .appendingPathComponent("LocalStoreDirectoryTests.\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: scratch)
+  }
+
+  private func isExcluded(_ url: URL) throws -> Bool? {
+    var fresh = url
+    fresh.removeAllCachedResourceValues()
+    return try fresh.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup
+  }
+
+  func testNameMatchesDart() {
+    XCTAssertEqual(AppDelegate.localStoreDirectoryName, "bitewise_local")
+  }
+
+  func testCreatesTheDirectoryExcludedFromBackup() throws {
+    let made = try XCTUnwrap(AppDelegate.prepareLocalStore(in: scratch))
+    XCTAssertEqual(made.lastPathComponent, "bitewise_local")
+    XCTAssertEqual(made.deletingLastPathComponent().standardizedFileURL.path,
+                   scratch.standardizedFileURL.path)
+    var isDirectory: ObjCBool = false
+    XCTAssertTrue(FileManager.default.fileExists(atPath: made.path, isDirectory: &isDirectory))
+    XCTAssertTrue(isDirectory.boolValue)
+    XCTAssertEqual(try isExcluded(made), true)
+  }
+
+  func testIdempotentAndReappliesAClearedFlagWithoutTouchingDocuments() throws {
+    var made = try XCTUnwrap(AppDelegate.prepareLocalStore(in: scratch))
+    let document = made.appendingPathComponent("photo_change_cursor.json")
+    try Data(#"{"v":1}"#.utf8).write(to: document)
+    // A restore or an older build left the flag off.
+    var off = URLResourceValues()
+    off.isExcludedFromBackup = false
+    try made.setResourceValues(off)
+    XCTAssertEqual(try isExcluded(made), false)
+
+    XCTAssertNotNil(AppDelegate.prepareLocalStore(in: scratch))
+    XCTAssertNotNil(AppDelegate.prepareLocalStore(in: scratch))
+    XCTAssertEqual(try isExcluded(made), true)
+    XCTAssertEqual(try Data(contentsOf: document), Data(#"{"v":1}"#.utf8))
+  }
+
+  func testFailuresReturnNilAndNeverThrow() throws {
+    XCTAssertNil(AppDelegate.prepareLocalStore(in: nil))
+    // A file where the directory belongs.
+    try Data("in the way".utf8).write(
+      to: scratch.appendingPathComponent(AppDelegate.localStoreDirectoryName))
+    XCTAssertNil(AppDelegate.prepareLocalStore(in: scratch))
+  }
+
+  /// The test host is the app itself, so its launch already ran the real
+  /// call: the store's directory under Application Support is there and
+  /// flagged.
+  func testTheAppLaunchPreparedTheRealDirectory() throws {
+    let support = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
+    let real = support.appendingPathComponent(
+      AppDelegate.localStoreDirectoryName, isDirectory: true)
+    var isDirectory: ObjCBool = false
+    XCTAssertTrue(FileManager.default.fileExists(atPath: real.path, isDirectory: &isDirectory))
+    XCTAssertTrue(isDirectory.boolValue)
+    XCTAssertEqual(try isExcluded(real), true)
+  }
+}
+
 /// The background-time channel (Runner/BackgroundTimePlugin.swift): one
 /// task per photo, begun and ended from Dart (background_time.dart). A
 /// task left open gets the app killed, so every way of ending one is

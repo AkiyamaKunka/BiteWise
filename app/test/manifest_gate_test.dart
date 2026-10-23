@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
     show imageIOChannelName;
+import 'package:calorie_tracker/services/local_store.dart'
+    show localStoreDirName;
 import 'package:calorie_tracker/services/photo/background_time.dart'
     show backgroundTimeChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
@@ -345,5 +347,95 @@ void main() {
             r'setPluginRegistrantCallback \{ registry in\s*\n(\s*)(\S[^\n]*)')
         .firstMatch(delegate);
     expect(callback?.group(2), 'AppDelegate.stampBackgroundLaunch()');
+  });
+
+  // The backup-excluded local store (lib/services/local_store.dart, design
+  // F1, 2026-10-23) holds state that hints at location or only works on
+  // this device. Nothing at runtime notices a backup rule that went
+  // missing — the app works the same, and the documents just start riding
+  // along to iCloud, a computer or a new phone — so the wiring is pinned
+  // here. iOS: AppDelegate makes the directory and flags it before
+  // anything else at launch (Dart never creates it there).
+  test('iOS excludes the local store directory from backup at launch', () {
+    final delegate = File('${_appRoot().path}/ios/Runner/AppDelegate.swift')
+        .readAsStringSync();
+    expect(delegate,
+        contains('static let localStoreDirectoryName = "$localStoreDirName"'));
+    final prepare = RegExp(r'static func prepareLocalStore\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(prepare, isNotNull, reason: 'AppDelegate.prepareLocalStore missing');
+    expect(prepare, contains('.applicationSupportDirectory'));
+    expect(prepare, contains('appendingPathComponent(\n      '
+        'localStoreDirectoryName, isDirectory: true)'));
+    expect(prepare, contains('createDirectory('));
+    expect(prepare, contains('values.isExcludedFromBackup = true'));
+    expect(prepare, contains('directory.setResourceValues(values)'));
+
+    final launch = RegExp(
+            r'didFinishLaunchingWithOptions launchOptions.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(launch, isNotNull);
+    final call = launch!.indexOf('AppDelegate.prepareLocalStore()');
+    expect(call, greaterThanOrEqualTo(0),
+        reason: 'didFinishLaunching never prepares the local store');
+    for (final later in [
+      'WorkmanagerPlugin.setPluginRegistrantCallback',
+      'WorkmanagerPlugin.registerPeriodicTask',
+      'super.application(',
+    ]) {
+      expect(launch.indexOf(later), greaterThan(call),
+          reason: 'the local store must be flagged before $later — before '
+              'either engine can write into it');
+    }
+  });
+
+  // Android: exclusion rules by path for both backup schemes, referenced
+  // from <application>. Exclude-only: an <include> would silently stop
+  // backing up everything else the app keeps.
+  test('Android excludes the local store from cloud backup and device '
+      'transfer, and nothing else', () {
+    final main = '${_appRoot().path}/android/app/src/main';
+    final manifest = File('$main/AndroidManifest.xml').readAsStringSync();
+    final application =
+        RegExp(r'<application\b[^>]*>').firstMatch(manifest)?.group(0);
+    expect(application, isNotNull);
+    expect(application,
+        contains('android:dataExtractionRules="@xml/data_extraction_rules"'));
+    expect(application,
+        contains('android:fullBackupContent="@xml/backup_rules"'));
+    expect(application, isNot(contains('android:allowBackup="false"')),
+        reason: 'F1 only excludes the local store; backup stays on');
+
+    final exclude = RegExp('<exclude\\s+domain="file"\\s+'
+        'path="${RegExp.escape(localStoreDirName)}/"\\s*/>');
+    String section(String xml, String tag) {
+      final body = RegExp('<$tag(?:\\s[^>]*)?>(.*?)</$tag>', dotAll: true)
+          .firstMatch(xml)
+          ?.group(1);
+      expect(body, isNotNull, reason: '<$tag> missing');
+      return body!;
+    }
+
+    final extraction = File('$main/res/xml/data_extraction_rules.xml');
+    expect(extraction.existsSync(), isTrue, reason: extraction.path);
+    final rules = section(
+        extraction.readAsStringSync(), 'data-extraction-rules');
+    for (final scheme in ['cloud-backup', 'device-transfer']) {
+      final body = section(rules, scheme);
+      expect(exclude.hasMatch(body), isTrue,
+          reason: '$scheme does not exclude $localStoreDirName/');
+      expect(body, isNot(contains('<include')), reason: scheme);
+    }
+
+    final legacy = File('$main/res/xml/backup_rules.xml');
+    expect(legacy.existsSync(), isTrue, reason: legacy.path);
+    final full = section(legacy.readAsStringSync(), 'full-backup-content');
+    expect(exclude.hasMatch(full), isTrue,
+        reason: 'fullBackupContent does not exclude $localStoreDirName/');
+    expect(full, isNot(contains('<include')));
   });
 }
