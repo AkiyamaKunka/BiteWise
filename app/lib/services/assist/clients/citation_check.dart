@@ -23,13 +23,27 @@ final RegExp _nonAscii = RegExp(r'[^\x21-\x7E]');
 String _stripWww(String host) =>
     host.startsWith('www.') ? host.substring(4) : host;
 
+/// The text between `scheme://` and the first `/`, `?`, `#` or `\` of
+/// [s] (the whole remainder when there is no `://`).
+String _rawAuthority(String s) {
+  final start = s.indexOf('://');
+  final rest = start < 0 ? s : s.substring(start + 3);
+  final end = rest.indexOf(RegExp(r'[/?#\\]'));
+  return end < 0 ? rest : rest.substring(0, end);
+}
+
 /// The comparable, launchable form of [raw], or null when it is not an
 /// https URL with a plain ASCII host (IDN / percent-encoded / userinfo /
 /// odd port / whitespace → null: never launchable, never official).
+///
+/// A `%` anywhere in the raw authority is refused BEFORE parsing: Dart's
+/// Uri decodes `%2e` in a host, so `https://chipotle.com%2eevil.com/` would
+/// otherwise come out as the launchable `https://chipotle.com.evil.com`.
 String? normalizeSourceUrl(String? raw) {
   if (raw == null) return null;
   final s = raw.trim();
   if (s.isEmpty || _nonAscii.hasMatch(s)) return null;
+  if (_rawAuthority(s).contains('%')) return null;
   final Uri uri;
   try {
     uri = Uri.parse(s);

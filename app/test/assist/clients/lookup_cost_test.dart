@@ -1,5 +1,7 @@
 // Cost caps: the per-lookup ceiling (checked before EVERY request), the
 // daily budget (count and dollars), and spend recording even on failure.
+import 'dart:async';
+
 import 'package:calorie_tracker/services/assist/clients/anthropic_lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
@@ -120,6 +122,111 @@ void main() {
     expect(budget.spends.single.httpCalls, 2);
     expect(budget.spends.single.searches, 1);
     expect(budget.spends.single.usd, greaterThan(0.01));
+  });
+
+  group('a request sent without a reply is charged its worst case', () {
+    // It may have run, and been billed for, its searches: the daily dollar
+    // ledger must see that, or retries of a transient failure spend
+    // unseen.
+    final worst = _anthropic(ScriptedClient([(_) => json200({})]))
+        .worstCaseFirstRequestUsd();
+
+    test('deadline hit', () async {
+      final budget = _RecordingBudget();
+      final never = Completer<http.Response>();
+      final s = ScriptedClient([(_) => never.future]);
+      final o = await AnthropicLookupClient(
+              apiKey: () => 'test-key',
+              client: s.client,
+              budget: budget,
+              perCallDeadline: const Duration(milliseconds: 30))
+          .submit(bigMacRequest);
+      expect(o.failure!.code, LookupFailureCode.timeout);
+      expect(budget.spends.single.usd, greaterThan(0));
+      expect(budget.spends.single.usd, closeTo(worst, 1e-12));
+      expect(o.cost.usd, closeTo(worst, 1e-12));
+    });
+
+    test('cancelled in flight', () async {
+      final budget = _RecordingBudget();
+      final gate = Completer<http.Response>();
+      final s = ScriptedClient([(_) => gate.future]);
+      final token = LookupCancelToken();
+      final pending =
+          _anthropic(s, budget: budget).submit(bigMacRequest, cancel: token);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      token.cancel();
+      final o = await pending;
+      expect(o.failure!.code, LookupFailureCode.cancelled);
+      expect(budget.spends.single.usd, closeTo(worst, 1e-12));
+      gate.complete(fixture200('anthropic_found.json'));
+    });
+
+    test('connection dropped', () async {
+      final budget = _RecordingBudget();
+      final s = ScriptedClient([
+        (_) => throw http.ClientException('Connection reset by peer')
+      ]);
+      final o = await _anthropic(s, budget: budget).submit(bigMacRequest);
+      expect(o.failure!.code, LookupFailureCode.network);
+      expect(budget.spends.single.usd, closeTo(worst, 1e-12));
+    });
+
+    test('a non-JSON reply', () async {
+      final budget = _RecordingBudget();
+      final s = ScriptedClient([(_) => http.Response('<html>', 200)]);
+      final o = await _anthropic(s, budget: budget).submit(bigMacRequest);
+      expect(o.failure!.code, LookupFailureCode.captivePortal);
+      expect(budget.spends.single.usd, closeTo(worst, 1e-12));
+    });
+
+    test('a continuation that times out adds ITS worst case to the real '
+        'spend of the first request', () async {
+      final budget = _RecordingBudget();
+      final never = Completer<http.Response>();
+      final s = ScriptedClient([
+        (_) => fixture200('anthropic_pause_1.json'),
+        (_) => never.future,
+      ]);
+      final c = AnthropicLookupClient(
+          apiKey: () => 'test-key',
+          client: s.client,
+          budget: budget,
+          perCallDeadline: const Duration(milliseconds: 30));
+      final o = await c.submit(bigMacRequest);
+      expect(o.failure!.code, LookupFailureCode.timeout);
+      final first = 0.01 + haikuUsd(7012, 96);
+      final second =
+          c.worstCaseRequestUsd(continuation: 1, searchesSoFar: 1, maxUses: 1);
+      expect(budget.spends.single.usd, closeTo(first + second, 1e-12));
+    });
+
+    test('an HTTP error answer is not charged', () async {
+      final budget = _RecordingBudget();
+      final s = ScriptedClient(
+          [(_) => http.Response('{"type":"error","error":{}}', 500)]);
+      await _anthropic(s, budget: budget).submit(bigMacRequest);
+      expect(budget.spends.single.usd, 0);
+      expect(budget.spends.single.httpCalls, 1);
+    });
+
+    test('the daily dollar cap sees timed-out lookups', () async {
+      final budget = DailyLookupBudget(maxLookupsPerDay: 20, maxUsdPerDay: 0.05);
+      final s = ScriptedClient([(_) => Completer<http.Response>().future]);
+      final c = AnthropicLookupClient(
+          apiKey: () => 'test-key',
+          client: s.client,
+          budget: budget,
+          perCallDeadline: const Duration(milliseconds: 10));
+      expect((await c.submit(bigMacRequest)).failure!.code,
+          LookupFailureCode.timeout);
+      expect((await c.submit(bigMacRequest)).failure!.code,
+          LookupFailureCode.timeout);
+      // 2 × 2.3¢ charged; a third worst case would pass 5¢.
+      final third = await c.submit(bigMacRequest);
+      expect(third.failure!.code, LookupFailureCode.dailyCap);
+      expect(s.requests, hasLength(2));
+    });
   });
 
   group('DailyLookupBudget', () {

@@ -14,6 +14,15 @@
 ///     the request is not sent;
 ///   - per day: [LookupBudget] counts lookups and dollars (the app's
 ///     20/day cap from the design lives in an implementation of it).
+///
+/// The per-lookup cap is HARD where we know the model's price (Anthropic,
+/// OpenAI, xAI: the worst case is computed from the price table). It is
+/// ADVISORY for OpenRouter: the user picks the model, its price is unknown
+/// here, and the pre-flight uses the flat
+/// [LookupCostPolicy.unknownModelAllowanceUsd] for its tokens — an
+/// expensive OpenRouter model can pass the cap in one call. The reply's
+/// `usage.cost` then records what it really cost, so the daily ledger sees
+/// the true spend afterwards.
 library;
 
 import 'lookup_client.dart';
@@ -54,7 +63,9 @@ const ModelPrice kGrok47Price = ModelPrice(2.00, 6.00);
 const double kXaiTicksPerUsd = 1e10;
 
 /// Knobs for one lookup. Defaults are the design's: max_uses 2, at most 2
-/// pause_turn continuations, and a lookup that cannot cost more than 5¢.
+/// pause_turn continuations, and a 5¢ ceiling per lookup (hard for priced
+/// models, advisory for the user's OpenRouter model — see the library
+/// comment).
 class LookupCostPolicy {
   const LookupCostPolicy({
     this.maxUsdPerLookup = 0.05,
@@ -68,7 +79,8 @@ class LookupCostPolicy {
         assert(maxContinuations >= 0),
         assert(maxOutputTokens > 0);
 
-  /// The hard ceiling for one lookup, all HTTP calls included.
+  /// The ceiling for one lookup, all HTTP calls included (advisory for
+  /// OpenRouter, whose model price is unknown before the call).
   final double maxUsdPerLookup;
 
   /// Searches per request (Anthropic max_uses, OpenAI max_tool_calls).

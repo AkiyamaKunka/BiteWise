@@ -102,11 +102,13 @@ void main() {
     expect(o.cost.estimatedUsd, closeTo(0.007 + 0.02, 1e-9));
   });
 
-  test('annotations without content → cited but ungrounded', () async {
+  test('an annotation without Exa content is a claim: not cited', () async {
+    // Possibly built from a markdown link the model wrote: nothing proves
+    // the search returned it, so it can never be a suggestion's source.
     final s = ScriptedClient([(_) => fixture200('openrouter_no_content.json')]);
     final o = await _client(s).submit(bigMacRequest);
     expect(o.isDone, isTrue);
-    expect(o.citedUrls, hasLength(1));
+    expect(o.citedUrls, isEmpty);
     expect(o.evidence, isEmpty);
     final c = checkSource(
         sourceUrl: o.result!.sourceUrl,
@@ -114,8 +116,23 @@ void main() {
         evidence: o.evidence,
         chainDomains: mcdDomains,
         figures: o.result!.matches.single.allFigures);
-    expect(c.cited, isTrue);
+    expect(c.cited, isFalse);
+    expect(c.reason, 'source_not_cited');
     expect(c.passes, isFalse);
+  });
+
+  test('only content-bearing annotations count, whitespace is no content',
+      () async {
+    final body = fixture('openrouter_found.json');
+    final ann = (((body['choices'] as List).first as Map)['message']
+        as Map)['annotations'] as List;
+    ((ann[1] as Map)['url_citation'] as Map)['content'] = '   ';
+    ((ann[2] as Map)['url_citation'] as Map).remove('content');
+    final o = await _client(ScriptedClient([(_) => json200(body)]))
+        .submit(bigMacRequest);
+    expect(o.citedUrls,
+        ['https://www.mcdonalds.com/us/en-us/product/big-mac.html']);
+    expect(o.evidence, hasLength(1));
   });
 
   test('an upstream error inside a 200 is classified by its code', () async {

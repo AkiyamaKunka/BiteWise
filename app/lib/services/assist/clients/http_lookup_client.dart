@@ -140,7 +140,12 @@ abstract class HttpLookupClient implements LookupClient {
   @override
   Future<LookupOutcome> submit(LookupRequest request,
       {List<String> chainDomains = const [],
-      LookupCancelToken? cancel}) async {
+      LookupCancelToken? cancel,
+      LookupRecipient? expectedRecipient}) async {
+    if (expectedRecipient != null && expectedRecipient != recipient) {
+      // Zero calls, and not counted against the day.
+      return LookupOutcome.consentChanged(expectedRecipient, recipient);
+    }
     final run = LookupRun(policy, cancel);
     final key = (apiKey() ?? '').trim();
     if (key.isEmpty) {
@@ -228,9 +233,19 @@ abstract class HttpLookupClient implements LookupClient {
   /// read sits inside the same deadline as the send (a stalled body must
   /// not hang the caller), and cancellation aborts the socket where the
   /// client supports it.
+  ///
+  /// [worstCaseUsd] is this request's worst case (what the cap check just
+  /// allowed). When the request was handed to the transport but no usage
+  /// ever came back — a timeout, a cancel, a dropped connection, a reply
+  /// that is not a JSON object — it is charged to [run] in full: the
+  /// provider may have run, and billed, its searches, and the daily dollar
+  /// ledger must see that even though a retry of a transient failure would
+  /// spend again. An HTTP error status is not charged (the provider
+  /// answered without doing the work).
   Future<Map<String, dynamic>> postJson(
       Uri url, Map<String, String> headers, Map<String, Object?> body,
-      LookupRun run) async {
+      LookupRun run,
+      {required double worstCaseUsd}) async {
     run.ensureNotCancelled();
     final left = overallDeadline - run.watch.elapsed;
     if (left <= Duration.zero) {
@@ -251,6 +266,7 @@ abstract class HttpLookupClient implements LookupClient {
     // Counted when attempted: a call that fails still reached (and may
     // have been billed by) the provider.
     run.add(const LookupCost(httpCalls: 1));
+    void chargeUnanswered() => run.add(LookupCost(estimatedUsd: worstCaseUsd));
     final http.Response resp;
     try {
       final send = client.send(req).then(http.Response.fromStream);
@@ -265,13 +281,18 @@ abstract class HttpLookupClient implements LookupClient {
       ]).timeout(deadline);
     } on LookupAbort {
       doAbort();
+      chargeUnanswered();
       rethrow;
     } on TimeoutException {
       doAbort();
+      chargeUnanswered();
       throw const LookupAbort(LookupFailure(LookupFailureCode.timeout,
           transient: true, message: 'client deadline hit'));
     } catch (e) {
       doAbort();
+      // Conservative: a connection that failed before the request left the
+      // phone is charged too — the error does not say which it was.
+      chargeUnanswered();
       if (cancel?.isCancelled ?? false) {
         throw const LookupAbort(LookupFailure(LookupFailureCode.cancelled,
             transient: false, message: 'cancelled'));
@@ -289,12 +310,15 @@ abstract class HttpLookupClient implements LookupClient {
     try {
       decoded = jsonDecode(resp.body);
     } on FormatException {
-      // Every provider answers JSON: a non-JSON 200 is a portal or proxy.
+      // Every provider answers JSON: a non-JSON 200 is a portal or proxy —
+      // or a provider reply cut short, so it is charged like a drop.
+      chargeUnanswered();
       throw const LookupAbort(LookupFailure(LookupFailureCode.captivePortal,
           transient: true,
           message: 'non-JSON reply (captive portal or proxy page)'));
     }
     if (decoded is! Map<String, dynamic>) {
+      chargeUnanswered();
       throw const LookupAbort(LookupFailure(LookupFailureCode.malformedReply,
           transient: false, message: 'reply is not a JSON object'));
     }

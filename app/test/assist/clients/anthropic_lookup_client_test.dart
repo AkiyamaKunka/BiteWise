@@ -155,24 +155,83 @@ void main() {
     });
 
     test('pause_turn past the continuation limit → truncated', () async {
+      // Searches to spare, so only the continuation limit can stop it.
+      final s = ScriptedClient([(_) => fixture200('anthropic_pause_1.json')]);
+      final o = await _client(s,
+              policy:
+                  const LookupCostPolicy(maxUsdPerLookup: 1, maxSearches: 5))
+          .submit(bigMacRequest);
+      expect(s.requests, hasLength(3), reason: '1 + 2 continuations');
+      expect([
+        for (final b in s.bodies)
+          ((b['tools'] as List).single as Map)['max_uses']
+      ], [5, 4, 3], reason: 'each request only what is left');
+      expect(o.kind, LookupOutcomeKind.failed);
+      expect(o.failure!.code, LookupFailureCode.truncated);
+      expect(o.cost.httpCalls, 3, reason: 'spend is still reported');
+    });
+
+    test('a pause after the whole search allowance: no continuation',
+        () async {
+      // The first request ran both allowed searches and paused. max_uses
+      // is per request and cannot be 0, so a continuation could only buy a
+      // third search: it is not sent, whatever the cost cap would allow.
+      final paused = fixture('anthropic_pause_1.json');
+      (paused['usage'] as Map)['server_tool_use'] = {'web_search_requests': 2};
+      final s = ScriptedClient([
+        (_) => json200(paused),
+        (_) => fixture200('anthropic_pause_2.json'),
+      ]);
+      final o = await _client(s,
+              policy: const LookupCostPolicy(maxUsdPerLookup: 1))
+          .submit(bigMacRequest);
+      expect(s.requests, hasLength(1), reason: 'zero further calls');
+      expect(o.kind, LookupOutcomeKind.failed);
+      expect(o.failure!.code, LookupFailureCode.truncated);
+      expect(o.failure!.transient, isFalse,
+          reason: 'a retry would spend the same searches again');
+      expect(o.searches, 2);
+      expect(o.cost.httpCalls, 1);
+    });
+
+    test('a pause after one of two searches resumes with max_uses 1, then '
+        'stops', () async {
+      // Each reply runs one search and pauses: request 2 may run the one
+      // search left; after it the allowance is spent and nothing is sent.
       final s = ScriptedClient([(_) => fixture200('anthropic_pause_1.json')]);
       final o = await _client(s,
               policy: const LookupCostPolicy(maxUsdPerLookup: 1))
           .submit(bigMacRequest);
-      expect(s.requests, hasLength(3), reason: '1 + 2 continuations');
-      expect(o.kind, LookupOutcomeKind.failed);
+      expect([
+        for (final b in s.bodies)
+          ((b['tools'] as List).single as Map)['max_uses']
+      ], [2, 1]);
       expect(o.failure!.code, LookupFailureCode.truncated);
-      expect(o.cost.httpCalls, 3, reason: 'spend is still reported');
+      expect(o.searches, 2, reason: 'never more than the design\'s 2');
     });
 
     test('a search error object (HTTP 200) fails the lookup', () async {
       final s =
           ScriptedClient([(_) => fixture200('anthropic_search_error.json')]);
       final o = await _client(s).submit(bigMacRequest);
-      expect(o.kind, LookupOutcomeKind.failed);
+      // A busy search is a rate limit to the caller: try later.
+      expect(o.kind, LookupOutcomeKind.rateLimited);
       expect(o.failure!.code, LookupFailureCode.searchError);
       expect(o.failure!.transient, isTrue, reason: 'too_many_requests');
       expect(o.failure!.message, contains('too_many_requests'));
+    });
+
+    test('a permanent search error stays failed', () async {
+      final body = fixture('anthropic_search_error.json');
+      for (final b in body['content'] as List) {
+        final c = (b as Map)['content'];
+        if (c is Map) c['error_code'] = 'invalid_tool_input';
+      }
+      final o = await _client(ScriptedClient([(_) => json200(body)]))
+          .submit(bigMacRequest);
+      expect(o.kind, LookupOutcomeKind.failed);
+      expect(o.failure!.code, LookupFailureCode.searchError);
+      expect(o.failure!.transient, isFalse);
     });
 
     test('max_uses_exceeded after a good search still answers', () async {

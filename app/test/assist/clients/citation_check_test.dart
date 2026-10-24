@@ -25,6 +25,11 @@ void main() {
       'https://mcdonalds.com@evil.example/a': null,
       'https://chipötle.com/nutrition': null, // IDN lookalike
       'https://chip%C3%B6tle.com/nutrition': null,
+      // Dart would decode %2e in a host into a launchable lookalike.
+      'https://chipotle.com%2eevil.com/': null,
+      'https://chipotle%2ecom/nutrition': null,
+      // A percent-escape in the PATH is fine (and kept as sent).
+      'https://mcdonalds.com/menu/big%20mac': 'https://mcdonalds.com/menu/big%20mac',
       'https://mc donalds.com/a': null,
       'https://localhost/a': null,
       '': null,

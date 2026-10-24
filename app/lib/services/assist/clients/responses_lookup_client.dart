@@ -26,8 +26,18 @@
 /// answer spans. Evidence from these clients is therefore `verbatim:
 /// false`, and under the design's grounding rule an OpenAI or xAI lookup
 /// can only ever produce a suggestion, never an automatic APPLY.
+///
+/// A `url_citation` annotation is the MODEL's claim: xAI builds it from the
+/// inline `[[n]](url)` marker the model wrote, and nothing makes an OpenAI
+/// annotation URL one the search returned. So [LookupOutcome.citedUrls]
+/// holds only what the search itself returned — OpenAI's
+/// `web_search_call.action.sources` and xAI's top-level `citations` (the
+/// URLs its search encountered) — plus an annotation URL only when it
+/// normalizes to one of those. An invented link never counts as cited, so
+/// it can never become the source of a suggestion.
 library;
 
+import 'citation_check.dart';
 import 'http_lookup_client.dart';
 import 'lookup_client.dart';
 import 'lookup_contract_adapter.dart';
@@ -62,13 +72,15 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
   @override
   Future<LookupAnswer> runLookup(String key, LookupRequest request,
       List<String> domains, LookupRun run) async {
-    run.ensureWithinCap(worstCaseFirstRequestUsd());
+    final worst = worstCaseFirstRequestUsd();
+    run.ensureWithinCap(worst);
     final body = await postJson(
         endpoint,
         {'Authorization': 'Bearer $key'},
         buildBody(composeLookupPrompt(request),
             country: request.iso2Country, domains: domains),
-        run);
+        run,
+        worstCaseUsd: worst);
     final output = body['output'];
     var searchCalls = 0;
     if (output is List) {
@@ -82,10 +94,7 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
     }
     run.add(costOf(body, searchCalls));
     final err = body['error'];
-    if (err is Map) {
-      throw const LookupAbort(LookupFailure(LookupFailureCode.server,
-          transient: true, message: 'response failed'));
-    }
+    if (err is Map) throw LookupAbort(responsesErrorFailure(err));
     final status = body['status'];
     if (status == 'incomplete') {
       final details = body['incomplete_details'];
@@ -108,7 +117,8 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
       throw const LookupAbort(LookupFailure(LookupFailureCode.malformedReply,
           transient: false, message: 'reply has no output list'));
     }
-    final urls = <String>[];
+    final searchUrls = <String>[]; // returned by the search itself
+    final claimedUrls = <String>[]; // annotation URLs: the model's claim
     final evidence = <LookupEvidence>[];
     final texts = <String>[];
     for (final item in output) {
@@ -118,7 +128,9 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
         final sources = action is Map ? action['sources'] : null;
         if (sources is List) {
           for (final s in sources) {
-            if (s is Map && s['url'] is String) urls.add(s['url'] as String);
+            if (s is Map && s['url'] is String) {
+              searchUrls.add(s['url'] as String);
+            }
           }
         }
         continue;
@@ -141,7 +153,7 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
           if (a is! Map || a['type'] != 'url_citation') continue;
           final url = a['url'];
           if (url is! String || url.isEmpty) continue;
-          urls.add(url);
+          claimedUrls.add(url);
           final s = a['start_index'], e = a['end_index'];
           if (s is int && e is int && s >= 0 && e > s && e <= text.length) {
             evidence.add(LookupEvidence(
@@ -155,14 +167,56 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
       }
     }
     final top = body['citations'];
-    if (top is List) urls.addAll(top.whereType<String>());
+    if (top is List) searchUrls.addAll(top.whereType<String>());
     final raw = texts.join('\n');
     var text = raw;
     if (decodeAnswerJson(text) is! Map) text = stripCitationMarkup(raw);
     final result = parseResult(text, request);
     return LookupAnswer(
-        result: result, text: raw, citedUrls: dedupe(urls), evidence: evidence);
+        result: result,
+        text: raw,
+        citedUrls: searchReturnedUrls(searchUrls, claimedUrls),
+        evidence: evidence);
   }
+}
+
+/// What the search returned ([searchUrls], as sent), then each of
+/// [claimedUrls] whose normalized form is one of them — OpenAI's
+/// `?utm_source=openai` copy of a source, say. A claimed URL that matches
+/// nothing the search returned is dropped: the model invented it.
+List<String> searchReturnedUrls(
+    List<String> searchUrls, List<String> claimedUrls) {
+  final returned = {
+    for (final u in searchUrls) ?normalizeSourceUrl(u),
+  };
+  return dedupe([
+    ...searchUrls,
+    for (final u in claimedUrls)
+      if (returned.contains(normalizeSourceUrl(u))) u,
+  ]);
+}
+
+final RegExp _errorCodeShape = RegExp(r'^[a-z0-9_]{1,48}$');
+
+/// An `error` object inside a Responses reply (`{code, message}`),
+/// classified by its code: a rate limit is transient and says so, an
+/// `invalid_*` request is permanent (a retry would spend again on the same
+/// refusal), anything else is a transient server failure. Only a plain
+/// identifier-shaped code reaches the diagnostics line, never the message.
+LookupFailure responsesErrorFailure(Map error) {
+  final raw = error['code'];
+  final code = raw is String && _errorCodeShape.hasMatch(raw) ? raw : '';
+  if (code == 'rate_limit_exceeded') {
+    return const LookupFailure(LookupFailureCode.rateLimited,
+        transient: true, message: 'response failed: rate_limit_exceeded');
+  }
+  if (code.startsWith('invalid_')) {
+    return LookupFailure(LookupFailureCode.badRequest,
+        transient: false, message: 'response failed: $code');
+  }
+  return LookupFailure(LookupFailureCode.server,
+      transient: true,
+      message: code.isEmpty ? 'response failed' : 'response failed: $code');
 }
 
 class OpenAiLookupClient extends _ResponsesLookupClient {

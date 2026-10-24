@@ -98,11 +98,28 @@ class ProviderLookupRouter implements LookupClient {
   @override
   LookupSupport lookupSupport() => active.lookupSupport();
 
+  /// Sends only to the recipient the caller's consent covers: Settings is
+  /// read ONCE, and when the provider it names now is not
+  /// [expectedRecipient] (the user switched providers while the caller was
+  /// awaiting something after its consent check), or the caller named no
+  /// recipient at all, the answer is [LookupFailureCode.consentChanged] with
+  /// zero HTTP calls. The caller then re-reads [lookupSupport] and asks for
+  /// consent again (design D19: a new recipient pauses the assist).
   @override
   Future<LookupOutcome> submit(LookupRequest request,
-          {List<String> chainDomains = const [],
-          LookupCancelToken? cancel}) =>
-      active.submit(request, chainDomains: chainDomains, cancel: cancel);
+      {List<String> chainDomains = const [],
+      LookupCancelToken? cancel,
+      LookupRecipient? expectedRecipient}) async {
+    final client = active;
+    final now = client.lookupSupport().recipient;
+    if (expectedRecipient == null || expectedRecipient != now) {
+      return LookupOutcome.consentChanged(expectedRecipient, now);
+    }
+    return client.submit(request,
+        chainDomains: chainDomains,
+        cancel: cancel,
+        expectedRecipient: expectedRecipient);
+  }
 
   @override
   Future<LookupOutcome> poll(String jobId) => active.poll(jobId);

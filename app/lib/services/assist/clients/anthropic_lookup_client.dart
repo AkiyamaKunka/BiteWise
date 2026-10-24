@@ -114,15 +114,25 @@ class AnthropicLookupClient extends HttpLookupClient {
     final turn = <Map<String, dynamic>>[]; // the assistant turn, all parts
     for (var continuation = 0;; continuation++) {
       final searchesSoFar = run.cost.searches;
-      // A continuation may only spend the searches the first request left;
-      // the API needs max_uses >= 1, and the cost cap bounds the rest.
-      final maxUses = continuation == 0
-          ? policy.maxSearches
-          : (policy.maxSearches - searchesSoFar).clamp(1, policy.maxSearches);
-      run.ensureWithinCap(worstCaseRequestUsd(
+      // A continuation may only spend the searches the first request left.
+      // max_uses is per REQUEST and the API needs it >= 1, so with nothing
+      // left the continuation is not sent at all: a paused turn resumes a
+      // trailing server_tool_use by running it, and no request field can
+      // forbid that search (tool_choice none is undefined on a resume).
+      final left = policy.maxSearches - searchesSoFar;
+      if (continuation > 0 && left <= 0) {
+        throw LookupAbort(LookupFailure(LookupFailureCode.truncated,
+            // Permanent: a retry would spend the same searches again.
+            transient: false,
+            message: 'paused after $searchesSoFar searches; the lookup '
+                'allows ${policy.maxSearches}'));
+      }
+      final maxUses = continuation == 0 ? policy.maxSearches : left;
+      final worst = worstCaseRequestUsd(
           continuation: continuation,
           searchesSoFar: searchesSoFar,
-          maxUses: maxUses));
+          maxUses: maxUses);
+      run.ensureWithinCap(worst);
       final body = await postJson(
           endpoint,
           _headers(key),
@@ -130,7 +140,8 @@ class AnthropicLookupClient extends HttpLookupClient {
               maxUses: maxUses,
               country: request.iso2Country,
               domains: domains),
-          run);
+          run,
+          worstCaseUsd: worst);
       run.add(_costOf(body));
       final content = body['content'];
       if (content is! List) {

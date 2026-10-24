@@ -1,9 +1,10 @@
 /// HTTP failure classification for the lookup clients — the SAME rules, in
 /// the same order, as `_HttpVisionAnalyzer._post` in
 /// services/analyzer/provider_analyzers.dart (that class is library-private,
-/// so the rules are mirrored here and pinned to it by
-/// test/assist/clients/http_failure_parity_test.dart, which runs one
-/// status/body matrix through both).
+/// so the rules are mirrored here and pinned to it by the group 'parity
+/// with the photo analyzers (probeKey)' in
+/// test/assist/clients/http_failure_test.dart, which runs one status/body
+/// matrix through both).
 library;
 
 import 'dart:convert';
@@ -107,16 +108,23 @@ LookupFailure classifyHttpFailureFromErrorObject(int status, Map error,
     classifyHttpFailure(status, jsonEncode({'error': error}),
         providerLabel: providerLabel);
 
-/// The outcome kind a failure maps to: rate limits and daily caps are
+/// The outcome kind a failure maps to: rate limits, daily caps and a
+/// transient search-level error (Anthropic's `too_many_requests` /
+/// `unavailable`: busy for a moment, try later) are
 /// [LookupOutcomeKind.rateLimited]; transport trouble (no network, a portal
-/// or proxy answering) is [LookupOutcomeKind.offline]; everything else is
+/// or proxy answering) is [LookupOutcomeKind.offline]; a provider that is
+/// no longer the one the user consented to is
+/// [LookupOutcomeKind.unsupported]; everything else is
 /// [LookupOutcomeKind.failed].
 LookupOutcomeKind outcomeKindFor(LookupFailure f) => switch (f.code) {
       LookupFailureCode.rateLimited ||
       LookupFailureCode.dailyCap =>
         LookupOutcomeKind.rateLimited,
+      LookupFailureCode.searchError when f.transient =>
+        LookupOutcomeKind.rateLimited,
       LookupFailureCode.network ||
       LookupFailureCode.captivePortal =>
         LookupOutcomeKind.offline,
+      LookupFailureCode.consentChanged => LookupOutcomeKind.unsupported,
       _ => LookupOutcomeKind.failed,
     };

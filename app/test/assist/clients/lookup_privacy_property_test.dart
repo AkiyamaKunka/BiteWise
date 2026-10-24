@@ -6,6 +6,7 @@
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_clients.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
@@ -35,19 +36,143 @@ const _city = 'Madisonville';
 const _street = '702 State Street';
 const _profile = 'PROFILE-MARKER no peanuts, type 2 diabetic';
 
-const _bodyKeys = <String, Set<String>>{
+/// A scalar, or a list of scalars.
+const _leaf = 'leaf';
+
+/// The NESTED allowlist per host: a map allows only its keys (each checked
+/// against its own spec, at any depth), a one-element list checks every
+/// element against that element. So a `user_location.city`, a `timezone`
+/// inside a tool, or a new plugin field fails, not just a new top-level key.
+const _bodyShapes = <String, Map<String, Object>>{
   'api.anthropic.com': {
-    'model', 'max_tokens', 'output_config', 'messages', 'tools'
+    'model': _leaf,
+    'max_tokens': _leaf,
+    'output_config': {'effort': _leaf},
+    'messages': [
+      {
+        'role': _leaf,
+        'content': [
+          {'type': _leaf, 'text': _leaf}
+        ],
+      }
+    ],
+    'tools': [
+      {
+        'type': _leaf,
+        'name': _leaf,
+        'max_uses': _leaf,
+        'user_location': {'type': _leaf, 'country': _leaf},
+        'allowed_domains': _leaf,
+      }
+    ],
   },
-  'openrouter.ai': {'model', 'messages', 'plugins', 'tools', 'max_tokens'},
+  'openrouter.ai': {
+    'model': _leaf,
+    'messages': [
+      {'role': _leaf, 'content': _leaf}
+    ],
+    'plugins': [
+      {
+        'id': _leaf,
+        'engine': _leaf,
+        'max_results': _leaf,
+        'include_domains': _leaf,
+      }
+    ],
+    'tools': [
+      {
+        'type': _leaf,
+        'parameters': {
+          'engine': _leaf,
+          'max_results': _leaf,
+          'max_uses': _leaf,
+          'allowed_domains': _leaf,
+        },
+      }
+    ],
+    'max_tokens': _leaf,
+  },
   'api.openai.com': {
-    'model', 'input', 'tools', 'include', 'max_tool_calls',
-    'max_output_tokens', 'store'
+    'model': _leaf,
+    'input': _leaf,
+    'tools': [
+      {
+        'type': _leaf,
+        'search_context_size': _leaf,
+        'user_location': {'type': _leaf, 'country': _leaf},
+        'filters': {'allowed_domains': _leaf},
+      }
+    ],
+    'include': _leaf,
+    'max_tool_calls': _leaf,
+    'max_output_tokens': _leaf,
+    'store': _leaf,
   },
   'api.x.ai': {
-    'model', 'input', 'tools', 'max_turns', 'max_output_tokens', 'store'
+    'model': _leaf,
+    'input': [
+      {'role': _leaf, 'content': _leaf}
+    ],
+    'tools': [
+      {
+        'type': _leaf,
+        'filters': {'allowed_domains': _leaf},
+      }
+    ],
+    'max_turns': _leaf,
+    'max_output_tokens': _leaf,
+    'store': _leaf,
   },
 };
+
+void _expectShape(Object? value, Object spec, String path) {
+  if (spec == _leaf) {
+    final scalars = value is List ? value : [value];
+    for (final v in scalars) {
+      expect(v is Map || v is List, isFalse, reason: '$path must be scalar');
+    }
+    return;
+  }
+  if (spec is List) {
+    expect(value, isA<List>(), reason: path);
+    final list = value as List;
+    for (var i = 0; i < list.length; i++) {
+      _expectShape(list[i], spec.single as Object, '$path[$i]');
+    }
+    return;
+  }
+  final allowed = spec as Map<String, Object>;
+  expect(value, isA<Map>(), reason: path);
+  for (final e in (value as Map).entries) {
+    expect(allowed.containsKey(e.key), isTrue,
+        reason: '$path.${e.key} is not on the allowlist');
+    if (allowed.containsKey(e.key)) {
+      _expectShape(e.value, allowed[e.key]!, '$path.${e.key}');
+    }
+  }
+}
+
+/// Every value under a `country` key is an ISO2 code, and every domain
+/// filter names only the chain table's domains — wherever they sit.
+void _expectValues(Object? node, String path) {
+  if (node is Map) {
+    for (final e in node.entries) {
+      final k = e.key as String;
+      if (k == 'country') {
+        expect(e.value, matches(RegExp(r'^[A-Z]{2}$')), reason: '$path.$k');
+      }
+      if (k.endsWith('_domains')) {
+        expect(mcdDomains.toSet().containsAll(e.value as List), isTrue,
+            reason: '$path.$k');
+      }
+      _expectValues(e.value, '$path.$k');
+    }
+  } else if (node is List) {
+    for (var i = 0; i < node.length; i++) {
+      _expectValues(node[i], '$path[$i]');
+    }
+  }
+}
 
 const _headerKeys = {
   'x-api-key',
@@ -132,11 +257,13 @@ void main() {
       ]) {
         await settings.setProvider(p);
         await router.submit(req,
-            chainDomains: r.nextBool() ? mcdDomains : const []);
+            chainDomains: r.nextBool() ? mcdDomains : const [],
+            expectedRecipient: router.lookupSupport().recipient);
       }
       // Brand path: no location-derived chain survives brandOnly().
       await settings.setProvider(AiProvider.anthropic);
-      await router.submit(req.brandOnly());
+      await router.submit(req.brandOnly(),
+          expectedRecipient: LookupRecipient.anthropic);
       final last = seen.last;
       expect(dataBlock(_promptOf(last.url.host,
               jsonDecode(last.body) as Map<String, dynamic>))['chains'],
@@ -147,8 +274,10 @@ void main() {
     for (final req in seen) {
       final host = req.url.host;
       final body = jsonDecode(req.body) as Map<String, dynamic>;
-      expect(_bodyKeys[host]!.containsAll(body.keys), isTrue,
-          reason: '$host sent ${body.keys}');
+      _expectShape(body, _bodyShapes[host]!, host);
+      // The data block lives in the prompt string; everything else in the
+      // body is the fixed tool/plugin config.
+      _expectValues(body, host);
       expect(
           _headerKeys
               .containsAll(req.headers.keys.map((k) => k.toLowerCase())),

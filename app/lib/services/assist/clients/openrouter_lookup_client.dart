@@ -18,6 +18,18 @@
 /// tool (the default model is a `~google/…-latest` alias, and the user can
 /// pick any slug): the plugin searches once, before the model runs. The
 /// server-tool mode is implemented and tested for the day the plugin goes.
+///
+/// Which annotations count as returned BY THE SEARCH: only those carrying
+/// non-empty `content`. The docs give each annotation `start_index` /
+/// `end_index` into the model's message and add `content` "if available",
+/// and the plugin's default prompt asks the model to cite with markdown
+/// links — so an annotation may be built from a link the model wrote, which
+/// could be invented. Exa highlights in `content` can only come from a
+/// result Exa returned, so a content-bearing annotation is search-returned;
+/// a content-less one is the model's claim and is not cited. UNVERIFIED
+/// LIVE: all fixtures are synthetic (scripts/generate_lookup_client_fixtures
+/// .py); one live call should confirm the annotation semantics before the
+/// assist is wired to this client.
 library;
 
 import 'http_failure.dart';
@@ -116,9 +128,11 @@ class OpenRouterLookupClient extends HttpLookupClient {
   @override
   Future<LookupAnswer> runLookup(String key, LookupRequest request,
       List<String> domains, LookupRun run) async {
-    run.ensureWithinCap(worstCaseFirstRequestUsd());
+    final worst = worstCaseFirstRequestUsd();
+    run.ensureWithinCap(worst);
     final body = await postJson(endpoint, _headers(key),
-        buildBody(composeLookupPrompt(request), domains: domains), run);
+        buildBody(composeLookupPrompt(request), domains: domains), run,
+        worstCaseUsd: worst);
     run.add(_costOf(body));
     // OpenRouter can answer an upstream failure inside a 200.
     final err = body['error'];
@@ -158,16 +172,17 @@ class OpenRouterLookupClient extends HttpLookupClient {
         if (c is! Map) continue;
         final url = c['url'];
         if (url is! String || url.isEmpty) continue;
-        urls.add(url);
         final content = c['content'];
-        if (content is String && content.trim().isNotEmpty) {
-          evidence.add(LookupEvidence(
-            url: url,
-            text: content,
-            verbatim: true, // Exa highlights: extracted from the page
-            title: c['title'] is String ? c['title'] as String : null,
-          ));
-        }
+        // No Exa content: possibly a link the model wrote, not a search
+        // result — neither cited nor evidence (see the library comment).
+        if (content is! String || content.trim().isEmpty) continue;
+        urls.add(url);
+        evidence.add(LookupEvidence(
+          url: url,
+          text: content,
+          verbatim: true, // Exa highlights: extracted from the page
+          title: c['title'] is String ? c['title'] as String : null,
+        ));
       }
     }
     final result = parseResult(text, request);

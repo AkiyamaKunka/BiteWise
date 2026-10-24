@@ -77,8 +77,10 @@ void main() {
       expect(support.reason, e.value);
       expect(support.recipient, LookupRecipient.none);
       expect(support.locationAllowed, isFalse);
-      final o = await router.submit(bigMacRequest, chainDomains: mcdDomains);
+      final o = await router.submit(bigMacRequest,
+          chainDomains: mcdDomains, expectedRecipient: support.recipient);
       expect(o.kind, LookupOutcomeKind.unsupported);
+      expect(o.failure!.code, isNot(LookupFailureCode.consentChanged));
       expect((await router.poll('j')).kind, LookupOutcomeKind.unsupported);
       expect(s.requests, isEmpty);
     });
@@ -95,16 +97,17 @@ void main() {
           client: s.client);
       expect(router.lookupSupport().supported, isTrue);
       expect(router.lookupSupport().recipient, e.value.$1);
-      final o = await router.submit(bigMacRequest);
+      final o =
+          await router.submit(bigMacRequest, expectedRecipient: e.value.$1);
       expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
       expect([for (final r in s.requests) r.url.host], [e.value.$2]);
     });
   }
 
   test('with owner sign-off, OpenAI and xAI are reachable', () async {
-    for (final (p, host) in [
-      (AiProvider.openai, 'api.openai.com'),
-      (AiProvider.xai, 'api.x.ai'),
+    for (final (p, host, who) in [
+      (AiProvider.openai, 'api.openai.com', LookupRecipient.openai),
+      (AiProvider.xai, 'api.x.ai', LookupRecipient.xai),
     ]) {
       final s = _anything();
       final router = ProviderLookupRouter(await _settings(p),
@@ -113,7 +116,7 @@ void main() {
           // xAI's worst case does not fit the 5¢ default (see notes).
           policy: const LookupCostPolicy(maxUsdPerLookup: 0.20));
       expect(router.lookupSupport().supported, isTrue);
-      final o = await router.submit(bigMacRequest);
+      final o = await router.submit(bigMacRequest, expectedRecipient: who);
       expect(o.kind, LookupOutcomeKind.done, reason: '$p ${o.failure}');
       expect([for (final r in s.requests) r.url.host], [host]);
     }
@@ -124,15 +127,80 @@ void main() {
     final settings = await _settings(AiProvider.anthropic);
     final s = _anything();
     final router = ProviderLookupRouter(settings, client: s.client);
-    await router.submit(bigMacRequest);
+    const an = LookupRecipient.anthropic;
+    await router.submit(bigMacRequest, expectedRecipient: an);
     await settings.setAnthropicApiKey('rotated-key');
-    await router.submit(bigMacRequest);
+    await router.submit(bigMacRequest, expectedRecipient: an);
     expect([for (final r in s.requests) r.headers['x-api-key']],
         ['test-anthropic_api_key', 'rotated-key']);
     await settings.setProvider(AiProvider.deepseek);
     expect(router.lookupSupport().supported, isFalse);
-    await router.submit(bigMacRequest);
+    await router.submit(bigMacRequest,
+        expectedRecipient: router.lookupSupport().recipient);
     expect(s.requests, hasLength(2));
+  });
+
+  group('consent is bound to the recipient', () {
+    test('a provider switch between the consent check and submit: '
+        'zero calls, consentChanged', () async {
+      final settings = await _settings(AiProvider.anthropic);
+      final s = _anything();
+      final router = ProviderLookupRouter(settings, client: s.client);
+      // The caller checks consent against the recipient it sees now…
+      final consented = router.lookupSupport().recipient;
+      expect(consented, LookupRecipient.anthropic);
+      // …awaits something (the place query), and the user switches.
+      await settings.setProvider(AiProvider.openrouter);
+      final o = await router.submit(bigMacRequest,
+          chainDomains: mcdDomains, expectedRecipient: consented);
+      expect(o.kind, LookupOutcomeKind.unsupported);
+      expect(o.failure!.code, LookupFailureCode.consentChanged);
+      expect(o.failure!.transient, isFalse);
+      expect(o.failure!.message, contains('openrouter'));
+      expect(o.result, isNull);
+      expect(s.requests, isEmpty);
+      // Re-consented for the new recipient, the same call goes through.
+      final again = await router.submit(bigMacRequest,
+          expectedRecipient: router.lookupSupport().recipient);
+      expect(again.kind, LookupOutcomeKind.done, reason: '${again.failure}');
+      expect([for (final r in s.requests) r.url.host], ['openrouter.ai']);
+    });
+
+    test('a submit that names no recipient is refused: zero calls',
+        () async {
+      final s = _anything();
+      final budget = DailyLookupBudget();
+      final router = ProviderLookupRouter(
+          await _settings(AiProvider.anthropic),
+          client: s.client,
+          budget: budget);
+      final o = await router.submit(bigMacRequest);
+      expect(o.failure!.code, LookupFailureCode.consentChanged);
+      expect(s.requests, isEmpty);
+      expect(budget.lookupsToday, 0, reason: 'not counted against the day');
+    });
+
+    test('a switch to the server: the job client is never reached', () async {
+      final settings = await _settings(AiProvider.anthropic);
+      final server = _FakeServer();
+      final router = ProviderLookupRouter(settings, serverClient: server);
+      final consented = router.lookupSupport().recipient;
+      await settings.setProvider(AiProvider.server);
+      final o =
+          await router.submit(bigMacRequest, expectedRecipient: consented);
+      expect(o.failure!.code, LookupFailureCode.consentChanged);
+      expect(server.submits, 0);
+    });
+
+    test('a direct client cross-checks a named recipient', () async {
+      final s = _anything();
+      final settings = await _settings(AiProvider.openrouter);
+      final router = ProviderLookupRouter(settings, client: s.client);
+      final o = await router.active
+          .submit(bigMacRequest, expectedRecipient: LookupRecipient.anthropic);
+      expect(o.failure!.code, LookupFailureCode.consentChanged);
+      expect(s.requests, isEmpty);
+    });
   });
 
   test('a server job client is used when one is wired in', () async {
@@ -140,10 +208,14 @@ void main() {
         serverClient: _FakeServer());
     expect(router.lookupSupport().recipient, LookupRecipient.claudePlan);
     expect((await router.poll('job-1')).jobId, 'job-1');
+    final o = await router.submit(bigMacRequest,
+        expectedRecipient: LookupRecipient.claudePlan);
+    expect(o.kind, LookupOutcomeKind.pending);
   });
 }
 
 class _FakeServer implements LookupClient {
+  int submits = 0;
   @override
   LookupSupport lookupSupport() => const LookupSupport(
       supported: true,
@@ -151,12 +223,15 @@ class _FakeServer implements LookupClient {
       locationAllowed: false);
   @override
   Future<LookupOutcome> submit(LookupRequest request,
-          {List<String> chainDomains = const [],
-          LookupCancelToken? cancel}) async =>
-      const LookupOutcome(
-          kind: LookupOutcomeKind.pending,
-          provider: LookupRecipient.claudePlan,
-          jobId: 'job-1');
+      {List<String> chainDomains = const [],
+      LookupCancelToken? cancel,
+      LookupRecipient? expectedRecipient}) async {
+    submits++;
+    return const LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job-1');
+  }
   @override
   Future<LookupOutcome> poll(String jobId) async => LookupOutcome(
       kind: LookupOutcomeKind.pending,

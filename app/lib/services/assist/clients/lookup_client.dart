@@ -105,6 +105,11 @@ enum LookupFailureCode {
   costCap,
   dailyCap,
   cancelled,
+
+  /// The caller's consent names a different recipient than the one the
+  /// lookup would go to now (the provider changed in Settings between the
+  /// consent check and the send). Nothing was sent.
+  consentChanged,
 }
 
 class LookupFailure {
@@ -167,7 +172,10 @@ class LookupCost {
   final int outputTokens;
   final int httpCalls;
 
-  /// From our price table (lookup_cost.dart).
+  /// From our price table (lookup_cost.dart). A request that was sent but
+  /// never answered (timeout, cancel, dropped connection, a non-JSON reply)
+  /// is charged its WORST case here: it may have run, and been billed for,
+  /// its searches.
   final double estimatedUsd;
 
   /// From the provider's own usage report when it gives one (OpenRouter
@@ -227,6 +235,22 @@ class LookupOutcome {
             transient: false, message: reason),
       );
 
+  /// Nothing sent: the caller consented to [expected] (or named no one),
+  /// and the lookup would go to [actual]. Permanent until the user answers
+  /// the consent sheet for [actual].
+  factory LookupOutcome.consentChanged(
+          LookupRecipient? expected, LookupRecipient actual) =>
+      LookupOutcome(
+        kind: LookupOutcomeKind.unsupported,
+        provider: LookupRecipient.none,
+        failure: LookupFailure(LookupFailureCode.consentChanged,
+            transient: false,
+            message: expected == null
+                ? 'no consented recipient named; provider is ${actual.wire}'
+                : 'consent covers ${expected.wire}; provider is now '
+                    '${actual.wire}'),
+      );
+
   final LookupOutcomeKind kind;
   final LookupRecipient provider;
   final String? jobId;
@@ -234,8 +258,12 @@ class LookupOutcome {
   /// Present only for [LookupOutcomeKind.done].
   final LookupResult? result;
 
-  /// Every URL the provider's SEARCH returned (results, sources, citation
-  /// annotations), as sent — normalize before comparing.
+  /// Every URL the provider's SEARCH returned, as sent — normalize before
+  /// comparing: Anthropic `web_search_result`s, OpenAI
+  /// `action.sources`, xAI's top-level `citations`, OpenRouter annotations
+  /// that carry Exa `content`. Never a URL that only the model's own answer
+  /// names (an inline marker, a markdown link, a bare annotation): the
+  /// model can invent those.
   final List<String> citedUrls;
   final List<LookupEvidence> evidence;
   final int searches;
@@ -270,8 +298,20 @@ abstract class LookupClient {
   /// to them (and they are what the source check calls official). They are
   /// derived from the same chains the request already names, so they add
   /// nothing to what the provider learns.
+  ///
+  /// [expectedRecipient] is the recipient the caller's consent covers (the
+  /// `lookupSupport().recipient` it checked). When it is not who this
+  /// client would send to, the outcome is [LookupFailureCode.consentChanged]
+  /// with zero HTTP calls. A direct client's recipient is fixed, so for it
+  /// the argument is a cross-check; `ProviderLookupRouter` follows Settings
+  /// and REQUIRES it (a null is refused the same way), because the provider
+  /// can change between the consent check and the send. Claude Plan's
+  /// consent also names the server host; binding that is the server job
+  /// client's job (R5a).
   Future<LookupOutcome> submit(LookupRequest request,
-      {List<String> chainDomains = const [], LookupCancelToken? cancel});
+      {List<String> chainDomains = const [],
+      LookupCancelToken? cancel,
+      LookupRecipient? expectedRecipient});
 
   /// Async jobs exist only on the owner's server (R5a).
   Future<LookupOutcome> poll(String jobId);
@@ -288,7 +328,8 @@ class UnsupportedLookupClient implements LookupClient {
   @override
   Future<LookupOutcome> submit(LookupRequest request,
           {List<String> chainDomains = const [],
-          LookupCancelToken? cancel}) async =>
+          LookupCancelToken? cancel,
+          LookupRecipient? expectedRecipient}) async =>
       LookupOutcome.unsupported(reason);
 
   @override

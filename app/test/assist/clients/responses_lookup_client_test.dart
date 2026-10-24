@@ -69,6 +69,79 @@ void main() {
       expect(c.passes, isFalse, reason: 'no page text → suggestion at most');
     });
 
+    test('an annotation URL the search never returned is not cited',
+        () async {
+      // The model links an invented page on the right domain and names it
+      // as its source: official, but not something the search returned.
+      const invented =
+          'https://www.mcdonalds.com/us/en-us/invented-page.html';
+      final body = fixture('openai_found.json');
+      final msg = (body['output'] as List)[1] as Map;
+      final part = (msg['content'] as List).single as Map;
+      part['text'] = (part['text'] as String)
+          .replaceAll('$_bigMac?utm_source=openai', invented)
+          .replaceAll('"source_url": "$_bigMac"', '"source_url": "$invented"');
+      ((part['annotations'] as List).single as Map)['url'] = invented;
+      final o = await client(ScriptedClient([(_) => json200(body)]))
+          .submit(bigMacRequest);
+      expect(o.isDone, isTrue, reason: '${o.failure}');
+      expect(o.result!.sourceUrl, invented);
+      expect(o.citedUrls, [
+        _bigMac,
+        'https://www.fastfoodnutrition.org/mcdonalds/big-mac'
+      ]);
+      final c = checkSource(
+          sourceUrl: o.result!.sourceUrl,
+          citedUrls: o.citedUrls,
+          evidence: o.evidence,
+          chainDomains: mcdDomains,
+          figures: o.result!.matches.single.allFigures);
+      expect(c.official, isTrue);
+      expect(c.cited, isFalse);
+      expect(c.reason, 'source_not_cited');
+    });
+
+    test('no sources in the reply → nothing is cited', () async {
+      final body = fixture('openai_found.json');
+      (((body['output'] as List).first as Map)['action'] as Map)
+          .remove('sources');
+      final o = await client(ScriptedClient([(_) => json200(body)]))
+          .submit(bigMacRequest);
+      expect(o.isDone, isTrue);
+      expect(o.citedUrls, isEmpty, reason: 'the annotation alone proves '
+          'nothing');
+      expect(o.evidence, hasLength(1), reason: 'kept as the model\'s claim');
+    });
+
+    test('error codes: rate limit, permanent invalid_*, else server',
+        () async {
+      Future<LookupFailure> run(Object? code) async {
+        final body = fixture('openai_found.json')
+          ..['status'] = 'failed'
+          ..['error'] = {'code': code, 'message': 'secret-ish text'};
+        final o = await client(ScriptedClient([(_) => json200(body)]))
+            .submit(bigMacRequest);
+        return o.failure!;
+      }
+
+      final rl = await run('rate_limit_exceeded');
+      expect(rl.code, LookupFailureCode.rateLimited);
+      expect(rl.transient, isTrue);
+      final bad = await run('invalid_prompt');
+      expect(bad.code, LookupFailureCode.badRequest);
+      expect(bad.transient, isFalse);
+      expect(bad.message, contains('invalid_prompt'));
+      final other = await run('server_error');
+      expect(other.code, LookupFailureCode.server);
+      expect(other.transient, isTrue);
+      final odd = await run('Weird Code <script>');
+      expect(odd.code, LookupFailureCode.server);
+      expect(odd.message, 'response failed');
+      for (final f in [rl, bad, other, odd]) {
+        expect(f.message.contains('secret-ish'), isFalse);
+      }
+    });
+
     test('incomplete → truncated; failed status → transient server', () async {
       final a = await client(
               ScriptedClient([(_) => fixture200('openai_incomplete.json')]))
@@ -124,9 +197,19 @@ void main() {
       expect(body['model'], 'grok-4.7');
       expect(body['max_turns'], 2);
       expect(body['store'], false);
-      final tool = (body['tools'] as List).single as Map;
-      expect(tool['type'], 'web_search');
-      expect((tool['filters'] as Map)['allowed_domains'], hasLength(5));
+      expect(body['max_output_tokens'], 1500);
+      // Exact: country never rides along (xAI's tool has no user_location
+      // here), and the filter is capped at xAI's 5 domains.
+      expect(body['tools'], [
+        {
+          'type': 'web_search',
+          'filters': {
+            'allowed_domains': [
+              'mcdonalds.com', 'a.com', 'b.com', 'c.com', 'd.com'
+            ]
+          },
+        }
+      ]);
       final input = (body['input'] as List).single as Map;
       expect(input['role'], 'user');
       expect(dataBlock(input['content'] as String),
@@ -148,6 +231,42 @@ void main() {
       expect(o.evidence.single.text, startsWith('[[1]]('));
       expect(o.cost.reportedUsd, closeTo(0.01967, 1e-9));
       expect(o.searches, 1);
+    });
+
+    test('an invented inline [[1]](url) marker is a claim, not a citation',
+        () async {
+      const invented =
+          'https://www.mcdonalds.com/us/en-us/invented-page.html';
+      final body = fixture('xai_found.json');
+      final msg = (body['output'] as List)[1] as Map;
+      final part = (msg['content'] as List).single as Map;
+      part['text'] = (part['text'] as String).replaceAll(
+          '[[1]]($_bigMac)', '[[1]]($invented)').replaceAll(
+          '"source_url": "$_bigMac"', '"source_url": "$invented"');
+      ((part['annotations'] as List).single as Map)['url'] = invented;
+      final o = await client(ScriptedClient([(_) => json200(body)]))
+          .submit(bigMacRequest);
+      expect(o.isDone, isTrue, reason: '${o.failure}');
+      expect(o.result!.sourceUrl, invented);
+      expect(o.citedUrls, isNot(contains(invented)));
+      expect(o.evidence.single.url, invented);
+      final c = checkSource(
+          sourceUrl: o.result!.sourceUrl,
+          citedUrls: o.citedUrls,
+          evidence: o.evidence,
+          chainDomains: mcdDomains,
+          figures: o.result!.matches.single.allFigures);
+      expect(c.official, isTrue);
+      expect(c.cited, isFalse, reason: 'never a suggestion\'s source');
+      expect(c.reason, 'source_not_cited');
+    });
+
+    test('without the top-level citations list nothing is cited', () async {
+      final body = fixture('xai_found.json')..remove('citations');
+      final o = await client(ScriptedClient([(_) => json200(body)]))
+          .submit(bigMacRequest);
+      expect(o.isDone, isTrue);
+      expect(o.citedUrls, isEmpty);
     });
 
     test('at the default 5¢ cap the pre-flight refuses: zero calls', () async {
