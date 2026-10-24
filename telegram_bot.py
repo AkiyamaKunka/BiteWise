@@ -4847,6 +4847,27 @@ def with_reply_language(prompt: str, lang) -> str:
     return f"{prompt}\n\n{REPLY_LANGUAGE_DIRECTIVE_ZH}\n"
 
 
+def api_features() -> dict:
+    """The "features" map of /api/auth_check: what a new app may rely on.
+
+    An older server omits the map entirely, which the app reads as "old
+    server, every capability off" (ServerAnalyzer.serverFeatures).
+      * estimate_confidence — photo replies carry the meal-context fields
+        (estimate_confidence, restaurant_context, portion_state,
+        order_merchant, item brand/qty/unit). True from the moment the
+        shared photo prompt asks for them.
+      * restaurant_lookup / lookup_jobs — the restaurant-lookup endpoints.
+        They do not exist on this server yet, so both stay False whatever
+        the environment says; the stage that adds them reports its knob
+        here.
+    """
+    return {
+        "estimate_confidence": True,
+        "restaurant_lookup": False,
+        "lookup_jobs": False,
+    }
+
+
 # ─── Flask REST API ───────────────────────────────────────────────
 
 # date -> (monotonic stamp, DailyActivity|None). Shared across requests;
@@ -4894,9 +4915,12 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return jsonify({"error": "Unauthorized"}), 401
         # "backends" lets the phone's Test connection diagnose a missing
         # server-side plan key (GLM_PLAN_KEY / DOUBAO_PLAN_KEY) remotely.
+        # "features" (additive) tells a new app which newer contracts this
+        # server speaks; an old app ignores it.
         return jsonify({"ok": True, "analyzer": claude_analyzer.status_label(),
                         "backends": claude_analyzer.backend_status(),
-                        "claude_login": claude_analyzer.login_state()})
+                        "claude_login": claude_analyzer.login_state(),
+                        "features": api_features()})
 
     @app.route('/api/garmin_daily', methods=['POST'])
     def api_garmin_daily():

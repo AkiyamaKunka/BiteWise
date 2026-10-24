@@ -37,6 +37,8 @@ VECTOR_FILES = [
     "mismatch.json",
     "report_formulas.json",
     "weight.json",
+    # Replayed case by case in tests/test_restaurant_lookup_compose.py.
+    "restaurant_lookup.json",
 ]
 
 

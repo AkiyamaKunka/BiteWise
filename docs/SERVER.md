@@ -370,7 +370,7 @@ phone owns its own database.
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /api/auth_check` | Free readiness probe: validates the key and reports which analysis backends are available. Never spends a CLI run. |
+| `POST /api/auth_check` | Free readiness probe: validates the key and reports which analysis backends are available, plus a `features` map of the newer contracts this server speaks (`estimate_confidence`, `restaurant_lookup`, `lookup_jobs`; an older server omits it and the app treats every feature as off). Never spends a CLI run. |
 | `POST /api/analyze_photo` | Analyze one photo. The server composes the prompt from its own `shared/` copy — the phone may contribute only a bounded dietary-profile appendix, never the prompt itself. |
 | `POST /api/text_intent` | Natural-language intent parsing for corrections and text-described meals. |
 | `POST /api/claude_auth/start` / `complete` / `cancel` | Phone-initiated OAuth re-connect for the server's Claude subscription. The PKCE verifier and token never leave the server. |
