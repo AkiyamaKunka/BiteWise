@@ -665,6 +665,27 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     return logged;
   }
 
+  /// The LIKE only narrows the rows to decode (a 16-hex key carries no
+  /// wildcard, and is matched however the JSON was spaced — an imported
+  /// export may come from Python's json.dumps); the stored JSON decides.
+  @override
+  Future<List<int>> mealIdsWithShutterKey(
+      String key, String fromDate, String toDate) async {
+    if (!shutterKeyShape.hasMatch(key)) return const [];
+    final rows = await _db.query(
+      'meals',
+      columns: const ['id', 'analysis'],
+      where: 'chat_id = ? AND date >= ? AND date <= ? AND analysis LIKE ?',
+      whereArgs: [localChatId, fromDate, toDate, '%$key%'],
+      orderBy: 'id ASC',
+    );
+    return [
+      for (final row in rows)
+        if (analysisHasShutterKey(coerceStoredAnalysis(row['analysis']), key))
+          (row['id'] as num).toInt(),
+    ];
+  }
+
   @override
   Future<void> saveMealThumb(int mealId, Uint8List jpeg) async {
     if (jpeg.isEmpty) return;

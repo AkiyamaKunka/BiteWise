@@ -189,6 +189,15 @@ abstract class MealsDao {
   /// read their bytes to find out. Read-only; empty ids never match.
   Future<Set<String>> loggedAssetIds(List<String> assetIds);
 
+  /// The meals dated [fromDate]..[toDate] (YYYY-MM-DD, both inclusive)
+  /// whose analysis.capture.shutter_key is [key] — another file of the same
+  /// shutter press is already a meal (design G2b, the duplicate-capture
+  /// guard). A cheap text prefilter, then the stored JSON itself decides;
+  /// a [key] that is not 16 lowercase hex characters matches nothing.
+  /// Ascending ids. Read-only.
+  Future<List<int>> mealIdsWithShutterKey(
+      String key, String fromDate, String toDate);
+
   /// Tiny per-meal JPEG (spec §9 app-only): written by the pipeline at
   /// save time, deleted with the meal, shown beside the analysis so the
   /// user can check the numbers against the actual photo.
@@ -547,7 +556,9 @@ class CaptureMeta {
       this.strength = CaptureStrength.none,
       this.signal,
       this.exif,
-      this.createDate});
+      this.createDate,
+      this.addedDate,
+      this.importPassAt});
 
   final CaptureDevice device;
   final CaptureStrength strength;
@@ -560,7 +571,31 @@ class CaptureMeta {
   /// which has no asset.
   final DateTime? createDate;
 
+  /// When the asset joined the library (PHAsset.addedDate, iOS 26+), as
+  /// the watcher learned it for a glasses photo the dating guard could
+  /// re-date (design G2b, services/photo/capture_dating.dart): evidence that
+  /// [createDate] is only the import time. Null: not asked, or not known.
+  final DateTime? addedDate;
+
+  /// Set when the late-import pass (design G1b) offered the photo: when
+  /// that pass ran — the guard's evidence where [addedDate] is unknown.
+  /// (Not 'lateImportAt': no member here may even read like a position —
+  /// exif_capture_test scans the names.)
+  final DateTime? importPassAt;
+
   bool get isMetaGlasses => device == CaptureDevice.metaGlasses;
+
+  /// This reading with the import-time evidence an intake found added.
+  CaptureMeta withImportEvidence(
+          {DateTime? addedDate, DateTime? importPassAt}) =>
+      CaptureMeta(
+          device: device,
+          strength: strength,
+          signal: signal,
+          exif: exif,
+          createDate: createDate,
+          addedDate: addedDate ?? this.addedDate,
+          importPassAt: importPassAt ?? this.importPassAt);
 }
 
 abstract class PhotoIntake {

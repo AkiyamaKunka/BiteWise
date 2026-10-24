@@ -785,6 +785,10 @@ class PhotoChangesTests: XCTestCase {
     let albums = map(p, "albumAssetIds", ["titles": [String](), "sinceMs": 0, "limit": 10])
     XCTAssertEqual(albums["status"] as? String, "ok")
     XCTAssertEqual((albums["ids"] as? [Any])?.count, 0)
+    // Nor does asking for asset dates (G2b).
+    let dates = map(p, "assetDates", ["ids": [String]()])
+    XCTAssertEqual(dates["status"] as? String, "ok")
+    XCTAssertEqual((dates["ids"] as? [Any])?.count, 0)
   }
 
   /// Without access it answers denied — it never asks (no prompt from a
@@ -800,6 +804,9 @@ class PhotoChangesTests: XCTestCase {
       let albums = map(p, "albumAssetIds", ["titles": ["Meta AI"], "sinceMs": 0, "limit": 10])
       XCTAssertEqual(albums["status"] as? String, "denied")
       XCTAssertEqual((albums["ids"] as? [Any])?.count, 0)
+      let dates = map(p, "assetDates", ["ids": ["A/L0/001"]])
+      XCTAssertEqual(dates["status"] as? String, "denied")
+      XCTAssertEqual((dates["ids"] as? [Any])?.count, 0)
     }
   }
 
@@ -847,6 +854,21 @@ class PhotoChangesTests: XCTestCase {
     XCTAssertNil(wrongTypes.token)
     XCTAssertEqual(wrongTypes.limit, 200)
     XCTAssertEqual(wrongTypes.budget, 1.0, accuracy: 0.0001)
+  }
+
+  /// assetDates (design G2b) asks about at most 50 distinct identifiers;
+  /// anything that is not one is dropped, never sent to PhotoKit.
+  func testAssetDatesArgumentsAreBoundedAndDistinct() {
+    let request = AssetDatesRequest([
+      "ids": [" A/L0/001 ", "", 7, "A/L0/001", String(repeating: "x", count: 257), "B/L0/001"]
+    ])
+    XCTAssertEqual(request.ids, ["A/L0/001", "B/L0/001"])
+    XCTAssertEqual(AssetDatesRequest([:]).ids, [])
+    XCTAssertEqual(AssetDatesRequest(["ids": "A/L0/001"]).ids, [])
+    let many = AssetDatesRequest(["ids": (0..<80).map { "id\($0)" }])
+    XCTAssertEqual(many.ids.count, 50)
+    XCTAssertEqual(many.ids.first, "id0")
+    XCTAssertEqual(many.ids.last, "id49")
   }
 
   func testAlbumArgumentsAndTitleMatching() {
@@ -899,6 +921,14 @@ class PhotoChangesTests: XCTestCase {
     XCTAssertEqual(unreadable["status"] as? String, "unavailable")
     XCTAssertEqual(unreadable["error_code"] as? String, "token_unreadable")
     XCTAssertNotNil(photoChangesUnarchiveToken(try XCTUnwrap(unreadable["token"] as? String)))
+  }
+
+  /// An identifier the library does not have is simply left out.
+  func testRealLibraryAssetDatesLeavesOutUnknownIds() throws {
+    guard hostHasPhotoAccess else { throw XCTSkip("the test host has no Photos access") }
+    let dates = map(PhotoChangesPlugin(), "assetDates", ["ids": ["no-such-asset/L0/001"]])
+    XCTAssertEqual(dates["status"] as? String, "ok")
+    XCTAssertEqual((dates["ids"] as? [Any])?.count, 0)
   }
 }
 

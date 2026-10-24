@@ -27,6 +27,8 @@ import UIKit
 ///      dropped?, device_tag?}
 ///   albumAssetIds {titles, sinceMs, limit} → {status: ok|denied|error,
 ///                                             ids, error_code?}
+///   assetDates {ids} → {status: ok|denied, ids: [{id, created_ms?,
+///                       added_ms?}]}
 ///
 /// - token: base64 of the PHPersistentChangeToken archived with secure
 ///   coding. In a reply it is always the token to store next: the one the
@@ -52,6 +54,10 @@ import UIKit
 ///   max_changes (≤ 5,000) changes and answers truncated=true with the
 ///   token of the LAST PROCESSED change, so the next call resumes there.
 ///   A week-old token cannot eat the ~30 s background grant.
+/// - assetDates (design G2b): the creation and added dates of up to 50
+///   image assets by identifier, for a glasses photo whose creation date
+///   may only be its import time. Ones that are gone, hidden or not images
+///   are left out. Needs no history: iOS 15 answers too, without added_ms.
 ///
 /// Read-only on PhotoKit: no change requests, and it never asks for
 /// authorization — without access it answers denied. All PhotoKit work
@@ -113,6 +119,9 @@ final class PhotoChangesPlugin: NSObject, FlutterPlugin {
     case "albumAssetIds":
       let request = AlbumRequest(args)
       work = { [self] _ in albumAssetIds(request) }
+    case "assetDates":
+      let request = AssetDatesRequest(args)
+      work = { [self] _ in assetDates(request) }
     default:
       result(FlutterMethodNotImplemented)
       return
@@ -278,6 +287,20 @@ final class PhotoChangesPlugin: NSObject, FlutterPlugin {
     }
     return ["status": "ok", "ids": ids]
   }
+
+  private func assetDates(_ request: AssetDatesRequest) -> [String: Any] {
+    guard hasAccess else { return ["status": "denied", "ids": [[String: Any]]()] }
+    guard !request.ids.isEmpty else { return ["status": "ok", "ids": [[String: Any]]()] }
+    let options = PHFetchOptions()
+    options.includeHiddenAssets = false
+    let assets = PHAsset.fetchAssets(withLocalIdentifiers: request.ids, options: options)
+    var out: [[String: Any]] = []
+    assets.enumerateObjects { asset, _, _ in
+      guard asset.mediaType == .image, !asset.isHidden else { return }
+      out.append(photoChangesEntry(asset))
+    }
+    return ["status": "ok", "ids": out]
+  }
 }
 
 // MARK: - arguments
@@ -336,6 +359,29 @@ struct AlbumRequest {
     since = Date(timeIntervalSince1970: sinceMs.isFinite ? sinceMs / 1000.0 : 0)
     limit = photoChangesClamp(
       args["limit"], fallback: Self.defaultLimit, min: 1, max: Self.maxLimit)
+  }
+}
+
+/// assetDates' arguments: up to 50 distinct non-empty identifiers of at
+/// most 256 characters, in the order sent.
+struct AssetDatesRequest {
+  static let maxIds = 50
+  static let maxLength = 256
+
+  let ids: [String]
+
+  init(_ args: [String: Any]) {
+    let raw = args["ids"] as? [Any] ?? []
+    var seen = Set<String>()
+    var ids: [String] = []
+    for value in raw {
+      guard let id = (value as? String)?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !id.isEmpty, id.count <= Self.maxLength, seen.insert(id).inserted
+      else { continue }
+      ids.append(id)
+      if ids.count >= Self.maxIds { break }
+    }
+    self.ids = ids
   }
 }
 

@@ -276,6 +276,61 @@ void main() {
     });
   });
 
+  // Design G2b: when a glasses photo joined the library.
+  group('decodeAssetDates', () {
+    test('ok with dates, denied, error', () {
+      final ok = decodeAssetDates({
+        'status': 'ok',
+        'ids': [
+          _entry('A', created: 1000, added: 2000),
+          _entry('B'),
+        ]
+      });
+      expect(ok.status, PhotoChangeStatus.ok);
+      expect(ok.ids.map((i) => i.id), ['A', 'B']);
+      expect(ok.ids[0].created, DateTime.fromMillisecondsSinceEpoch(1000));
+      expect(ok.ids[0].added, DateTime.fromMillisecondsSinceEpoch(2000));
+      expect(ok.ids[1].added, isNull, reason: 'before iOS 26');
+      final denied = decodeAssetDates({'status': 'denied', 'ids': []});
+      expect(denied.status, PhotoChangeStatus.denied);
+      expect(denied.ids, isEmpty);
+      expect(decodeAssetDates({'status': 'error', 'error_code': 'x'}).errorCode,
+          'x');
+    });
+
+    test('anything off-contract is an error', () {
+      for (final reply in <Object?>[
+        null,
+        [],
+        {'status': 'ok'},
+        {'status': 'ok', 'ids': 'A'},
+        {
+          'status': 'ok',
+          'ids': ['A']
+        },
+        {
+          'status': 'ok',
+          'ids': [
+            {'id': ''}
+          ]
+        },
+        {
+          'status': 'ok',
+          'ids': [
+            {'id': 'A', 'added_ms': 'soon'}
+          ]
+        },
+        {'status': 'expired', 'ids': []},
+        {'status': 'what', 'ids': []},
+      ]) {
+        final r = decodeAssetDates(reply);
+        expect(r.status, PhotoChangeStatus.error, reason: '$reply');
+        expect(r.errorCode, photoChangesMalformed);
+        expect(r.ids, isEmpty);
+      }
+    });
+  });
+
   group('ChannelPhotoChangeSource', () {
     const channel = MethodChannel(photoChangesChannelName);
     final messenger =
@@ -359,6 +414,34 @@ void main() {
       expect((calls.last.arguments as Map)['sinceMs'], 0);
     });
 
+    test('assetDates sends at most 50 non-empty ids, and asks nothing for '
+        'none', () async {
+      answer((call) async => {
+            'status': 'ok',
+            'ids': [_entry('A', created: 1, added: 2)],
+          });
+      final source = ChannelPhotoChangeSource();
+      final dates = await source.assetDates(['A', '']);
+      expect(dates.ids.single.added, DateTime.fromMillisecondsSinceEpoch(2));
+      expect(calls.last.method, 'assetDates');
+      expect(calls.last.arguments, {
+        'ids': ['A']
+      });
+      await source.assetDates([for (var i = 0; i < 80; i++) 'id$i']);
+      expect(((calls.last.arguments as Map)['ids'] as List), hasLength(50));
+      final before = calls.length;
+      expect((await source.assetDates(const [''])).status,
+          PhotoChangeStatus.ok);
+      expect(calls, hasLength(before), reason: 'nothing to ask about');
+
+      answer((call) async =>
+          throw PlatformException(code: 'boom', message: 'native failure'));
+      expect((await source.assetDates(['A'])).errorCode, 'platform:boom');
+      messenger.setMockMethodCallHandler(channel, null);
+      expect((await source.assetDates(['A'])).errorCode,
+          photoChangesMissingPlugin);
+    });
+
     test('a platform error, a missing plugin, a timeout and a bad reply are '
         'errors, never exceptions', () async {
       answer((call) async =>
@@ -423,6 +506,12 @@ void main() {
       expect(fake.insertedImagesSinceTokens, [null, 'fake-token-2']);
       expect(fake.albumAssetIdsTitles, [
         ['Meta AI']
+      ]);
+      final dates = await fake.assetDates(['A']);
+      expect(dates.status, PhotoChangeStatus.ok);
+      expect(dates.ids, isEmpty);
+      expect(fake.assetDatesIds, [
+        ['A']
       ]);
     });
 

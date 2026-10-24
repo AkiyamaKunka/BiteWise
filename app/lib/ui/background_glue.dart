@@ -787,6 +787,8 @@ Future<bool> _runAfterLaunch({
           dao: await createMealsDao(),
           analyzer: createMultiProviderAnalyzer(settings),
           latch: autoScanLatchFor(settings),
+          // A glasses preview copy waits once for its full-size one (G2b).
+          previewHold: holdGlassesPreview,
           // iOS only: there dart:ui cannot decode (platform_decode.dart).
           deferUndecodable: ios),
       showMealCard: (title, body) async {

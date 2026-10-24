@@ -188,6 +188,26 @@ class AlbumAssetIds {
       '${errorCode == null ? '' : ', $errorCode'})';
 }
 
+/// assetDates' answer.
+class AssetDates {
+  const AssetDates(this.status, {this.ids = const [], this.errorCode});
+
+  final PhotoChangeStatus status;
+
+  /// The image assets among those asked about that still exist and are not
+  /// hidden, with their creation and (iOS 26+) added dates; ok only.
+  final List<InsertedImage> ids;
+  final String? errorCode;
+
+  @override
+  String toString() => 'AssetDates($status, ${ids.length} ids'
+      '${errorCode == null ? '' : ', $errorCode'})';
+}
+
+/// The most ids one assetDates call asks about (AssetDatesRequest in the
+/// Swift file).
+const int assetDatesMaxIds = 50;
+
 abstract class PhotoChangeSource {
   /// The library's current token: the starting point for
   /// [insertedImagesSince].
@@ -206,6 +226,12 @@ abstract class PhotoChangeSource {
   /// [titles] (case-insensitive), at most [limit].
   Future<AlbumAssetIds> albumAssetIds(List<String> titles,
       {DateTime? since, int limit = 500});
+
+  /// The creation and added dates of the images among [ids] (at most
+  /// [assetDatesMaxIds]); PHAsset.addedDate exists from iOS 26. Design
+  /// G2b: whether a glasses photo's creation date is only its import time.
+  /// Needs no change history (iOS 15 answers too, without added dates).
+  Future<AssetDates> assetDates(List<String> ids);
 }
 
 /// The channel to PhotoChangesPlugin.swift on iOS; null elsewhere.
@@ -277,6 +303,24 @@ class ChannelPhotoChangeSource implements PhotoChangeSource {
       return AlbumAssetIds(PhotoChangeStatus.error, errorCode: failure);
     }
     return decodeAlbumAssetIds(reply);
+  }
+
+  @override
+  Future<AssetDates> assetDates(List<String> ids) async {
+    final wanted = [
+      for (final id in ids)
+        if (id.isNotEmpty) id,
+    ];
+    if (wanted.isEmpty) return const AssetDates(PhotoChangeStatus.ok);
+    final (reply, failure) = await _invoke('assetDates', {
+      'ids': wanted.length > assetDatesMaxIds
+          ? wanted.sublist(0, assetDatesMaxIds)
+          : wanted,
+    });
+    if (failure != null) {
+      return AssetDates(PhotoChangeStatus.error, errorCode: failure);
+    }
+    return decodeAssetDates(reply);
   }
 }
 
@@ -455,6 +499,41 @@ AlbumAssetIds decodeAlbumAssetIds(Object? reply) {
   }
 }
 
+/// assetDates' reply → [AssetDates]; malformed → error.
+@visibleForTesting
+AssetDates decodeAssetDates(Object? reply) {
+  try {
+    final map = _asMap(reply);
+    final status = _status(map);
+    switch (status) {
+      case PhotoChangeStatus.ok:
+        final rawIds = map['ids'];
+        if (rawIds is! List) throw const _Malformed();
+        final ids = <InsertedImage>[];
+        for (final raw in rawIds) {
+          final entry = _asMap(raw);
+          final id = entry['id'];
+          if (id is! String || id.isEmpty) throw const _Malformed();
+          ids.add(InsertedImage(id,
+              created: _millis(entry, 'created_ms'),
+              added: _millis(entry, 'added_ms')));
+        }
+        return AssetDates(status, ids: List.unmodifiable(ids));
+      case PhotoChangeStatus.error:
+      case PhotoChangeStatus.unsupported:
+      case PhotoChangeStatus.denied:
+        return AssetDates(status, errorCode: _errorCode(map));
+      case PhotoChangeStatus.fresh:
+      case PhotoChangeStatus.expired:
+      case PhotoChangeStatus.unavailable:
+        throw const _Malformed();
+    }
+  } catch (_) {
+    return const AssetDates(PhotoChangeStatus.error,
+        errorCode: photoChangesMalformed);
+  }
+}
+
 // ---------------------------------------------------------------------------
 
 /// A scripted [PhotoChangeSource] for tests (G1b's cursor, the watcher).
@@ -473,10 +552,12 @@ class FakePhotoChangeSource implements PhotoChangeSource {
       int maxChanges)? onInsertedImagesSince;
   AlbumAssetIds Function(List<String> titles, DateTime? since, int limit)?
       onAlbumAssetIds;
+  AssetDates Function(List<String> ids)? onAssetDates;
 
   int currentTokenCalls = 0;
   final List<String?> insertedImagesSinceTokens = [];
   final List<List<String>> albumAssetIdsTitles = [];
+  final List<List<String>> assetDatesIds = [];
 
   /// A new token, as the library would hand out after a change.
   String nextToken() => 'fake-token-${++_serial}';
@@ -511,6 +592,12 @@ class FakePhotoChangeSource implements PhotoChangeSource {
     albumAssetIdsTitles.add(List.of(titles));
     return onAlbumAssetIds?.call(titles, since, limit) ??
         const AlbumAssetIds(PhotoChangeStatus.ok);
+  }
+
+  @override
+  Future<AssetDates> assetDates(List<String> ids) async {
+    assetDatesIds.add(List.of(ids));
+    return onAssetDates?.call(ids) ?? const AssetDates(PhotoChangeStatus.ok);
   }
 }
 

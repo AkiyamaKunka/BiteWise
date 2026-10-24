@@ -24,7 +24,8 @@ import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
     show androidBackgroundAllowed;
 import '../services/photo/background_time.dart';
-import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
+import '../services/photo/deferred_assets.dart'
+    show clearDeferredAsset, holdGlassesPreview;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
 import '../services/photo/glasses.dart' show captureMetaFor;
@@ -215,7 +216,9 @@ class AppServices {
           if (!o.retryable && o.kind != PhotoOutcomeKind.alreadyTracked) {
             unawaited(clearDeferredAsset(photo.assetId));
           }
-        });
+        },
+        // A glasses preview copy waits once for its full-size one (G2b).
+        previewHold: holdGlassesPreview);
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's

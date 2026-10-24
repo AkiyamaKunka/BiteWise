@@ -18,10 +18,12 @@ import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
 import '../services/analyzer/platform_decode.dart';
 import '../services/photo/background_time.dart';
+import '../services/photo/capture_dating.dart' show glassesCapturedAt;
 import '../services/photo/filename_dates.dart'
     show captureWallClock, exifCapturedAt, exifWallAndOffset,
         validateCapturedAt;
-import '../services/photo/glasses.dart' show captureAnalysis;
+import '../services/photo/glasses.dart'
+    show captureAnalysis, isGlassesPreview, shutterKey;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
 
@@ -95,6 +97,13 @@ class PhotoOutcome {
   /// closed before the verdict came back (unannouncedOutcome): the
   /// snackbar asks the user to pick it again.
   final bool picked;
+
+  /// Why the automatic intake skipped or held a photo back without asking
+  /// the model, machine-readable ([duplicateCaptureReason],
+  /// [glassesPreviewReason]); null for every other verdict. Never shown:
+  /// those guards act on automatic photos only, whose skips and releases
+  /// nobody announces.
+  final String? reason;
   const PhotoOutcome(this.kind, this.message,
       {this.analysis,
       this.retryable = false,
@@ -107,8 +116,17 @@ class PhotoOutcome {
       this.mealDate,
       this.previousAnalysis,
       this.shared = false,
-      this.picked = false});
+      this.picked = false,
+      this.reason});
 }
+
+/// [PhotoOutcome.reason] of an automatic glasses photo skipped because
+/// another file of the same shutter press is already a meal (design G2b).
+const String duplicateCaptureReason = 'duplicate_capture';
+
+/// [PhotoOutcome.reason] of an automatic glasses preview copy held back
+/// for its full-size version (design G2b, deferred_assets.dart).
+const String glassesPreviewReason = 'glasses_preview';
 
 /// What to announce for a verdict NOBODY is awaiting — a shared photo
 /// (bindStream), or a picked one whose add-flow screen was closed
@@ -233,6 +251,14 @@ class PhotoPipeline {
   /// app settled it (deferred_assets.dart). A throw is contained.
   final void Function(IntakePhoto photo, PhotoOutcome outcome)? onOutcome;
 
+  /// Asked for an AUTOMATIC Meta glasses photo below 2 MP (design G2b,
+  /// glasses.dart isGlassesPreview): true holds it back — released,
+  /// retryable, untouched — so its full-size version can arrive first.
+  /// Production: deferred_assets.dart holdGlassesPreview (once, for 10
+  /// minutes). Null (tests, the add flow's fallback instance): never held.
+  /// A throw counts as false.
+  final Future<bool> Function(String assetId)? previewHold;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
   /// The 'processing' reservation the photo in flight holds right now, and
@@ -258,6 +284,7 @@ class PhotoPipeline {
       this.backgroundTime,
       this.backgrounded,
       this.onOutcome,
+      this.previewHold,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
@@ -403,6 +430,78 @@ class PhotoPipeline {
     }
   }
 
+  /// The clock [photo]'s meal is dated by. validateCapturedAt is NOT
+  /// optional: EXIF is attacker- and junk-controlled (a 2015 stock photo, a
+  /// camera with a dead clock, a forward-set date), and an unvalidated
+  /// value writes a meal into a random month of the user's log.
+  /// A capturedAt is re-expressed in the zone the photo was TAKEN in when
+  /// the EXIF shutter stamp names that zone and the same instant
+  /// (captureWallClock): iOS's createDateTime is an instant shown in the
+  /// CURRENT zone, so a photo first scanned after a flight was dated by the
+  /// destination's clock. Not re-validated against local now — the instant
+  /// already was, and a westbound wall clock can sit "ahead".
+  /// First, design G2b: a Meta glasses photo whose creation date is only
+  /// the time it was imported is dated by its EXIF shutter clock
+  /// (capture_dating.dart glassesCapturedAt, with the evidence the watcher
+  /// found). Every other photo is dated exactly as before.
+  static DateTime _mealClock(IntakePhoto photo) {
+    final now = DateTime.now();
+    final redated = glassesCapturedAt(photo.capture, now: now);
+    if (redated != null) return redated;
+    final captured = photo.capturedAt;
+    return (captured == null
+            ? null
+            : captureWallClock(captured, exifWallAndOffset(photo.bytes))) ??
+        validateCapturedAt(exifCapturedAt(photo.bytes), now: now) ??
+        now;
+  }
+
+  /// How many days either side of a photo's own day the duplicate-capture
+  /// guard looks for a meal of the same shutter press: the two files may
+  /// have been dated differently (one by its import time).
+  static const int sameShotWindowDays = 2;
+
+  /// [photo]'s shutter key when the duplicate-capture guard (design G2b)
+  /// looks at it — an AUTOMATIC Meta glasses photo whose EXIF names its
+  /// shutter press — else null.
+  static String? _guardedShutterKey(IntakePhoto photo) {
+    if (photo.deliberate) return null;
+    final capture = photo.capture;
+    if (capture == null || !capture.isMetaGlasses) return null;
+    return shutterKey(capture.exif);
+  }
+
+  /// Whether a meal dated within [sameShotWindowDays] of [clock]'s day
+  /// already holds [key]. A store that cannot say lets the photo through:
+  /// the guard must never cost a photo.
+  Future<bool> _sameShotLogged(String key, DateTime clock) async {
+    try {
+      final from = isoDate(
+          DateTime(clock.year, clock.month, clock.day - sameShotWindowDays));
+      final to = isoDate(
+          DateTime(clock.year, clock.month, clock.day + sameShotWindowDays));
+      final ids = await dao.mealIdsWithShutterKey(key, from, to);
+      return ids.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether [previewHold] holds the AUTOMATIC glasses preview [photo]
+  /// back now. A throwing hold lets it through.
+  Future<bool> _holdsPreview(IntakePhoto photo) async {
+    final hold = previewHold;
+    if (hold == null || photo.deliberate || photo.assetId.isEmpty) {
+      return false;
+    }
+    if (!isGlassesPreview(photo.capture)) return false;
+    try {
+      return await hold(photo.assetId);
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// The photo's verdict once [abandon] ran: retryable, so the intake
   /// releases it and the frontier halts in front of it. Releases the
   /// reservation itself when [abandon] could not (it was taken after).
@@ -481,6 +580,21 @@ class PhotoPipeline {
         return PhotoOutcome(PhotoOutcomeKind.failed, _latchedMessage,
             retryable: true, errorKind: latched, detail: _latchedMessage);
       }
+      // Design G2b, AUTOMATIC Meta glasses photos only — a deliberate add
+      // is the user's call. Another file of the same shutter press (a
+      // preview and its full-size copy) already being a meal is decided
+      // HERE, before the reservation and without the model; the photo is
+      // tombstoned 'skipped' below once its reservation is ours. The meal
+      // clock it needs is read now only for such a photo: the EXIF scan
+      // behind it is not repeated for the already-logged photos every
+      // catch-up re-offers.
+      final shotKey = _guardedShutterKey(photo);
+      final shotClock = shotKey == null ? null : _mealClock(photo);
+      final sameShot =
+          shotKey != null && await _sameShotLogged(shotKey, shotClock!);
+      // A glasses preview copy (< 2 MP) waits once for its full-size
+      // version: released untouched, before it is even hashed.
+      if (!sameShot && await _holdsPreview(photo)) return _previewHeld;
       hash = normalizeImageHash(await _hash(photo.bytes));
       // Pre-reservation 5-minute duplicate window — deliberate (user-facing)
       // path only, matching the server's chat-only check (spec §2.3).
@@ -514,24 +628,17 @@ class PhotoPipeline {
           }
       }
       if (_abandoned) return await _whenAbandoned();
+      if (sameShot) {
+        // Settled as a verdict, so no scan offers it again; a deliberate
+        // add still reclaims it (spec §2.3).
+        await dao.markPhotoHash(hash, IngestionStatus.skipped,
+            ownerStamp: stamp);
+        _held = null;
+        return _duplicateCapture;
+      }
 
-      // The day this photo belongs to. validateCapturedAt is NOT optional:
-      // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
-      // with a dead clock, a forward-set date), and an unvalidated value
-      // writes a meal into a random month of the user's log.
-      // A capturedAt is re-expressed in the zone the photo was TAKEN in
-      // when the EXIF shutter stamp names that zone and the same instant
-      // (captureWallClock): iOS's createDateTime is an instant shown in the
-      // CURRENT zone, so a photo first scanned after a flight was dated by
-      // the destination's clock. Not re-validated against local now — the
-      // instant already was, and a westbound wall clock can sit "ahead".
-      final captured = photo.capturedAt;
-      final when = (captured == null
-              ? null
-              : captureWallClock(captured, exifWallAndOffset(photo.bytes))) ??
-          validateCapturedAt(exifCapturedAt(photo.bytes),
-              now: DateTime.now()) ??
-          DateTime.now();
+      // The day this photo belongs to ([_mealClock]).
+      final when = shotClock ?? _mealClock(photo);
       // AUTOMATIC leftover check (2026-08-05): the meals of the day the
       // photo was TAKEN ride along as compacts; the model may answer
       // leftover_of instead of a new meal. The SNAPSHOT is captured here —
@@ -852,6 +959,23 @@ class PhotoPipeline {
       retryable: true,
       errorKind: AnalysisErrorKind.unknown,
       detail: 'in the background');
+
+  /// An automatic glasses photo another file of whose shutter press is
+  /// already a meal (design G2b): tombstoned, no model call.
+  static const _duplicateCapture = PhotoOutcome(PhotoOutcomeKind.skipped,
+      'Another copy of this shot is already logged.',
+      reason: duplicateCaptureReason);
+
+  /// An automatic glasses preview held back for its full-size version
+  /// (design G2b): released untouched, offered again by a later scan. Not
+  /// [AnalysisErrorKind.badPhoto], so the background run never counts it
+  /// as a photo it cannot decode (deferred_assets.dart).
+  static const _previewHeld = PhotoOutcome(PhotoOutcomeKind.failed,
+      'A preview copy of a glasses photo: it waits for the full-size one.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'glasses preview',
+      reason: glassesPreviewReason);
 
   /// [abandon]'s verdict: released, offered again by a later scan.
   static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,

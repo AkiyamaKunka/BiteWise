@@ -146,7 +146,8 @@ CaptureMeta captureMetaFor(
 /// DateTimeOriginal (canonical 'YYYY:MM:DD HH:MM:SS'), SubSecTimeOriginal,
 /// Make and Model (trimmed, lower-cased) — joined with '|'. Two files of
 /// the same shutter press (the preview and the full-size copy, an edited
-/// duplicate) share it; the next stage skips such a second copy. Null
+/// duplicate) share it; the automatic intake skips a second glasses copy
+/// (photo_pipeline.dart, design G2b). Null
 /// without DateTimeOriginal, or with nothing beside it to tell two photos
 /// of the same second apart.
 String? shutterKey(ExifCapture? exif) {
@@ -163,6 +164,20 @@ String? shutterKey(ExifCapture? exif) {
       '${two(when.second)}';
   final digest = sha256.convert(utf8.encode('$stamp|$subSec|$make|$model'));
   return digest.toString().substring(0, 16);
+}
+
+/// A glasses photo with fewer pixels than this is a preview copy (design
+/// G2b): the automatic intake gives its full-size version time to arrive.
+const int glassesPreviewMaxPixels = 2000000;
+
+/// Whether [capture] is a Meta glasses photo below [glassesPreviewMaxPixels]
+/// — its pixel size known (exifCapture reads it from the frame header or the
+/// HEIF extents first). An unknown size is not a preview. Never throws.
+bool isGlassesPreview(CaptureMeta? capture) {
+  if (capture == null || !capture.isMetaGlasses) return false;
+  final w = capture.exif?.pixelW, h = capture.exif?.pixelH;
+  if (w == null || h == null || w < 1 || h < 1) return false;
+  return w * h < glassesPreviewMaxPixels;
 }
 
 /// The instant the GPS fix is compared with: the library's creationDate,

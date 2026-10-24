@@ -123,6 +123,11 @@ void main() {
       expect(init(), _wired(r'backgroundScanStuck: backgroundScanStuckNow,'));
     });
 
+    // G2b: without it every glasses preview copy is analyzed at once.
+    test('a glasses preview copy waits once for its full-size one', () {
+      expect(init(), _wired(r'previewHold: holdGlassesPreview\)'));
+    });
+
     // G1b: without it every late import is read in full, logged or not.
     test('late imports skip photos a meal already names, without a read', () {
       expect(
@@ -179,6 +184,8 @@ void main() {
     test('iOS: undecodable photos are deferred, the offer budget applies, '
         'and the deadline releases the photo in flight', () {
       expect(after(), _wired(r'deferUndecodable: ios\)'));
+      // G2b: a glasses preview copy waits once there too.
+      expect(after(), _wired(r'previewHold: holdGlassesPreview, '));
       expect(after(), _wired(r'budget: ios \? iosBackgroundBudget : null,'));
       expect(
         after(),
@@ -279,11 +286,16 @@ void main() {
       expect(ios.lateImports, isNotNull);
       expect(ios.lateImports!.store, isNotNull);
       expect(ios.onLateImportPass, equals(recordLateImportPass));
+      // G2a/G2b: the album lookup and the added dates ride the same channel.
+      expect(ios.metaAlbumIds, isNotNull);
+      expect(ios.assetAddedDate, isNotNull);
       final android =
           createPhotoIntake(settings, loggedAssetIds: logged, isIOS: false)
               as LibraryPhotoIntake;
       expect(android.lateImports, isNull);
       expect(android.onLateImportPass, isNull);
+      expect(android.metaAlbumIds, isNull);
+      expect(android.assetAddedDate, isNull);
     },
   );
 }

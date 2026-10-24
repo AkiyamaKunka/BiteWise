@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../core/contracts.dart';
 import '../local_store.dart';
 import '../settings/app_settings.dart' show AppSettings;
+import 'capture_dating.dart' show glassesExifRedate;
 import 'filename_dates.dart';
 import 'glasses.dart';
 import 'photo_changes.dart';
@@ -55,8 +56,9 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// [LibraryPhotoIntake]. On iOS the intake also reads the library's change
 /// history for late imports (design G1b), its cursor in the backup-excluded
 /// local store, and asks the same channel which photos sit in a Meta
-/// glasses album (G2a); elsewhere [PhotoIntake.lateImportScan] does nothing
-/// and no album is asked about.
+/// glasses album (G2a) and, for a glasses photo the dating guard could
+/// re-date, when it joined the library (G2b); elsewhere
+/// [PhotoIntake.lateImportScan] does nothing and nothing is asked.
 PhotoIntake createPhotoIntake(AppSettings settings,
     {FutureOr<void> Function(int count)? onBackfillListed,
     bool Function(String assetId)? passOver,
@@ -76,7 +78,23 @@ PhotoIntake createPhotoIntake(AppSettings settings,
       onLateImportPass: changes == null ? null : recordLateImportPass,
       metaAlbumIds: changes == null
           ? null
-          : (since) => metaAlbumAssetIds(changes, since: since));
+          : (since) => metaAlbumAssetIds(changes, since: since),
+      assetAddedDate:
+          changes == null ? null : (id) => assetAddedDate(changes, id));
+}
+
+/// When the image [id] joined the library (PHAsset.addedDate, iOS 26+);
+/// null when the channel could not say, or the OS does not know. Never
+/// throws.
+Future<DateTime?> assetAddedDate(PhotoChangeSource source, String id) async {
+  try {
+    final found = await source.assetDates([id]);
+    if (found.status != PhotoChangeStatus.ok) return null;
+    for (final image in found.ids) {
+      if (image.id == id) return image.added;
+    }
+  } catch (_) {}
+  return null;
 }
 
 /// The ids of the images created at or after [since] in the Meta glasses
@@ -100,6 +118,10 @@ Future<Set<String>> metaAlbumAssetIds(PhotoChangeSource source,
 /// glasses photo). The native lookup takes milliseconds; this only bounds a
 /// stuck channel, which must not hold the scan.
 const Duration metaAlbumLookupTimeout = Duration(seconds: 2);
+
+/// How long a photo waits for its added date (design G2b) before it goes on
+/// without it — dated exactly as before.
+const Duration addedDateLookupTimeout = Duration(seconds: 2);
 
 /// What one [LibraryPhotoIntake._emit] call left undone, for a scan that
 /// wants to know whether it read its whole window.
@@ -129,8 +151,22 @@ class LibraryPhotoIntake implements PhotoIntake {
       this.loggedAssetIds,
       this.onLateImportPass,
       this.metaAlbumIds,
-      @visibleForTesting this.metaAlbumTimeout = metaAlbumLookupTimeout})
+      @visibleForTesting this.metaAlbumTimeout = metaAlbumLookupTimeout,
+      this.assetAddedDate,
+      @visibleForTesting this.addedDateTimeout = addedDateLookupTimeout})
       : _clock = clock ?? DateTime.now;
+
+  /// When an image joined the library (design G2b; iOS: [assetAddedDate]
+  /// over the change channel). Asked only for a Meta glasses photo the
+  /// dating guard could re-date (capture_dating.dart glassesExifRedate) —
+  /// one whose creation date and EXIF shutter clock disagree — so nearly
+  /// every photo costs nothing. A failure, a timeout or null (Android,
+  /// tests): unknown, and the photo is dated as before unless the
+  /// late-import pass offered it.
+  final Future<DateTime?> Function(String assetId)? assetAddedDate;
+
+  /// [addedDateLookupTimeout]; shorter in tests.
+  final Duration addedDateTimeout;
 
   /// The ids of the images created at or after a time that sit in a Meta
   /// glasses album (design G2a; iOS: [metaAlbumAssetIds]). Asked at most
@@ -346,10 +382,13 @@ class LibraryPhotoIntake implements PhotoIntake {
             }
             // No frontier, no onCovered: a late photo's createDate lies
             // behind every cutoff and watermark, and must not move one.
+            // When this pass ran is the dating guard's evidence where the
+            // library cannot say when a photo was added (G2b).
             await _emit(assets,
                 reportFrontier: false,
                 shouldContinue: shouldContinue,
-                onSettled: onSettled);
+                onSettled: onSettled,
+                importPassAt: _clock());
           },
         ),
       );
@@ -427,6 +466,40 @@ class LibraryPhotoIntake implements PhotoIntake {
     return frontier;
   }
 
+  /// [capture] with what says its creation date is only the import time
+  /// (design G2b, capture_dating.dart): the library's added date and the
+  /// late-import pass that offered it. Looked for only when the dating
+  /// guard could re-date the photo at all — a Meta glasses photo whose
+  /// creation date and EXIF shutter clock disagree. Never throws: a failed
+  /// or slow lookup leaves the photo dated as before.
+  Future<CaptureMeta> _withImportEvidence(CaptureMeta capture, String assetId,
+      {DateTime? importPassAt}) async {
+    try {
+      if (glassesExifRedate(capture,
+              now: _clock(), maxAgeDays: _capturedAtMaxAgeDays) ==
+          null) {
+        return capture;
+      }
+      DateTime? added;
+      final lookup = assetAddedDate;
+      if (lookup != null) {
+        try {
+          // Through then<DateTime?>: see inMetaAlbum in [_emit].
+          added = await lookup(assetId)
+              .then<DateTime?>((d) => d)
+              .timeout(addedDateTimeout, onTimeout: () => null);
+        } catch (_) {
+          added = null;
+        }
+      }
+      if (added == null && importPassAt == null) return capture;
+      return capture.withImportEvidence(
+          addedDate: added, importPassAt: importPassAt);
+    } catch (_) {
+      return capture;
+    }
+  }
+
   /// The photos not yet handled this session that were taken on the same
   /// local day as the newest of them.
   List<LibraryAsset> _newestDay(List<LibraryAsset> assets) {
@@ -463,7 +536,8 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// [onSettled] hears each photo that reached a verdict here (delivered:
   /// read and handed over, rather than passed over or already handled),
   /// before the next photo is considered — the late-import cursor's
-  /// carry. [tally] counts what was left undone.
+  /// carry. [tally] counts what was left undone. [importPassAt]: the
+  /// late-import pass delivering [assets] ran then (design G2b).
   Future<DateTime?> _emit(List<LibraryAsset> assets,
       {bool reportFrontier = true,
       bool Function()? shouldContinue,
@@ -471,7 +545,8 @@ class LibraryPhotoIntake implements PhotoIntake {
       Set<String>? released,
       Future<void> Function(String assetId, {required bool delivered})?
           onSettled,
-      _EmitTally? tally}) async {
+      _EmitTally? tally,
+      DateTime? importPassAt}) async {
     // §6: newest-LAST emission — oldest first, so downstream meal rows land
     // in chronological order.
     final ordered = [...assets]
@@ -614,6 +689,10 @@ class LibraryPhotoIntake implements PhotoIntake {
               inMetaAlbum: await inMetaAlbum(asset.id));
         } catch (_) {
           capture = null;
+        }
+        if (capture != null) {
+          capture = await _withImportEvidence(capture, asset.id,
+              importPassAt: importPassAt);
         }
         // deliberate=false: automated intake, strict reservation (§2.3).
         final photo = IntakePhoto(bytes, asset.id, name,

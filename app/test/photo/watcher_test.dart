@@ -1092,4 +1092,168 @@ void main() {
       expect(await metaAlbumAssetIds(source, since: since), isEmpty);
     });
   });
+
+  // Design G2b: for a glasses photo the dating guard could re-date, the
+  // watcher adds what says its creation date is only the import time — the
+  // library's added date, and the late-import pass that offered it. Every
+  // other photo costs no lookup.
+  group('import-time evidence (G2b)', () {
+    late FakePhotoLibrary library;
+    late List<IntakePhoto> delivered;
+    late List<String> asked;
+
+    // Lunch at 12:29:58 by the glasses' clock.
+    Uint8List glassesJpeg() {
+      final image = img.Image(width: 8, height: 6);
+      image.exif.imageIfd['Make'] = 'Meta AI';
+      image.exif.imageIfd['Model'] = 'Ray-Ban Meta Smart Glasses';
+      image.exif.exifIfd['DateTimeOriginal'] = '2026:07:16 12:29:58';
+      return Uint8List.fromList(img.encodeJpg(image));
+    }
+
+    Uint8List cameraJpeg() {
+      final image = img.Image(width: 8, height: 6);
+      image.exif.imageIfd['Make'] = 'Apple';
+      image.exif.exifIfd['DateTimeOriginal'] = '2026:07:16 12:29:58';
+      return Uint8List.fromList(img.encodeJpg(image));
+    }
+
+    // Created 9 h 7 min after the shutter: no zone is that far off.
+    final importedAt = DateTime(2026, 7, 16, 21, 37);
+    final addedAt = importedAt.add(const Duration(seconds: 15));
+
+    LibraryPhotoIntake makeIntake(
+        {Future<DateTime?> Function(String id)? added,
+        Duration timeout = const Duration(seconds: 2),
+        LateImportCursor? lateImports}) {
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          lateImports: lateImports,
+          assetAddedDate: added,
+          addedDateTimeout: timeout);
+      intake.attachSink((p, _) async {
+        delivered.add(p);
+        return true;
+      });
+      return intake;
+    }
+
+    Future<DateTime?> lookup(String id) async {
+      asked.add(id);
+      return addedAt;
+    }
+
+    setUp(() {
+      library = FakePhotoLibrary();
+      delivered = [];
+      asked = [];
+    });
+
+    test('asked only for a glasses photo whose creation date and shutter '
+        'disagree', () async {
+      library.assets = [
+        FakeAsset('late', 'IMG_1.JPG', importedAt, glassesJpeg()),
+        FakeAsset('ontime', 'IMG_2.JPG', DateTime(2026, 7, 16, 12, 30),
+            glassesJpeg()),
+        FakeAsset('camera', 'IMG_3.JPG', importedAt, cameraJpeg()),
+      ];
+      await makeIntake(added: lookup).backfillScan();
+      expect(asked, ['late']);
+      final byId = {for (final p in delivered) p.assetId: p.capture!};
+      expect(byId['late']!.addedDate, addedAt);
+      expect(byId['late']!.importPassAt, isNull,
+          reason: 'a scan by date, not the late-import pass');
+      expect(byId['late']!.isMetaGlasses, isTrue,
+          reason: 'the G2a reading is kept');
+      expect(byId['ontime']!.addedDate, isNull);
+      expect(byId['camera']!.addedDate, isNull);
+      // The intake still dates each photo as before; the pipeline decides,
+      // with the evidence (capture_dating.dart).
+      expect(byId.length, 3);
+      expect({for (final p in delivered) p.assetId: p.capturedAt}, {
+        'late': importedAt,
+        'ontime': DateTime(2026, 7, 16, 12, 30),
+        'camera': importedAt,
+      });
+    });
+
+    test('a failing, throwing or stuck lookup never holds a photo: it goes on '
+        'without the evidence', () async {
+      for (final added in <Future<DateTime?> Function(String)>[
+        (_) async => null,
+        (_) async => throw StateError('channel gone'),
+        (_) => Future<DateTime?>.error(StateError('late error')),
+        (_) => Completer<DateTime?>().future, // never answers
+      ]) {
+        delivered.clear();
+        library.assets = [
+          FakeAsset('late', 'IMG_1.JPG', importedAt, glassesJpeg()),
+        ];
+        final frontier = await makeIntake(
+                added: added, timeout: const Duration(milliseconds: 20))
+            .backfillScan();
+        expect(delivered.single.capture!.addedDate, isNull);
+        expect(delivered.single.capture!.isMetaGlasses, isTrue);
+        expect(frontier, importedAt, reason: 'coverage is unchanged');
+      }
+    });
+
+    test('the late-import pass adds when it ran', () async {
+      final root = Directory.systemTemp.createTempSync('watcher_g2b');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final history = FakePhotoChangeSource();
+      final cursor = LateImportCursor(
+          source: history,
+          store:
+              LocalNoBackupStore(root: () async => root, createMissingDirectory: true),
+          clock: () => now);
+      final intake = makeIntake(lateImports: cursor); // no added dates
+      await intake.lateImportScan(); // the cursor starts here
+      library.assets = [
+        FakeAsset('late', 'IMG_1.JPG', importedAt, glassesJpeg()),
+        FakeAsset('camera', 'IMG_2.JPG', importedAt, cameraJpeg()),
+      ];
+      history.onInsertedImagesSince = (token, _, _, _) => InsertedImages(
+          PhotoChangeStatus.ok,
+          token: history.nextToken(),
+          deviceTag: history.deviceTag,
+          ids: [
+            InsertedImage('late', created: importedAt),
+            InsertedImage('camera', created: importedAt),
+          ]);
+      await intake.lateImportScan();
+      final byId = {for (final p in delivered) p.assetId: p.capture!};
+      expect(byId['late']!.importPassAt, now);
+      expect(byId['late']!.addedDate, isNull);
+      expect(byId['camera']!.importPassAt, isNull,
+          reason: 'nothing the guard could use it for');
+    });
+
+    test('assetAddedDate reads the channel answer for that id; any trouble '
+        'is unknown', () async {
+      final source = FakePhotoChangeSource();
+      source.onAssetDates = (ids) => AssetDates(PhotoChangeStatus.ok, ids: [
+            InsertedImage('other', added: DateTime(2026, 1, 1)),
+            InsertedImage(ids.single, created: importedAt, added: addedAt),
+          ]);
+      expect(await assetAddedDate(source, 'A/L0/001'), addedAt);
+      expect(source.assetDatesIds.single, ['A/L0/001']);
+      source.onAssetDates =
+          (ids) => const AssetDates(PhotoChangeStatus.ok, ids: []);
+      expect(await assetAddedDate(source, 'gone'), isNull);
+      for (final status in [
+        PhotoChangeStatus.error,
+        PhotoChangeStatus.denied,
+        PhotoChangeStatus.unsupported,
+      ]) {
+        source.onAssetDates = (ids) => AssetDates(status,
+            ids: [InsertedImage(ids.single, added: addedAt)]);
+        expect(await assetAddedDate(source, 'x'), isNull);
+      }
+      source.onAssetDates = (_) => throw StateError('boom');
+      expect(await assetAddedDate(source, 'x'), isNull);
+    });
+  });
 }

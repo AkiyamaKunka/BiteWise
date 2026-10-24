@@ -16,6 +16,8 @@ import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/services/photo/deferred_assets.dart'
+    show holdGlassesPreview;
 import 'package:calorie_tracker/services/photo/glasses.dart' show shutterKey;
 import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
@@ -262,6 +264,275 @@ void main() {
       final camera = await savedAnalysis(const CaptureMeta(), reply: forged);
       expect(camera['capture'], {'has_gps': false},
           reason: "the intake's reading replaces the model's");
+    });
+  });
+
+  // Design G2b: what the automatic intake does with a Meta glasses photo
+  // before any model sees it — a second file of a shutter press already
+  // logged is skipped, a preview copy waits once for its full-size one, and
+  // a creation date that is only the import time gives way to the shutter.
+  group('glasses guards (G2b)', () {
+    final taken = DateTime(2026, 10, 8, 12, 29, 58);
+    ExifCapture shot({int? w, int? h}) => ExifCapture(
+        make: 'Meta AI',
+        model: 'Ray-Ban Meta Smart Glasses',
+        dateTimeOriginal: taken,
+        subSec: '123',
+        pixelW: w,
+        pixelH: h);
+    CaptureMeta capture(
+            {int? w,
+            int? h,
+            CaptureDevice device = CaptureDevice.metaGlasses}) =>
+        CaptureMeta(
+            device: device,
+            strength: device == CaptureDevice.metaGlasses
+                ? CaptureStrength.strong
+                : CaptureStrength.none,
+            signal: device == CaptureDevice.metaGlasses
+                ? CaptureSignal.filename
+                : null,
+            exif: shot(w: w, h: h),
+            createDate: DateTime(2026, 10, 8, 12, 30));
+    final key = shutterKey(shot())!;
+    IntakePhoto photo(List<int> bytes, String id,
+            {bool deliberate = false, CaptureMeta? meta, DateTime? at}) =>
+        IntakePhoto(Uint8List.fromList(bytes), id,
+            'photo-${id}_singular_display_fullPicture.HEIC',
+            capturedAt: at ?? DateTime(2026, 10, 8, 12, 30),
+            deliberate: deliberate,
+            capture: meta ?? capture(w: 3024, h: 4032));
+    String hashOf(List<int> bytes) =>
+        md5.convert(Uint8List.fromList(bytes)).toString().toLowerCase();
+
+    late FakeDao dao;
+    late FakeAnalyzer analyzer;
+    late int analyses;
+    late int hashes;
+    PhotoPipeline pipeline({Future<bool> Function(String id)? hold}) =>
+        PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            previewHold: hold,
+            hasher: (bytes) async {
+              hashes++;
+              return md5.convert(bytes).toString();
+            });
+
+    setUp(() {
+      dao = FakeDao();
+      analyses = 0;
+      hashes = 0;
+      analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _foodAnalysis(), isFood: true, wall: Duration.zero)
+        ..onAnalyze = () async => analyses++;
+    });
+
+    /// A meal of this shutter press, dated [date].
+    void seedShot(String date) => dao.seed(Meal(
+        id: 0,
+        date: date,
+        time: '12:30 PM',
+        timestamp: '${date}T12:30:00.000',
+        source: MealSource.appWatch,
+        imageHash: 'f' * 32,
+        fileId: 'full',
+        analysis: {
+          'is_food': true,
+          'total_calories': 500,
+          'capture': {'device': 'meta_glasses', 'shutter_key': key},
+        }));
+
+    group('the same shutter press twice', () {
+      test('automatic: the second file is skipped without the model; '
+          'deliberate: both are kept', () async {
+        final p = pipeline();
+        final first = await p.process(photo([1, 2, 3], 'full'));
+        expect(first.kind, PhotoOutcomeKind.saved);
+        expect((dao.meals.single.analysis['capture'] as Map)['shutter_key'],
+            key);
+        final second = await p.process(photo([4, 5, 6], 'preview'));
+        expect(second.kind, PhotoOutcomeKind.skipped);
+        expect(second.reason, duplicateCaptureReason);
+        expect(second.retryable, isFalse, reason: 'a verdict: settled');
+        expect(dao.ledger[hashOf([4, 5, 6])], IngestionStatus.skipped,
+            reason: 'tombstoned, so no later scan offers it again');
+        expect(dao.meals, hasLength(1));
+        expect(analyses, 1, reason: 'the model saw the first file only');
+        expect(dao.shutterKeyCalls.last, (key, '2026-10-06', '2026-10-10'));
+
+        // The user picks it on purpose: theirs to log (and it reclaims
+        // the skipped row).
+        final picked =
+            await p.process(photo([4, 5, 6], 'preview', deliberate: true));
+        expect(picked.kind, PhotoOutcomeKind.saved);
+        expect(dao.meals, hasLength(2));
+      });
+
+      test('a photo offered again after its own meal is still "already '
+          'logged", never re-tombstoned', () async {
+        final p = pipeline();
+        await p.process(photo([1, 2, 3], 'full'));
+        final again = await p.process(photo([1, 2, 3], 'full'));
+        expect(again.kind, PhotoOutcomeKind.alreadyTracked);
+        expect(dao.ledger[hashOf([1, 2, 3])], IngestionStatus.saved);
+      });
+
+      for (final (date, skipped) in [
+        ('2026-10-06', true),
+        ('2026-10-05', false),
+        ('2026-10-10', true),
+        ('2026-10-11', false),
+      ]) {
+        test('a meal of that press dated $date → '
+            '${skipped ? 'skipped' : 'logged'} (±2 days)', () async {
+          seedShot(date);
+          final out = await pipeline().process(photo([4, 5, 6], 'preview'));
+          expect(out.kind,
+              skipped ? PhotoOutcomeKind.skipped : PhotoOutcomeKind.saved);
+          expect(dao.meals, hasLength(skipped ? 1 : 2));
+        });
+      }
+
+      test('camera photos are never looked up: two files of one press are '
+          'two meals, as before', () async {
+        seedShot('2026-10-08');
+        final out = await pipeline().process(photo([4, 5, 6], 'camera',
+            meta: capture(w: 3024, h: 4032, device: CaptureDevice.unknown)));
+        expect(out.kind, PhotoOutcomeKind.saved);
+        expect(dao.shutterKeyCalls, isEmpty);
+      });
+
+      test('a store that cannot answer lets the photo through', () async {
+        seedShot('2026-10-08');
+        dao.shutterKeyError = StateError('database is locked');
+        final out = await pipeline().process(photo([4, 5, 6], 'preview'));
+        expect(out.kind, PhotoOutcomeKind.saved);
+      });
+    });
+
+    group('a preview copy (< 2 MP)', () {
+      late DateTime t;
+      late Future<bool> Function(String id) hold;
+      setUp(() {
+        SharedPreferences.setMockInitialValues({});
+        t = DateTime.utc(2026, 10, 8, 18);
+        hold = (id) => holdGlassesPreview(id, clock: () => t);
+      });
+
+      test('1.9 MP: held once for 10 minutes, untouched; then processed',
+          () async {
+        final p = pipeline(hold: hold);
+        final preview = photo([4, 5, 6], 'preview',
+            meta: capture(w: 1600, h: 1187)); // 1,899,200 px
+        final first = await p.process(preview);
+        expect(first.kind, PhotoOutcomeKind.failed);
+        expect(first.retryable, isTrue,
+            reason: 'released: a later scan offers it again');
+        expect(first.reason, glassesPreviewReason);
+        expect(first.errorKind, isNot(AnalysisErrorKind.badPhoto),
+            reason: 'never counted as a photo the run cannot decode');
+        expect(hashes, 0, reason: 'not even hashed');
+        expect(dao.ledger, isEmpty);
+        t = t.add(const Duration(minutes: 9, seconds: 59));
+        expect((await p.process(preview)).reason, glassesPreviewReason);
+        t = t.add(const Duration(seconds: 1));
+        final later = await p.process(preview);
+        expect(later.kind, PhotoOutcomeKind.saved);
+        expect(analyses, 1);
+      });
+
+      test('its full-size copy already logged: skipped at once, not held',
+          () async {
+        final p = pipeline(hold: (id) async => fail('never asked'));
+        await p.process(photo([1, 2, 3], 'full'));
+        final out = await p.process(
+            photo([4, 5, 6], 'preview', meta: capture(w: 1600, h: 1187)));
+        expect(out.reason, duplicateCaptureReason);
+      });
+
+      test('12 MP, a camera photo, a deliberate add and an unknown size are '
+          'never held', () async {
+        var asked = 0;
+        Future<bool> counting(String id) async {
+          asked++;
+          return true;
+        }
+
+        for (final (i, candidate) in [
+          photo([1], 'full', meta: capture(w: 4032, h: 3024)),
+          photo([2], 'camera',
+              meta: capture(w: 1600, h: 1187, device: CaptureDevice.unknown)),
+          photo([3], 'picked',
+              deliberate: true, meta: capture(w: 1600, h: 1187)),
+          photo([4], 'unknown', meta: capture()),
+        ].indexed) {
+          // Each on its own log: they are one shutter press.
+          dao = FakeDao();
+          final out = await pipeline(hold: counting).process(candidate);
+          expect(out.kind, PhotoOutcomeKind.saved, reason: '#$i');
+        }
+        expect(asked, 0);
+      });
+
+      test('a hold that throws lets the photo through', () async {
+        final out = await pipeline(hold: (id) async => throw StateError('x'))
+            .process(
+                photo([4, 5, 6], 'preview', meta: capture(w: 1600, h: 1187)));
+        expect(out.kind, PhotoOutcomeKind.saved);
+      });
+    });
+
+    group('dating (the import-time guard)', () {
+      // Relative to today: the guard validates the shutter against now.
+      final day = DateTime.now().subtract(const Duration(days: 1));
+      final imported = DateTime(day.year, day.month, day.day, 22, 0);
+      final lunch = DateTime(day.year, day.month, day.day, 12, 37);
+      String isoDay(DateTime d) => '${d.year}-'
+          '${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+      CaptureMeta lateCopy(
+              {CaptureDevice device = CaptureDevice.metaGlasses,
+              DateTime? added}) =>
+          CaptureMeta(
+              device: device,
+              strength: CaptureStrength.strong,
+              signal: CaptureSignal.filename,
+              exif: ExifCapture(
+                  make: 'Meta AI',
+                  model: 'Ray-Ban Meta Smart Glasses',
+                  dateTimeOriginal: lunch,
+                  subSec: '5'),
+              // Stamped with the import time, as the guard fears.
+              createDate: imported,
+              addedDate: added);
+
+      Future<Meal> saved(CaptureMeta meta) async {
+        final out = await pipeline()
+            .process(photo([7, 8, 9], 'late', meta: meta, at: imported));
+        expect(out.kind, PhotoOutcomeKind.saved, reason: out.message);
+        return dao.meals.single;
+      }
+
+      test('a glasses photo created when it was imported is dated by its '
+          'shutter', () async {
+        final meal = await saved(
+            lateCopy(added: imported.add(const Duration(seconds: 20))));
+        expect(meal.date, isoDay(lunch));
+        expect(meal.time, '12:37 PM');
+      });
+
+      test('without the evidence, or for a camera photo, nothing changes',
+          () async {
+        final meal = await saved(lateCopy());
+        expect(meal.time, '10:00 PM');
+        dao = FakeDao();
+        final camera = await saved(lateCopy(
+            device: CaptureDevice.unknown,
+            added: imported.add(const Duration(seconds: 20))));
+        expect(camera.time, '10:00 PM');
+      });
     });
   });
 
