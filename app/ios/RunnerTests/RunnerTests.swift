@@ -1,5 +1,6 @@
 import Flutter
 import ImageIO
+import Photos
 import UIKit
 import UniformTypeIdentifiers
 import XCTest
@@ -396,6 +397,83 @@ class BackgroundLaunchStampTests: XCTestCase {
   }
 }
 
+/// The backup-excluded local store's directory (AppDelegate
+/// .prepareLocalStore, design F1): Dart's LocalNoBackupStore writes only
+/// into a directory this made and flagged, so a missing flag would put
+/// location hints and the device-bound photo change token into backups.
+class LocalStoreDirectoryTests: XCTestCase {
+  private var scratch: URL!
+
+  override func setUpWithError() throws {
+    scratch = FileManager.default.temporaryDirectory
+      .appendingPathComponent("LocalStoreDirectoryTests.\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: scratch, withIntermediateDirectories: true)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: scratch)
+  }
+
+  private func isExcluded(_ url: URL) throws -> Bool? {
+    var fresh = url
+    fresh.removeAllCachedResourceValues()
+    return try fresh.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup
+  }
+
+  func testNameMatchesDart() {
+    XCTAssertEqual(AppDelegate.localStoreDirectoryName, "bitewise_local")
+  }
+
+  func testCreatesTheDirectoryExcludedFromBackup() throws {
+    let made = try XCTUnwrap(AppDelegate.prepareLocalStore(in: scratch))
+    XCTAssertEqual(made.lastPathComponent, "bitewise_local")
+    XCTAssertEqual(made.deletingLastPathComponent().standardizedFileURL.path,
+                   scratch.standardizedFileURL.path)
+    var isDirectory: ObjCBool = false
+    XCTAssertTrue(FileManager.default.fileExists(atPath: made.path, isDirectory: &isDirectory))
+    XCTAssertTrue(isDirectory.boolValue)
+    XCTAssertEqual(try isExcluded(made), true)
+  }
+
+  func testIdempotentAndReappliesAClearedFlagWithoutTouchingDocuments() throws {
+    var made = try XCTUnwrap(AppDelegate.prepareLocalStore(in: scratch))
+    let document = made.appendingPathComponent("photo_change_cursor.json")
+    try Data(#"{"v":1}"#.utf8).write(to: document)
+    // A restore or an older build left the flag off.
+    var off = URLResourceValues()
+    off.isExcludedFromBackup = false
+    try made.setResourceValues(off)
+    XCTAssertEqual(try isExcluded(made), false)
+
+    XCTAssertNotNil(AppDelegate.prepareLocalStore(in: scratch))
+    XCTAssertNotNil(AppDelegate.prepareLocalStore(in: scratch))
+    XCTAssertEqual(try isExcluded(made), true)
+    XCTAssertEqual(try Data(contentsOf: document), Data(#"{"v":1}"#.utf8))
+  }
+
+  func testFailuresReturnNilAndNeverThrow() throws {
+    XCTAssertNil(AppDelegate.prepareLocalStore(in: nil))
+    // A file where the directory belongs.
+    try Data("in the way".utf8).write(
+      to: scratch.appendingPathComponent(AppDelegate.localStoreDirectoryName))
+    XCTAssertNil(AppDelegate.prepareLocalStore(in: scratch))
+  }
+
+  /// The test host is the app itself, so its launch already ran the real
+  /// call: the store's directory under Application Support is there and
+  /// flagged.
+  func testTheAppLaunchPreparedTheRealDirectory() throws {
+    let support = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first)
+    let real = support.appendingPathComponent(
+      AppDelegate.localStoreDirectoryName, isDirectory: true)
+    var isDirectory: ObjCBool = false
+    XCTAssertTrue(FileManager.default.fileExists(atPath: real.path, isDirectory: &isDirectory))
+    XCTAssertTrue(isDirectory.boolValue)
+    XCTAssertEqual(try isExcluded(real), true)
+  }
+}
+
 /// The background-time channel (Runner/BackgroundTimePlugin.swift): one
 /// task per photo, begun and ended from Dart (background_time.dart). A
 /// task left open gets the app killed, so every way of ending one is
@@ -443,5 +521,500 @@ class BackgroundTimePluginTests: XCTestCase {
   func testUnknownMethodIsNotImplemented() {
     let reply = call(BackgroundTimePlugin(), "nope", nil)
     XCTAssertTrue((reply as AnyObject?) === FlutterMethodNotImplemented)
+  }
+}
+
+/// The photo change history channel (Runner/PhotoChangesPlugin.swift,
+/// design G1a): which photos were added since a saved token, whatever
+/// date they carry. Everything that decides what the caller does with its
+/// token — the status mapping, where a bounded read stops, the device tag —
+/// is pinned here without a photo library; the library itself is exercised
+/// when the test host has Photos access, and end to end by
+/// `scripts/run_e2e_ios.sh --scenario late_import_native`.
+class PhotoChangesTests: XCTestCase {
+
+  // MARK: - helpers
+
+  private func call(
+    _ plugin: PhotoChangesPlugin, _ method: String, _ args: Any? = nil,
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> (reply: Any?, onMain: Bool) {
+    let replied = expectation(description: "\(method) reply")
+    var reply: Any?
+    var onMain = false
+    plugin.handle(FlutterMethodCall(methodName: method, arguments: args)) {
+      reply = $0
+      onMain = Thread.isMainThread
+      replied.fulfill()
+    }
+    wait(for: [replied], timeout: 30)
+    return (reply, onMain)
+  }
+
+  private func map(
+    _ plugin: PhotoChangesPlugin, _ method: String, _ args: Any? = nil,
+    file: StaticString = #filePath, line: UInt = #line
+  ) -> [String: Any] {
+    let (reply, onMain) = call(plugin, method, args, file: file, line: line)
+    XCTAssertTrue(onMain, "channel replies belong on the platform thread", file: file, line: line)
+    guard let map = reply as? [String: Any] else {
+      XCTFail("\(method) replied \(String(describing: reply)), not a map", file: file, line: line)
+      return [:]
+    }
+    return map
+  }
+
+  private let fixedVendor = UUID(uuidString: "E621E1F8-C36C-495A-93FC-0C247A3E6E5F")!
+
+  private func plugin(
+    history: Bool = true, status: PHAuthorizationStatus = .authorized, vendor: UUID?? = nil
+  ) -> PhotoChangesPlugin {
+    let id: UUID? = vendor ?? fixedVendor
+    return PhotoChangesPlugin(
+      historyAvailable: history, authorization: { status }, vendorIdentifier: { id })
+  }
+
+  private var hostHasPhotoAccess: Bool {
+    let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    return status == .authorized || status == .limited
+  }
+
+  // MARK: - channel
+
+  func testChannelNameMatchesDart() {
+    XCTAssertEqual(PhotoChangesPlugin.channelName, "dev.calorietracker/photochanges")
+  }
+
+  func testUnknownMethodIsNotImplemented() {
+    let (reply, _) = call(plugin(), "nope")
+    XCTAssertTrue((reply as AnyObject?) === FlutterMethodNotImplemented)
+  }
+
+  // MARK: - token archive
+
+  /// The same archive/unarchive path the token takes, with a class every
+  /// runtime can make (a PHPersistentChangeToken has no public init).
+  func testArchiveRoundTripAndRejectsAnythingElse() throws {
+    let uuid = NSUUID()
+    let text = try XCTUnwrap(photoChangesArchive(uuid))
+    XCTAssertNotNil(Data(base64Encoded: text), "base64")
+    XCTAssertEqual(photoChangesUnarchive(text, as: NSUUID.self), uuid)
+    // Another class, not base64, base64 of garbage, empty.
+    XCTAssertNil(photoChangesUnarchive(text, as: NSDate.self))
+    XCTAssertNil(photoChangesUnarchive("not base64 !!", as: NSUUID.self))
+    XCTAssertNil(photoChangesUnarchive(Data("garbage".utf8).base64EncodedString(), as: NSUUID.self))
+    XCTAssertNil(photoChangesUnarchive("", as: NSUUID.self))
+  }
+
+  func testRealTokenRoundTrip() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("no change history before iOS 16") }
+    guard hostHasPhotoAccess else { throw XCTSkip("the test host has no Photos access") }
+    let token = PHPhotoLibrary.shared().currentChangeToken
+    let text = try XCTUnwrap(photoChangesArchive(token))
+    let restored = try XCTUnwrap(photoChangesUnarchiveToken(text))
+    // The restored token reads history (Photos' own background work may
+    // have changed something since, so no count is assumed).
+    XCTAssertNoThrow(try PHPhotoLibrary.shared().fetchPersistentChanges(since: restored))
+    XCTAssertNil(photoChangesUnarchiveToken(photoChangesArchive(NSUUID())!))
+  }
+
+  // MARK: - error mapping
+
+  func testOnlyPhotosExpiredAndUnavailableResetTheToken() {
+    if #available(iOS 16.0, *) {
+      XCTAssertEqual(PHPhotosError.Code.persistentChangeTokenExpired.rawValue, 3105)
+      XCTAssertEqual(PHPhotosError.Code.persistentChangeDetailsUnavailable.rawValue, 3210)
+    }
+    let expired = photoChangesStatus(for: NSError(domain: PHPhotosErrorDomain, code: 3105))
+    XCTAssertEqual(expired.status, "expired")
+    XCTAssertNil(expired.errorCode)
+    let unavailable = photoChangesStatus(for: NSError(domain: PHPhotosErrorDomain, code: 3210))
+    XCTAssertEqual(unavailable.status, "unavailable")
+    XCTAssertNil(unavailable.errorCode)
+
+    let other = photoChangesStatus(for: NSError(domain: PHPhotosErrorDomain, code: 3300))
+    XCTAssertEqual(other.status, "error")
+    XCTAssertEqual(other.errorCode, "\(PHPhotosErrorDomain):3300")
+    // The code alone is not enough: another domain's 3105 is a plain error.
+    let foreign = photoChangesStatus(for: NSError(domain: NSCocoaErrorDomain, code: 3105))
+    XCTAssertEqual(foreign.status, "error")
+    XCTAssertEqual(foreign.errorCode, "\(NSCocoaErrorDomain):3105")
+    struct Odd: Error {}
+    XCTAssertEqual(photoChangesStatus(for: Odd()).status, "error")
+  }
+
+  // MARK: - bounded read
+
+  private struct FakeChange {
+    let token: String
+    let ids: Set<String>
+    var fails = false
+  }
+
+  private struct Boom: Error {}
+
+  private func collect(
+    _ changes: [FakeChange], budget: TimeInterval = 1.0, maxChanges: Int = 5000,
+    maxIdentifiers: Int = 10_000, tick: TimeInterval = 0, touched: inout [String]
+  ) throws -> PhotoChangesCollection<String> {
+    var now: TimeInterval = 100
+    var seen: [String] = []
+    defer { touched = seen }
+    return try photoChangesCollect(
+      changes, budget: budget, maxChanges: maxChanges, maxIdentifiers: maxIdentifiers,
+      clock: {
+        defer { now += tick }
+        return now
+      },
+      token: { $0.token },
+      inserted: {
+        seen.append($0.token)
+        if $0.fails { throw Boom() }
+        return $0.ids
+      })
+  }
+
+  private let four = [
+    FakeChange(token: "t1", ids: ["a"]),
+    FakeChange(token: "t2", ids: ["b", "x"]),
+    FakeChange(token: "t3", ids: ["c"]),
+    FakeChange(token: "t4", ids: ["d"]),
+  ]
+
+  func testCollectReadsEverythingWithinTheBudget() throws {
+    var touched: [String] = []
+    let out = try collect(four, touched: &touched)
+    XCTAssertEqual(out.inserted, ["a", "b", "x", "c", "d"])
+    XCTAssertEqual(out.lastToken, "t4")
+    XCTAssertEqual(out.processed, 4)
+    XCTAssertFalse(out.truncated)
+  }
+
+  func testCollectStopsAtTheBudgetWithTheLastProcessedToken() throws {
+    var touched: [String] = []
+    // The clock reads 0.4 s later on every call: start 0, then 0.4 and 0.8
+    // before t2 and t3, and 1.2 ≥ 1.0 before t4, which is left unread.
+    let out = try collect(four, budget: 1.0, tick: 0.4, touched: &touched)
+    XCTAssertTrue(out.truncated)
+    XCTAssertEqual(out.lastToken, "t3")
+    XCTAssertEqual(out.processed, 3)
+    XCTAssertEqual(out.inserted, ["a", "b", "x", "c"])
+    XCTAssertEqual(touched, ["t1", "t2", "t3"], "t4 must not be read")
+  }
+
+  func testCollectAlwaysProcessesOneChangeEvenWithNoBudgetLeft() throws {
+    var touched: [String] = []
+    let out = try collect(four, budget: -5, tick: 10, touched: &touched)
+    XCTAssertTrue(out.truncated)
+    XCTAssertEqual(out.lastToken, "t1")
+    XCTAssertEqual(out.processed, 1)
+    XCTAssertEqual(touched, ["t1"])
+  }
+
+  func testCollectStopsAtMaxChangesAndMaxIdentifiers() throws {
+    var touched: [String] = []
+    let byChanges = try collect(four, maxChanges: 2, touched: &touched)
+    XCTAssertTrue(byChanges.truncated)
+    XCTAssertEqual(byChanges.lastToken, "t2")
+    XCTAssertEqual(touched, ["t1", "t2"])
+
+    // Three IDs gathered after t2 ≥ 3: t3 is left for the next read.
+    let byIds = try collect(four, maxIdentifiers: 3, touched: &touched)
+    XCTAssertTrue(byIds.truncated)
+    XCTAssertEqual(byIds.lastToken, "t2")
+    XCTAssertEqual(byIds.inserted, ["a", "b", "x"])
+
+    // Exactly at the limit with nothing left over is not truncated.
+    let exact = try collect(Array(four.prefix(2)), maxChanges: 2, touched: &touched)
+    XCTAssertFalse(exact.truncated)
+    XCTAssertEqual(exact.lastToken, "t2")
+  }
+
+  func testCollectOfNoChangesHasNoToken() throws {
+    var touched: [String] = []
+    let out = try collect([], tick: 1, touched: &touched)
+    XCTAssertNil(out.lastToken)
+    XCTAssertEqual(out.processed, 0)
+    XCTAssertFalse(out.truncated)
+    XCTAssertTrue(out.inserted.isEmpty)
+  }
+
+  /// A change whose details cannot be read ends the read with the error:
+  /// the caller's token still covers it, so it is retried, never skipped.
+  func testCollectRethrowsAndReadsNothingAfterAFailingChange() {
+    var changes = four
+    changes[1].fails = true
+    var touched: [String] = []
+    XCTAssertThrowsError(try collect(changes, touched: &touched)) { error in
+      XCTAssertTrue(error is Boom)
+    }
+    XCTAssertEqual(touched, ["t1", "t2"])
+  }
+
+  // MARK: - device tag
+
+  func testDeviceTagIsEightHexAndStable() {
+    let tag = photoChangesDeviceTag(fixedVendor)
+    // SHA-256("E621E1F8-C36C-495A-93FC-0C247A3E6E5F"), first 4 bytes.
+    XCTAssertEqual(tag, "94996017")
+    XCTAssertEqual(photoChangesDeviceTag(fixedVendor), tag)
+    XCTAssertEqual(
+      photoChangesDeviceTag(UUID(uuidString: "00000000-0000-0000-0000-000000000000")!),
+      "12b9377c")
+    XCTAssertNil(photoChangesDeviceTag(nil))
+
+    let real = photoChangesDeviceTag(UIDevice.current.identifierForVendor)
+    XCTAssertNotNil(real)
+    XCTAssertNotNil(real?.range(of: "^[0-9a-f]{8}$", options: .regularExpression))
+    XCTAssertEqual(photoChangesDeviceTag(UIDevice.current.identifierForVendor), real)
+  }
+
+  // MARK: - branches that never touch the library
+
+  func testUnsupportedBeforeIOS16() {
+    let p = plugin(history: false)
+    let token = map(p, "currentToken")
+    XCTAssertEqual(token["status"] as? String, "unsupported")
+    XCTAssertNil(token["token"])
+    let since = map(p, "insertedImagesSince", ["token": "abc", "limit": 50])
+    XCTAssertEqual(since["status"] as? String, "unsupported")
+    XCTAssertNil(since["token"])
+    XCTAssertEqual((since["ids"] as? [Any])?.count, 0)
+    XCTAssertEqual(since["truncated"] as? Bool, false)
+    // Album lookups do not need change history.
+    let albums = map(p, "albumAssetIds", ["titles": [String](), "sinceMs": 0, "limit": 10])
+    XCTAssertEqual(albums["status"] as? String, "ok")
+    XCTAssertEqual((albums["ids"] as? [Any])?.count, 0)
+  }
+
+  /// Without access it answers denied — it never asks (no prompt from a
+  /// background run) and never reads.
+  func testDeniedWithoutAccessAndNeverPrompts() {
+    for status in [PHAuthorizationStatus.notDetermined, .denied, .restricted] {
+      let p = plugin(status: status)
+      XCTAssertEqual(map(p, "currentToken")["status"] as? String, "denied", "\(status.rawValue)")
+      let since = map(p, "insertedImagesSince", ["token": "abc"])
+      XCTAssertEqual(since["status"] as? String, "denied")
+      XCTAssertNil(since["token"])
+      XCTAssertEqual(since["device_tag"] as? String, "94996017")
+      let albums = map(p, "albumAssetIds", ["titles": ["Meta AI"], "sinceMs": 0, "limit": 10])
+      XCTAssertEqual(albums["status"] as? String, "denied")
+      XCTAssertEqual((albums["ids"] as? [Any])?.count, 0)
+    }
+  }
+
+  /// No identifierForVendor yet (after a restart, before the first unlock):
+  /// nothing can be tied to this phone, so nothing changes.
+  func testNoDeviceTagIsAnErrorThatKeepsTheToken() {
+    let p = plugin(vendor: .some(nil))
+    let token = map(p, "currentToken")
+    XCTAssertEqual(token["status"] as? String, "error")
+    XCTAssertEqual(token["error_code"] as? String, "no_device_tag")
+    XCTAssertNil(token["token"])
+    let since = map(p, "insertedImagesSince", ["token": "abc"])
+    XCTAssertEqual(since["status"] as? String, "error")
+    XCTAssertEqual(since["error_code"] as? String, "no_device_tag")
+    XCTAssertEqual(since["token"] as? String, "abc")
+    XCTAssertNil(since["device_tag"])
+  }
+
+  // MARK: - arguments
+
+  func testInsertedImagesArgumentsAreClamped() {
+    let defaults = InsertedImagesRequest([:])
+    XCTAssertNil(defaults.token)
+    XCTAssertEqual(defaults.limit, 200)
+    XCTAssertEqual(defaults.budget, 1.0, accuracy: 0.0001)
+    XCTAssertEqual(defaults.maxChanges, 5000)
+
+    let high = InsertedImagesRequest([
+      "token": "  t  ", "limit": 10_000, "budget_ms": 99_999, "max_changes": 1_000_000,
+    ])
+    XCTAssertEqual(high.token, "t")
+    XCTAssertEqual(high.limit, 500)
+    XCTAssertEqual(high.budget, 1.5, accuracy: 0.0001)
+    XCTAssertEqual(high.maxChanges, 5000)
+
+    let low = InsertedImagesRequest([
+      "token": "   ", "limit": -3, "budget_ms": 0, "max_changes": 0,
+    ])
+    XCTAssertNil(low.token)
+    XCTAssertEqual(low.limit, 1)
+    XCTAssertEqual(low.budget, 0.05, accuracy: 0.0001)
+    XCTAssertEqual(low.maxChanges, 1)
+
+    let wrongTypes = InsertedImagesRequest(["token": 5, "limit": "9", "budget_ms": "x"])
+    XCTAssertNil(wrongTypes.token)
+    XCTAssertEqual(wrongTypes.limit, 200)
+    XCTAssertEqual(wrongTypes.budget, 1.0, accuracy: 0.0001)
+  }
+
+  func testAlbumArgumentsAndTitleMatching() {
+    let request = AlbumRequest([
+      "titles": [" Meta AI ", "", 7, String(repeating: "x", count: 65), "Ray-Ban Meta"],
+      "sinceMs": 1_700_000_000_000, "limit": 5000,
+    ])
+    XCTAssertEqual(request.titles, ["Meta AI", "Ray-Ban Meta"])
+    XCTAssertEqual(request.since.timeIntervalSince1970, 1_700_000_000, accuracy: 0.001)
+    XCTAssertEqual(request.limit, 1000)
+    XCTAssertEqual(AlbumRequest([:]).since.timeIntervalSince1970, 0)
+    XCTAssertEqual(AlbumRequest([:]).limit, 500)
+
+    XCTAssertTrue(photoChangesTitleMatches("meta ai", request.titles))
+    XCTAssertTrue(photoChangesTitleMatches("  META AI\n", request.titles))
+    XCTAssertTrue(photoChangesTitleMatches("ray-ban meta", request.titles))
+    XCTAssertFalse(photoChangesTitleMatches("Meta AI 2", request.titles))
+    XCTAssertFalse(photoChangesTitleMatches("", request.titles))
+    XCTAssertFalse(photoChangesTitleMatches(nil, request.titles))
+  }
+
+  // MARK: - the real library (when the test host has Photos access)
+
+  func testRealLibraryFreshOkAndUnreadable() throws {
+    guard #available(iOS 16.0, *) else { throw XCTSkip("no change history before iOS 16") }
+    guard hostHasPhotoAccess else { throw XCTSkip("the test host has no Photos access") }
+    let p = PhotoChangesPlugin()
+
+    let current = map(p, "currentToken")
+    XCTAssertEqual(current["status"] as? String, "ok")
+    let token = try XCTUnwrap(current["token"] as? String)
+    XCTAssertNotNil(photoChangesUnarchiveToken(token))
+    let tag = try XCTUnwrap(current["device_tag"] as? String)
+    XCTAssertEqual(tag, photoChangesDeviceTag(UIDevice.current.identifierForVendor))
+
+    let fresh = map(p, "insertedImagesSince", ["limit": 10])
+    XCTAssertEqual(fresh["status"] as? String, "fresh")
+    XCTAssertNotNil(photoChangesUnarchiveToken(try XCTUnwrap(fresh["token"] as? String)))
+    XCTAssertEqual((fresh["ids"] as? [Any])?.count, 0)
+
+    let ok = map(p, "insertedImagesSince", ["token": token, "limit": 10])
+    XCTAssertEqual(ok["status"] as? String, "ok")
+    XCTAssertNotNil(ok["token"] as? String)
+    XCTAssertEqual(ok["device_tag"] as? String, tag)
+    XCTAssertNotNil(ok["truncated"] as? Bool)
+    XCTAssertNotNil(ok["dropped"] as? Int)
+    XCTAssertNotNil(ok["ids"] as? [[String: Any]])
+
+    let unreadable = map(p, "insertedImagesSince", ["token": "AAAA", "limit": 10])
+    XCTAssertEqual(unreadable["status"] as? String, "unavailable")
+    XCTAssertEqual(unreadable["error_code"] as? String, "token_unreadable")
+    XCTAssertNotNil(photoChangesUnarchiveToken(try XCTUnwrap(unreadable["token"] as? String)))
+  }
+}
+
+/// `scripts/run_e2e_ios.sh --scenario late_import_native` (design G1a):
+/// the script adds a HEIC whose EXIF capture time is two days old with
+/// `simctl addmedia` while this test waits. insertedImagesSince must
+/// report it; the watcher's createDate > cutoff query must not. Skipped
+/// unless the script set BITEWISE_SCENARIO (xcodebuild passes TEST_RUNNER_
+/// variables through).
+class LateImportNativeScenarioTests: XCTestCase {
+  private var env: [String: String] { ProcessInfo.processInfo.environment }
+
+  private func call(_ plugin: PhotoChangesPlugin, _ method: String, _ args: Any?) -> [String: Any] {
+    let replied = expectation(description: method)
+    var reply: Any?
+    plugin.handle(FlutterMethodCall(methodName: method, arguments: args)) {
+      reply = $0
+      replied.fulfill()
+    }
+    wait(for: [replied], timeout: 30)
+    return reply as? [String: Any] ?? [:]
+  }
+
+  private func filename(of id: String) -> String? {
+    guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject
+    else { return nil }
+    return PHAssetResource.assetResources(for: asset).first?.originalFilename
+  }
+
+  func testInsertedImagesSinceSeesALateImportTheCreateDateQueryMisses() throws {
+    guard env["BITEWISE_SCENARIO"] == "late_import_native",
+      let expectedName = env["BITEWISE_SCENARIO_FILE"], !expectedName.isEmpty
+    else { throw XCTSkip("run by scripts/run_e2e_ios.sh --scenario late_import_native") }
+    guard #available(iOS 16.0, *) else { throw XCTSkip("no change history before iOS 16") }
+
+    // The script writes the Photos grant once this process is up.
+    var status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    let grantDeadline = Date().addingTimeInterval(60)
+    while status != .authorized && Date() < grantDeadline {
+      Thread.sleep(forTimeInterval: 0.5)
+      status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+    }
+    XCTAssertEqual(status, .authorized, "no Photos access (TCC grant)")
+    guard status == .authorized else { return }
+
+    let plugin = PhotoChangesPlugin()
+    let start = call(plugin, "currentToken", nil)
+    XCTAssertEqual(start["status"] as? String, "ok")
+    let token = try XCTUnwrap(start["token"] as? String)
+    let cutoff = Date().addingTimeInterval(-60)
+
+    // Tell the script to add the photo now.
+    let marker = URL(fileURLWithPath: NSTemporaryDirectory())
+      .appendingPathComponent("bitewise_late_import_ready_\(expectedName)")
+    try Data().write(to: marker)
+    defer { try? FileManager.default.removeItem(at: marker) }
+
+    // Read the way the app will: carry on from each reply's token. The
+    // import makes Photos busy, so a read can stop at its budget
+    // (truncated) and the next one resumes where it stopped.
+    var cursor = token
+    var found: [String: Any]?
+    var truncatedReads = 0
+    var last: [String: Any] = [:]
+    let deadline = Date().addingTimeInterval(180)
+    while Date() < deadline {
+      let readStart = Date()
+      last = call(plugin, "insertedImagesSince", ["token": cursor, "limit": 500])
+      print(
+        "late_import_native: read \(Int(Date().timeIntervalSince(readStart) * 1000)) ms,"
+          + " truncated=\(last["truncated"] ?? "-"), ids=\((last["ids"] as? [Any])?.count ?? -1)")
+      XCTAssertEqual(last["status"] as? String, "ok")
+      XCTAssertEqual(
+        last["device_tag"] as? String,
+        photoChangesDeviceTag(UIDevice.current.identifierForVendor))
+      guard last["status"] as? String == "ok", let next = last["token"] as? String else { break }
+      cursor = next
+      let ids = last["ids"] as? [[String: Any]] ?? []
+      if found == nil {
+        found = ids.first { ($0["id"] as? String).flatMap(filename(of:)) == expectedName }
+      }
+      let truncated = last["truncated"] as? Bool ?? false
+      if truncated { truncatedReads += 1 }
+      if found != nil && !truncated { break }
+      if !truncated { Thread.sleep(forTimeInterval: 1) }
+    }
+    print("late_import_native: \(truncatedReads) truncated read(s) before the end of history")
+    XCTAssertEqual(last["dropped"] as? Int, 0)
+    let entry = try XCTUnwrap(found, "insertedImagesSince never reported \(expectedName)")
+    let id = try XCTUnwrap(entry["id"] as? String)
+
+    // Dated at capture, two days back — so a date query cannot see it.
+    let asset = try XCTUnwrap(
+      PHAsset.fetchAssets(withLocalIdentifiers: [id], options: nil).firstObject)
+    let created = try XCTUnwrap(asset.creationDate)
+    XCTAssertLessThan(created, cutoff.addingTimeInterval(-86_400), "creationDate \(created)")
+    XCTAssertEqual(
+      (entry["created_ms"] as? NSNumber)?.int64Value, photoChangesMillis(created))
+    if #available(iOS 26.0, *), let added = asset.addedDate {
+      XCTAssertEqual((entry["added_ms"] as? NSNumber)?.int64Value, photoChangesMillis(added))
+      XCTAssertGreaterThan(added, cutoff)
+    }
+
+    // The watcher's query shape (createDate after the cutoff) misses it.
+    let options = PHFetchOptions()
+    options.predicate = NSPredicate(format: "creationDate > %@", cutoff as NSDate)
+    var byDate = Set<String>()
+    PHAsset.fetchAssets(with: .image, options: options).enumerateObjects { a, _, _ in
+      byDate.insert(a.localIdentifier)
+    }
+    XCTAssertFalse(byDate.contains(id), "a createDate > cutoff query found the late import")
+
+    // And the token handed back moves past it: asked again, it is gone.
+    let again = call(plugin, "insertedImagesSince", ["token": cursor, "limit": 500])
+    XCTAssertEqual(again["status"] as? String, "ok")
+    let againIds = (again["ids"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
+    XCTAssertFalse(againIds.contains(id))
   }
 }
