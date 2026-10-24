@@ -78,7 +78,7 @@ void main() {
   test('Anthropic worst case for the design defaults is ~2.3¢', () {
     final c = _anthropic(ScriptedClient([(_) => json200({})]));
     expect(c.worstCaseFirstRequestUsd(),
-        closeTo(0.02 + 23000 * 0.10 / 1e6 + 1500 * 0.50 / 1e6, 1e-12));
+        closeTo(0.02 + 24000 * 0.10 / 1e6 + 1500 * 0.50 / 1e6, 1e-12));
     expect(c.worstCaseFirstRequestUsd(), lessThan(0.05));
   });
 

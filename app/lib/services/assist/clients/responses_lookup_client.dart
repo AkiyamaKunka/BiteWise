@@ -77,7 +77,7 @@ abstract class _ResponsesLookupClient extends HttpLookupClient {
     final body = await postJson(
         endpoint,
         {'Authorization': 'Bearer $key'},
-        buildBody(composeLookupPrompt(request),
+        buildBody(request.prompt,
             country: request.iso2Country, domains: domains),
         run,
         worstCaseUsd: worst);

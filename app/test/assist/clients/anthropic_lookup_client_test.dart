@@ -87,20 +87,23 @@ void main() {
       final content = (messages.single as Map)['content'] as List;
       expect(content.single['type'], 'text');
       final prompt = content.single['text'] as String;
-      expect(prompt, startsWith(kPlaceholderLookupPrompt));
-      expect(dataBlock(prompt), bigMacRequest.toContractJson());
+      // Lane B's shared prompt with the composed request in its one data
+      // block: the bytes every provider (and the owner's server) gets.
+      expect(prompt, bigMacRequest.prompt);
+      expect(dataBlock(prompt), bigMacRequest.body);
       // Never the user's photo model, never an image.
       expect(jsonEncode(body).contains('"image"'), isFalse);
     });
 
-    test('no domains → no allowed_domains; bad country → no user_location',
+    test('no domains → no allowed_domains; a bad country is composed to US',
         () async {
       final s = ScriptedClient([(_) => fixture200('anthropic_found.json')]);
-      await _client(s).submit(const LookupRequest(
-          items: [LookupRequestItem(name: 'Big Mac')], country: 'Earth'));
+      await _client(s).submit(itemRequest('Big Mac', country: 'Earth'));
       final tool = (s.bodies.single['tools'] as List).single as Map;
       expect(tool.containsKey('allowed_domains'), isFalse);
-      expect(tool.containsKey('user_location'), isFalse);
+      // Lane B's composer sends "US" for anything that is not an ISO2
+      // code, so user_location still names only a country.
+      expect(tool['user_location'], {'type': 'approximate', 'country': 'US'});
     });
   });
 
@@ -260,7 +263,7 @@ void main() {
         expect(spent, greaterThanOrEqualTo(2 * kAnthropicSearchUsd));
         // Unreported tokens are priced at the allowance, not at 0…
         expect(spent,
-            closeTo(0.02 + haikuUsd(3000 + 2 * 10000, 1500), 1e-12));
+            closeTo(0.02 + haikuUsd(4000 + 2 * 10000, 1500), 1e-12));
         // …but never reported as tokens the reply did not report.
         expect(o.cost.inputTokens, 0);
         expect(o.cost.outputTokens, 0);
@@ -334,8 +337,8 @@ void main() {
             o.cost.usd,
             closeTo(
                 0.01 +
-                    haikuUsd(3000 + 10000, 1500) +
-                    haikuUsd(3000 + 10000 + 1500, 1500),
+                    haikuUsd(4000 + 10000, 1500) +
+                    haikuUsd(4000 + 10000 + 1500, 1500),
                 1e-12));
       });
 
@@ -542,7 +545,7 @@ void main() {
       final s = ScriptedClient([(_) => fixture200('anthropic_found.json')]);
       final a = await _client(s, key: '  ').submit(bigMacRequest);
       expect(a.failure!.code, LookupFailureCode.noKey);
-      final b = await _client(s).submit(const LookupRequest(items: []));
+      final b = await _client(s).submit(LookupRequest.compose({'items': []}));
       expect(b.failure!.code, LookupFailureCode.badRequest);
       final token = LookupCancelToken()..cancel();
       final c = await _client(s).submit(bigMacRequest, cancel: token);

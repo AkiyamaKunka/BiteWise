@@ -2,7 +2,6 @@
 // openrouter:web_search server tool, against documented response shapes.
 import 'package:calorie_tracker/services/assist/clients/citation_check.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
-import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
 import 'package:calorie_tracker/services/assist/clients/openrouter_lookup_client.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -44,7 +43,8 @@ void main() {
     ]);
     expect(body['max_tokens'], 1500);
     final prompt = ((body['messages'] as List).single as Map)['content'];
-    expect(dataBlock(prompt as String), bigMacRequest.toContractJson());
+    expect(prompt, bigMacRequest.prompt);
+    expect(dataBlock(prompt as String), bigMacRequest.body);
   });
 
   test('a :online model is not double-searched', () async {
@@ -197,7 +197,7 @@ void main() {
               }
             ]
           })
-    ])).submit(const LookupRequest(items: [LookupRequestItem(name: 'x')]));
+    ])).submit(itemRequest('x'));
     expect(o.failure!.code, LookupFailureCode.malformedReply);
     expect(o.result, isNull);
   });

@@ -123,7 +123,7 @@ class AnthropicLookupClient extends HttpLookupClient {
       {
         'role': 'user',
         'content': [
-          {'type': 'text', 'text': composeLookupPrompt(request)}
+          {'type': 'text', 'text': request.prompt}
         ],
       }
     ];

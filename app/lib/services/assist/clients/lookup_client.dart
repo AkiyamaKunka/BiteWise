@@ -11,6 +11,8 @@ library;
 
 import 'dart:async';
 
+import '../../../core/restaurant_assist_logic.dart'
+    show AssistEvidence, AssistLookup;
 import 'lookup_contract_adapter.dart';
 
 /// Who receives the lookup request (the consent recipient, design D13).
@@ -282,6 +284,27 @@ class LookupOutcome {
   final Map<String, dynamic>? raw;
 
   bool get isDone => kind == LookupOutcomeKind.done && result != null;
+
+  /// This outcome as lane B's acceptance input (decideAssist): the answer
+  /// exactly as the model sent it, the recipient as
+  /// `analysis.assist.provider`, the URLs the search returned and the text
+  /// it extracted (verbatim or not, with its page date). Null unless done.
+  AssistLookup? toAssistLookup() => isDone
+      ? AssistLookup(
+          result: result!.json,
+          provider: provider.wire,
+          citedUrls: citedUrls,
+          evidence: [
+            for (final e in evidence)
+              AssistEvidence(
+                url: e.url,
+                text: e.text,
+                verbatim: e.verbatim,
+                pageAge: e.pageAge,
+              ),
+          ],
+        )
+      : null;
 
   /// Every [evidence] text for [url] (exact string match after the
   /// caller's normalization is the caller's business; this is raw).

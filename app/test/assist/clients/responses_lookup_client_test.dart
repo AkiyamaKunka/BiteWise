@@ -39,8 +39,8 @@ void main() {
       expect(body['max_tool_calls'], 2);
       expect(body['max_output_tokens'], 1500);
       expect(body['store'], false);
-      expect(dataBlock(body['input'] as String),
-          bigMacRequest.toContractJson());
+      expect(body['input'], bigMacRequest.prompt);
+      expect(dataBlock(body['input'] as String), bigMacRequest.body);
     });
 
     test('found: utm-tagged citation matches; evidence is model-only',
@@ -212,8 +212,8 @@ void main() {
       ]);
       final input = (body['input'] as List).single as Map;
       expect(input['role'], 'user');
-      expect(dataBlock(input['content'] as String),
-          bigMacRequest.toContractJson());
+      expect(input['content'], bigMacRequest.prompt);
+      expect(dataBlock(input['content'] as String), bigMacRequest.body);
     });
 
     test('found: an inline [[1]](url) inside the JSON is stripped', () async {

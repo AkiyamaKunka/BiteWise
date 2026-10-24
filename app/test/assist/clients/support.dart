@@ -52,13 +52,24 @@ class ScriptedClient {
       ];
 }
 
-/// The standard lookup: one Big Mac, item brand printed on the box.
-const LookupRequest bigMacRequest = LookupRequest(
-  items: [
-    LookupRequestItem(name: 'Big Mac', qty: 1, unit: 'sandwich', brand: "McDonald's")
+/// The standard lookup: one Big Mac, item brand printed on the box, and
+/// McDonald's from our chain table — composed by lane B's composer, as
+/// every request is.
+final LookupRequest bigMacRequest = LookupRequest.compose({
+  'items': [
+    {'name': 'Big Mac', 'qty': 1, 'unit': 'sandwich', 'brand': "McDonald's"}
   ],
-  chains: [LookupRequestChain(key: 'mcdonalds', name: "McDonald's")],
-);
+  'chains': ['mcdonalds'],
+});
+
+/// A one-item request with nothing else in it.
+LookupRequest itemRequest(String name, {String? country}) =>
+    LookupRequest.compose({
+      'items': [
+        {'name': name}
+      ],
+      'country': ?country,
+    });
 
 const List<String> mcdDomains = ['mcdonalds.com'];
 

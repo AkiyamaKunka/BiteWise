@@ -131,7 +131,7 @@ class OpenRouterLookupClient extends HttpLookupClient {
     final worst = worstCaseFirstRequestUsd();
     run.ensureWithinCap(worst);
     final body = await postJson(endpoint, _headers(key),
-        buildBody(composeLookupPrompt(request), domains: domains), run,
+        buildBody(request.prompt, domains: domains), run,
         worstCaseUsd: worst);
     run.add(_costOf(body));
     // OpenRouter can answer an upstream failure inside a 200.

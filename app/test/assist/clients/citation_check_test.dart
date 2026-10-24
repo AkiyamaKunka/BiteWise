@@ -1,6 +1,7 @@
 // Source screening: URL normalization, official-domain matching, number
-// grounding, and the combined check over fake / uncited / third-party
-// sources.
+// grounding (lane B's rules, re-exported), and the combined check over
+// fake / uncited / third-party sources.
+import 'package:calorie_tracker/core/restaurant_assist_logic.dart' as core;
 import 'package:calorie_tracker/services/assist/clients/citation_check.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -15,13 +16,18 @@ void main() {
       '$_bigMac#nutrition': 'https://mcdonalds.com/us/en-us/product/big-mac.html',
       'https://WWW.McDonalds.COM/us/': 'https://mcdonalds.com/us',
       'https://mcdonalds.com': 'https://mcdonalds.com',
-      'https://mcdonalds.com:443/a': 'https://mcdonalds.com/a',
+      'https://mcdonalds.com./a': 'https://mcdonalds.com/a',
+      'HTTPS://www.mcdonalds.com/a': 'https://mcdonalds.com/a',
       '  https://order.chipotle.com/menu//  ': 'https://order.chipotle.com/menu',
       // Not launchable:
       'http://www.mcdonalds.com/us': null,
       'javascript:alert(1)': null,
       'ftp://mcdonalds.com/a': null,
+      // Lane B: no port at all, not even the default one.
+      'https://mcdonalds.com:443/a': null,
       'https://mcdonalds.com:8443/a': null,
+      'https://192.168.1.10/a': null,
+      r'https://mcdonalds.com\a': null,
       'https://mcdonalds.com@evil.example/a': null,
       'https://chipötle.com/nutrition': null, // IDN lookalike
       'https://chip%C3%B6tle.com/nutrition': null,
@@ -72,7 +78,20 @@ void main() {
         ['mcdonalds.com', 'a.com', 'b.com', 'c.com', 'd.com']);
   });
 
-  group('numberGrounded', () {
+  test('the screen uses lane B\'s functions, not copies', () {
+    expect(normalizeSourceUrl, same(core.normalizeSourceUrl));
+    expect(grounded, same(core.grounded));
+  });
+
+  test('sourceHost and canonicalDomain', () {
+    expect(sourceHost('$_bigMac?x=1'), 'mcdonalds.com');
+    expect(sourceHost('http://mcdonalds.com'), isNull);
+    expect(canonicalDomain('HTTPS://WWW.Chipotle.com//'), 'chipotle.com');
+    expect(canonicalDomain('chipötle.com'), isNull);
+    expect(canonicalDomain('chipotle.com:443'), isNull);
+  });
+
+  group('grounded', () {
     final rows = <(int, String, bool)>[
       (590, 'Big Mac® | 590 Cal.', true),
       (590, 'Calories 590, Total Fat 34g', true),
@@ -90,7 +109,7 @@ void main() {
     ];
     for (final (kcal, text, want) in rows) {
       test('$kcal in "$text" → $want', () {
-        expect(numberGrounded(kcal, text), want);
+        expect(grounded(kcal, text), want);
       });
     }
   });

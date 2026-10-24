@@ -1,11 +1,15 @@
 // PRIVACY property (design R5a/R5b): whatever the inputs, a lookup request
-// carries exactly the fixed instructions plus the §4 data block — no
-// coordinates, timestamps, city, street, dietary profile, meal description
-// or image — and only the headers a provider needs. Random requests, every
-// supported client, settings seeded with sensitive values.
+// carries exactly lane B's shared instructions plus the §4 data block its
+// composer built — no coordinates, timestamps, city, street, dietary
+// profile, meal description or image — and only the headers a provider
+// needs. Random raw inputs (with the photo's fix, time and place seeded
+// into them), every supported client, settings seeded with sensitive
+// values.
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:calorie_tracker/core/chain_match.dart';
+import 'package:calorie_tracker/core/shared_generated.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_clients.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
@@ -192,23 +196,51 @@ String _rand(Random r, int maxLen) {
   ]);
 }
 
-LookupRequest _randomRequest(Random r) => LookupRequest(
-      items: [
+/// Real table chains, some printed the way a receipt prints them.
+const _printed = [
+  "McDonald's",
+  'CHIPOTLE 2381 - 1540 Broadway',
+  'Starbucks Coffee #123, 702 State Street, Madisonville',
+  'Panda Express',
+];
+const _tableKeys = ['mcdonalds', 'chipotle', 'starbucks', 'panda_express'];
+
+String _brand(Random r) =>
+    r.nextBool() ? _printed[r.nextInt(_printed.length)] : _rand(r, 90);
+
+/// A raw input as a careless caller might hand it to the composer: the
+/// §4 fields, plus the photo's fix, time and place and the profile, at the
+/// top level and inside items and chains.
+LookupRequest _randomRequest(Random r) => LookupRequest.compose({
+      'items': [
         for (var i = 0; i < 1 + r.nextInt(15); i++)
-          LookupRequestItem(
-              name: _rand(r, 120),
-              qty: r.nextInt(30) - 3,
-              unit: _rand(r, 30),
-              brand: _rand(r, 90)),
+          {
+            'name': _rand(r, 120),
+            'qty': r.nextInt(30) - 3,
+            'unit': _rand(r, 30),
+            'brand': _brand(r),
+            'lat': _lat,
+            'captured_at': _when,
+            'meal_description': _profile,
+          },
       ],
-      orderMerchant: _rand(r, 90),
-      chains: [
+      'order_merchant': _brand(r),
+      'chains': [
         for (var i = 0; i < r.nextInt(5); i++)
-          LookupRequestChain(key: _rand(r, 20), name: _rand(r, 80)),
+          r.nextBool()
+              ? {'key': _tableKeys[r.nextInt(_tableKeys.length)],
+                  'name': _city, 'distance_m': 40}
+              : {'key': _rand(r, 20), 'name': _rand(r, 80)},
       ],
-      country: r.nextBool() ? 'US' : _rand(r, 3),
-      lang: r.nextBool() ? 'zh' : null,
-    );
+      'country': r.nextBool() ? 'US' : _rand(r, 3),
+      'lang': r.nextBool() ? 'zh' : null,
+      'lat': _lat,
+      'lon': _lon,
+      'captured_at': _when,
+      'city': _city,
+      'street': _street,
+      'dietary_profile': _profile,
+    });
 
 String _promptOf(String host, Map<String, dynamic> body) => switch (host) {
       'api.anthropic.com' => (((body['messages'] as List).first
@@ -260,9 +292,10 @@ void main() {
             chainDomains: r.nextBool() ? mcdDomains : const [],
             expectedRecipient: router.lookupSupport().recipient);
       }
-      // Brand path: no location-derived chain survives brandOnly().
+      // Brand path: no location-derived chain survives
+      // withoutLocationChains (here every chain counts as one).
       await settings.setProvider(AiProvider.anthropic);
-      await router.submit(req.brandOnly(),
+      await router.submit(req.withoutLocationChains(req.chainKeys),
           expectedRecipient: LookupRecipient.anthropic);
       final last = seen.last;
       expect(dataBlock(_promptOf(last.url.host,
@@ -284,7 +317,6 @@ void main() {
           isTrue,
           reason: '$host sent headers ${req.headers.keys}');
       final prompt = _promptOf(host, body);
-      expect(prompt, startsWith(kPlaceholderLookupPrompt));
       final data = dataBlock(prompt);
       expect(data.keys.toSet().difference(
           {'items', 'order_merchant', 'chains', 'country', 'lang'}), isEmpty);
@@ -293,10 +325,15 @@ void main() {
       }
       for (final c in data['chains'] as List) {
         expect((c as Map).keys.toSet(), {'key', 'name', 'size'});
+        // A chain is only ever one of OUR table's, under its own name.
+        expect(c['name'], chainByKey(c['key'] as String)?.name);
       }
-      // The data block is the WHOLE remainder of the prompt.
-      expect(prompt,
-          '$kPlaceholderLookupPrompt<data>${jsonEncode(data)}</data>');
+      // Lane B's shared prompt, and the data block the composer built is
+      // all the rest: nothing else rides along.
+      expect(
+          prompt,
+          sharedRestaurantLookupPrompt.replaceFirst(
+              '<<REQUEST_JSON>>', jsonEncode(data)));
       final wire = req.body;
       for (final secret in [_lat, _lon, _when, _city, _street, _profile]) {
         expect(wire.contains(secret), isFalse, reason: '$host: $secret');

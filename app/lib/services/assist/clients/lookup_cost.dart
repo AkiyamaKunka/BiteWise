@@ -72,7 +72,7 @@ class LookupCostPolicy {
     this.maxSearches = 2,
     this.maxContinuations = 2,
     this.maxOutputTokens = 1500,
-    this.promptTokensAllowance = 3000,
+    this.promptTokensAllowance = 4000,
     this.tokensPerSearchAllowance = 10000,
     this.unknownModelAllowanceUsd = 0.02,
   })  : assert(maxSearches >= 1, 'a lookup needs at least one search'),
@@ -90,8 +90,10 @@ class LookupCostPolicy {
   final int maxContinuations;
   final int maxOutputTokens;
 
-  /// Worst-case input assumptions for the pre-flight check: our prompt
-  /// (~1.5k tokens) with margin, and one search's results as input.
+  /// Worst-case input assumptions for the pre-flight check: the prompt —
+  /// lane B's shared lookup prompt (~1.4k tokens) plus the largest request
+  /// its composer emits (12 items, about 1.7k tokens when the names are
+  /// CJK) — with margin, and one search's results as input.
   final int promptTokensAllowance;
   final int tokensPerSearchAllowance;
 
