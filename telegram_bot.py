@@ -56,6 +56,8 @@ import claude_analyzer
 import claude_auth
 import garmin
 import database
+import lookup_contract
+import lookup_jobs
 import fitness_plan
 import nutrition
 import service_health
@@ -4847,25 +4849,43 @@ def with_reply_language(prompt: str, lang) -> str:
     return f"{prompt}\n\n{REPLY_LANGUAGE_DIRECTIVE_ZH}\n"
 
 
-def api_features() -> dict:
-    """The "features" map of /api/auth_check: what a new app may rely on.
+def _api_features() -> Dict[str, bool]:
+    """/api/auth_check "features": what this server build can do, so the
+    app can tell "server needs an update" from "feature switched off".
 
     An older server omits the map entirely, which the app reads as "old
-    server, every capability off" (ServerAnalyzer.serverFeatures).
-      * estimate_confidence — photo replies carry the meal-context fields
+    server, every capability off" (ServerAnalyzer.serverFeatures). Values
+    are strict booleans: the app reads only a literal true as "on".
+      * estimate_confidence -- photo replies carry the meal-context fields
         (estimate_confidence, restaurant_context, portion_state,
-        order_merchant, item brand/qty/unit). True from the moment the
-        shared photo prompt asks for them.
-      * restaurant_lookup / lookup_jobs — the restaurant-lookup endpoints.
-        They do not exist on this server yet, so both stay False whatever
-        the environment says; the stage that adds them reports its knob
-        here.
+        order_merchant, item brand/qty/unit): true only once the shared
+        photo prompt asks for them (R1), never by assertion.
+      * restaurant_lookup -- the lookup knob (CLAUDE_LOOKUP_ENABLED) is on
+        AND the Claude backend can run it.
+      * lookup_jobs -- this build has the async /api/restaurant_lookup
+        endpoints (always true from R3b on).
     """
     return {
-        "estimate_confidence": True,
-        "restaurant_lookup": False,
-        "lookup_jobs": False,
+        "estimate_confidence": "estimate_confidence" in FOOD_DETECTION_PROMPT,
+        "restaurant_lookup": (lookup_jobs.is_enabled()
+                              and claude_analyzer.backend_available("claude")),
+        "lookup_jobs": True,
     }
+
+
+def _api_bind_host() -> str:
+    """API_BIND_HOST: where Flask listens. Default 0.0.0.0 (unchanged).
+    127.0.0.1 once a TLS proxy (Caddy, docs/SERVER_TLS.md) fronts the API,
+    so plain-HTTP port 5000 is no longer reachable from the network. Only
+    an IP literal is accepted; anything else keeps the default."""
+    raw = (os.environ.get("API_BIND_HOST") or "").strip()
+    if not raw:
+        return "0.0.0.0"
+    try:
+        return str(ipaddress.ip_address(raw))
+    except ValueError:
+        log.warning("Ignoring API_BIND_HOST: not an IP address.")
+        return "0.0.0.0"
 
 
 # ─── Flask REST API ───────────────────────────────────────────────
@@ -4920,7 +4940,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return jsonify({"ok": True, "analyzer": claude_analyzer.status_label(),
                         "backends": claude_analyzer.backend_status(),
                         "claude_login": claude_analyzer.login_state(),
-                        "features": api_features()})
+                        "features": _api_features()})
 
     @app.route('/api/garmin_daily', methods=['POST'])
     def api_garmin_daily():
@@ -5320,6 +5340,77 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                             "retry": False}), 503
         return jsonify({"ok": True, "result": out["result"],
                         "analyzed_by": backend})
+
+    def _lookup_refused(status, code, retry=None, field=None):
+        """A lookup refusal, logged as one line: code + client platform.
+        Never the payload — it holds restaurant and dish names."""
+        log.warning(
+            f"restaurant_lookup refused ({status} {code}); client="
+            f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
+        body = {"error": code, "reason": code}
+        if retry is not None:
+            body["retry"] = retry
+        if field:
+            body["field"] = field
+        return jsonify(body), status
+
+    def _lookup_service():
+        return lookup_jobs.get_service(lambda: SERVICE_HEALTH_PATH)
+
+    @app.route('/api/restaurant_lookup', methods=['POST'])
+    def api_restaurant_lookup():
+        """Queue a published-nutrition lookup for chain-restaurant items.
+
+        Body (data_contracts section 4 + backend): STRUCTURED fields only
+        — item names/qty/unit/brand, the receipt merchant, up to 3 chain
+        KEYS from our own table, country, lang. The request is rebuilt
+        from a whitelist and the prompt composed HERE
+        (lookup_contract); location keys and coordinate-shaped text are
+        refused. Answers 202 {state, job_id} (poll /status), or 200
+        {state: done, ...} from the 24 h cache with no CLI run.
+        Off unless CLAUDE_LOOKUP_ENABLED (403 {reason: disabled}).
+        """
+        if not _authorized_api_request():
+            return jsonify({"error": "Unauthorized"}), 401
+        if not lookup_jobs.is_enabled():
+            return _lookup_refused(403, "disabled")
+        payload = request.get_json(silent=True)
+        try:
+            lookup_request = lookup_contract.sanitize_request(payload)
+        except lookup_contract.RequestRejected as rejected:
+            return _lookup_refused(400, rejected.code, field=rejected.field)
+        if not claude_analyzer.backend_available("claude"):
+            reason = claude_analyzer.backend_status().get("claude")
+            log.warning(f"restaurant_lookup refused: claude backend "
+                        f"unavailable ({reason}).")
+            return jsonify({"error": "claude_unavailable",
+                            "reason": reason}), 503
+        kind, body = _lookup_service().submit(lookup_request)
+        if kind == "cached":
+            log.info("restaurant_lookup served from cache.")
+            return jsonify(body), 200
+        if kind == "accepted":
+            dropped = lookup_contract.unknown_key_count(payload)
+            log.info(f"restaurant_lookup accepted (state={body['state']}"
+                     f"{f', {dropped} unknown key(s) dropped' if dropped else ''}).")
+            return jsonify(body), 202
+        return _lookup_refused(
+            429, kind, retry=True if kind == "queue_full" else "later")
+
+    @app.route('/api/restaurant_lookup/status', methods=['POST'])
+    def api_restaurant_lookup_status():
+        """{job_id} → {state: queued|running|done|failed|unknown, ...}.
+        unknown = never seen, expired, or lost in a restart: resubmit."""
+        if not _authorized_api_request():
+            return jsonify({"error": "Unauthorized"}), 401
+        if not lookup_jobs.is_enabled():
+            return _lookup_refused(403, "disabled")
+        payload = request.get_json(silent=True)
+        job_id = payload.get("job_id") if isinstance(payload, dict) else None
+        if not isinstance(job_id, str) or not re.fullmatch(
+                r"[A-Za-z0-9_-]{8,64}", job_id):
+            return _lookup_refused(400, "bad_request", field="job_id")
+        return jsonify(_lookup_service().status(job_id)), 200
 
     @app.route('/reconcile', methods=['POST'])
     def reconcile():
@@ -6328,8 +6419,10 @@ def main():
     app = _build_api_app(bot, gemini_client)
 
     # Start Flask in a background thread
-    threading.Thread(target=lambda: app.run(host='0.0.0.0', port=5000, debug=False, use_reloader=False), daemon=True).start()
-    log.info("🚀 Flask REST API started on port 5000")
+    bind_host = _api_bind_host()
+    threading.Thread(target=lambda: app.run(host=bind_host, port=5000, debug=False, use_reloader=False), daemon=True).start()
+    log.info("🚀 Flask REST API started on port 5000"
+             + (" (loopback only)" if ipaddress.ip_address(bind_host).is_loopback else ""))
 
     # API-ONLY mode: the phone app's /api/* endpoints and the Telegram
     # chat bot share ONE process, so `systemctl stop` would take the app's

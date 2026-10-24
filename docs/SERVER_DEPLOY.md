@@ -21,6 +21,10 @@ No new pip packages, no new required env vars, no database migration.
 Older app builds keep working (every change is additive or strictly
 better for them).
 
+The restaurant-assist work adds the lookup endpoints, off by default:
+see [Restaurant lookup](#restaurant-lookup-websearch-on-your-server)
+below for its knobs, its smoke script and the order to switch it on in.
+
 ## Before you start
 
 - `pillow_heif` must import in the VM venv (step 2). Without it the server
@@ -104,6 +108,99 @@ Optional (spends one plan run): with the Chinese UI and a current app
 build, take one food photo — the journal shows the analysis and the meal
 gets a Chinese name. Check `systemctl show caloriebot -p NRestarts` is
 still 0 an hour later.
+
+## Restaurant lookup (WebSearch on your server)
+
+The restaurant-assist work adds two app endpoints,
+`POST /api/restaurant_lookup` and `POST /api/restaurant_lookup/status`,
+and a `features` object on `/api/auth_check`. They are **off** until you
+switch them on, and deploying the code changes nothing else: photos,
+leftovers and text work exactly as before (a running lookup always
+yields the CLI to them).
+
+What switching it on means: for a meal from a chain restaurant, the app
+sends item names, quantities, the brand printed on an item or receipt
+and up to 3 chain names from BiteWise's own US chain table — never
+coordinates, street, city, the photo or your meal history. Your server
+then runs the Claude CLI on your plan with **WebSearch only** (no
+WebFetch, no MCP, no plugins, `--safe-mode`, a minimal environment
+without the upload key or any plan key). The first event of every run
+is checked and the run is killed if any tool, MCP server, plugin or
+memory path appears that should not. Each lookup takes about 20–75 s of
+plan usage; results are cached for 24 h.
+
+New `.env` knobs (all optional):
+
+| Knob | Default | Meaning |
+|---|---|---|
+| `CLAUDE_LOOKUP_ENABLED` | off | `1` turns the endpoints on. Off → `403 {"reason":"disabled"}`. |
+| `CLAUDE_LOOKUP_MODEL` | `sonnet` | `haiku` uses less plan usage. |
+| `CLAUDE_LOOKUP_TIMEOUT_SECONDS` | `75` | Per-lookup wall clock (20–300). |
+| `CLAUDE_LOOKUP_INIT_SECONDS` | `10` | How long the CLI may take to print its first (init) event (5–30). Raise it only if the smoke's `init latency` is close to the limit. |
+| `CLAUDE_LOOKUP_DAILY_CAP` | `30` | Lookup runs started per day, counted in `logs/service_health.json`. |
+| `CLAUDE_LOOKUP_KEY_SOURCE` | `none` | The `apiKeySource` the guard accepts. Change it only if the smoke tells you to. |
+| `API_BIND_HOST` | `0.0.0.0` | `127.0.0.1` once Caddy fronts the API ([SERVER_TLS.md](SERVER_TLS.md)). |
+
+Recommended order:
+
+1. **TLS first** ([SERVER_TLS.md](SERVER_TLS.md)). Without it the app
+   keeps lookups to printed brands only, and the upload key that now
+   also unlocks a web-searching model still travels in clear text.
+2. **Deploy** as above. No new pip packages, no database migration.
+3. **Smoke the guard without spending usage** (on the VM, no photo in
+   flight):
+
+   ```bash
+   cd /home/ubuntu/CalorieTracker && sudo -u ubuntu -H venv/bin/python scripts/lookup_smoke.py --init-only
+   ```
+
+   Expect `guard : pass`, `init tools : StructuredOutput, WebSearch`,
+   `memory_paths : absent` and `status : init_ok`. `init latency` is how
+   long the CLI took to start (about 1–2 s on a Mac; if it is near the
+   10 s limit on the VM, set `CLAUDE_LOOKUP_INIT_SECONDS=20`). It prints the CLI
+   version and the `apiKeySource` the CLI reports, never a key. If it says
+   `FAIL guard_fail:apiKeySource` and shows a value you expect for your
+   sign-in (for example the one for a `claude setup-token` login), add
+   `CLAUDE_LOOKUP_KEY_SOURCE=<that value>` to `.env` and run it again.
+   Any other `FAIL` means this CLI version behaves differently from the
+   one the guard was written against (2.1.233): do not enable the
+   feature; report the printed lines instead.
+4. **One real lookup** (spends one search run on your plan):
+
+   ```bash
+   cd /home/ubuntu/CalorieTracker && sudo -u ubuntu -H venv/bin/python scripts/lookup_smoke.py --record /tmp/lookup_stream.jsonl
+   ```
+
+   Expect `status : ok`, a `lookup : found, chain=chipotle …` line and
+   `chipotle.com cited: yes`. The `--record` file is the stream with ids,
+   paths and every secret-looking value redacted (mode 0600); copy it
+   back to the Mac as `tests/fixtures/lookup_streams/vm_<version>.jsonl`
+   if you want the tests to pin the real WebSearch shape, then delete it
+   from `/tmp`.
+5. **Switch it on**: `CLAUDE_LOOKUP_ENABLED=1` in `.env`,
+   `sudo systemctl restart caloriebot`.
+6. **Check without spending usage**:
+
+   ```bash
+   B=http://127.0.0.1:5000
+   K=$(sudo sed -n 's/^ANDROID_API_KEY=//p' /home/ubuntu/CalorieTracker/.env | head -1 | tr -d "\"'")
+   # features: expect restaurant_lookup= True
+   printf 'X-API-Key: %s\n' "$K" | curl -s -X POST -H @- $B/api/auth_check \
+     | python3 -c 'import json,sys; print("features:", json.load(sys.stdin).get("features"))'
+   # a location key is refused before any CLI run: expect {"error":"bad_request",...,"field":"lat"} 400
+   printf 'X-API-Key: %s\n' "$K" | curl -s -w ' %{http_code}\n' -X POST -H @- \
+     -H 'Content-Type: application/json' -H 'X-Client-Platform: smoke' \
+     --data '{"items":[{"name":"bowl","brand":"Chipotle"}],"lat":1}' $B/api/restaurant_lookup
+   unset K
+   ```
+
+   The journal shows one `restaurant_lookup refused (400 bad_request)`
+   line and nothing about the payload. Lookup runs log only
+   `Restaurant lookup <status> (<verdict>) in <s>; searches=<n>` — never
+   restaurant names, dishes, queries or URLs.
+
+To switch it off again, remove `CLAUDE_LOOKUP_ENABLED` (or set `0`) and
+restart; queued jobs are dropped, cached results expire on their own.
 
 ## Rollback
 
