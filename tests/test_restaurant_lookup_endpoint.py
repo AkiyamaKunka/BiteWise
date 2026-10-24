@@ -121,7 +121,7 @@ def test_the_runner_only_ever_sees_the_rebuilt_request(lookup):
         time.sleep(0.01)
     req = runner.requests[0]
     assert set(req) == {"items", "order_merchant", "chains", "country"}
-    assert req["chains"][0]["name"] == "Chipotle Mexican Grill"
+    assert req["chains"][0]["name"] == "Chipotle"
 
 
 def test_same_request_twice_is_one_job(lookup):

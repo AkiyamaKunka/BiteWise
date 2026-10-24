@@ -26,8 +26,11 @@ def stream(name):
 INIT_OK = stream("init_ok.jsonl")[0]
 FOUND = stream("found_chipotle.jsonl")
 
+# The same rows as R2a's shared/chains/us_chains.json for these two keys
+# (names included), so a test that stubs the table and R2a's composer,
+# which reads the real one, agree once both are on the path.
 CHAINS = {
-    "chipotle": {"name": "Chipotle Mexican Grill", "domains": ["chipotle.com"]},
+    "chipotle": {"name": "Chipotle", "domains": ["chipotle.com"]},
     "panda_express": {"name": "Panda Express",
                       "domains": ["pandaexpress.com"]},
 }
@@ -36,7 +39,7 @@ REQUEST_BODY = {
     "items": [{"name": "Chicken burrito bowl (~500 g)", "qty": 1,
                "unit": "bowl", "brand": "Chipotle"}],
     "order_merchant": "",
-    "chains": [{"key": "chipotle", "name": "Chipotle Mexican Grill",
+    "chains": [{"key": "chipotle", "name": "Chipotle",
                 "size": "20_plus"}],
     "country": "US",
     "backend": "claude",
