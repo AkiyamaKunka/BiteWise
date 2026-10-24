@@ -1317,9 +1317,15 @@ class LateImportNativeScenarioTests: XCTestCase {
     XCTAssertLessThan(created, cutoff.addingTimeInterval(-86_400), "creationDate \(created)")
     XCTAssertEqual(
       (entry["created_ms"] as? NSNumber)?.int64Value, photoChangesMillis(created))
-    if #available(iOS 26.0, *), let added = asset.addedDate {
-      XCTAssertEqual((entry["added_ms"] as? NSNumber)?.int64Value, photoChangesMillis(added))
-      XCTAssertGreaterThan(added, cutoff)
+    if #available(iOS 26.0, *) {
+      // addedDate is Date in the iOS 26 SDK and Date? in the iOS 27 SDK:
+      // bound through an explicit optional, so both Xcodes compile it (as
+      // PhotoChangesPlugin.photoChangesEntry does).
+      let addedOrNil: Date? = asset.addedDate
+      if let added = addedOrNil {
+        XCTAssertEqual((entry["added_ms"] as? NSNumber)?.int64Value, photoChangesMillis(added))
+        XCTAssertGreaterThan(added, cutoff)
+      }
     }
 
     // The watcher's query shape (createDate after the cutoff) misses it.
