@@ -5363,10 +5363,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
 
         Body (data_contracts section 4 + backend): STRUCTURED fields only
         — item names/qty/unit/brand, the receipt merchant, up to 3 chain
-        KEYS from our own table, country, lang. The request is rebuilt
-        from a whitelist and the prompt composed HERE
-        (lookup_contract); location keys and coordinate-shaped text are
-        refused. Answers 202 {state, job_id} (poll /status), or 200
+        KEYS from our own table, country, lang. The request is gated by
+        a whitelist (lookup_contract) and then composed, with the prompt,
+        HERE by lane B's composer (restaurant_lookup, the app's twin);
+        location keys and coordinate-shaped text are refused. Answers 202 {state, job_id} (poll /status), or 200
         {state: done, ...} from the 24 h cache with no CLI run.
         Off unless CLAUDE_LOOKUP_ENABLED (403 {reason: disabled}).
         """

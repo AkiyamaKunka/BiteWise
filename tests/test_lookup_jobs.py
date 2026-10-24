@@ -12,13 +12,7 @@ import lookup_contract
 import lookup_jobs
 import service_health
 from claude_analyzer import LookupRun
-from lookup_fakes import (FOUND, INIT_OK, REQUEST_BODY, configure, make_cli,
-                          use_chain_table)
-
-
-@pytest.fixture(autouse=True)
-def _table(monkeypatch):
-    use_chain_table(monkeypatch)
+from lookup_fakes import FOUND, INIT_OK, REQUEST_BODY, configure, make_cli
 
 
 def _request(name="Chicken burrito bowl"):

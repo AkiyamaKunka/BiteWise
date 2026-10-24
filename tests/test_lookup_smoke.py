@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from lookup_fakes import (FOUND, INIT_OK, configure, init_with, lines,
-                          make_cli, read_record, use_chain_table)
+                          make_cli, read_record)
 
 SMOKE_PATH = Path(__file__).resolve().parent.parent / "scripts" / "lookup_smoke.py"
 spec = importlib.util.spec_from_file_location("lookup_smoke", SMOKE_PATH)
@@ -30,7 +30,6 @@ SECRETS = {
 def env(monkeypatch):
     for key, value in SECRETS.items():
         monkeypatch.setenv(key, value)
-    use_chain_table(monkeypatch)
 
 
 def _main(monkeypatch, tmp_path, steps, argv=(), exit_code=0):
@@ -130,12 +129,15 @@ def test_unconfigured_and_bad_model(env, monkeypatch, tmp_path):
     assert read_record(record)["argv"][-1] == "haiku"
 
 
-def test_sample_request_is_brand_only_without_the_table(monkeypatch):
-    use_chain_table(monkeypatch, {})
+def test_sample_request_names_chipotle_from_the_table(monkeypatch):
     req = smoke.sample_request()
-    assert req["chains"] == [] and req["items"][0]["brand"] == "Chipotle"
-    use_chain_table(monkeypatch)
-    assert smoke.sample_request()["chains"][0]["key"] == "chipotle"
+    assert req["chains"] == [{"key": "chipotle", "name": "Chipotle",
+                              "size": "20_plus"}]
+    assert req["items"][0]["brand"] == "Chipotle"
+    # A table without the chain (never shipped) would still smoke-test the
+    # brand path rather than send a key the gate refuses.
+    monkeypatch.setattr(smoke.lookup_contract, "chain_known", lambda k: False)
+    assert smoke.sample_request()["chains"] == []
 
 
 def test_secret_values_and_redaction_units():

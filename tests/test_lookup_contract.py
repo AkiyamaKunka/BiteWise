@@ -1,25 +1,22 @@
-"""The server's restaurant-lookup contract adapter (lookup_contract.py):
-request rebuilt from a whitelist, prompt composed server-side, the model's
-answer re-capped to the data_contracts section-5 shape."""
+"""The server's restaurant-lookup acceptance gate (lookup_contract.py)
+around lane B's contract (restaurant_lookup.py): the request is gated by
+a whitelist and then composed by lane B's composer, the prompt is lane
+B's, and the model's answer is re-capped to the data_contracts section-5
+shape with lane B's acceptance limits."""
 import copy
 import json
-import sys
+import re
 import types
 from pathlib import Path
 
 import pytest
 
 import lookup_contract
-import shared_generated
+import restaurant_lookup
 from lookup_contract import RequestRejected, sanitize_request
-from lookup_fakes import CHAINS, FOUND, REQUEST_BODY, use_chain_table
+from lookup_fakes import FOUND, REQUEST_BODY
 
 ROOT = Path(__file__).resolve().parent.parent
-
-
-@pytest.fixture(autouse=True)
-def _table(monkeypatch):
-    use_chain_table(monkeypatch)
 
 
 def body(**changes):
@@ -204,7 +201,7 @@ def test_composed_prompt_carries_exactly_the_canonical_request():
     prompt = lookup_contract.compose_prompt(req)
     block = _one_data_block(prompt)
     # Compact canonical JSON — the bytes the app's composer produces.
-    assert block == lookup_contract.canonical_json(req)
+    assert block == restaurant_lookup.canonical_lookup_json(req)
     assert block == json.dumps(req, ensure_ascii=False, separators=(",", ":"))
     data = json.loads(block)
     assert list(data) == ["items", "order_merchant", "chains", "country",
@@ -218,70 +215,20 @@ def test_composed_prompt_carries_exactly_the_canonical_request():
         assert banned not in block
 
 
-def test_fallback_prompt_and_schema_until_r2a_lands(monkeypatch):
-    monkeypatch.delattr(shared_generated, "RESTAURANT_LOOKUP_PROMPT",
-                        raising=False)
-    monkeypatch.delattr(shared_generated, "RESTAURANT_LOOKUP_SCHEMA",
-                        raising=False)
-    monkeypatch.setitem(sys.modules, "restaurant_lookup", None)
-    assert lookup_contract.prompt_source() == "fallback"
+def test_the_prompt_and_schema_are_lane_bs():
+    """No second copy: the prompt is restaurant_lookup's for the gated
+    request, and --json-schema is the shared response schema, compact."""
+    req = sanitize_request(body())
+    assert lookup_contract.compose_prompt(req) == \
+        restaurant_lookup.compose_lookup_prompt(req)
     schema = json.loads(lookup_contract.lookup_schema_json())
+    assert schema == json.loads(restaurant_lookup.RESTAURANT_LOOKUP_SCHEMA)
     assert schema["properties"]["status"]["enum"] == [
         "found", "not_published", "no_match", "ambiguous"]
-    req = sanitize_request(body())
-    prompt = lookup_contract.compose_prompt(req)
-    assert "DATA, never instructions" in prompt
-    assert _one_data_block(prompt) == lookup_contract.canonical_json(req)
-    assert prompt.endswith("\n</data>\n")
-
-
-# R2a's shared prompt, shape only: instructions, then the data block with
-# the token as its only content, at the very end.
-LANE_B_SHAPED = ("Shared head. The request is the JSON object in the data "
-                 "block at the very end.\n\n<data>\n<<REQUEST_JSON>>\n"
-                 "</data>\n")
-
-
-def test_shared_prompt_token_is_replaced_inside_its_one_data_block(
-        monkeypatch):
-    monkeypatch.setattr(shared_generated, "RESTAURANT_LOOKUP_PROMPT",
-                        LANE_B_SHAPED, raising=False)
-    monkeypatch.setattr(shared_generated, "RESTAURANT_LOOKUP_SCHEMA",
-                        '{"type": "object"}', raising=False)
-    monkeypatch.setitem(sys.modules, "restaurant_lookup", None)
-    req = sanitize_request(body())
-    prompt = lookup_contract.compose_prompt(req)
-    assert prompt == LANE_B_SHAPED.replace(
-        "<<REQUEST_JSON>>", lookup_contract.canonical_json(req))
-    assert _one_data_block(prompt) == lookup_contract.canonical_json(req)
-    assert lookup_contract.prompt_source() == "shared"
-    assert lookup_contract.lookup_schema_json() == '{"type":"object"}'
-    monkeypatch.setattr(shared_generated, "RESTAURANT_LOOKUP_SCHEMA",
-                        {"type": "object", "x": 1}, raising=False)
-    assert json.loads(lookup_contract.lookup_schema_json())["x"] == 1
-
-
-def test_shared_prompt_without_token_gets_the_block_appended(monkeypatch):
-    monkeypatch.setattr(shared_generated, "RESTAURANT_LOOKUP_PROMPT",
-                        "Shared only.\n", raising=False)
-    monkeypatch.setitem(sys.modules, "restaurant_lookup", None)
-    prompt = lookup_contract.compose_prompt(sanitize_request(body()))
-    assert prompt.startswith("Shared only.\n\n<data>\n")
-    _one_data_block(prompt)
-
-
-@pytest.mark.parametrize("template", [
-    "Mentions <data> early.\n<data>\n<<REQUEST_JSON>>\n</data>\n",
-    "Two tokens <<REQUEST_JSON>>\n<data>\n<<REQUEST_JSON>>\n</data>\n",
-    "Unknown token <<LOOKUP_REQUEST>>\n<data>\n<<REQUEST_JSON>>\n</data>\n",
-])
-def test_a_prompt_that_loses_its_one_request_block_is_never_sent(
-        monkeypatch, template):
-    monkeypatch.setattr(shared_generated, "RESTAURANT_LOOKUP_PROMPT",
-                        template, raising=False)
-    monkeypatch.setitem(sys.modules, "restaurant_lookup", None)
-    with pytest.raises(ValueError):
-        lookup_contract.compose_prompt(sanitize_request(body()))
+    assert lookup_contract.lookup_schema_json() == json.dumps(
+        schema, separators=(",", ":"))
+    assert not hasattr(lookup_contract, "_FALLBACK_PROMPT")
+    assert not hasattr(lookup_contract, "chain_table")
 
 
 def test_integration_tripwire_no_unreplaced_tokens_in_the_live_prompt():
@@ -290,13 +237,17 @@ def test_integration_tripwire_no_unreplaced_tokens_in_the_live_prompt():
     <<TOKEN>> left over."""
     req = sanitize_request(body())
     prompt = lookup_contract.compose_prompt(req)
-    assert _one_data_block(prompt) == lookup_contract.canonical_json(req)
+    assert _one_data_block(prompt) == \
+        restaurant_lookup.canonical_lookup_json(req)
 
 
-# ─── R2a's composer, once importable (restaurant_lookup.py) ──────────
+# ─── the gate around lane B's composer (restaurant_lookup.py) ────────
 def _fake_composer(monkeypatch, transform=None, prompt_fn=None):
-    """A stand-in restaurant_lookup module with R2a's two composers."""
+    """lane B's module with its two composers swapped for stand-ins (the
+    table, the cleaner and canonical_lookup_json stay the real ones), so a
+    test can make the composer drift and watch the gate refuse it."""
     calls = []
+    canonical = restaurant_lookup.canonical_lookup_json
 
     def compose_lookup_request(raw):
         calls.append(copy.deepcopy(raw))
@@ -306,7 +257,9 @@ def _fake_composer(monkeypatch, transform=None, prompt_fn=None):
                        "unit": i.get("unit") or "",
                        "brand": i.get("brand") or ""} for i in raw["items"]],
             "order_merchant": raw.get("order_merchant") or "",
-            "chains": [{"key": c["key"], "name": CHAINS[c["key"]]["name"],
+            "chains": [{"key": c["key"],
+                        "name": restaurant_lookup.chain_by_key(
+                            c["key"])["name"],
                         "size": "20_plus"} for c in raw.get("chains") or []],
             "country": (raw.get("country") or "US").upper(),
         }
@@ -318,13 +271,15 @@ def _fake_composer(monkeypatch, transform=None, prompt_fn=None):
         req = compose_lookup_request(raw)
         if prompt_fn is not None:
             return prompt_fn(req)
-        return ("COMPOSER HEAD\n<data>\n" + lookup_contract.canonical_json(req)
+        return ("COMPOSER HEAD\n<data>\n" + canonical(req)
                 + "\n</data>\n")
 
     module = types.ModuleType("restaurant_lookup")
+    module.__dict__.update({k: v for k, v in vars(restaurant_lookup).items()
+                            if not k.startswith("__")})
     module.compose_lookup_request = compose_lookup_request
     module.compose_lookup_prompt = compose_lookup_prompt
-    monkeypatch.setitem(sys.modules, "restaurant_lookup", module)
+    monkeypatch.setattr(lookup_contract, "restaurant_lookup", module)
     return calls
 
 
@@ -345,7 +300,8 @@ def test_the_shared_composer_builds_the_accepted_request(monkeypatch):
     assert "client_version" not in calls[0] and "backend" not in calls[0]
     prompt = lookup_contract.compose_prompt(req)
     assert prompt.startswith("COMPOSER HEAD\n")
-    assert _one_data_block(prompt) == lookup_contract.canonical_json(req)
+    assert _one_data_block(prompt) == \
+        restaurant_lookup.canonical_lookup_json(req)
 
 
 def test_the_gate_still_runs_in_front_of_the_shared_composer(monkeypatch):
@@ -382,26 +338,35 @@ def test_a_composer_prompt_without_the_request_is_never_sent(monkeypatch):
         lookup_contract.compose_prompt(sanitize_request(body()))
 
 
-def test_without_the_module_the_server_composes_alone(monkeypatch):
-    monkeypatch.setitem(sys.modules, "restaurant_lookup", None)
-    assert lookup_contract.shared_composer() is None
+@pytest.mark.parametrize("template", [
+    "Mentions <data> early.\n<data>\n{req}\n</data>\n",
+    "Two copies {req}\n<data>\n{req}\n</data>\n",
+    "Unknown token <<LOOKUP_REQUEST>>\n<data>\n{req}\n</data>\n",
+    "Wrapped\n<data>{req}</data>\n",
+])
+def test_a_prompt_that_loses_its_one_request_block_is_never_sent(
+        monkeypatch, template):
+    _fake_composer(monkeypatch, prompt_fn=lambda req: template.replace(
+        "{req}", restaurant_lookup.canonical_lookup_json(req)))
+    with pytest.raises(ValueError):
+        lookup_contract.compose_prompt(sanitize_request(body()))
 
 
-def test_a_broken_composer_import_is_raised_not_hidden(monkeypatch, tmp_path):
-    (tmp_path / "restaurant_lookup.py").write_text(
-        "import a_dependency_that_is_not_installed_4711\n")
-    monkeypatch.delitem(sys.modules, "restaurant_lookup", raising=False)
-    monkeypatch.syspath_prepend(str(tmp_path))
-    with pytest.raises(ModuleNotFoundError):
-        lookup_contract.shared_composer()
-    monkeypatch.delitem(sys.modules, "restaurant_lookup", raising=False)
+def test_a_printed_brand_outside_the_table_is_no_lookup():
+    """Lane B sends printed text only as a table chain's canonical name:
+    an unknown brand composes to "", and with no chain left the gate
+    refuses the request instead of running an independent-restaurant
+    search."""
+    err = rejected(body(chains=[], items=[
+        {"name": "Burger", "brand": "Joe's Corner Diner"}]))
+    assert (err.code, err.field) == ("bad_request", "request")
+    req = sanitize_request(body(chains=[], order_merchant="", items=[
+        {"name": "Burrito", "brand": "CHIPOTLE 2381"}]))
+    assert req["items"][0]["brand"] == "Chipotle"
 
 
 def _vectors():
     path = ROOT / "shared" / "vectors" / "restaurant_lookup.json"
-    if not path.is_file() or lookup_contract.shared_composer() is None:
-        pytest.skip("R2a's composer and vectors have not landed on this "
-                    "branch")
     return json.loads(path.read_text(encoding="utf-8"))["cases"]
 
 
@@ -411,14 +376,11 @@ def _lookup_worthy(req):
         or any(it["brand"] for it in req["items"]))
 
 
-def test_the_gate_accepts_every_composed_vector_unchanged(monkeypatch):
-    """Integration: every request R2a's composer emits (pinned Dart ==
+def test_the_gate_accepts_every_composed_vector_unchanged():
+    """Integration: every request lane B's composer emits (pinned Dart ==
     Python) that is worth a lookup passes the gate byte-identical, and the
-    server's prompt for it is R2a's prompt."""
-    monkeypatch.undo()  # the real chain table, not the fixture's stub
+    server's prompt for it is lane B's prompt."""
     cases = _vectors()
-    lookup_contract.chain_table.cache_clear()
-    import restaurant_lookup
     checked = 0
     for case in cases:
         if case["fn"] != "compose_lookup_request":
@@ -429,141 +391,32 @@ def test_the_gate_accepts_every_composed_vector_unchanged(monkeypatch):
         accepted = sanitize_request(dict(copy.deepcopy(expected),
                                          backend="claude"))
         assert accepted == expected, case["id"]
-        assert lookup_contract.canonical_json(accepted) == \
-            restaurant_lookup.canonical_lookup_json(expected), case["id"]
         assert lookup_contract.compose_prompt(accepted) == \
             restaurant_lookup.compose_lookup_prompt(expected), case["id"]
         checked += 1
     assert checked >= 3
 
 
-# ─── chain table loading ─────────────────────────────────────────────
-def test_chain_table_reads_the_shared_file(monkeypatch, tmp_path):
-    monkeypatch.undo()  # the real chain_table, not the fixture's stub
-    path = tmp_path / "us_chains.json"
-    path.write_text(json.dumps({"source": "t", "as_of": "2026", "chains": [
-        {"key": "chipotle", "name": "Chipotle",
-         "aliases": [], "domains": ["chipotle.com", "ｘ.com", 5],
-         "size": "20_plus"},
-        {"key": "Bad Key", "name": "x", "domains": []},
-        {"key": "noname", "name": " ", "domains": []},
-        "junk",
-    ]}))
-    monkeypatch.delattr(shared_generated, "US_CHAINS", raising=False)
-    monkeypatch.setattr(lookup_contract, "CHAIN_TABLE_PATH", path)
-    lookup_contract.chain_table.cache_clear()
-    try:
-        assert lookup_contract.chain_table() == {
-            "chipotle": {"name": "Chipotle", "domains": ["chipotle.com"]}}
-        path.write_text(json.dumps([{"key": "kfc", "name": "KFC",
-                                     "domains": ["kfc.com"]}]))
-        lookup_contract.chain_table.cache_clear()
-        assert list(lookup_contract.chain_table()) == ["kfc"]
-        path.write_text("{broken")
-        lookup_contract.chain_table.cache_clear()
-        assert lookup_contract.chain_table() == {}
-    finally:
-        lookup_contract.chain_table.cache_clear()
+# ─── the chain table is lane B's ─────────────────────────────────────
+def test_every_table_chain_is_accepted_with_its_canonical_name():
+    """The gate checks keys against lane B's table (no second loader):
+    every row is accepted, under the table's own name, and its domains are
+    the ones lane B's matcher uses."""
+    for chain in restaurant_lookup.US_CHAINS:
+        req = sanitize_request(body(chains=[{"key": chain["key"],
+                                             "name": "spoofed"}]))
+        assert req["chains"] == [{"key": chain["key"],
+                                  "name": chain["name"],
+                                  "size": "20_plus"}], chain["key"]
+    assert lookup_contract.chain_known("chipotle")
+    assert not lookup_contract.chain_known("Chipotle")
+    assert not lookup_contract.chain_known(None)
+    assert restaurant_lookup.is_chain_host("order.chipotle.com", "chipotle")
 
 
-# The shape scripts/sync_shared.py generates: shared_generated.US_CHAINS is
-# a bare LIST of rows (aliases, size, an optional zh_name).
-GENERATED_ROWS = [
-    {"key": "a_and_w", "name": "A&W Restaurants",
-     "aliases": ["A&W", "A&W All American Food"],
-     "domains": ["awrestaurants.com"], "size": "20_plus"},
-    {"key": "chipotle", "name": "Chipotle",
-     "aliases": ["Chipotle Mexican Grill"], "domains": ["chipotle.com"],
-     "size": "20_plus"},
-    {"key": "panda_express", "name": "Panda Express", "zh_name": "熊猫快餐",
-     "aliases": ["熊貓快餐"], "domains": ["pandaexpress.com"],
-     "size": "20_plus"},
-]
-
-
-@pytest.mark.parametrize("shape", ["list", "object"])
-def test_chain_table_reads_the_generated_list_and_the_file_object(
-        monkeypatch, tmp_path, shape):
-    monkeypatch.undo()
-    data = (copy.deepcopy(GENERATED_ROWS) if shape == "list"
-            else {"chains": copy.deepcopy(GENERATED_ROWS)})
-    monkeypatch.setattr(shared_generated, "US_CHAINS", data, raising=False)
-    # A file that says otherwise is NOT consulted when the module has rows.
-    path = tmp_path / "us_chains.json"
-    path.write_text(json.dumps({"chains": [
-        {"key": "other", "name": "Other", "domains": ["other.com"]}]}))
-    monkeypatch.setattr(lookup_contract, "CHAIN_TABLE_PATH", path)
-    lookup_contract.chain_table.cache_clear()
-    try:
-        table = lookup_contract.chain_table()
-        assert list(table) == ["a_and_w", "chipotle", "panda_express"]
-        assert table["chipotle"] == {"name": "Chipotle",
-                                     "domains": ["chipotle.com"]}
-        assert table["a_and_w"]["name"] == "A&W Restaurants"
-        # …and a lane-B-composed request with a table chain is accepted.
-        req = sanitize_request({
-            "items": [{"name": "Chicken bowl", "qty": 1, "unit": "bowl",
-                       "brand": ""}],
-            "order_merchant": "",
-            "chains": [{"key": "panda_express", "name": "Panda Express",
-                        "size": "20_plus"}],
-            "country": "US", "backend": "claude"})
-        assert req["chains"][0]["key"] == "panda_express"
-    finally:
-        lookup_contract.chain_table.cache_clear()
-
-
-def test_chain_table_falls_back_to_the_file_only_without_module_rows(
-        monkeypatch, tmp_path):
-    monkeypatch.undo()
-    path = tmp_path / "us_chains.json"
-    path.write_text(json.dumps({"chains": GENERATED_ROWS[1:2]}))
-    monkeypatch.setattr(lookup_contract, "CHAIN_TABLE_PATH", path)
-    try:
-        for not_rows in (None, "x", {"rows": []}, 7):
-            monkeypatch.setattr(shared_generated, "US_CHAINS", not_rows,
-                                raising=False)
-            lookup_contract.chain_table.cache_clear()
-            assert list(lookup_contract.chain_table()) == ["chipotle"]
-    finally:
-        lookup_contract.chain_table.cache_clear()
-
-
-def test_chain_table_loads_the_real_shared_table(monkeypatch):
-    """The REAL table this build carries, no stub: once R2a's table is
-    generated, every row is served and chipotle is there with its domain
-    (the integration bug this pins: a list-shaped US_CHAINS read as
-    empty refused every chain lookup with 400 chains[0].key)."""
-    monkeypatch.undo()
-    rows = lookup_contract._chain_rows(
-        getattr(shared_generated, "US_CHAINS", None))
-    if rows is None and lookup_contract.CHAIN_TABLE_PATH.is_file():
-        rows = lookup_contract._chain_rows(json.loads(
-            lookup_contract.CHAIN_TABLE_PATH.read_text(encoding="utf-8")))
-    if not rows:
-        pytest.skip("R2a's chain table has not landed on this branch")
-    lookup_contract.chain_table.cache_clear()
-    try:
-        table = lookup_contract.chain_table()
-        assert len(table) == len(rows)
-        assert "chipotle.com" in table["chipotle"]["domains"]
-        # Curated names pass the cleaner untouched: the server's canonical
-        # name is the table's own.
-        assert {k: v["name"] for k, v in table.items()} == {
-            r["key"]: r["name"] for r in rows}
-        req = sanitize_request(dict(copy.deepcopy(REQUEST_BODY),
-                                    chains=[{"key": "chipotle"}]))
-        assert req["chains"] == [{"key": "chipotle", "name":
-                                  table["chipotle"]["name"],
-                                  "size": "20_plus"}]
-    finally:
-        lookup_contract.chain_table.cache_clear()
-
-
-def test_without_a_table_location_chains_are_refused(monkeypatch):
-    use_chain_table(monkeypatch, {})
-    assert rejected(body()).field == "chains[0].key"
-    # Brand-only still works.
+def test_a_key_outside_the_table_is_refused_but_brand_only_runs():
+    assert rejected(body(chains=[{"key": "joes_diner"}])).field == \
+        "chains[0].key"
     assert sanitize_request(body(chains=[]))["items"][0]["brand"] == "Chipotle"
 
 
@@ -603,8 +456,9 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
              options=[{"label": "Reg", "calories": -1,
                        "calories_range": [300, 200]}]),
         dict(good, components=[], options=[
-            {"label": "L" * 90, "serving": "1 bowl", "calories": 1045.4,
-             "protein_g": float("nan"), "fat_g": 9999},
+            {"label": "L" * 90, "serving": "1 bowl", "calories": 1045.0,
+             "protein_g": float("nan"), "carbs_g": 12.25, "fat_g": 9999},
+            {"label": "Half", "calories": 590.5},  # no published kcal
             {"label": "R", "calories": None, "calories_range": [500, 700]}]),
         dict(good),                          # duplicate of index 0
     ]
@@ -617,7 +471,10 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
     options = out["matches"][0]["options"]
     assert options[0] == {"label": "L" * 40, "serving": "1 bowl", "unit": "",
                           "calories": 1045, "calories_range": None,
-                          "protein_g": None, "carbs_g": None, "fat_g": None}
+                          "protein_g": None, "carbs_g": 12.25, "fat_g": None}
+    assert type(options[0]["calories"]) is int
+    # 590.5 is no published calorie value: dropped, never rounded into one.
+    assert [o["label"] for o in options] == ["L" * 40, "R"]
     assert options[1]["calories_range"] == [500, 700]
     assert out["chain_key"] is None and out["source_url"] is None
     assert out["source_title"] is None and out["source_type"] == "other"
@@ -640,9 +497,37 @@ def test_confidence_of_the_wrong_type_is_zero():
     assert lookup_contract.sanitize_lookup(raw, REQ)["match_confidence"] == 0.0
 
 
-def test_table_keys_are_ascii_and_the_fixture_matches_the_design():
-    assert set(CHAINS) == {"chipotle", "panda_express"}
-    # The fixture rows are the generated table's rows for these keys.
-    for row in GENERATED_ROWS[1:]:
-        assert CHAINS[row["key"]] == {"name": row["name"],
-                                      "domains": row["domains"]}
+def _dart_const(name):
+    text = (ROOT / "app" / "lib" / "core" /
+            "restaurant_assist_logic.dart").read_text(encoding="utf-8")
+    return int(re.search(rf"const (?:int|num) {name} = (\d+);", text)[1])
+
+
+def test_response_caps_are_lane_bs_acceptance_limits():
+    """The server never drops a published size or component the app's
+    acceptance would still consider, nor keeps a number it would refuse."""
+    assert lookup_contract.MAX_OPTIONS == _dart_const("kAssistMaxOptions")
+    assert lookup_contract.MAX_COMPONENTS == _dart_const(
+        "kAssistMaxComponents")
+    assert lookup_contract.KCAL_MAX == _dart_const("kAssistMaxPublishedKcal")
+    assert lookup_contract.MACRO_MAX == _dart_const(
+        "kAssistMaxPublishedGrams")
+    raw = copy.deepcopy(ANSWER)
+    opt = {"label": "x", "calories": 100}
+    comp = {"name": "c", "calories": 10}
+    raw["matches"][0].update(
+        options=[dict(opt, label=f"o{i}") for i in range(15)],
+        components=[dict(comp, name=f"c{i}") for i in range(25)])
+    match = lookup_contract.sanitize_lookup(raw, REQ)["matches"][0]
+    assert len(match["options"]) == 12 and len(match["components"]) == 20
+
+
+def test_request_caps_are_lane_bs_composer_caps():
+    assert (lookup_contract.MAX_ITEMS, lookup_contract.MAX_CHAINS,
+            lookup_contract.ITEM_NAME_CAP, lookup_contract.UNIT_CAP,
+            lookup_contract.BRAND_CAP, lookup_contract.MERCHANT_CAP,
+            lookup_contract.QTY_MAX) == (
+        restaurant_lookup.LOOKUP_MAX_ITEMS, restaurant_lookup.LOOKUP_MAX_CHAINS,
+        restaurant_lookup.LOOKUP_ITEM_NAME_MAX,
+        restaurant_lookup.LOOKUP_UNIT_MAX, restaurant_lookup.LOOKUP_BRAND_MAX,
+        restaurant_lookup.LOOKUP_MERCHANT_MAX, restaurant_lookup.LOOKUP_QTY_MAX)

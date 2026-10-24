@@ -41,6 +41,8 @@ if str(ROOT) not in sys.path:
 
 import claude_analyzer  # noqa: E402  (loads .env through config)
 import lookup_contract  # noqa: E402
+import restaurant_lookup  # noqa: E402
+import shared_generated  # noqa: E402
 
 SAMPLE = {
     "items": [{"name": "chicken burrito bowl", "qty": 1, "unit": "bowl",
@@ -105,7 +107,7 @@ def _domain(url):
 
 def sample_request():
     payload = dict(SAMPLE)
-    if "chipotle" in lookup_contract.chain_table():
+    if lookup_contract.chain_known("chipotle"):
         payload["chains"] = [{"key": "chipotle", "size": "20_plus"}]
     return lookup_contract.sanitize_request(payload)
 
@@ -135,7 +137,8 @@ def main(argv=None, out=None):
         model = args.model
     say("claude CLI", _cli_version(cli))
     say("model", model)
-    say("prompt source", lookup_contract.prompt_source())
+    say("chain table", f"{len(restaurant_lookup.US_CHAINS)} chains, as of "
+                       f"{shared_generated.US_CHAINS_AS_OF}")
 
     recorder = None
     record_file = None

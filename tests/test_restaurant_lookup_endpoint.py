@@ -12,7 +12,7 @@ import lookup_jobs
 import telegram_bot
 from claude_analyzer import LookupRun
 from conftest import _ledger_rows, _meals
-from lookup_fakes import FOUND, REQUEST_BODY, use_chain_table
+from lookup_fakes import FOUND, REQUEST_BODY
 
 KEY = {"X-API-Key": "secret-key", "X-Client-Platform": "app"}
 
@@ -38,7 +38,6 @@ class FakeRunner:
 
 @pytest.fixture
 def lookup(client, monkeypatch):
-    use_chain_table(monkeypatch)
     monkeypatch.setenv("CLAUDE_LOOKUP_ENABLED", "1")
     monkeypatch.setenv("CLAUDE_ANALYZER_ENABLED", "1")
     monkeypatch.setattr(claude_analyzer.shutil, "which",
@@ -246,7 +245,6 @@ def test_endpoint_logs_never_carry_the_payload(lookup, caplog):
 def test_the_default_service_uses_the_redirected_health_path(
         client, monkeypatch, tmp_path):
     monkeypatch.setattr(lookup_jobs, "_SERVICE", None)
-    use_chain_table(monkeypatch)
     monkeypatch.setenv("CLAUDE_LOOKUP_ENABLED", "1")
     monkeypatch.setenv("CLAUDE_ANALYZER_ENABLED", "1")
     monkeypatch.setattr(claude_analyzer.shutil, "which",

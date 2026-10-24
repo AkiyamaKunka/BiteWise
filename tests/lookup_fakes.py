@@ -26,15 +26,9 @@ def stream(name):
 INIT_OK = stream("init_ok.jsonl")[0]
 FOUND = stream("found_chipotle.jsonl")
 
-# The same rows as R2a's shared/chains/us_chains.json for these two keys
-# (names included), so a test that stubs the table and R2a's composer,
-# which reads the real one, agree once both are on the path.
-CHAINS = {
-    "chipotle": {"name": "Chipotle", "domains": ["chipotle.com"]},
-    "panda_express": {"name": "Panda Express",
-                      "domains": ["pandaexpress.com"]},
-}
-
+# A request lane B's composer produces as is: the brand and the chain
+# are rows of the real shared/chains/us_chains.json (the server tests use
+# that table; there is no stub).
 REQUEST_BODY = {
     "items": [{"name": "Chicken burrito bowl (~500 g)", "qty": 1,
                "unit": "bowl", "brand": "Chipotle"}],
@@ -93,12 +87,6 @@ def configure(monkeypatch, cli_path):
                  "CLAUDE_LOOKUP_INIT_SECONDS",
                  "CLAUDE_LOOKUP_KEY_SOURCE", "CLAUDE_ANALYZER_EXTRA_FLAGS"):
         monkeypatch.delenv(knob, raising=False)
-
-
-def use_chain_table(monkeypatch, table=None):
-    import lookup_contract
-    monkeypatch.setattr(lookup_contract, "chain_table",
-                        lambda: dict(table if table is not None else CHAINS))
 
 
 def read_record(record):

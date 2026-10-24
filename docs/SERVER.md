@@ -394,13 +394,16 @@ nutrition for the app's restaurant assist. It is the only CLI path with
 a network tool, so it is fenced separately from the photo and text paths:
 
 - **Inputs are structured only**: item names, quantities and units, the
-  brand printed on an item or receipt, the receipt merchant, up to 3
-  chain KEYS from BiteWise's own US chain table (the server substitutes
-  its own canonical name), country and reply language. The request is
-  rebuilt from a whitelist and the prompt is composed on the server
-  (`lookup_contract.py`); location keys (`lat`, `lon`, `city`, `street`,
-  `distance`, …), `prompt`, `meal_description` and coordinate-shaped text
-  are refused with `400`.
+  chain a printed item brand or the receipt merchant names (sent only as
+  that chain's canonical name from BiteWise's own US chain table, never
+  as the printed text), up to 3 chain KEYS from that table (the server
+  substitutes its own canonical name), country and reply language. The
+  request is gated by a whitelist (`lookup_contract.py`), then composed
+  with the prompt on the server by `restaurant_lookup.py`, the Python twin
+  of the app's composer (the shared parity vectors pin the two byte for
+  byte); location keys (`lat`, `lon`, `city`, `street`, `distance`, …),
+  `prompt`, `meal_description` and coordinate-shaped text are refused
+  with `400`.
 - **The CLI run** (`claude_analyzer.lookup_restaurant`): `--safe-mode`,
   `--tools WebSearch` (the `--json-schema` answer adds the internal
   `StructuredOutput`), WebFetch / MCP / every other tool disallowed,
