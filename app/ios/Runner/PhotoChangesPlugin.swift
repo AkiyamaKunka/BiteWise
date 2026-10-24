@@ -470,8 +470,11 @@ func photoChangesEntry(_ asset: PHAsset) -> [String: Any] {
   if let created = asset.creationDate {
     entry["created_ms"] = photoChangesMillis(created)
   }
-  if #available(iOS 26.0, *), let added = asset.addedDate {
-    entry["added_ms"] = photoChangesMillis(added)
+  if #available(iOS 26.0, *) {
+    // addedDate is Date in the iOS 26 SDK and Date? in the iOS 27 SDK;
+    // binding through an explicit optional compiles with both Xcodes.
+    let added: Date? = asset.addedDate
+    if let added { entry["added_ms"] = photoChangesMillis(added) }
   }
   return entry
 }
