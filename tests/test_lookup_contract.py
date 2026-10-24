@@ -467,8 +467,22 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
                match_confidence=7, notes="n" * 500,
                restaurant_name="<b>" + "R" * 100)
     out = lookup_contract.sanitize_lookup(raw, REQ)
-    assert len(out["matches"]) == 1
-    options = out["matches"][0]["options"]
+    # Dropped one by one, as lane B skips them: junk, a bad index, a bool
+    # index, an unknown type, no menu item, no usable number at all.
+    # Kept: the match whose components are unusable (lane B voids its sum
+    # rather than see a shorter list), the options match, and the second
+    # match for item 0 (ambiguity lane B must see).
+    assert len(out["matches"]) == 3
+    unusable = out["matches"][0]
+    assert unusable["options"] == []
+    assert unusable["components"] == [
+        {"name": "", "calories": 5, "protein_g": None, "carbs_g": None,
+         "fat_g": None},
+        {"name": "x", "calories": None, "protein_g": None, "carbs_g": None,
+         "fat_g": None}]
+    assert out["matches"][2] == lookup_contract.sanitize_lookup(
+        copy.deepcopy(ANSWER), REQ)["matches"][0]
+    options = out["matches"][1]["options"]
     assert options[0] == {"label": "L" * 40, "serving": "1 bowl", "unit": "",
                           "calories": 1045, "calories_range": None,
                           "protein_g": None, "carbs_g": 12.25, "fat_g": None}
@@ -490,6 +504,32 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
 ])
 def test_safe_url(url, ok):
     assert (lookup_contract.safe_url(url) is not None) is ok
+
+
+def test_the_sanitizer_reads_what_lane_b_reads():
+    """The first 12 matches / 12 options / 20 components of the RAW answer
+    (not the first 12 that survive), a range winning over a value next to
+    it, and non-string text as ""."""
+    raw = copy.deepcopy(ANSWER)
+    good = raw["matches"][0]
+    raw["matches"] = ["junk"] * 12 + [dict(good)]
+    assert lookup_contract.sanitize_lookup(raw, REQ)["matches"] == []
+    raw["matches"] = [dict(good, components=[], options=(
+        [{"label": "bad", "calories": None}] * 12
+        + [{"label": "late", "calories": 300}]))]
+    assert lookup_contract.sanitize_lookup(raw, REQ)["matches"] == []
+    raw["matches"] = [dict(good, components=[], options=[
+        {"label": 7, "calories": 590, "calories_range": [540, 640]}])]
+    opt = lookup_contract.sanitize_lookup(raw, REQ)["matches"][0][
+        "options"][0]
+    assert opt["calories"] is None and opt["calories_range"] == [540, 640]
+    assert opt["label"] == ""
+    raw["matches"] = [dict(good, options="x", components={"a": 1})]
+    assert lookup_contract.sanitize_lookup(raw, REQ)["matches"] == []
+    raw.update(matches="x", notes=5, restaurant_name=["Chipotle"])
+    out = lookup_contract.sanitize_lookup(raw, REQ)
+    assert out["matches"] == [] and out["notes"] == ""
+    assert out["restaurant_name"] == ""
 
 
 def test_confidence_of_the_wrong_type_is_zero():

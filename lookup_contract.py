@@ -364,13 +364,27 @@ def safe_url(value) -> Optional[str]:
     return value
 
 
+def _text(value, cap: int) -> str:
+    """Answer text as kept: a string cleaned and capped; anything else is
+    "" (lane B's sanitizeAssistText never stringifies a number)."""
+    return clean_text(value, cap) if isinstance(value, str) else ""
+
+
+def _list(value) -> list:
+    return value if isinstance(value, list) else []
+
+
 def _option(raw) -> Optional[Dict]:
+    """One published size, or None when it publishes no calorie value
+    (lane B's _parseOption skips it the same way). A valid range wins over
+    a single value given next to it: both at once breaks the contract, and
+    a range can never apply."""
     if not isinstance(raw, dict):
         return None
     out = {
-        "label": clean_text(raw.get("label") or "", 40),
-        "serving": clean_text(raw.get("serving") or "", 40),
-        "unit": clean_text(raw.get("unit") or "", 20),
+        "label": _text(raw.get("label"), 40),
+        "serving": _text(raw.get("serving"), 40),
+        "unit": _text(raw.get("unit"), 20),
         "calories": _num(raw.get("calories"), KCAL_MAX, integer=True),
         "calories_range": None,
         "protein_g": _num(raw.get("protein_g"), MACRO_MAX),
@@ -383,19 +397,21 @@ def _option(raw) -> Optional[Dict]:
         hi = _num(rng[1], KCAL_MAX, integer=True)
         if lo is not None and hi is not None and lo <= hi:
             out["calories_range"] = [lo, hi]
+            out["calories"] = None
     if out["calories"] is None and out["calories_range"] is None:
         return None
     return out
 
 
-def _component(raw) -> Optional[Dict]:
+def _component(raw) -> Dict:
+    """One published component, KEPT even when it is unusable: lane B sums
+    a components_sum match only when EVERY component publishes calories,
+    so dropping a bad one would turn "no total" into a smaller, wrong
+    total. An unusable entry stays with calories null."""
     if not isinstance(raw, dict):
-        return None
-    name = clean_text(raw.get("name") or "", 60)
-    calories = _num(raw.get("calories"), KCAL_MAX, integer=True)
-    if not name or calories is None:
-        return None
-    return {"name": name, "calories": calories,
+        raw = {}
+    return {"name": _text(raw.get("name"), 60),
+            "calories": _num(raw.get("calories"), KCAL_MAX, integer=True),
             "protein_g": _num(raw.get("protein_g"), MACRO_MAX),
             "carbs_g": _num(raw.get("carbs_g"), MACRO_MAX),
             "fat_g": _num(raw.get("fat_g"), MACRO_MAX)}
@@ -403,40 +419,45 @@ def _component(raw) -> Optional[Dict]:
 
 def sanitize_lookup(raw, request: Dict) -> Optional[Dict]:
     """The model's answer rebuilt to the section-5 shape with every cap
-    applied, or None when it is not a lookup answer at all. Entries that
-    break the contract are DROPPED, never repaired into something the
-    model did not say; the app's acceptance layer decides what to trust."""
+    applied, or None when it is not a lookup answer at all.
+
+    It never changes what lane B's acceptance (decideAssist) would decide
+    on the raw answer: it reads the same first 12 matches, 12 options and
+    20 components; drops only what lane B skips one by one (a match with
+    a bad index, type or name, an option without a calorie value); keeps
+    what lane B judges as a whole (a second match for the same item, which
+    makes the mapping ambiguous; an unusable component, which voids its
+    sum); and repairs nothing into a number the model did not give."""
     if not isinstance(raw, dict) or raw.get("status") not in _STATUSES:
         return None
     n_items = len(request.get("items", []))
-    seen_items = set()
     matches = []
-    for m in raw.get("matches") or []:
-        if not isinstance(m, dict) or len(matches) >= MAX_ITEMS:
+    for m in _list(raw.get("matches"))[:MAX_ITEMS]:
+        if not isinstance(m, dict):
             continue
         idx = m.get("item_index")
         if isinstance(idx, bool) or not isinstance(idx, int):
             continue
-        if not (0 <= idx < n_items) or idx in seen_items:
+        if not 0 <= idx < n_items:
             continue
         if m.get("match_type") not in _MATCH_TYPES:
             continue
-        menu_item = clean_text(m.get("menu_item") or "", 60)
+        menu_item = _text(m.get("menu_item"), 60)
         if not menu_item:
             continue
-        options = [o for o in map(_option, m.get("options") or []) if o]
-        components = [c for c in map(_component, m.get("components") or [])
-                      if c]
+        options = [o for o in map(_option,
+                                  _list(m.get("options"))[:MAX_OPTIONS]) if o]
+        components = [_component(c) for c in
+                      _list(m.get("components"))[:MAX_COMPONENTS]]
         if not options and not components:
             continue
-        seen_items.add(idx)
         matches.append({
             "item_index": idx,
             "menu_item": menu_item,
             "match_type": m["match_type"],
             "is_drink": m.get("is_drink") is True,
-            "components": components[:MAX_COMPONENTS],
-            "options": options[:MAX_OPTIONS],
+            "components": components,
+            "options": options,
         })
     chain_key = raw.get("chain_key")
     if not chain_known(chain_key):
@@ -453,12 +474,12 @@ def sanitize_lookup(raw, request: Dict) -> Optional[Dict]:
     return {
         "status": raw["status"],
         "chain_key": chain_key,
-        "restaurant_name": clean_text(raw.get("restaurant_name") or "", 60),
+        "restaurant_name": _text(raw.get("restaurant_name"), 60),
         "matches": matches,
         "source_url": safe_url(raw.get("source_url")),
         "source_title": _str_or_none(raw.get("source_title"), 120),
         "source_type": source_type if source_type in _SOURCE_TYPES else "other",
         "source_year": year,
         "match_confidence": round(min(max(float(confidence), 0.0), 1.0), 3),
-        "notes": clean_text(raw.get("notes") or "", 200),
+        "notes": _text(raw.get("notes"), 200),
     }
