@@ -1384,6 +1384,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get correctedBadge => '已修正';
 
   @override
+  String get captureMetaGlasses => 'Meta 眼镜';
+
+  @override
   String fixRequestFailed(String error) {
     return '请求失败：$error';
   }

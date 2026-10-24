@@ -9,8 +9,10 @@ import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import 'dart:typed_data';
 
+import '../../services/photo/glasses.dart' show isMetaGlassesAnalysis;
 import '../format.dart';
 import '../l10n.dart';
+import 'glasses_badge.dart';
 import 'grouped.dart' show GroupedCard;
 import 'macro_chart.dart' show MacroPalette;
 import 'meal_thumb.dart';
@@ -107,6 +109,10 @@ class MealCard extends StatelessWidget {
                     tint: MacroPalette.of(context).carbs),
                 _chip(context, '${context.l10n.macroFatShort}: ${displayMacro(a, 'total_fat_g')}g',
                     tint: MacroPalette.of(context).fat),
+                // Taken with Meta glasses (design G2a): where the photo
+                // came from, after what the meal holds.
+                if (isMetaGlassesAnalysis(a))
+                  const MetaGlassesBadge(key: Key('metaGlassesBadge')),
               ],
             ),
             if (showItems && items.isNotEmpty) ...[

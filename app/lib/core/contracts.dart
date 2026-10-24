@@ -460,8 +460,107 @@ class IntakePhoto {
   final String fileName;
   final DateTime? capturedAt;
   final bool deliberate; // user-picked/shared (reclaims failed/skipped rows)
+
+  /// How the photo was taken, read from the bytes the intake already holds
+  /// (design G2a, services/photo/glasses.dart captureMetaFor). Null when
+  /// the intake did not look (older call sites, tests): nothing is stored
+  /// for it then.
+  final CaptureMeta? capture;
   const IntakePhoto(this.bytes, this.assetId, this.fileName,
-      {this.capturedAt, this.deliberate = false});
+      {this.capturedAt, this.deliberate = false, this.capture});
+}
+
+/// The capture facts a photo's own EXIF holds, as exifCapture
+/// (services/photo/filename_dates.dart) reads them (design G2a). There is
+/// deliberately NO latitude or longitude here, nor any way to carry one:
+/// whether a position exists, how precise it was and when it was fixed are
+/// all any later step needs to judge it, and a coordinate kept in memory
+/// is one a later change can leak (the upload bytes are stripped of GPS,
+/// exif_strip_test).
+class ExifCapture {
+  const ExifCapture(
+      {this.make,
+      this.model,
+      this.dateTimeOriginal,
+      this.subSec,
+      this.offsetTimeOriginal,
+      this.gpsPresent = false,
+      this.gpsAccuracyM,
+      this.gpsFixUtc,
+      this.pixelW,
+      this.pixelH});
+
+  /// TIFF Make / Model, trimmed, at most 64 characters each.
+  final String? make;
+  final String? model;
+
+  /// DateTimeOriginal: the camera's wall clock at the shutter (local
+  /// components, no zone).
+  final DateTime? dateTimeOriginal;
+
+  /// SubSecTimeOriginal: its fraction of a second, digits only.
+  final String? subSec;
+
+  /// OffsetTimeOriginal: the zone [dateTimeOriginal] was in.
+  final Duration? offsetTimeOriginal;
+
+  /// The GPS block names a position (latitude and longitude tags both
+  /// present). The position itself is never read.
+  final bool gpsPresent;
+
+  /// GPSHPositioningError (tag 0x1F), in metres.
+  final double? gpsAccuracyM;
+
+  /// When the position was fixed: GPSDateStamp + GPSTimeStamp, in UTC.
+  final DateTime? gpsFixUtc;
+
+  /// The full image's size in pixels (EXIF PixelX/YDimension, else the
+  /// JPEG frame header or the HEIF image extents).
+  final int? pixelW;
+  final int? pixelH;
+}
+
+/// The device a photo came from, as far as the phone can tell.
+enum CaptureDevice {
+  /// Ray-Ban / Oakley Meta glasses, imported by the Meta AI app.
+  metaGlasses,
+  unknown,
+}
+
+/// How much the evidence for [CaptureDevice] is worth. The filename and
+/// the album are set by the Meta AI app itself; EXIF Make/Model can be
+/// written onto any photo by a converter, so it is only ever [medium].
+enum CaptureStrength { strong, medium, none }
+
+/// Which evidence decided [CaptureDevice]. The names are stored
+/// (analysis.capture.signal).
+enum CaptureSignal { filename, album, exif }
+
+/// What an intake learned about how a photo was taken (design G2a): the
+/// device, the evidence for it, the EXIF facts, and the library's
+/// creation instant the GPS fix is compared with. The pipeline stores a
+/// summary of it as analysis['capture'] (glasses.dart captureAnalysis);
+/// none of it is ever a coordinate.
+class CaptureMeta {
+  const CaptureMeta(
+      {this.device = CaptureDevice.unknown,
+      this.strength = CaptureStrength.none,
+      this.signal,
+      this.exif,
+      this.createDate});
+
+  final CaptureDevice device;
+  final CaptureStrength strength;
+  final CaptureSignal? signal;
+
+  /// Null when the bytes carry no readable EXIF.
+  final ExifCapture? exif;
+
+  /// The library asset's creationDate (an instant); null for a shared file,
+  /// which has no asset.
+  final DateTime? createDate;
+
+  bool get isMetaGlasses => device == CaptureDevice.metaGlasses;
 }
 
 abstract class PhotoIntake {

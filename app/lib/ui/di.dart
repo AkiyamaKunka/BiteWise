@@ -27,6 +27,7 @@ import '../services/photo/background_time.dart';
 import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
+import '../services/photo/glasses.dart' show captureMetaFor;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../services/photo/photo_library.dart';
 import '../services/photo/share_intake.dart';
@@ -530,6 +531,9 @@ class _ShareIntakePicker implements RecentPhotoPicker {
     return IntakePhoto(bytes, asset.id, asset.fileName,
         capturedAt: deriveCapturedAt(
             fileName: asset.fileName, assetCreateDate: asset.createdAt),
-        deliberate: true);
+        deliberate: true,
+        // How it was taken (design G2a): the badge, for a picked photo too.
+        capture: captureMetaFor(bytes, asset.fileName,
+            createDate: asset.createdAt));
   }
 }

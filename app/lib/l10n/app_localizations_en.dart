@@ -1494,6 +1494,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get correctedBadge => 'Corrected';
 
   @override
+  String get captureMetaGlasses => 'Meta glasses';
+
+  @override
   String fixRequestFailed(String error) {
     return 'That request failed: $error';
   }

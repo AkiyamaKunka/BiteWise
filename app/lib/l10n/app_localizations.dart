@@ -2496,6 +2496,12 @@ abstract class AppLocalizations {
   /// **'Corrected'**
   String get correctedBadge;
 
+  /// Badge on a meal (Today card and meal editor) whose photo was taken with Meta smart glasses (Ray-Ban/Oakley Meta) and imported by the Meta AI app. 'Meta' is the brand; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Meta glasses'**
+  String get captureMetaGlasses;
+
   /// No description provided for @fixRequestFailed.
   ///
   /// In en, this message translates to:

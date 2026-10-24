@@ -1,6 +1,7 @@
 // Watcher / backfill behavior (spec §6.1, §6.4): lookback window math,
 // newest-last emission, deliberate=false, session dedup, permission flow,
 // 25 MB cap (§8).
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -10,6 +11,7 @@ import 'package:calorie_tracker/services/photo/photo_changes.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 class FakeAsset implements LibraryAsset {
   FakeAsset(this.id, this.name, this.createDateTime, this.bytes,
@@ -928,6 +930,166 @@ void main() {
       await pumpEventQueue();
       expect(library.lookedUp, isEmpty);
       expect(history.insertedImagesSinceTokens, isEmpty);
+    });
+  });
+
+  // Design G2a: every photo the watcher reads carries how it was taken —
+  // from the bytes it already holds, plus ONE album lookup per scan.
+  group('capture (G2a)', () {
+    late FakePhotoLibrary library;
+    late List<IntakePhoto> delivered;
+    late List<DateTime> albumAsks;
+
+    Uint8List glassesJpeg() {
+      final image = img.Image(width: 8, height: 6);
+      image.exif.imageIfd['Make'] = 'Meta AI';
+      image.exif.imageIfd['Model'] = 'Ray-Ban Meta Smart Glasses';
+      image.exif.exifIfd['DateTimeOriginal'] = '2026:07:16 12:29:58';
+      return Uint8List.fromList(img.encodeJpg(image));
+    }
+
+    LibraryPhotoIntake makeIntake(
+        {Future<Set<String>> Function(DateTime since)? albums,
+        Duration timeout = const Duration(seconds: 2)}) {
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          metaAlbumIds: albums,
+          metaAlbumTimeout: timeout);
+      intake.attachSink((p, _) async {
+        delivered.add(p);
+        return true;
+      });
+      return intake;
+    }
+
+    setUp(() {
+      library = FakePhotoLibrary();
+      delivered = [];
+      albumAsks = [];
+    });
+
+    test('filled from the bytes read: EXIF, the device, the creation date',
+        () async {
+      final created = DateTime(2026, 7, 16, 12, 30);
+      library.assets = [
+        FakeAsset('glasses', 'IMG_0042.JPG', created, glassesJpeg()),
+        FakeAsset('named', 'photo-9_singular_display_fullPicture.HEIC',
+            created.add(const Duration(minutes: 1)), bytesOf(9)),
+        FakeAsset('camera', 'IMG_0043.HEIC',
+            created.add(const Duration(minutes: 2)), bytesOf(3)),
+      ];
+      await makeIntake().backfillScan();
+      final byId = {for (final p in delivered) p.assetId: p.capture!};
+      expect(byId['glasses']!.device, CaptureDevice.metaGlasses);
+      expect(byId['glasses']!.signal, CaptureSignal.exif);
+      expect(byId['glasses']!.exif!.dateTimeOriginal,
+          DateTime(2026, 7, 16, 12, 29, 58));
+      expect(byId['glasses']!.createDate, created);
+      expect(byId['named']!.signal, CaptureSignal.filename);
+      expect(byId['camera']!.device, CaptureDevice.unknown);
+      expect(byId['camera']!.exif, isNull);
+    });
+
+    test('ONE album lookup per scan, from before its oldest photo; a member '
+        'is a glasses photo by its album', () async {
+      final oldest = DateTime(2026, 7, 16, 9, 0);
+      library.assets = [
+        FakeAsset('b', 'IMG_2.HEIC', oldest.add(const Duration(hours: 2)),
+            bytesOf(2)),
+        FakeAsset('a', 'IMG_1.HEIC', oldest, bytesOf(1)),
+        FakeAsset('c', 'IMG_3.HEIC', oldest.add(const Duration(hours: 3)),
+            bytesOf(3)),
+      ];
+      final intake = makeIntake(albums: (since) async {
+        albumAsks.add(since);
+        return {'b'};
+      });
+      await intake.backfillScan();
+      expect(albumAsks, hasLength(1));
+      expect(albumAsks.single.isAfter(oldest), isFalse);
+      final byId = {for (final p in delivered) p.assetId: p.capture!};
+      expect(byId['b']!.signal, CaptureSignal.album);
+      expect(byId['b']!.strength, CaptureStrength.strong);
+      expect(byId['a']!.device, CaptureDevice.unknown);
+      expect(byId['c']!.device, CaptureDevice.unknown);
+      // A second scan asks again (members may have joined) …
+      library.assets = [
+        ...library.assets,
+        FakeAsset('d', 'IMG_4.HEIC', oldest.add(const Duration(hours: 4)),
+            bytesOf(4)),
+      ];
+      await intake.backfillScan();
+      expect(albumAsks, hasLength(2));
+      // … but a scan that reads nothing asks nothing.
+      await intake.backfillScan();
+      expect(albumAsks, hasLength(2));
+    });
+
+    test('a failing, throwing or stuck album lookup never holds or drops a '
+        'photo: it is simply in no album', () async {
+      final created = DateTime(2026, 7, 16, 12);
+      for (final albums in <Future<Set<String>> Function(DateTime)>[
+        (_) async => throw StateError('channel gone'),
+        (_) => Future<Set<String>>.error(StateError('late error')),
+        (_) => Completer<Set<String>>().future, // never answers
+      ]) {
+        delivered.clear();
+        library.assets = [
+          FakeAsset('x', 'photo-1_singular_display_fullPicture.HEIC', created,
+              bytesOf(1)),
+          FakeAsset('y', 'IMG_1.HEIC', created.add(const Duration(minutes: 1)),
+              bytesOf(2)),
+        ];
+        final frontier = await makeIntake(
+                albums: albums, timeout: const Duration(milliseconds: 20))
+            .backfillScan();
+        expect(delivered.map((p) => p.assetId), ['x', 'y']);
+        expect(frontier, created.add(const Duration(minutes: 1)),
+            reason: 'coverage is unchanged');
+        expect(delivered[0].capture!.signal, CaptureSignal.filename);
+        expect(delivered[1].capture!.device, CaptureDevice.unknown);
+      }
+    });
+
+    test('Android (no album source): no lookup, the rest still read',
+        () async {
+      library.assets = [
+        FakeAsset('g', 'IMG_0042.JPG', DateTime(2026, 7, 16, 12),
+            glassesJpeg()),
+      ];
+      await makeIntake().backfillScan();
+      expect(delivered.single.capture!.signal, CaptureSignal.exif);
+    });
+
+    test('metaAlbumAssetIds asks for the table titles; any trouble is empty',
+        () async {
+      final source = FakePhotoChangeSource();
+      final since = DateTime(2026, 7, 16);
+      DateTime? askedSince;
+      int? askedLimit;
+      source.onAlbumAssetIds = (titles, s, limit) {
+        askedSince = s;
+        askedLimit = limit;
+        return const AlbumAssetIds(PhotoChangeStatus.ok, ids: ['a', 'b']);
+      };
+      expect(await metaAlbumAssetIds(source, since: since), {'a', 'b'});
+      expect(source.albumAssetIdsTitles.single,
+          ['Meta AI', 'Meta View', 'Ray-Ban Meta', 'Ray-Ban Stories']);
+      expect(askedSince, since);
+      expect(askedLimit, albumAssetIdsMaxLimit);
+      for (final status in [
+        PhotoChangeStatus.error,
+        PhotoChangeStatus.denied,
+        PhotoChangeStatus.unsupported,
+      ]) {
+        source.onAlbumAssetIds =
+            (_, _, _) => AlbumAssetIds(status, ids: const ['a']);
+        expect(await metaAlbumAssetIds(source, since: since), isEmpty);
+      }
+      source.onAlbumAssetIds = (_, _, _) => throw StateError('boom');
+      expect(await metaAlbumAssetIds(source, since: since), isEmpty);
     });
   });
 }

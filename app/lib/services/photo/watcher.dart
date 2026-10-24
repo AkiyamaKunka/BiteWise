@@ -15,6 +15,7 @@ import '../../core/contracts.dart';
 import '../local_store.dart';
 import '../settings/app_settings.dart' show AppSettings;
 import 'filename_dates.dart';
+import 'glasses.dart';
 import 'photo_changes.dart';
 import 'photo_library.dart';
 
@@ -53,7 +54,9 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// [onBackfillListed], [passOver], [loggedAssetIds]: see
 /// [LibraryPhotoIntake]. On iOS the intake also reads the library's change
 /// history for late imports (design G1b), its cursor in the backup-excluded
-/// local store; elsewhere [PhotoIntake.lateImportScan] does nothing.
+/// local store, and asks the same channel which photos sit in a Meta
+/// glasses album (G2a); elsewhere [PhotoIntake.lateImportScan] does nothing
+/// and no album is asked about.
 PhotoIntake createPhotoIntake(AppSettings settings,
     {FutureOr<void> Function(int count)? onBackfillListed,
     bool Function(String assetId)? passOver,
@@ -70,8 +73,33 @@ PhotoIntake createPhotoIntake(AppSettings settings,
           : LateImportCursor(
               source: changes, store: LocalNoBackupStore.platform()),
       loggedAssetIds: loggedAssetIds,
-      onLateImportPass: changes == null ? null : recordLateImportPass);
+      onLateImportPass: changes == null ? null : recordLateImportPass,
+      metaAlbumIds: changes == null
+          ? null
+          : (since) => metaAlbumAssetIds(changes, since: since));
 }
+
+/// The ids of the images created at or after [since] in the Meta glasses
+/// albums ([MetaGlassesStrings.albumTitles]); empty when the channel could
+/// not say. Never throws.
+Future<Set<String>> metaAlbumAssetIds(PhotoChangeSource source,
+    {required DateTime since}) async {
+  try {
+    final found = await source.albumAssetIds(MetaGlassesStrings.albumTitles,
+        since: since, limit: albumAssetIdsMaxLimit);
+    return found.status == PhotoChangeStatus.ok
+        ? found.ids.toSet()
+        : const <String>{};
+  } catch (_) {
+    return const <String>{};
+  }
+}
+
+/// How long one scan waits for the album answer before it reads every
+/// photo as outside the albums (the filename and EXIF still recognize a
+/// glasses photo). The native lookup takes milliseconds; this only bounds a
+/// stuck channel, which must not hold the scan.
+const Duration metaAlbumLookupTimeout = Duration(seconds: 2);
 
 /// What one [LibraryPhotoIntake._emit] call left undone, for a scan that
 /// wants to know whether it read its whole window.
@@ -99,8 +127,21 @@ class LibraryPhotoIntake implements PhotoIntake {
       this.passOver,
       this.lateImports,
       this.loggedAssetIds,
-      this.onLateImportPass})
+      this.onLateImportPass,
+      this.metaAlbumIds,
+      @visibleForTesting this.metaAlbumTimeout = metaAlbumLookupTimeout})
       : _clock = clock ?? DateTime.now;
+
+  /// The ids of the images created at or after a time that sit in a Meta
+  /// glasses album (design G2a; iOS: [metaAlbumAssetIds]). Asked at most
+  /// once per batch a scan delivers (a launch catch-up delivers two), when
+  /// its first photo is read — never for one that reads nothing — and only
+  /// to recognize glasses photos: a failure, a timeout or null (Android,
+  /// tests) just means "in no album".
+  final Future<Set<String>> Function(DateTime since)? metaAlbumIds;
+
+  /// [metaAlbumLookupTimeout]; shorter in tests.
+  final Duration metaAlbumTimeout;
 
   /// The late-import cursor (photo_changes.dart); null where there is no
   /// change history to read (Android, iOS tests): [lateImportScan] then
@@ -439,6 +480,29 @@ class LibraryPhotoIntake implements PhotoIntake {
     DateTime? frontier;
     var frontierOpen = true;
     final settled = <(String, bool)>[];
+    // The Meta album members of this batch, looked up once (see
+    // [metaAlbumIds]); from a minute before its oldest photo, so a
+    // creation date rounded either way is still inside.
+    Future<Set<String>>? albumIds;
+    Future<bool> inMetaAlbum(String id) async {
+      final lookup = metaAlbumIds;
+      if (lookup == null || ordered.isEmpty) return false;
+      albumIds ??= () async {
+        try {
+          final since = ordered.first.createDateTime
+              .subtract(const Duration(minutes: 1));
+          // Through then<Set<String>>: a lookup typed narrower (a
+          // Future<Never> that throws) would reject timeout's onTimeout
+          // and leave its own error unhandled.
+          return await lookup(since)
+              .then<Set<String>>((ids) => ids)
+              .timeout(metaAlbumTimeout, onTimeout: () => const <String>{});
+        } catch (_) {
+          return const <String>{};
+        }
+      }();
+      return (await albumIds!).contains(id);
+    }
 
     void cover(LibraryAsset asset, {bool delivered = false}) {
       if (frontierOpen) frontier = asset.createDateTime;
@@ -540,9 +604,20 @@ class LibraryPhotoIntake implements PhotoIntake {
             assetCreateDate: asset.createDateTime,
             now: _clock(),
             maxAgeDays: _capturedAtMaxAgeDays);
+        // How it was taken, from the bytes already in hand (design G2a):
+        // a header read, and one album lookup per scan. Neither throws;
+        // were one to, the photo goes on without it.
+        CaptureMeta? capture;
+        try {
+          capture = captureMetaFor(bytes, name,
+              createDate: asset.createDateTime,
+              inMetaAlbum: await inMetaAlbum(asset.id));
+        } catch (_) {
+          capture = null;
+        }
         // deliberate=false: automated intake, strict reservation (§2.3).
         final photo = IntakePhoto(bytes, asset.id, name,
-            capturedAt: capturedAt, deliberate: false);
+            capturedAt: capturedAt, deliberate: false, capture: capture);
         final sink = _sink;
         if (sink != null) {
           // Backpressured path: the next asset's bytes are read only after

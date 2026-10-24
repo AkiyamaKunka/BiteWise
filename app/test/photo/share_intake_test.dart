@@ -172,4 +172,37 @@ void main() {
       expect(library.permissionRequests, 0);
     });
   });
+
+  // Design G2a: a shared or picked photo carries how it was taken, read
+  // from its own bytes — the badge works for those too.
+  group('capture (G2a)', () {
+    test('a shared glasses file: recognized by its name; no asset, so no '
+        'creation date and no album', () async {
+      final source = FakeShareSource();
+      final intake = build(source, FakePhotoLibrary());
+      const path = '/shared/photo-77_singular_display_fullPicture.HEIC';
+      files[path] = Uint8List.fromList([1, 2, 3]);
+      final emitted = <IntakePhoto>[];
+      final sub = intake.photos().listen(emitted.add);
+      source.controller.add([path]);
+      await pumpEventQueue();
+      final capture = emitted.single.capture!;
+      expect(capture.device, CaptureDevice.metaGlasses);
+      expect(capture.signal, CaptureSignal.filename);
+      expect(capture.createDate, isNull);
+      await sub.cancel();
+    });
+
+    test('a picked photo keeps its creation date', () async {
+      final created = DateTime(2026, 7, 17, 8, 0);
+      final library = FakePhotoLibrary()
+        ..assets = [
+          FakeAsset('p1', 'IMG_1.HEIC', created, Uint8List.fromList([1])),
+        ];
+      final picked =
+          await build(FakeShareSource(), library).pickFromRecent(1);
+      expect(picked.single.capture!.createDate, created);
+      expect(picked.single.capture!.device, CaptureDevice.unknown);
+    });
+  });
 }

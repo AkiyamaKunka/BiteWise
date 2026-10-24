@@ -21,6 +21,7 @@ import '../services/photo/background_time.dart';
 import '../services/photo/filename_dates.dart'
     show captureWallClock, exifCapturedAt, exifWallAndOffset,
         validateCapturedAt;
+import '../services/photo/glasses.dart' show captureAnalysis;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
 
@@ -696,6 +697,13 @@ class PhotoPipeline {
         // (spec §3.5).
         analysis['food_items'] = safeFoodItems(analysis);
       }
+
+      // How the photo was taken (design G2a): the intake's reading of its
+      // own bytes, never the model's — a reply carrying a 'capture' key is
+      // not evidence of a camera. No coordinates, no timestamps.
+      analysis.remove('capture');
+      final capture = photo.capture;
+      if (capture != null) analysis['capture'] = captureAnalysis(capture);
 
       // Backdating: a valid capturedAt (validated by the intake module,
       // spec §6.3) sets date/time; timestamp stays now (spec §2.2).

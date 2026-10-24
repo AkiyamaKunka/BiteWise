@@ -16,6 +16,7 @@ import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/services/photo/glasses.dart' show shutterKey;
 import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 
@@ -182,6 +183,86 @@ void main() {
     // The snackbar gets the OUTCOME (worded in the app language by
     // di.dart), the very one process() returns.
     expect(notes.single, same(out));
+  });
+
+  // Design G2a: how the photo was taken — the intake's reading of its own
+  // bytes — lands in analysis.capture before the save; never a coordinate,
+  // never the model's word for it.
+  group('analysis.capture', () {
+    final glasses = CaptureMeta(
+        device: CaptureDevice.metaGlasses,
+        strength: CaptureStrength.strong,
+        signal: CaptureSignal.filename,
+        exif: ExifCapture(
+            make: 'Meta AI',
+            model: 'Ray-Ban Meta Smart Glasses',
+            dateTimeOriginal: DateTime(2026, 10, 8, 12, 29, 58),
+            subSec: '123',
+            gpsPresent: true,
+            gpsAccuracyM: 11.6,
+            gpsFixUtc: DateTime.utc(2026, 10, 8, 17, 29, 20)),
+        createDate: DateTime.utc(2026, 10, 8, 17, 30));
+
+    Future<Map<String, dynamic>> savedAnalysis(CaptureMeta? capture,
+        {Map<String, dynamic>? reply, bool deliberate = false}) async {
+      final dao = FakeDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: reply ?? _foodAnalysis(),
+            isFood: true,
+            wall: Duration.zero);
+      final out = await PhotoPipeline(dao: dao, analyzer: analyzer).process(
+          IntakePhoto(Uint8List.fromList([1, 2, 3]), 'asset1',
+              'photo-1_singular_display_fullPicture.HEIC',
+              deliberate: deliberate, capture: capture));
+      expect(out.kind, PhotoOutcomeKind.saved, reason: out.message);
+      expect(out.analysis, same(dao.meals.single.analysis));
+      return dao.meals.single.analysis;
+    }
+
+    test('a glasses photo: the device, its signal and the GPS facts', () async {
+      final a = await savedAnalysis(glasses);
+      expect(a['capture'], {
+        'device': 'meta_glasses',
+        'signal': 'filename',
+        'has_gps': true,
+        'gps_acc_m': 12,
+        'gps_fix_delta_s': -40,
+        'shutter_key': shutterKey(glasses.exif),
+      });
+      expect(a['meal_description'], 'Ramen', reason: 'the meal is unchanged');
+    });
+
+    test('a camera photo: no device — only what it really is', () async {
+      final a = await savedAnalysis(CaptureMeta(
+          exif: const ExifCapture(make: 'Apple', gpsPresent: false),
+          createDate: DateTime.utc(2026, 10, 8)));
+      expect(a['capture'], {'has_gps': false});
+    });
+
+    test('a deliberate add keeps it too (the badge on a picked photo)',
+        () async {
+      final a = await savedAnalysis(glasses, deliberate: true);
+      expect((a['capture'] as Map)['device'], 'meta_glasses');
+    });
+
+    test("a model reply's own 'capture' is never stored", () async {
+      final forged = {
+        ..._foodAnalysis(),
+        'capture': {
+          'device': 'meta_glasses',
+          'lat': 43.07,
+          'lon': -89.4,
+          'shutter_key': 'ffffffffffffffff'
+        },
+      };
+      final none = await savedAnalysis(null, reply: forged);
+      expect(none.containsKey('capture'), isFalse,
+          reason: 'no reading by the intake, nothing stored');
+      final camera = await savedAnalysis(const CaptureMeta(), reply: forged);
+      expect(camera['capture'], {'has_gps': false},
+          reason: "the intake's reading replaces the model's");
+    });
   });
 
   test('non-food photo → skipped tombstone, no meal', () async {

@@ -995,6 +995,10 @@
   "@correctedBadge": {
     "description": "Tooltip and screen-reader name of the pencil mark on a meal the user corrected."
   },
+  "captureMetaGlasses": "Meta glasses",
+  "@captureMetaGlasses": {
+    "description": "Badge on a meal (Today card and meal editor) whose photo was taken with Meta smart glasses (Ray-Ban/Oakley Meta) and imported by the Meta AI app. 'Meta' is the brand; keep it untranslated."
+  },
   "fixRequestFailed": "That request failed: {error}",
   "@fixRequestFailed": {
     "placeholders": {
