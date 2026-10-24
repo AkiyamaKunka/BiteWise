@@ -948,6 +948,190 @@ def build_restaurant_lookup():
     return {"generator": GENERATOR, "encoding": ENCODING_NOTE, "cases": cases}
 
 
+# ─── lookup_sanitizer.json ─────────────────────────────────────────
+
+def _assist_item(name="Chicken burrito bowl (~550 g)", kcal=900, p=50, c=90,
+                 f=35, brand="Chipotle", qty=1, unit="bowl"):
+    return {"name": name, "estimated_calories": kcal, "protein_g": p,
+            "carbs_g": c, "fat_g": f, "brand": brand, "qty": qty,
+            "unit": unit}
+
+
+def _assist_meal(items):
+    def total(key):
+        return sum(item.get(key) or 0 for item in items)
+
+    return {"is_food": True, "food_items": items,
+            "total_calories": total("estimated_calories"),
+            "total_protein_g": total("protein_g"),
+            "total_carbs_g": total("carbs_g"),
+            "total_fat_g": total("fat_g"),
+            "meal_description": "Chipotle lunch",
+            "estimate_confidence": "low",
+            "restaurant_context": "restaurant",
+            "portion_state": "whole",
+            "order_merchant": ""}
+
+
+def _assist_option(label="Regular", serving="1 bowl", unit="bowl", kcal=1050,
+                   rng=None, p=56, c=98, f=44):
+    return {"label": label, "serving": serving, "unit": unit,
+            "calories": kcal, "calories_range": rng, "protein_g": p,
+            "carbs_g": c, "fat_g": f}
+
+
+def _assist_match(index=0, menu="Chicken Burrito Bowl",
+                  match_type="exact_item", options=None, components=None):
+    return {"item_index": index, "menu_item": menu, "match_type": match_type,
+            "is_drink": False,
+            "components": [] if components is None else components,
+            "options": [_assist_option()] if options is None else options}
+
+
+def _assist_answer(matches, **changes):
+    out = {"status": "found", "chain_key": "chipotle",
+           "restaurant_name": "Chipotle", "matches": matches,
+           "source_url": "https://www.chipotle.com/nutrition-calculator",
+           "source_title": "Nutrition Calculator | Chipotle",
+           "source_type": "official_site", "source_year": 2026,
+           "match_confidence": 0.9, "notes": "An exact menu item."}
+    out.update(changes)
+    return out
+
+
+def build_lookup_sanitizer():
+    """The server's answer sanitizer (lookup_contract.sanitize_lookup)
+    against lane B's acceptance (core/restaurant_assist_logic.dart
+    decideAssist). Each case is a meal, the request lane B's composer
+    built for it, the model's RAW answer and what the server makes of it;
+    flutter test runs decideAssist on both answers (with verbatim and with
+    search-summary evidence) and requires the same outcome and reason.
+    raw_verbatim is lane B's verdict on the raw answer with verbatim
+    evidence, so a case cannot quietly stop exercising its path."""
+    import lookup_contract
+    import restaurant_lookup as rl
+
+    cases = []
+    bowl = _assist_item()
+    chips = _assist_item(name="Chips & guacamole (~200 g)", kcal=500, p=7,
+                         c=56, f=32, unit="bag")
+    chips_option = _assist_option(serving="1 bag", unit="bag", kcal=540, p=7,
+                                  c=56, f=32)
+    sour_cream = _assist_item(name="Sour cream (~30 g)", kcal=110, p=1, c=2,
+                              f=10, brand="", unit="serving")
+
+    def case(case_id, items, answer, raw_verbatim, request_items=None):
+        request = rl.compose_lookup_request({
+            "items": items if request_items is None else request_items,
+            "chains": ["chipotle"]})
+        cases.append({
+            "id": case_id,
+            "analysis": _assist_meal(items),
+            "request": request,
+            "raw": answer,
+            "sanitized": lookup_contract.sanitize_lookup(
+                copy.deepcopy(answer), request),
+            "raw_verbatim": list(raw_verbatim),
+        })
+
+    case("exact_item_applies", [bowl], _assist_answer([_assist_match()]),
+         ("apply", "ok"))
+    # The final review's probe A: item 0 matched twice, the first match
+    # publishing no calorie value. Lane B counts the first match, so the
+    # mapping is ambiguous and nothing usable is left.
+    case("second_match_after_an_unusable_one", [bowl], _assist_answer([
+        _assist_match(options=[_assist_option(kcal=None)]),
+        _assist_match()]), ("contextOnly", "no_usable_match"))
+    # Probe B: a second match (same item, or another item under the same
+    # menu name) whose only option is 590.5 kcal, no published value.
+    case("same_item_again_without_a_published_value", [bowl], _assist_answer([
+        _assist_match(), _assist_match(options=[_assist_option(kcal=590.5)])]),
+        ("suggest", "mapping_not_one_to_one"))
+    case("another_item_same_menu_without_a_published_value",
+         [bowl, _assist_item(name="Steak burrito bowl (~550 g)")],
+         _assist_answer([
+             _assist_match(),
+             _assist_match(index=1,
+                           options=[_assist_option(kcal=590.5)])]),
+         ("suggest", "mapping_not_one_to_one"))
+    # U+00AD survives lane B's cleaner, so lane B counts this match.
+    case("soft_hyphen_menu_item", [bowl], _assist_answer([
+        _assist_match(menu="­"), _assist_match()]),
+        ("suggest", "mapping_not_one_to_one"))
+    # Full NFKC turns "²" into "2" and splits one menu name into two.
+    case("compatibility_digit_in_a_menu_name", [bowl, chips], _assist_answer([
+        _assist_match(),
+        _assist_match(index=1, menu="Chicken Burrito Bowl²",
+                      options=[chips_option])]),
+        ("suggest", "mapping_not_one_to_one"))
+    # The meal grew after the request: lane B reads the index against the
+    # meal and calls the match a changed item.
+    case("index_past_the_request_but_in_the_meal", [bowl, chips],
+         _assist_answer([_assist_match(index=1, menu="Chips & Guacamole",
+                                       options=[chips_option])]),
+         ("reject", "item_changed"), request_items=[bowl])
+    case("long_component_name_overlaps_an_item", [bowl, sour_cream],
+         _assist_answer([_assist_match(
+             menu="Burrito Bowl", match_type="components_sum", options=[],
+             components=[{
+                 "name": "Chicken, white rice, black beans, fajita "
+                         "veggies, salsa and sour cream",
+                 "calories": 940, "protein_g": 50, "carbs_g": 90,
+                 "fat_g": 35}])]),
+         ("suggest", "components_overlap"))
+    # Lane B reads a component name cleaned and at its 200-character cap,
+    # as the server keeps it: words past the cap are in neither answer.
+    case("component_name_past_lane_bs_cap", [bowl, sour_cream],
+         _assist_answer([_assist_match(
+             menu="Burrito Bowl", match_type="components_sum", options=[],
+             components=[{
+                 "name": "Chicken burrito bowl " + "x" * 190
+                         + " with sour cream",
+                 "calories": 940, "protein_g": 50, "carbs_g": 90,
+                 "fat_g": 35}])]),
+         ("apply", "ok"))
+    case("component_without_calories_voids_the_sum", [bowl], _assist_answer([
+        _assist_match(menu="Burrito Bowl", match_type="components_sum",
+                      options=[], components=[
+                          {"name": "Chicken", "calories": 180,
+                           "protein_g": 32, "carbs_g": 0, "fat_g": 7},
+                          {"name": "Rice", "calories": None,
+                           "protein_g": None, "carbs_g": None,
+                           "fat_g": None}])]),
+        ("contextOnly", "no_usable_match"))
+    case("range_wins_over_a_value", [bowl], _assist_answer([_assist_match(
+        options=[_assist_option(rng=[900, 1100])])]), ("suggest", "range"))
+    case("bad_entries_are_skipped", [bowl], _assist_answer([
+        "junk", _assist_match(index=-1), _assist_match(index=12),
+        _assist_match(index=True), _assist_match(index=0.0),
+        _assist_match(match_type="guess"), _assist_match(menu=""),
+        _assist_match(menu="<>"), _assist_match(menu=" ​ "),
+        _assist_match()]), ("apply", "ok"))
+    case("source_url_with_spaces_around_it", [bowl], _assist_answer(
+        [_assist_match()],
+        source_url=" https://www.chipotle.com/nutrition-calculator\n"),
+        ("apply", "ok"))
+    case("source_url_upper_case_scheme", [bowl], _assist_answer(
+        [_assist_match()],
+        source_url="HTTPS://WWW.CHIPOTLE.COM/nutrition-calculator"),
+        ("apply", "ok"))
+    case("source_url_long_query", [bowl], _assist_answer(
+        [_assist_match()],
+        source_url="https://www.chipotle.com/nutrition-calculator?ref="
+                   + "a" * 700), ("apply", "ok"))
+    case("superscript_year_in_the_title", [bowl], _assist_answer(
+        [_assist_match()],
+        source_title="Nutrition Calculator ²⁰¹⁹"),
+        ("apply", "ok"))
+
+    return {"generator": GENERATOR, "encoding": ENCODING_NOTE,
+            "now": "2026-10-23T14:00:00",
+            "meal": {"date": "2026-10-23", "time": "12:30 PM",
+                     "timestamp": "2026-10-23T12:30:00"},
+            "cited": ["https://chipotle.com/nutrition-calculator"],
+            "cases": cases}
+
+
 BUILDERS = {
     "coerce.json": build_coerce,
     "nl_normalize.json": build_nl_normalize,
@@ -956,6 +1140,7 @@ BUILDERS = {
     "report_formulas.json": build_report_formulas,
     "weight.json": build_weight,
     "restaurant_lookup.json": build_restaurant_lookup,
+    "lookup_sanitizer.json": build_lookup_sanitizer,
 }
 
 

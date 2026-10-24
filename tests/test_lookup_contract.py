@@ -447,7 +447,8 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
     good = raw["matches"][0]
     raw["matches"] = [
         "junk",
-        dict(good, item_index=5),            # no such item
+        dict(good, item_index=12),           # past any meal lane B reads
+        dict(good, item_index=-1),
         dict(good, item_index=True),         # bool is not an index
         dict(good, match_type="guess"),
         dict(good, menu_item=""),
@@ -467,22 +468,26 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
                match_confidence=7, notes="n" * 500,
                restaurant_name="<b>" + "R" * 100)
     out = lookup_contract.sanitize_lookup(raw, REQ)
-    # Dropped one by one, as lane B skips them: junk, a bad index, a bool
-    # index, an unknown type, no menu item, no usable number at all.
-    # Kept: the match whose components are unusable (lane B voids its sum
-    # rather than see a shorter list), the options match, and the second
-    # match for item 0 (ambiguity lane B must see).
-    assert len(out["matches"]) == 3
-    unusable = out["matches"][0]
+    # Dropped, as lane B skips them before counting anything: junk, an
+    # index outside [0, 12), a bool index, an unknown type, no menu item.
+    # Kept: every match lane B counts toward its one-to-one mapping, even
+    # one with no usable option (lane B sees the ambiguity, then finds
+    # nothing to pick), the match whose components are unusable (lane B
+    # voids its sum rather than see a shorter list), the options match and
+    # the second match for item 0.
+    assert len(out["matches"]) == 4
+    assert out["matches"][0]["options"] == []
+    assert out["matches"][0]["components"] == []
+    unusable = out["matches"][1]
     assert unusable["options"] == []
     assert unusable["components"] == [
         {"name": "", "calories": 5, "protein_g": None, "carbs_g": None,
          "fat_g": None},
         {"name": "x", "calories": None, "protein_g": None, "carbs_g": None,
          "fat_g": None}]
-    assert out["matches"][2] == lookup_contract.sanitize_lookup(
+    assert out["matches"][3] == lookup_contract.sanitize_lookup(
         copy.deepcopy(ANSWER), REQ)["matches"][0]
-    options = out["matches"][1]["options"]
+    options = out["matches"][2]["options"]
     assert options[0] == {"label": "L" * 40, "serving": "1 bowl", "unit": "",
                           "calories": 1045, "calories_range": None,
                           "protein_g": None, "carbs_g": 12.25, "fat_g": None}
@@ -500,16 +505,29 @@ def test_contract_breaking_entries_are_dropped_and_caps_applied():
 @pytest.mark.parametrize("url,ok", [
     ("https://www.chipotle.com/x", True), ("http://a.b/c", True),
     ("https://a.b/c d", False), ("ftp://a.b", False), ("https://", False),
-    ("https://a.b/\x07", False), ("https://a.b/" + "x" * 600, False), (5, False),
+    ("https://a.b/\x07", False), ("https://a.b/\u200b", False),
+    ("https://a.b/" + "x" * 600, True), ("https://a.b/" + "x" * 2040, False),
+    ("HTTPS://WWW.CHIPOTLE.COM/x", True), ("\ufeff https://a.b/c\n", True),
+    (" \x1c https://a.b/c", False), (5, False), ("   ", False),
 ])
 def test_safe_url(url, ok):
+    """Never stricter than lane B's normalizeSourceUrl (it trims, takes any
+    case of scheme and up to 2048 characters), so the server never takes
+    away a source lane B could launch."""
     assert (lookup_contract.safe_url(url) is not None) is ok
+
+
+def test_safe_url_trims_like_dart():
+    assert lookup_contract.safe_url(" https://a.b/c\u3000") == "https://a.b/c"
+    # \x1c is no whitespace to Dart's trim: lane B refuses the URL, so it
+    # must not reach the app trimmed into a launchable one.
+    assert lookup_contract.safe_url("\x1chttps://a.b/c") is None
 
 
 def test_the_sanitizer_reads_what_lane_b_reads():
     """The first 12 matches / 12 options / 20 components of the RAW answer
     (not the first 12 that survive), a range winning over a value next to
-    it, and non-string text as ""."""
+    it, non-string text as "", and every match lane B counts."""
     raw = copy.deepcopy(ANSWER)
     good = raw["matches"][0]
     raw["matches"] = ["junk"] * 12 + [dict(good)]
@@ -517,7 +535,8 @@ def test_the_sanitizer_reads_what_lane_b_reads():
     raw["matches"] = [dict(good, components=[], options=(
         [{"label": "bad", "calories": None}] * 12
         + [{"label": "late", "calories": 300}]))]
-    assert lookup_contract.sanitize_lookup(raw, REQ)["matches"] == []
+    late = lookup_contract.sanitize_lookup(raw, REQ)["matches"]
+    assert len(late) == 1 and late[0]["options"] == []
     raw["matches"] = [dict(good, components=[], options=[
         {"label": 7, "calories": 590, "calories_range": [540, 640]}])]
     opt = lookup_contract.sanitize_lookup(raw, REQ)["matches"][0][
@@ -525,11 +544,101 @@ def test_the_sanitizer_reads_what_lane_b_reads():
     assert opt["calories"] is None and opt["calories_range"] == [540, 640]
     assert opt["label"] == ""
     raw["matches"] = [dict(good, options="x", components={"a": 1})]
-    assert lookup_contract.sanitize_lookup(raw, REQ)["matches"] == []
+    kept = lookup_contract.sanitize_lookup(raw, REQ)["matches"]
+    assert len(kept) == 1
+    assert kept[0]["options"] == [] and kept[0]["components"] == []
     raw.update(matches="x", notes=5, restaurant_name=["Chipotle"])
     out = lookup_contract.sanitize_lookup(raw, REQ)
     assert out["matches"] == [] and out["notes"] == ""
     assert out["restaurant_name"] == ""
+
+
+def _options_match(index=0, menu="Chicken Burrito Bowl", kcal=1050):
+    return {"item_index": index, "menu_item": menu,
+            "match_type": "exact_item", "is_drink": False, "components": [],
+            "options": [{"label": "Regular", "serving": "1 bowl",
+                         "unit": "bowl", "calories": kcal,
+                         "calories_range": None, "protein_g": 56,
+                         "carbs_g": 98, "fat_g": 44}]}
+
+
+def test_matches_lane_b_counts_are_kept_whatever_they_publish():
+    """The final review's probes. Lane B counts every match with a good
+    index, type and menu name toward its one-to-one mapping BEFORE it
+    tries a pick, so a match that publishes nothing usable still makes
+    the mapping ambiguous. Dropping it turned lane B's context-only
+    (probe A) and suggestion (probe B) into a clean one-to-one match it
+    could apply. shared/vectors/lookup_sanitizer.json runs lane B on both
+    answers."""
+    two = {"items": [{"name": "bowl"}, {"name": "steak bowl"}],
+           "chains": [{"key": "chipotle"}]}
+    # A: item 0 matched twice, the first match's only option has no kcal.
+    probe_a = dict(ANSWER, matches=[_options_match(kcal=None),
+                                    _options_match()])
+    out = lookup_contract.sanitize_lookup(probe_a, REQ)
+    assert [m["item_index"] for m in out["matches"]] == [0, 0]
+    assert out["matches"][0]["options"] == []
+    # B: a second match under the same menu name whose option is 590.5.
+    for index, req in ((0, REQ), (1, two)):
+        probe_b = dict(ANSWER, matches=[_options_match(),
+                                        _options_match(index, kcal=590.5)])
+        out = lookup_contract.sanitize_lookup(probe_b, req)
+        assert [m["item_index"] for m in out["matches"]] == [0, index]
+        assert out["matches"][1]["menu_item"] == "Chicken Burrito Bowl"
+        assert out["matches"][1]["options"] == []
+
+
+def test_answer_text_is_cleaned_with_lane_bs_cleaner():
+    """restaurant_lookup.clean_short_text (lane B's cleanShortText twin),
+    not the gate's full-NFKC clean_text: U+00AD stays, so lane B's
+    non-empty menu name is never emptied into a dropped match, and "²"
+    stays "²", so two menu names lane B tells apart never merge (and a
+    title never gains a year lane B does not see)."""
+    raw = dict(ANSWER, source_title="Nutrition \u00b2\u2070\u00b9\u2079",
+               matches=[_options_match(menu="\u00ad"),
+                        _options_match(menu="Bowl\u00b2"),
+                        _options_match(menu="Ｂowl <b>\u200b")])
+    out = lookup_contract.sanitize_lookup(raw, REQ)
+    assert [m["menu_item"] for m in out["matches"]] == [
+        "\u00ad", "Bowl\u00b2", "Bowl b"]
+    assert out["source_title"] == "Nutrition \u00b2\u2070\u00b9\u2079"
+    for m in out["matches"]:
+        assert restaurant_lookup.clean_short_text(
+            m["menu_item"], lookup_contract.MENU_ITEM_CAP) == m["menu_item"]
+    long_name = "Chicken burrito bowl " + "x" * 300
+    raw = dict(ANSWER, matches=[dict(_options_match(), components=[
+        {"name": long_name, "calories": 5}])])
+    comp = lookup_contract.sanitize_lookup(raw, REQ)["matches"][0][
+        "components"][0]
+    assert comp["name"] == long_name[:lookup_contract.COMPONENT_NAME_CAP]
+
+
+def test_an_index_past_the_request_is_kept_for_lane_b():
+    """Lane B reads item_index against the MEAL (up to 12 items) and calls
+    a match for an item the request never named a changed item; dropping
+    it would turn that reject into a context-only result."""
+    raw = dict(ANSWER, matches=[_options_match(index=5),
+                                _options_match(index=11),
+                                _options_match(index=12)])
+    out = lookup_contract.sanitize_lookup(raw, REQ)
+    assert [m["item_index"] for m in out["matches"]] == [5, 11]
+
+
+@pytest.mark.parametrize("field,value", [
+    ("status", ["found"]), ("chain_key", ["chipotle"]),
+    ("source_type", {"x": 1}), ("match_confidence", 10 ** 400),
+    ("source_url", ["https://a.b"]), ("source_title", 7),
+])
+def test_unhashable_or_odd_fields_never_raise(field, value):
+    raw = dict(copy.deepcopy(ANSWER), **{field: value})
+    raw["matches"][0]["match_type"] = ["exact_item"]
+    out = lookup_contract.sanitize_lookup(raw, REQ)
+    if field == "status":
+        assert out is None
+        return
+    assert out["matches"] == []
+    if field == "match_confidence":
+        assert out["match_confidence"] == 1.0
 
 
 def test_confidence_of_the_wrong_type_is_zero():
@@ -552,6 +661,17 @@ def test_response_caps_are_lane_bs_acceptance_limits():
     assert lookup_contract.KCAL_MAX == _dart_const("kAssistMaxPublishedKcal")
     assert lookup_contract.MACRO_MAX == _dart_const(
         "kAssistMaxPublishedGrams")
+    # Text is kept at the caps lane B reads each field with, so lane B's
+    # cleaner leaves the server's text unchanged.
+    for name, const in (("MENU_ITEM_CAP", "kAssistMenuItemMax"),
+                        ("OPTION_LABEL_CAP", "kAssistOptionLabelMax"),
+                        ("SERVING_CAP", "kAssistServingMax"),
+                        ("OPTION_UNIT_CAP", "kAssistUnitMax"),
+                        ("COMPONENT_NAME_CAP", "kAssistComponentNameMax"),
+                        ("RESTAURANT_NAME_CAP", "kAssistBrandNameMax"),
+                        ("TITLE_CAP", "kAssistTitleMax"),
+                        ("NOTES_CAP", "kAssistNotesMax")):
+        assert getattr(lookup_contract, name) == _dart_const(const), name
     raw = copy.deepcopy(ANSWER)
     opt = {"label": "x", "calories": 100}
     comp = {"name": "c", "calories": 10}

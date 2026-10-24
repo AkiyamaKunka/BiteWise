@@ -112,6 +112,11 @@ const int kAssistNotesMax = 200;
 const int kAssistBrandNameMax = 60;
 const int kAssistTitleMax = 120;
 
+/// A component's name as the overlap check reads it (cleaned like every
+/// other lookup text, so the owner's server, which keeps names at this
+/// cap, never changes the words the check sees).
+const int kAssistComponentNameMax = 200;
+
 /// Evidence text read per entry (the server caps at 1,500 characters).
 const int kAssistEvidenceTextMax = 20000;
 
@@ -1679,7 +1684,11 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
     for (final c in (comps is List ? comps : const []).take(
       kAssistMaxComponents,
     )) {
-      final cw = _nameWords(c is Map ? c['name'] : null);
+      final cw = _nameWords(
+        c is Map
+            ? sanitizeAssistText(c['name'], kAssistComponentNameMax)
+            : null,
+      );
       if (cw.isEmpty) continue;
       for (var j = 0; j < itemCount && !overlap; j++) {
         if (j == p.index) continue;

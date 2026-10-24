@@ -24,8 +24,11 @@ What this module adds is the server's own gate around that contract:
     when the prompt still holds exactly one data block carrying exactly
     the request.
   * sanitize_lookup rebuilds the model's answer to the section-5 shape
-    with lane B's acceptance limits (core/restaurant_assist_logic.dart):
-    entries that break the contract are dropped, never repaired.
+    with lane B's acceptance limits and text cleaner
+    (core/restaurant_assist_logic.dart): entries lane B would skip are
+    dropped, never repaired, and nothing it would count is, so lane B
+    decides the server's answer exactly as it would the raw one
+    (shared/vectors/lookup_sanitizer.json).
 
 What a request may carry (and nothing else reaches the model): item
 names, quantities and units, the chain an item's printed brand names, the
@@ -327,7 +330,28 @@ MAX_OPTIONS = 12
 MAX_COMPONENTS = 20
 KCAL_MAX = 6000
 MACRO_MAX = 1000
-URL_CAP = 500
+# Answer text caps: the ones lane B reads each field with
+# (kAssistMenuItemMax, kAssistOptionLabelMax, kAssistServingMax,
+# kAssistUnitMax, kAssistComponentNameMax, kAssistBrandNameMax,
+# kAssistTitleMax, kAssistNotesMax), so lane B's cleaner leaves the
+# server's text exactly as it is.
+MENU_ITEM_CAP = 60
+OPTION_LABEL_CAP = 40
+SERVING_CAP = 40
+OPTION_UNIT_CAP = 20
+COMPONENT_NAME_CAP = 200
+RESTAURANT_NAME_CAP = 60
+TITLE_CAP = 120
+NOTES_CAP = 200
+# normalizeSourceUrl's limit: a longer claim is not launchable there.
+URL_CAP = 2048
+_URL_RE = re.compile(r"^https?://[^\s/?#]+", re.IGNORECASE)
+# What Dart's String.trim removes (Unicode White_Space plus the BOM):
+# lane B trims a claimed source URL before it reads it.
+_DART_TRIM = frozenset(
+    [0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20, 0x85, 0xA0, 0x1680]
+    + list(range(0x2000, 0x200B))
+    + [0x2028, 0x2029, 0x202F, 0x205F, 0x3000, 0xFEFF])
 
 
 def _num(value, upper: float, integer: bool = False):
@@ -345,18 +369,24 @@ def _num(value, upper: float, integer: bool = False):
     return value
 
 
-def _str_or_none(value, cap: int):
-    if not isinstance(value, str):
-        return None
-    text = clean_text(value, cap)
-    return text or None
+def _dart_trim(value: str) -> str:
+    start, end = 0, len(value)
+    while start < end and ord(value[start]) in _DART_TRIM:
+        start += 1
+    while end > start and ord(value[end - 1]) in _DART_TRIM:
+        end -= 1
+    return value[start:end]
 
 
 def safe_url(value) -> Optional[str]:
-    """An http(s) URL with no whitespace or control characters, or None."""
-    if not isinstance(value, str) or len(value) > URL_CAP:
+    """An http(s) URL with no whitespace or control characters, trimmed
+    the way lane B trims it, or None. Never stricter than lane B's
+    normalizeSourceUrl (any case of scheme, up to 2048 characters), so a
+    source lane B could launch is never taken away."""
+    if not isinstance(value, str):
         return None
-    if not re.match(r"^https?://[^\s/?#]+", value):
+    value = _dart_trim(value)
+    if not value or len(value) > URL_CAP or not _URL_RE.match(value):
         return None
     if any(ch.isspace() or unicodedata.category(ch).startswith("C")
            for ch in value):
@@ -365,9 +395,14 @@ def safe_url(value) -> Optional[str]:
 
 
 def _text(value, cap: int) -> str:
-    """Answer text as kept: a string cleaned and capped; anything else is
-    "" (lane B's sanitizeAssistText never stringifies a number)."""
-    return clean_text(value, cap) if isinstance(value, str) else ""
+    """Answer text as lane B keeps it: its own cleaner
+    (restaurant_lookup.clean_short_text, the twin of cleanShortText that
+    sanitizeAssistText is) at lane B's cap for the field. Anything that
+    is not a string is "" (lane B never stringifies a number). Not the
+    gate's clean_text: full NFKC and stripping every category-C character
+    would change text lane B reads ("²" becomes "2", U+00AD vanishes), and
+    with it a menu name's identity or a title's date."""
+    return restaurant_lookup.clean_short_text(value, cap)
 
 
 def _list(value) -> list:
@@ -382,9 +417,9 @@ def _option(raw) -> Optional[Dict]:
     if not isinstance(raw, dict):
         return None
     out = {
-        "label": _text(raw.get("label"), 40),
-        "serving": _text(raw.get("serving"), 40),
-        "unit": _text(raw.get("unit"), 20),
+        "label": _text(raw.get("label"), OPTION_LABEL_CAP),
+        "serving": _text(raw.get("serving"), SERVING_CAP),
+        "unit": _text(raw.get("unit"), OPTION_UNIT_CAP),
         "calories": _num(raw.get("calories"), KCAL_MAX, integer=True),
         "calories_range": None,
         "protein_g": _num(raw.get("protein_g"), MACRO_MAX),
@@ -407,14 +442,20 @@ def _component(raw) -> Dict:
     """One published component, KEPT even when it is unusable: lane B sums
     a components_sum match only when EVERY component publishes calories,
     so dropping a bad one would turn "no total" into a smaller, wrong
-    total. An unusable entry stays with calories null."""
+    total. An unusable entry stays with calories null. The name keeps lane
+    B's component cap: its words decide whether a component also stands
+    as its own item in the meal (components_overlap)."""
     if not isinstance(raw, dict):
         raw = {}
-    return {"name": _text(raw.get("name"), 60),
+    return {"name": _text(raw.get("name"), COMPONENT_NAME_CAP),
             "calories": _num(raw.get("calories"), KCAL_MAX, integer=True),
             "protein_g": _num(raw.get("protein_g"), MACRO_MAX),
             "carbs_g": _num(raw.get("carbs_g"), MACRO_MAX),
             "fat_g": _num(raw.get("fat_g"), MACRO_MAX)}
+
+
+def _enum(value, allowed: frozenset) -> Optional[str]:
+    return value if isinstance(value, str) and value in allowed else None
 
 
 def sanitize_lookup(raw, request: Dict) -> Optional[Dict]:
@@ -422,15 +463,24 @@ def sanitize_lookup(raw, request: Dict) -> Optional[Dict]:
     applied, or None when it is not a lookup answer at all.
 
     It never changes what lane B's acceptance (decideAssist) would decide
-    on the raw answer: it reads the same first 12 matches, 12 options and
-    20 components; drops only what lane B skips one by one (a match with
-    a bad index, type or name, an option without a calorie value); keeps
-    what lane B judges as a whole (a second match for the same item, which
-    makes the mapping ambiguous; an unusable component, which voids its
-    sum); and repairs nothing into a number the model did not give."""
-    if not isinstance(raw, dict) or raw.get("status") not in _STATUSES:
+    on the raw answer (shared/vectors/lookup_sanitizer.json pins it): it
+    reads the same first 12 matches, 12 options and 20 components; drops
+    only a match lane B skips before it counts anything (not an object, an
+    index that is not an int in [0, 12), an unknown type, a menu name that
+    lane B's cleaner empties) and an option without a calorie value; keeps
+    every match lane B counts toward its one-to-one item and menu mapping,
+    even one with no usable option or component, and every component (an
+    unusable one voids its sum); cleans text with lane B's own cleaner at
+    lane B's caps; and repairs nothing into a number the model did not
+    give.
+
+    An index is bounded by 12, not by the request: lane B reads it against
+    the MEAL, and a match for an item the request did not name is how it
+    notices the meal changed under the lookup (item_changed). [request] is
+    kept for the callers; nothing here depends on its size."""
+    del request  # the bounds are lane B's, not the request's
+    if not isinstance(raw, dict) or _enum(raw.get("status"), _STATUSES) is None:
         return None
-    n_items = len(request.get("items", []))
     matches = []
     for m in _list(raw.get("matches"))[:MAX_ITEMS]:
         if not isinstance(m, dict):
@@ -438,29 +488,26 @@ def sanitize_lookup(raw, request: Dict) -> Optional[Dict]:
         idx = m.get("item_index")
         if isinstance(idx, bool) or not isinstance(idx, int):
             continue
-        if not 0 <= idx < n_items:
+        if not 0 <= idx < MAX_ITEMS:
             continue
-        if m.get("match_type") not in _MATCH_TYPES:
+        match_type = _enum(m.get("match_type"), _MATCH_TYPES)
+        if match_type is None:
             continue
-        menu_item = _text(m.get("menu_item"), 60)
+        menu_item = _text(m.get("menu_item"), MENU_ITEM_CAP)
         if not menu_item:
-            continue
-        options = [o for o in map(_option,
-                                  _list(m.get("options"))[:MAX_OPTIONS]) if o]
-        components = [_component(c) for c in
-                      _list(m.get("components"))[:MAX_COMPONENTS]]
-        if not options and not components:
             continue
         matches.append({
             "item_index": idx,
             "menu_item": menu_item,
-            "match_type": m["match_type"],
+            "match_type": match_type,
             "is_drink": m.get("is_drink") is True,
-            "components": components,
-            "options": options,
+            "components": [_component(c) for c in
+                           _list(m.get("components"))[:MAX_COMPONENTS]],
+            "options": [o for o in map(
+                _option, _list(m.get("options"))[:MAX_OPTIONS]) if o],
         })
     chain_key = raw.get("chain_key")
-    if not chain_known(chain_key):
+    if not isinstance(chain_key, str) or not chain_known(chain_key):
         chain_key = None
     year = raw.get("source_year")
     if isinstance(year, bool) or not isinstance(year, int) \
@@ -470,16 +517,18 @@ def sanitize_lookup(raw, request: Dict) -> Optional[Dict]:
     if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) \
             or confidence != confidence:
         confidence = 0.0
-    source_type = raw.get("source_type")
+    title = _text(raw.get("source_title"), TITLE_CAP)
     return {
         "status": raw["status"],
         "chain_key": chain_key,
-        "restaurant_name": _text(raw.get("restaurant_name"), 60),
+        "restaurant_name": _text(raw.get("restaurant_name"),
+                                 RESTAURANT_NAME_CAP),
         "matches": matches,
         "source_url": safe_url(raw.get("source_url")),
-        "source_title": _str_or_none(raw.get("source_title"), 120),
-        "source_type": source_type if source_type in _SOURCE_TYPES else "other",
+        "source_title": title or None,
+        "source_type": _enum(raw.get("source_type"), _SOURCE_TYPES) or "other",
         "source_year": year,
-        "match_confidence": round(min(max(float(confidence), 0.0), 1.0), 3),
-        "notes": _text(raw.get("notes"), 200),
+        # Clamped before float(): a huge JSON integer overflows a float.
+        "match_confidence": round(float(min(max(confidence, 0.0), 1.0)), 3),
+        "notes": _text(raw.get("notes"), NOTES_CAP),
     }
