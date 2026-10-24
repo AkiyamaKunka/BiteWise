@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:calorie_tracker/services/assist/clients/anthropic_lookup_client.dart';
+import 'package:calorie_tracker/services/assist/clients/http_lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +43,23 @@ void main() {
     expect(haikuUsd(200000, 1000), closeTo(0.10 + 0.0025, 1e-12));
     expect(kAnthropicSearchUsd, 0.01);
     expect(kOpenRouterExaRequestUsd, 0.007);
+  });
+
+  test('usage counts: numbers and numeric strings; junk is unknown', () {
+    expect(countOf(2), 2);
+    expect(countOf(0), 0);
+    expect(countOf(2.0), 2);
+    expect(countOf(1.2), 2, reason: 'a fraction rounds up');
+    expect(countOf('2'), 2);
+    expect(countOf(' 7 '), 7);
+    expect(countOf('1e3'), 1000);
+    expect(countOf(1e300), kMaxReportedCount, reason: 'no overflow');
+    for (final junk in <Object?>[
+      null, -1, '-1', '', 'x', 'NaN', double.nan, double.infinity, true,
+      <Object?>[], <String, Object?>{},
+    ]) {
+      expect(countOf(junk), isNull, reason: '$junk');
+    }
   });
 
   test('LookupCost adds up; reported only when someone reported', () {

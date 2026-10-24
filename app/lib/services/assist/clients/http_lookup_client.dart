@@ -354,6 +354,20 @@ class LookupAnswer {
 
 int intOf(Object? v) => v is int ? v : (v is num && v.isFinite ? v.toInt() : 0);
 
+/// Ceiling for a vendor-reported count, so sums of counts cannot overflow.
+const int kMaxReportedCount = 1 << 40;
+
+/// A count from a vendor's usage report, or null when [v] is not one.
+/// Accepts a non-negative finite number (a fraction rounds UP) or a
+/// decimal string such as "2" — shapes drift, and a count that silently
+/// read as 0 would under-charge. Null lets the caller fall back to an
+/// allowance or another signal instead of trusting a zero.
+int? countOf(Object? v) {
+  final num? n = v is num ? v : (v is String ? num.tryParse(v.trim()) : null);
+  if (n == null || !n.isFinite || n < 0) return null;
+  return n >= kMaxReportedCount ? kMaxReportedCount : n.ceil();
+}
+
 /// [urls] de-duplicated in first-seen order.
 List<String> dedupe(Iterable<String> urls) {
   final seen = <String>{};

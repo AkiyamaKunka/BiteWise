@@ -15,6 +15,34 @@ import 'support.dart';
 
 const _bigMac = 'https://www.mcdonalds.com/us/en-us/product/big-mac.html';
 
+class _Ledger implements LookupBudget {
+  final List<LookupCost> spends = [];
+  @override
+  bool tryStartLookup(double worstCaseUsd) => true;
+  @override
+  void recordSpend(LookupCost cost) => spends.add(cost);
+}
+
+/// pause_1 as a reply that really ran TWO searches: a second call and its
+/// (successful, empty) result ahead of the fixture's own pair.
+Map<String, dynamic> _pausedAfterTwoSearches() {
+  final p = fixture('anthropic_pause_1.json');
+  (p['content'] as List).insertAll(1, [
+    {
+      'type': 'server_tool_use',
+      'id': 'srvtoolu_022222222222222222222222',
+      'name': 'web_search',
+      'input': {'query': 'Big Mac nutrition facts'}
+    },
+    {
+      'type': 'web_search_tool_result',
+      'tool_use_id': 'srvtoolu_022222222222222222222222',
+      'content': <Object?>[]
+    },
+  ]);
+  return p;
+}
+
 AnthropicLookupClient _client(ScriptedClient s,
         {String? key = 'test-key',
         LookupCostPolicy policy = const LookupCostPolicy(),
@@ -208,6 +236,122 @@ void main() {
       ], [2, 1]);
       expect(o.failure!.code, LookupFailureCode.truncated);
       expect(o.searches, 2, reason: 'never more than the design\'s 2');
+    });
+
+    group('the search count survives a drifting usage block', () {
+      // The count drives the pause_turn allowance, the per-lookup cap and
+      // the daily ledger: it is the larger of usage and the reply's own
+      // successful search results, so no usage shape can lower it.
+      test('usage missing: one request, truncated, both searches charged',
+          () async {
+        final paused = _pausedAfterTwoSearches()..remove('usage');
+        final ledger = _Ledger();
+        final s = ScriptedClient([
+          (_) => json200(paused),
+          (_) => fixture200('anthropic_pause_2.json'),
+        ]);
+        final o = await _client(s, budget: ledger).submit(bigMacRequest);
+        expect(s.requests, hasLength(1),
+            reason: 'both allowed searches ran: no continuation');
+        expect(o.failure!.code, LookupFailureCode.truncated);
+        expect(o.failure!.transient, isFalse);
+        expect(o.searches, 2);
+        final spent = ledger.spends.single.usd;
+        expect(spent, greaterThanOrEqualTo(2 * kAnthropicSearchUsd));
+        // Unreported tokens are priced at the allowance, not at 0…
+        expect(spent,
+            closeTo(0.02 + haikuUsd(3000 + 2 * 10000, 1500), 1e-12));
+        // …but never reported as tokens the reply did not report.
+        expect(o.cost.inputTokens, 0);
+        expect(o.cost.outputTokens, 0);
+      });
+
+      test('a missing, mistyped or short count never lowers it', () async {
+        final rows = <(String, Map<String, dynamic> Function())>[
+          ('usage not an object',
+              () => _pausedAfterTwoSearches()..['usage'] = 'n/a'),
+          ('server_tool_use missing', () {
+            final p = _pausedAfterTwoSearches();
+            (p['usage'] as Map).remove('server_tool_use');
+            return p;
+          }),
+          ('count below the results', () {
+            final p = _pausedAfterTwoSearches();
+            (p['usage'] as Map)['server_tool_use'] = {
+              'web_search_requests': 0
+            };
+            return p;
+          }),
+          ('count negative', () {
+            final p = _pausedAfterTwoSearches();
+            (p['usage'] as Map)['server_tool_use'] = {
+              'web_search_requests': -1
+            };
+            return p;
+          }),
+          // One result in the content: the string "2" itself must count.
+          ('count as a string', () {
+            final p = fixture('anthropic_pause_1.json');
+            (p['usage'] as Map)['server_tool_use'] = {
+              'web_search_requests': '2'
+            };
+            return p;
+          }),
+        ];
+        for (final (label, body) in rows) {
+          final ledger = _Ledger();
+          final s = ScriptedClient([
+            (_) => json200(body()),
+            (_) => fixture200('anthropic_pause_2.json'),
+          ]);
+          final o = await _client(s, budget: ledger).submit(bigMacRequest);
+          expect(s.requests, hasLength(1), reason: label);
+          expect(o.failure!.code, LookupFailureCode.truncated, reason: label);
+          expect(o.searches, 2, reason: label);
+          expect(ledger.spends.single.usd,
+              greaterThanOrEqualTo(2 * kAnthropicSearchUsd),
+              reason: label);
+        }
+      });
+
+      test('usage missing on a resumed turn: max_uses [2, 1], then done',
+          () async {
+        // One search ran: the continuation may still spend the other one.
+        // Counting from the content must not truncate a legitimate resume.
+        final s = ScriptedClient([
+          (_) => json200(fixture('anthropic_pause_1.json')..remove('usage')),
+          (_) => json200(fixture('anthropic_pause_2.json')..remove('usage')),
+        ]);
+        final o = await _client(s).submit(bigMacRequest);
+        expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
+        expect([
+          for (final b in s.bodies)
+            ((b['tools'] as List).single as Map)['max_uses']
+        ], [2, 1]);
+        expect(o.searches, 1);
+        // Request 2 re-sends request 1's search results and output.
+        expect(
+            o.cost.usd,
+            closeTo(
+                0.01 +
+                    haikuUsd(3000 + 10000, 1500) +
+                    haikuUsd(3000 + 10000 + 1500, 1500),
+                1e-12));
+      });
+
+      test('error results are not searches (not billed, not run)', () async {
+        // max_uses_exceeded: two calls, one ran.
+        final capped = fixture('anthropic_max_uses.json')..remove('usage');
+        final a = await _client(ScriptedClient([(_) => json200(capped)]))
+            .submit(bigMacRequest);
+        expect(a.kind, LookupOutcomeKind.done, reason: '${a.failure}');
+        expect(a.searches, 1);
+        final busy = fixture('anthropic_search_error.json')..remove('usage');
+        final b = await _client(ScriptedClient([(_) => json200(busy)]))
+            .submit(bigMacRequest);
+        expect(b.failure!.code, LookupFailureCode.searchError);
+        expect(b.searches, 0);
+      });
     });
 
     test('a search error object (HTTP 200) fails the lookup', () async {

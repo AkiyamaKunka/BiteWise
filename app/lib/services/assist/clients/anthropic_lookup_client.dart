@@ -10,7 +10,9 @@
 ///     `web_search_tool_result_error{error_code}` OBJECT on error, HTTP 200
 ///     either way), text blocks with `citations` of type
 ///     `web_search_result_location{url, title, cited_text ≤150 chars}`;
-///   - `usage.server_tool_use.web_search_requests`;
+///   - `usage.server_tool_use.web_search_requests` — never trusted alone:
+///     the reply's own successful `web_search_tool_result` blocks are
+///     counted too and the larger number wins (the client's cost rule);
 ///   - `stop_reason: pause_turn` → send the paused assistant content back
 ///     unchanged in a new request.
 ///
@@ -19,6 +21,8 @@
 /// keeps a lookup at about 2–3¢. Haiku 5.5 is not on the dynamic-filtering
 /// list, so the basic tool version is the right one.
 library;
+
+import 'dart:math' as math;
 
 import 'http_lookup_client.dart';
 import 'lookup_client.dart';
@@ -61,12 +65,24 @@ class AnthropicLookupClient extends HttpLookupClient {
       {required int continuation,
       required int searchesSoFar,
       required int maxUses}) {
-    final input = policy.promptTokensAllowance +
-        (searchesSoFar + maxUses) * policy.tokensPerSearchAllowance +
-        continuation * policy.maxOutputTokens;
+    final input = inputTokensAllowance(
+        continuation: continuation,
+        searchesSoFar: searchesSoFar,
+        searches: maxUses);
     return maxUses * kAnthropicSearchUsd +
         haikuUsd(input, policy.maxOutputTokens);
   }
+
+  /// The input tokens assumed for request number [continuation] when it ran
+  /// [searches] of its own after [searchesSoFar]: our prompt, every search's
+  /// results (all re-sent on a continuation) and the earlier output.
+  int inputTokensAllowance(
+          {required int continuation,
+          required int searchesSoFar,
+          required int searches}) =>
+      policy.promptTokensAllowance +
+      (searchesSoFar + searches) * policy.tokensPerSearchAllowance +
+      continuation * policy.maxOutputTokens;
 
   @override
   double worstCaseFirstRequestUsd() => worstCaseRequestUsd(
@@ -142,7 +158,8 @@ class AnthropicLookupClient extends HttpLookupClient {
               domains: domains),
           run,
           worstCaseUsd: worst);
-      run.add(_costOf(body));
+      run.add(_costOf(body,
+          continuation: continuation, searchesSoFar: searchesSoFar));
       final content = body['content'];
       if (content is! List) {
         throw const LookupAbort(LookupFailure(LookupFailureCode.malformedReply,
@@ -180,34 +197,64 @@ class AnthropicLookupClient extends HttpLookupClient {
     }
   }
 
-  LookupCost _costOf(Map<String, dynamic> body) {
+  /// What one reply cost.
+  ///
+  /// Searches: the LARGER of what `usage` reports and what the reply's own
+  /// content shows ran, always both. This count drives the pause_turn
+  /// allowance, the per-lookup cap and the daily ledger, so a usage block
+  /// that is missing, renamed or mistyped must not read as "no searches"
+  /// (that would let continuations buy searches past max 2 and record a
+  /// 2-search lookup at a tenth of a cent).
+  ///
+  /// Tokens: a count the reply does not report is priced at this request's
+  /// policy allowance ([inputTokensAllowance] in, the policy's
+  /// maxOutputTokens out), never at 0. The cost's token fields stay what
+  /// was reported; only [LookupCost.estimatedUsd] carries the allowance.
+  LookupCost _costOf(Map<String, dynamic> body,
+      {required int continuation, required int searchesSoFar}) {
     final usage = body['usage'];
-    if (usage is! Map) return LookupCost.zero;
-    final input = intOf(usage['input_tokens']) +
-        intOf(usage['cache_creation_input_tokens']) +
-        intOf(usage['cache_read_input_tokens']);
-    final output = intOf(usage['output_tokens']);
-    final stu = usage['server_tool_use'];
-    var searches = stu is Map ? intOf(stu['web_search_requests']) : 0;
-    if (stu is! Map) {
-      // Older shapes: count the search calls themselves.
-      final content = body['content'];
-      if (content is List) {
-        searches = content
-            .where((b) =>
-                b is Map &&
-                b['type'] == 'server_tool_use' &&
-                b['name'] == 'web_search')
-            .length;
-      }
-    }
+    final Map<dynamic, dynamic> u =
+        usage is Map ? usage : const <String, Object?>{};
+    final stu = u['server_tool_use'];
+    final reported = stu is Map ? countOf(stu['web_search_requests']) : null;
+    final searches =
+        math.max(reported ?? 0, _searchesRanIn(body['content']));
+    final inputReported = countOf(u['input_tokens']);
+    final outputReported = countOf(u['output_tokens']);
+    final cached = (countOf(u['cache_creation_input_tokens']) ?? 0) +
+        (countOf(u['cache_read_input_tokens']) ?? 0);
+    final input = (inputReported ??
+            inputTokensAllowance(
+                continuation: continuation,
+                searchesSoFar: searchesSoFar,
+                searches: searches)) +
+        cached;
+    final output = outputReported ?? policy.maxOutputTokens;
     return LookupCost(
       searches: searches,
-      inputTokens: input,
-      outputTokens: output,
-      estimatedUsd:
-          searches * kAnthropicSearchUsd + haikuUsd(input, output),
+      inputTokens: (inputReported ?? 0) + cached,
+      outputTokens: outputReported ?? 0,
+      estimatedUsd: searches * kAnthropicSearchUsd + haikuUsd(input, output),
     );
+  }
+
+  /// The searches a reply's [content] shows ran: one `web_search_tool_result`
+  /// block per search, except an error result (a failed search is not
+  /// billed, and `max_uses_exceeded` is a search refused, not run). A result
+  /// whose content is neither a list nor an error object still counts: the
+  /// block says a search happened. `server_tool_use` blocks are NOT counted:
+  /// a paused turn can end on a call that has not run yet (the resume runs
+  /// it), and a refused call has one too.
+  static int _searchesRanIn(Object? content) {
+    if (content is! List) return 0;
+    var n = 0;
+    for (final b in content) {
+      if (b is! Map || b['type'] != 'web_search_tool_result') continue;
+      final c = b['content'];
+      if (c is Map && c['type'] == 'web_search_tool_result_error') continue;
+      n++;
+    }
+    return n;
   }
 
   LookupAnswer _answer(List<Map<String, dynamic>> turn, LookupRequest req) {
