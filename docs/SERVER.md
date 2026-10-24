@@ -397,7 +397,9 @@ a network tool, so it is fenced separately from the photo and text paths:
   chain a printed item brand or the receipt merchant names (sent only as
   that chain's canonical name from BiteWise's own US chain table, never
   as the printed text), up to 3 chain KEYS from that table (the server
-  substitutes its own canonical name), country and reply language. The
+  substitutes its own canonical name; the chains a brand or the merchant
+  names are always among them, first, because the model may choose only
+  among `chains`), country and reply language. The
   request is gated by a whitelist (`lookup_contract.py`), then composed
   with the prompt on the server by `restaurant_lookup.py`, the Python twin
   of the app's composer (the shared parity vectors pin the two byte for
@@ -428,7 +430,8 @@ a network tool, so it is fenced separately from the photo and text paths:
 Knobs, the owner-run `scripts/lookup_smoke.py` and the order to switch
 it on in are in [SERVER_DEPLOY.md](SERVER_DEPLOY.md#restaurant-lookup-websearch-on-your-server).
 Put HTTPS in front first ([SERVER_TLS.md](SERVER_TLS.md)): over plain
-HTTP the app sends lookups by printed brand only.
+HTTP the app looks up only the chains a printed brand or the receipt
+names, never chains found from the photo's location.
 
 ## Subscription backends (Claude / GLM / Doubao)
 

@@ -102,6 +102,33 @@ void main() {
     expect(jsonEncode(req), isNot(contains('Broadway')));
   });
 
+  test('a chain a brand or the merchant names is always in chains, first',
+      () {
+    // The prompt lets the model choose only among "chains", and
+    // decideAssist accepts only a chain the request lists: a brand-only
+    // request without its chain could only ever answer no_match.
+    List<Object?> keys(Map<String, Object?> req) =>
+        [for (final c in req['chains'] as List) (c as Map)['key']];
+    final brandOnly = composeLookupRequest({
+      'items': [
+        {'name': 'Burrito', 'brand': 'CHIPOTLE 2381'},
+      ],
+      'chains': const [],
+    });
+    expect(keys(brandOnly), ['chipotle']);
+    expect(LookupRequest.compose(brandOnly).chainKeys, ['chipotle']);
+    final capped = composeLookupRequest({
+      'items': [
+        {'name': 'Big Mac', 'brand': "McDonald's"},
+        {'name': 'Latte', 'brand': 'Starbucks Coffee #12'},
+      ],
+      'order_merchant': 'Chipotle Mexican Grill',
+      'chains': ['panda_express', 'chipotle', 'wendys'],
+    });
+    expect(keys(capped), ['mcdonalds', 'starbucks', 'chipotle']);
+    expect(composeLookupRequest(capped), capped, reason: 'idempotent');
+  });
+
   test('printed brand and merchant text goes out only as a table name', () {
     final req = composeLookupRequest({
       'items': [

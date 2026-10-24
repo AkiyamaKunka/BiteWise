@@ -8,6 +8,12 @@
 ///  "chains":[≤3×{"key", "name" (canonical, from OUR table), "size"}],
 ///  "country":"US"|ISO2, "lang":"zh"?}
 ///
+/// Every chain an item's brand or the order merchant names is in "chains"
+/// (first, then the caller's chains): the prompt lets the model choose
+/// only among "chains" and lane B accepts only a chain the request lists,
+/// so a brand without its chain would be a lookup that can only answer
+/// no_match.
+///
 /// What can never be in it: coordinates, street, distance, city, timestamps,
 /// meal_description, calories, the dietary profile, history or the image.
 /// The composer reads only the keys above from its raw input and ignores
@@ -120,17 +126,30 @@ Map<String, Object?> composeLookupItem(dynamic item) {
   };
 }
 
-List<Map<String, Object?>> _requestChains(dynamic value) {
+/// The request's chains: first the chains the composed [named] texts
+/// name (the items' brands, then the order merchant: canonical table
+/// names), then the caller's [value] (keys of OUR table, in rank order, as
+/// strings or `{"key": ...}` maps); no repeats, at most 3.
+List<Map<String, Object?>> _requestChains(
+  dynamic value,
+  Iterable<Object?> named,
+) {
   final out = <Map<String, Object?>>[];
   final seen = <String>{};
-  for (final entry in value is List ? value : const []) {
-    final key = entry is Map ? entry['key'] : entry;
-    if (key is! String || seen.contains(key)) continue;
+  void add(Object? key) {
+    if (key is! String || seen.contains(key)) return;
+    if (out.length == kLookupMaxChains) return;
     final chain = chainByKey(key);
-    if (chain == null) continue;
+    if (chain == null) return;
     seen.add(key);
     out.add({'key': chain.key, 'name': chain.name, 'size': chain.size});
-    if (out.length == kLookupMaxChains) break;
+  }
+
+  for (final name in named) {
+    if (name is String && name.isNotEmpty) add(matchChain(name));
+  }
+  for (final entry in value is List ? value : const []) {
+    add(entry is Map ? entry['key'] : entry);
   }
   return out;
 }
@@ -139,18 +158,24 @@ List<Map<String, Object?>> _requestChains(dynamic value) {
 /// items[].name/qty/unit/brand, order_merchant, chains (keys of OUR table,
 /// in rank order, as strings or `{"key": ...}` maps), country and lang are
 /// read; brand and order_merchant become a table chain's canonical name or
-/// "" ([chainNameOnly]). Items keep their positions (the first 12), so a
+/// "" ([chainNameOnly]), and the chains they name lead "chains"
+/// ([_requestChains]). Items keep their positions (the first 12), so a
 /// response's item_index is the meal's food_items index. Idempotent.
 Map<String, Object?> composeLookupRequest(dynamic raw) {
   final r = raw is Map ? raw : const {};
   final items = r['items'];
+  final composed = [
+    for (final i in (items is List ? items : const []).take(kLookupMaxItems))
+      composeLookupItem(i),
+  ];
+  final merchant = chainNameOnly(r['order_merchant'], kLookupMerchantMax);
   final request = <String, Object?>{
-    'items': [
-      for (final i in (items is List ? items : const []).take(kLookupMaxItems))
-        composeLookupItem(i),
-    ],
-    'order_merchant': chainNameOnly(r['order_merchant'], kLookupMerchantMax),
-    'chains': _requestChains(r['chains']),
+    'items': composed,
+    'order_merchant': merchant,
+    'chains': _requestChains(r['chains'], [
+      for (final item in composed) item['brand'],
+      merchant,
+    ]),
     'country': _country(r['country']),
   };
   final lang = _lang(r['lang']);

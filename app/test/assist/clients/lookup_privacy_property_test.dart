@@ -293,14 +293,23 @@ void main() {
             expectedRecipient: router.lookupSupport().recipient);
       }
       // Brand path: no location-derived chain survives
-      // withoutLocationChains (here every chain counts as one).
+      // withoutLocationChains (here every chain counts as one); only the
+      // chains the request's own brands and merchant name are left.
       await settings.setProvider(AiProvider.anthropic);
       await router.submit(req.withoutLocationChains(req.chainKeys),
           expectedRecipient: LookupRecipient.anthropic);
       final last = seen.last;
-      expect(dataBlock(_promptOf(last.url.host,
-              jsonDecode(last.body) as Map<String, dynamic>))['chains'],
-          isEmpty);
+      final block = dataBlock(_promptOf(
+          last.url.host, jsonDecode(last.body) as Map<String, dynamic>));
+      final named = <String?>{
+        for (final item in block['items'] as List)
+          matchChain((item as Map)['brand'] as String),
+        matchChain(block['order_merchant'] as String),
+      };
+      for (final c in block['chains'] as List) {
+        expect(named, contains((c as Map)['key']),
+            reason: 'a chain no brand or merchant names survived');
+      }
     }
     expect(seen, hasLength(40 * 5));
 

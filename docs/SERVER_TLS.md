@@ -10,7 +10,8 @@ localhost. Flask itself does not change.
 
 It is also the switch for the restaurant lookup's location path: the app
 sends chain names derived from a photo's location to your server **only
-over `https://`**. Over `http://` it sends lookups by printed brand only.
+over `https://`**. Over `http://` it looks up only the chains a printed
+brand or the receipt names (the request still lists them in `chains`).
 Do this before setting `CLAUDE_LOOKUP_ENABLED=1` (see
 [SERVER_DEPLOY.md](SERVER_DEPLOY.md)).
 

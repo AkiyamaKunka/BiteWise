@@ -878,6 +878,23 @@ def build_restaurant_lookup():
     req("merchant_numbered_chain_name", {
         "order_merchant": "Seasons 52 #12, Chicago",
         "items": [{"name": "Burger", "brand": "Hwy 55 Burgers 1200 Main"}]})
+    # A chain a brand or the merchant names is always in "chains", first:
+    # the model may choose only among "chains", and lane B accepts only a
+    # chain the request lists.
+    req("brand_only_names_its_chain", {
+        "items": [{"name": "Burrito", "qty": 1, "brand": "CHIPOTLE 2381"}],
+        "chains": []})
+    req("named_chains_lead_and_the_cap_holds", {
+        "items": [{"name": "Big Mac", "brand": "McDonald's"},
+                  {"name": "Latte", "brand": "Starbucks Coffee #12"},
+                  {"name": "Fries", "brand": "McDonald’s"},
+                  {"name": "Water", "brand": "Dasani"}],
+        "order_merchant": "Chipotle Mexican Grill",
+        "chains": ["panda_express", "chipotle", "wendys"]})
+    req("caller_chains_follow_a_named_one", {
+        "items": [{"name": "Whopper", "brand": ""}],
+        "order_merchant": "Wendy's #4411",
+        "chains": ["burger_king", "wendys", "mcdonalds"]})
 
     prompt("typical", typical)
     prompt("injection", {

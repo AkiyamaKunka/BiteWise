@@ -33,9 +33,11 @@ What this module adds is the server's own gate around that contract:
 What a request may carry (and nothing else reaches the model): item
 names, quantities and units, the chain an item's printed brand names, the
 chain the receipt merchant names (lane B's chain_name_only: the table's
-canonical name or "", never the printed text), up to 3 chain KEYS from
-our own table (their canonical names are taken from the table, never from
-the caller), the country code and the reply language. No coordinates,
+canonical name or "", never the printed text), up to 3 chains from our
+own table (their canonical names are taken from the table, never from
+the caller; the chains the brands and the merchant name always among
+them, first, so a brand-only request names its chain), the country code
+and the reply language. No coordinates,
 street, city, distance, timestamps, meal_description, dietary profile,
 history or image: those keys are refused outright, and coordinate-shaped
 text inside any field is too.
@@ -238,13 +240,36 @@ def sanitize_request(payload) -> Dict:
     return _compose(payload, request)
 
 
+def _expected_chain_keys(composed: Dict, gated_chains: List[Dict]) -> List:
+    """The chain keys data_contracts section 4 requires, in order: the
+    chains the composed brands and merchant name (the prompt lets the
+    model choose only among "chains", and lane B accepts only a chain the
+    request lists), then the chains the gate accepted; no repeats, at
+    most MAX_CHAINS."""
+    keys: List = []
+
+    def add(key):
+        if key is not None and key not in keys and len(keys) < MAX_CHAINS:
+            keys.append(key)
+
+    for item in composed["items"]:
+        if item["brand"]:
+            add(restaurant_lookup.match_chain(item["brand"]))
+    if composed["order_merchant"]:
+        add(restaurant_lookup.match_chain(composed["order_merchant"]))
+    for chain in gated_chains:
+        add(chain["key"])
+    return keys
+
+
 def _compose(payload: Dict, gated: Dict) -> Dict:
     """The request as lane B's composer builds it from the caller's own
     whitelisted fields (byte-identical to what the app composed), checked
-    against what the gate accepted: same items, same chain keys in the
-    same order, still a lookup worth running (a printed brand counts only
-    when it names a table chain), no coordinate-shaped text. Anything else
-    is refused, never repaired."""
+    against what the gate accepted: same items; the chains the brands and
+    merchant name, then the accepted chain keys in their order, each under
+    our table's name; at least one chain, so the lookup can find something
+    (a printed brand counts only when it names a table chain); no
+    coordinate-shaped text. Anything else is refused, never repaired."""
     raw = {k: payload[k] for k in TOP_LEVEL_KEYS - {"backend"} if k in payload}
     composed = restaurant_lookup.compose_lookup_request(raw)
     try:
@@ -254,13 +279,14 @@ def _compose(payload: Dict, gated: Dict) -> Dict:
         for item in items:
             texts += [item["name"], item["unit"], item["brand"]]
         ok = (len(items) == len(gated["items"])
+              and bool(chains)
               and [c["key"] for c in chains]
-              == [c["key"] for c in gated["chains"]]
+              == _expected_chain_keys(composed, gated["chains"])
+              and all(c["name"] == restaurant_lookup.chain_by_key(
+                  c["key"])["name"] for c in chains)
               and all(isinstance(t, str) and not _COORD_RE.search(t)
                       and "<" not in t and ">" not in t for t in texts)
               and any(item["name"] for item in items)
-              and (chains or composed["order_merchant"]
-                   or any(item["brand"] for item in items))
               and composed.get("country") == gated["country"]
               and composed.get("lang") == gated.get("lang"))
     except (KeyError, TypeError):

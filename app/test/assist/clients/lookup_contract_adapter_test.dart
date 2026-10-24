@@ -117,7 +117,17 @@ void main() {
       final brandOnly = req.withoutLocationChains(['chipotle']);
       expect(brandOnly.chainKeys, ['mcdonalds']);
       expect(brandOnly.items, req.items);
-      expect(req.withoutLocationChains(req.chainKeys).chainKeys, isEmpty);
+      // A chain a printed brand names is never dropped, even when the
+      // location also found it: the composer always lists it.
+      expect(req.withoutLocationChains(req.chainKeys).chainKeys,
+          ['mcdonalds']);
+      final noBrand = LookupRequest.compose({
+        'items': [
+          {'name': 'Bowl'}
+        ],
+        'chains': ['chipotle'],
+      });
+      expect(noBrand.withoutLocationChains(['chipotle']).chainKeys, isEmpty);
     });
 
     test('chainDomains: the table domains of every chain the request names',
@@ -130,8 +140,10 @@ void main() {
         'order_merchant': 'Starbucks Coffee #123',
         'chains': ['panda_express'],
       });
+      // The chains the brand and the merchant name lead the request.
+      expect(req.chainKeys, ['chipotle', 'starbucks', 'panda_express']);
       expect(req.chainDomains,
-          ['pandaexpress.com', 'chipotle.com', 'starbucks.com']);
+          ['chipotle.com', 'starbucks.com', 'pandaexpress.com']);
       expect(itemRequest('Pho').chainDomains, isEmpty);
     });
 

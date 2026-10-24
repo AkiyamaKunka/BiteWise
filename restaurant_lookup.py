@@ -6,7 +6,8 @@ between the owner's server and the app:
   * compose_lookup_request(raw) -> the request body (data_contracts section
     4): item names, counts and units, the chain each item's printed brand
     names, the chain the receipt merchant names, up to 3 chains taken from
-    OUR table by key, the country and the reply language. Nothing else
+    OUR table by key (the chains the brands and the merchant name always
+    among them, first), the country and the reply language. Nothing else
     survives: no coordinates, street, distance, city, timestamps,
     meal_description, calories or any other key. Printed brand and merchant
     text never goes out as printed (a receipt prints store numbers, streets
@@ -214,21 +215,34 @@ def compose_lookup_item(item):
     }
 
 
-def _request_chains(value):
+def _request_chains(value, named):
+    """The request's chains: first the chains the composed named texts
+    name (the items' brands, then the order merchant: canonical table
+    names), then the caller's value (keys of OUR table, in rank order, as
+    strings or {"key": ...} dicts); no repeats, at most 3. The prompt lets
+    the model choose only among "chains" and lane B accepts only a chain
+    the request lists, so a brand without its chain could only ever come
+    back no_match. Twin of the Dart _requestChains."""
     out = []
     seen = set()
-    for entry in value if isinstance(value, list) else []:
-        key = entry.get("key") if isinstance(entry, dict) else entry
+
+    def add(key):
         if not isinstance(key, str) or key in seen:
-            continue
+            return
+        if len(out) == LOOKUP_MAX_CHAINS:
+            return
         chain = chain_by_key(key)
         if chain is None:
-            continue
+            return
         seen.add(key)
         out.append({"key": chain["key"], "name": chain["name"],
                     "size": chain["size"]})
-        if len(out) == LOOKUP_MAX_CHAINS:
-            break
+
+    for name in named:
+        if isinstance(name, str) and name:
+            add(match_chain(name))
+    for entry in value if isinstance(value, list) else []:
+        add(entry.get("key") if isinstance(entry, dict) else entry)
     return out
 
 
@@ -237,18 +251,21 @@ def compose_lookup_request(raw):
     of the same shape. Only items[].name/qty/unit/brand, order_merchant,
     chains (keys of OUR table, in rank order), country and lang are read;
     every other key is ignored. brand and order_merchant become a table
-    chain's canonical name or "" (chain_name_only). Items keep their positions (the first 12),
-    so a response's item_index is the meal's food_items index. Idempotent:
-    composing a composed request returns it unchanged."""
+    chain's canonical name or "" (chain_name_only), and the chains they
+    name lead "chains" (_request_chains). Items keep their positions (the
+    first 12), so a response's item_index is the meal's food_items index.
+    Idempotent: composing a composed request returns it unchanged."""
     r = raw if isinstance(raw, dict) else {}
     items = r.get("items")
+    composed = [compose_lookup_item(i)
+                for i in (items if isinstance(items, list) else [])
+                [:LOOKUP_MAX_ITEMS]]
+    merchant = chain_name_only(r.get("order_merchant"), LOOKUP_MERCHANT_MAX)
     request = {
-        "items": [compose_lookup_item(i)
-                  for i in (items if isinstance(items, list) else [])
-                  [:LOOKUP_MAX_ITEMS]],
-        "order_merchant": chain_name_only(r.get("order_merchant"),
-                                          LOOKUP_MERCHANT_MAX),
-        "chains": _request_chains(r.get("chains")),
+        "items": composed,
+        "order_merchant": merchant,
+        "chains": _request_chains(
+            r.get("chains"), [item["brand"] for item in composed] + [merchant]),
         "country": _country(r.get("country")),
     }
     lang = _lang(r.get("lang"))

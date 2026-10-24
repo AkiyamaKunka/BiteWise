@@ -67,8 +67,9 @@ extension LookupRequestForClients on LookupRequest {
 
   /// This request without the chains that came from the photo's location
   /// (design §4: the brand path when the location path is not allowed).
-  /// Chains a printed brand or the receipt merchant named are kept;
-  /// everything else is recomposed unchanged.
+  /// Chains a printed brand or the receipt merchant names are kept even
+  /// when the location found them too (lane B's composer always lists
+  /// them); everything else is recomposed unchanged.
   LookupRequest withoutLocationChains(Iterable<String> locationChainKeys) {
     final drop = locationChainKeys.toSet();
     return LookupRequest.compose({

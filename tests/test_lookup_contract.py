@@ -61,7 +61,10 @@ def test_defaults_and_optional_fields():
                             "lang": "zh-Hans", "country": "us"})
     assert req["items"] == [{"name": "Latte", "qty": 1, "unit": "",
                              "brand": "Starbucks"}]
-    assert req["chains"] == [] and req["country"] == "US"
+    # The brand's chain is listed: the model may only choose among chains.
+    assert req["chains"] == [{"key": "starbucks", "name": "Starbucks",
+                              "size": "20_plus"}]
+    assert req["country"] == "US"
     assert req["lang"] == "zh"
     assert "lang" not in sanitize_request(body(lang="en"))
     assert sanitize_request(body(qty=None, country=None))["country"] == "US"
@@ -403,8 +406,9 @@ def test_every_table_chain_is_accepted_with_its_canonical_name():
     every row is accepted, under the table's own name, and its domains are
     the ones lane B's matcher uses."""
     for chain in restaurant_lookup.US_CHAINS:
-        req = sanitize_request(body(chains=[{"key": chain["key"],
-                                             "name": "spoofed"}]))
+        req = sanitize_request(body(
+            items=[{"name": "Meal", "brand": ""}],
+            chains=[{"key": chain["key"], "name": "spoofed"}]))
         assert req["chains"] == [{"key": chain["key"],
                                   "name": chain["name"],
                                   "size": "20_plus"}], chain["key"]
@@ -417,7 +421,47 @@ def test_every_table_chain_is_accepted_with_its_canonical_name():
 def test_a_key_outside_the_table_is_refused_but_brand_only_runs():
     assert rejected(body(chains=[{"key": "joes_diner"}])).field == \
         "chains[0].key"
-    assert sanitize_request(body(chains=[]))["items"][0]["brand"] == "Chipotle"
+    req = sanitize_request(body(chains=[]))
+    assert req["items"][0]["brand"] == "Chipotle"
+    # Brand-only still names its chain: step 1 of the prompt answers
+    # no_match for empty chains, and lane B accepts only a listed chain.
+    assert [c["key"] for c in req["chains"]] == ["chipotle"]
+
+
+def test_brand_and_merchant_chains_lead_the_request():
+    req = sanitize_request(body(
+        items=[{"name": "Big Mac", "brand": "McDonald's"},
+               {"name": "Latte", "brand": "Starbucks Coffee #12"}],
+        order_merchant="Chipotle Mexican Grill #2381",
+        chains=[{"key": "panda_express"}, {"key": "chipotle"}]))
+    assert [c["key"] for c in req["chains"]] == [
+        "mcdonalds", "starbucks", "chipotle"]
+    req = sanitize_request(body(
+        items=[{"name": "Whopper"}], order_merchant="Wendy's #4411",
+        chains=[{"key": "burger_king"}, {"key": "mcdonalds"}]))
+    assert [c["key"] for c in req["chains"]] == [
+        "wendys", "burger_king", "mcdonalds"]
+
+
+@pytest.mark.parametrize("transform", [
+    lambda r: dict(r, chains=[c for c in r["chains"]
+                              if c["key"] != "mcdonalds"]),  # brand's chain
+    lambda r: dict(r, chains=list(reversed(r["chains"]))),     # order
+    lambda r: dict(r, chains=[dict(c, name="Spoofed") for c in r["chains"]]),
+])
+def test_a_composer_that_drops_or_reorders_named_chains_is_refused(
+        monkeypatch, transform):
+    def lane_b_then(req):
+        out = restaurant_lookup.compose_lookup_request(req)
+        return transform(out)
+
+    calls = _fake_composer(monkeypatch, transform=lambda r: r)
+    module = lookup_contract.restaurant_lookup
+    module.compose_lookup_request = lane_b_then
+    err = rejected(body(items=[{"name": "Big Mac", "brand": "McDonald's"}],
+                        chains=[{"key": "chipotle"}]))
+    assert (err.code, err.field) == ("bad_request", "request")
+    assert calls == []
 
 
 # ─── response ────────────────────────────────────────────────────────

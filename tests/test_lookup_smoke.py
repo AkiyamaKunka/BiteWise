@@ -134,10 +134,12 @@ def test_sample_request_names_chipotle_from_the_table(monkeypatch):
     assert req["chains"] == [{"key": "chipotle", "name": "Chipotle",
                               "size": "20_plus"}]
     assert req["items"][0]["brand"] == "Chipotle"
-    # A table without the chain (never shipped) would still smoke-test the
-    # brand path rather than send a key the gate refuses.
+    # Without the key passed in, the brand path still names its chain:
+    # lane B's composer lists the chain a printed brand names (the model
+    # may choose only among "chains").
     monkeypatch.setattr(smoke.lookup_contract, "chain_known", lambda k: False)
-    assert smoke.sample_request()["chains"] == []
+    assert [c["key"] for c in smoke.sample_request()["chains"]] == [
+        "chipotle"]
 
 
 def test_secret_values_and_redaction_units():
