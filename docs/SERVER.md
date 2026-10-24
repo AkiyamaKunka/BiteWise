@@ -423,7 +423,15 @@ a network tool, so it is fenced separately from the photo and text paths:
   "scope": "search"`: it is the CLI search tool's own summary of a whole
   search, shared by every URL that search listed — not text from the
   cited page. It can back a suggestion in the app, never an automatic
-  apply.
+  apply. So on Claude Plan every lookup that finds an item reaches the
+  app as a one-tap suggestion at most (decision code `not_grounded`
+  when nothing else stands in the way); automatic
+  applies come only through a direct Anthropic or OpenRouter key, whose
+  search returns page text. The acceptance test
+  (docs/GLASSES_ACCEPTANCE.md, Part C, 2026-10-24) expects exactly that.
+  Verbatim page text from the server (a WebFetch pinned to the chain's
+  own domains, design L5) would change it; that is the owner's decision,
+  and it is not built.
 - **Logs** carry status, verdict, timings and counts only — never
   restaurant names, dishes, queries or URLs.
 

@@ -7,7 +7,7 @@ Written 2026-10-24 for stage H1 of the Meta glasses and restaurant assist design
 | Setup | Are all the settings right? | The glasses, the Meta AI app, your iPhone 18 Pro Max | 15 min |
 | **A** | Does Meta put glasses photos into Apple Photos by itself, with the phone locked and Meta AI not open? **This decides the return.** | Nothing from Bitewise | About 45 min of active time, spread over 2 to 3 days |
 | B | Does Bitewise log those photos, in the background and when you open it? | A Bitewise build with stages G1b, G2a, G2b and G3 (Claude installs it) | About 30 min, plus waiting |
-| C | Does the restaurant assist work at a US chain, both as a suggestion and as an automatic apply with Undo? | A build with the R stages, your server redeployed, the lookup switched on (your approval), and TLS for the location half | 2 restaurant meals |
+| C | Does the restaurant assist work at a US chain? On Claude Plan it ends as a one-tap suggestion; an automatic apply with Undo needs a direct Anthropic or OpenRouter key. | A build with the R stages, your server redeployed, the lookup switched on (your approval), and TLS for the location half | 2 restaurant meals |
 
 Build status on 2026-10-24 (branch feat/glasses-restaurant-assist): the glasses stages F1, G1a, G1b, G2a, G2b and G3 are built, so Part B can run on a new install. Of the restaurant stages, R1, R2a, R2b, R3a, R3b, R4 and R5b are merged, with the TLS guide (docs/SERVER_TLS.md); R2c, R5a, R6a to R6c, R7a and R7b (the assist itself, its settings and its diagnostics) are still to be built, so Part C waits for them. If the build is not ready before your return deadline, Part A alone decides. Parts B and C can wait, because any problem they find is a Bitewise problem we fix in software (see "Return the glasses if").
 
@@ -184,6 +184,8 @@ The card covers the last 20 glasses photos from the last 14 days. It never shows
 
 ## 4. Part C: restaurant assist at a US chain (needs R1 to R7)
 
+**On Claude Plan, expect suggestions, not automatic applies.** Your server searches with the Claude CLI's WebSearch tool, which returns a summary of each search, not text taken from the cited page. Bitewise applies published numbers by itself only when every number is found in text from the source page itself. So on Claude Plan, a lookup that finds your item ends as a **one-tap suggestion** at most. When nothing else about the match stands in the way, its decision code is `not_grounded`. That is by design (docs/SERVER.md, "Evidence"). An automatic apply with Undo needs a direct **Anthropic** or **OpenRouter** key in Bitewise, because their search returns page text. Giving your server page text (a WebFetch pinned to the chain's own website, design L5) is your decision, and it is not built. Each step below says what to expect on each.
+
 ### Before the test (Claude or you, not at the restaurant)
 1. Your server is redeployed with the lookup endpoints (docs/SERVER_DEPLOY.md), and you have approved `CLAUDE_LOOKUP_ENABLED=1` after `scripts/lookup_smoke.py` passes.
 2. TLS (docs/SERVER_TLS.md) is required for the **location half** on Claude Plan. Without https, Bitewise looks up **brand only** (C1 and C2 still work; skip C3 and C4).
@@ -198,16 +200,20 @@ The card covers the last 20 glasses photos from the last 14 days. It never shows
 
 ### C1. Brand path (the cup, wrapper or bag is in the photo)
 1. Take a glasses photo with the **printed logo clearly visible** on the cup, wrapper, box or bag next to the food. Also take 1 iPhone camera photo of the same scene as a control.
-2. **Expected (automatic apply):**
+2. **Expected on Claude Plan (a one-tap suggestion):**
+   - A chip on the meal card: "{chain} publishes {kcal} kcal — tap to review". Diagnostics shows the decision code `not_grounded`.
+   - Tap the chip. The meal editor shows a source card with the menu item, size and serving, the published kcal/P/C/F, "**Source: mcdonalds.com**" and "via Claude Plan · {date}".
+   - Tap **Use published numbers** (采用公布数值). The published numbers replace the AI's estimate.
+3. **Expected with a direct Anthropic or OpenRouter key (automatic apply):**
    - A snackbar: "Used McDonald's's published numbers: 540 → 590 kcal" with **Undo**. The numbers are examples.
    - A chip on the meal card: "McDonald's numbers used for 1 item(s)", plus a small "updated" dot until you open the meal.
-   - In the meal editor, a source card with the menu item, size and serving, the published kcal/P/C/F, "**Source: mcdonalds.com**", "via Claude Plan · {date}", and "Number found on the source page".
-3. **Also fine (suggestion instead of apply):** the chip reads "{chain} publishes {kcal} kcal — tap to review". This happens when the match is not airtight: a combo, a size range, numbers very different from the AI's estimate, or a meal older than 12 hours. Write down the decision code from Diagnostics.
+   - In the meal editor, the same source card, with "via {provider} · {date}" and "Number found on the source page".
+4. **Also fine with a direct key (suggestion instead of apply):** the chip reads "{chain} publishes {kcal} kcal — tap to review". This happens when the match is not airtight: a combo, a size range, numbers very different from the AI's estimate, or a meal older than 12 hours. Write down the decision code from Diagnostics. On Claude Plan, any code other than `not_grounded` is worth writing down too.
 
 ### C2. Undo
-1. Tap **Undo** (撤销) on the snackbar. **Expected:** the kcal goes back to **exactly** the old number from the snackbar, and the chip disappears.
-2. Then open the meal editor and tap **Look up restaurant nutrition** (查找餐厅营养) to run the lookup by hand. It applies or suggests again.
-3. Tap **Use AI estimate** (改用 AI 估算). **Expected:** the same exact revert.
+1. With a direct key only: tap **Undo** (撤销) on the snackbar. **Expected:** the kcal goes back to **exactly** the old number from the snackbar, and the chip disappears. On Claude Plan there is no automatic apply and no snackbar, so skip this step.
+2. Open the meal editor and tap **Look up restaurant nutrition** (查找餐厅营养) to run the lookup by hand. On Claude Plan it suggests again: accept it with **Use published numbers** (采用公布数值). With a direct key it applies or suggests again.
+3. Tap **Use AI estimate** (改用 AI 估算). **Expected:** the kcal goes back to **exactly** the AI's number from before the published numbers were used.
 
 ### C3. Location path, first visit (no logo in the photo)
 1. Photograph food with **no logo visible**, for example a dine-in tray or plate with the logos kept out of the frame. Also take an iPhone camera control photo.
@@ -216,7 +222,7 @@ The card covers the last 20 glasses photos from the last 14 days. It never shows
 4. If nothing happens, check: does the Glasses check card say GPS yes? Is the GPS time difference within ±10 min? A glasses photo with no GPS uses the brand path only.
 
 ### C4. Location path, second visit
-Go to the **same location**, at least **6 hours later** (ideally another day; the same item is not applied twice within 6 h). Order the same item and take a logo-free photo. **Expected:** an **automatic apply** with snackbar and Undo. If you get a suggestion instead, write down the GPS line and the GPS time difference from the Glasses check card, and the decision code. A missing or stale GPS fix time on a glasses photo keeps it a suggestion, by design. The iPhone control photo should then apply.
+Go to the **same location**, at least **6 hours later** (ideally another day; the same item is not applied twice within 6 h). Order the same item and take a logo-free photo. **Expected on Claude Plan:** a one-tap suggestion again, with `not_grounded`. The spot you confirmed in C3 is remembered, but the number check still needs page text. **Expected with a direct Anthropic or OpenRouter key:** an **automatic apply** with snackbar and Undo. If you get a suggestion with any other code, write down the GPS line and the GPS time difference from the Glasses check card, and the decision code. A missing or stale GPS fix time on a glasses photo keeps it a suggestion, by design. With a direct key, the iPhone control photo should then apply.
 
 ### C5. Home meal (negative test)
 Photograph a home-cooked meal at home, with the mode still "Always". **Expected:** nothing happens, and the **Restaurant lookups** count ("Today n/20") does not go up.
@@ -257,7 +263,7 @@ Set **Restaurant nutrition lookup** back to what you want to keep: **When unsure
 | B6 | No glasses badge | Glasses check signal | Make/Model text, album name, file-name pattern with digits as `#` |
 | B7 | A food photo marked "not food" | Glasses check food score | All 10 scores, each labelled food or non-food (no pictures; a short word such as "burger" or "wall" is enough) |
 | C (any) | No lookup at all | Settings > Restaurant nutrition hint text; mode is Always; consent given; your provider is Claude Plan, Anthropic or OpenRouter (others are unsupported) | The hint text, the **Restaurant lookups** line ("Today n/20 · last {code}"), and the last decisions (code, old → new kcal, provider) |
-| C1 | Suggestion instead of apply | Decision code | The code; what you ordered (item and size); whether it was a combo or customized; the old and published kcal |
+| C1 | Suggestion instead of apply (with a direct key; on Claude Plan a suggestion with `not_grounded` is expected) | Decision code | The code; what you ordered (item and size); whether it was a combo or customized; the old and published kcal |
 | C3 / C4 | No suggestion from location | Glasses check: GPS yes or no, GPS time difference; https on your server; "Use photo location" ON | Those values; whether the iPhone control photo got a suggestion; whether the place was a mall or a busy block |
 | C2 | Undo did not restore exactly | Did you edit the meal before tapping Undo? (Edits are protected on purpose.) | Old kcal, new kcal, kcal after Undo, and any message shown ("This meal was changed after…", "This meal was just updated…") |
 
@@ -313,9 +319,10 @@ Badge shown? __   Include-switch-off outcome: __   Camera control logged normall
 
 PART C
 Chain ______ (standalone? y/n)  server https? y/n
-C1: applied / suggested / nothing; snackbar old → new ___ → ___; source host ____
-C2: Undo exact? __  manual lookup again? __  Use AI estimate exact? __
-C3: suggestion? __  C4 (date/time ____): applied / suggested
+Provider: Claude Plan / Anthropic / OpenRouter
+C1: applied / suggested (code ____) / nothing; old → new ___ → ___; source host ____
+C2: Undo exact (direct key only)? __  manual lookup again? __  Use AI estimate exact? __
+C3: suggestion? __  C4 (date/time ____): applied / suggested (code ____)
 C5 home meal: lookups count unchanged? __
 Restaurant lookups line "____"; last decisions (code, old → new, provider): ...
 ```
@@ -361,3 +368,4 @@ The "Oct 21 research" is the camera-glasses research run of 2026-10-21 (its note
   - it has no separate "waiting for the app to open" outcome for a background food-check deferral (`deferred_gpu`).
 - Copy nit spotted while writing C1: the design's snackbar template "Used {brand}'s published numbers" renders as "McDonald's's" for brands that already end in 's (McDonald's, Wendy's, Culver's). It needs a template without the possessive, for example "Used published numbers from {brand}: {old} → {new} kcal".
 - If criterion 1 or 2 of "Return the glasses if" fails, do not propose L4 (DAT) as a fix. It is foreground-only.
+- On Claude Plan, `not_grounded` suggestions are the expected Part C result: the server's evidence is a search summary (`verbatim: false`, lookup_jobs.py), and decideAssist grounds numbers only in verbatim page text. If the owner wants automatic applies on Claude Plan, that is design L5 (a WebFetch pinned to the chain's own domains that returns page text). It needs the owner's decision before anything is built.
