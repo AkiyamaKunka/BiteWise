@@ -59,8 +59,10 @@ Settings, using **your own API key**:
   Roll rules. The app recognizes them on the phone, from the file name,
   the album the Meta AI app puts them in, or the camera model recorded in
   the photo. On iPhone, each one is first checked on the phone by Apple's
-  built-in image classifier, and a photo that does not look like food is
-  not sent at all. **Meta glasses photos** (Settings › Photos)
+  built-in image classifier when it can run, and a photo it finds no food
+  in is not sent. When the check cannot run (the classifier is
+  unavailable, fails or takes too long), the photo is handled like any
+  camera photo and sent to the AI. **Meta glasses photos** (Settings › Photos)
   turns automatic logging of these photos off; photos you pick or share
   are still sent.
 
@@ -137,7 +139,7 @@ date. Questions: open an issue at
 
 - 你手动选择或分享到应用里的照片。
 - 仅当你打开**「监控相册」**时：相册里的每一张新照片，以及开启那一刻回溯窗口内（默认最近 2 天，可在设置里调整）已经拍下的照片，包括不是食物的照片——由 AI 判断照片是否为食物，非食物照片不会被记录。
-- Meta AI App 导入相册的 **Meta 眼镜**照片，与相机照片同等对待，遵循同样的「监控相册」规则。应用在手机上根据文件名、Meta AI App 存放它们的相簿，或照片里记录的相机型号识别这些照片。在 iPhone 上，每一张都会先由苹果系统自带的图像分类器在手机上检查一遍，看起来不像食物的照片根本不会被发送。**「包括 Meta 眼镜拍的照片」**（设置 › 照片）可以关闭对这类照片的自动记录；你手动选择或分享的照片仍会发送。
+- Meta AI App 导入相册的 **Meta 眼镜**照片，与相机照片同等对待，遵循同样的「监控相册」规则。应用在手机上根据文件名、Meta AI App 存放它们的相簿，或照片里记录的相机型号识别这些照片。在 iPhone 上，只要苹果系统自带的图像分类器能够运行，每一张都会先由它在手机上检查一遍，它认为不含食物的照片不会被发送；如果检查无法进行（分类器不可用、出错或耗时过长），这张照片就和普通相机照片一样处理，会发送给 AI。**「包括 Meta 眼镜拍的照片」**（设置 › 照片）可以关闭对这类照片的自动记录；你手动选择或分享的照片仍会发送。
 
 **随照片一起发送的内容：**
 
