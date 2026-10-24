@@ -60,7 +60,7 @@ import json
 import logging
 import os
 import re
-import select
+import selectors
 import shlex
 import shutil
 import signal
@@ -119,24 +119,44 @@ class AnalyzerTimeout(Exception):
 # process group is killed and the caller waits at most
 # PREEMPT_WAIT_SECONDS for the lock (_acquire_cli_for_foreground). The
 # lookup job is requeued by lookup_jobs.
+#
+# A lookup takes AND releases _CLI_LOCK only while holding
+# _LOOKUP_STATE_LOCK, so a foreground caller that holds the state lock
+# sees a stable owner. While a foreground caller waits for a lookup to
+# let go ("fg_waiting"), no lookup may take the lock: the worker's next
+# queued job can never win the (non-FIFO) race against that caller.
 _CLI_LOCK = threading.Lock()
 PREEMPT_WAIT_SECONDS = 5
 
-# Who holds _CLI_LOCK for a lookup, and its process (for pre-emption).
+# Who holds _CLI_LOCK for a lookup, its process and its cancel event
+# (for pre-emption), and how many foreground callers wait for it.
 _LOOKUP_STATE_LOCK = threading.Lock()
 _LOOKUP_STATE: Dict[str, object] = {
-    "holding": False, "proc": None, "preempted": False}
+    "holding": False, "proc": None, "preempted": False, "cancel": None,
+    "fg_waiting": 0}
 
 
 def _acquire_cli_for_foreground() -> bool:
     """_CLI_LOCK for a photo/leftover/text request. Contended by another
     FOREGROUND request: False at once, as always. Contended by a lookup:
-    kill the lookup and wait (bounded) for the lock it releases."""
+    kill the lookup and wait (bounded) for the lock it releases — the
+    first such caller only; a second one would lose to the first anyway,
+    so it is told False at once like any other contended caller."""
     if _CLI_LOCK.acquire(blocking=False):
         return True
-    if not preempt_lookup():
-        return False
-    return _CLI_LOCK.acquire(timeout=PREEMPT_WAIT_SECONDS)
+    with _LOOKUP_STATE_LOCK:
+        if _CLI_LOCK.acquire(blocking=False):  # released meanwhile
+            return True
+        if not _LOOKUP_STATE["holding"] or _LOOKUP_STATE["fg_waiting"]:
+            return False
+        _LOOKUP_STATE["fg_waiting"] += 1
+        _preempt_locked()
+    _lookup_log.info("Restaurant lookup pre-empted by a foreground request.")
+    try:
+        return _CLI_LOCK.acquire(timeout=PREEMPT_WAIT_SECONDS)
+    finally:
+        with _LOOKUP_STATE_LOCK:
+            _LOOKUP_STATE["fg_waiting"] -= 1
 
 
 def _timeout_seconds() -> int:
@@ -1070,7 +1090,8 @@ LOOKUP_INIT_EXPECT = {
 LOOKUP_KEY_SOURCES_DEFAULT = ("none",)
 LOOKUP_ENV_KEYS = ("PATH", "HOME", "LANG", "CLAUDE_CODE_OAUTH_TOKEN")
 LOOKUP_MODEL_DEFAULT = "sonnet"
-LOOKUP_INIT_DEADLINE_SECONDS = 10
+LOOKUP_INIT_DEADLINE_SECONDS = 10  # default for CLAUDE_LOOKUP_INIT_SECONDS
+LOOKUP_READ_SLICE_SECONDS = 0.25  # how often a blocked read checks cancel
 LOOKUP_EXIT_GRACE_SECONDS = 5
 LOOKUP_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 LOOKUP_MAX_LINE_BYTES = 2 * 1024 * 1024
@@ -1097,6 +1118,20 @@ def lookup_timeout_seconds() -> int:
     except ValueError:
         return 75
     return min(max(value, 20), 300)
+
+
+def lookup_init_deadline_seconds() -> float:
+    """CLAUDE_LOOKUP_INIT_SECONDS: how long the CLI may take to print its
+    init event (default 10, clamp 5..30) — a cold Node start on a small
+    VM can be slow; the smoke script prints the measured latency."""
+    raw = os.environ.get("CLAUDE_LOOKUP_INIT_SECONDS")
+    if raw is None or not raw.strip():
+        return LOOKUP_INIT_DEADLINE_SECONDS
+    try:
+        value = int(raw)
+    except ValueError:
+        return LOOKUP_INIT_DEADLINE_SECONDS
+    return min(max(value, 5), 30)
 
 
 def lookup_key_sources() -> frozenset:
@@ -1195,6 +1230,7 @@ class LookupRun:
     evidence: List[Dict] = field(default_factory=list)
     searches: int = 0
     duration_s: float = 0.0
+    init_s: float = 0.0
     lines_read: int = 0
     started: bool = False
     init: Dict = field(default_factory=dict)
@@ -1208,16 +1244,34 @@ class _OutputOverflow(Exception):
     pass
 
 
-class _LineReader:
-    """Line-at-a-time reads from a pipe with a deadline (select + os.read),
-    so the caller decides about EACH line before the next is parsed, and a
-    silent or flooding child can never hold the CLI lock past the limit."""
+class _Cancelled(Exception):
+    pass
 
-    def __init__(self, fd: int):
+
+class _LineReader:
+    """Line-at-a-time reads from a pipe with a deadline (a selector +
+    os.read), so the caller decides about EACH line before the next is
+    parsed, and a silent or flooding child can never hold the CLI lock
+    past the limit. A set [cancel] event ends a blocked read within
+    LOOKUP_READ_SLICE_SECONDS — a pre-emption never waits for pipe EOF,
+    which a descendant that left the process group could hold open."""
+
+    def __init__(self, fd: int, cancel: Optional[threading.Event] = None):
         self._fd = fd
+        self._cancel = cancel
         self._buf = b""
         self._eof = False
         self._total = 0
+        # selectors, not select.select: no FD_SETSIZE limit in a
+        # long-running process with many sockets.
+        self._selector = selectors.DefaultSelector()
+        self._selector.register(fd, selectors.EVENT_READ)
+
+    def close(self) -> None:
+        try:
+            self._selector.close()
+        except (OSError, ValueError):  # pragma: no cover - best effort
+            pass
 
     def readline(self, deadline: float) -> bytes:
         while True:
@@ -1230,12 +1284,15 @@ class _LineReader:
                 return line
             if len(self._buf) > LOOKUP_MAX_LINE_BYTES:
                 raise _OutputOverflow()
+            if self._cancel is not None and self._cancel.is_set():
+                raise _Cancelled()
             remaining = deadline - time.monotonic()
             if remaining <= 0:
                 raise _ReadTimeout()
-            ready, _, _ = select.select([self._fd], [], [], remaining)
-            if not ready:
-                raise _ReadTimeout()
+            if self._cancel is not None:
+                remaining = min(remaining, LOOKUP_READ_SLICE_SECONDS)
+            if not self._selector.select(remaining):
+                continue  # re-checks cancel and the deadline
             chunk = os.read(self._fd, 65536)
             if not chunk:
                 self._eof = True
@@ -1353,6 +1410,16 @@ def _collect_search_results(event: Dict, ws_ids: set, searches: list) -> None:
                          "text": text.strip()[:LOOKUP_EVIDENCE_TEXT_CAP]})
 
 
+# Tool calls a lookup may make, per content-block type. Any other block
+# whose type ends in "tool_use" (server_tool_use web_fetch or
+# code_execution, mcp_tool_use, a type a future CLI adds) is a kill.
+_LOOKUP_TOOL_USES = {
+    "tool_use": frozenset({"WebSearch", "StructuredOutput"}),
+    # The API's own search tool, the one WebSearch wraps.
+    "server_tool_use": frozenset({"web_search"}),
+}
+
+
 def _unexpected_tool_use(event: Dict, ws_ids: set) -> bool:
     """Record WebSearch tool_use ids; True for any tool outside the
     expected set (the init guard's promise, re-checked per call)."""
@@ -1361,14 +1428,17 @@ def _unexpected_tool_use(event: Dict, ws_ids: set) -> bool:
     if not isinstance(content, list):
         return False
     for block in content:
-        if not isinstance(block, dict) or block.get("type") != "tool_use":
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("type")
+        if not isinstance(kind, str) or not kind.endswith("tool_use"):
             continue
         name = block.get("name")
-        if name == "WebSearch":
-            if isinstance(block.get("id"), str):
-                ws_ids.add(block["id"])
-        elif name != "StructuredOutput":
+        if name not in _LOOKUP_TOOL_USES.get(kind, ()):
             return True
+        if kind == "tool_use" and name == "WebSearch" \
+                and isinstance(block.get("id"), str):
+            ws_ids.add(block["id"])
     return False
 
 
@@ -1402,8 +1472,9 @@ def _finish_lookup(run: LookupRun, envelope: Dict, refused: bool) -> None:
 
 
 def _read_lookup_stream(proc, run: LookupRun, start: float,
-                        on_line, stop_after_init: bool) -> None:
-    reader = _LineReader(proc.stdout.fileno())
+                        on_line, stop_after_init: bool,
+                        cancel: Optional[threading.Event] = None) -> None:
+    reader = _LineReader(proc.stdout.fileno(), cancel)
     deadline = start + lookup_timeout_seconds()
     ws_ids: set = set()
     searches: list = []
@@ -1411,11 +1482,12 @@ def _read_lookup_stream(proc, run: LookupRun, start: float,
     refused = False
     try:
         line = reader.readline(
-            min(deadline, start + LOOKUP_INIT_DEADLINE_SECONDS))
+            min(deadline, start + lookup_init_deadline_seconds()))
         if not line:
             run.status, run.verdict = "cli_error", "no_init"
             return
         run.lines_read = 1
+        run.init_s = round(time.monotonic() - start, 2)
         try:
             event = json.loads(line)
         except (ValueError, RecursionError):
@@ -1474,7 +1546,18 @@ def _read_lookup_stream(proc, run: LookupRun, start: float,
         _signal_group(proc)
         run.status, run.verdict = "cli_error", "output_too_large"
         return
+    except _Cancelled:
+        # Pre-empted: the group is already dead or dying; do not wait
+        # for EOF (an escaped descendant could hold the pipe open).
+        _signal_group(proc)
+        run.status = run.verdict = "preempted"
+        return
+    except (OSError, ValueError):
+        _signal_group(proc)
+        run.status, run.verdict = "cli_error", "read_error"
+        return
     finally:
+        reader.close()
         run.searches = len(ws_ids)
         cited: List[str] = []
         for search in searches:
@@ -1497,6 +1580,7 @@ def lookup_restaurant(
     on_proc: Optional[Callable] = None,
     on_line: Optional[Callable[[str], None]] = None,
     stop_after_init: bool = False,
+    cancel: Optional[threading.Event] = None,
 ) -> LookupRun:
     """Run ONE restaurant lookup through the CLI (Claude backend only).
 
@@ -1507,6 +1591,9 @@ def lookup_restaurant(
     runner processed (the smoke script's fixture recorder).
     [stop_after_init] kills the run right after a PASSING init guard —
     the smoke script's zero-usage check of the guard on the VM.
+    [cancel] set (pre-emption) ends the run as 'preempted' at once: no
+    spawn if it is already set, and a blocked read stops within
+    LOOKUP_READ_SLICE_SECONDS instead of waiting for pipe EOF.
 
     Never raises for run failures; the LookupRun says what happened.
     Does NOT take _CLI_LOCK — run_lookup_exclusive does.
@@ -1519,6 +1606,10 @@ def lookup_restaurant(
         return run
     if not (prompt_text or "").strip():
         run.verdict = "empty_prompt"
+        _log_lookup(run)
+        return run
+    if cancel is not None and cancel.is_set():
+        run.status = run.verdict = "preempted"
         _log_lookup(run)
         return run
     work_dir = tempfile.mkdtemp(prefix="ct_lookup_")
@@ -1547,7 +1638,8 @@ def lookup_restaurant(
             proc.stdin.close()
         except OSError:
             pass  # the child died early; the reader sees its exit
-        _read_lookup_stream(proc, run, start, on_line, stop_after_init)
+        _read_lookup_stream(proc, run, start, on_line, stop_after_init,
+                            cancel)
         return run
     finally:
         if proc is not None:
@@ -1583,14 +1675,25 @@ def _register_lookup_proc(proc) -> bool:
         return not (proc is not None and _LOOKUP_STATE["preempted"])
 
 
+def _preempt_locked() -> None:
+    """Mark the holding lookup pre-empted, wake its reader and kill its
+    process group. Call with _LOOKUP_STATE_LOCK held."""
+    _LOOKUP_STATE["preempted"] = True
+    cancel = _LOOKUP_STATE["cancel"]
+    if cancel is not None:
+        cancel.set()
+    _signal_group(_LOOKUP_STATE["proc"])
+
+
 def preempt_lookup() -> bool:
     """Kill a lookup that holds the CLI so a foreground request can run.
-    True when a lookup held it (the caller then waits for the lock)."""
+    True when a lookup held it. (Foreground callers go through
+    _acquire_cli_for_foreground, which also keeps the next lookup from
+    taking the lock while they wait.)"""
     with _LOOKUP_STATE_LOCK:
         if not _LOOKUP_STATE["holding"]:
             return False
-        _LOOKUP_STATE["preempted"] = True
-        _signal_group(_LOOKUP_STATE["proc"])
+        _preempt_locked()
     _lookup_log.info("Restaurant lookup pre-empted by a foreground request.")
     return True
 
@@ -1602,18 +1705,21 @@ def run_lookup_exclusive(
     on_start: Optional[Callable[[], bool]] = None,
 ) -> Optional[LookupRun]:
     """lookup_restaurant under _CLI_LOCK, pre-emptible by any photo,
-    leftover or text request. None = the CLI is busy right now (the job
-    worker polls again). [on_start] runs once the lock is held and before
-    the CLI starts; False aborts with status 'refused' (the daily cap)."""
-    if not _CLI_LOCK.acquire(blocking=False):
-        return None
+    leftover or text request. None = the CLI is busy right now, or a
+    foreground request is waiting for it (the job worker polls again).
+    [on_start] runs once the lock is held and before the CLI starts;
+    False aborts with status 'refused' (the daily cap)."""
     with _LOOKUP_STATE_LOCK:
-        _LOOKUP_STATE.update(holding=True, proc=None, preempted=False)
+        if _LOOKUP_STATE["fg_waiting"] or not _CLI_LOCK.acquire(blocking=False):
+            return None
+        cancel = threading.Event()
+        _LOOKUP_STATE.update(holding=True, proc=None, preempted=False,
+                             cancel=cancel)
     try:
         if on_start is not None and not on_start():
             return LookupRun(status="refused", verdict="refused")
         run = lookup_restaurant(prompt_text, schema_json, model,
-                                on_proc=_register_lookup_proc)
+                                on_proc=_register_lookup_proc, cancel=cancel)
         with _LOOKUP_STATE_LOCK:
             preempted = bool(_LOOKUP_STATE["preempted"])
         if preempted and run.status != "ok":
@@ -1621,5 +1727,6 @@ def run_lookup_exclusive(
         return run
     finally:
         with _LOOKUP_STATE_LOCK:
-            _LOOKUP_STATE.update(holding=False, proc=None, preempted=False)
-        _CLI_LOCK.release()
+            _LOOKUP_STATE.update(holding=False, proc=None, preempted=False,
+                                 cancel=None)
+            _CLI_LOCK.release()

@@ -8,6 +8,8 @@ consumed, and that a silent child cannot hold the CLI past its limit.
 """
 import json
 import logging
+import os
+import signal
 import threading
 import time
 
@@ -57,6 +59,7 @@ def test_found_stream_yields_structured_result_and_links(monkeypatch, tmp_path):
     # Evidence is the search's prose — the grounding text for the app.
     assert "180 calories" in run.evidence[0]["text"]
     assert run.init["tools"] == ["StructuredOutput", "WebSearch"]
+    assert 0 < run.init_s < 5  # what the smoke prints as "init latency"
     assert run.init["apiKeySource"] == "none"
     assert run.init["claude_code_version"] == "2.1.233"
     # The prompt travelled on stdin, never argv.
@@ -222,11 +225,20 @@ def test_key_source_override_admits_the_smoke_value(monkeypatch, tmp_path):
     assert claude_analyzer.lookup_key_sources() == frozenset({"none"})
 
 
-def test_unexpected_tool_use_mid_stream_is_killed(monkeypatch, tmp_path):
+@pytest.mark.parametrize("block", [
+    {"type": "tool_use", "id": "t9", "name": "WebFetch",
+     "input": {"url": "https://evil.example"}},
+    {"type": "server_tool_use", "id": "s9", "name": "web_fetch",
+     "input": {"url": "https://evil.example"}},
+    {"type": "server_tool_use", "id": "s8", "name": "code_execution"},
+    {"type": "mcp_tool_use", "id": "m9", "name": "WebSearch",
+     "server_name": "zai"},
+    {"type": "future_tool_use", "id": "f9", "name": "WebSearch"},
+])
+def test_unexpected_tool_use_mid_stream_is_killed(monkeypatch, tmp_path,
+                                                  block):
     steps = [{"line": INIT_OK},
-             {"line": {"type": "assistant", "message": {"content": [
-                 {"type": "tool_use", "id": "t9", "name": "WebFetch",
-                  "input": {"url": "https://evil.example"}}]}}},
+             {"line": {"type": "assistant", "message": {"content": [block]}}},
              {"line": {"type": "result", "is_error": False,
                        "structured_output": {"status": "found"}}},
              {"sleep": 30}]
@@ -236,6 +248,18 @@ def test_unexpected_tool_use_mid_stream_is_killed(monkeypatch, tmp_path):
     assert (run.status, run.verdict) == ("guard_fail", "guard_fail:tool_use")
     assert run.lines_read == 2
     assert _wait_dead(read_record(record)["pid"])
+
+
+def test_the_api_search_tool_itself_is_not_a_kill(monkeypatch, tmp_path):
+    """server_tool_use web_search is the API tool WebSearch wraps; only
+    other names (web_fetch, code_execution, …) are kills."""
+    steps = [{"line": INIT_OK},
+             {"line": {"type": "assistant", "message": {"content": [
+                 {"type": "server_tool_use", "id": "s1", "name": "web_search",
+                  "input": {"query": "chipotle nutrition"}}]}}}]
+    steps += lines(FOUND[1:])
+    run, _ = _run(monkeypatch, tmp_path, steps)
+    assert run.status == "ok"
 
 
 def test_silent_child_fails_the_init_deadline(monkeypatch, tmp_path):
@@ -324,6 +348,26 @@ def test_lookup_model_knob(monkeypatch, raw, expected):
     else:
         monkeypatch.setenv("CLAUDE_LOOKUP_MODEL", raw)
     assert claude_analyzer.lookup_model() == expected
+
+
+@pytest.mark.parametrize("raw,expected", [
+    (None, 10), ("", 10), ("bad", 10), ("2", 5), ("99", 30), ("15", 15)])
+def test_lookup_init_deadline_knob(monkeypatch, raw, expected):
+    if raw is None:
+        monkeypatch.delenv("CLAUDE_LOOKUP_INIT_SECONDS", raising=False)
+    else:
+        monkeypatch.setenv("CLAUDE_LOOKUP_INIT_SECONDS", raw)
+    assert claude_analyzer.lookup_init_deadline_seconds() == expected
+
+
+def test_init_deadline_knob_reaches_the_guard(monkeypatch, tmp_path):
+    monkeypatch.setattr(claude_analyzer, "LOOKUP_INIT_DEADLINE_SECONDS", 30)
+    monkeypatch.setattr(claude_analyzer, "lookup_init_deadline_seconds",
+                        lambda: 1)
+    start = time.monotonic()
+    run, _ = _run(monkeypatch, tmp_path, [{"sleep": 30}])
+    assert time.monotonic() - start < 3.0
+    assert run.verdict == "guard_fail:init_timeout"
 
 
 @pytest.mark.parametrize("raw,expected", [
@@ -525,7 +569,7 @@ def test_text_and_leftover_requests_preempt_too(monkeypatch, tmp_path, call):
     assert box["run"].status == "preempted"
 
 
-def test_preempt_before_spawn_kills_at_registration(monkeypatch, tmp_path):
+def test_preempt_before_spawn_never_spawns(monkeypatch, tmp_path):
     cli, record = make_cli(tmp_path, [{"line": INIT_OK}, {"sleep": 30}])
     configure(monkeypatch, cli)
 
@@ -537,6 +581,251 @@ def test_preempt_before_spawn_kills_at_registration(monkeypatch, tmp_path):
     run = claude_analyzer.run_lookup_exclusive(PROMPT, SCHEMA, on_start=on_start)
     assert time.monotonic() - start < 3
     assert run.status == "preempted"
+    assert not record.exists()
+
+
+def test_preempt_between_spawn_and_registration_kills_at_once(
+        monkeypatch, tmp_path):
+    cli, _ = make_cli(tmp_path, [{"line": INIT_OK}, {"sleep": 30}])
+    configure(monkeypatch, cli)
+    seen = []
+
+    def on_proc(proc):
+        seen.append(proc)
+        return False if proc is not None else None
+
+    start = time.monotonic()
+    run = claude_analyzer.lookup_restaurant(PROMPT, SCHEMA, on_proc=on_proc)
+    assert time.monotonic() - start < 3
+    assert run.status == "preempted" and run.started is True
+    assert seen[-1] is None  # deregistered before the reap
+    assert seen[0].returncode is not None
+
+
+def test_a_read_error_fails_the_run_and_kills_the_child(monkeypatch, tmp_path):
+    cli, record = make_cli(tmp_path, [{"line": INIT_OK}, {"sleep": 30}])
+    configure(monkeypatch, cli)
+
+    def boom(self, deadline):
+        end = time.monotonic() + 5
+        while not record.exists() and time.monotonic() < end:
+            time.sleep(0.02)  # the child is up (and has recorded its pid)
+        raise OSError("read failed")
+
+    monkeypatch.setattr(claude_analyzer._LineReader, "readline", boom)
+    run = claude_analyzer.lookup_restaurant(PROMPT, SCHEMA)
+    assert (run.status, run.verdict) == ("cli_error", "read_error")
+    assert _wait_dead(read_record(record)["pid"])
+
+
+def test_reader_handles_a_descriptor_past_fd_setsize():
+    """select.select raises ValueError for fd >= 1024 (FD_SETSIZE); the
+    reader must not, in a long-running process with many sockets."""
+    resource = pytest.importorskip("resource")
+    soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+    target = 1500
+    if soft <= target:
+        if hard != resource.RLIM_INFINITY and hard <= target:
+            pytest.skip("cannot open a descriptor past FD_SETSIZE here")
+        resource.setrlimit(resource.RLIMIT_NOFILE, (target + 16, hard))
+    r, w = os.pipe()
+    high = None
+    try:
+        os.dup2(r, target)
+        high = target
+        os.write(w, b'{"type":"system"}\n')
+        reader = claude_analyzer._LineReader(target)
+        try:
+            assert reader.readline(time.monotonic() + 2) == \
+                b'{"type":"system"}\n'
+        finally:
+            reader.close()
+    finally:
+        for fd in (r, w, high):
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        if soft <= target:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (soft, hard))
+
+
+def test_cancel_ends_a_blocked_read_without_waiting_for_eof():
+    r, w = os.pipe()
+    cancel = threading.Event()
+    reader = claude_analyzer._LineReader(r, cancel)
+    threading.Timer(0.2, cancel.set).start()
+    start = time.monotonic()
+    try:
+        with pytest.raises(claude_analyzer._Cancelled):
+            reader.readline(time.monotonic() + 10)
+        assert time.monotonic() - start < 1.0
+    finally:
+        reader.close()
+        os.close(r)
+        os.close(w)
+
+
+def test_preemption_does_not_wait_on_a_descendant_that_left_the_group(
+        monkeypatch, tmp_path):
+    """A CLI descendant that called setsid() survives killpg and keeps the
+    stdout pipe open: the reader must still stop at the pre-empt, not at
+    EOF or the lookup deadline, so the photo gets the CLI at once."""
+    pidfile = tmp_path / "escapee.pid"
+    cli, _ = make_cli(tmp_path, [{"line": INIT_OK},
+                                 {"escapee": 30, "pidfile": str(pidfile)},
+                                 {"sleep": 30}])
+    configure(monkeypatch, cli)
+    monkeypatch.setattr(claude_analyzer, "lookup_timeout_seconds", lambda: 60)
+    box = {}
+    worker = threading.Thread(target=lambda: box.setdefault(
+        "run", claude_analyzer.run_lookup_exclusive(PROMPT, SCHEMA)))
+    worker.start()
+    try:
+        end = time.monotonic() + 5
+        while not pidfile.exists() and time.monotonic() < end:
+            time.sleep(0.02)
+        assert pidfile.exists(), "the escapee never started"
+        time.sleep(0.3)  # let it setsid()
+        start = time.monotonic()
+        got = claude_analyzer._acquire_cli_for_foreground()
+        waited = time.monotonic() - start
+        if got:
+            claude_analyzer._CLI_LOCK.release()
+        assert got is True and waited < 2.0
+        worker.join(5)
+        assert box["run"].status == "preempted"
+    finally:
+        try:
+            os.kill(int(pidfile.read_text()), signal.SIGKILL)
+        except (OSError, ValueError):
+            pass
+        worker.join(5)
+
+
+def _stub_lookups(monkeypatch, first, later=None):
+    """lookup_restaurant replaced: the first call runs [first](), later
+    calls run [later]() (or answer ok at once). Returns the call log."""
+    calls = []
+
+    def fake(prompt, schema, model=None, on_proc=None, cancel=None, **kw):
+        calls.append(prompt)
+        body = first if len(calls) == 1 else later
+        if body is not None:
+            body()
+        return claude_analyzer.LookupRun(status="ok", verdict="ok")
+
+    monkeypatch.setattr(claude_analyzer, "lookup_restaurant", fake)
+    return calls
+
+
+def _wait_fg_waiting(n, seconds=5.0):
+    end = time.monotonic() + seconds
+    while claude_analyzer._LOOKUP_STATE["fg_waiting"] != n \
+            and time.monotonic() < end:
+        time.sleep(0.002)
+    assert claude_analyzer._LOOKUP_STATE["fg_waiting"] == n
+
+
+def test_a_waiting_photo_never_loses_the_cli_to_the_next_lookup(monkeypatch):
+    """Regression (review 2026-10-24): a lookup whose answer was already
+    in when the photo pre-empted it ends 'ok', and the worker loops at
+    once to its next queued job. That job must not take the lock the
+    photo is waiting for (threading.Lock is not FIFO)."""
+    monkeypatch.setattr(claude_analyzer, "PREEMPT_WAIT_SECONDS", 3)
+    in_first = threading.Event()
+
+    def first():
+        in_first.set()
+        _wait_fg_waiting(1)  # the photo is now blocked on the lock
+        time.sleep(0.05)
+
+    calls = _stub_lookups(monkeypatch, first, later=lambda: time.sleep(4))
+    results = []
+
+    def worker():  # the job worker's back-to-back loop, two queued jobs
+        results.append(claude_analyzer.run_lookup_exclusive("first", "{}"))
+        results.append(claude_analyzer.run_lookup_exclusive("second", "{}"))
+
+    thread = threading.Thread(target=worker)
+    thread.start()
+    assert in_first.wait(5)
+    start = time.monotonic()
+    got = claude_analyzer._acquire_cli_for_foreground()
+    try:
+        assert got is True and time.monotonic() - start < 2.0
+        thread.join(5)
+        assert results[0].status == "ok"
+        assert results[1] is None  # busy: the worker polls again later
+        assert calls == ["first"]
+    finally:
+        if got:
+            claude_analyzer._CLI_LOCK.release()
+        thread.join(5)
+    assert claude_analyzer._LOOKUP_STATE["fg_waiting"] == 0
+
+
+def test_no_lookup_starts_while_a_foreground_caller_waits(monkeypatch):
+    """The guard itself, deterministically: the lock is free, but a
+    foreground caller is still on its way to it."""
+    calls = _stub_lookups(monkeypatch, None)
+    monkeypatch.setitem(claude_analyzer._LOOKUP_STATE, "fg_waiting", 1)
+    assert claude_analyzer.run_lookup_exclusive("x", "{}") is None
+    assert calls == [] and not claude_analyzer._CLI_LOCK.locked()
+    assert claude_analyzer._LOOKUP_STATE["holding"] is False
+
+
+def test_a_second_foreground_caller_is_told_busy_at_once(monkeypatch):
+    """While one photo waits for a pre-empted lookup to let go, a second
+    one would only lose to it: it gets False at once (→ Gemini / busy),
+    exactly as with any other foreground contention."""
+    monkeypatch.setattr(claude_analyzer, "PREEMPT_WAIT_SECONDS", 3)
+    release = threading.Event()
+    in_first = threading.Event()
+
+    def first():
+        in_first.set()
+        release.wait(5)
+
+    _stub_lookups(monkeypatch, first)
+    worker = threading.Thread(
+        target=lambda: claude_analyzer.run_lookup_exclusive("first", "{}"))
+    worker.start()
+    assert in_first.wait(5)
+    box = {}
+    photo_a = threading.Thread(target=lambda: box.setdefault(
+        "a", claude_analyzer._acquire_cli_for_foreground()))
+    photo_a.start()
+    try:
+        _wait_fg_waiting(1)
+        start = time.monotonic()
+        assert claude_analyzer._acquire_cli_for_foreground() is False
+        assert time.monotonic() - start < 0.5
+        release.set()
+        photo_a.join(5)
+        assert box["a"] is True
+    finally:
+        release.set()
+        photo_a.join(5)
+        if box.get("a"):
+            claude_analyzer._CLI_LOCK.release()
+        worker.join(5)
+
+
+def test_foreground_contention_without_a_lookup_is_unchanged():
+    """Another FOREGROUND request holds the CLI: False at once, nothing
+    pre-empted, no waiting counted."""
+    assert claude_analyzer._CLI_LOCK.acquire(blocking=False)
+    try:
+        start = time.monotonic()
+        assert claude_analyzer._acquire_cli_for_foreground() is False
+        assert time.monotonic() - start < 0.5
+        assert claude_analyzer._LOOKUP_STATE["fg_waiting"] == 0
+    finally:
+        claude_analyzer._CLI_LOCK.release()
+    assert claude_analyzer._acquire_cli_for_foreground() is True
+    claude_analyzer._CLI_LOCK.release()
 
 
 def test_a_finished_lookup_is_not_relabelled_preempted(monkeypatch, tmp_path):

@@ -90,6 +90,7 @@ def configure(monkeypatch, cli_path):
     # be the one it records. Tests that need another value set it after.
     monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "fake-oauth-for-tests")
     for knob in ("CLAUDE_LOOKUP_MODEL", "CLAUDE_LOOKUP_TIMEOUT_SECONDS",
+                 "CLAUDE_LOOKUP_INIT_SECONDS",
                  "CLAUDE_LOOKUP_KEY_SOURCE", "CLAUDE_ANALYZER_EXTRA_FLAGS"):
         monkeypatch.delenv(knob, raising=False)
 

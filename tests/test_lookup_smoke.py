@@ -5,6 +5,7 @@ import importlib.util
 import io
 import json
 import os
+import re
 import stat
 from pathlib import Path
 
@@ -52,6 +53,8 @@ def test_init_only_reports_the_guard_facts_and_stops(env, monkeypatch, tmp_path)
     assert "memory_paths      : absent" in out
     assert "guard             : pass" in out
     assert "status            : init_ok" in out
+    assert re.search(r"init latency      : \d+\.\ds \(limit 10s, "
+                     r"CLAUDE_LOOKUP_INIT_SECONDS\)", out)
     assert "searches" not in out  # it stopped at the guard
     for value in SECRETS.values():
         assert value not in out

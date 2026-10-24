@@ -359,3 +359,48 @@ def test_photo_during_a_running_lookup_wins_then_the_job_completes(
     assert found_record.exists()
     # Both CLI starts were counted against the daily cap.
     assert service_health.load(health)["restaurant_lookup"]["runs"] == 2
+
+
+def test_photo_during_an_ok_teardown_beats_the_next_queued_job(
+        monkeypatch, services):
+    """Regression (review 2026-10-24), through the real default runner and
+    run_lookup_exclusive: two jobs queued; a photo pre-empts the first
+    while its answer is already in (it stays 'ok' and is cached). The
+    worker's next job must not start until the photo has had the CLI."""
+    monkeypatch.setattr(claude_analyzer, "PREEMPT_WAIT_SECONDS", 3)
+    first_in = threading.Event()
+    starts = []
+
+    def fake_lookup(prompt, schema, model=None, on_proc=None, cancel=None,
+                    **kw):
+        starts.append(time.monotonic())
+        if len(starts) == 1:
+            first_in.set()
+            end = time.monotonic() + 5
+            while claude_analyzer._LOOKUP_STATE["fg_waiting"] == 0 \
+                    and time.monotonic() < end:
+                time.sleep(0.002)
+            time.sleep(0.05)
+        return _ok_run()
+
+    monkeypatch.setattr(claude_analyzer, "lookup_restaurant", fake_lookup)
+    service = lookup_jobs.LookupService(Counter(), clock=Clock(),
+                                        poll_seconds=0.05,
+                                        model_fn=lambda: "sonnet")
+    services.append(service)
+    _, a = service.submit(_request("a"))
+    _, b = service.submit(_request("b"))
+    assert first_in.wait(5)
+    got = claude_analyzer._acquire_cli_for_foreground()
+    try:
+        assert got is True
+        photo_started = time.monotonic()
+        time.sleep(0.3)  # the photo's own CLI run
+        assert len(starts) == 1, "the next lookup ran during the photo"
+    finally:
+        if got:
+            claude_analyzer._CLI_LOCK.release()
+    assert _wait_state(service, a["job_id"], {"done"})["lookup"]["status"] \
+        == "found"
+    _wait_state(service, b["job_id"], {"done"})
+    assert starts[1] > photo_started + 0.3

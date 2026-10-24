@@ -4,8 +4,9 @@
 Runs ONE lookup (brand Chipotle, "chicken burrito bowl") through the
 exact runner the server uses — same argv, same allowlisted environment,
 same init guard — and prints only non-secret facts: the CLI version, the
-init event's tool list and apiKeySource, the guard verdict, status,
-timings, the search count and the cited DOMAINS. It never prints the
+init event's tool list and apiKeySource, how long the init event took,
+the guard verdict, status, timings, the search count and the cited
+DOMAINS. It never prints the
 OAuth token, the upload key, a plan key or any other environment value.
 
   --init-only   stop right after the init guard passes: checks the
@@ -161,6 +162,10 @@ def main(argv=None, out=None):
     say("init tools", ", ".join(init.get("tools") or []) or "-")
     say("apiKeySource", init.get("apiKeySource") or "-")
     say("init version", init.get("claude_code_version") or "-")
+    say("init latency", f"{run.init_s:.1f}s (limit "
+                        f"{claude_analyzer.lookup_init_deadline_seconds():g}s, "
+                        "CLAUDE_LOOKUP_INIT_SECONDS)" if run.lines_read
+        else "-")
     say("memory_paths", "present" if init.get("memory_paths") else "absent")
     say("guard", "FAIL " + run.verdict if run.status == "guard_fail"
         else "pass")

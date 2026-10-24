@@ -12,6 +12,10 @@ Scenario JSON: {"steps": [...], "exit": int, "read_stdin": bool}
   {"grandchild": seconds, "pidfile": path}
                                spawn `sleep` sharing our stdout and
                                process group, its pid written to pidfile
+  {"escapee": seconds, "pidfile": path}
+                               spawn a child that calls setsid() (it
+                               LEAVES our process group, so killpg misses
+                               it) and keeps our stdout open
 Record JSON (written before any output): argv, env, cwd, stdin, pid, pgid.
 """
 import json
@@ -47,6 +51,12 @@ def main(scenario_path, record_path, argv):
             time.sleep(step["sleep"])
         elif "grandchild" in step:
             child = subprocess.Popen(["sleep", str(step["grandchild"])])
+            with open(step["pidfile"], "w", encoding="utf-8") as f:
+                f.write(str(child.pid))
+        elif "escapee" in step:
+            child = subprocess.Popen([
+                sys.executable, "-c",
+                f"import os, time; os.setsid(); time.sleep({step['escapee']})"])
             with open(step["pidfile"], "w", encoding="utf-8") as f:
                 f.write(str(child.pid))
     sys.exit(scenario.get("exit", 0))

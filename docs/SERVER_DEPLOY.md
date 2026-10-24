@@ -136,6 +136,7 @@ New `.env` knobs (all optional):
 | `CLAUDE_LOOKUP_ENABLED` | off | `1` turns the endpoints on. Off → `403 {"reason":"disabled"}`. |
 | `CLAUDE_LOOKUP_MODEL` | `sonnet` | `haiku` uses less plan usage. |
 | `CLAUDE_LOOKUP_TIMEOUT_SECONDS` | `75` | Per-lookup wall clock (20–300). |
+| `CLAUDE_LOOKUP_INIT_SECONDS` | `10` | How long the CLI may take to print its first (init) event (5–30). Raise it only if the smoke's `init latency` is close to the limit. |
 | `CLAUDE_LOOKUP_DAILY_CAP` | `30` | Lookup runs started per day, counted in `logs/service_health.json`. |
 | `CLAUDE_LOOKUP_KEY_SOURCE` | `none` | The `apiKeySource` the guard accepts. Change it only if the smoke tells you to. |
 | `API_BIND_HOST` | `0.0.0.0` | `127.0.0.1` once Caddy fronts the API ([SERVER_TLS.md](SERVER_TLS.md)). |
@@ -154,7 +155,9 @@ Recommended order:
    ```
 
    Expect `guard : pass`, `init tools : StructuredOutput, WebSearch`,
-   `memory_paths : absent` and `status : init_ok`. It prints the CLI
+   `memory_paths : absent` and `status : init_ok`. `init latency` is how
+   long the CLI took to start (about 1–2 s on a Mac; if it is near the
+   10 s limit on the VM, set `CLAUDE_LOOKUP_INIT_SECONDS=20`). It prints the CLI
    version and the `apiKeySource` the CLI reports, never a key. If it says
    `FAIL guard_fail:apiKeySource` and shows a value you expect for your
    sign-in (for example the one for a `claude setup-token` login), add
