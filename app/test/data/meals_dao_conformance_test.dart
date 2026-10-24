@@ -309,6 +309,131 @@ void main() {
     });
   });
 
+  // Design G1b: the late-import pass skips, without reading a byte, the
+  // photos a meal already names.
+  group('loggedAssetIds — which photos a meal already names', () {
+    Future<int> mealFor(String assetId, {String hash = ''}) => dao.saveMeal(
+        Meal(
+          id: 0,
+          date: '2026-07-17',
+          time: '12:00 PM',
+          timestamp: '2026-07-17T12:00:00.000',
+          source: MealSource.appWatch,
+          imageHash: hash,
+          fileId: assetId,
+          analysis: const {'is_food': true, 'total_calories': 100},
+        ));
+
+    test('answers only the ids a meal names; text meals name none',
+        () async {
+      await mealFor('A1/L0/001');
+      await mealFor('A2/L0/001', hash: 'a' * 32);
+      await insert(date: '2026-07-17'); // a text meal: file_id ''
+      expect(
+          await dao.loggedAssetIds(
+              ['A1/L0/001', 'A2/L0/001', 'B9/L0/001', '']),
+          {'A1/L0/001', 'A2/L0/001'});
+      expect(await dao.loggedAssetIds(const []), isEmpty);
+      expect(await dao.loggedAssetIds(const ['']), isEmpty,
+          reason: 'the empty id of every text meal is never a match');
+    });
+
+    test('a deleted meal no longer names its photo', () async {
+      final id = await mealFor('A1/L0/001', hash: 'b' * 32);
+      await dao.deleteMeal(id);
+      expect(await dao.loggedAssetIds(['A1/L0/001']), isEmpty);
+    });
+
+    test('more ids than one query may bind', () async {
+      for (var i = 0; i < 3; i++) {
+        await mealFor('id$i');
+      }
+      await mealFor('id1200');
+      final asked = [for (var i = 0; i < 1300; i++) 'id$i'];
+      expect(await dao.loggedAssetIds(asked),
+          {'id0', 'id1', 'id2', 'id1200'});
+    });
+  });
+
+  // Design G2b: the duplicate-capture guard asks whether another file of
+  // the same shutter press is already a meal.
+  group('mealIdsWithShutterKey — the same shutter press, already a meal', () {
+    const key = '0123456789abcdef';
+    Future<int> shot(String date,
+            {Object? capture = const {'shutter_key': key},
+            String time = '12:00 PM'}) =>
+        dao.saveMeal(Meal(
+          id: 0,
+          date: date,
+          time: time,
+          timestamp: '${date}T12:00:00.000',
+          source: MealSource.appWatch,
+          analysis: {
+            'is_food': true,
+            'total_calories': 100,
+            'capture': ?capture,
+          },
+        ));
+
+    test('the stored JSON decides, inside the inclusive date range',
+        () async {
+      final edgeLow = await shot('2026-07-15');
+      final inside = await shot('2026-07-17');
+      final edgeHigh = await shot('2026-07-19');
+      await shot('2026-07-14'); // a day too early
+      await shot('2026-07-20'); // a day too late
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-15', '2026-07-19'),
+          [edgeLow, inside, edgeHigh]);
+    });
+
+    test('a key that only appears elsewhere in the text is no match',
+        () async {
+      // In a description, under another capture field, as a prefix.
+      await dao.saveMeal(Meal(
+        id: 0,
+        date: '2026-07-17',
+        time: '12:00 PM',
+        timestamp: '2026-07-17T12:00:00.000',
+        source: MealSource.appWatch,
+        analysis: const {
+          'is_food': true,
+          'meal_description': 'noodles $key',
+          'capture': {'note': key, 'shutter_key': '${key}00'},
+        },
+      ));
+      await shot('2026-07-17', capture: key); // capture not a map
+      await shot('2026-07-17', capture: const {'shutter_key': 'ffffffffffffffff'});
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          isEmpty);
+    });
+
+    test('spacing from another writer (an imported export) still matches',
+        () async {
+      final id = await shot('2026-07-17');
+      await db.update('meals',
+          {'analysis': '{"is_food": true, "capture": {"shutter_key": "$key"}}'},
+          where: 'id = ?', whereArgs: [id]);
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          [id]);
+    });
+
+    test('a key of the wrong shape never reaches the LIKE', () async {
+      await shot('2026-07-17');
+      for (final bad in ['', '%', '_' * 16, '0123456789ABCDEF', '${key}0',
+          '0123456789abcde%']) {
+        expect(await dao.mealIdsWithShutterKey(bad, '2026-07-01', '2026-07-31'),
+            isEmpty, reason: bad);
+      }
+    });
+
+    test('a deleted meal no longer counts', () async {
+      final id = await shot('2026-07-17');
+      await dao.deleteMeal(id);
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          isEmpty);
+    });
+  });
+
   test('exportJson wraps every table in the versioned envelope', () async {
     await insert(date: '2026-07-17');
     await dao.saveBodyWeight('2026-07-17', 70);

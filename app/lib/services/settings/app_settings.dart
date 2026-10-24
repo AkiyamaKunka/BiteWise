@@ -271,6 +271,7 @@ class AppSettings extends ChangeNotifier {
   static const String _kWatcherEnabled = 'settings.watcher_enabled';
   static const String _kWatcherDisclosureSeen =
       'settings.watcher_disclosure_seen';
+  static const String _kWatchGlasses = 'settings.watch_glasses';
   static const String _kSummaryEnabled = 'settings.summary_enabled';
   static const String _kDietaryProfile = 'settings.dietary_profile';
   static const String _kQuotaPauseUntil = 'settings.quota_pause_until';
@@ -364,6 +365,7 @@ class AppSettings extends ChangeNotifier {
   int _calorieGoal = 0; // 0 = unset -> the daily summary uses the median
   bool _watcherEnabled = false;
   bool _watcherDisclosureSeen = false;
+  bool _watchGlasses = true;
   bool _summaryEnabled = true;
   String? _dietaryProfile;
   DateTime? _quotaPauseUntil;
@@ -439,6 +441,7 @@ class AppSettings extends ChangeNotifier {
     s._calorieGoal = (goal > 0 && goal <= maxDailyGoalKcal) ? goal : 0;
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
     s._watcherDisclosureSeen = p.getBool(_kWatcherDisclosureSeen) ?? false;
+    s._watchGlasses = p.getBool(_kWatchGlasses) ?? true;
     s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
@@ -881,6 +884,19 @@ class AppSettings extends ChangeNotifier {
   Future<void> setWatcherDisclosureSeen(bool value) async {
     _watcherDisclosureSeen = value;
     await _prefs.setBool(_kWatcherDisclosureSeen, value);
+    notifyListeners();
+  }
+
+  /// Whether the automatic intake logs photos it recognizes as taken with
+  /// Meta glasses (design G3, the 'Meta glasses photos' switch; default on).
+  /// Off, they are not offered at all — PhotoPipeline.includeGlasses — and
+  /// photos the user adds on purpose still go through. Read by both
+  /// engines: the background run loads it with the rest at its start.
+  bool get watchGlasses => _watchGlasses;
+
+  Future<void> setWatchGlasses(bool value) async {
+    _watchGlasses = value;
+    await _prefs.setBool(_kWatchGlasses, value);
     notifyListeners();
   }
 

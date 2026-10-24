@@ -118,6 +118,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   late String _reportTime;
   late bool _summaryEnabled;
   late bool _watcherEnabled;
+  late bool _watchGlasses;
 
   /// True only when the OS says notifications are OFF for this app. On iOS
   /// a declined permission makes every scheduled summary vanish silently,
@@ -150,6 +151,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _reportTime = s.reportTime.isEmpty ? '21:00' : s.reportTime;
     _summaryEnabled = s.summaryEnabled;
     _watcherEnabled = s.watcherEnabled;
+    _watchGlasses = s.watchGlasses;
     WidgetsBinding.instance.addObserver(this);
     _probeNotifications();
     _probeNextSummary();
@@ -340,6 +342,11 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (!mounted) return;
     setState(() => _watcherEnabled = enable);
     await widget.settings.update(watcherEnabled: enable);
+  }
+
+  Future<void> _toggleWatchGlasses(bool include) async {
+    setState(() => _watchGlasses = include);
+    await widget.settings.update(watchGlasses: include);
   }
 
   /// The one-time 照片会发送给 AI 服务 notice; true = Continue.
@@ -539,6 +546,19 @@ class _SettingsScreenState extends State<SettingsScreen>
               title: context.l10n.settingsRowWatch,
               value: _watcherEnabled,
               onChanged: (v) => _toggleWatcher(v),
+            ),
+            // Design G3: photos recognized as taken with Meta glasses. Off,
+            // the automatic scan does not offer them at all; on (the
+            // default), an iPhone checks each one for food on the phone
+            // before anything is sent (docs/PRIVACY.md).
+            GroupedToggleRow(
+              key: const Key('watchGlassesRow'),
+              switchKey: const Key('watchGlassesToggle'),
+              icon: Icons.visibility_outlined,
+              iconColor: theme.colorScheme.secondary,
+              title: context.l10n.settingsRowWatchGlasses,
+              value: _watchGlasses,
+              onChanged: (v) => _toggleWatchGlasses(v),
             ),
             GroupedRow(
               icon: Icons.history,

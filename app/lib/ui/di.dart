@@ -24,9 +24,13 @@ import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
     show androidBackgroundAllowed;
 import '../services/photo/background_time.dart';
-import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
+import '../services/photo/deferred_assets.dart'
+    show clearDeferredAsset, holdGlassesPreview;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
+import '../services/photo/food_prefilter.dart' show foodScoreViaImageIO;
+import '../services/photo/glasses.dart' show captureMetaFor;
+import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../services/photo/photo_library.dart';
 import '../services/photo/share_intake.dart';
@@ -88,7 +92,9 @@ class AppServices {
     final executor = createExecutor(dao, analyzer, settings);
     // The photo module reads lookbackDays through the live settings object,
     // so slider edits apply to the next scan without rewiring (spec §6.4).
-    final photoIntake = createPhotoIntake(settings);
+    // Late imports skip photos a meal already names, without a read (G1b).
+    final photoIntake =
+        createPhotoIntake(settings, loggedAssetIds: dao.loggedAssetIds);
     final shareIntake = createShareIntake(settings);
     final ReportBuilder reports = createReportBuilder(dao);
 
@@ -212,7 +218,14 @@ class AppServices {
           if (!o.retryable && o.kind != PhotoOutcomeKind.alreadyTracked) {
             unawaited(clearDeferredAsset(photo.assetId));
           }
-        });
+        },
+        // A glasses preview copy waits once for its full-size one (G2b).
+        previewHold: holdGlassesPreview,
+        // Design G3: the 'Meta glasses photos' switch, read live, and on iOS
+        // the on-device food check before any glasses photo is uploaded.
+        includeGlasses: () => settings.watchGlasses,
+        foodCheck: Platform.isIOS ? foodScoreViaImageIO : null,
+        glassesCheckLog: recordGlassesCheckLocally);
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -382,6 +395,8 @@ class _AppSettingsStore implements SettingsStore {
   @override
   bool get watcherDisclosureSeen => _s.watcherDisclosureSeen;
   @override
+  bool get watchGlasses => _s.watchGlasses;
+  @override
   String get dietaryProfile => _s.dietaryProfile ?? '';
   @override
   String get serverBaseUrl => _s.serverBaseUrl;
@@ -408,6 +423,7 @@ class _AppSettingsStore implements SettingsStore {
     bool? summaryEnabled,
     bool? watcherEnabled,
     bool? watcherDisclosureSeen,
+    bool? watchGlasses,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -488,6 +504,7 @@ class _AppSettingsStore implements SettingsStore {
     if (watcherDisclosureSeen != null) {
       await _s.setWatcherDisclosureSeen(watcherDisclosureSeen);
     }
+    if (watchGlasses != null) await _s.setWatchGlasses(watchGlasses);
     if (dietaryProfile != null) await _s.setDietaryProfile(dietaryProfile);
     if (serverBaseUrl != null) await _s.setServerBaseUrl(serverBaseUrl);
     if (serverBackend != null) await _s.setServerBackend(serverBackend);
@@ -528,6 +545,9 @@ class _ShareIntakePicker implements RecentPhotoPicker {
     return IntakePhoto(bytes, asset.id, asset.fileName,
         capturedAt: deriveCapturedAt(
             fileName: asset.fileName, assetCreateDate: asset.createdAt),
-        deliberate: true);
+        deliberate: true,
+        // How it was taken (design G2a): the badge, for a picked photo too.
+        capture: captureMetaFor(bytes, asset.fileName,
+            createDate: asset.createdAt));
   }
 }

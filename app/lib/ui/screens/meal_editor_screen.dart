@@ -20,10 +20,13 @@ import '../../core/coerce.dart' show normalizeImageHash;
 import '../../core/contracts.dart';
 import '../../services/photo/filename_dates.dart'
     show captureWallClock, exifWallAndOffset;
+import '../../services/photo/glasses.dart'
+    show captureAnalysis, isMetaGlassesAnalysis;
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
 import '../large_text.dart';
 import '../meal_edit_logic.dart';
+import '../widgets/glasses_badge.dart';
 import '../widgets/macro_chart.dart';
 import '../widgets/small_spinner.dart';
 
@@ -272,6 +275,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       final analysis = _draft.toAnalysis();
       if (widget.isNew) {
         final photo = widget.fromPhoto;
+        // How the photo was taken (design G2a), from the intake's reading
+        // of its bytes — never from a model's preview — as the automatic
+        // pipeline stores it.
+        analysis.remove('capture');
+        final capture = photo?.capture;
+        if (capture != null) analysis['capture'] = captureAnalysis(capture);
         // md5 of the ORIGINAL bytes: the same identity the watcher uses, so
         // marking the ledger 'saved' stops this photo being re-offered
         // forever (spec §6.2/§2.3).
@@ -421,6 +430,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   static String _plain(num v) =>
       v == v.roundToDouble() ? v.round().toString() : v.toString();
 
+  /// The meal's photo came from Meta glasses (design G2a): the stored
+  /// meal says so, or the photo being logged by hand does.
+  bool get _fromMetaGlasses {
+    final meal = widget.meal;
+    if (meal != null) return isMetaGlassesAnalysis(meal.analysis);
+    return widget.fromPhoto?.capture?.isMetaGlasses ?? false;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -462,6 +479,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                               color: theme.colorScheme.onErrorContainer)),
                   ],
                 ),
+              ),
+            ),
+          if (_fromMetaGlasses)
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: MetaGlassesBadge(key: Key('editorMetaGlassesBadge')),
               ),
             ),
           TextField(

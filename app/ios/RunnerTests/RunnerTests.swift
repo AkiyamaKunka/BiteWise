@@ -3,6 +3,7 @@ import ImageIO
 import Photos
 import UIKit
 import UniformTypeIdentifiers
+import Vision
 import XCTest
 
 @testable import Runner
@@ -367,6 +368,293 @@ class ImageIODownscaleTests: XCTestCase {
     }
     wait(for: [replied], timeout: 5)
     XCTAssertTrue((reply as AnyObject?) === FlutterMethodNotImplemented)
+  }
+}
+
+/// The on-device food check (ImageIOPlugin.swift foodScore, design G3):
+/// the label table against the classifier's own identifiers, where the
+/// request runs, and every way a check ends. Inference itself is mocked
+/// except in one test, which skips where the runtime has no inference
+/// context (some simulators).
+class ImageIOFoodScoreTests: XCTestCase {
+
+  /// app/lib/services/photo/food_prefilter.dart, read from the source tree:
+  /// the ONE label table (the Dart side sends it with every call).
+  private func dartFoodLabels(file: StaticString = #filePath, line: UInt = #line) throws
+    -> [String]
+  {
+    let app = URL(fileURLWithPath: "\(#filePath)")
+      .deletingLastPathComponent()  // RunnerTests
+      .deletingLastPathComponent()  // ios
+      .deletingLastPathComponent()  // app
+    let dart = app.appendingPathComponent("lib/services/photo/food_prefilter.dart")
+    let source = try String(contentsOf: dart, encoding: .utf8)
+    guard let start = source.range(of: "const List<String> kFoodLabels = ["),
+      let end = source.range(of: "];", range: start.upperBound..<source.endIndex)
+    else {
+      XCTFail("no kFoodLabels table in \(dart.path)", file: file, line: line)
+      return []
+    }
+    let body = String(source[start.upperBound..<end.lowerBound])
+    let regex = try NSRegularExpression(pattern: "'([a-z_]+)'")
+    return regex.matches(in: body, range: NSRange(body.startIndex..., in: body)).compactMap {
+      Range($0.range(at: 1), in: body).map { String(body[$0]) }
+    }
+  }
+
+  /// A width x height JPEG of one colour.
+  private func jpeg(width: Int = 640, height: Int = 480) -> Data {
+    let ctx = CGContext(
+      data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.setFillColor(red: 0.9, green: 0.5, blue: 0.1, alpha: 1)
+    ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
+    let out = NSMutableData()
+    let dest = CGImageDestinationCreateWithData(
+      out as CFMutableData, "public.jpeg" as CFString, 1, nil)!
+    CGImageDestinationAddImage(dest, ctx.makeImage()!, nil)
+    XCTAssertTrue(CGImageDestinationFinalize(dest))
+    return out as Data
+  }
+
+  private let labels: Set<String> = ["food", "pizza", "plate"]
+
+  // MARK: - the label table
+
+  func testEveryFoodLabelIsAClassTheClassifierKnows() throws {
+    let table = try dartFoodLabels()
+    XCTAssertGreaterThan(table.count, 100, "the table was not read whole")
+    XCTAssertEqual(table.first, "food")
+    XCTAssertEqual(Set(table).count, table.count, "duplicates")
+    let known = Set(try VNClassifyImageRequest().supportedIdentifiers())
+    XCTAssertFalse(known.isEmpty)
+    let unknown = table.filter { !known.contains($0) }
+    XCTAssertEqual(unknown, [], "not classes VNClassifyImageRequest knows")
+  }
+
+  // MARK: - where the request runs
+
+  func testComputeChoice() {
+    XCTAssertEqual(imageIOFoodComputeChoice(cpuOnEveryStage: true, background: false), .cpu)
+    XCTAssertEqual(imageIOFoodComputeChoice(cpuOnEveryStage: true, background: true), .cpu)
+    XCTAssertEqual(
+      imageIOFoodComputeChoice(cpuOnEveryStage: false, background: false), .defaultDevices)
+    XCTAssertEqual(
+      imageIOFoodComputeChoice(cpuOnEveryStage: false, background: true), .deferGPU)
+  }
+
+  /// The real request lists a CPU device for every stage (iOS 17+), so the
+  /// background run can classify at all; and after imageIOUseCPU every
+  /// stage is set to it.
+  func testTheClassifierCanRunOnTheCPU() throws {
+    let request = VNClassifyImageRequest()
+    XCTAssertTrue(imageIOCPUOnEveryStage(request))
+    imageIOUseCPU(request)
+    if #available(iOS 17.0, *) {
+      let stages = try request.supportedComputeStageDevices
+      XCTAssertFalse(stages.isEmpty)
+      for stage in stages.keys {
+        guard let device = request.computeDevice(for: stage) else {
+          XCTFail("stage \(stage) has no device set")
+          continue
+        }
+        if case .cpu = device {
+        } else {
+          XCTFail("stage \(stage) runs on \(device), not the CPU")
+        }
+      }
+    } else {
+      XCTAssertTrue(request.usesCPUOnly)
+    }
+  }
+
+  // MARK: - every way a check ends
+
+  func testScoreIsTheBestFoodLabelAndTopTheBestFive() {
+    let score = imageIOFoodScoreOf(
+      [
+        ("outdoor", 0.9), ("sky", 0.8), ("plate", 0.3), ("food", 0.25), ("tree", 0.2),
+        ("road", 0.1), ("pizza", 0.05),
+      ], labels: labels)
+    XCTAssertEqual(score.status, "ok")
+    XCTAssertEqual(score.score!, 0.3, accuracy: 1e-6)
+    XCTAssertEqual(score.top.map(\.id), ["outdoor", "sky", "plate", "food", "tree"])
+    let none = imageIOFoodScoreOf([("sky", 0.9)], labels: labels)
+    XCTAssertEqual(none.score, 0, "no food class scored")
+    let clamped = imageIOFoodScoreOf([("food", 1.5), ("sky", -1)], labels: labels)
+    XCTAssertEqual(clamped.score, 1)
+    XCTAssertEqual(clamped.top.map(\.conf), [1, 0])
+  }
+
+  func testMockedClassifierAnswers() {
+    var sawBackground: [Bool] = []
+    let ok = imageIOFoodScore(jpeg(), maxPx: 360, labels: labels, background: true) {
+      image, background in
+      sawBackground.append(background)
+      XCTAssertLessThanOrEqual(max(image.width, image.height), 360, "the thumbnail")
+      return .observations([("pizza", 0.7), ("plate", 0.2)])
+    }
+    XCTAssertEqual(ok.status, "ok")
+    XCTAssertEqual(ok.score!, 0.7, accuracy: 1e-6)
+    XCTAssertEqual(sawBackground, [true])
+
+    let deferred = imageIOFoodScore(jpeg(), maxPx: 360, labels: labels, background: true) {
+      _, _ in .deferGPU
+    }
+    XCTAssertEqual(deferred, .deferredGPU)
+
+    let unsupported = imageIOFoodScore(jpeg(), maxPx: 360, labels: labels, background: false) {
+      _, _ in
+      throw NSError(domain: VNErrorDomain, code: VNErrorCode.unsupportedRevision.rawValue)
+    }
+    XCTAssertEqual(unsupported, .unsupported)
+
+    let failed = imageIOFoodScore(jpeg(), maxPx: 360, labels: labels, background: false) {
+      _, _ in
+      throw NSError(domain: VNErrorDomain, code: VNErrorCode.internalError.rawValue)
+    }
+    XCTAssertEqual(failed, .error)
+  }
+
+  func testATimeoutIsAnError() {
+    let queue = DispatchQueue(label: "test.vision.slow")
+    let started = Date()
+    let slow = imageIOFoodScore(
+      jpeg(), maxPx: 360, labels: labels, background: false, timeout: 0.2, queue: queue
+    ) { _, _ in
+      Thread.sleep(forTimeInterval: 1.5)
+      return .observations([("food", 0.9)])
+    }
+    XCTAssertEqual(slow, .error)
+    XCTAssertLessThan(Date().timeIntervalSince(started), 1.0, "it did not wait the sleep out")
+    // A check queued behind the stuck one times out too, instead of piling
+    // up more work.
+    let behind = imageIOFoodScore(
+      jpeg(), maxPx: 360, labels: labels, background: false, timeout: 0.2, queue: queue
+    ) { _, _ in .observations([("food", 0.9)]) }
+    XCTAssertEqual(behind, .error)
+  }
+
+  func testUnusableInputsAreErrorsWithoutClassifying() {
+    var calls = 0
+    let classify: ImageIOClassifier = { _, _ in
+      calls += 1
+      return .observations([("food", 0.9)])
+    }
+    XCTAssertEqual(
+      imageIOFoodScore(Data([1, 2, 3]), maxPx: 360, labels: labels, background: false,
+        classify: classify), .error)
+    XCTAssertEqual(
+      imageIOFoodScore(Data(), maxPx: 360, labels: labels, background: false,
+        classify: classify), .error)
+    XCTAssertEqual(
+      imageIOFoodScore(jpeg(), maxPx: 360, labels: [], background: false, classify: classify),
+      .error)
+    XCTAssertEqual(
+      imageIOFoodScore(jpeg(), maxPx: 0, labels: labels, background: false, classify: classify),
+      .error)
+    XCTAssertEqual(calls, 0)
+  }
+
+  /// The real classifier on this runtime: a reply of real classes, or a
+  /// skip where the runtime cannot run inference at all.
+  func testRealClassifierOnThisRuntime() throws {
+    guard let thumb = imageIOThumbnail(jpeg(), maxPx: 360) else {
+      return XCTFail("thumbnail")
+    }
+    let answer: ImageIOClassification
+    do {
+      answer = try imageIOVisionClassify(thumb, background: false)
+    } catch {
+      throw XCTSkip("no inference context on this runtime: \(error)")
+    }
+    guard case .observations(let observations) = answer else {
+      return XCTFail("the foreground never defers")
+    }
+    XCTAssertFalse(observations.isEmpty)
+    for (_, conf) in observations {
+      XCTAssertTrue((0...1).contains(conf))
+    }
+  }
+
+  // MARK: - the channel
+
+  private func call(_ plugin: ImageIOPlugin, _ args: Any?) -> (reply: Any?, onMain: Bool) {
+    let replied = expectation(description: "reply")
+    var reply: Any?
+    var onMain = false
+    plugin.handle(FlutterMethodCall(methodName: "foodScore", arguments: args)) {
+      reply = $0
+      onMain = Thread.isMainThread
+      replied.fulfill()
+    }
+    wait(for: [replied], timeout: 15)
+    return (reply, onMain)
+  }
+
+  func testHandleFoodScoreRepliesAMapOnMain() {
+    var sawBackground: [Bool] = []
+    let plugin = ImageIOPlugin(isBackground: { false }) { _, background in
+      sawBackground.append(background)
+      return .observations([("food", 0.42), ("outdoor", 0.1)])
+    }
+    let (reply, onMain) = call(
+      plugin,
+      [
+        "bytes": FlutterStandardTypedData(bytes: jpeg()), "maxPx": 360,
+        "labels": ["food", "pizza"], "background": false,
+      ])
+    XCTAssertTrue(onMain, "channel replies belong on the platform thread")
+    let map = reply as? [String: Any]
+    XCTAssertEqual(map?["status"] as? String, "ok")
+    XCTAssertEqual(map?["score"] as? Double ?? -1, 0.42, accuracy: 1e-6)
+    let top = map?["top"] as? [[String: Any]]
+    XCTAssertEqual(top?.first?["id"] as? String, "food")
+    XCTAssertEqual(sawBackground, [false])
+  }
+
+  func testTheBackgroundIsWhatEitherSideSays() {
+    var sawBackground: [Bool] = []
+    let classify: ImageIOClassifier = { _, background in
+      sawBackground.append(background)
+      return background ? .deferGPU : .observations([("food", 0.5)])
+    }
+    let args: (Bool) -> [String: Any] = {
+      [
+        "bytes": FlutterStandardTypedData(bytes: self.jpeg()), "labels": ["food"],
+        "background": $0,
+      ]
+    }
+    let inBackground = ImageIOPlugin(isBackground: { true }, classify: classify)
+    let inForeground = ImageIOPlugin(isBackground: { false }, classify: classify)
+    XCTAssertEqual(
+      (call(inBackground, args(false)).reply as? [String: Any])?["status"] as? String,
+      "deferred_gpu")
+    XCTAssertEqual(
+      (call(inForeground, args(true)).reply as? [String: Any])?["status"] as? String,
+      "deferred_gpu")
+    XCTAssertEqual(
+      (call(inForeground, args(false)).reply as? [String: Any])?["status"] as? String, "ok")
+    XCTAssertEqual(sawBackground, [true, true, false])
+  }
+
+  func testHandleFoodScoreBadArgumentsAreErrors() {
+    let plugin = ImageIOPlugin(isBackground: { false }) { _, _ in
+      XCTFail("nothing to classify")
+      return .observations([])
+    }
+    let cases: [Any?] = [
+      nil,
+      ["labels": ["food"]],  // no bytes
+      ["bytes": FlutterStandardTypedData(bytes: jpeg())],  // no labels
+      ["bytes": FlutterStandardTypedData(bytes: jpeg()), "labels": [String]()],
+      ["bytes": FlutterStandardTypedData(bytes: Data([1])), "labels": ["food"]],
+    ]
+    for (i, args) in cases.enumerated() {
+      let map = call(plugin, args).reply as? [String: Any]
+      XCTAssertEqual(map?["status"] as? String, "error", "case \(i)")
+    }
   }
 }
 
@@ -785,6 +1073,10 @@ class PhotoChangesTests: XCTestCase {
     let albums = map(p, "albumAssetIds", ["titles": [String](), "sinceMs": 0, "limit": 10])
     XCTAssertEqual(albums["status"] as? String, "ok")
     XCTAssertEqual((albums["ids"] as? [Any])?.count, 0)
+    // Nor does asking for asset dates (G2b).
+    let dates = map(p, "assetDates", ["ids": [String]()])
+    XCTAssertEqual(dates["status"] as? String, "ok")
+    XCTAssertEqual((dates["ids"] as? [Any])?.count, 0)
   }
 
   /// Without access it answers denied — it never asks (no prompt from a
@@ -800,6 +1092,9 @@ class PhotoChangesTests: XCTestCase {
       let albums = map(p, "albumAssetIds", ["titles": ["Meta AI"], "sinceMs": 0, "limit": 10])
       XCTAssertEqual(albums["status"] as? String, "denied")
       XCTAssertEqual((albums["ids"] as? [Any])?.count, 0)
+      let dates = map(p, "assetDates", ["ids": ["A/L0/001"]])
+      XCTAssertEqual(dates["status"] as? String, "denied")
+      XCTAssertEqual((dates["ids"] as? [Any])?.count, 0)
     }
   }
 
@@ -847,6 +1142,21 @@ class PhotoChangesTests: XCTestCase {
     XCTAssertNil(wrongTypes.token)
     XCTAssertEqual(wrongTypes.limit, 200)
     XCTAssertEqual(wrongTypes.budget, 1.0, accuracy: 0.0001)
+  }
+
+  /// assetDates (design G2b) asks about at most 50 distinct identifiers;
+  /// anything that is not one is dropped, never sent to PhotoKit.
+  func testAssetDatesArgumentsAreBoundedAndDistinct() {
+    let request = AssetDatesRequest([
+      "ids": [" A/L0/001 ", "", 7, "A/L0/001", String(repeating: "x", count: 257), "B/L0/001"]
+    ])
+    XCTAssertEqual(request.ids, ["A/L0/001", "B/L0/001"])
+    XCTAssertEqual(AssetDatesRequest([:]).ids, [])
+    XCTAssertEqual(AssetDatesRequest(["ids": "A/L0/001"]).ids, [])
+    let many = AssetDatesRequest(["ids": (0..<80).map { "id\($0)" }])
+    XCTAssertEqual(many.ids.count, 50)
+    XCTAssertEqual(many.ids.first, "id0")
+    XCTAssertEqual(many.ids.last, "id49")
   }
 
   func testAlbumArgumentsAndTitleMatching() {
@@ -899,6 +1209,14 @@ class PhotoChangesTests: XCTestCase {
     XCTAssertEqual(unreadable["status"] as? String, "unavailable")
     XCTAssertEqual(unreadable["error_code"] as? String, "token_unreadable")
     XCTAssertNotNil(photoChangesUnarchiveToken(try XCTUnwrap(unreadable["token"] as? String)))
+  }
+
+  /// An identifier the library does not have is simply left out.
+  func testRealLibraryAssetDatesLeavesOutUnknownIds() throws {
+    guard hostHasPhotoAccess else { throw XCTSkip("the test host has no Photos access") }
+    let dates = map(PhotoChangesPlugin(), "assetDates", ["ids": ["no-such-asset/L0/001"]])
+    XCTAssertEqual(dates["status"] as? String, "ok")
+    XCTAssertEqual((dates["ids"] as? [Any])?.count, 0)
   }
 }
 

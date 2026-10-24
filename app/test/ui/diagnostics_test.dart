@@ -10,6 +10,8 @@ import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/photo/background_runs.dart';
+import 'package:calorie_tracker/services/photo/glasses_check.dart';
+import 'package:calorie_tracker/services/photo/photo_changes.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
 import 'package:calorie_tracker/ui/provider_names.dart';
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
@@ -511,6 +513,223 @@ void main() {
       expect(lines, hasLength(7));
       expect(backgroundRunVerdict(l, ended('error:StateError')),
           'Stopped by an error (StateError).');
+    });
+  });
+
+  // Design G1b: what the change history caught for the automatic scan.
+  group('late imports', () {
+    final now = DateTime(2026, 10, 23, 12);
+    final lastAt = DateTime(2026, 10, 23, 11, 30);
+    LateImportStats stats(String status) => LateImportStats(caught: [
+          DateTime(2026, 10, 12, 9), // older than 7 days
+          DateTime(2026, 10, 20, 9),
+          DateTime(2026, 10, 22, 19),
+        ], lastAt: lastAt, lastStatus: status);
+
+    Future<void> pump(WidgetTester tester, LateImportStats? record,
+        {Locale? locale, Size size = const Size(800, 4000), double scale = 1}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      if (scale != 1) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiagnosticsScreen(
+              diagnostics: _diag(),
+              loadBackgroundRuns: () async => const [],
+              loadLateImports: () async => record,
+              now: () => now)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('how many were caught this week and when it last looked',
+        (tester) async {
+      await pump(tester, stats('ok'));
+      expect(find.text('Late imports (other apps, glasses)'), findsOneWidget);
+      expect(find.text('2 caught in 7 days · last ${localStamp(lastAt)}'),
+          findsOneWidget);
+      expect(find.text('History expired — rescanning'), findsNothing);
+      expect(find.text('Needs iOS 16'), findsNothing);
+    });
+
+    testWidgets('a rescan in progress says so', (tester) async {
+      await pump(tester, stats(lateImportRescanning));
+      expect(find.text('History expired — rescanning'), findsOneWidget);
+    });
+
+    testWidgets('an iPhone without the change history says so',
+        (tester) async {
+      await pump(tester, stats('unsupported'));
+      expect(find.text('Needs iOS 16'), findsOneWidget);
+    });
+
+    testWidgets('in Chinese', (tester) async {
+      await pump(tester, stats(lateImportRescanning),
+          locale: const Locale('zh'));
+      expect(find.text('后导入的照片（其他 App、眼镜）'), findsOneWidget);
+      expect(find.text('7 天内补录 2 张 · 最近 ${localStamp(lastAt)}'),
+          findsOneWidget);
+      expect(find.text('历史已过期 — 正在重新扫描'), findsOneWidget);
+    });
+
+    testWidgets('no record (Android, or never looked): no section',
+        (tester) async {
+      await pump(tester, null);
+      expect(find.byKey(const Key('diagLateImports')), findsNothing);
+    });
+
+    // The row wraps rather than cut: a narrow phone at the largest text
+    // size, both languages.
+    for (final locale in [const Locale('en'), const Locale('zh')]) {
+      testWidgets('fits a 320-pt phone at 2x text ($locale)', (tester) async {
+        await pump(tester, stats(lateImportRescanning),
+            locale: locale, size: const Size(320, 6000), scale: 2);
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('diagLateImports')), findsOneWidget);
+      });
+    }
+
+    test('status lines exist only where they help', () {
+      final l = AppLocalizationsEn();
+      expect(lateImportStatusLine(l, null), isNull);
+      expect(lateImportStatusLine(l, 'ok'), isNull);
+      expect(lateImportStatusLine(l, 'denied'), isNull);
+      expect(lateImportStatusLine(l, lateImportRescanning),
+          'History expired — rescanning');
+      expect(lateImportStatusLine(AppLocalizationsZh(), 'unsupported'),
+          '需要 iOS 16');
+    });
+  });
+
+  // Design G3: what the automatic intake did with each glasses photo.
+  group('glasses check', () {
+    final now = DateTime(2026, 10, 24, 13);
+    final healthy = GlassesCheckEntry(
+        assetId: 'g1',
+        at: DateTime(2026, 10, 24, 12, 45),
+        outcome: GlassesCheckOutcome.logged,
+        signal: 'filename',
+        make: 'Meta AI',
+        model: 'Ray-Ban Meta Smart Glasses 2',
+        lagSeconds: 32 * 60,
+        hasGps: true,
+        gpsFixDeltaSeconds: 20,
+        foodScore: 0.63);
+    final waiting = GlassesCheckEntry(
+        assetId: 'g2',
+        at: DateTime(2026, 10, 24, 12, 40),
+        outcome: GlassesCheckOutcome.appWait,
+        signal: 'exif');
+
+    Future<void> pump(WidgetTester tester, List<GlassesCheckEntry> rows,
+        {Locale? locale,
+        Size size = const Size(800, 4000),
+        double scale = 1}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      if (scale != 1) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiagnosticsScreen(
+              diagnostics: _diag(),
+              loadBackgroundRuns: () async => const [],
+              loadLateImports: () async => null,
+              loadGlassesChecks: () async => rows,
+              now: () => now)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('one row per photo: outcome, signal, Make / Model, lag, GPS, '
+        'food score', (tester) async {
+      await pump(tester, [healthy, waiting]);
+      expect(find.text('Glasses check'), findsOneWidget);
+      expect(find.text('${localStamp(healthy.at)} · logged'), findsOneWidget);
+      expect(
+          find.text(
+              'Signal: filename · Meta AI / Ray-Ban Meta Smart Glasses 2'),
+          findsOneWidget);
+      expect(
+          find.text('import lag 32 min · GPS yes · GPS time +0:20 · '
+              'food 0.63'),
+          findsOneWidget);
+      expect(find.text('${localStamp(waiting.at)} · waiting for the app to '
+          'open'), findsOneWidget);
+      expect(find.text('Signal: EXIF · — / —'), findsOneWidget);
+      expect(find.text('import lag unknown · GPS no · food —'),
+          findsOneWidget);
+    });
+
+    testWidgets('in Chinese', (tester) async {
+      await pump(tester, [healthy], locale: const Locale('zh'));
+      expect(find.text('眼镜检查'), findsOneWidget);
+      expect(find.text('${localStamp(healthy.at)} · 已记录'), findsOneWidget);
+      expect(find.text('导入延迟 32 分钟 · 有 GPS · GPS 时间差 +0:20 · 食物分 0.63'),
+          findsOneWidget);
+    });
+
+    testWidgets('none yet says so', (tester) async {
+      await pump(tester, const []);
+      expect(find.byKey(const Key('diagGlassesCheck')), findsOneWidget);
+      expect(find.text('No Meta glasses photos in the past 14 days.'),
+          findsOneWidget);
+    });
+
+    for (final locale in [const Locale('en'), const Locale('zh')]) {
+      testWidgets('fits a 320-pt phone at 2x text ($locale)', (tester) async {
+        await pump(tester, [healthy, waiting],
+            locale: locale, size: const Size(320, 8000), scale: 2);
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('diagGlassesCheck')), findsOneWidget);
+      });
+    }
+
+    test('every outcome has words, in both languages', () {
+      for (final l in <AppLocalizations>[
+        AppLocalizationsEn(),
+        AppLocalizationsZh(),
+      ]) {
+        final words = {
+          for (final o in GlassesCheckOutcome.all) glassesOutcomeLabel(l, o),
+        };
+        expect(words, hasLength(GlassesCheckOutcome.all.length),
+            reason: 'each outcome reads differently');
+      }
+      expect(glassesOutcomeLabel(AppLocalizationsEn(), 'not_food'), 'not food');
+      expect(glassesOutcomeLabel(AppLocalizationsEn(), 'preview_wait'),
+          'waiting for full size');
+      expect(glassesOutcomeLabel(AppLocalizationsEn(), 'excluded'), 'excluded');
+      expect(glassesOutcomeLabel(AppLocalizationsEn(), 'duplicate'),
+          'duplicate');
+    });
+
+    test('durations and clock differences', () {
+      final l = AppLocalizationsEn();
+      expect(diagDuration(l, 0), '<1 min');
+      expect(diagDuration(l, 59), '<1 min');
+      expect(diagDuration(l, 60), '1 min');
+      expect(diagDuration(l, 32 * 60 + 40), '32 min');
+      expect(diagDuration(l, 2 * 3600 + 5 * 60), '2 h 5 min');
+      expect(diagDuration(l, 3 * 86400), '3 d');
+      expect(diagDuration(l, -90), '-1 min');
+      expect(diagDuration(AppLocalizationsZh(), 2 * 3600 + 5 * 60),
+          '2 小时 5 分钟');
+      expect(signedClock(20), '+0:20');
+      expect(signedClock(-725), '-12:05');
+      expect(signedClock(3723), '+1:02:03');
+      expect(signedClock(0), '+0:00');
     });
   });
 }

@@ -528,6 +528,14 @@ void main() {
                   matching: find.byType(GroupedRow),
                 ),
               ),
+              // Design G3: the glasses switch right under it.
+              (
+                'watchGlassesToggle',
+                find.ancestor(
+                  of: find.byKey(const Key('watchGlassesToggle')),
+                  matching: find.byType(GroupedRow),
+                ),
+              ),
               for (final k in valueRows.skip(1)) (k, find.byKey(Key(k))),
             ];
             for (final (name, row) in rows) {

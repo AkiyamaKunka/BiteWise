@@ -220,6 +220,10 @@
     }
   },
   "settingsRowWatch": "Watch Camera Roll",
+  "settingsRowWatchGlasses": "Meta glasses photos",
+  "@settingsRowWatchGlasses": {
+    "description": "Settings > Photos switch under Watch Camera Roll (design G3): whether the automatic scan logs photos taken with Meta glasses (recognized by file name, album or EXIF). Off: they are not offered; photos added on purpose still are. Kept short: the title shares its line with the switch, and 'Include Meta glasses photos' was cut at 390 pt (row_fit_layout_test)."
+  },
   "watcherDisclosureTitle": "Photos will be sent to your AI service",
   "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app's developer. You can turn this off any time.",
   "@watcherDisclosureBody": {
@@ -835,6 +839,126 @@
     }
   },
   "diagBgRunWatermarkNone": "none",
+  "diagLateImportsTitle": "Late imports (other apps, glasses)",
+  "@diagLateImportsTitle": {
+    "description": "Diagnostics section: photos other apps (the Meta AI app for glasses, AirDrop, WeChat) added to the library after they were taken, which the automatic scan caught through the photo library's change history."
+  },
+  "diagLateImportsSummary": "{n} caught in 7 days · last {time}",
+  "@diagLateImportsSummary": {
+    "description": "{time} is when the app last checked for late imports (yyyy-MM-dd HH:mm), or 'none'.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "diagLateImportsRescanning": "History expired — rescanning",
+  "diagLateImportsNeedsIos16": "Needs iOS 16",
+  "diagGlassesTitle": "Glasses check",
+  "@diagGlassesTitle": {
+    "description": "Diagnostics section (design G3): the last Meta glasses photos and what the automatic intake did with each."
+  },
+  "diagGlassesIntro": "The last 20 Meta glasses photos from the past 14 days and what happened to each. Locations are never shown.",
+  "diagGlassesNone": "No Meta glasses photos in the past 14 days.",
+  "diagGlassesSignal": "Signal: {signal}",
+  "@diagGlassesSignal": {
+    "description": "How the photo was recognized as a glasses photo: {signal} is diagGlassesSignalFilename, diagGlassesSignalAlbum or diagGlassesSignalExif.",
+    "placeholders": {
+      "signal": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesSignalFilename": "filename",
+  "diagGlassesSignalAlbum": "album",
+  "diagGlassesSignalExif": "EXIF",
+  "diagGlassesLag": "import lag {lag}",
+  "@diagGlassesLag": {
+    "description": "How long after it was taken the photo joined the photo library. {lag} is a diagDuration* string.",
+    "placeholders": {
+      "lag": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesLagUnknown": "import lag unknown",
+  "diagGlassesGpsYes": "GPS yes",
+  "@diagGlassesGpsYes": {
+    "description": "The photo carries a GPS position (never shown)."
+  },
+  "diagGlassesGpsNo": "GPS no",
+  "diagGlassesGpsTime": "GPS time {delta}",
+  "@diagGlassesGpsTime": {
+    "description": "The GPS fix time minus the capture time, signed, as m:ss or h:mm:ss, e.g. +0:20.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesFood": "food {score}",
+  "@diagGlassesFood": {
+    "description": "The on-device food score, 0.00–1.00, e.g. food 0.63.",
+    "placeholders": {
+      "score": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesFoodNone": "food —",
+  "@diagGlassesFoodNone": {
+    "description": "No on-device food check ran on this photo."
+  },
+  "diagGlassesOutcomeLogged": "logged",
+  "diagGlassesOutcomeNotFood": "not food",
+  "@diagGlassesOutcomeNotFood": {
+    "description": "The on-device check found no food: the photo was never sent to the AI."
+  },
+  "diagGlassesOutcomeNotFoodAi": "not food (AI)",
+  "diagGlassesOutcomeDuplicate": "duplicate",
+  "diagGlassesOutcomePreviewWait": "waiting for full size",
+  "diagGlassesOutcomeExcluded": "excluded",
+  "@diagGlassesOutcomeExcluded": {
+    "description": "The Meta glasses photos switch (Settings > Photos) was off."
+  },
+  "diagGlassesOutcomeAppWait": "waiting for the app to open",
+  "@diagGlassesOutcomeAppWait": {
+    "description": "The on-device food check could not run in the background; the photo waits for the app to be opened."
+  },
+  "diagGlassesOutcomeQueued": "waiting for the next scan",
+  "diagGlassesOutcomeRetry": "will retry",
+  "diagGlassesOutcomeFailed": "failed",
+  "diagDurationUnderMinute": "<1 min",
+  "diagDurationMinutes": "{n} min",
+  "@diagDurationMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "diagDurationHours": "{h} h {m} min",
+  "@diagDurationHours": {
+    "placeholders": {
+      "h": {
+        "type": "int"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "diagDurationDays": "{n} d",
+  "@diagDurationDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "addPhotosTitle": "Recent photos",
   "addPhotoUnreadable": "That photo could not be read (too large or removed).",
   "addPhotosLoadFailed": "Could not load photos: {error}",
@@ -976,6 +1100,10 @@
   "correctedBadge": "Corrected",
   "@correctedBadge": {
     "description": "Tooltip and screen-reader name of the pencil mark on a meal the user corrected."
+  },
+  "captureMetaGlasses": "Meta glasses",
+  "@captureMetaGlasses": {
+    "description": "Badge on a meal (Today card and meal editor) whose photo was taken with Meta smart glasses (Ray-Ban/Oakley Meta) and imported by the Meta AI app. 'Meta' is the brand; keep it untranslated."
   },
   "fixRequestFailed": "That request failed: {error}",
   "@fixRequestFailed": {

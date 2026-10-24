@@ -165,6 +165,8 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   @override
   bool watcherDisclosureSeen;
   @override
+  bool watchGlasses;
+  @override
   String dietaryProfile;
   @override
   String serverBaseUrl = '';
@@ -182,6 +184,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     this.summaryEnabled = true,
     this.watcherEnabled = false,
     this.watcherDisclosureSeen = false,
+    this.watchGlasses = true,
     this.dietaryProfile = '',
   })  : keysByProvider = keys ?? {'gemini': apiKey},
         modelsByProvider = models ??
@@ -220,6 +223,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     bool? summaryEnabled,
     bool? watcherEnabled,
     bool? watcherDisclosureSeen,
+    bool? watchGlasses,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -245,6 +249,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     if (watcherDisclosureSeen != null) {
       this.watcherDisclosureSeen = watcherDisclosureSeen;
     }
+    if (watchGlasses != null) this.watchGlasses = watchGlasses;
     if (dietaryProfile != null) this.dietaryProfile = dietaryProfile;
     if (serverBaseUrl != null) this.serverBaseUrl = serverBaseUrl;
     if (serverBackend != null) this.serverBackend = serverBackend;
@@ -322,6 +327,13 @@ class FakeIntake implements PhotoIntake {
     checkpointed.add(onCovered != null);
     return null;
   }
+
+  /// Late-import passes asked for (design G1b).
+  int lateImportScans = 0;
+
+  @override
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async =>
+      lateImportScans++;
 
   @override
   Future<void> start() async => started = true;

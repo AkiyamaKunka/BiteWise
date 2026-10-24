@@ -246,6 +246,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsRowWatch => '监控相册';
 
   @override
+  String get settingsRowWatchGlasses => '包括 Meta 眼镜拍的照片';
+
+  @override
   String get watcherDisclosureTitle => '照片会发送给 AI 服务';
 
   @override
@@ -1174,6 +1177,118 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagBgRunWatermarkNone => '无';
 
   @override
+  String get diagLateImportsTitle => '后导入的照片（其他 App、眼镜）';
+
+  @override
+  String diagLateImportsSummary(int n, String time) {
+    return '7 天内补录 $n 张 · 最近 $time';
+  }
+
+  @override
+  String get diagLateImportsRescanning => '历史已过期 — 正在重新扫描';
+
+  @override
+  String get diagLateImportsNeedsIos16 => '需要 iOS 16';
+
+  @override
+  String get diagGlassesTitle => '眼镜检查';
+
+  @override
+  String get diagGlassesIntro => '过去 14 天里最近 20 张 Meta 眼镜照片，以及每张的处理结果。不显示任何位置。';
+
+  @override
+  String get diagGlassesNone => '过去 14 天里没有 Meta 眼镜照片。';
+
+  @override
+  String diagGlassesSignal(String signal) {
+    return '识别：$signal';
+  }
+
+  @override
+  String get diagGlassesSignalFilename => '文件名';
+
+  @override
+  String get diagGlassesSignalAlbum => '相册';
+
+  @override
+  String get diagGlassesSignalExif => 'EXIF';
+
+  @override
+  String diagGlassesLag(String lag) {
+    return '导入延迟 $lag';
+  }
+
+  @override
+  String get diagGlassesLagUnknown => '导入延迟未知';
+
+  @override
+  String get diagGlassesGpsYes => '有 GPS';
+
+  @override
+  String get diagGlassesGpsNo => '无 GPS';
+
+  @override
+  String diagGlassesGpsTime(String delta) {
+    return 'GPS 时间差 $delta';
+  }
+
+  @override
+  String diagGlassesFood(String score) {
+    return '食物分 $score';
+  }
+
+  @override
+  String get diagGlassesFoodNone => '食物分 —';
+
+  @override
+  String get diagGlassesOutcomeLogged => '已记录';
+
+  @override
+  String get diagGlassesOutcomeNotFood => '不是食物';
+
+  @override
+  String get diagGlassesOutcomeNotFoodAi => '不是食物（AI 判断）';
+
+  @override
+  String get diagGlassesOutcomeDuplicate => '重复';
+
+  @override
+  String get diagGlassesOutcomePreviewWait => '等待完整尺寸';
+
+  @override
+  String get diagGlassesOutcomeExcluded => '已排除';
+
+  @override
+  String get diagGlassesOutcomeAppWait => '等待打开 App';
+
+  @override
+  String get diagGlassesOutcomeQueued => '等待下一次扫描';
+
+  @override
+  String get diagGlassesOutcomeRetry => '稍后重试';
+
+  @override
+  String get diagGlassesOutcomeFailed => '失败';
+
+  @override
+  String get diagDurationUnderMinute => '不到 1 分钟';
+
+  @override
+  String diagDurationMinutes(int n) {
+    return '$n 分钟';
+  }
+
+  @override
+  String diagDurationHours(int h, int m) {
+    return '$h 小时 $m 分钟';
+  }
+
+  @override
+  String diagDurationDays(int n) {
+    return '$n 天';
+  }
+
+  @override
   String get addPhotosTitle => '最近照片';
 
   @override
@@ -1368,6 +1483,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get correctedBadge => '已修正';
+
+  @override
+  String get captureMetaGlasses => 'Meta 眼镜';
 
   @override
   String fixRequestFailed(String error) {

@@ -42,6 +42,8 @@ void main() {
     // arriving — the switch exists so a friend can turn it OFF.
     expect(s.summaryEnabled, isTrue);
     expect(s.watcherEnabled, isFalse);
+    // Design G3: Meta glasses photos are included unless switched off.
+    expect(s.watchGlasses, isTrue);
     expect(s.dietaryProfile, isNull);
     expect(s.quotaPauseUntil, isNull);
     expect(s.isQuotaPaused, isFalse);
@@ -55,6 +57,7 @@ void main() {
     await s.setReportTime('08:05');
     await s.setSummaryEnabled(false);
     await s.setWatcherEnabled(true);
+    await s.setWatchGlasses(false);
     await s.setDietaryProfile('vegetarian, Cantonese cuisine');
     final pause = DateTime(2026, 7, 18, 9, 30);
     await s.setQuotaPauseUntil(pause);
@@ -66,6 +69,9 @@ void main() {
     expect(again.reportTime, '08:05');
     expect(again.summaryEnabled, isFalse, reason: 'off survives a relaunch');
     expect(again.watcherEnabled, isTrue);
+    expect(again.watchGlasses, isFalse);
+    expect(prefs.getBool('settings.watch_glasses'), isFalse,
+        reason: 'the key the design names');
     expect(again.dietaryProfile, 'vegetarian, Cantonese cuisine');
     expect(again.quotaPauseUntil, pause);
   });

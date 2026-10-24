@@ -16,6 +16,7 @@ import 'dart:typed_data';
 import '../../core/coerce.dart' show isoDate, normalizeImageHash;
 import '../../core/contracts.dart';
 import 'filename_dates.dart';
+import 'glasses.dart' show captureMetaFor;
 import 'photo_library.dart';
 import 'watcher.dart'
     show backfillQueryLimit, clampLookbackDays, lookbackCutoff;
@@ -264,6 +265,10 @@ class CoverageAuditor {
       maxAgeDays: 45,
     );
     return IntakePhoto(bytes, item.assetId, item.fileName,
-        capturedAt: capturedAt, deliberate: deliberate);
+        capturedAt: capturedAt,
+        deliberate: deliberate,
+        // How it was taken (design G2a), as the scan would have read it.
+        capture: captureMetaFor(bytes, item.fileName,
+            createDate: item.createDate));
   }
 }

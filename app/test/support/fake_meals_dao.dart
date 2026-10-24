@@ -269,6 +269,40 @@ class BaseFakeDao implements MealsDao {
     return (status: st, mealId: match.isEmpty ? null : match.first.id);
   }
 
+  /// Every call's ids, in order (the late-import pass's pre-filter).
+  final List<List<String>> loggedAssetIdsCalls = [];
+
+  @override
+  Future<Set<String>> loggedAssetIds(List<String> assetIds) async {
+    loggedAssetIdsCalls.add(List.of(assetIds));
+    final wanted = assetIds.where((id) => id.isNotEmpty).toSet();
+    return {
+      for (final m in meals)
+        if (wanted.contains(m.fileId)) m.fileId,
+    };
+  }
+
+  final List<(String, String, String)> shutterKeyCalls = [];
+
+  /// Throws when set: a store that cannot answer the duplicate-capture
+  /// lookup (the guard must fail open).
+  Object? shutterKeyError;
+
+  @override
+  Future<List<int>> mealIdsWithShutterKey(
+      String key, String fromDate, String toDate) async {
+    shutterKeyCalls.add((key, fromDate, toDate));
+    final error = shutterKeyError;
+    if (error != null) throw error;
+    return [
+      for (final m in meals)
+        if (m.date.compareTo(fromDate) >= 0 &&
+            m.date.compareTo(toDate) <= 0 &&
+            analysisHasShutterKey(m.analysis, key))
+          m.id,
+    ]..sort();
+  }
+
   @override
   Future<void> saveMealThumb(int mealId, Uint8List jpeg) async =>
       thumbs[mealId] = jpeg;

@@ -51,6 +51,13 @@ abstract class PhotoLibrary {
   /// Most-recent images, newest first (in-app picker grid source).
   Future<List<LibraryAsset>> recentImages(int limit);
 
+  /// The library's answer for each of [ids] (design G1b, the late-import
+  /// pass): the image asset; null when the library says it is no longer
+  /// there to read — deleted, hidden, or not an image; NO entry when the
+  /// lookup itself failed, so the caller cannot tell and keeps the id for
+  /// later. Never throws.
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids);
+
   /// Change-notify subscription while the app is alive (spec §6.1 watcher).
   Future<void> startChangeNotify(void Function() onChange);
   Future<void> stopChangeNotify();
@@ -176,6 +183,29 @@ class PhotoManagerLibrary implements PhotoLibrary {
       orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
     );
     return _query(filter, limit);
+  }
+
+  /// One fetch per id (AssetEntity.fromId; at most a pass's worth of
+  /// ids). photo_manager fetches by identifier with default fetch options,
+  /// which leave hidden assets out, so a photo hidden since the history
+  /// reported it (the native side drops hidden ones then) comes back null
+  /// like a deleted one — unless photo_manager still has it cached, in
+  /// which case it is read once more and the ledger has the last word.
+  @override
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids) async {
+    final found = <String, LibraryAsset?>{};
+    for (final id in ids) {
+      if (id.isEmpty) continue;
+      try {
+        final entity = await AssetEntity.fromId(id);
+        found[id] = entity == null || entity.type != AssetType.image
+            ? null
+            : _PhotoManagerAsset(entity);
+      } catch (_) {
+        // A failed lookup says nothing about the photo: no entry.
+      }
+    }
+    return found;
   }
 
   @override
