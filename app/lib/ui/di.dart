@@ -28,7 +28,9 @@ import '../services/photo/deferred_assets.dart'
     show clearDeferredAsset, holdGlassesPreview;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
+import '../services/photo/food_prefilter.dart' show foodScoreViaImageIO;
 import '../services/photo/glasses.dart' show captureMetaFor;
+import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../services/photo/photo_library.dart';
 import '../services/photo/share_intake.dart';
@@ -218,7 +220,12 @@ class AppServices {
           }
         },
         // A glasses preview copy waits once for its full-size one (G2b).
-        previewHold: holdGlassesPreview);
+        previewHold: holdGlassesPreview,
+        // Design G3: the 'Meta glasses photos' switch, read live, and on iOS
+        // the on-device food check before any glasses photo is uploaded.
+        includeGlasses: () => settings.watchGlasses,
+        foodCheck: Platform.isIOS ? foodScoreViaImageIO : null,
+        glassesCheckLog: recordGlassesCheckLocally);
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -388,6 +395,8 @@ class _AppSettingsStore implements SettingsStore {
   @override
   bool get watcherDisclosureSeen => _s.watcherDisclosureSeen;
   @override
+  bool get watchGlasses => _s.watchGlasses;
+  @override
   String get dietaryProfile => _s.dietaryProfile ?? '';
   @override
   String get serverBaseUrl => _s.serverBaseUrl;
@@ -414,6 +423,7 @@ class _AppSettingsStore implements SettingsStore {
     bool? summaryEnabled,
     bool? watcherEnabled,
     bool? watcherDisclosureSeen,
+    bool? watchGlasses,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -494,6 +504,7 @@ class _AppSettingsStore implements SettingsStore {
     if (watcherDisclosureSeen != null) {
       await _s.setWatcherDisclosureSeen(watcherDisclosureSeen);
     }
+    if (watchGlasses != null) await _s.setWatchGlasses(watchGlasses);
     if (dietaryProfile != null) await _s.setDietaryProfile(dietaryProfile);
     if (serverBaseUrl != null) await _s.setServerBaseUrl(serverBaseUrl);
     if (serverBackend != null) await _s.setServerBackend(serverBackend);

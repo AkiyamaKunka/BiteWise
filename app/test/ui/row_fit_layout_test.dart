@@ -243,6 +243,29 @@ void main() {
           });
         }
 
+        // Design G3: the glasses switch shares its line with a Switch;
+        // 'Include Meta glasses photos' was cut here in English.
+        testWidgets('the Meta glasses switch row, $lang at $width pt',
+            (tester) async {
+          _phone(tester, width);
+          await tester.pumpWidget(_app(
+              Locale(lang),
+              SettingsScreen(
+                settings: FakeSettings(apiKey: 'k'),
+                analyzer: FakeAnalyzer(),
+                dao: FakeDao(),
+                requestPhotoPermission: () async => true,
+              ),
+              theme: iphoneTheme));
+          await tester.pumpAndSettle();
+          final row = find.byKey(const Key('watchGlassesRow'));
+          await tester.ensureVisible(row);
+          await tester.pumpAndSettle();
+          expect(_ellipsised(tester, row), isEmpty,
+              reason: 'the glasses switch title must read in full');
+          expect(tester.takeException(), isNull);
+        });
+
         // Refresh on → the last-run time; off → the remedy, worded per
         // platform: 'Off' / '系统已关闭' on iOS (Background App Refresh),
         // 'Restricted' / '电池受限' on Android (App battery usage,

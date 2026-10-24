@@ -7,6 +7,8 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/photo/background_runs.dart';
+import '../../services/photo/glasses_check.dart'
+    show GlassesCheckEntry, readGlassesChecks;
 import '../../services/photo/photo_changes.dart'
     show
         LateImportStats,
@@ -33,6 +35,10 @@ class DiagnosticsScreen extends StatefulWidget {
   /// Android never writes one.
   final Future<LateImportStats?> Function()? loadLateImports;
 
+  /// The Glasses check record (glasses_check.dart, design G3), newest
+  /// first; null reads it from the device (readGlassesChecks).
+  final Future<List<GlassesCheckEntry>> Function()? loadGlassesChecks;
+
   /// The clock for the "in 7 days" count.
   final DateTime Function() now;
   const DiagnosticsScreen(
@@ -40,6 +46,7 @@ class DiagnosticsScreen extends StatefulWidget {
       required this.diagnostics,
       this.loadBackgroundRuns,
       this.loadLateImports,
+      this.loadGlassesChecks,
       this.now = DateTime.now});
 
   @override
@@ -54,6 +61,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       (widget.loadBackgroundRuns ?? readBackgroundRuns)();
   late final Future<LateImportStats?> _lateImports =
       (widget.loadLateImports ?? readLateImportStats)();
+  late final Future<List<GlassesCheckEntry>> _glassesChecks =
+      (widget.loadGlassesChecks ?? readGlassesChecks)();
 
   Future<void> _run() async {
     setState(() {
@@ -198,6 +207,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 ? const SizedBox.shrink()
                 : _LateImports(snap.data!, now: widget.now()),
           ),
+          FutureBuilder<List<GlassesCheckEntry>>(
+            future: _glassesChecks,
+            builder: (context, snap) => snap.hasData
+                ? _GlassesChecks(snap.data!)
+                : const SizedBox.shrink(),
+          ),
         ],
       ),
     );
@@ -235,6 +250,54 @@ class _LateImports extends StatelessWidget {
           Text(status,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ],
+    );
+  }
+}
+
+/// "Glasses check" (design G3): the last Meta glasses photos and what the
+/// automatic intake did with each — the owner's view of an intake that
+/// mostly runs with no screen. Never a coordinate: the record has none.
+class _GlassesChecks extends StatelessWidget {
+  const _GlassesChecks(this.entries);
+  final List<GlassesCheckEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = context.l10n;
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    return Column(
+      key: const Key('diagGlassesCheck'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(l.diagGlassesTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(entries.isEmpty ? l.diagGlassesNone : l.diagGlassesIntro,
+            style: muted),
+        for (final e in entries) ...[
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Builder(builder: (context) {
+                final lines = glassesCheckLines(l, e);
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(lines.title, style: theme.textTheme.titleSmall),
+                    const SizedBox(height: 4),
+                    Text(lines.device, style: theme.textTheme.bodyMedium),
+                    const SizedBox(height: 2),
+                    Text(lines.details, style: muted),
+                  ],
+                );
+              }),
+            ),
+          ),
         ],
       ],
     );

@@ -259,6 +259,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsRowWatch => 'Watch Camera Roll';
 
   @override
+  String get settingsRowWatchGlasses => 'Meta glasses photos';
+
+  @override
   String get watcherDisclosureTitle => 'Photos will be sent to your AI service';
 
   @override
@@ -1273,6 +1276,105 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagLateImportsNeedsIos16 => 'Needs iOS 16';
+
+  @override
+  String get diagGlassesTitle => 'Glasses check';
+
+  @override
+  String get diagGlassesIntro =>
+      'The last 20 Meta glasses photos from the past 14 days and what happened to each. Locations are never shown.';
+
+  @override
+  String get diagGlassesNone => 'No Meta glasses photos in the past 14 days.';
+
+  @override
+  String diagGlassesSignal(String signal) {
+    return 'Signal: $signal';
+  }
+
+  @override
+  String get diagGlassesSignalFilename => 'filename';
+
+  @override
+  String get diagGlassesSignalAlbum => 'album';
+
+  @override
+  String get diagGlassesSignalExif => 'EXIF';
+
+  @override
+  String diagGlassesLag(String lag) {
+    return 'import lag $lag';
+  }
+
+  @override
+  String get diagGlassesLagUnknown => 'import lag unknown';
+
+  @override
+  String get diagGlassesGpsYes => 'GPS yes';
+
+  @override
+  String get diagGlassesGpsNo => 'GPS no';
+
+  @override
+  String diagGlassesGpsTime(String delta) {
+    return 'GPS time $delta';
+  }
+
+  @override
+  String diagGlassesFood(String score) {
+    return 'food $score';
+  }
+
+  @override
+  String get diagGlassesFoodNone => 'food —';
+
+  @override
+  String get diagGlassesOutcomeLogged => 'logged';
+
+  @override
+  String get diagGlassesOutcomeNotFood => 'not food';
+
+  @override
+  String get diagGlassesOutcomeNotFoodAi => 'not food (AI)';
+
+  @override
+  String get diagGlassesOutcomeDuplicate => 'duplicate';
+
+  @override
+  String get diagGlassesOutcomePreviewWait => 'waiting for full size';
+
+  @override
+  String get diagGlassesOutcomeExcluded => 'excluded';
+
+  @override
+  String get diagGlassesOutcomeAppWait => 'waiting for the app to open';
+
+  @override
+  String get diagGlassesOutcomeQueued => 'waiting for the next scan';
+
+  @override
+  String get diagGlassesOutcomeRetry => 'will retry';
+
+  @override
+  String get diagGlassesOutcomeFailed => 'failed';
+
+  @override
+  String get diagDurationUnderMinute => '<1 min';
+
+  @override
+  String diagDurationMinutes(int n) {
+    return '$n min';
+  }
+
+  @override
+  String diagDurationHours(int h, int m) {
+    return '$h h $m min';
+  }
+
+  @override
+  String diagDurationDays(int n) {
+    return '$n d';
+  }
 
   @override
   String get addPhotosTitle => 'Recent photos';

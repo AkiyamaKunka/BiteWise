@@ -1093,10 +1093,142 @@ void main() {
     });
   });
 
-  // Design G2b: for a glasses photo the dating guard could re-date, the
-  // watcher adds what says its creation date is only the import time — the
-  // library's added date, and the late-import pass that offered it. Every
-  // other photo costs no lookup.
+  // Design G2b: for a glasses photo the watcher adds what says its
+  // creation date is only the import time — the library's added date, and
+  // the late-import pass that offered it. G3 asks the added date for every
+  // glasses photo (the Glasses check card's import lag), but still for
+  // nothing else: a camera photo costs no lookup.
+  // Design G3: at most N glasses photos per scan go on to the model. The
+  // pipeline takes the slots (photo_pipeline.dart); the watcher hands every
+  // photo its scan's GlassesQuota and keeps what it turned away as if
+  // unread: the frontier waits, the late-import carry keeps it, and the
+  // next scan offers it.
+  group('the per-scan glasses allowance (G3)', () {
+    late FakePhotoLibrary library;
+    late List<String> delivered;
+    late Map<String, int> reads;
+
+    FakeAsset glasses(String id, DateTime at) => FakeAsset(
+        id, 'photo-${id}_singular_display_fullPicture.HEIC', at,
+        Uint8List.fromList([1, 2, 3]),
+        onRead: () => reads[id] = (reads[id] ?? 0) + 1);
+    FakeAsset camera(String id, DateTime at) => FakeAsset(
+        id, 'IMG_$id.HEIC', at, Uint8List.fromList([4, 5, 6]),
+        onRead: () => reads[id] = (reads[id] ?? 0) + 1);
+
+    /// The pipeline's side of the quota: a glasses photo takes a slot or is
+    /// released (false), like PhotoPipeline._overGlassesQuota.
+    Future<bool> sink(IntakePhoto p, DateTime? _) async {
+      final quota = p.glassesQuota;
+      expect(quota, isNotNull, reason: 'every automatic photo carries it');
+      if ((p.capture?.isMetaGlasses ?? false) && !quota!.take(p.assetId)) {
+        return false;
+      }
+      delivered.add(p.assetId);
+      return true;
+    }
+
+    LibraryPhotoIntake makeIntake({LateImportCursor? lateImports}) =>
+        LibraryPhotoIntake(
+            lookbackDays: () => 2,
+            library: library,
+            clock: () => now,
+            lateImports: lateImports,
+            glassesPerScan: 2)
+          ..attachSink(sink);
+
+    setUp(() {
+      library = FakePhotoLibrary();
+      delivered = [];
+      reads = {};
+    });
+
+    final t = DateTime(2026, 7, 17, 9);
+    DateTime at(int minutes) => t.add(Duration(minutes: minutes));
+
+    test('a scan sends at most N; the rest wait in front of the frontier for '
+        'the next scan, which has its own allowance', () async {
+      library.assets = [
+        glasses('g1', at(1)),
+        glasses('g2', at(2)),
+        glasses('g3', at(3)),
+        camera('c1', at(4)),
+        glasses('g4', at(5)),
+      ];
+      final intake = makeIntake();
+      final frontier = await intake.backfillScan();
+      expect(delivered, ['g1', 'g2', 'c1'],
+          reason: 'camera photos are never held back');
+      expect(frontier, at(2), reason: 'halted in front of g3');
+      expect(reads['g3'], 1);
+
+      delivered.clear();
+      final next = await intake.backfillScan();
+      expect(delivered, ['g3', 'g4'],
+          reason: 'not released, so the same session offers them again');
+      expect(next, at(5));
+      expect(reads['g1'], 1, reason: 'handled ones cost nothing');
+    });
+
+    test('the newest-day pass and the full pass share one allowance, and a '
+        'photo it turned away is not read twice in a scan', () async {
+      library.assets = [
+        glasses('g1', at(1)),
+        glasses('g2', at(2)),
+        glasses('g3', at(3)),
+      ];
+      final frontier =
+          await makeIntake().backfillScan(newestDayFirst: true);
+      expect(delivered, ['g1', 'g2']);
+      expect(reads['g3'], 1);
+      expect(frontier, at(2));
+    });
+
+    test('a late-import pass keeps what it turned away in the carry, and the '
+        'next pass offers it', () async {
+      final root = Directory.systemTemp.createTempSync('watcher_g3');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final history = FakePhotoChangeSource();
+      final cursor = LateImportCursor(
+          source: history,
+          store: LocalNoBackupStore(
+              root: () async => root, createMissingDirectory: true),
+          clock: () => now);
+      final intake = makeIntake(lateImports: cursor);
+      await intake.lateImportScan(); // the cursor starts here
+      final old = DateTime(2026, 7, 16, 19);
+      library.assets = [
+        glasses('g1', old.add(const Duration(minutes: 1))),
+        glasses('g2', old.add(const Duration(minutes: 2))),
+        glasses('g3', old.add(const Duration(minutes: 3))),
+      ];
+      var reported = false;
+      history.onInsertedImagesSince = (token, _, _, _) {
+        if (reported) {
+          return InsertedImages(PhotoChangeStatus.ok,
+              token: token, deviceTag: history.deviceTag);
+        }
+        reported = true;
+        return InsertedImages(PhotoChangeStatus.ok,
+            token: history.nextToken(),
+            deviceTag: history.deviceTag,
+            ids: [
+              for (final a in library.assets)
+                InsertedImage(a.id, created: a.createDateTime),
+            ]);
+      };
+      await intake.lateImportScan();
+      expect(delivered, ['g1', 'g2']);
+      expect([for (final e in (await cursor.read())!.carry) e.id], ['g3'],
+          reason: 'the rest stay in the carry');
+
+      await intake.lateImportScan();
+      expect(delivered, ['g1', 'g2', 'g3'],
+          reason: 'not "tried and released": offered again this session');
+      expect((await cursor.read())!.carry, isEmpty);
+    });
+  });
+
   group('import-time evidence (G2b)', () {
     late FakePhotoLibrary library;
     late List<IntakePhoto> delivered;
@@ -1151,8 +1283,7 @@ void main() {
       asked = [];
     });
 
-    test('asked only for a glasses photo whose creation date and shutter '
-        'disagree', () async {
+    test('asked for every glasses photo, never for a camera photo', () async {
       library.assets = [
         FakeAsset('late', 'IMG_1.JPG', importedAt, glassesJpeg()),
         FakeAsset('ontime', 'IMG_2.JPG', DateTime(2026, 7, 16, 12, 30),
@@ -1160,14 +1291,16 @@ void main() {
         FakeAsset('camera', 'IMG_3.JPG', importedAt, cameraJpeg()),
       ];
       await makeIntake(added: lookup).backfillScan();
-      expect(asked, ['late']);
+      expect(asked, unorderedEquals(['late', 'ontime']));
       final byId = {for (final p in delivered) p.assetId: p.capture!};
       expect(byId['late']!.addedDate, addedAt);
       expect(byId['late']!.importPassAt, isNull,
           reason: 'a scan by date, not the late-import pass');
       expect(byId['late']!.isMetaGlasses, isTrue,
           reason: 'the G2a reading is kept');
-      expect(byId['ontime']!.addedDate, isNull);
+      // Its shutter and creation date agree: the guard re-dates nothing,
+      // and the added date only measures the import lag.
+      expect(byId['ontime']!.addedDate, addedAt);
       expect(byId['camera']!.addedDate, isNull);
       // The intake still dates each photo as before; the pipeline decides,
       // with the evidence (capture_dating.dart).

@@ -31,6 +31,8 @@ import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
 import '../services/photo/background_runs.dart';
 import '../services/photo/deferred_assets.dart';
+import '../services/photo/food_prefilter.dart' show foodScoreViaImageIO;
+import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
@@ -789,6 +791,11 @@ Future<bool> _runAfterLaunch({
           latch: autoScanLatchFor(settings),
           // A glasses preview copy waits once for its full-size one (G2b).
           previewHold: holdGlassesPreview,
+          // Design G3: the switch as this run loaded it, and on iOS the
+          // on-device food check — on the CPU, or deferred to the app.
+          includeGlasses: () => settings.watchGlasses,
+          foodCheck: ios ? foodScoreViaImageIO : null,
+          glassesCheckLog: recordGlassesCheckLocally,
           // iOS only: there dart:ui cannot decode (platform_decode.dart).
           deferUndecodable: ios),
       showMealCard: (title, body) async {

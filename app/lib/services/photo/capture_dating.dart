@@ -74,8 +74,9 @@ bool zoneShapedDifference(Duration difference) {
 /// to be the import time: its EXIF DateTimeOriginal (the camera's wall
 /// clock, as a local DateTime), when every condition of the guard but the
 /// import-time evidence holds; null when the guard can never apply to it.
-/// The watcher asks this before it looks for the evidence, so a photo the
-/// guard cannot touch — nearly every photo — costs no lookup. Never throws.
+/// The watcher looks for the evidence of Meta glasses photos only (it also
+/// gives the Glasses check card its import lag, design G3), so nearly every
+/// photo costs no lookup. Never throws.
 DateTime? glassesExifRedate(CaptureMeta? capture,
     {required DateTime now,
     int maxAgeDays = SharedConstants.capturedAtMaxAgeDaysDefault}) {

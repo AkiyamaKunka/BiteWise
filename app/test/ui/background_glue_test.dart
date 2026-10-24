@@ -21,6 +21,7 @@ import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/photo/background_runs.dart';
 import 'package:calorie_tracker/services/photo/deferred_assets.dart';
+import 'package:calorie_tracker/services/photo/food_prefilter.dart';
 import 'package:calorie_tracker/services/local_store.dart';
 import 'package:calorie_tracker/services/photo/photo_changes.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
@@ -1319,6 +1320,54 @@ void main() {
       await runWith(FakeAnalyzer()
         ..nextPhotoOutcome = const AnalysisOutcome(
             analysis: {'is_food': false}, isFood: false, wall: Duration.zero));
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+    });
+
+    // Design G3: the food check that cannot run in the background defers
+    // its glasses photo the same way; a photo the scan's glasses allowance
+    // turned away is no deferral (the next run simply offers it), and a
+    // switched-off one is a verdict that moves the watermark.
+    test('glasses photos: a food-check deferral counts, the allowance and '
+        'the switch do not', () async {
+      final settings = await settingsWith(key: 'k');
+      const glasses = CaptureMeta(device: CaptureDevice.metaGlasses);
+      IntakePhoto shot(int n, {GlassesQuota? quota}) => IntakePhoto(
+          Uint8List.fromList([n, n, n]), 'asset$n', 'IMG_$n.jpg',
+          capture: glasses, glassesQuota: quota);
+      Future<void> runWith(List<IntakePhoto> batch,
+              {FoodCheck check = const FoodCheck(FoodCheckStatus.ok,
+                  score: 0.9),
+              bool include = true}) async =>
+          headlessBackfillWith(
+            settings: settings,
+            prefs: prefs,
+            intake: EmittingIntake()..batch = batch,
+            pipeline: () async => PhotoPipeline(
+                dao: FakeDao(),
+                analyzer: FakeAnalyzer()
+                  ..nextPhotoOutcome = const AnalysisOutcome(
+                      analysis: {'is_food': true, 'food_items': []},
+                      isFood: true,
+                      wall: Duration.zero),
+                includeGlasses: () => include,
+                foodCheck: (_) async => check,
+                deferUndecodable: true),
+            showMealCard: (_, _) async {},
+            deferred: await DeferredAssets.load(prefs),
+          );
+      await runWith([shot(1)],
+          check: const FoodCheck(FoodCheckStatus.deferredGpu));
+      expect(
+          decodeDeferredAssets(prefs.getString(deferredAssetsPrefsKey))
+              .single
+              .id,
+          'asset1');
+      await prefs.remove(deferredAssetsPrefsKey);
+      final full = GlassesQuota(limit: 0);
+      await runWith([shot(2, quota: full)]);
+      expect(full.turnedAway('asset2'), isTrue);
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+      await runWith([shot(3)], include: false);
       expect(prefs.getString(deferredAssetsPrefsKey), isNull);
     });
 

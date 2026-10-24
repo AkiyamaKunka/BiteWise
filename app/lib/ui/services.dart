@@ -73,6 +73,9 @@ abstract class SettingsStore {
   /// True once the user accepted the one-time 监控相册 disclosure (photos
   /// go to the chosen AI service); only the Settings toggle reads it.
   bool get watcherDisclosureSeen;
+
+  /// The 'Meta glasses photos' switch (AppSettings.watchGlasses, default on).
+  bool get watchGlasses;
   String get dietaryProfile; // spec §1.3 photo-prompt appendix
 
   /// Base URL of the user's own server (AiProvider.server); '' when unset.
@@ -107,6 +110,7 @@ abstract class SettingsStore {
     bool? summaryEnabled,
     bool? watcherEnabled,
     bool? watcherDisclosureSeen,
+    bool? watchGlasses,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,

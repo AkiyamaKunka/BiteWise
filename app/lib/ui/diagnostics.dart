@@ -16,6 +16,7 @@ import 'package:image/image.dart' as img;
 
 import '../core/contracts.dart';
 import '../l10n/app_localizations.dart';
+import '../services/photo/glasses_check.dart';
 import 'provider_names.dart';
 import 'services.dart';
 
@@ -263,4 +264,76 @@ String localStamp(DateTime t) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${l.year}-${two(l.month)}-${two(l.day)} '
       '${two(l.hour)}:${two(l.minute)}';
+}
+
+/// A span of [seconds] as the Glasses check card says it: '<1 min',
+/// '32 min', '2 h 5 min', '3 d'; a negative one with a leading '-'.
+String diagDuration(AppLocalizations l, int seconds) {
+  final sign = seconds < 0 ? '-' : '';
+  final s = seconds.abs();
+  if (s < 60) return '$sign${l.diagDurationUnderMinute}';
+  final minutes = s ~/ 60;
+  if (minutes < 60) return '$sign${l.diagDurationMinutes(minutes)}';
+  final hours = minutes ~/ 60;
+  if (hours < 48) return '$sign${l.diagDurationHours(hours, minutes % 60)}';
+  return '$sign${l.diagDurationDays(hours ~/ 24)}';
+}
+
+/// [seconds] as a signed clock difference: '+0:20', '-12:05', '+1:02:03'.
+String signedClock(int seconds) {
+  final sign = seconds < 0 ? '-' : '+';
+  final s = seconds.abs();
+  String two(int n) => n.toString().padLeft(2, '0');
+  final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;
+  return h > 0 ? '$sign$h:${two(m)}:${two(sec)}' : '$sign$m:${two(sec)}';
+}
+
+/// How a glasses photo was recognized, in the app language.
+String glassesSignalLabel(AppLocalizations l, String? signal) =>
+    switch (signal) {
+      'filename' => l.diagGlassesSignalFilename,
+      'album' => l.diagGlassesSignalAlbum,
+      'exif' => l.diagGlassesSignalExif,
+      _ => '—',
+    };
+
+/// A [GlassesCheckOutcome] in the app language.
+String glassesOutcomeLabel(AppLocalizations l, String outcome) =>
+    switch (outcome) {
+      GlassesCheckOutcome.logged => l.diagGlassesOutcomeLogged,
+      GlassesCheckOutcome.notFood => l.diagGlassesOutcomeNotFood,
+      GlassesCheckOutcome.notFoodAi => l.diagGlassesOutcomeNotFoodAi,
+      GlassesCheckOutcome.duplicate => l.diagGlassesOutcomeDuplicate,
+      GlassesCheckOutcome.previewWait => l.diagGlassesOutcomePreviewWait,
+      GlassesCheckOutcome.excluded => l.diagGlassesOutcomeExcluded,
+      GlassesCheckOutcome.appWait => l.diagGlassesOutcomeAppWait,
+      GlassesCheckOutcome.queued => l.diagGlassesOutcomeQueued,
+      GlassesCheckOutcome.retry => l.diagGlassesOutcomeRetry,
+      _ => l.diagGlassesOutcomeFailed,
+    };
+
+/// One Glasses check row, as three lines: when and what happened; how it
+/// was recognized and the camera's Make / Model; the import lag, GPS
+/// (yes or no, and the fix's difference from the shutter) and the food
+/// score. No coordinate exists to show.
+({String title, String device, String details}) glassesCheckLines(
+    AppLocalizations l, GlassesCheckEntry e) {
+  final lag = e.lagSeconds;
+  final fix = e.gpsFixDeltaSeconds;
+  final food = e.foodScore;
+  return (
+    title: '${localStamp(e.at)} · ${glassesOutcomeLabel(l, e.outcome)}',
+    device: '${l.diagGlassesSignal(glassesSignalLabel(l, e.signal))} · '
+        '${e.make ?? '—'} / ${e.model ?? '—'}',
+    details: [
+      lag == null
+          ? l.diagGlassesLagUnknown
+          : l.diagGlassesLag(diagDuration(l, lag)),
+      e.hasGps ? l.diagGlassesGpsYes : l.diagGlassesGpsNo,
+      if (fix != null) l.diagGlassesGpsTime(signedClock(fix)),
+      food == null
+          ? l.diagGlassesFoodNone
+          : l.diagGlassesFood(food.toStringAsFixed(2)),
+    ].join(' · '),
+  );
 }

@@ -486,6 +486,12 @@ abstract class AppLocalizations {
   /// **'Watch Camera Roll'**
   String get settingsRowWatch;
 
+  /// Settings > Photos switch under Watch Camera Roll (design G3): whether the automatic scan logs photos taken with Meta glasses (recognized by file name, album or EXIF). Off: they are not offered; photos added on purpose still are. Kept short: the title shares its line with the switch, and 'Include Meta glasses photos' was cut at 390 pt (row_fit_layout_test).
+  ///
+  /// In en, this message translates to:
+  /// **'Meta glasses photos'**
+  String get settingsRowWatchGlasses;
+
   /// No description provided for @watcherDisclosureTitle.
   ///
   /// In en, this message translates to:
@@ -2141,6 +2147,174 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Needs iOS 16'**
   String get diagLateImportsNeedsIos16;
+
+  /// Diagnostics section (design G3): the last Meta glasses photos and what the automatic intake did with each.
+  ///
+  /// In en, this message translates to:
+  /// **'Glasses check'**
+  String get diagGlassesTitle;
+
+  /// No description provided for @diagGlassesIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'The last 20 Meta glasses photos from the past 14 days and what happened to each. Locations are never shown.'**
+  String get diagGlassesIntro;
+
+  /// No description provided for @diagGlassesNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No Meta glasses photos in the past 14 days.'**
+  String get diagGlassesNone;
+
+  /// How the photo was recognized as a glasses photo: {signal} is diagGlassesSignalFilename, diagGlassesSignalAlbum or diagGlassesSignalExif.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal: {signal}'**
+  String diagGlassesSignal(String signal);
+
+  /// No description provided for @diagGlassesSignalFilename.
+  ///
+  /// In en, this message translates to:
+  /// **'filename'**
+  String get diagGlassesSignalFilename;
+
+  /// No description provided for @diagGlassesSignalAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'album'**
+  String get diagGlassesSignalAlbum;
+
+  /// No description provided for @diagGlassesSignalExif.
+  ///
+  /// In en, this message translates to:
+  /// **'EXIF'**
+  String get diagGlassesSignalExif;
+
+  /// How long after it was taken the photo joined the photo library. {lag} is a diagDuration* string.
+  ///
+  /// In en, this message translates to:
+  /// **'import lag {lag}'**
+  String diagGlassesLag(String lag);
+
+  /// No description provided for @diagGlassesLagUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'import lag unknown'**
+  String get diagGlassesLagUnknown;
+
+  /// The photo carries a GPS position (never shown).
+  ///
+  /// In en, this message translates to:
+  /// **'GPS yes'**
+  String get diagGlassesGpsYes;
+
+  /// No description provided for @diagGlassesGpsNo.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS no'**
+  String get diagGlassesGpsNo;
+
+  /// The GPS fix time minus the capture time, signed, as m:ss or h:mm:ss, e.g. +0:20.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS time {delta}'**
+  String diagGlassesGpsTime(String delta);
+
+  /// The on-device food score, 0.00–1.00, e.g. food 0.63.
+  ///
+  /// In en, this message translates to:
+  /// **'food {score}'**
+  String diagGlassesFood(String score);
+
+  /// No on-device food check ran on this photo.
+  ///
+  /// In en, this message translates to:
+  /// **'food —'**
+  String get diagGlassesFoodNone;
+
+  /// No description provided for @diagGlassesOutcomeLogged.
+  ///
+  /// In en, this message translates to:
+  /// **'logged'**
+  String get diagGlassesOutcomeLogged;
+
+  /// The on-device check found no food: the photo was never sent to the AI.
+  ///
+  /// In en, this message translates to:
+  /// **'not food'**
+  String get diagGlassesOutcomeNotFood;
+
+  /// No description provided for @diagGlassesOutcomeNotFoodAi.
+  ///
+  /// In en, this message translates to:
+  /// **'not food (AI)'**
+  String get diagGlassesOutcomeNotFoodAi;
+
+  /// No description provided for @diagGlassesOutcomeDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'duplicate'**
+  String get diagGlassesOutcomeDuplicate;
+
+  /// No description provided for @diagGlassesOutcomePreviewWait.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for full size'**
+  String get diagGlassesOutcomePreviewWait;
+
+  /// The Meta glasses photos switch (Settings > Photos) was off.
+  ///
+  /// In en, this message translates to:
+  /// **'excluded'**
+  String get diagGlassesOutcomeExcluded;
+
+  /// The on-device food check could not run in the background; the photo waits for the app to be opened.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for the app to open'**
+  String get diagGlassesOutcomeAppWait;
+
+  /// No description provided for @diagGlassesOutcomeQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for the next scan'**
+  String get diagGlassesOutcomeQueued;
+
+  /// No description provided for @diagGlassesOutcomeRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'will retry'**
+  String get diagGlassesOutcomeRetry;
+
+  /// No description provided for @diagGlassesOutcomeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get diagGlassesOutcomeFailed;
+
+  /// No description provided for @diagDurationUnderMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'<1 min'**
+  String get diagDurationUnderMinute;
+
+  /// No description provided for @diagDurationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} min'**
+  String diagDurationMinutes(int n);
+
+  /// No description provided for @diagDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{h} h {m} min'**
+  String diagDurationHours(int h, int m);
+
+  /// No description provided for @diagDurationDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} d'**
+  String diagDurationDays(int n);
 
   /// No description provided for @addPhotosTitle.
   ///

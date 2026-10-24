@@ -1,6 +1,6 @@
 # Bitewise · 筷拍 — Privacy Policy
 
-Effective date: 2026-10-12
+Effective date: 2026-10-24
 
 [English](#english) · [中文](#中文)
 
@@ -22,6 +22,10 @@ accounts, and receives none of your data.**
   the iOS Keychain, or on Android in encrypted storage protected by the
   Android Keystore.
 - Notifications (meal cards, daily summary) are generated on the phone.
+- A short record of the last 20 Meta glasses photos (how each was
+  recognized, the camera model, whether it carries a location — never the
+  location itself — its on-phone food score and what happened to it),
+  shown on the diagnostics page. It is kept outside your phone's backups.
 
 The app contains no analytics, no crash reporting, no advertising and no
 tracking SDK, and it does not use your data to track you across apps or
@@ -50,6 +54,15 @@ Settings, using **your own API key**:
   the look-back window (2 days by default, set under Settings), including
   photos that are not food. The AI decides whether a photo shows food, and
   non-food photos are not logged.
+- Photos taken with **Meta glasses** that the Meta AI app imports into
+  your library are treated like camera photos, under the same Watch Camera
+  Roll rules. The app recognizes them on the phone, from the file name,
+  the album the Meta AI app puts them in, or the camera model recorded in
+  the photo. On iPhone, each one is first checked on the phone by Apple's
+  built-in image classifier, and a photo that does not look like food is
+  not sent at all. **Meta glasses photos** (Settings › Photos)
+  turns automatic logging of these photos off; photos you pick or share
+  are still sent.
 
 **What is sent with a photo:**
 
@@ -109,6 +122,7 @@ date. Questions: open an issue at
 - 设置保存在手机上应用自己的偏好设置中。
 - API Key（以及你自己服务器的密钥，如果你使用的话）保存在 iOS 钥匙串中；在 Android 上保存在由 Android Keystore 保护的加密存储中。
 - 通知（餐食卡片、每日总结）在手机上生成。
+- 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
 
 应用不包含任何统计分析、崩溃上报、广告或追踪 SDK，也不会利用你的数据在其他应用或网站之间追踪你。
 
@@ -123,6 +137,7 @@ date. Questions: open an issue at
 
 - 你手动选择或分享到应用里的照片。
 - 仅当你打开**「监控相册」**时：相册里的每一张新照片，以及开启那一刻回溯窗口内（默认最近 2 天，可在设置里调整）已经拍下的照片，包括不是食物的照片——由 AI 判断照片是否为食物，非食物照片不会被记录。
+- Meta AI App 导入相册的 **Meta 眼镜**照片，与相机照片同等对待，遵循同样的「监控相册」规则。应用在手机上根据文件名、Meta AI App 存放它们的相簿，或照片里记录的相机型号识别这些照片。在 iPhone 上，每一张都会先由苹果系统自带的图像分类器在手机上检查一遍，看起来不像食物的照片根本不会被发送。**「包括 Meta 眼镜拍的照片」**（设置 › 照片）可以关闭对这类照片的自动记录；你手动选择或分享的照片仍会发送。
 
 **随照片一起发送的内容：**
 

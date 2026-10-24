@@ -239,6 +239,36 @@ void main() {
       });
     });
 
+    // Design G3: the switch under 监控相册, on by default.
+    group('[$tag] the Meta glasses photos switch', () {
+      final title =
+          tag == 'zh' ? '包括 Meta 眼镜拍的照片' : 'Meta glasses photos';
+
+      testWidgets('the row under Watch Camera Roll, on by default; it '
+          'switches the setting off and on', (tester) async {
+        final settings = FakeSettings(watcherEnabled: true);
+        await pump(tester, c.locale, settings: settings);
+        final row = find.byKey(const Key('watchGlassesRow'));
+        expect(find.descendant(of: row, matching: find.text(title)),
+            findsOneWidget);
+        expect(
+            tester.getTopLeft(row).dy,
+            greaterThan(tester
+                .getTopLeft(find.byKey(const Key('watcherToggle')))
+                .dy),
+            reason: 'under Watch Camera Roll');
+        final toggle = find.byKey(const Key('watchGlassesToggle'));
+        expect(tester.widget<Switch>(toggle).value, isTrue);
+        await tester.tap(toggle);
+        await tester.pumpAndSettle();
+        expect(settings.watchGlasses, isFalse);
+        expect(tester.widget<Switch>(toggle).value, isFalse);
+        await tester.tap(row); // the whole row toggles too
+        await tester.pumpAndSettle();
+        expect(settings.watchGlasses, isTrue);
+      });
+    });
+
     group('[$tag] 导入数据… / 导出数据…', () {
       testWidgets('the dialog: title, body, Cancel and Import',
           (tester) async {

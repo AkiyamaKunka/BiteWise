@@ -125,7 +125,20 @@ void main() {
 
     // G2b: without it every glasses preview copy is analyzed at once.
     test('a glasses preview copy waits once for its full-size one', () {
-      expect(init(), _wired(r'previewHold: holdGlassesPreview\)'));
+      expect(init(), _wired(r'previewHold: holdGlassesPreview,'));
+    });
+
+    // G3: without them a switched-off glasses photo is still logged, an
+    // iPhone uploads every casual glasses frame, and the Glasses check
+    // card stays empty.
+    test('glasses photos: the live switch, the iOS food check, the record',
+        () {
+      expect(init(), _wired(r'includeGlasses: \(\) => settings\.watchGlasses,'));
+      expect(
+        init(),
+        _wired(r'foodCheck: Platform\.isIOS \? foodScoreViaImageIO : null,'),
+      );
+      expect(init(), _wired(r'glassesCheckLog: recordGlassesCheckLocally\)'));
     });
 
     // G1b: without it every late import is read in full, logged or not.
@@ -186,6 +199,12 @@ void main() {
       expect(after(), _wired(r'deferUndecodable: ios\)'));
       // G2b: a glasses preview copy waits once there too.
       expect(after(), _wired(r'previewHold: holdGlassesPreview, '));
+      // G3: the switch as the run loaded it, the food check on iOS (on the
+      // CPU, or deferred to the app), and the Glasses check record.
+      expect(
+          after(), _wired(r'includeGlasses: \(\) => settings\.watchGlasses, '));
+      expect(after(), _wired(r'foodCheck: ios \? foodScoreViaImageIO : null, '));
+      expect(after(), _wired(r'glassesCheckLog: recordGlassesCheckLocally, '));
       expect(after(), _wired(r'budget: ios \? iosBackgroundBudget : null,'));
       expect(
         after(),

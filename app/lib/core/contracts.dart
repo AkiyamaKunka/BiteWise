@@ -475,8 +475,55 @@ class IntakePhoto {
   /// the intake did not look (older call sites, tests): nothing is stored
   /// for it then.
   final CaptureMeta? capture;
+
+  /// The automatic scan's allowance of Meta glasses photos for the model
+  /// (design G3): every photo one scan delivers shares it. Null: no limit
+  /// (deliberate adds, older call sites, tests).
+  final GlassesQuota? glassesQuota;
   const IntakePhoto(this.bytes, this.assetId, this.fileName,
-      {this.capturedAt, this.deliberate = false, this.capture});
+      {this.capturedAt,
+      this.deliberate = false,
+      this.capture,
+      this.glassesQuota});
+}
+
+/// Meta glasses photos one automatic scan sends on to the model at most
+/// (design G3).
+const int glassesPerScanLimit = 15;
+
+/// One automatic scan's allowance of Meta glasses photos for the model
+/// (design G3). Folding the glasses can import 20–40 photos at once, and
+/// each one the model sees is an upload, plan usage and up to a minute of
+/// a pipeline that also serves the camera. The watcher makes one per scan
+/// (services/photo/watcher.dart); the pipeline takes a slot for each
+/// glasses photo that gets as far as the model — past the duplicate,
+/// preview and on-device food checks, so a burst of casual non-food photos
+/// costs none. A photo turned away is released, and the watcher leaves it
+/// as if unread: the late-import carry keeps it, the frontier waits in
+/// front of it, and the next scan offers it.
+class GlassesQuota {
+  GlassesQuota({this.limit = glassesPerScanLimit});
+
+  final int limit;
+  int _taken = 0;
+  final Set<String> _turnedAway = {};
+
+  /// Slots taken so far.
+  int get taken => _taken;
+
+  /// A slot for [assetId]; false — and [assetId] remembered as turned
+  /// away — once every slot is taken.
+  bool take(String assetId) {
+    if (_taken >= limit) {
+      _turnedAway.add(assetId);
+      return false;
+    }
+    _taken++;
+    return true;
+  }
+
+  /// Whether this scan turned [assetId] away for want of a slot.
+  bool turnedAway(String assetId) => _turnedAway.contains(assetId);
 }
 
 /// The capture facts a photo's own EXIF holds, as exifCapture

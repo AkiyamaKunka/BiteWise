@@ -14,7 +14,6 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../core/contracts.dart';
 import '../local_store.dart';
 import '../settings/app_settings.dart' show AppSettings;
-import 'capture_dating.dart' show glassesExifRedate;
 import 'filename_dates.dart';
 import 'glasses.dart';
 import 'photo_changes.dart';
@@ -153,16 +152,21 @@ class LibraryPhotoIntake implements PhotoIntake {
       this.metaAlbumIds,
       @visibleForTesting this.metaAlbumTimeout = metaAlbumLookupTimeout,
       this.assetAddedDate,
-      @visibleForTesting this.addedDateTimeout = addedDateLookupTimeout})
+      @visibleForTesting this.addedDateTimeout = addedDateLookupTimeout,
+      @visibleForTesting this.glassesPerScan = glassesPerScanLimit})
       : _clock = clock ?? DateTime.now;
 
+  /// Meta glasses photos one scan sends on to the model at most (design
+  /// G3, [GlassesQuota]); smaller in tests.
+  final int glassesPerScan;
+
   /// When an image joined the library (design G2b; iOS: [assetAddedDate]
-  /// over the change channel). Asked only for a Meta glasses photo the
-  /// dating guard could re-date (capture_dating.dart glassesExifRedate) —
-  /// one whose creation date and EXIF shutter clock disagree — so nearly
-  /// every photo costs nothing. A failure, a timeout or null (Android,
-  /// tests): unknown, and the photo is dated as before unless the
-  /// late-import pass offered it.
+  /// over the change channel). Asked only for a Meta glasses photo, so
+  /// nearly every photo costs nothing: the dating guard's evidence
+  /// (capture_dating.dart), and the import lag on the Glasses check card
+  /// (design G3, glasses_check.dart). A failure, a timeout or null
+  /// (Android, tests): unknown, and the photo is dated as before unless
+  /// the late-import pass offered it.
   final Future<DateTime?> Function(String assetId)? assetAddedDate;
 
   /// [addedDateLookupTimeout]; shorter in tests.
@@ -293,7 +297,9 @@ class LibraryPhotoIntake implements PhotoIntake {
       // OLDER tail — the cutoff must not advance over unseen photos
       // (recovered by the full-window backfill layers meanwhile).
       final truncated = assets.length >= 500;
-      final frontier = await _emit(assets, reportFrontier: !truncated);
+      final frontier = await _emit(assets,
+          reportFrontier: !truncated,
+          glassesQuota: GlassesQuota(limit: glassesPerScan));
       // Advance ONLY over the contiguous run of successfully-covered
       // photos (oldest-first), and never past the wall clock: a transient
       // read failure must stay inside the window so the next change event
@@ -361,6 +367,8 @@ class LibraryPhotoIntake implements PhotoIntake {
     // intake is never started, and is never stopped either).
     if (_everStarted && !_started) return;
     final generation = _generation;
+    // One allowance of glasses photos for the whole pass (design G3).
+    final quota = GlassesQuota(limit: glassesPerScan);
     try {
       final report = await cursor.pass(
         cutoff: lookbackCutoff(_clock(), _lookbackDays()),
@@ -388,7 +396,8 @@ class LibraryPhotoIntake implements PhotoIntake {
                 reportFrontier: false,
                 shouldContinue: shouldContinue,
                 onSettled: onSettled,
-                importPassAt: _clock());
+                importPassAt: _clock(),
+                glassesQuota: quota);
           },
         ),
       );
@@ -439,19 +448,23 @@ class LibraryPhotoIntake implements PhotoIntake {
     // pass (one try per scan) and halts the frontier there.
     final released = <String>{};
     final tally = _EmitTally();
+    // One allowance of glasses photos for both passes (design G3).
+    final quota = GlassesQuota(limit: glassesPerScan);
     if (newestDayFirst) {
       await _emit(_newestDay(assets),
           reportFrontier: false,
           shouldContinue: shouldContinue,
           released: released,
-          tally: tally);
+          tally: tally,
+          glassesQuota: quota);
     }
     final frontier = await _emit(assets,
         reportFrontier: !truncated,
         shouldContinue: shouldContinue,
         onCovered: onCovered,
         released: released,
-        tally: tally);
+        tally: tally,
+        glassesQuota: quota);
     // Signal AFTER emitting: the caller processes what was seen, but a
     // watermark must not advance over the unseen tail.
     if (truncated) throw const BackfillWindowTruncated();
@@ -466,20 +479,17 @@ class LibraryPhotoIntake implements PhotoIntake {
     return frontier;
   }
 
-  /// [capture] with what says its creation date is only the import time
-  /// (design G2b, capture_dating.dart): the library's added date and the
-  /// late-import pass that offered it. Looked for only when the dating
-  /// guard could re-date the photo at all — a Meta glasses photo whose
-  /// creation date and EXIF shutter clock disagree. Never throws: a failed
-  /// or slow lookup leaves the photo dated as before.
+  /// [capture] with when the photo joined the library and the late-import
+  /// pass that offered it: the dating guard's evidence that its creation
+  /// date is only the import time (design G2b, capture_dating.dart), and
+  /// the Glasses check card's import lag (design G3). Looked for only for a
+  /// Meta glasses photo; the guard itself still re-dates nothing whose
+  /// creation date and EXIF shutter clock agree (glassesExifRedate). Never
+  /// throws: a failed or slow lookup leaves the photo dated as before.
   Future<CaptureMeta> _withImportEvidence(CaptureMeta capture, String assetId,
       {DateTime? importPassAt}) async {
     try {
-      if (glassesExifRedate(capture,
-              now: _clock(), maxAgeDays: _capturedAtMaxAgeDays) ==
-          null) {
-        return capture;
-      }
+      if (!capture.isMetaGlasses) return capture;
       DateTime? added;
       final lookup = assetAddedDate;
       if (lookup != null) {
@@ -538,6 +548,11 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// before the next photo is considered — the late-import cursor's
   /// carry. [tally] counts what was left undone. [importPassAt]: the
   /// late-import pass delivering [assets] ran then (design G2b).
+  /// [glassesQuota]: the scan's allowance of glasses photos for the model
+  /// (design G3), handed to the pipeline with every photo. A photo it
+  /// turned away is left as if unread — not released, so the late-import
+  /// carry keeps it and the next scan offers it — and a later pass of the
+  /// same scan does not read it again.
   Future<DateTime?> _emit(List<LibraryAsset> assets,
       {bool reportFrontier = true,
       bool Function()? shouldContinue,
@@ -546,7 +561,8 @@ class LibraryPhotoIntake implements PhotoIntake {
       Future<void> Function(String assetId, {required bool delivered})?
           onSettled,
       _EmitTally? tally,
-      DateTime? importPassAt}) async {
+      DateTime? importPassAt,
+      GlassesQuota? glassesQuota}) async {
     // §6: newest-LAST emission — oldest first, so downstream meal rows land
     // in chronological order.
     final ordered = [...assets]
@@ -606,6 +622,15 @@ class LibraryPhotoIntake implements PhotoIntake {
       if (released != null && released.contains(asset.id)) {
         frontierOpen = false; // tried once this scan; the next scan retries
         tally?.released++;
+        continue;
+      }
+      if (glassesQuota != null &&
+          !_seenAssetIds.contains(asset.id) &&
+          glassesQuota.turnedAway(asset.id)) {
+        // Turned away by this scan's allowance in an earlier pass: not
+        // read again; the next scan offers it.
+        frontierOpen = false;
+        tally?.unread++;
         continue;
       }
       if (passOver != null &&
@@ -696,7 +721,10 @@ class LibraryPhotoIntake implements PhotoIntake {
         }
         // deliberate=false: automated intake, strict reservation (§2.3).
         final photo = IntakePhoto(bytes, asset.id, name,
-            capturedAt: capturedAt, deliberate: false, capture: capture);
+            capturedAt: capturedAt,
+            deliberate: false,
+            capture: capture,
+            glassesQuota: glassesQuota);
         final sink = _sink;
         if (sink != null) {
           // Backpressured path: the next asset's bytes are read only after
@@ -714,6 +742,14 @@ class LibraryPhotoIntake implements PhotoIntake {
                 await onCovered(safe);
               } catch (_) {}
             }
+          } else if (glassesQuota != null &&
+              glassesQuota.turnedAway(asset.id)) {
+            // Over the scan's allowance of glasses photos (design G3): as
+            // if unread, so nothing marks it tried, and the next scan or
+            // late-import pass offers it.
+            _seenAssetIds.remove(asset.id);
+            frontierOpen = false;
+            tally?.unread++;
           } else {
             _seenAssetIds.remove(asset.id); // released: re-offer next scan
             released?.add(asset.id);
