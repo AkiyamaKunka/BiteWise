@@ -30,6 +30,12 @@
 		9D25CD89DEEBB3D5D69795A8 /* InfoPlist.strings in Resources */ = {isa = PBXBuildFile; fileRef = FF80F3AC411DE1418D7E15FD /* InfoPlist.strings */; };
 		A695B57625095D4E609386C2 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = B15C76B2DE7664DCB4D45642 /* ShareViewController.swift */; };
 		D0B6808D19B1D28F7152C855 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 30F109BF9CA2B6004D7C6CC4 /* PrivacyInfo.xcprivacy */; };
+		6DA7C0DE0000000000000002 /* MetaDatPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DA7C0DE0000000000000001 /* MetaDatPlugin.swift */; };
+		6DA7C0DE0000000000000004 /* MetaDatTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6DA7C0DE0000000000000003 /* MetaDatTests.swift */; };
+		6DA7C0DE0000000000000021 /* MWDATCore in Frameworks */ = {isa = PBXBuildFile; productRef = 6DA7C0DE0000000000000011 /* MWDATCore */; };
+		6DA7C0DE0000000000000022 /* MWDATCamera in Frameworks */ = {isa = PBXBuildFile; productRef = 6DA7C0DE0000000000000012 /* MWDATCamera */; };
+		6DA7C0DE0000000000000023 /* MWDATInputs in Frameworks */ = {isa = PBXBuildFile; productRef = 6DA7C0DE0000000000000013 /* MWDATInputs */; };
+		6DA7C0DE0000000000000024 /* MWDATMockDevice in Frameworks */ = {isa = PBXBuildFile; productRef = 6DA7C0DE0000000000000014 /* MWDATMockDevice */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -114,6 +120,8 @@
 		F2A906F11ED879CAA412A61C /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		F9BC0C8EB7D7D1A9041173E8 /* Pods_RunnerTests.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_RunnerTests.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		FE8CC7C2A18F628D2C72438F /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		6DA7C0DE0000000000000001 /* MetaDatPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaDatPlugin.swift; sourceTree = "<group>"; };
+		6DA7C0DE0000000000000003 /* MetaDatTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MetaDatTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -140,6 +148,10 @@
 			files = (
 				78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */,
 				471D18A24BDDC47E7FDDA285 /* Pods_Runner.framework in Frameworks */,
+				6DA7C0DE0000000000000021 /* MWDATCore in Frameworks */,
+				6DA7C0DE0000000000000022 /* MWDATCamera in Frameworks */,
+				6DA7C0DE0000000000000023 /* MWDATInputs in Frameworks */,
+				6DA7C0DE0000000000000024 /* MWDATMockDevice in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -158,6 +170,7 @@
 			isa = PBXGroup;
 			children = (
 				331C807B294A618700263BE5 /* RunnerTests.swift */,
+				6DA7C0DE0000000000000003 /* MetaDatTests.swift */,
 			);
 			path = RunnerTests;
 			sourceTree = "<group>";
@@ -247,6 +260,7 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				4C1A7E0B2F3D9A6E00C0FFEE /* ImageIOPlugin.swift */,
 				4C1A7E0D2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift */,
+				6DA7C0DE0000000000000001 /* MetaDatPlugin.swift */,
 				4C1A7E0F2F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				4377BC1A20341ED1CFBB3347 /* InfoPlist.strings */,
@@ -299,6 +313,10 @@
 			name = Runner;
 			packageProductDependencies = (
 				78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */,
+				6DA7C0DE0000000000000011 /* MWDATCore */,
+				6DA7C0DE0000000000000012 /* MWDATCamera */,
+				6DA7C0DE0000000000000013 /* MWDATInputs */,
+				6DA7C0DE0000000000000014 /* MWDATMockDevice */,
 			);
 			productName = Runner;
 			productReference = 97C146EE1CF9000F007C117D /* Runner.app */;
@@ -356,6 +374,7 @@
 			mainGroup = 97C146E51CF9000F007C117D;
 			packageReferences = (
 				781AD8BC2B33823900A9FFBB /* XCLocalSwiftPackageReference "FlutterGeneratedPluginSwiftPackage" */,
+				6DA7C0DE0000000000000010 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */,
 			);
 			productRefGroup = 97C146EF1CF9000F007C117D /* Products */;
 			projectDirPath = "";
@@ -502,6 +521,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				331C808B294A63AB00263BE5 /* RunnerTests.swift in Sources */,
+				6DA7C0DE0000000000000004 /* MetaDatTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -522,6 +542,7 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				4C1A7E0C2F3D9A6E00C0FFEE /* ImageIOPlugin.swift in Sources */,
 				4C1A7E0E2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift in Sources */,
+				6DA7C0DE0000000000000002 /* MetaDatPlugin.swift in Sources */,
 				4C1A7E102F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -649,7 +670,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -807,7 +828,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -858,7 +879,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.2;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SUPPORTED_PLATFORMS = iphoneos;
@@ -887,6 +908,7 @@
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = dev.calorietracker.calorieTracker;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) METADAT_MOCK";
 				SWIFT_OBJC_BRIDGING_HEADER = "Runner/Runner-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
@@ -995,7 +1017,38 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		6DA7C0DE0000000000000010 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/facebook/meta-wearables-dat-ios";
+			requirement = {
+				kind = exactVersion;
+				version = 1.0.1;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
+		6DA7C0DE0000000000000011 /* MWDATCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6DA7C0DE0000000000000010 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCore;
+		};
+		6DA7C0DE0000000000000012 /* MWDATCamera */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6DA7C0DE0000000000000010 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATCamera;
+		};
+		6DA7C0DE0000000000000013 /* MWDATInputs */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6DA7C0DE0000000000000010 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATInputs;
+		};
+		6DA7C0DE0000000000000014 /* MWDATMockDevice */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 6DA7C0DE0000000000000010 /* XCRemoteSwiftPackageReference "meta-wearables-dat-ios" */;
+			productName = MWDATMockDevice;
+		};
 		78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = FlutterGeneratedPluginSwiftPackage;
