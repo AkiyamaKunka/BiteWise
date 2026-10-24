@@ -560,7 +560,8 @@ class ImageIOFoodScoreTests: XCTestCase {
   }
 
   /// The real classifier on this runtime: a reply of real classes, or a
-  /// skip where the runtime cannot run inference at all.
+  /// skip where the runtime cannot run inference at all — or is blind
+  /// ([ImageIOBlindCheck]; the iOS 26.2 simulator's is).
   func testRealClassifierOnThisRuntime() throws {
     guard let thumb = imageIOThumbnail(jpeg(), maxPx: 360) else {
       return XCTFail("thumbnail")
@@ -569,6 +570,9 @@ class ImageIOFoodScoreTests: XCTestCase {
     do {
       answer = try imageIOVisionClassify(thumb, background: false)
     } catch {
+      if imageIOFoodUnsupported(error) {
+        throw XCTSkip("this runtime's classifier cannot run, or is blind: \(error)")
+      }
       throw XCTSkip("no inference context on this runtime: \(error)")
     }
     guard case .observations(let observations) = answer else {
@@ -577,6 +581,212 @@ class ImageIOFoodScoreTests: XCTestCase {
     XCTAssertFalse(observations.isEmpty)
     for (_, conf) in observations {
       XCTAssertTrue((0...1).contains(conf))
+    }
+  }
+
+  // MARK: - the blind check
+
+  /// kFoodThreshold, read from food_prefilter.dart like the label table.
+  private func dartFoodThreshold() throws -> Double {
+    let app = URL(fileURLWithPath: "\(#filePath)")
+      .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+    let source = try String(
+      contentsOf: app.appendingPathComponent("lib/services/photo/food_prefilter.dart"),
+      encoding: .utf8)
+    let regex = try NSRegularExpression(
+      pattern: "const double kFoodThreshold = ([0-9.]+);")
+    guard
+      let match = regex.firstMatch(in: source, range: NSRange(source.startIndex..., in: source)),
+      let range = Range(match.range(at: 1), in: source),
+      let value = Double(source[range])
+    else {
+      XCTFail("no kFoodThreshold in food_prefilter.dart")
+      return 0
+    }
+    return value
+  }
+
+  /// A drawn plate of food, as JPEG: a cream table, a white plate with a
+  /// rim, and round pieces of food in four colours — the shape of
+  /// app/test_live/fixtures/plate.jpg, drawn here so the check needs no
+  /// file and runs on a device as well. On a Mac's classifier (2026-10-24)
+  /// it scores plate / tableware 0.36, food 0.12: over kFoodThreshold
+  /// (0.10) by more than three times.
+  private func drawnPlateJpeg(width: Int = 1200, height: Int = 900) throws -> Data {
+    let ctx = try XCTUnwrap(
+      CGContext(
+        data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue))
+    let w = CGFloat(width)
+    let h = CGFloat(height)
+    func fill(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) {
+      ctx.setFillColor(red: r / 255, green: g / 255, blue: b / 255, alpha: 1)
+    }
+    fill(236, 228, 216)  // the table
+    ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    let plate = CGRect(x: w * 0.21, y: h * 0.17, width: w * 0.58, height: h * 0.66)
+    fill(200, 200, 200)  // the rim's edge
+    ctx.fillEllipse(in: plate)
+    fill(249, 249, 248)
+    ctx.fillEllipse(in: plate.insetBy(dx: 5, dy: 5))
+    ctx.setStrokeColor(red: 0.88, green: 0.88, blue: 0.88, alpha: 1)
+    ctx.setLineWidth(3)
+    ctx.strokeEllipse(in: plate.insetBy(dx: w * 0.065, dy: h * 0.087))
+    // The food: a fixed scatter (a small LCG: every run draws the same).
+    let colours: [(CGFloat, CGFloat, CGFloat)] = [
+      (228, 200, 92), (216, 120, 60), (90, 145, 60), (160, 90, 40),
+    ]
+    var seed: UInt64 = 20_261_024
+    func next() -> CGFloat {
+      seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+      return CGFloat(seed >> 33) / CGFloat(UInt64(1) << 31)
+    }
+    for i in 0..<48 {
+      let (r, g, b) = colours[i % colours.count]
+      fill(r, g, b)
+      let radius = 14 + next() * 26
+      let x = w * (0.34 + next() * 0.32)
+      let y = h * (0.36 + next() * 0.30)
+      ctx.fillEllipse(
+        in: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
+    }
+    let out = NSMutableData()
+    let dest = try XCTUnwrap(
+      CGImageDestinationCreateWithData(out as CFMutableData, "public.jpeg" as CFString, 1, nil))
+    CGImageDestinationAddImage(dest, try XCTUnwrap(ctx.makeImage()), nil)
+    XCTAssertTrue(CGImageDestinationFinalize(dest))
+    return out as Data
+  }
+
+  /// The mean grey of [image] (0 black … 1 white), drawn into 8x8.
+  private func meanGray(_ image: CGImage) -> Float {
+    var pixels = [UInt8](repeating: 0, count: 8 * 8 * 4)
+    pixels.withUnsafeMutableBytes { buffer in
+      let ctx = CGContext(
+        data: buffer.baseAddress, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 32,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+      ctx?.draw(image, in: CGRect(x: 0, y: 0, width: 8, height: 8))
+    }
+    var sum = 0
+    for (i, value) in pixels.enumerated() where i % 4 != 3 { sum += Int(value) }
+    return Float(sum) / Float(8 * 8 * 3 * 255)
+  }
+
+  func testSameAnswer() {
+    let night: [(String, Float)] = [("outdoor", 0.49), ("night_sky", 0.49), ("moon", 0.18)]
+    XCTAssertTrue(imageIOSameAnswer(night, night))
+    XCTAssertTrue(
+      imageIOSameAnswer(night, [("night_sky", 0.47), ("outdoor", 0.52), ("moon", 0.16)]),
+      "the simulator's two calls differ by ~0.004: still the same answer")
+    XCTAssertFalse(
+      imageIOSameAnswer(night, [("outdoor", 0.49), ("night_sky", 0.49), ("moon", 0.10)]))
+    XCTAssertFalse(
+      imageIOSameAnswer(night, [("outdoor", 0.49), ("night_sky", 0.49)]),
+      "a class one left out counts as 0")
+    XCTAssertTrue(
+      imageIOSameAnswer([("moon", 0.03)], []), "a missing class near 0 is the same")
+    XCTAssertTrue(imageIOSameAnswer([], []), "two empty answers say nothing apart")
+    XCTAssertFalse(
+      imageIOSameAnswer(night, [("machine", 0.02), ("vehicle", 0.02)]),
+      "what a Mac answers a black and a white frame")
+  }
+
+  func testTheProbesAreBlackAndWhite() throws {
+    let black = try XCTUnwrap(imageIOFlatProbe(gray: 0))
+    let white = try XCTUnwrap(imageIOFlatProbe(gray: 1))
+    XCTAssertEqual(meanGray(black), 0, accuracy: 0.01)
+    XCTAssertEqual(meanGray(white), 1, accuracy: 0.01)
+  }
+
+  func testABlindClassifierIsFoundOnceAndKept() throws {
+    let check = ImageIOBlindCheck()
+    XCTAssertNil(check.known)
+    var shown: [Float] = []
+    let blind: (CGImage) throws -> [(String, Float)] = { image in
+      shown.append(self.meanGray(image))
+      return [("outdoor", 0.49), ("night_sky", 0.49)]
+    }
+    XCTAssertFalse(try check.seesInput(blind))
+    XCTAssertEqual(shown.count, 2, "one black and one white probe")
+    XCTAssertEqual(shown.min() ?? -1, 0, accuracy: 0.01)
+    XCTAssertEqual(shown.max() ?? -1, 1, accuracy: 0.01)
+    XCTAssertEqual(check.known, false)
+    XCTAssertFalse(try check.seesInput(blind))
+    XCTAssertEqual(shown.count, 2, "the verdict is kept: no probe again")
+  }
+
+  func testAClassifierThatSeesIsFoundOnceAndKept() throws {
+    let check = ImageIOBlindCheck()
+    var calls = 0
+    let sees: (CGImage) throws -> [(String, Float)] = { image in
+      calls += 1
+      return self.meanGray(image) < 0.5
+        ? [("outdoor", 0.49), ("night_sky", 0.49)] : [("machine", 0.02)]
+    }
+    XCTAssertTrue(try check.seesInput(sees))
+    XCTAssertTrue(try check.seesInput(sees))
+    XCTAssertEqual(calls, 2)
+    XCTAssertEqual(check.known, true)
+  }
+
+  func testAProbeThatThrowsKeepsNoVerdict() throws {
+    let check = ImageIOBlindCheck()
+    let failing: (CGImage) throws -> [(String, Float)] = { _ in
+      throw NSError(domain: VNErrorDomain, code: VNErrorCode.internalError.rawValue)
+    }
+    XCTAssertThrowsError(try check.seesInput(failing))
+    XCTAssertNil(check.known, "asked again next time")
+    XCTAssertTrue(try check.seesInput { self.meanGray($0) < 0.5 ? [("a", 0.9)] : [("b", 0.9)] })
+  }
+
+  /// A blind verdict stops the production classifier before it looks at
+  /// the photo, with the error that reads as unsupported; the check then
+  /// answers unsupported, and the Dart side lets the photo through.
+  func testABlindClassifierIsUnsupportedNeverNotFood() throws {
+    let check = ImageIOBlindCheck()
+    XCTAssertFalse(try check.seesInput { _ in [("outdoor", 0.49)] })
+    let thumb = try XCTUnwrap(imageIOThumbnail(jpeg(), maxPx: 360))
+    XCTAssertThrowsError(try imageIOVisionClassify(thumb, background: false, blindCheck: check)) {
+      XCTAssertTrue(imageIOFoodUnsupported($0), "\($0)")
+    }
+    XCTAssertTrue(imageIOFoodUnsupported(imageIOBlindClassifierError))
+    XCTAssertFalse(
+      imageIOFoodUnsupported(NSError(domain: imageIOBlindClassifierError.domain, code: 2)))
+    let score = imageIOFoodScore(jpeg(), maxPx: 360, labels: labels, background: false) {
+      image, background in
+      try imageIOVisionClassify(image, background: background, blindCheck: check)
+    }
+    XCTAssertEqual(score, .unsupported)
+  }
+
+  /// The check this runtime really runs, on a drawn plate of food: either
+  /// it scores the plate as food, or it gives no answer at all (unsupported
+  /// or error: the photo goes on unchecked). Never ok below the threshold —
+  /// a blind or broken classifier that answers "not food" would tombstone
+  /// every glasses photo for good. On the iOS 26.2 simulator the classifier
+  /// is blind, so this is unsupported there; on a device it is ok.
+  func testTheRealCheckNeverCallsAPlateOfFoodNotFood() throws {
+    let labels = Set(try dartFoodLabels())
+    let threshold = try dartFoodThreshold()
+    XCTAssertEqual(threshold, 0.10, accuracy: 0.05, "the threshold this test was sized for")
+    let plate = try drawnPlateJpeg()
+    let score = imageIOFoodScore(
+      plate, maxPx: 360, labels: labels, background: false, timeout: 15)
+    let seen = ImageIOBlindCheck.shared.known.map { $0 ? "sees" : "blind" } ?? "not checked"
+    print(
+      "real food check on a drawn plate: \(score.status) \(score.score ?? -1) "
+        + "[\(score.top.map { "\($0.id) \($0.conf)" }.joined(separator: ", "))] "
+        + "classifier: \(seen)")
+    switch score.status {
+    case "ok":
+      XCTAssertGreaterThanOrEqual(score.score ?? -1, threshold, "a plate of food, not food")
+      XCTAssertEqual(ImageIOBlindCheck.shared.known, true)
+    case "unsupported", "error":
+      break  // no answer: fail open
+    default:
+      XCTFail("the foreground never defers: \(score.status)")
     }
   }
 

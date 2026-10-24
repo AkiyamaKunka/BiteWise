@@ -16,6 +16,9 @@
 ///   background): the photo waits for the foreground, exactly as a decode
 ///   the background engine cannot do does;
 /// - error or unsupported: the photo goes on as it always did (fail open).
+///   A classifier that runs but gives a black and a white frame the same
+///   answer — the iOS 26.2 simulator's sees every image as black — is
+///   unsupported (ImageIOBlindCheck), never "not food".
 ///
 /// Camera photos, photos the user adds on purpose, and Android are never
 /// checked. The threshold is permissive on purpose: a false "not food"
