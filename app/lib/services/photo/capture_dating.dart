@@ -82,30 +82,71 @@ DateTime? glassesExifRedate(CaptureMeta? capture,
     int maxAgeDays = SharedConstants.capturedAtMaxAgeDaysDefault}) {
   try {
     if (capture == null || !capture.isMetaGlasses) return null;
-    final created = capture.createDate;
-    final exifWall = capture.exif?.dateTimeOriginal;
-    if (created == null || exifWall == null) return null;
-    final wall = _wallAsLocal(exifWall);
-    final offset = capture.exif?.offsetTimeOriginal;
-    final DateTime shutter; // the instant validated against now
-    final Duration difference;
-    if (offset != null) {
-      final instant = _wallAsUtc(exifWall).subtract(offset);
-      shutter = instant.toLocal();
-      difference = created.toUtc().difference(instant);
-    } else {
-      // No zone: the camera's wall clock, read as the phone's.
-      shutter = wall;
-      difference =
-          _wallAsUtc(created.toLocal()).difference(_wallAsUtc(exifWall));
-    }
-    if (validateCapturedAt(shutter, now: now, maxAgeDays: maxAgeDays) ==
+    final s = _exifShutter(capture);
+    if (s == null) return null;
+    if (validateCapturedAt(s.shutter, now: now, maxAgeDays: maxAgeDays) ==
         null) {
       return null;
     }
-    if (difference.abs() <= captureDatingTolerance) return null; // agree
-    if (offset == null && zoneShapedDifference(difference)) return null;
-    return wall;
+    if (s.difference.abs() <= captureDatingTolerance) return null; // agree
+    if (!s.zoned && zoneShapedDifference(s.difference)) return null;
+    return s.wall;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// [capture]'s EXIF shutter against its createDate: the camera's wall clock
+/// (as a local DateTime), the shutter as the instant validated against now,
+/// whether OffsetTimeOriginal named its zone, and createDate minus the
+/// shutter — as instants with the zone, else as wall clocks (the camera's
+/// read as the phone's). Null without both times.
+({DateTime wall, DateTime shutter, bool zoned, Duration difference})?
+    _exifShutter(CaptureMeta capture) {
+  final created = capture.createDate;
+  final exifWall = capture.exif?.dateTimeOriginal;
+  if (created == null || exifWall == null) return null;
+  final wall = _wallAsLocal(exifWall);
+  final offset = capture.exif?.offsetTimeOriginal;
+  if (offset != null) {
+    final instant = _wallAsUtc(exifWall).subtract(offset);
+    return (
+      wall: wall,
+      shutter: instant.toLocal(),
+      zoned: true,
+      difference: created.toUtc().difference(instant),
+    );
+  }
+  // No zone: the camera's wall clock, read as the phone's.
+  return (
+    wall: wall,
+    shutter: wall,
+    zoned: false,
+    difference:
+        _wallAsUtc(created.toLocal()).difference(_wallAsUtc(exifWall)),
+  );
+}
+
+/// How long after its shutter [capture] joined the library: the library's
+/// addedDate minus the moment its meal is dated by — the createDate, or,
+/// where the guard ([glassesCapturedAt]) dates the photo by its EXIF
+/// shutter because createDate is only the import time, that shutter (so a
+/// photo imported a day late reads a day, not 0 s). For the Glasses check
+/// card (design G3). Null when addedDate or createDate is unknown. Never
+/// throws.
+Duration? glassesImportLag(CaptureMeta? capture,
+    {required DateTime now,
+    int maxAgeDays = SharedConstants.capturedAtMaxAgeDaysDefault}) {
+  try {
+    final created = capture?.createDate, added = capture?.addedDate;
+    if (capture == null || created == null || added == null) return null;
+    final sinceCreated = added.difference(created);
+    if (glassesCapturedAt(capture, now: now, maxAgeDays: maxAgeDays) ==
+        null) {
+      return sinceCreated;
+    }
+    final s = _exifShutter(capture);
+    return s == null ? sinceCreated : sinceCreated + s.difference;
   } catch (_) {
     return null;
   }

@@ -301,4 +301,57 @@ void main() {
     expect(both.addedDate, addedThen, reason: 'what it had is kept');
     expect(both.importPassAt, imported);
   });
+
+  group('glassesImportLag (the Glasses check card)', () {
+    Duration? lag(CaptureMeta c) => glassesImportLag(c, now: now);
+
+    test('a creation date at the shutter: addedDate minus it', () {
+      final shotAt = imported.subtract(const Duration(hours: 3));
+      expect(
+          lag(glasses(created: shotAt, shutter: shotAt, added: addedThen)),
+          addedThen.difference(shotAt));
+    });
+
+    test('a creation date that is only the import time: measured from the '
+        'EXIF shutter the meal is dated by, not 0 s', () {
+      // Lunch 12:37 by the camera, imported 22:00, added 40 s later.
+      expect(lag(glasses(created: imported, shutter: lunch, added: addedThen)),
+          addedThen.difference(lunch));
+      // With the zone tag: lunch at 12:30 in Chicago, imported 25 h later.
+      final createdAt = DateTime.utc(2026, 10, 25, 18, 30).toLocal();
+      expect(
+          glassesImportLag(
+              glasses(
+                  created: createdAt,
+                  shutter: DateTime(2026, 10, 24, 12, 30),
+                  offset: const Duration(hours: -5),
+                  added: createdAt.add(const Duration(seconds: 30))),
+              now: createdAt.add(const Duration(minutes: 1))),
+          const Duration(hours: 25, seconds: 30));
+    });
+
+    test('where the guard keeps the creation date, so does the lag', () {
+      // A UTC glasses clock 5 h off: zone-shaped, createDate stands.
+      expect(
+          lag(glasses(
+              created: imported,
+              shutter: imported.subtract(const Duration(hours: 5)),
+              added: addedThen)),
+          const Duration(seconds: 40));
+      // Not a glasses photo: never re-dated.
+      expect(
+          lag(glasses(
+              created: imported,
+              shutter: lunch,
+              added: addedThen,
+              device: CaptureDevice.unknown)),
+          const Duration(seconds: 40));
+    });
+
+    test('no addedDate or no creation date: unknown', () {
+      expect(lag(glasses(created: imported, shutter: lunch)), isNull);
+      expect(glassesImportLag(null, now: now), isNull);
+      expect(lag(CaptureMeta(addedDate: addedThen)), isNull);
+    });
+  });
 }
