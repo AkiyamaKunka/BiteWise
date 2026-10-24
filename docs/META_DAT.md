@@ -24,8 +24,8 @@ auto-import is too slow or unreliable.
 | DAT 1.0.1 Swift package on the Runner target (Core, Camera, Inputs, MockDevice) | Done, `exactVersion`, `Package.resolved` committed |
 | iOS deployment target 17.2 (Runner and RunnerTests; the share extension stays at 15.0) | This branch only |
 | Dart wrapper, shutter-button arbiter, pipeline adapter, session screen | Done, behind `BITEWISE_META_DAT` |
-| Dart tests (`app/test/glasses/`, 61 tests: mocked channel, screen, real SQLite ledger, native wiring gate) | Pass; the full suite passes too |
-| XCTest on Mock Device Kit (`ios/RunnerTests/MetaDatTests.swift`): configure → mock glasses → session → capture → photo bytes → capture-button event → stop, and events reaching the real channel | Passes on the simulator |
+| Dart tests (`app/test/glasses/`, 76 tests: mocked channel, screen, real SQLite ledger, native wiring gate) | Pass; the full suite passes too |
+| XCTest on Mock Device Kit (`ios/RunnerTests/MetaDatTests.swift`): configure → mock glasses → session → capture → photo bytes → capture-button event → stop; events reaching the real channel; the photo-startup retry (every failure kind, through a test-only fault seam); every `DeviceSessionError` mapped to its own code | Passes on the simulator |
 | Simulator end to end with both flags on: + → Meta glasses session → Start → Take a photo, then the mock shutter button | Works. Both mock photos went through the real pipeline and the configured AI ("no food recognized" for the drawn plate) |
 | Simulator Debug build and a Release device build (`generic/platform=iOS`) | Both build. Nothing was installed on a phone |
 | Real glasses | **Not tested.** No hardware yet; see "Open questions" |
@@ -43,13 +43,18 @@ auto-import is too slow or unreliable.
 - **iOS floor 17.2 on this branch.** The SDK's frameworks need it. Your
   only iOS device (iOS 27) is far above it, so in practice nothing is
   lost. `main` keeps 15.0.
-- **The session must be active, and it lives only in the foreground.**
-  Photos arrive only while the Glasses session screen is open. Leaving
-  the screen or the app ends the session (Bitewise ends it itself on
-  `paused`, and DAT ends it anyway). So does folding the glasses. Opening
-  them does not restart it. DAT cannot wake Bitewise when you take a
-  photo, so this is a "sit down and shoot your meal" tool. It does not
-  replace automatic logging.
+- **The session must be active, and the screen must stay open.**
+  Photos arrive only while a session runs and the Glasses session screen
+  is open. Going back from the screen ends the session. Locking the phone
+  or switching to another app does not end it at once: Bitewise keeps it
+  for **15 minutes** in the background, then ends it itself. Whether DAT
+  keeps the session running while the phone is locked is not documented
+  (Meta's lifecycle guide lists folding, another experience, another
+  app's session and a lost Meta AI link as what ends one); that is open
+  question 4 below. Folding the glasses ends the session, and opening them
+  does not restart it. DAT cannot launch Bitewise when you take a photo,
+  so this is a "sit down and shoot your meal" tool. It does not replace
+  automatic logging.
 - **Bluetooth only, no Wi-Fi link.** DAT's Wi-Fi link needs the Hotspot
   Configuration capability, and a free Apple developer team cannot sign
   it. So this branch declares only the Bluetooth LE and Bluetooth Classic
@@ -119,6 +124,23 @@ glasses ──BT──> DAT (MWDATCore/Camera/Inputs) ──> MetaDatPlugin.swif
   - **Pause and resume:** after a resume, the capabilities are attached
     again, because of DAT's known issue that beta capabilities do not
     resume.
+  - **Photo startup retry:** Meta's camera-capture guide calls startup
+    "the most common failure point". `MetaDatPhotoStartup` watches each
+    startup until `.started`, under a 10 s timeout. A fall back to
+    `.stopped` after `.starting`, a `sessionSetupFailed` or the timeout
+    stops that camera and adds a fresh one, once. Dart hears
+    `photo_setup_failed` only when the retry fails too. The count resets
+    when a startup works.
+  - **Session errors:** each `DeviceSessionError` keeps its own wire code,
+    because Meta's version guide says they are not equally recoverable:
+    `session_update_glasses_app` (the screen offers **Update in Meta AI**,
+    `openDATGlassesAppUpdate()`), `session_sdk_too_old` (only a newer
+    Bitewise build helps), `session_version_warning` (`dwaOutOfStuRange`:
+    the session goes on, and the screen says so once and stops nothing),
+    `session_glasses_app_unavailable` (the toolkit's app on the glasses
+    did not start; its install fails below 10% battery),
+    `session_thermal`, `session_battery`, and `no_device`. Everything else
+    is `session`.
 - **Dart** (`app/lib/services/glasses/`):
   - `meta_dat_channel.dart`: typed methods, parsed events (a malformed
     payload is dropped), and the callback-link filter.
@@ -259,9 +281,16 @@ xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Relea
 3. How long a `large` photo takes over Bluetooth Classic, and whether
    `full` ever finishes inside the 30 s silence window.
 4. Whether the session survives the phone screen locking with Bitewise
-   in front. A community plugin reports 8–15 s on iOS 27.
+   in front. Bitewise does not end it for 15 minutes in the background,
+   so this measures DAT itself. Start a session, lock the phone, and take
+   a photo after 1 minute and again after 5 minutes. Then unlock and
+   write down which photos arrived and what the Session row says. A
+   community plugin reports 8–15 s on iOS 27.
 5. The EXIF Make/Model of a DAT capture. It feeds lane A's
    glasses-detection table.
+6. Any session error the screen shows. Each `DeviceSessionError` now has
+   its own wording, and the update prompt has an **Update in Meta AI**
+   button. Write down the exact text.
 
 ## Files
 

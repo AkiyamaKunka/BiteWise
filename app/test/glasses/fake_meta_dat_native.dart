@@ -82,6 +82,7 @@ class FakeMetaDatNative {
       case 'register':
       case 'unregister':
       case 'stopSession':
+      case 'openGlassesAppUpdate':
         return null;
       case 'startSession':
         session = 'starting';

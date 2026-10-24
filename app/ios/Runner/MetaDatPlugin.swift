@@ -19,8 +19,11 @@ import UIKit
 /// The SDK is NEVER initialised by registering this plugin. Only the
 /// flag-gated Dart "Glasses session" screen calls `configure`, and the
 /// plugin is registered for the app's own engine only, never for the
-/// headless background engine (a DAT session cannot outlive the
-/// foreground anyway: it stops when the glasses fold or the app leaves).
+/// headless background engine: that engine never shows the screen, so it
+/// has no use for a session. (When a session ends is the screen's call
+/// and DAT's: Bitewise keeps one through a phone lock for a while, and
+/// DAT stops it on a fold. Whether DAT also stops it while the phone is
+/// locked is open question 4 in docs/META_DAT.md.)
 ///
 /// Channel `dev.calorietracker/metadat`. Dart → native:
 ///   status                       → status map (below); safe before configure
@@ -30,12 +33,17 @@ import UIKit
 ///   requestCameraPermission      → 'granted' | 'denied'
 ///   startSession / stopSession   → nil; the session reports its states
 ///   capture {resolution, quality}→ Bool; false while not ready or busy
+///   openGlassesAppUpdate         → nil; Meta AI's update page for the
+///                                  toolkit's app on the glasses
 ///   enableMock {photo?}          → nil; Debug config only (METADAT_MOCK)
 ///   mockCapturePress {press}     → Bool; Debug only, a shutter-button press
 /// Native → Dart: method `event` with one map, `type` first:
 ///   registration {state} · devices {count} · activeDevice {active} ·
 ///   session {state} · camera {state} · progress {fraction} ·
 ///   button {press} · photo {bytes, receivedAtMs} · error {code, message}
+/// Error codes come from [MetaDatWire] (sessionError, photoError) and the
+/// controller. `session_version_warning` is the only one that does not
+/// mean something stopped: DAT lets that session go on.
 /// Status map: supported, configured, registration, devices, activeDevice,
 /// session, camera, mock, mockAvailable. Every value is a wire string from
 /// [MetaDatWire]; lib/services/glasses/meta_dat_channel.dart reads them.
@@ -134,6 +142,15 @@ final class MetaDatPlugin: NSObject, FlutterPlugin {
         result(
           c.capture(
             resolution: args["resolution"] as? String, quality: args["quality"] as? String))
+      case "openGlassesAppUpdate":
+        Task { @MainActor in
+          do {
+            try await c.openGlassesAppUpdate()
+            result(nil)
+          } catch {
+            result(MetaDatPlugin.flutterError(error))
+          }
+        }
       case "enableMock":
         #if METADAT_MOCK
           do {
@@ -228,6 +245,33 @@ enum MetaDatWire {
     }
   }
 
+  /// Meta's version-dependencies guide: handle each DeviceSessionError on
+  /// its own, they are not equally recoverable. Only
+  /// insufficientSDKVersion needs a new Bitewise build; only
+  /// dwaOutOfStuRange lets the session go on; datAppOnTheGlassesUpdateRequired
+  /// is fixed in the Meta AI app (openDATGlassesAppUpdate); dwaUnavailable
+  /// means the toolkit's app on the glasses did not come up (not installed:
+  /// its install fails below 10 % battery, a known issue).
+  static func sessionError(_ e: DeviceSessionError) -> String {
+    switch e {
+    case .noEligibleDevice: return "no_device"
+    case .datAppOnTheGlassesUpdateRequired: return "session_update_glasses_app"
+    case .insufficientSDKVersion: return "session_sdk_too_old"
+    case .dwaOutOfStuRange: return versionWarning
+    case .dwaUnavailable: return "session_glasses_app_unavailable"
+    case .thermalCritical, .thermalEmergency: return "session_thermal"
+    case .batteryCritical, .peakPowerShutdown: return "session_battery"
+    case .sessionAlreadyStopped, .sessionAlreadyExists, .sessionIdle,
+      .capabilityAlreadyActive, .capabilityNotFound, .unexpectedError:
+      return "session"
+    @unknown default: return "session"
+    }
+  }
+
+  /// The one session error that stops nothing (Meta: "Not blocking. The
+  /// session can continue").
+  static let versionWarning = "session_version_warning"
+
   static func photoError(_ e: PhotoError) -> String {
     switch e {
     case .notReady: return "photo_not_ready"
@@ -263,6 +307,83 @@ enum MetaDatWire {
   }
 }
 
+/// Starting the photo capability, as Meta's camera-capture guide prescribes
+/// ("Capture reliability"): startup is the most common failure point, and
+/// the attempt after an intermittent sessionSetupFailed usually works. So
+/// a startup is watched until `.started`; a fall back to `.stopped` after
+/// `.starting`, a sessionSetupFailed or the startup timeout each fail it;
+/// the first failure asks for a retry on a FRESH camera (a stopped one is
+/// invalidated), and only a failed retry is reported. Reaching `.started`
+/// resets the count. Pure, so RunnerTests pins it without glasses.
+struct MetaDatPhotoStartup: Equatable {
+  enum Action: Equatable {
+    /// No verdict: keep waiting (or nothing is starting).
+    case nothing
+    /// Stop this camera and start a fresh one.
+    case retry
+    /// Stop this camera and report photo_setup_failed.
+    case fail
+  }
+
+  static let maxRetries = 1
+
+  /// Retries spent on the current startup; back to 0 at `.started`.
+  private(set) var retries = 0
+  /// A camera was added and asked to start, and has not reached
+  /// `.started` (or failed) yet.
+  private(set) var pending = false
+  private var sawStarting = false
+
+  /// A camera was added and `photo.start()` called.
+  mutating func began() {
+    pending = true
+    sawStarting = false
+  }
+
+  mutating func on(_ state: PhotoState) -> Action {
+    guard pending else { return .nothing }
+    switch state {
+    case .starting:
+      sawStarting = true
+      return .nothing
+    case .started:
+      pending = false
+      sawStarting = false
+      retries = 0
+      return .nothing
+    case .stopped:
+      // The initial `.stopped` of a photo not yet started is no verdict.
+      return sawStarting ? failed() : .nothing
+    case .stopping:
+      return .nothing
+    @unknown default:
+      return .nothing
+    }
+  }
+
+  mutating func setupFailed() -> Action { pending ? failed() : .nothing }
+
+  mutating func timedOut() -> Action { pending ? failed() : .nothing }
+
+  /// The camera goes for another reason (session stopped or paused).
+  mutating func reset() {
+    pending = false
+    sawStarting = false
+    retries = 0
+  }
+
+  private mutating func failed() -> Action {
+    pending = false
+    sawStarting = false
+    if retries < Self.maxRetries {
+      retries += 1
+      return .retry
+    }
+    retries = 0
+    return .fail
+  }
+}
+
 /// The DAT state machine behind the channel: registration, one device
 /// session, its photo capability and the capture button. Main actor only;
 /// SDK callbacks hop here before touching state or emitting.
@@ -276,6 +397,10 @@ final class MetaDatController {
   /// DAT fails a silent transfer after 30 s; a capture flag still set
   /// after this is cleared so the button never stays dead.
   static let captureTimeout: TimeInterval = 40
+  /// How long a photo startup may take before it counts as failed
+  /// (MetaDatPhotoStartup). Meta names no figure; a startup that works
+  /// takes about a second on Mock Device Kit.
+  static let photoStartupTimeout: TimeInterval = 10
 
   private let emit: Emit
   private(set) var configured = false
@@ -299,12 +424,31 @@ final class MetaDatController {
   private(set) var captureInFlight = false
   private var captureWatchdog: DispatchWorkItem?
 
+  private(set) var photoStartup = MetaDatPhotoStartup()
+  private var photoStartupWatchdog: DispatchWorkItem?
+  /// [photoStartupTimeout], shortened by RunnerTests.
+  var photoStartupTimeout = MetaDatController.photoStartupTimeout
+  /// Cameras added over the controller's life (RunnerTests: a retry adds a
+  /// fresh one).
+  private(set) var camerasAdded = 0
+
   private var inputsAttached = false
   private var inputsTokens: [any AnyListenerToken] = []
   private var inputsTask: Task<Void, Never>?
 
   #if METADAT_MOCK
     private var mockGlasses: (any MockGlasses)?
+
+    /// RunnerTests only. Mock Device Kit can fail a capture
+    /// (simulateCaptureFailure) but never a photo STARTUP, so the next
+    /// startups take these faults instead, in order. Each is fed through
+    /// the same entry points the photo's listeners use, and the photo is
+    /// never asked to start:
+    /// - setupFailed: `.starting`, then sessionSetupFailed (DAT on iOS);
+    /// - stoppedAfterStarting: `.starting`, then `.stopped`;
+    /// - silent: nothing at all, so only the startup timeout ends it.
+    enum PhotoStartupFault { case setupFailed, stoppedAfterStarting, silent }
+    var photoStartupFaults: [PhotoStartupFault] = []
   #endif
 
   init(emit: @escaping Emit) {
@@ -429,6 +573,18 @@ final class MetaDatController {
     }
   }
 
+  /// Meta AI's page that updates the toolkit's app on the glasses: the
+  /// remedy for `session_update_glasses_app` (Meta's CameraAccess sample
+  /// offers the same).
+  func openGlassesAppUpdate() async throws {
+    try requireConfigured()
+    do {
+      try await Wearables.shared.openDATGlassesAppUpdate()
+    } catch {
+      throw MetaDatFailure("navigation", String(describing: error))
+    }
+  }
+
   // MARK: - session
 
   /// One session at a time, on the glasses the selector picked.
@@ -443,8 +599,7 @@ final class MetaDatController {
     do {
       s = try Wearables.shared.createSession(deviceSelector: selector)
     } catch {
-      throw MetaDatFailure(
-        error == .noEligibleDevice ? "no_device" : "session", String(describing: error))
+      throw MetaDatFailure(MetaDatWire.sessionError(error), String(describing: error))
     }
     session = s
     lastSessionState = .idle
@@ -452,17 +607,27 @@ final class MetaDatController {
       s.statePublisher.listen { [weak self] state in
         Task { @MainActor in self?.sessionStateChanged(state, of: s) }
       },
+      // An error is news, not a state: the state publisher says whether
+      // the session stopped.
       s.errorPublisher.listen { [weak self] error in
+        let code = MetaDatWire.sessionError(error)
         let message = String(describing: error)
-        Task { @MainActor in self?.emitError("session", message) }
+        Task { @MainActor in self?.emitError(code, message) }
       },
     ]
     do {
       try s.start()
     } catch {
+      let code = MetaDatWire.sessionError(error)
+      if code == MetaDatWire.versionWarning {
+        // Not blocking (Meta): the session goes on, and the warning is
+        // passed on as news.
+        emitError(code, String(describing: error))
+        return
+      }
       sessionTokens = []
       session = nil
-      throw MetaDatFailure("session", String(describing: error))
+      throw MetaDatFailure(code, String(describing: error))
     }
   }
 
@@ -496,22 +661,29 @@ final class MetaDatController {
     }
   }
 
-  /// Photo capability (explicit start on iOS, listeners first: nothing
-  /// replays) and the capture button (Inputs, capture-button source only,
-  /// so no touchpad gesture is taken from the glasses).
+  /// Photo capability and capture button, each attached once.
   private func attachCapabilities(on s: DeviceSession) {
+    attachCamera(on: s)
+    attachInputs(on: s)
+  }
+
+  /// The photo capability: explicit start on iOS, listeners first (nothing
+  /// replays), and the startup watched by [photoStartup] — a failed one is
+  /// retried once on a fresh camera before Dart hears photo_setup_failed.
+  private func attachCamera(on s: DeviceSession) {
     guard camera == nil else { return }
     do {
       guard let cam = try s.addCamera() else {
-        emitError("camera", "The session has not started.")
+        cameraNotAdded("The session has not started.")
         return
       }
+      camerasAdded += 1
       camera = cam
       let p = cam.photo
       photo = p
       photoTokens = [
         p.statePublisher.listen { [weak self] state in
-          Task { @MainActor in self?.photoStateChanged(state) }
+          Task { @MainActor in self?.photoStateReceived(state, of: p) }
         },
         // Wearer-initiated shots (the glasses' own shutter) arrive here
         // too, not only the ones capture() asks for.
@@ -523,19 +695,35 @@ final class MetaDatController {
           Task { @MainActor in self?.emit(["type": "progress", "fraction": fraction]) }
         },
         p.errorPublisher.listen { [weak self] error in
-          let code = MetaDatWire.photoError(error)
-          let message = String(describing: error)
-          Task { @MainActor in
-            self?.clearCapture()
-            self?.emitError(code, message)
-          }
+          Task { @MainActor in self?.photoErrorReceived(error, of: p) }
         },
       ]
+      photoStartup.began()
+      armPhotoStartupWatchdog(for: p)
+      #if METADAT_MOCK
+        if !photoStartupFaults.isEmpty {
+          injectStartupFault(photoStartupFaults.removeFirst(), into: p)
+          return
+        }
+      #endif
       p.start()
     } catch {
-      emitError("camera", String(describing: error))
+      cameraNotAdded(String(describing: error))
     }
+  }
 
+  /// addCamera gave nothing: a first attempt says so as `camera`; a retry
+  /// that cannot even add its camera is the failed retry.
+  private func cameraNotAdded(_ message: String) {
+    let retrying = photoStartup.retries > 0
+    photoStartup.reset()
+    emitError(retrying ? "photo_setup_failed" : "camera", message)
+  }
+
+  /// The capture button (Inputs, capture-button source only, so no
+  /// touchpad gesture is taken from the glasses).
+  private func attachInputs(on s: DeviceSession) {
+    guard !inputsAttached else { return }
     do {
       if let inputs = try s.addInputs(
         configuration: InputsConfiguration(sources: [.captureButton]))
@@ -569,6 +757,15 @@ final class MetaDatController {
       try? s.removeInputs()
     }
     inputsAttached = false
+    photoStartup.reset()
+    dropCamera()
+  }
+
+  /// Stops and forgets the camera. Its listeners go first, so a stopped
+  /// camera's late news cannot touch the next one (the identity guards
+  /// below catch what was already on its way).
+  private func dropCamera() {
+    cancelPhotoStartupWatchdog()
     photoTokens = []
     camera?.stop()
     camera = nil
@@ -580,10 +777,71 @@ final class MetaDatController {
     }
   }
 
-  private func photoStateChanged(_ state: PhotoState) {
+  private func photoStateReceived(_ state: PhotoState, of p: Photo) {
+    guard p === photo else { return }
     photoState = state
     if state != .started { clearCapture() }
     emit(["type": "camera", "state": MetaDatWire.camera(state)])
+    let action = photoStartup.on(state)
+    if state == .started { cancelPhotoStartupWatchdog() }
+    if action != .nothing {
+      photoStartupFailed(action, "The photo capability stopped while starting.")
+    }
+  }
+
+  private func photoErrorReceived(_ error: PhotoError, of p: Photo) {
+    guard p === photo else { return }
+    let message = String(describing: error)
+    if case .sessionSetupFailed = error {
+      let action = photoStartup.setupFailed()
+      if action != .nothing {
+        photoStartupFailed(action, message)
+        return
+      }
+    }
+    clearCapture()
+    emitError(MetaDatWire.photoError(error), message)
+  }
+
+  private func armPhotoStartupWatchdog(for p: Photo) {
+    cancelPhotoStartupWatchdog()
+    let watchdog = DispatchWorkItem { [weak self] in
+      MainActor.assumeIsolated { self?.photoStartupTimedOut(of: p) }
+    }
+    photoStartupWatchdog = watchdog
+    DispatchQueue.main.asyncAfter(deadline: .now() + photoStartupTimeout, execute: watchdog)
+  }
+
+  private func cancelPhotoStartupWatchdog() {
+    photoStartupWatchdog?.cancel()
+    photoStartupWatchdog = nil
+  }
+
+  private func photoStartupTimedOut(of p: Photo) {
+    guard p === photo else { return }
+    let action = photoStartup.timedOut()
+    if action != .nothing {
+      photoStartupFailed(action, "The photo capability did not start in time.")
+    }
+  }
+
+  /// A failed startup: the camera is stopped and dropped either way; a
+  /// retry adds a fresh one on the same session (only a started session:
+  /// a paused one re-attaches on resume), a failed retry tells Dart.
+  private func photoStartupFailed(_ action: MetaDatPhotoStartup.Action, _ message: String) {
+    dropCamera()
+    switch action {
+    case .retry:
+      if let s = session, lastSessionState == .started {
+        attachCamera(on: s)
+      } else {
+        photoStartup.reset()
+      }
+    case .fail:
+      emitError("photo_setup_failed", message)
+    case .nothing:
+      break
+    }
   }
 
   // MARK: - capture
@@ -681,9 +939,44 @@ final class MetaDatController {
       return true
     }
 
+    /// [photoStartupFaults]: what DAT would report, delivered the way its
+    /// listeners deliver it (a hop to the main actor), for a photo that
+    /// was never asked to start.
+    private func injectStartupFault(_ fault: PhotoStartupFault, into p: Photo) {
+      switch fault {
+      case .setupFailed:
+        Task { @MainActor [weak self] in
+          self?.photoStateReceived(.starting, of: p)
+          self?.photoErrorReceived(.sessionSetupFailed(underlying: nil), of: p)
+        }
+      case .stoppedAfterStarting:
+        Task { @MainActor [weak self] in
+          self?.photoStateReceived(.starting, of: p)
+          self?.photoStateReceived(.stopped, of: p)
+        }
+      case .silent:
+        break
+      }
+    }
+
     /// Tears the mock down (RunnerTests' tearDown).
     func disableMock() async {
+      let s = session
       stopSession()
+      // Let DAT finish stopping before the glasses go, and retire this
+      // controller's selector: RunnerTests pair glasses afresh for every
+      // test, and a selector or session left over from the last one
+      // intermittently kept the next controller from ever being given
+      // an active device.
+      if let s {
+        for _ in 0..<50 where s.state != .stopped {
+          try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+      }
+      selectorTask?.cancel()
+      selectorTask = nil
+      selector = nil
+      hasActiveDevice = false
       if let glasses = mockGlasses {
         await MockDeviceKit.shared.unpairDevice(glasses)
       }

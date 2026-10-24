@@ -1,4 +1,6 @@
 import Flutter
+import MWDATCamera
+import MWDATCore
 import UIKit
 import XCTest
 
@@ -36,7 +38,10 @@ final class MetaDatControllerTests: XCTestCase {
     let deadline = Date().addingTimeInterval(timeout)
     while !predicate() {
       if Date() > deadline {
-        XCTFail("timed out waiting for \(what); events: \(eventSummary())")
+        let links = Wearables.shared.devices.map { id in
+          Wearables.shared.deviceForIdentifier(id).map { "\($0.linkState)" } ?? "nil"
+        }
+        XCTFail("timed out waiting for \(what); events: \(eventSummary()); device links: \(links)")
         throw XCTSkip("timed out: \(what)")
       }
       try await Task.sleep(nanoseconds: 100_000_000)
@@ -93,11 +98,86 @@ final class MetaDatControllerTests: XCTestCase {
     XCTAssertEqual(image?.size, CGSize(width: 64, height: 48))
   }
 
+  /// Meta's version-dependencies guide: each DeviceSessionError has its
+  /// own remedy, so none of these may collapse into the generic "session".
+  func testEverySessionErrorKeepsItsOwnRemedy() {
+    let distinct: [(DeviceSessionError, String)] = [
+      (.noEligibleDevice, "no_device"),
+      (.datAppOnTheGlassesUpdateRequired, "session_update_glasses_app"),
+      (.insufficientSDKVersion, "session_sdk_too_old"),
+      (.dwaOutOfStuRange, "session_version_warning"),
+      (.dwaUnavailable, "session_glasses_app_unavailable"),
+      (.thermalCritical, "session_thermal"),
+      (.thermalEmergency, "session_thermal"),
+      (.batteryCritical, "session_battery"),
+      (.peakPowerShutdown, "session_battery"),
+    ]
+    for (error, code) in distinct {
+      XCTAssertEqual(MetaDatWire.sessionError(error), code, "\(error)")
+    }
+    // The non-blocking one is the warning the controller lets through.
+    XCTAssertEqual(MetaDatWire.versionWarning, MetaDatWire.sessionError(.dwaOutOfStuRange))
+    let generic: [DeviceSessionError] = [
+      .sessionAlreadyStopped, .sessionAlreadyExists, .sessionIdle, .capabilityAlreadyActive,
+      .capabilityNotFound, .unexpectedError(description: "x"),
+    ]
+    for error in generic {
+      XCTAssertEqual(MetaDatWire.sessionError(error), "session", "\(error)")
+    }
+  }
+
+  /// Meta's camera-capture guide, "Capture reliability": one retry on a
+  /// fresh camera, a report only when the retry fails too, the count back
+  /// to zero once a startup works.
+  func testPhotoStartupRetriesOnceThenFails() {
+    var s = MetaDatPhotoStartup()
+    // Nothing starting: nothing is a verdict.
+    XCTAssertEqual(s.on(.stopped), .nothing)
+    XCTAssertEqual(s.setupFailed(), .nothing)
+    XCTAssertEqual(s.timedOut(), .nothing)
+
+    s.began()
+    XCTAssertTrue(s.pending)
+    XCTAssertEqual(s.on(.stopped), .nothing, "the photo's initial .stopped is no failure")
+    XCTAssertEqual(s.on(.starting), .nothing)
+    XCTAssertEqual(s.on(.stopping), .nothing)
+    XCTAssertEqual(s.on(.stopped), .retry, ".stopped after .starting is a failed startup")
+    XCTAssertEqual(s.retries, 1)
+    XCTAssertFalse(s.pending)
+    // The same failure reported twice (error + state) is one verdict.
+    XCTAssertEqual(s.setupFailed(), .nothing)
+
+    s.began()
+    XCTAssertEqual(s.timedOut(), .fail, "the retry failed too")
+    XCTAssertEqual(s.retries, 0)
+    XCTAssertFalse(s.pending)
+
+    // The next startup has its own retry.
+    s.began()
+    XCTAssertEqual(s.setupFailed(), .retry)
+    s.began()
+    XCTAssertEqual(s.on(.starting), .nothing)
+    XCTAssertEqual(s.on(.started), .nothing)
+    XCTAssertEqual(s.retries, 0, "a startup that works resets the count")
+    XCTAssertFalse(s.pending)
+    // After .started nothing is a startup verdict any more.
+    XCTAssertEqual(s.setupFailed(), .nothing)
+    XCTAssertEqual(s.timedOut(), .nothing)
+    XCTAssertEqual(s.on(.stopped), .nothing)
+
+    // reset() (session stopped or paused) forgets a spent retry.
+    s.began()
+    XCTAssertEqual(s.setupFailed(), .retry)
+    s.reset()
+    XCTAssertEqual(s, MetaDatPhotoStartup())
+  }
+
   // MARK: - end to end on Mock Device Kit
 
   /// configure → mock glasses → session → camera started → capture →
   /// the fixture's exact bytes reach "Dart"; the capture button arrives
-  /// as a button event; stop ends it all.
+  /// as a button event; stop ends it all. Then, on the same glasses, the
+  /// photo-startup retry ([checkPhotoStartupRetries]).
   func testMockGlassesSessionCapturesAndReportsTheShutter() async throws {
     let status = try controller.configure()
     XCTAssertEqual(status["configured"] as? Bool, true)
@@ -167,6 +247,96 @@ final class MetaDatControllerTests: XCTestCase {
     XCTAssertTrue(has("session", "state", "stopped"))
     XCTAssertEqual(controller.status()["camera"] as? String, "stopped")
     XCTAssertFalse(controller.capture(resolution: nil, quality: nil))
+
+    try await checkPhotoStartupRetries()
+  }
+
+  // MARK: - photo startup retry (Mock Device Kit + startup faults)
+
+  private func errors() -> [String] {
+    events.filter { $0["type"] as? String == "error" }.compactMap { $0["code"] as? String }
+  }
+
+  /// A new session on the same controller and glasses whose next photo
+  /// startups fail as [faults] say (MetaDatController.photoStartupFaults).
+  /// DAT may still be stopping the last session (sessionAlreadyExists),
+  /// so a refused start is tried again for a while, as a user would.
+  private func startSession(
+    faults: [MetaDatController.PhotoStartupFault]
+  ) async throws {
+    events = []
+    controller.photoStartupFaults = faults
+    let deadline = Date().addingTimeInterval(10)
+    while true {
+      do {
+        try controller.startSession()
+        break
+      } catch let failure as MetaDatFailure where failure.code == "session" && Date() < deadline {
+        try await Task.sleep(nanoseconds: 200_000_000)
+      }
+    }
+    try await waitFor("the session to start") { has("session", "state", "started") }
+  }
+
+  /// Meta's bounded retry (camera-capture guide), every way a startup
+  /// fails. Each case is a new session on the same controller and mock
+  /// glasses, as when the user ends one session and starts another. Run
+  /// from the end-to-end test, on its pairing: every extra Mock Device Kit
+  /// pairing in one process is slower to yield an active device, and one
+  /// per retry case intermittently never did.
+  private func checkPhotoStartupRetries() async throws {
+    var added = controller.camerasAdded
+
+    // 1. sessionSetupFailed (iOS): a fresh camera, which starts; Dart hears
+    // no error at all, and the fresh camera takes photos.
+    try await startSession(faults: [.setupFailed])
+    try await waitFor("the retried camera after setupFailed") {
+      controller.status()["camera"] as? String == "started"
+    }
+    XCTAssertEqual(controller.camerasAdded - added, 2)
+    XCTAssertEqual(errors(), [], eventSummary())
+    XCTAssertEqual(controller.photoStartup, MetaDatPhotoStartup(), "reset at .started")
+    XCTAssertTrue(controller.capture(resolution: nil, quality: nil))
+    try await waitFor("the photo") { events.contains { $0["type"] as? String == "photo" } }
+    controller.stopSession()
+    added = controller.camerasAdded
+
+    // 2. `.stopped` after `.starting` is the same failure.
+    try await startSession(faults: [.stoppedAfterStarting])
+    try await waitFor("the retried camera after a fall back to stopped") {
+      controller.status()["camera"] as? String == "started"
+    }
+    XCTAssertEqual(controller.camerasAdded - added, 2)
+    XCTAssertEqual(errors(), [], eventSummary())
+    controller.stopSession()
+    added = controller.camerasAdded
+
+    // 3. A startup that never answers is ended by the timeout. The retry
+    // is a real Mock Device Kit startup: it gets the full time.
+    controller.photoStartupTimeout = 0.6
+    try await startSession(faults: [.silent])
+    try await waitFor("the first camera") { controller.camerasAdded - added == 1 }
+    controller.photoStartupTimeout = MetaDatController.photoStartupTimeout
+    try await waitFor("the retried camera after the timeout") {
+      controller.status()["camera"] as? String == "started"
+    }
+    XCTAssertEqual(controller.camerasAdded - added, 2)
+    XCTAssertEqual(errors(), [], eventSummary())
+    controller.stopSession()
+    added = controller.camerasAdded
+
+    // 4. The retry failing too is reported once, as photo_setup_failed:
+    // no third camera, and the session itself goes on.
+    controller.photoStartupTimeout = 0.4
+    try await startSession(faults: [.setupFailed, .silent])
+    try await waitFor("photo_setup_failed") { errors().contains("photo_setup_failed") }
+    try await Task.sleep(nanoseconds: 1_500_000_000)
+    XCTAssertEqual(errors(), ["photo_setup_failed"], eventSummary())
+    XCTAssertEqual(controller.camerasAdded - added, 2)
+    XCTAssertEqual(controller.status()["camera"] as? String, "stopped")
+    XCTAssertEqual(controller.status()["session"] as? String, "started")
+    XCTAssertFalse(controller.capture(resolution: nil, quality: nil))
+    XCTAssertEqual(controller.photoStartup, MetaDatPhotoStartup())
   }
 }
 

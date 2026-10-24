@@ -16,6 +16,7 @@ import 'package:calorie_tracker/services/glasses/meta_dat_flags.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/screens/add_flow.dart';
 import 'package:calorie_tracker/ui/screens/glasses_session_screen.dart';
+import 'package:calorie_tracker/ui/screens/glasses_session_strings.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -297,18 +298,225 @@ void main() {
     expect(h.native.methods.last, 'stopSession');
   });
 
-  testWidgets('the app leaving the foreground ends a live session',
+  // A locked phone fires `paused` like any trip to the background. Meta's
+  // lifecycle guide does not list the app leaving the foreground among
+  // what ends a session, so Bitewise lets DAT decide for the grace period
+  // (open question 4 in META_DAT.md needs exactly that), then ends it.
+  void background(WidgetTester tester) {
+    // Whatever a test asserts, the next one starts in the foreground.
+    addTearDown(() => tester.binding
+        .handleAppLifecycleStateChanged(AppLifecycleState.resumed));
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+  }
+
+  void foreground(WidgetTester tester) {
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+  }
+
+  int stops() => h.native.methods.where((m) => m == 'stopSession').length;
+
+  testWidgets(
+      'a locked phone keeps the session; Bitewise ends it after the grace',
+      (tester) async {
+    h.native.registration = 'registered';
+    await h.open(tester);
+    expect(
+        find.textContaining('ends it after 15 minutes'), findsOneWidget);
+    await h.native.push({'type': 'session', 'state': 'started'});
+    await tester.pumpAndSettle();
+    background(tester);
+    await tester.pump(const Duration(minutes: 14, seconds: 59));
+    expect(stops(), 0, reason: 'a phone lock alone must not end it');
+    await tester.pump(const Duration(seconds: 2));
+    expect(stops(), 1);
+    // Still in the background: no second stop.
+    await tester.pump(const Duration(minutes: 30));
+    expect(stops(), 1);
+    // Back on screen (no frames are drawn while paused), it says why.
+    foreground(tester);
+    await tester.pump();
+    expect(
+        find.text('The session ended: Bitewise was in the background for 15 '
+            'minutes. Start it again when you are ready.'),
+        findsOneWidget);
+  });
+
+  testWidgets('coming back within the grace keeps the session',
       (tester) async {
     h.native.registration = 'registered';
     await h.open(tester);
     await h.native.push({'type': 'session', 'state': 'started'});
     await tester.pumpAndSettle();
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.inactive);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.hidden);
-    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+    background(tester);
+    await tester.pump(const Duration(minutes: 10));
+    foreground(tester);
+    await tester.pump(const Duration(minutes: 30));
+    expect(stops(), 0);
+    // The next trip to the background gets the whole grace again.
+    background(tester);
+    await tester.pump(const Duration(minutes: 14));
+    expect(stops(), 0);
+    await tester.pump(const Duration(minutes: 2));
+    expect(stops(), 1);
+    foreground(tester);
     await tester.pump();
-    expect(h.native.methods.where((m) => m == 'stopSession'), hasLength(1));
+  });
+
+  testWidgets('the process going away ends the session at once',
+      (tester) async {
+    h.native.registration = 'registered';
+    await h.open(tester);
+    await h.native.push({'type': 'session', 'state': 'started'});
+    await tester.pumpAndSettle();
+    background(tester);
+    tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.detached);
+    await tester.pump();
+    expect(stops(), 1);
+    // The grace timer went with it.
+    await tester.pump(const Duration(minutes: 20));
+    expect(stops(), 1);
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+    await tester.pump();
+  });
+
+  testWidgets('leaving the screen while in the background stops once',
+      (tester) async {
+    h.native.registration = 'registered';
+    await h.open(tester);
+    await h.native.push({'type': 'session', 'state': 'started'});
+    await tester.pumpAndSettle();
+    background(tester);
+    foreground(tester);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(stops(), 1);
+    await tester.pump(const Duration(minutes: 20));
+    expect(stops(), 1);
+  });
+
+  group('session errors, one remedy each (Meta version guide)', () {
+    const words = {
+      'session_update_glasses_app':
+          'The glasses need an update before Bitewise can use them.',
+      'session_sdk_too_old': 'This Bitewise build is too old',
+      'session_glasses_app_unavailable':
+          'The glasses did not open their side of the Bitewise connection.',
+      'session_thermal': 'The glasses are too hot',
+      'session_battery': 'The glasses battery is too low',
+      'photo_setup_failed':
+          'The glasses camera did not start, even on a second try.',
+    };
+    for (final MapEntry(key: code, value: text) in words.entries) {
+      testWidgets(code, (tester) async {
+        h.native.registration = 'registered';
+        await h.open(tester);
+        await h.native
+            .push({'type': 'error', 'code': code, 'message': 'SDK text'});
+        await tester.pump();
+        expect(find.textContaining(text), findsOneWidget);
+        expect(find.textContaining('Something went wrong'), findsNothing);
+        expect(find.textContaining('SDK text'), findsNothing);
+        // Only the glasses-app update has an action of its own.
+        expect(_row('glassesUpdateApp'),
+            code == 'session_update_glasses_app' ? findsOneWidget : findsNothing);
+      });
+    }
+
+    testWidgets('none of them collapses into the generic wording', (tester) async {
+      final generic = GlassesSessionStrings.en.failure('session');
+      for (final code in [...words.keys, metaDatVersionWarning]) {
+        expect(GlassesSessionStrings.en.failure(code), isNot(generic),
+            reason: code);
+        expect(GlassesSessionStrings.zhHans.failure(code),
+            isNot(GlassesSessionStrings.zhHans.failure('session')),
+            reason: code);
+        expect(GlassesSessionStrings.zhHans.failure(code), isNot(contains(code)),
+            reason: '$code must be worded in Chinese, not named');
+      }
+      // The generic one no longer claims every error stopped the session.
+      expect(generic, isNot(startsWith('The glasses session stopped')));
+    });
+
+    testWidgets('Update in Meta AI opens it; a new session clears the offer',
+        (tester) async {
+      h.native.registration = 'registered';
+      h.native.activeDevice = true;
+      h.native.failures['startSession'] = 'session_update_glasses_app';
+      await h.open(tester);
+      await tester.tap(_row('glassesStart'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('The glasses need an update'), findsOneWidget);
+      await tester.tap(_row('glassesUpdateApp'));
+      await tester.pumpAndSettle();
+      expect(h.native.methods.last, 'openGlassesAppUpdate');
+
+      h.native.failures.remove('startSession');
+      await tester.tap(_row('glassesStart'));
+      await tester.pumpAndSettle();
+      await h.native.push({'type': 'session', 'state': 'started'});
+      await tester.pump();
+      expect(_row('glassesUpdateApp'), findsNothing);
+    });
+
+    testWidgets('Meta AI failing to open is worded', (tester) async {
+      h.native.registration = 'registered';
+      await h.open(tester);
+      await h.native.push({
+        'type': 'error',
+        'code': 'session_update_glasses_app',
+        'message': ''
+      });
+      await tester.pump();
+      h.native.failures['openGlassesAppUpdate'] = 'navigation';
+      await tester.tap(_row('glassesUpdateApp'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Could not open the Meta AI app'),
+          findsOneWidget);
+      expect(_row('glassesUpdateApp'), findsNothing);
+    });
+
+    testWidgets('the version warning stops nothing and is said once',
+        (tester) async {
+      h.native.registration = 'registered';
+      await h.open(tester);
+      await h.native.push({'type': 'session', 'state': 'started'});
+      await h.native.push({'type': 'camera', 'state': 'started'});
+      await tester.pumpAndSettle();
+      await tester.tap(_row('glassesCapture'));
+      await tester.pump();
+      await h.native.push({'type': 'progress', 'fraction': 0.3});
+      await tester.pump();
+
+      await h.native.push({
+        'type': 'error',
+        'code': metaDatVersionWarning,
+        'message': 'dwaOutOfStuRange'
+      });
+      await tester.pump();
+      expect(find.textContaining('The session is running'), findsOneWidget);
+      expect(find.textContaining('stopped'), findsNothing);
+      // The capture in flight is untouched.
+      expect(find.text('Taking photo…'), findsOneWidget);
+      expect(_row('glassesProgress'), findsOneWidget);
+      expect(find.text('Running'), findsOneWidget);
+
+      // Said once per visit: a repeat does not replace newer news.
+      await h.native.push({'type': 'button', 'press': 'shortPress'});
+      await tester.pump();
+      await h.native.push({
+        'type': 'error',
+        'code': metaDatVersionWarning,
+        'message': 'dwaOutOfStuRange'
+      });
+      await tester.pump();
+      expect(find.textContaining('Shutter pressed'), findsOneWidget);
+      expect(find.textContaining('The session is running'), findsNothing);
+      await tester.pump(const Duration(seconds: 4));
+    });
   });
 
   testWidgets('mock mode pairs the simulated glasses and offers the shutter',
@@ -342,6 +550,7 @@ void main() {
     expect(find.text('已关联'), findsOneWidget);
     expect(find.text('已就绪'), findsOneWidget);
     expect(find.text('开始拍摄模式'), findsOneWidget);
+    expect(find.textContaining('15 分钟后结束拍摄模式'), findsOneWidget);
   });
 
   group('add sheet entry', () {

@@ -105,6 +105,18 @@ void main() {
               .having((e) => e.code, 'code', 'not_configured')));
     });
 
+    test('the glasses-app update opens Meta AI; a refusal keeps its code',
+        () async {
+      await channel.openGlassesAppUpdate();
+      expect(native.methods, ['openGlassesAppUpdate']);
+      expect(native.calls.single.arguments, isNull);
+      native.failures['openGlassesAppUpdate'] = 'navigation';
+      await expectLater(
+          channel.openGlassesAppUpdate(),
+          throwsA(isA<MetaDatException>()
+              .having((e) => e.code, 'code', 'navigation')));
+    });
+
     test('status never throws: a refusal reads as unsupported', () async {
       native.failures['status'] = 'internal';
       expect((await channel.status()).supported, isFalse);
@@ -181,6 +193,25 @@ void main() {
       expect(photo.format, MetaDatPhotoFormat.jpeg);
       expect(photo.receivedAt, at);
       expect((got[7] as MetaDatFailure).code, 'capture_timeout');
+      expect((got[7] as MetaDatFailure).isWarning, isFalse);
+    });
+
+    test('only the version warning is news that stops nothing', () async {
+      final got = await collect(() async {
+        await native.push({
+          'type': 'error',
+          'code': 'session_version_warning',
+          'message': 'dwaOutOfStuRange'
+        });
+        await native.push({
+          'type': 'error',
+          'code': 'session_update_glasses_app',
+          'message': 'x'
+        });
+      });
+      expect(metaDatVersionWarning, 'session_version_warning');
+      expect([for (final e in got) (e as MetaDatFailure).isWarning],
+          [true, false]);
     });
 
     test('malformed payloads are dropped, unknown states are unknown',

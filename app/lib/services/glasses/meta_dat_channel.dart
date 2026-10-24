@@ -218,6 +218,11 @@ final class MetaDatButton extends MetaDatEvent {
   const MetaDatButton(this.press);
 }
 
+/// The one session error that stops nothing (Swift
+/// MetaDatWire.versionWarning, DAT's dwaOutOfStuRange): Meta says the
+/// session goes on and the user is only told to update now and then.
+const String metaDatVersionWarning = 'session_version_warning';
+
 /// An asynchronous failure (session, photo capability, inputs, a capture
 /// that timed out). [code] is a stable wire code; [message] is the SDK's
 /// case description, for diagnostics only.
@@ -225,6 +230,9 @@ final class MetaDatFailure extends MetaDatEvent {
   final String code;
   final String message;
   const MetaDatFailure(this.code, this.message);
+
+  /// News that stops nothing ([metaDatVersionWarning]).
+  bool get isWarning => code == metaDatVersionWarning;
 }
 
 /// The largest photo the bridge accepts (mirrors the Swift guard).
@@ -419,6 +427,10 @@ class MetaDatChannel {
         'quality': quality.name,
       }) ??
       false;
+
+  /// Opens Meta AI's page that updates the toolkit's app on the glasses:
+  /// the remedy for `session_update_glasses_app`.
+  Future<void> openGlassesAppUpdate() => _invoke<void>('openGlassesAppUpdate');
 
   /// Debug builds: pair Mock Device Kit glasses whose captures return
   /// [photo] (a drawn plate when null).

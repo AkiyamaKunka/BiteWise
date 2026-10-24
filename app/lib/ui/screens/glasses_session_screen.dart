@@ -4,8 +4,11 @@
 /// photo pipeline as deliberate intake (MealSource.appGlasses).
 ///
 /// Behind BITEWISE_META_DAT (meta_dat_flags.dart): without it the add sheet
-/// never offers this screen and nothing initialises the native SDK. The
-/// session cannot outlive the foreground, so leaving the app ends it.
+/// never offers this screen and nothing initialises the native SDK.
+/// Going back ends the session. A locked phone or another app in front
+/// does not, for [GlassesSessionScreen.backgroundGrace]: whether DAT keeps
+/// the session alive then is what the hardware test measures (open
+/// question 4 in docs/META_DAT.md).
 library;
 
 import 'dart:async';
@@ -36,6 +39,7 @@ class GlassesSessionScreen extends StatefulWidget {
     this.useMock = kMetaDatMock,
     this.now = DateTime.now,
     this.shutterWindow = const Duration(seconds: 3),
+    this.backgroundGrace = const Duration(minutes: 15),
   });
 
   /// The app's serialized pipeline (UiServices.processPhoto).
@@ -57,6 +61,13 @@ class GlassesSessionScreen extends StatefulWidget {
   final bool useMock;
   final DateTime Function() now;
   final Duration shutterWindow;
+
+  /// How long a session may sit behind a locked phone or another app
+  /// before Bitewise ends it itself. Long enough to lock the phone through
+  /// a meal's first photos, and to measure whether DAT keeps the session
+  /// meanwhile; short enough that one forgotten in a pocket does not hold
+  /// the glasses all evening. (Folding them ends it at once anyway.)
+  final Duration backgroundGrace;
 
   @override
   State<GlassesSessionScreen> createState() => _GlassesSessionScreenState();
@@ -95,6 +106,17 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
   double? _progress;
   String? _notice;
   final List<_Shot> _shots = [];
+
+  /// Runs while the app is hidden or paused: [GlassesSessionScreen.backgroundGrace].
+  Timer? _backgroundTimer;
+
+  /// The last failure was session_update_glasses_app: offer Meta AI's
+  /// update page.
+  bool _offerGlassesAppUpdate = false;
+
+  /// The version warning was shown once on this visit (Meta: tell the user
+  /// now and then, never block).
+  bool _versionWarned = false;
 
   GlassesSessionStrings get _s => GlassesSessionStrings.of(context);
 
@@ -145,8 +167,15 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
     if (!mounted) return;
     setState(() {
       _status = status;
-      if (notice != null) _notice = _s.failure(notice);
+      if (notice != null) _setFailure(notice);
     });
+  }
+
+  /// A failure [code] in words, and the update action when it has one.
+  /// Call inside setState.
+  void _setFailure(String code) {
+    _notice = _s.failure(code);
+    _offerGlassesAppUpdate = code == 'session_update_glasses_app';
   }
 
   Future<void> _onLink(Uri uri) async {
@@ -161,7 +190,7 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
     try {
       await _channel.handleCallback(uri);
     } on MetaDatException catch (e) {
-      if (mounted) setState(() => _notice = _s.failure(e.code));
+      if (mounted) setState(() => _setFailure(e.code));
     }
     final status = await _channel.status();
     return status.supported ? status : null;
@@ -179,17 +208,30 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
         if (press == MetaDatPress.shortPress) {
           setState(() => _notice = _s.shutterPressed);
         }
+      case MetaDatFailure(isWarning: true, :final code):
+        // The session goes on: nothing in flight is touched, and the
+        // warning is said once per visit.
+        if (_versionWarned) return;
+        _versionWarned = true;
+        setState(() => _notice = _s.failure(code));
       case MetaDatFailure(:final code):
         setState(() {
           _capturing = false;
           _progress = null;
-          _notice = _s.failure(code);
+          _setFailure(code);
         });
       default:
         if (_status == null) {
           _missedWhileBooting = true;
         } else {
-          setState(() => _status = _status!.apply(e));
+          setState(() {
+            _status = _status!.apply(e);
+            if (e case MetaDatSessionChanged(
+              state: MetaDatSessionState.started,
+            )) {
+              _offerGlassesAppUpdate = false;
+            }
+          });
         }
     }
   }
@@ -234,7 +276,7 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
     try {
       await action();
     } on MetaDatException catch (e) {
-      if (mounted) setState(() => _notice = _s.failure(e.code));
+      if (mounted) setState(() => _setFailure(e.code));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -284,15 +326,50 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
     await _channel.mockCapturePress();
   });
 
+  Future<void> _openGlassesAppUpdate() => _guard(() async {
+    await _channel.openGlassesAppUpdate();
+  });
+
+  /// A locked phone or another app in front does NOT end the session at
+  /// once: Meta's lifecycle guide lists folding, other experiences, another
+  /// app's session and a lost Meta AI link as what ends one, not the app
+  /// leaving the foreground, so Bitewise lets DAT decide for
+  /// [GlassesSessionScreen.backgroundGrace] and then ends it itself. The
+  /// process going away ends it at once.
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // DAT ends a session when the app backgrounds anyway; ending it here
-    // keeps the screen's state honest and releases the glasses at once.
-    if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.detached) {
-      if (_status?.supported ?? false) unawaited(_stopQuietly());
+    if (!(_status?.supported ?? false)) return;
+    switch (state) {
+      case AppLifecycleState.detached:
+        _cancelBackgroundTimer();
+        unawaited(_stopQuietly());
+      case AppLifecycleState.hidden || AppLifecycleState.paused:
+        _backgroundTimer ??= Timer(
+          widget.backgroundGrace,
+          _endAfterBackgroundGrace,
+        );
+      case AppLifecycleState.inactive || AppLifecycleState.resumed:
+        _cancelBackgroundTimer();
     }
   }
+
+  void _cancelBackgroundTimer() {
+    _backgroundTimer?.cancel();
+    _backgroundTimer = null;
+  }
+
+  void _endAfterBackgroundGrace() {
+    _backgroundTimer = null;
+    final live = _status?.sessionLive ?? false;
+    // Unconditional, like leaving the screen: a session asked for may not
+    // have reported 'starting' yet.
+    unawaited(_stopQuietly());
+    if (live && mounted) {
+      setState(() => _notice = _s.endedInBackground(_graceMinutes));
+    }
+  }
+
+  int get _graceMinutes => widget.backgroundGrace.inMinutes;
 
   /// Unconditional: a session just asked for may not have reported
   /// `starting` yet, and stopping none is a no-op natively.
@@ -305,6 +382,7 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _cancelBackgroundTimer();
     _arbiter.dispose();
     unawaited(_events?.cancel());
     unawaited(_links?.cancel());
@@ -335,7 +413,7 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
               children: [
                 GroupedSection(
                   header: s.statusHeader,
-                  footer: s.keepOpen,
+                  footer: s.keepOpen(_graceMinutes),
                   children: [
                     GroupedRow(
                       icon: Icons.link,
@@ -392,6 +470,14 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
                       enabled: !_busy && !_capturing && status.canCapture,
                       onTap: _takePhoto,
                     ),
+                    if (_offerGlassesAppUpdate)
+                      GroupedRow(
+                        key: const Key('glassesUpdateApp'),
+                        icon: Icons.system_update_outlined,
+                        title: s.updateGlassesApp,
+                        enabled: !_busy,
+                        onTap: _openGlassesAppUpdate,
+                      ),
                     if (status.mock)
                       GroupedRow(
                         key: const Key('glassesMockPress'),
