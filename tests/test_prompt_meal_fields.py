@@ -101,6 +101,27 @@ def test_brand_rules_refuse_background_text_and_guessing():
     assert "receipt" in om[:200] and "order screen" in om[:200]
 
 
+def test_order_merchant_is_a_name_never_an_address():
+    # Receipts and order screens print store numbers, streets and cities
+    # next to the merchant; the field carries the name alone (the lookup
+    # composer then sends only our table's name for it, or nothing).
+    om = FLAT[FLAT.index("order_merchant:"):FLAT.index("For each food item:")]
+    assert "the merchant's name only" in om
+    assert "without store number, address or city" in om
+
+
+def test_a_receipt_merchant_never_becomes_an_item_brand():
+    # A merchant header copied into every item's brand would turn the
+    # suggest-only order_merchant evidence into item-brand evidence, which
+    # can APPLY.
+    brand = FLAT[FLAT.index("brand: the brand printed"):FLAT.index("qty:")]
+    assert "receipt line" not in brand.split(".")[0]
+    assert ("the restaurant or merchant name goes only in order_merchant, "
+            "never in an item's brand") in brand
+    assert ("a receipt line gives an item a brand only when it prints a "
+            "product brand other than the merchant") in brand
+
+
 def test_qty_keeps_item_numbers_as_totals():
     # A count must not turn per-line calories into per-unit calories: every
     # total in the app sums estimated_calories as-is.

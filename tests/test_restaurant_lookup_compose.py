@@ -106,16 +106,22 @@ def test_items_keep_their_positions_and_cap_at_twelve():
     assert req["items"][11]["name"] == "item 11"
 
 
-@pytest.mark.parametrize("field,cap", [
-    ("name", 80), ("unit", 20), ("brand", 60)])
+@pytest.mark.parametrize("field,cap", [("name", 80), ("unit", 20)])
 def test_long_item_fields_are_capped(field, cap):
     req = rl.compose_lookup_request({"items": [{field: "x" * 10_000}]})
     assert len(req["items"][0][field]) == cap
 
 
-def test_merchant_is_capped():
-    req = rl.compose_lookup_request({"order_merchant": "m" * 10_000})
-    assert len(req["order_merchant"]) == 60
+@pytest.mark.parametrize("printed,sent", [
+    ("m" * 10_000, ""),
+    ("Chipotle Mexican Grill #" + "9" * 10_000, "Chipotle"),
+    ("Chipotle Mexican Grill " + "x" * 10_000, "Chipotle"),
+])
+def test_long_brand_and_merchant_are_a_table_name_or_nothing(printed, sent):
+    req = rl.compose_lookup_request({"items": [{"brand": printed}],
+                                     "order_merchant": printed})
+    assert req["order_merchant"] == sent
+    assert req["items"][0]["brand"] == sent
 
 
 @pytest.mark.parametrize("qty,expected", [
@@ -136,6 +142,65 @@ def test_country(country, expected):
 
 # ─── what may never leave the phone ────────────────────────────────
 
+# Printed brand and merchant text as receipts, order screens, cups and bags
+# carry it: store numbers, streets, branches and cities.
+PRINTED = ("", "Chipotle", "Uber Eats",
+           "Chipotle Mexican Grill #2381 - 1540 Broadway, New York NY",
+           "Chipotle (State St)",
+           "CHIPOTLE 2381 W Main St Madison WI 53703",
+           "Starbucks Reserve Roastery Chicago",
+           "McDonald's 1540 Broadway",
+           "Panera Bread #4417 Madison, WI",
+           "Joe's Pizza Brooklyn",
+           "Taco Bell | 900 N Michigan Ave",
+           "STARBUCKS STORE #12345 SEATTLE WA",
+           "麦当劳（时代广场店）")
+# Address, branch and city text from PRINTED that must never leave.
+PLACE_TEXT = ("1540", "Broadway", "New York", "State St", "Main St",
+              "Madison", "53703", "2381", "Chicago", "Roastery", "4417",
+              "Brooklyn", "Michigan", "12345", "SEATTLE", "Seattle",
+              "时代广场", "Joe")
+CANONICAL = {c["name"] for c in rl.US_CHAINS}
+
+
+def test_printed_brand_and_merchant_go_out_only_as_a_table_name():
+    printed = "Chipotle Mexican Grill #2381 - 1540 Broadway, New York NY"
+    req = rl.compose_lookup_request({
+        "items": [{"name": "Chicken burrito bowl", "brand": printed},
+                  {"name": "Latte",
+                   "brand": "Starbucks Reserve Roastery Chicago"},
+                  {"name": "Cola", "brand": "Coca-Cola"}],
+        "order_merchant": printed, "chains": ["chipotle", "starbucks"]})
+    assert req["order_merchant"] == "Chipotle"
+    assert [i["brand"] for i in req["items"]] == ["Chipotle", "Starbucks", ""]
+    text = rl.compose_lookup_prompt(req)
+    for place in ("1540", "Broadway", "New York", "2381", "Chicago"):
+        assert place not in _data_block(text), place
+
+
+@pytest.mark.parametrize("printed,sent", [
+    ("Chipotle (State St)", "Chipotle"),
+    ("CHIPOTLE 2381", "Chipotle"),
+    ("McDonald's 1540 Broadway", "McDonald's"),
+    ("Joe's Pizza - 7 Carmine St, New York", ""),
+    ("Uber Eats", ""),
+    ("麦当劳（时代广场店）", "McDonald's"),
+    ("Seasons 52 #12, Chicago", "Seasons 52"),
+    (None, ""),
+    (42, ""),
+])
+def test_chain_name_only(printed, sent):
+    assert rl.chain_name_only(printed, rl.LOOKUP_MERCHANT_MAX) == sent
+    assert rl.compose_lookup_request(
+        {"order_merchant": printed})["order_merchant"] == sent
+
+
+def test_every_table_name_survives_composing():
+    for chain in rl.US_CHAINS:
+        assert rl.chain_name_only(chain["name"], rl.LOOKUP_BRAND_MAX) == \
+            chain["name"], chain["key"]
+
+
 FORBIDDEN_KEYS = ("lat", "lon", "latitude", "longitude", "coordinates",
                   "city", "street", "address", "distance", "distance_m",
                   "timestamp", "captured_at", "meal_description",
@@ -149,12 +214,13 @@ def _hostile_raw(rnd):
     item = {"name": rnd.choice(["Burrito bowl", "Latte", "珍珠奶茶", ""]),
             "qty": rnd.choice([1, 2, 0.5, -1, "2", None]),
             "unit": rnd.choice(["", "cup", "slice"]),
-            "brand": rnd.choice(["", "STARBUCKS", "Chipotle"]),
+            "brand": rnd.choice(PRINTED),
             "calories": rnd.randint(100, 2000)}
     for k in FORBIDDEN_KEYS:
         item[k] = f"{k}-{lat}"
-    raw = {"items": [dict(item) for _ in range(rnd.randint(0, 15))],
-           "order_merchant": rnd.choice(["", "Chipotle", "Uber Eats"]),
+    raw = {"items": [dict(item, brand=rnd.choice(PRINTED))
+                     for _ in range(rnd.randint(0, 15))],
+           "order_merchant": rnd.choice(PRINTED),
            "chains": rnd.sample([c["key"] for c in rl.US_CHAINS[:30]] +
                                 ["evil", "lat:%s" % lat], 5),
            "country": rnd.choice(["US", "us", "", "CA"]),
@@ -176,6 +242,12 @@ def test_property_no_location_or_meal_text_ever_reaches_the_request():
             assert set(item) == ITEM_KEYS
         assert str(lat) not in text and str(lon) not in text
         assert "1540 Broadway" not in text
+        block = _data_block(rl.compose_lookup_prompt(raw))
+        for place in PLACE_TEXT:
+            assert place not in text and place not in block, place
+        for printed in [req["order_merchant"]] + [
+                i["brand"] for i in req["items"]]:
+            assert printed == "" or printed in CANONICAL, printed
         for k in FORBIDDEN_KEYS:
             assert f'"{k}"' not in text, k
         assert len(req["chains"]) <= rl.LOOKUP_MAX_CHAINS
@@ -246,6 +318,9 @@ PROMPT = " ".join(shared_generated.RESTAURANT_LOOKUP_PROMPT.split())
     "Never name a restaurant that is not listed",
     "OFFICIAL nutrition information",
     "nutrition PDF",
+    "Use ONLY the version for the given country, never another country's "
+    "page or PDF",
+    "as the app's list names it",
     "third-party nutrition database only when the chain publishes nothing",
     "EVERY published size or variant",
     "Do not choose a size for the person",

@@ -13,6 +13,12 @@
 /// The composer reads only the keys above from its raw input and ignores
 /// everything else, so a caller cannot widen the request by accident.
 ///
+/// Printed text never goes out as printed: a receipt or order screen puts
+/// store numbers, streets and cities next to the merchant ("Chipotle
+/// Mexican Grill #2381 - 1540 Broadway, New York NY"), and a cup can carry
+/// a city. So brand and order_merchant hold only the canonical name of the
+/// table chain the printed text names, or "" ([chainNameOnly]).
+///
 /// Injection safety: every string goes through [cleanShortText] (the
 /// brand cleaner: compatibility-folded, control, invisible and bidi
 /// characters and every `<` `>` removed, whitespace collapsed, capped), so
@@ -56,13 +62,61 @@ String _country(dynamic value) => value is String && _countryRe.hasMatch(value)
 String? _lang(dynamic value) =>
     value is String && _langZhRe.hasMatch(value) ? 'zh' : null;
 
-Map<String, Object?> _requestItem(dynamic item) {
+/// Where a printed name's suffix starts (chain_match.dart's cuts), and a
+/// standalone number (a store or street number: "CHIPOTLE 2381").
+const List<String> _headCuts = [
+  '(', '[', '|', '#', ',', ' - ', ' – ', ' — ', ' @ ', ' · ', //
+];
+final RegExp _standaloneNumberRe = RegExp(r' [0-9]+(?= |$)');
+
+/// [text] (already cleaned: single spaces) up to its first name separator
+/// or standalone number, without leading or trailing spaces.
+String _nameHead(String text) {
+  var cut = text.length;
+  for (final sep in _headCuts) {
+    final i = text.indexOf(sep);
+    if (i > 0 && i < cut) cut = i;
+  }
+  final m = _standaloneNumberRe.firstMatch(text);
+  if (m != null && m.start > 0 && m.start < cut) cut = m.start;
+  var head = text.substring(0, cut);
+  while (head.startsWith(' ')) {
+    head = head.substring(1);
+  }
+  while (head.endsWith(' ')) {
+    head = head.substring(0, head.length - 1);
+  }
+  return head;
+}
+
+/// What a request carries for printed brand or merchant text: the
+/// canonical name of the table chain it names ([matchChain] on the cleaned
+/// text, then on its head before the first separator or standalone
+/// number), or "" — never the printed text itself, which can carry a store
+/// number, a street or a city. Identical to the Python composer's
+/// chain_name_only.
+String chainNameOnly(dynamic value, int maxChars) {
+  final text = cleanShortText(value, maxChars);
+  if (text.isEmpty) return '';
+  var key = matchChain(text);
+  if (key == null) {
+    final head = _nameHead(text);
+    if (head.isNotEmpty && head != text) key = matchChain(head);
+  }
+  final chain = chainByKey(key);
+  return chain == null ? '' : cleanShortText(chain.name, maxChars);
+}
+
+/// One request item: name, count, unit and the chain its printed brand
+/// names. [decideAssist] composes the meal's CURRENT items the same way to
+/// notice an item that changed after the request was sent.
+Map<String, Object?> composeLookupItem(dynamic item) {
   final m = item is Map ? item : const {};
   return {
     'name': cleanShortText(m['name'], kLookupItemNameMax),
     'qty': _requestQty(m['qty']),
     'unit': cleanShortText(m['unit'], kLookupUnitMax),
-    'brand': cleanShortText(m['brand'], kLookupBrandMax),
+    'brand': chainNameOnly(m['brand'], kLookupBrandMax),
   };
 }
 
@@ -84,17 +138,18 @@ List<Map<String, Object?>> _requestChains(dynamic value) {
 /// The lookup request body from a raw input of the same shape. Only
 /// items[].name/qty/unit/brand, order_merchant, chains (keys of OUR table,
 /// in rank order, as strings or `{"key": ...}` maps), country and lang are
-/// read. Items keep their positions (the first 12), so a response's
-/// item_index is the meal's food_items index. Idempotent.
+/// read; brand and order_merchant become a table chain's canonical name or
+/// "" ([chainNameOnly]). Items keep their positions (the first 12), so a
+/// response's item_index is the meal's food_items index. Idempotent.
 Map<String, Object?> composeLookupRequest(dynamic raw) {
   final r = raw is Map ? raw : const {};
   final items = r['items'];
   final request = <String, Object?>{
     'items': [
       for (final i in (items is List ? items : const []).take(kLookupMaxItems))
-        _requestItem(i),
+        composeLookupItem(i),
     ],
-    'order_merchant': cleanShortText(r['order_merchant'], kLookupMerchantMax),
+    'order_merchant': chainNameOnly(r['order_merchant'], kLookupMerchantMax),
     'chains': _requestChains(r['chains']),
     'country': _country(r['country']),
   };

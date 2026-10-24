@@ -531,14 +531,18 @@ consumers never trust shapes:
 - **Meal context (2026-10, restaurant assist R1), optional and additive.** Meal level:
   `estimate_confidence` (`low`/`medium`/`high`), `restaurant_context`
   (`restaurant`/`takeout`/`packaged`/`home`/`unknown`), `portion_state`
-  (`whole`/`partial`/`shared`/`buffet`), `order_merchant` (≤60, receipt/order screen only);
-  per item: `brand` (printed on that item's own packaging only, ≤60), `qty` (0<q≤20, default 1;
+  (`whole`/`partial`/`shared`/`buffet`), `order_merchant` (≤60, receipt/order screen only, the
+  merchant's name without store number, address or city);
+  per item: `brand` (printed on that item's own packaging only, never the receipt merchant,
+  ≤60), `qty` (0<q≤20, default 1;
   the item's calories stay the line total), `unit` (≤20). Read ONLY through
   `core/coerce.dart` (`coerceEstimateConfidence`, `coerceRestaurantContext`,
   `coercePortionState`, `cleanBrand`, `cleanOrderMerchant`, `coerceQty`, `cleanUnit`): a missing
   or invalid value is unknown (null / "" / 1) and unknown never triggers anything. The
   recent-meal, leftover and chat whitelists never forward them. `confidence` stays the
-  leftover verdict's key.
+  leftover verdict's key. A restaurant lookup request (R2a) never carries `brand` or
+  `order_merchant` as printed: only the canonical name of the chain table entry the text
+  names, or "" (`chainNameOnly` / `chain_name_only`).
 
 - **`safe_number(value, default=0)`** (`utils.py:39-57`): returns the value only if it is an
   `int`/`double` that is **not a bool** and lies **strictly** inside `(-1e9, 1e9)` (this also

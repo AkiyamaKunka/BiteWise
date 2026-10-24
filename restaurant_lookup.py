@@ -4,10 +4,14 @@ Three pieces every lookup provider shares, so the request can never differ
 between the owner's server and the app:
 
   * compose_lookup_request(raw) -> the request body (data_contracts section
-    4): item names, counts, units and printed brands, the receipt merchant,
-    up to 3 chains taken from OUR table by key, the country and the reply
-    language. Nothing else survives: no coordinates, street, distance, city,
-    timestamps, meal_description, calories or any other key.
+    4): item names, counts and units, the chain each item's printed brand
+    names, the chain the receipt merchant names, up to 3 chains taken from
+    OUR table by key, the country and the reply language. Nothing else
+    survives: no coordinates, street, distance, city, timestamps,
+    meal_description, calories or any other key. Printed brand and merchant
+    text never goes out as printed (a receipt prints store numbers, streets
+    and cities next to the merchant): only the canonical name of the table
+    chain it names, or "" (chain_name_only).
   * compose_lookup_prompt(raw) -> the shared prompt with that request as
     compact JSON inside its single data block.
   * match_chain(name, url_host) -> the key of a chain in
@@ -161,13 +165,52 @@ def _lang(value):
 # Composers
 # ---------------------------------------------------------------------------
 
-def _request_item(item):
+# A standalone number in a printed name: a store or street number
+# ("CHIPOTLE 2381", "McDonald's 1540 Broadway").
+_STANDALONE_NUMBER_RE = re.compile(r" [0-9]+(?= |$)")
+
+
+def _name_head(text):
+    """text (already cleaned: single spaces) up to its first name
+    separator or standalone number, without leading or trailing spaces."""
+    cut = len(text)
+    for sep in _NAME_CUTS:
+        i = text.find(sep)
+        if 0 < i < cut:
+            cut = i
+    m = _STANDALONE_NUMBER_RE.search(text)
+    if m is not None and 0 < m.start() < cut:
+        cut = m.start()
+    return text[:cut].strip(" ")
+
+
+def chain_name_only(value, max_chars):
+    """What a request carries for printed brand or merchant text: the
+    canonical name of the table chain it names (match_chain on the cleaned
+    text, then on its head before the first separator or standalone
+    number), or "" -- never the printed text itself, which can carry a
+    store number, a street or a city. Twin of the Dart chainNameOnly."""
+    text = clean_short_text(value, max_chars)
+    if not text:
+        return ""
+    key = match_chain(text)
+    if key is None:
+        head = _name_head(text)
+        if head and head != text:
+            key = match_chain(head)
+    chain = chain_by_key(key)
+    return "" if chain is None else clean_short_text(chain["name"], max_chars)
+
+
+def compose_lookup_item(item):
+    """One request item: name, count, unit and the chain its printed brand
+    names (Dart composeLookupItem)."""
     m = item if isinstance(item, dict) else {}
     return {
         "name": clean_short_text(m.get("name"), LOOKUP_ITEM_NAME_MAX),
         "qty": _request_qty(m.get("qty")),
         "unit": clean_short_text(m.get("unit"), LOOKUP_UNIT_MAX),
-        "brand": clean_short_text(m.get("brand"), LOOKUP_BRAND_MAX),
+        "brand": chain_name_only(m.get("brand"), LOOKUP_BRAND_MAX),
     }
 
 
@@ -193,17 +236,18 @@ def compose_lookup_request(raw):
     """The lookup request body (data_contracts section 4) from a raw input
     of the same shape. Only items[].name/qty/unit/brand, order_merchant,
     chains (keys of OUR table, in rank order), country and lang are read;
-    every other key is ignored. Items keep their positions (the first 12),
+    every other key is ignored. brand and order_merchant become a table
+    chain's canonical name or "" (chain_name_only). Items keep their positions (the first 12),
     so a response's item_index is the meal's food_items index. Idempotent:
     composing a composed request returns it unchanged."""
     r = raw if isinstance(raw, dict) else {}
     items = r.get("items")
     request = {
-        "items": [_request_item(i)
+        "items": [compose_lookup_item(i)
                   for i in (items if isinstance(items, list) else [])
                   [:LOOKUP_MAX_ITEMS]],
-        "order_merchant": clean_short_text(r.get("order_merchant"),
-                                           LOOKUP_MERCHANT_MAX),
+        "order_merchant": chain_name_only(r.get("order_merchant"),
+                                          LOOKUP_MERCHANT_MAX),
         "chains": _request_chains(r.get("chains")),
         "country": _country(r.get("country")),
     }

@@ -22,6 +22,33 @@ const _forbiddenKeys = [
   'place_id', 'category', 'calories', //
 ];
 
+/// Printed brand and merchant text as receipts, order screens, cups and
+/// bags carry it: store numbers, streets, branches and cities.
+const _printed = [
+  '',
+  'Chipotle',
+  'Uber Eats',
+  'Chipotle Mexican Grill #2381 - 1540 Broadway, New York NY',
+  'Chipotle (State St)',
+  'CHIPOTLE 2381 W Main St Madison WI 53703',
+  'Starbucks Reserve Roastery Chicago',
+  "McDonald's 1540 Broadway",
+  'Panera Bread #4417 Madison, WI',
+  "Joe's Pizza Brooklyn",
+  'Taco Bell | 900 N Michigan Ave',
+  'STARBUCKS STORE #12345 SEATTLE WA',
+  '麦当劳（时代广场店）',
+];
+
+/// Address, branch and city text from [_printed] that must never leave.
+const _placeText = [
+  '1540', 'Broadway', 'New York', 'State St', 'Main St', 'Madison', //
+  '53703', '2381', 'Chicago', 'Roastery', '4417', 'Brooklyn', 'Michigan', //
+  '12345', 'SEATTLE', 'Seattle', '时代广场', 'Joe', //
+];
+
+final Set<String> _canonical = {for (final c in sharedUsChains) c.name};
+
 String _dataBlock(String prompt) {
   final start = prompt.indexOf('<data>\n') + '<data>\n'.length;
   final end = prompt.indexOf('\n</data>', start);
@@ -75,6 +102,47 @@ void main() {
     expect(jsonEncode(req), isNot(contains('Broadway')));
   });
 
+  test('printed brand and merchant text goes out only as a table name', () {
+    final req = composeLookupRequest({
+      'items': [
+        {
+          'name': 'Chicken burrito bowl',
+          'brand': 'Chipotle Mexican Grill #2381 - 1540 Broadway, New York NY',
+        },
+        {'name': 'Latte', 'brand': 'Starbucks Reserve Roastery Chicago'},
+        {'name': 'Cola', 'brand': 'Coca-Cola'},
+      ],
+      'order_merchant':
+          'Chipotle Mexican Grill #2381 - 1540 Broadway, New York NY',
+      'chains': ['chipotle', 'starbucks'],
+    });
+    expect(req['order_merchant'], 'Chipotle');
+    expect(
+      [for (final i in req['items'] as List) (i as Map)['brand']],
+      ['Chipotle', 'Starbucks', ''],
+    );
+    for (final (printed, sent) in [
+      ('Chipotle (State St)', 'Chipotle'),
+      ('CHIPOTLE 2381', 'Chipotle'),
+      ("McDonald's 1540 Broadway", "McDonald's"),
+      ("Joe's Pizza - 7 Carmine St, New York", ''),
+      ('Uber Eats', ''),
+      ('麦当劳（时代广场店）', "McDonald's"),
+    ]) {
+      expect(chainNameOnly(printed, kLookupMerchantMax), sent, reason: printed);
+      expect(
+        composeLookupRequest({'order_merchant': printed})['order_merchant'],
+        sent,
+      );
+    }
+  });
+
+  test('every table name survives composing (idempotent)', () {
+    for (final c in sharedUsChains) {
+      expect(chainNameOnly(c.name, kLookupBrandMax), c.name, reason: c.key);
+    }
+  });
+
   test('a random hostile input never puts location or meal text in it', () {
     final rnd = Random(20261023);
     for (var n = 0; n < 300; n++) {
@@ -83,11 +151,15 @@ void main() {
       final item = <String, Object?>{
         'name': ['Burrito bowl', 'Latte', '珍珠奶茶', ''][rnd.nextInt(4)],
         'qty': [1, 2, 0.5, -1, '2', null][rnd.nextInt(6)],
-        'brand': ['', 'STARBUCKS'][rnd.nextInt(2)],
+        'brand': _printed[rnd.nextInt(_printed.length)],
         for (final k in _forbiddenKeys) k: '$k-$lat',
       };
       final raw = <String, Object?>{
-        'items': List.generate(rnd.nextInt(16), (_) => {...item}),
+        'items': List.generate(
+          rnd.nextInt(16),
+          (_) => {...item, 'brand': _printed[rnd.nextInt(_printed.length)]},
+        ),
+        'order_merchant': _printed[rnd.nextInt(_printed.length)],
         'chains': [
           sharedUsChains[rnd.nextInt(30)].key,
           'evil',
@@ -106,6 +178,21 @@ void main() {
       expect(text, isNot(contains(lat)));
       expect(text, isNot(contains(lon)));
       expect(text, isNot(contains('Broadway')));
+      final prompt = composeLookupPrompt(raw);
+      for (final place in _placeText) {
+        expect(text, isNot(contains(place)), reason: place);
+        expect(_dataBlock(prompt), isNot(contains(place)), reason: place);
+      }
+      for (final printed in [
+        req['order_merchant'],
+        for (final i in req['items'] as List) (i as Map)['brand'],
+      ]) {
+        expect(
+          printed == '' || _canonical.contains(printed),
+          isTrue,
+          reason: '$printed',
+        );
+      }
       for (final k in _forbiddenKeys) {
         expect(text, isNot(contains('"$k"')), reason: k);
       }

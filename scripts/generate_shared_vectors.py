@@ -848,6 +848,36 @@ def build_restaurant_lookup():
         {"name": "  spaced \t\n out  ", "qty": 1, "unit": " slice ",
          "brand": "Ben\u00a0&\u00a0Jerry’s™"},
     ], "order_merchant": "麦当劳（时代广场店）"})
+    # Printed brand and merchant text never goes out as printed: only the
+    # canonical name of the table chain it names, or "" (no store number,
+    # street or city ever reaches a provider).
+    req("merchant_with_store_and_address", {
+        "items": [{"name": "Chicken burrito bowl", "qty": 1, "unit": "bowl",
+                   "brand": "Chipotle Mexican Grill #2381 - 1540 Broadway, "
+                            "New York NY"}],
+        "order_merchant": "Chipotle Mexican Grill #2381 - 1540 Broadway, "
+                          "New York NY",
+        "chains": ["chipotle"]})
+    req("merchant_branch_in_parens", {
+        "order_merchant": "Chipotle (State St)", "chains": ["chipotle"]})
+    req("merchant_store_number_only", {
+        "order_merchant": "CHIPOTLE 2381", "chains": ["chipotle"]})
+    req("merchant_street_without_separator", {
+        "order_merchant": "McDonald's 1540 Broadway", "chains": ["mcdonalds"]})
+    req("brand_with_city", {"items": [
+        {"name": "Latte", "qty": 1, "unit": "cup",
+         "brand": "Starbucks Reserve Roastery Chicago"},
+        {"name": "Slice", "qty": 1, "unit": "slice",
+         "brand": "Joe's Pizza Brooklyn"},
+        {"name": "Cola", "qty": 1, "unit": "can", "brand": "Coca-Cola"},
+    ], "chains": ["starbucks"]})
+    req("merchant_not_a_chain", {
+        "order_merchant": "Joe's Pizza - 7 Carmine St, New York",
+        "chains": ["chipotle"]})
+    req("merchant_delivery_app", {"order_merchant": "Uber Eats"})
+    req("merchant_numbered_chain_name", {
+        "order_merchant": "Seasons 52 #12, Chicago",
+        "items": [{"name": "Burger", "brand": "Hwy 55 Burgers 1200 Main"}]})
 
     prompt("typical", typical)
     prompt("injection", {
