@@ -14,9 +14,13 @@ What this module adds is the server's own gate around that contract:
 
   * sanitize_request refuses anything that is not a lookup request this
     server will run (a field whitelist, forbidden location and free-text
-    keys, caps with an oversize refusal, coordinate-shaped text in any
-    field after full NFKC, chain keys that are not in the table, a lookup
-    with neither a table chain nor a printed brand), then has
+    keys, caps with an oversize refusal, chain keys that are not in the
+    table, a lookup with neither a table chain nor a printed brand, and
+    coordinate-shaped numbers in any text field or split across fields:
+    a decimal with 4+ fractional digits, two decimals with 2+ fractional
+    digits side by side, degree-minute or hemisphere notation, a geo: URI
+    or a plus code, read under full NFKC with any Unicode digit as its
+    ASCII digit), then has
     restaurant_lookup.compose_lookup_request build the request from the
     caller's whitelisted fields and refuses the result unless it still
     matches what the gate accepted. A caller never supplies prompt text.
@@ -37,10 +41,12 @@ canonical name or "", never the printed text), up to 3 chains from our
 own table (their canonical names are taken from the table, never from
 the caller; the chains the brands and the merchant name always among
 them, first, so a brand-only request names its chain), the country code
-and the reply language. No coordinates,
-street, city, distance, timestamps, meal_description, dietary profile,
-history or image: those keys are refused outright, and coordinate-shaped
-text inside any field is too.
+and the reply language. No coordinates, street, city, distance,
+timestamps, meal_description, dietary profile, history or image: those
+keys are refused outright, and so is a text field holding a coordinate-
+shaped number. That check is a backstop for number shapes only: a street
+or city written out in words inside an item name is ordinary text to it
+(the app's composer never puts one there).
 """
 
 import hashlib
@@ -86,10 +92,9 @@ FORBIDDEN_KEYS = frozenset({
 _ZH_LANG_RE = re.compile(r"^[Zz][Hh](?:[-_][A-Za-z0-9]{1,8})*$")
 _LANG_CAP = 35
 _COUNTRY_RE = re.compile(r"^[A-Za-z]{2}$")
-# Two decimal numbers with 3+ fractional digits side by side: the shape of
-# a latitude/longitude pair. No dish, unit or brand looks like this.
-_COORD_RE = re.compile(
-    r"[-+]?\d{1,3}\.\d{3,}\s*[,;/ ]\s*[-+]?\d{1,3}\.\d{3,}")
+# Text checked for coordinate shapes is read whole (no cap), with every
+# Unicode decimal digit as its ASCII digit: lane B's patterns are ASCII.
+_HUGE = 10 ** 6
 _WS_RE = re.compile(r"\s+")
 _TOKEN_RE = re.compile(r"<<[A-Z_]+>>")
 
@@ -118,7 +123,26 @@ def clean_text(value, cap: int) -> str:
     return text[:cap]
 
 
+def _ascii_digits(text: str) -> str:
+    return "".join(str(unicodedata.decimal(ch)) if ch.isdecimal() else ch
+                   for ch in text)
+
+
+def coordinate_shaped(text: str) -> bool:
+    """Lane B's coordinate_shaped (restaurant_lookup), on text whose
+    Unicode decimal digits are read as ASCII digits: a decimal with 4+
+    fractional digits, two decimals with 2+ fractional digits side by
+    side, degree-minute or hemisphere notation, a geo: URI or a plus code.
+    A street or city written out in words is not a number shape."""
+    return restaurant_lookup.coordinate_shaped(_ascii_digits(text))
+
+
 def _text_field(raw, cap: int, field: str) -> str:
+    """A text field as the gate keeps it (clean_text at the cap), refused
+    when it is not a string, is far over its cap, or holds coordinate-
+    shaped text anywhere: in the kept text, in the whole field under full
+    NFKC, or in the whole field under lane B's lighter cleaner (which keeps
+    the "º" that NFKC turns into an "o")."""
     if raw is None:
         return ""
     if not isinstance(raw, str):
@@ -126,9 +150,25 @@ def _text_field(raw, cap: int, field: str) -> str:
     if len(raw) > cap * _OVERSIZE_FACTOR:
         raise RequestRejected("bad_request", field)
     text = clean_text(raw, cap)
-    if _COORD_RE.search(text):
+    if (coordinate_shaped(text) or coordinate_shaped(clean_text(raw, _HUGE))
+            or coordinate_shaped(
+                restaurant_lookup.clean_short_text(raw, _HUGE))):
         raise RequestRejected("bad_request", field)
     return text
+
+
+def _split_coordinates(items: List[Dict]) -> bool:
+    """A coordinate split across fields: the items' names and units read
+    as one line (name, unit, next name, ...), the names alone and the
+    units alone. Brand and merchant are canonical table names and carry
+    none."""
+    def line(texts):
+        return " ".join(t for t in texts if isinstance(t, str) and t)
+
+    return any(coordinate_shaped(text) for text in (
+        line(t for item in items for t in (item["name"], item["unit"])),
+        line(item["name"] for item in items),
+        line(item["unit"] for item in items)))
 
 
 def _qty(raw, field: str):
@@ -192,6 +232,9 @@ def sanitize_request(payload) -> Dict:
 
     merchant = _text_field(payload.get("order_merchant"), MERCHANT_CAP,
                            "order_merchant")
+    if _split_coordinates(items):
+        # A latitude in one item and its longitude in the next.
+        raise RequestRejected("bad_request", "items")
 
     raw_chains = payload.get("chains")
     if raw_chains is None:
@@ -278,13 +321,15 @@ def _compose(payload: Dict, gated: Dict) -> Dict:
         texts = [composed["order_merchant"]]
         for item in items:
             texts += [item["name"], item["unit"], item["brand"]]
-        ok = (len(items) == len(gated["items"])
+        ok = (all(isinstance(t, str) for t in texts)
+              and not _split_coordinates(items)
+              and len(items) == len(gated["items"])
               and bool(chains)
               and [c["key"] for c in chains]
               == _expected_chain_keys(composed, gated["chains"])
               and all(c["name"] == restaurant_lookup.chain_by_key(
                   c["key"])["name"] for c in chains)
-              and all(isinstance(t, str) and not _COORD_RE.search(t)
+              and all(not coordinate_shaped(t)
                       and "<" not in t and ">" not in t for t in texts)
               and any(item["name"] for item in items)
               and composed.get("country") == gated["country"]

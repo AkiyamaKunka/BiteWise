@@ -404,8 +404,11 @@ a network tool, so it is fenced separately from the photo and text paths:
   with the prompt on the server by `restaurant_lookup.py`, the Python twin
   of the app's composer (the shared parity vectors pin the two byte for
   byte); location keys (`lat`, `lon`, `city`, `street`, `distance`, …),
-  `prompt`, `meal_description` and coordinate-shaped text are refused
-  with `400`.
+  `prompt`, `meal_description` and coordinate-shaped numbers in any text
+  field or split across items (decimal degrees, degree-minute notation,
+  a `geo:` URI, a plus code) are refused with `400`. That check is a
+  backstop for number shapes: a street or city written out in words is
+  not caught by it (the app never puts one in a request).
 - **The CLI run** (`claude_analyzer.lookup_restaurant`): `--safe-mode`,
   `--tools WebSearch` (the `--json-schema` answer adds the internal
   `StructuredOutput`), WebFetch / MCP / every other tool disallowed,

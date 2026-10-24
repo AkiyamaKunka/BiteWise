@@ -215,9 +215,15 @@ LookupRequest _randomRequest(Random r) => LookupRequest.compose({
       'items': [
         for (var i = 0; i < 1 + r.nextInt(15); i++)
           {
-            'name': _rand(r, 120),
+            // The fix also rides inside item text, where only the
+            // composer's coordinate backstop can stop it.
+            'name': switch (r.nextInt(4)) {
+              0 => '${_rand(r, 60)} $_lat, $_lon',
+              1 => '$_lat $_city',
+              _ => _rand(r, 120),
+            },
             'qty': r.nextInt(30) - 3,
-            'unit': _rand(r, 30),
+            'unit': r.nextInt(4) == 0 ? _lon : _rand(r, 30),
             'brand': _brand(r),
             'lat': _lat,
             'captured_at': _when,

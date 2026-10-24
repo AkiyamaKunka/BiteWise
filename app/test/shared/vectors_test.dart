@@ -251,6 +251,9 @@ void main() {
                 reason: '[$id]');
           case 'chain_tokens':
             expect(chainTokens(input), c['expected'], reason: '[$id]');
+          case 'coordinate_shaped':
+            expect(coordinateShaped(input as String), c['expected'],
+                reason: '[$id]');
           default:
             fail('[$id] unknown fn ${c['fn']}');
         }

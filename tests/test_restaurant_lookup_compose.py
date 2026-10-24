@@ -60,6 +60,8 @@ def test_vectors_replay(case):
         assert rl.match_chain(raw, case.get("url_host")) == case["expected"]
     elif case["fn"] == "chain_tokens":
         assert rl.chain_tokens(raw) == case["expected"]
+    elif case["fn"] == "coordinate_shaped":
+        assert rl.coordinate_shaped(raw) is case["expected"]
     else:
         pytest.fail(f"unknown fn {case['fn']!r}")
 
@@ -211,9 +213,13 @@ FORBIDDEN_KEYS = ("lat", "lon", "latitude", "longitude", "coordinates",
 def _hostile_raw(rnd):
     lat = round(rnd.uniform(-89, 89), 6)
     lon = round(rnd.uniform(-179, 179), 6)
-    item = {"name": rnd.choice(["Burrito bowl", "Latte", "珍珠奶茶", ""]),
+    # The fix also rides inside item text, where only the coordinate
+    # backstop can stop it.
+    item = {"name": rnd.choice(["Burrito bowl", "Latte", "珍珠奶茶", "",
+                                f"Bowl {lat:.5f}, {lon:.5f}",
+                                f"Latte at {lat:.5f}"]),
             "qty": rnd.choice([1, 2, 0.5, -1, "2", None]),
-            "unit": rnd.choice(["", "cup", "slice"]),
+            "unit": rnd.choice(["", "cup", "slice", f"{lon:.5f}"]),
             "brand": rnd.choice(PRINTED),
             "calories": rnd.randint(100, 2000)}
     for k in FORBIDDEN_KEYS:
@@ -241,6 +247,7 @@ def test_property_no_location_or_meal_text_ever_reaches_the_request():
         for item in req["items"]:
             assert set(item) == ITEM_KEYS
         assert str(lat) not in text and str(lon) not in text
+        assert f"{lat:.5f}" not in text and f"{lon:.5f}" not in text
         assert "1540 Broadway" not in text
         block = _data_block(rl.compose_lookup_prompt(raw))
         for place in PLACE_TEXT:
@@ -252,6 +259,19 @@ def test_property_no_location_or_meal_text_ever_reaches_the_request():
             assert f'"{k}"' not in text, k
         assert len(req["chains"]) <= rl.LOOKUP_MAX_CHAINS
         assert len(req["items"]) <= rl.LOOKUP_MAX_ITEMS
+
+
+@pytest.mark.parametrize("field,text", [
+    ("name", "Burrito 43.07305, -89.40123"), ("name", "43.07, -89.40"),
+    ("name", "x" * 74 + " 43.07305"), ("unit", "43°04'23\"N"),
+    ("unit", "86JQ3H2V+G4"), ("name", "geo:43.07,-89.40")])
+def test_a_coordinate_shaped_name_or_unit_is_sent_empty(field, text):
+    item = {"name": "Bowl", "unit": "bowl", "brand": "Chipotle", field: text}
+    req = rl.compose_lookup_request({"items": [{"name": "Chips"}, item]})
+    assert req["items"][1][field] == ""
+    assert req["items"][1]["brand"] == "Chipotle"
+    assert req["items"][0]["name"] == "Chips"
+    assert rl.compose_lookup_request(req) == req
 
 
 def test_property_composing_is_idempotent():

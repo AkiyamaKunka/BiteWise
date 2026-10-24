@@ -158,13 +158,65 @@ def test_a_lookup_needs_a_chain_or_a_printed_brand():
     assert sanitize_request(dict(payload, order_merchant="Panda Express"))
 
 
-@pytest.mark.parametrize("text", [
+COORDINATE_TEXTS = [
     "Bowl near 43.0731,-89.4012", "bowl 43.07312 / -89.40123",
-    "40.712776 -74.005974 tacos"])
+    "40.712776 -74.005974 tacos",
+    # The final review's probe: every one of these used to pass.
+    "43.07305:-89.40123", "43.07305|-89.40123", "43.07305-89.40123",
+    "43.07305x-89.40123", "43.07, -89.40", "43°04'23\"N 89°24'04\"W",
+    "43,07305 -89,40123", "86JQ3H2V+G4", "43.07305",
+    # The masculine ordinal NFKC turns into "o", Unicode digits, a digit
+    # split by an invisible character, a geo: URI.
+    "43º04'23\"", "\u0664\u0663.\u0660\u0667\u0663\u0660\u0665",
+    "43.0\u200b7305", "geo:43.07,-89.40",
+]
+
+
+@pytest.mark.parametrize("text", COORDINATE_TEXTS)
 def test_coordinate_shaped_text_is_refused_in_any_field(text):
-    assert rejected(body(items=[{"name": text, "brand": "X"}])).code == \
-        "bad_request"
+    err = rejected(body(items=[{"name": text, "brand": "X"}]))
+    assert (err.code, err.field) == ("bad_request", "items[0].name")
+    err = rejected(body(items=[{"name": "Bowl", "unit": text[:20]}]))
+    assert err.field == "items[0].unit"
     assert rejected(body(order_merchant=text)).field == "order_merchant"
+
+
+def test_a_coordinate_split_across_items_is_refused():
+    err = rejected(body(items=[{"name": "43.07", "brand": "Chipotle"},
+                               {"name": "-89.40"}]))
+    assert (err.code, err.field) == ("bad_request", "items")
+    err = rejected(body(items=[{"name": "Bowl", "unit": "43.07"},
+                               {"name": "-89.40 chips"}]))
+    assert err.field == "items"
+    err = rejected(body(items=[{"name": "Bowl", "unit": "43.07"},
+                               {"name": "Chips", "unit": "-89.40"}]))
+    assert err.field == "items"
+    err = rejected(body(items=[{"name": "Bowl 43.07", "unit": "-89.40"}]))
+    assert err.field == "items"
+
+
+@pytest.mark.parametrize("text", [
+    "Chicken burrito bowl (~500 g)", "Fries 2.50", "Bowl 2.5 lb, 0.75 lb",
+    "10,000 steps", "Iced coffee 350°F", "Combo+Fries"])
+def test_ordinary_numbers_are_not_coordinates(text):
+    assert sanitize_request(body(items=[{"name": text, "brand": "Chipotle"}]))
+
+
+def test_a_chain_with_a_degree_sign_is_no_coordinate():
+    req = sanitize_request(body(items=[
+        {"name": "Sea salt coffee", "brand": "85°C Bakery Cafe"}], chains=[]))
+    assert req["items"][0]["brand"] == "85°C Bakery Cafe"
+    assert [c["key"] for c in req["chains"]] == ["eighty_five_c"]
+
+
+def test_words_for_a_place_are_not_caught():
+    """The backstop is for number shapes. A street or a city written out
+    in an item name is ordinary text to it (the module docstring says
+    so); the app's composer never puts one there."""
+    req = sanitize_request(body(items=[
+        {"name": "burrito 702 State Street Madison WI",
+         "brand": "Chipotle"}]))
+    assert req["items"][0]["name"] == "burrito 702 State Street Madison WI"
 
 
 def test_text_is_nfkc_normalized_stripped_and_capped():

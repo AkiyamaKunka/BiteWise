@@ -895,6 +895,53 @@ def build_restaurant_lookup():
         "items": [{"name": "Whopper", "brand": ""}],
         "order_merchant": "Wendy's #4411",
         "chains": ["burger_king", "wendys", "mcdonalds"]})
+    # A coordinate-shaped name or unit goes out as "", in its slot; one the
+    # cap would cut in half is caught whole.
+    req("coordinate_shaped_names_and_units", {
+        "items": [
+            {"name": "Burrito 43.07305, -89.40123", "unit": "bowl",
+             "brand": "Chipotle"},
+            {"name": "Chips", "unit": "43°04'23\"N"},
+            {"name": "x" * 74 + " 43.07305", "unit": "bag"},
+            {"name": "Latte", "unit": "86JQ3H2V+G4"},
+            {"name": "Bowl 2.5 lb, 0.75 lb", "unit": "1,000 g"},
+            {"name": "Iced coffee", "brand": "85°C Bakery Cafe"},
+        ],
+        "chains": ["chipotle"]})
+
+    def shaped(case_id, text):
+        cases.append({"id": f"coord_{case_id}", "fn": "coordinate_shaped",
+                      "input": text,
+                      "expected": rl.coordinate_shaped(text)})
+
+    for cid, text in (
+            ("colon_pair", "43.07305:-89.40123"),
+            ("pipe_pair", "43.07305|-89.40123"),
+            ("dash_pair", "43.07305-89.40123"),
+            ("x_pair", "43.07305x-89.40123"),
+            ("two_decimals_each", "43.07, -89.40"),
+            ("comma_decimals", "43,07305 -89,40123"),
+            ("lone_latitude", "43.07305"),
+            ("dms", "43°04'23\"N 89°24'04\"W"),
+            ("masculine_ordinal_dms", "43º04'23\""),
+            ("degrees_then_hemisphere", "40° N"),
+            ("hemisphere_then_degrees", "N 43° 04.383"),
+            ("geo_uri", "geo:43.07,-89.40"),
+            ("plus_code", "86JQ3H2V+G4"),
+            ("short_plus_code", "3H2V+G4 Madison"),
+            ("prices", "12.99/14.99"),
+            ("temperature_c", "85°C Bakery Cafe"),
+            ("temperature_f", "350°F"),
+            ("degrees_then_word", "400° shortly"),
+            ("assumed_weight", "Chicken burrito bowl (~500 g)"),
+            ("one_decimal", "Fries 2.50"),
+            ("two_weights_apart", "Bowl 2.5 lb, 0.75 lb"),
+            ("thousands", "10,000 steps 1,000 kcal"),
+            ("combo_plus", "Combo+Fries"),
+            ("numbered_chain", "Hwy 55 Burgers Shakes & Fries"),
+            ("arabic_indic_digits", "٤٣.٠٧٣٠٥"),
+            ("empty", "")):
+        shaped(cid, text)
 
     prompt("typical", typical)
     prompt("injection", {

@@ -9,7 +9,8 @@ between the owner's server and the app:
     OUR table by key (the chains the brands and the merchant name always
     among them, first), the country and the reply language. Nothing else
     survives: no coordinates, street, distance, city, timestamps,
-    meal_description, calories or any other key. Printed brand and merchant
+    meal_description, calories or any other key; an item name or unit
+    shaped like a coordinate is sent as "". Printed brand and merchant
     text never goes out as printed (a receipt prints store numbers, streets
     and cities next to the merchant): only the canonical name of the table
     chain it names, or "" (chain_name_only).
@@ -121,6 +122,60 @@ def clean_short_text(value, max_chars):
     return s[:max_chars].rstrip(" ")
 
 
+# ---------------------------------------------------------------------------
+# Coordinate-shaped text (a backstop: nothing in the app writes a location
+# into an item's name or unit, but a request must never carry one)
+# ---------------------------------------------------------------------------
+
+_DEG = "[\u00b0\u00ba\u02da]"  # degree sign, masculine ordinal, ring above
+_DEG_NUM = "[0-9]{1,3}(?:[.,][0-9]+)?"
+_PLUS_CODE = "[2-9CFGHJMPQRVWXcfghjmpqrvwx]"
+_COORD_PATTERNS = tuple(re.compile(p) for p in (
+    # A decimal with 4+ fractional digits: one latitude or longitude to
+    # about 10 m, even alone or split from its pair.
+    "[0-9][.,][0-9]{4}",
+    # Two decimals with 2+ fractional digits at most 3 non-digits apart,
+    # whatever the separator and with a sign after it: a pair to ~1 km.
+    "[0-9]{1,3}[.,][0-9]{2,}[^0-9]{0,3}[-+]?[0-9]{1,3}[.,][0-9]{2,}",
+    # Degrees followed by minutes, or next to a hemisphere letter
+    # (43°04'23"N, 40° N, N 43° 04.383); 85°C and 350°F are not.
+    _DEG_NUM + " ?" + _DEG + " ?[0-9]",
+    _DEG_NUM + " ?" + _DEG + " ?[NSEWnsew](?![A-Za-z])",
+    "(?<![A-Za-z])[NSEWnsew] ?" + _DEG_NUM + " ?" + _DEG,
+    # A geo: URI.
+    "[Gg][Ee][Oo]: ?[-+]?[0-9]",
+    # An Open Location Code (plus code): 86JQ3H2V+G4, 3H2V+G4.
+    "(?<![0-9A-Za-z])" + _PLUS_CODE + "{4,8}\\+" + _PLUS_CODE
+    + "{2,3}(?![0-9A-Za-z])",
+))
+# How far past a field's cap the composer still looks, so a coordinate the
+# cap would cut in half is caught whole (every pattern's shortest match is
+# shorter than this).
+_COORD_LOOKAHEAD = 40
+
+
+def coordinate_shaped(text):
+    """True when text holds a number shape that reads as a location: a
+    decimal with 4+ fractional digits, two decimals with 2+ fractional
+    digits side by side, degree-minute or hemisphere notation, a geo: URI
+    or a plus code. ASCII digits only, on cleaned text (the gate also runs
+    it on full-NFKC text). A street or a city written out in words is not
+    a number shape, and nothing here can catch it. Twin of the Dart
+    coordinateShaped."""
+    return isinstance(text, str) and any(
+        p.search(text) for p in _COORD_PATTERNS)
+
+
+def _location_free_text(value, max_chars):
+    """clean_short_text, or "" when the text is coordinate-shaped, within
+    the cap or just past it."""
+    text = clean_short_text(value, max_chars)
+    if coordinate_shaped(text) or coordinate_shaped(
+            clean_short_text(value, max_chars + _COORD_LOOKAHEAD)):
+        return ""
+    return text
+
+
 def coerce_qty(value):
     """core/coerce.dart coerceQty: a finite number in (0, 20], else 1.
     Bools and numeric strings are not counts."""
@@ -205,12 +260,13 @@ def chain_name_only(value, max_chars):
 
 def compose_lookup_item(item):
     """One request item: name, count, unit and the chain its printed brand
-    names (Dart composeLookupItem)."""
+    names (Dart composeLookupItem). A coordinate-shaped name or unit is
+    sent as "" (the item keeps its slot)."""
     m = item if isinstance(item, dict) else {}
     return {
-        "name": clean_short_text(m.get("name"), LOOKUP_ITEM_NAME_MAX),
+        "name": _location_free_text(m.get("name"), LOOKUP_ITEM_NAME_MAX),
         "qty": _request_qty(m.get("qty")),
-        "unit": clean_short_text(m.get("unit"), LOOKUP_UNIT_MAX),
+        "unit": _location_free_text(m.get("unit"), LOOKUP_UNIT_MAX),
         "brand": chain_name_only(m.get("brand"), LOOKUP_BRAND_MAX),
     }
 

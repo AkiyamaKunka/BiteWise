@@ -15,7 +15,8 @@
 /// no_match.
 ///
 /// What can never be in it: coordinates, street, distance, city, timestamps,
-/// meal_description, calories, the dietary profile, history or the image.
+/// meal_description, calories, the dietary profile, history or the image
+/// (an item name or unit shaped like a coordinate is sent as "").
 /// The composer reads only the keys above from its raw input and ignores
 /// everything else, so a caller cannot widen the request by accident.
 ///
@@ -68,6 +69,56 @@ String _country(dynamic value) => value is String && _countryRe.hasMatch(value)
 String? _lang(dynamic value) =>
     value is String && _langZhRe.hasMatch(value) ? 'zh' : null;
 
+// ─── Coordinate-shaped text ──────────────────────────────────────────
+// A backstop: nothing in the app writes a location into an item's name or
+// unit, but a request must never carry one. Twin of the Python composer's
+// coordinate_shaped (the parity vectors pin both).
+
+const String _deg = '[\u00b0\u00ba\u02da]'; // °, º, ˚
+const String _degNum = '[0-9]{1,3}(?:[.,][0-9]+)?';
+const String _plusCode = '[2-9CFGHJMPQRVWXcfghjmpqrvwx]';
+final List<RegExp> _coordPatterns = [
+  // A decimal with 4+ fractional digits: one latitude or longitude to
+  // about 10 m, even alone or split from its pair.
+  RegExp(r'[0-9][.,][0-9]{4}'),
+  // Two decimals with 2+ fractional digits at most 3 non-digits apart,
+  // whatever the separator and with a sign after it: a pair to ~1 km.
+  RegExp(r'[0-9]{1,3}[.,][0-9]{2,}[^0-9]{0,3}[-+]?[0-9]{1,3}[.,][0-9]{2,}'),
+  // Degrees followed by minutes, or next to a hemisphere letter
+  // (43°04'23"N, 40° N, N 43° 04.383); 85°C and 350°F are not.
+  RegExp('$_degNum ?$_deg ?[0-9]'),
+  RegExp('$_degNum ?$_deg ?[NSEWnsew](?![A-Za-z])'),
+  RegExp('(?<![A-Za-z])[NSEWnsew] ?$_degNum ?$_deg'),
+  // A geo: URI.
+  RegExp(r'[Gg][Ee][Oo]: ?[-+]?[0-9]'),
+  // An Open Location Code (plus code): 86JQ3H2V+G4, 3H2V+G4.
+  RegExp('(?<![0-9A-Za-z])$_plusCode{4,8}\\+$_plusCode{2,3}(?![0-9A-Za-z])'),
+];
+
+/// How far past a field's cap the composer still looks, so a coordinate the
+/// cap would cut in half is caught whole.
+const int _coordLookahead = 40;
+
+/// True when [text] holds a number shape that reads as a location: a
+/// decimal with 4+ fractional digits, two decimals with 2+ fractional
+/// digits side by side, degree-minute or hemisphere notation, a geo: URI or
+/// a plus code. ASCII digits only, on cleaned text. A street or a city
+/// written out in words is not a number shape, and nothing here can catch
+/// it.
+bool coordinateShaped(String text) =>
+    _coordPatterns.any((p) => p.hasMatch(text));
+
+/// [cleanShortText], or "" when the text is coordinate-shaped, within the
+/// cap or just past it.
+String _locationFreeText(dynamic value, int maxChars) {
+  final text = cleanShortText(value, maxChars);
+  if (coordinateShaped(text) ||
+      coordinateShaped(cleanShortText(value, maxChars + _coordLookahead))) {
+    return '';
+  }
+  return text;
+}
+
 /// Where a printed name's suffix starts (chain_match.dart's cuts), and a
 /// standalone number (a store or street number: "CHIPOTLE 2381").
 const List<String> _headCuts = [
@@ -114,14 +165,15 @@ String chainNameOnly(dynamic value, int maxChars) {
 }
 
 /// One request item: name, count, unit and the chain its printed brand
-/// names. [decideAssist] composes the meal's CURRENT items the same way to
-/// notice an item that changed after the request was sent.
+/// names. A coordinate-shaped name or unit is sent as "" (the item keeps
+/// its slot). [decideAssist] composes the meal's CURRENT items the same way
+/// to notice an item that changed after the request was sent.
 Map<String, Object?> composeLookupItem(dynamic item) {
   final m = item is Map ? item : const {};
   return {
-    'name': cleanShortText(m['name'], kLookupItemNameMax),
+    'name': _locationFreeText(m['name'], kLookupItemNameMax),
     'qty': _requestQty(m['qty']),
-    'unit': cleanShortText(m['unit'], kLookupUnitMax),
+    'unit': _locationFreeText(m['unit'], kLookupUnitMax),
     'brand': chainNameOnly(m['brand'], kLookupBrandMax),
   };
 }
