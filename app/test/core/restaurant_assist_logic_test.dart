@@ -11,6 +11,7 @@ import 'dart:math';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/leftover_logic.dart';
 import 'package:calorie_tracker/core/restaurant_assist_logic.dart';
+import 'package:calorie_tracker/core/restaurant_lookup_contract.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // ─── Fixtures ──────────────────────────────────────────────────────────
@@ -190,11 +191,13 @@ AssistContext ctxOf({
   bool dense = false,
   List<AssistRecentApply> recent = const [],
   AssistTrigger trigger = AssistTrigger.autoLowConfidence,
+  List<Object?> items = const [],
 }) => AssistContext(
   now: at ?? now,
   trigger: trigger,
   country: country,
   requestChainKeys: request,
+  requestItems: items,
   locationChainKeys: location,
   placeChainKey: place,
   confirmedChainKeys: confirmed,
@@ -204,17 +207,44 @@ AssistContext ctxOf({
   recentApplies: recent,
 );
 
+/// The items a lookup request for [analysis] names, as composed.
+List<Object?> requestItemsOf(Map<String, dynamic> analysis) =>
+    LookupRequest.compose({'items': analysis['food_items']}).body['items']
+        as List<Object?>;
+
+/// [c] with the request items a lookup for [m] would have sent (the
+/// caller's LookupRequest), unless it already carries some.
+AssistContext forMeal(AssistContext c, Meal m) => c.requestItems.isNotEmpty
+    ? c
+    : AssistContext(
+        now: c.now,
+        trigger: c.trigger,
+        country: c.country,
+        requestChainKeys: c.requestChainKeys,
+        requestItems: requestItemsOf(m.analysis),
+        locationChainKeys: c.locationChainKeys,
+        placeChainKey: c.placeChainKey,
+        confirmedChainKeys: c.confirmedChainKeys,
+        blockedChainKeys: c.blockedChainKeys,
+        placeVerified: c.placeVerified,
+        dense: c.dense,
+        recentApplies: c.recentApplies,
+      );
+
 AssistDecision decide({
   Map<String, dynamic>? a,
   Meal? meal,
   Map<String, dynamic>? r,
   AssistLookup? lookup,
   AssistContext? ctx,
-}) => decideAssist(
-  meal ?? mealOf(a ?? analysis()),
-  lookup ?? lookupOf(r ?? result()),
-  ctx ?? ctxOf(),
-);
+}) {
+  final m = meal ?? mealOf(a ?? analysis());
+  return decideAssist(
+    m,
+    lookup ?? lookupOf(r ?? result()),
+    forMeal(ctx ?? ctxOf(), m),
+  );
+}
 
 /// A home bowl that the photo model thought was restaurant food, eaten in
 /// an apartment above a Chipotle (critique 2): 1,045 / 640 = 1.63 sits
@@ -267,10 +297,16 @@ Map<String, dynamic> bowlAt(int kcal, {num p = 50, num c = 100, num f = 40}) =>
 Map<String, dynamic> thousandKcalBowl() =>
     analysis(items: [food(kcal: 1000, p: 50, c: 100, f: 40)]);
 
-// Panda Express, Pizza Hut and Yard House fixtures.
+// Panda Express, Pizza Hut, Yard House, Starbucks, McDonald's and Qdoba
+// fixtures.
 const String pandaUrl = 'https://www.pandaexpress.com/nutrition';
 const String pizzaUrl = 'https://www.pizzahut.com/nutrition';
 const String yardUrl = 'https://www.yardhouse.com/menu/beer';
+const String starbucksUrl =
+    'https://www.starbucks.com/menu/product/mocha-frappuccino';
+const String mcdUrl =
+    'https://www.mcdonalds.com/us/en-us/product/world-famous-fries.html';
+const String qdobaUrl = 'https://www.qdoba.com/nutrition';
 
 typedef Row = ({
   String name,
@@ -395,6 +431,77 @@ void main() {
         ),
         outcome: AssistOutcome.suggest,
         reason: AssistReason.orderMerchantOnly,
+      ),
+      // Another chain's printed brand beats a location match.
+      (
+        name:
+            'a bowl printed Chipotle at a confirmed Qdoba spot, lookup '
+            'chose Qdoba → suggest (brand_conflict)',
+        run: () => decide(
+          lookup: lookupOf(qdobaResult(), cited: const [qdobaUrl]),
+          ctx: atQdoba(),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.brandConflict,
+      ),
+      (
+        name:
+            'an unbranded bowl at a confirmed Qdoba spot next to chips '
+            'printed Chipotle → suggest (the spot is contradicted)',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(brand: ''),
+              food(
+                name: 'Chips (~100 g)',
+                kcal: 540,
+                p: 7,
+                c: 70,
+                f: 26,
+                brand: 'Chipotle',
+                unit: 'bag',
+              ),
+            ],
+          ),
+          lookup: lookupOf(qdobaResult(), cited: const [qdobaUrl]),
+          ctx: atQdoba(),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.brandConflict,
+      ),
+      (
+        name: 'the same unbranded bowl alone at that spot → apply',
+        run: () => decide(
+          a: analysis(items: [food(brand: '')]),
+          lookup: lookupOf(qdobaResult(), cited: const [qdobaUrl]),
+          ctx: atQdoba(),
+        ),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
+      ),
+      (
+        name:
+            'a Starbucks cup next to an unbranded bowl at a confirmed '
+            'Chipotle → the bowl is only suggested',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(brand: ''),
+              food(
+                name: 'Iced coffee (~16 oz)',
+                kcal: 120,
+                p: 1,
+                c: 20,
+                f: 4,
+                brand: 'Starbucks',
+                unit: 'cup',
+              ),
+            ],
+          ),
+          ctx: atChipotle(confirmed: {'chipotle'}),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.brandConflict,
       ),
       // Item mapping.
       (
@@ -599,6 +706,121 @@ void main() {
         outcome: AssistOutcome.suggest,
         reason: AssistReason.unitMismatch,
       ),
+      // Sizes: grounding cannot tell sizes apart (every size's number is
+      // on the same page), so the size must be unambiguous.
+      (
+        name:
+            'fries with no size word, three sizes inside the band '
+            '→ suggest (size_ambiguous)',
+        run: () => decideFries(fries()),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.sizeAmbiguous,
+      ),
+      (
+        name: "'Large french fries' → apply the named Large, not the nearest",
+        run: () => decideFries(fries(name: 'Large french fries (~150 g)')),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
+      ),
+      (
+        name:
+            "'Small fries' whose kcal sits near Large → suggest (the item "
+            'names another size)',
+        run: () => decideFries(fries(name: 'Small fries', kcal: 600)),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.sizeAmbiguous,
+      ),
+      (
+        name:
+            "'Chicken McNuggets (~8 pieces)' against 4/6/10/20 piece "
+            '→ suggest, never the 10 piece',
+        run: () => decide(
+          a: nuggets('Chicken McNuggets (~8 pieces)'),
+          lookup: lookupOf(nuggetsResult(), cited: const [mcdUrl]),
+          ctx: ctxOf(request: const ['mcdonalds']),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.sizeAmbiguous,
+      ),
+      (
+        name: "'Chicken McNuggets, 10 pc' → apply the named 10 piece",
+        run: () => decide(
+          a: nuggets('Chicken McNuggets, 10 pc'),
+          lookup: lookupOf(nuggetsResult(), cited: const [mcdUrl]),
+          ctx: ctxOf(request: const ['mcdonalds']),
+        ),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
+      ),
+      (
+        name: 'a venti latte named in the item → apply the Venti',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(
+                name: 'Iced caffe latte, venti (~24 oz)',
+                kcal: 230,
+                p: 12,
+                c: 18,
+                f: 9,
+                brand: 'Starbucks',
+                unit: 'cup',
+              ),
+            ],
+          ),
+          lookup: lookupOf(icedLatteResult(), cited: const [starbucksUrl]),
+          ctx: ctxOf(request: const ['starbucks']),
+        ),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
+      ),
+      (
+        name: 'the same latte with no size word → suggest',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(
+                name: 'Iced caffe latte (~24 oz)',
+                kcal: 230,
+                p: 12,
+                c: 18,
+                f: 9,
+                brand: 'Starbucks',
+                unit: 'cup',
+              ),
+            ],
+          ),
+          lookup: lookupOf(icedLatteResult(), cited: const [starbucksUrl]),
+          ctx: ctxOf(request: const ['starbucks']),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.sizeAmbiguous,
+      ),
+      (
+        name:
+            'a medium pizza slice against a large-pizza menu item '
+            '→ suggest',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(
+                name: 'Medium pepperoni pizza slice (~110 g)',
+                kcal: 620,
+                p: 26,
+                c: 66,
+                f: 26,
+                brand: 'Pizza Hut',
+                qty: 2,
+                unit: 'slices',
+              ),
+            ],
+          ),
+          lookup: lookupOf(pizzaResult(), cited: const [pizzaUrl]),
+          ctx: ctxOf(request: const ['pizza_hut']),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.sizeAmbiguous,
+      ),
       // Drinks.
       (
         name: 'a drink without its own brand → suggest',
@@ -773,6 +995,25 @@ void main() {
         },
         outcome: AssistOutcome.suggest,
         reason: AssistReason.sourceNotOfficial,
+      ),
+      for (final url in [
+        'https://www.mcdonalds.com/gb/en-gb/product/world-famous-fries.html',
+        'https://www.mcdonalds.com/ca/fr-ca/produit/frites.html',
+        'https://www.mcdonalds.com/ca/en-ca/product/fries.html',
+        'https://www.mcdonalds.com/en-GB/fries',
+        'https://ca.mcdonalds.com/fries',
+      ])
+        (
+          name: 'another country\'s page on the chain domain ($url) → suggest',
+          run: () => decideFries(fries(name: 'Large fries'), url: url),
+          outcome: AssistOutcome.suggest,
+          reason: AssistReason.sourceForeign,
+        ),
+      (
+        name: 'the US page on the same domain → apply',
+        run: () => decideFries(fries(name: 'Large fries')),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
       ),
       (
         name: 'a host that only contains the domain → suggest',
@@ -992,14 +1233,16 @@ void main() {
         reason: AssistReason.mealCorrected,
       ),
       (
-        name: 'a meal with a leftover deduction → suggest',
+        name:
+            'a meal with a leftover deduction → context only (published '
+            'numbers are a whole serving; no one-tap suggestion)',
         run: () => decide(
           a: {
             ...analysis(),
             'leftover': {'applied_total': 900},
           },
         ),
-        outcome: AssistOutcome.suggest,
+        outcome: AssistOutcome.contextOnly,
         reason: AssistReason.hasLeftover,
       ),
       (
@@ -1008,6 +1251,105 @@ void main() {
         outcome: AssistOutcome.suggest,
         reason: AssistReason.contextPackaged,
       ),
+      // Retail chain-branded products: only restaurant or takeout food
+      // applies, and unknown never applies anything.
+      for (final context in ['home', 'unknown', 'outdoors', null])
+        (
+          name: 'restaurant_context $context with the brand printed → suggest',
+          run: () => decide(
+            a: {
+              ...(analysis()..remove('restaurant_context')),
+              'restaurant_context': ?context,
+            },
+          ),
+          outcome: AssistOutcome.suggest,
+          reason: AssistReason.contextNotRestaurant,
+        ),
+      (
+        name:
+            'a bottled Starbucks Frappuccino at home: the café Tall is not '
+            'the bottle → suggest',
+        run: () => decide(
+          a: bottledFrappuccino(context: 'home'),
+          lookup: lookupOf(frappuccinoResult(), cited: const [starbucksUrl]),
+          ctx: ctxOf(request: const ['starbucks']),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.contextNotRestaurant,
+      ),
+      (
+        name: 'the same bottle, context unknown → suggest',
+        run: () => decide(
+          a: bottledFrappuccino(context: 'unknown'),
+          lookup: lookupOf(frappuccinoResult(), cited: const [starbucksUrl]),
+          ctx: ctxOf(request: const ['starbucks']),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.contextNotRestaurant,
+      ),
+      (
+        name:
+            'the same bottle even in a café (unit bottle) → suggest: a '
+            'retail package is not the café drink',
+        run: () => decide(
+          a: bottledFrappuccino(context: 'restaurant'),
+          lookup: lookupOf(frappuccinoResult(), cited: const [starbucksUrl]),
+          ctx: ctxOf(request: const ['starbucks']),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.itemPackaged,
+      ),
+      for (final (name, unit) in [
+        ('Pike Place K-Cup coffee (~8 fl oz)', 'cup'),
+        ('Canned cold brew (~11 fl oz)', ''),
+        ('Cold brew (~11 fl oz)', 'can'),
+        ('Cold brew (~11 fl oz)', 'pods'),
+      ])
+        (
+          name: 'a retail package: "$name" unit "$unit" → suggest',
+          run: () => decide(
+            a: analysis(
+              items: [
+                food(
+                  name: name,
+                  kcal: 150,
+                  p: 2,
+                  c: 30,
+                  f: 2,
+                  brand: 'Starbucks',
+                  unit: unit,
+                ),
+              ],
+            ),
+            lookup: lookupOf(
+              result(
+                chain: 'starbucks',
+                url: starbucksUrl,
+                matches: [
+                  match(
+                    menu: 'Cold Brew Coffee',
+                    drink: true,
+                    options: [
+                      option(
+                        label: 'Grande',
+                        serving: '16 fl oz',
+                        unit: 'cup',
+                        kcal: 160,
+                        p: 2,
+                        c: 32,
+                        f: 2,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              cited: const [starbucksUrl],
+            ),
+            ctx: ctxOf(request: const ['starbucks']),
+          ),
+          outcome: AssistOutcome.suggest,
+          reason: AssistReason.itemPackaged,
+        ),
       (
         name: 'same chain and item applied 3 h earlier → suggest',
         run: () => decide(
@@ -1109,6 +1451,60 @@ void main() {
             decide(lookup: lookupOf(result(url: 'http://www.chipotle.com/x'))),
         outcome: AssistOutcome.contextOnly,
         reason: AssistReason.sourceNotLaunchable,
+      ),
+      (
+        name:
+            'the item at the matched index is no longer the one the '
+            'request named → reject (item_changed)',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(
+                name: 'Chips and guacamole',
+                kcal: 900,
+                p: 12,
+                c: 80,
+                f: 60,
+                unit: 'bag',
+              ),
+            ],
+          ),
+          ctx: ctxOf(
+            items: requestItemsOf(
+              analysis(
+                items: [
+                  food(),
+                  food(
+                    name: 'Chips and guacamole',
+                    kcal: 900,
+                    p: 12,
+                    c: 80,
+                    f: 60,
+                    unit: 'bag',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        outcome: AssistOutcome.reject,
+        reason: AssistReason.itemChanged,
+      ),
+      (
+        name: 'a renamed item → reject (item_changed)',
+        run: () => decide(
+          a: analysis(items: [food(name: 'Steak burrito bowl (~550 g)')]),
+          ctx: ctxOf(items: requestItemsOf(analysis())),
+        ),
+        outcome: AssistOutcome.reject,
+        reason: AssistReason.itemChanged,
+      ),
+      (
+        name: 'no request items from the caller → nothing is covered',
+        run: () =>
+            decideAssist(mealOf(analysis()), lookupOf(result()), ctxOf()),
+        outcome: AssistOutcome.reject,
+        reason: AssistReason.itemChanged,
       ),
       (
         name: 'a chain the request never named → reject',
@@ -1342,24 +1738,149 @@ void main() {
       expect(d.sourceType, 'third_party');
     });
 
-    test('sizes: the option nearest the photo estimate is picked', () {
+    test('sizes: the nearest option is picked, but two sizes in the band '
+        'only suggest; naming the size applies it', () {
+      Map<String, dynamic> sized() => result(
+        matches: [
+          match(
+            options: [
+              option(label: 'Kids', kcal: 400, p: 20, c: 40, f: 17),
+              option(label: 'Regular', kcal: 750, p: 40, c: 75, f: 32),
+              option(label: 'Large', kcal: 1100, p: 58, c: 110, f: 48),
+            ],
+          ),
+        ],
+      );
       final d = decide(
         a: analysis(items: [food(kcal: 700)]),
+        r: sized(),
+      );
+      expect(d.outcome, AssistOutcome.suggest);
+      expect(d.reason, AssistReason.sizeAmbiguous);
+      final pick = d.items.single.pick;
+      expect(pick.label, 'Regular');
+      expect(pick.optionIndex, 1);
+      expect(pick.inBand, 2);
+      expect(pick.sizeNamed, isFalse);
+      expect(pick.sizeConflict, isFalse);
+
+      final named = decide(
+        a: analysis(
+          items: [food(name: 'Regular chicken burrito bowl', kcal: 700)],
+        ),
+        r: sized(),
+      );
+      expect(named.outcome, AssistOutcome.apply);
+      expect(named.items.single.pick.label, 'Regular');
+      expect(named.items.single.pick.sizeNamed, isTrue);
+    });
+
+    test('request items read back from a persisted job still match', () {
+      final a = twoSlices();
+      final persisted =
+          jsonDecode(
+                LookupRequest.compose({
+                  'items': a['food_items'],
+                  'chains': ['pizza_hut'],
+                }).toJson(),
+              )
+              as Map;
+      final d = decide(
+        a: a,
+        lookup: lookupOf(pizzaResult(), cited: const [pizzaUrl]),
+        ctx: ctxOf(
+          request: const ['pizza_hut'],
+          items: persisted['items'] as List<Object?>,
+        ),
+      );
+      expect(d.outcome, AssistOutcome.apply);
+      // The brand is compared as composed (the table's name), so a printed
+      // brand's spelling never trips the check.
+      expect((persisted['items'] as List).single['brand'], 'Pizza Hut');
+    });
+
+    test('a size suggestion lists every published size for the user', () {
+      final a = fries();
+      final d = decideFries(a);
+      expect(d.outcome, AssistOutcome.suggest);
+      final match =
+          (recordAssistDecision(a, d)!['assist'] as Map)['matches'].single
+              as Map;
+      expect(match['option_label'], 'Medium');
+      expect(match['sizes'], [
+        {'label': 'Small', 'serving': '71 g', 'calories': 230},
+        {'label': 'Medium', 'serving': '111 g', 'calories': 320},
+        {'label': 'Large', 'serving': '150 g', 'calories': 480},
+      ]);
+      // An application never stores them: it used exactly one size.
+      final applied = applyAssist(a, d)!;
+      final stamped =
+          ((applied['assist'] as Map)['matches'] as List).single as Map;
+      expect(stamped.containsKey('sizes'), isFalse);
+    });
+
+    test('a single published size lists no sizes', () {
+      final d = decide(r: result(type: 'third_party_db'));
+      final match =
+          (recordAssistDecision(analysis(), d)!['assist'] as Map)['matches']
+                  .single
+              as Map;
+      expect(match.containsKey('sizes'), isFalse);
+    });
+
+    test('item_changed: an unchanged item still applies when another '
+        'item changed', () {
+      final requested = analysis(
+        items: [
+          food(),
+          food(
+            name: 'Chips (~100 g)',
+            kcal: 540,
+            p: 7,
+            c: 70,
+            f: 26,
+            unit: 'bag',
+          ),
+        ],
+      );
+      final now = analysis(
+        items: [
+          food(),
+          food(
+            name: 'Tortilla chips (~100 g)',
+            kcal: 540,
+            p: 7,
+            c: 70,
+            f: 26,
+            unit: 'bag',
+          ),
+        ],
+      );
+      final d = decide(
+        a: now,
         r: result(
           matches: [
+            match(),
             match(
+              index: 1,
+              menu: 'Chips',
               options: [
-                option(label: 'Kids', kcal: 400, p: 20, c: 40, f: 17),
-                option(label: 'Regular', kcal: 750, p: 40, c: 75, f: 32),
-                option(label: 'Large', kcal: 1100, p: 58, c: 110, f: 48),
+                option(
+                  label: 'Regular',
+                  unit: 'bag',
+                  kcal: 540,
+                  p: 7,
+                  c: 73,
+                  f: 25,
+                ),
               ],
             ),
           ],
         ),
+        ctx: ctxOf(items: requestItemsOf(requested)),
       );
       expect(d.outcome, AssistOutcome.apply);
-      expect(d.items.single.pick.label, 'Regular');
-      expect(d.items.single.pick.optionIndex, 1);
+      expect(d.items.map((i) => i.itemIndex), [0]);
     });
 
     test('text from the lookup is sanitized and capped', () {
@@ -1473,7 +1994,10 @@ void main() {
               AssistEvidence(url: chipotleCited, text: '1,050 Cal'),
             ],
           ),
-          ctxOf(location: const ['chipotle'], place: 'chipotle'),
+          forMeal(
+            ctxOf(location: const ['chipotle'], place: 'chipotle'),
+            mealOf(a),
+          ),
         );
         // The block is always storable (the junk analysis around it may
         // hold NaN, which the store's finiteAnalysis handles).
@@ -1670,6 +2194,44 @@ void main() {
         verifySource('https://chipotle.com/x', const [], null).official,
         isFalse,
       );
+    });
+
+    test('verifySource: another country\'s page on the chain domain is '
+        'foreign', () {
+      for (final url in [
+        'https://www.mcdonalds.com/gb/en-gb/product/big-mac.html',
+        'https://www.mcdonalds.com/ca/fr-ca/produit/big-mac.html',
+        'https://www.subway.com/en-GB/MenuNutrition/Menu',
+        'https://www.subway.com/fr_CA/menu',
+        'https://www.starbucks.com/uk/menu',
+        'https://ca.starbucks.com/menu',
+        'https://www.kfc.com/content/dam/nutrition/en-au/menu.pdf',
+      ]) {
+        final v = verifySource(
+          url,
+          [url],
+          url.contains('subway')
+              ? 'subway'
+              : url.contains('starbucks')
+              ? 'starbucks'
+              : url.contains('kfc')
+              ? 'kfc'
+              : 'mcdonalds',
+        );
+        expect(v.official, isTrue, reason: url);
+        expect(v.foreign, isTrue, reason: url);
+      }
+      for (final url in [
+        'https://www.mcdonalds.com/us/en-us/product/big-mac.html',
+        'https://www.subway.com/en-US/MenuNutrition/Menu',
+        'https://www.tacobell.com/es-us/nutrition',
+        'https://www.dominos.com/en/pages/content/nutritional/nutrition',
+        'https://www.chipotle.com/nutrition-calculator',
+        'https://order.chipotle.com/menu',
+        'https://chipotle.com',
+      ]) {
+        expect(verifySource(url, [url], null).foreign, isFalse, reason: url);
+      }
     });
   });
 
@@ -1949,6 +2511,50 @@ void main() {
         // And a new decision starts from the edited numbers.
         expect(identical(assistBase(copy), copy), isTrue);
       }
+    });
+
+    test('a leftover, then accepting a suggestion: nothing is written, the '
+        'deduction stands', () {
+      final a = analysis();
+      // A suggestion decided before the leftover photo arrived.
+      final before = decide(a: a, meal: mealOf(a, corrected: true));
+      expect(before.outcome, AssistOutcome.suggest);
+      final left = applyLeftover(
+        a,
+        {'leftover_fraction': 0.5, 'items': []},
+        leftoverPhotoMd5: 'x',
+        appliedAtIso: '2026-10-23T13:00:00',
+      )!.adjusted;
+      expect(left['total_calories'], 450);
+      // Deciding now gives no one-tap suggestion at all.
+      final d = decide(a: left, meal: mealOf(left, corrected: true));
+      expect(d.outcome, AssistOutcome.contextOnly);
+      expect(d.reason, AssistReason.hasLeftover);
+      expect(d.items, isEmpty);
+      expect(applyAssist(left, d), isNull);
+      // The earlier suggestion, accepted now, is refused too.
+      expect(applyAssist(left, before), isNull);
+      final recorded = recordAssistDecision(left, d)!;
+      expect(recorded['total_calories'], 450);
+      expect((recorded['leftover'] as Map)['eaten_fraction'], 0.5);
+      expect((recorded['assist'] as Map)['status'], AssistStatus.contextOnly);
+    });
+
+    test('a leftover that deducted nothing still blocks an accept', () {
+      final a = analysis();
+      final before = decide(a: a, meal: mealOf(a, corrected: true));
+      final left = applyLeftover(
+        a,
+        {'leftover_fraction': 0.0, 'items': []},
+        leftoverPhotoMd5: 'x',
+        appliedAtIso: '2026-10-23T13:00:00',
+      )!.adjusted;
+      // The item's numbers did not move, so only the leftover guard stops it.
+      expect(
+        (left['food_items'] as List).first['estimated_calories'],
+        (a['food_items'] as List).first['estimated_calories'],
+      );
+      expect(applyAssist(left, before), isNull);
     });
 
     test('revert after a leftover deduction → null', () {
@@ -2243,3 +2849,244 @@ Map<String, dynamic> beerResult({List<Map<String, dynamic>>? options}) =>
         ),
       ],
     );
+
+Map<String, dynamic> bottledFrappuccino({required String context}) => analysis(
+  items: [
+    food(
+      name: 'Starbucks bottled mocha Frappuccino (13.7 fl oz)',
+      kcal: 280,
+      p: 9,
+      c: 46,
+      f: 4.5,
+      brand: 'Starbucks',
+      unit: 'bottle',
+    ),
+  ],
+  context: context,
+  description: 'Bottled mocha Frappuccino',
+);
+
+Map<String, dynamic> frappuccinoResult() => result(
+  chain: 'starbucks',
+  url: starbucksUrl,
+  matches: [
+    match(
+      menu: 'Mocha Frappuccino Blended Beverage',
+      drink: true,
+      options: [
+        option(
+          label: 'Tall',
+          serving: '12 fl oz',
+          unit: 'cup',
+          kcal: 280,
+          p: 4,
+          c: 52,
+          f: 3,
+        ),
+        option(
+          label: 'Grande',
+          serving: '16 fl oz',
+          unit: 'cup',
+          kcal: 370,
+          p: 5,
+          c: 69,
+          f: 4,
+        ),
+        option(
+          label: 'Venti',
+          serving: '24 fl oz',
+          unit: 'cup',
+          kcal: 470,
+          p: 6,
+          c: 89,
+          f: 5,
+        ),
+      ],
+    ),
+  ],
+);
+
+/// McDonald's fries: three sizes, all inside the APPLY band of a 360 kcal
+/// photo estimate (0.64×, 0.89×, 1.33×).
+Map<String, dynamic> fries({
+  String name = 'French fries (~120 g)',
+  num kcal = 360,
+}) => analysis(
+  items: [
+    food(
+      name: name,
+      kcal: kcal,
+      p: 5,
+      c: 48,
+      f: 17,
+      brand: "McDonald's",
+      unit: 'carton',
+    ),
+  ],
+  description: 'French fries',
+);
+
+Map<String, dynamic> friesResult({String url = mcdUrl}) => result(
+  chain: 'mcdonalds',
+  url: url,
+  matches: [
+    match(
+      menu: 'World Famous Fries',
+      options: [
+        option(
+          label: 'Small',
+          serving: '71 g',
+          unit: '',
+          kcal: 230,
+          p: 3,
+          c: 31,
+          f: 11,
+        ),
+        option(
+          label: 'Medium',
+          serving: '111 g',
+          unit: '',
+          kcal: 320,
+          p: 5,
+          c: 43,
+          f: 15,
+        ),
+        option(
+          label: 'Large',
+          serving: '150 g',
+          unit: '',
+          kcal: 480,
+          p: 7,
+          c: 65,
+          f: 23,
+        ),
+      ],
+    ),
+  ],
+);
+
+AssistDecision decideFries(Map<String, dynamic> a, {String url = mcdUrl}) =>
+    decide(
+      a: a,
+      lookup: lookupOf(friesResult(url: url), cited: [url]),
+      ctx: ctxOf(request: const ['mcdonalds']),
+    );
+
+Map<String, dynamic> nuggetsResult() => result(
+  chain: 'mcdonalds',
+  url: mcdUrl,
+  matches: [
+    match(
+      menu: 'Chicken McNuggets',
+      options: [
+        option(
+          label: '4 piece',
+          serving: '4 pieces',
+          unit: '',
+          kcal: 170,
+          p: 9,
+          c: 10,
+          f: 10,
+        ),
+        option(
+          label: '6 piece',
+          serving: '6 pieces',
+          unit: '',
+          kcal: 250,
+          p: 14,
+          c: 15,
+          f: 15,
+        ),
+        option(
+          label: '10 piece',
+          serving: '10 pieces',
+          unit: '',
+          kcal: 410,
+          p: 23,
+          c: 25,
+          f: 24,
+        ),
+        option(
+          label: '20 piece',
+          serving: '20 pieces',
+          unit: '',
+          kcal: 830,
+          p: 46,
+          c: 49,
+          f: 49,
+        ),
+      ],
+    ),
+  ],
+);
+
+Map<String, dynamic> nuggets(String name) => analysis(
+  items: [
+    food(
+      name: name,
+      kcal: 340,
+      p: 19,
+      c: 20,
+      f: 20,
+      brand: "McDonald's",
+      unit: '',
+    ),
+  ],
+  description: 'Chicken McNuggets',
+);
+
+/// A bowl from a confirmed, auto-picked Qdoba spot.
+AssistContext atQdoba() => ctxOf(
+  request: const ['chipotle', 'qdoba'],
+  location: const ['qdoba'],
+  place: 'qdoba',
+  confirmed: {'qdoba'},
+);
+
+Map<String, dynamic> qdobaResult({int index = 0}) => result(
+  chain: 'qdoba',
+  url: qdobaUrl,
+  matches: [
+    match(index: index, options: [option(kcal: 800, p: 45, c: 85, f: 30)]),
+  ],
+);
+
+Map<String, dynamic> icedLatteResult() => result(
+  chain: 'starbucks',
+  url: starbucksUrl,
+  matches: [
+    match(
+      menu: 'Iced Caffè Latte',
+      drink: true,
+      options: [
+        option(
+          label: 'Tall',
+          serving: '12 fl oz',
+          unit: 'cup',
+          kcal: 130,
+          p: 7,
+          c: 11,
+          f: 4.5,
+        ),
+        option(
+          label: 'Grande',
+          serving: '16 fl oz',
+          unit: 'cup',
+          kcal: 200,
+          p: 11,
+          c: 16,
+          f: 7,
+        ),
+        option(
+          label: 'Venti',
+          serving: '24 fl oz',
+          unit: 'cup',
+          kcal: 250,
+          p: 13,
+          c: 20,
+          f: 9,
+        ),
+      ],
+    ),
+  ],
+);

@@ -15,25 +15,36 @@
 ///     returned, its host is (a subdomain of) one of that chain's table
 ///     domains, source_type is official_*, and no date on it (source_year,
 ///     page_age, a year in its address or title) is more than 24 months old;
-///   * the meal: not corrected by the user, no leftover block, portion_state
-///     whole, not packaged, logged today (local) and at most 12 h ago, in
-///     the US; item→menu-item mapping one-to-one, and no published component
-///     that already stands as its own item in the meal;
-///   * per covered item: exact_item (components_sum only on an item-brand
-///     match); a single published value (no range), no combo or slash
-///     alternatives; units agree when the item counts more than one; a
-///     drink only with its own printed brand; the item's own printed brand
-///     names the chain OR the place step auto-picked this chain at a spot
-///     where the user confirmed it, with a verified fix in a non-dense area
-///     and a restaurant meal; 0.6–1.7× the photo model's kcal; the macro
-///     check (4p+4c+9f within ±35%, skipped for drinks and under 100 kcal);
-///     the calorie number found word-bounded in the provider's verbatim
-///     text for that exact URL; and not the same chain and menu item
-///     applied in the last 6 h.
+///   * the source is not another country's page on the chain's domain
+///     (mcdonalds.com/gb/en-gb/…, subway.com/en-GB/…);
+///   * the meal: not corrected by the user, portion_state whole, a
+///     restaurant or takeout meal (not packaged, home or unknown), logged
+///     today (local) and at most 12 h ago, in the US; item→menu-item mapping
+///     one-to-one, and no published component that already stands as its
+///     own item in the meal;
+///   * per covered item: still the item the request named (same name,
+///     count, unit and brand at that position); exact_item (components_sum
+///     only on an item-brand match); a single published value (no range),
+///     no combo or slash alternatives; units agree when the item counts more
+///     than one; an unambiguous size (the item names the chosen size, or it
+///     is the only published size inside the APPLY band, and the item names
+///     no other size); not a retail package (bottle, can, pod …); a drink
+///     only with its own printed brand; no printed brand of ANOTHER chain on
+///     it; the item's own printed brand names the chain OR the place step
+///     auto-picked this chain at a spot where the user confirmed it, with a
+///     verified fix in a non-dense area, a restaurant meal and no item
+///     printed with another chain's brand; 0.6–1.7× the photo model's kcal;
+///     the macro check (4p+4c+9f within ±35%, skipped for drinks and under
+///     100 kcal); the calorie number found word-bounded in the provider's
+///     verbatim text for that exact URL; and not the same chain and menu
+///     item applied in the last 6 h.
 /// Otherwise items at 0.4–2.5× become a SUGGESTION. A lookup that found
-/// nothing, an unusable source or only implausible numbers is CONTEXT ONLY;
-/// a malformed lookup, a chain we never asked about, or a chain with no
-/// evidence in the meal is REJECTED (nothing is written).
+/// nothing, an unusable source, only implausible numbers, or a meal with a
+/// leftover deduction (published numbers are one whole serving; the meal
+/// counts what was eaten) is CONTEXT ONLY; a malformed lookup, a chain we
+/// never asked about, a chain with no evidence in the meal, or a lookup
+/// whose items all changed since the request is REJECTED (nothing is
+/// written).
 ///
 /// Writes keep the user's numbers safe ([applyAssist], [revertAssist]):
 /// only the covered items' four numbers change (names and
@@ -47,7 +58,8 @@ library;
 import 'chain_match.dart';
 import 'coerce.dart';
 import 'contracts.dart';
-import 'restaurant_lookup_contract.dart' show kLookupMaxItems;
+import 'restaurant_lookup_contract.dart'
+    show composeLookupItem, kLookupMaxItems;
 
 // ─── Thresholds (named so the diagnostics log can quote them) ──────────
 
@@ -192,6 +204,7 @@ abstract final class AssistReason {
   static const String chainBlocked = 'chain_blocked';
   static const String noEvidence = 'no_evidence';
   static const String locationNotRestaurant = 'location_not_restaurant';
+  static const String itemChanged = 'item_changed';
 
   // Context only.
   static const String notPublished = 'not_published';
@@ -200,18 +213,20 @@ abstract final class AssistReason {
   static const String noUsableMatch = 'no_usable_match';
   static const String sourceNotLaunchable = 'source_not_launchable';
   static const String ratioImplausible = 'ratio_implausible';
+  static const String hasLeftover = 'has_leftover';
 
   // Suggest: the source.
   static const String sourceNotCited = 'source_not_cited';
   static const String sourceNotOfficial = 'source_not_official';
+  static const String sourceForeign = 'source_foreign';
   static const String sourceTypeNotOfficial = 'source_type_not_official';
   static const String sourceOld = 'source_old';
 
   // Suggest: the meal.
   static const String mealCorrected = 'meal_corrected';
-  static const String hasLeftover = 'has_leftover';
   static const String portionNotWhole = 'portion_not_whole';
   static const String contextPackaged = 'context_packaged';
+  static const String contextNotRestaurant = 'context_not_restaurant';
   static const String notToday = 'not_today';
   static const String mealTimeUnknown = 'meal_time_unknown';
   static const String mealTooOld = 'meal_too_old';
@@ -224,6 +239,9 @@ abstract final class AssistReason {
   static const String combo = 'combo';
   static const String range = 'range';
   static const String unitMismatch = 'unit_mismatch';
+  static const String sizeAmbiguous = 'size_ambiguous';
+  static const String itemPackaged = 'item_packaged';
+  static const String brandConflict = 'brand_conflict';
   static const String drinkUnbranded = 'drink_unbranded';
   static const String orderMerchantOnly = 'order_merchant_only';
   static const String locationUnconfirmed = 'location_unconfirmed';
@@ -293,6 +311,51 @@ String? normalizeSourceUrl(dynamic raw) {
   return 'https://$host$path';
 }
 
+/// ISO 3166-1 alpha-2 codes (plus "uk", which sites use for the United
+/// Kingdom) other than "us": a path or host label equal to one of these
+/// names another country's version of a chain's site.
+final Set<String> _foreignCountries = {
+  ...('ad ae af ag ai al am ao aq ar as at au aw ax az ba bb bd be bf bg bh '
+          'bi bj bl bm bn bo bq br bs bt bv bw by bz ca cc cd cf cg ch ci ck '
+          'cl cm cn co cr cu cv cw cx cy cz de dj dk dm do dz ec ee eg eh er '
+          'es et fi fj fk fm fo fr ga gb gd ge gf gg gh gi gl gm gn gp gq gr '
+          'gs gt gu gw gy hk hm hn hr ht hu id ie il im in io iq ir is it je '
+          'jm jo jp ke kg kh ki km kn kp kr kw ky kz la lb lc li lk lr ls lt '
+          'lu lv ly ma mc md me mf mg mh mk ml mm mn mo mp mq mr ms mt mu mv '
+          'mw mx my mz na nc ne nf ng ni nl no np nr nu nz om pa pe pf pg ph '
+          'pk pl pm pn pr ps pt pw py qa re ro rs ru rw sa sb sc sd se sg sh '
+          'si sj sk sl sm sn so sr ss st sv sx sy sz tc td tf tg th tj tk tl '
+          'tm tn to tr tt tv tw tz ua ug um uy uz va vc ve vg vi vn vu wf ws '
+          'ye yt za zm zw uk')
+      .split(' '),
+};
+
+/// A locale path segment: language, `-` or `_`, country ("en-gb", "fr_CA").
+final RegExp _localeSegmentRe = RegExp(r'^[a-z]{2}[-_]([a-z]{2})$');
+
+/// True when the normalized [url] is another country's version of a page:
+/// a country subdomain ("ca.example.com"), a first path segment naming a
+/// country ("/gb/…", "/ca/…"), or a locale segment for a country other than
+/// the US anywhere in the path ("/en-gb/", "/en-GB/", "/fr-ca/"). A US
+/// locale ("/us/en-us/", "/es-us/") or a language alone ("/en/") is not.
+bool _foreignLocale(String url) {
+  final rest = url.substring(8);
+  final slash = rest.indexOf('/');
+  final host = slash < 0 ? rest : rest.substring(0, slash);
+  final labels = host.split('.');
+  if (labels.length > 2 && _foreignCountries.contains(labels.first)) {
+    return true;
+  }
+  if (slash < 0) return false;
+  final segments = rest.substring(slash + 1).toLowerCase().split('/');
+  for (var i = 0; i < segments.length; i++) {
+    final m = _localeSegmentRe.firstMatch(segments[i]);
+    if (m != null && _foreignCountries.contains(m.group(1))) return true;
+    if (i == 0 && _foreignCountries.contains(segments[i])) return true;
+  }
+  return false;
+}
+
 /// What [verifySource] found out about a claimed source.
 final class SourceVerdict {
   const SourceVerdict({
@@ -301,6 +364,7 @@ final class SourceVerdict {
     required this.cited,
     required this.official,
     required this.ascii,
+    this.foreign = false,
   });
 
   /// The normalized URL; null when the claim is not launchable.
@@ -317,6 +381,11 @@ final class SourceVerdict {
   /// The claim was plain ASCII (an IDN host never is).
   final bool ascii;
 
+  /// Another country's version of the page ([_foreignLocale]): a chain's
+  /// own multi-country domain serves UK or Canadian numbers too, and those
+  /// can only ever be suggested.
+  final bool foreign;
+
   bool get launchable => url != null;
 }
 
@@ -324,7 +393,7 @@ final class SourceVerdict {
 /// returned ([citedUrls], compared normalized) and the table domains of
 /// [chainKey]. A lookalike (chipotle-nutrition.com), a host that merely
 /// contains the domain (chipotle.com.evil.example) or an IDN is never
-/// official.
+/// official; a page for another country is flagged [SourceVerdict.foreign].
 SourceVerdict verifySource(
   dynamic sourceUrl,
   Iterable<dynamic> citedUrls,
@@ -338,6 +407,7 @@ SourceVerdict verifySource(
     cited: url != null && citedUrls.any((u) => normalizeSourceUrl(u) == url),
     official: host != null && isChainHost(host, chainKey),
     ascii: sourceUrl is String && _isAscii(sourceUrl),
+    foreign: url != null && _foreignLocale(url),
   );
 }
 
@@ -606,6 +676,89 @@ Set<String> _nameWords(dynamic name) {
 
 String _menuKey(dynamic name) => chainTokens(name).join(' ');
 
+/// Units and name words of a retail package: a chain's bottled, canned or
+/// pod product is not what its café serves, so it is never applied. Not
+/// "carton", "box", "bag" or "cup": fries, nuggets and chips come in those
+/// at the counter.
+const Set<String> _packagedWords = {
+  'bottle',
+  'bottled',
+  'can',
+  'canned',
+  'pod',
+  'kcup',
+  'k cup',
+  'package',
+  'packaged',
+  'prepackaged',
+  'jar',
+  'pouch',
+  'sachet',
+};
+
+bool _packagedItem(dynamic item) {
+  final unit = _unitKey(itemContextFields(item).unit);
+  if (_packagedWords.contains(unit)) return true;
+  final name = item is Map ? item['name'] : null;
+  final tokens = chainTokens(name is String ? name : '');
+  for (var i = 0; i < tokens.length; i++) {
+    // A bare "can" in a name is too ambiguous to count; as a unit it does.
+    if (tokens[i] != 'can' && _packagedWords.contains(tokens[i])) return true;
+    if (i + 1 < tokens.length &&
+        tokens[i] == 'k' &&
+        _singular(tokens[i + 1]) == 'cup') {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ─── Size words ────────────────────────────────────────────────────────
+
+const Map<String, String> _sizeWords = {
+  'small': 'small',
+  'medium': 'medium',
+  'large': 'large',
+  'regular': 'regular',
+  'kid': 'kids',
+  'kids': 'kids',
+  'tall': 'tall',
+  'grande': 'grande',
+  'venti': 'venti',
+  'trenta': 'trenta',
+  'xl': 'xl',
+  'footlong': '12in',
+};
+final RegExp _sizeWordRe = RegExp(
+  r'\b(small|medium|large|regular|kids?|tall|grande|venti|trenta|xl|'
+  r'footlong)\b',
+);
+final RegExp _countSizeRe = RegExp(
+  r'\b([0-9]{1,3})\s*-?\s*(?:pcs|pc|pieces|piece|ct|count)\b',
+);
+final RegExp _inchSizeRe = RegExp(r'\b([0-9]{1,2})\s*-?\s*(?:inches|inch|")');
+final RegExp _apostropheRe = RegExp('[\'`´ʼ‘’]');
+final RegExp _xlRe = RegExp(r'\b(?:extra[\s-]*large|x[\s-]?large)\b');
+final RegExp _footLongRe = RegExp(r'\bfoot[\s-]*long\b');
+
+/// The size words a text names, normalized: small, medium, large,
+/// regular, kids, tall, grande, venti, trenta, xl ("extra large"), a count
+/// ("8 pieces", "10-pc" → 8pc / 10pc) or a length ('6-inch', '6"' → 6in;
+/// "footlong" → 12in). Weights and volumes ("~150 g", "16 oz") are the
+/// photo model's own assumptions and never count.
+Set<String> _sizeTags(String text) {
+  final t = nfkcLite(text)
+      .toLowerCase()
+      .replaceAll(_apostropheRe, '')
+      .replaceAll(_xlRe, ' xl ')
+      .replaceAll(_footLongRe, ' footlong ');
+  return {
+    for (final m in _sizeWordRe.allMatches(t)) _sizeWords[m.group(1)]!,
+    for (final m in _countSizeRe.allMatches(t)) '${int.parse(m.group(1)!)}pc',
+    for (final m in _inchSizeRe.allMatches(t)) '${int.parse(m.group(1)!)}in',
+  };
+}
+
 // ─── Options ───────────────────────────────────────────────────────────
 
 /// One published size or variant, coerced.
@@ -632,6 +785,38 @@ final class _Option {
 
   /// What the option is compared at: the value, or a range's middle.
   int get kcal => calories ?? ((range![0] + range![1]) / 2).round();
+
+  /// The size words its label and serving name ([_sizeTags]).
+  Set<String> get sizeTags => _sizeTags('$label $serving');
+
+  AssistSize get asSize => AssistSize(
+    label: label,
+    serving: serving,
+    calories: calories,
+    caloriesRange: range,
+  );
+}
+
+/// One published size as a suggestion lists it.
+final class AssistSize {
+  const AssistSize({
+    required this.label,
+    required this.serving,
+    required this.calories,
+    required this.caloriesRange,
+  });
+
+  final String label;
+  final String serving;
+  final int? calories;
+  final List<int>? caloriesRange;
+
+  Map<String, Object?> toJson() => {
+    'label': label,
+    'serving': serving,
+    'calories': calories,
+    if (caloriesRange != null) 'calories_range': caloriesRange,
+  };
 }
 
 _Option? _parseOption(dynamic raw, int index) {
@@ -676,6 +861,10 @@ final class AssistPick {
     required this.kcal,
     required this.unitsAgree,
     this.components = const [],
+    this.sizes = const [],
+    this.inBand = 1,
+    this.sizeNamed = false,
+    this.sizeConflict = false,
   });
 
   /// The option's position in the match's options; -1 for a
@@ -707,6 +896,26 @@ final class AssistPick {
   /// components_sum only: each component's published calories (grounding).
   final List<int> components;
 
+  /// Every published size of the menu item, in the lookup's order (empty
+  /// for a components_sum).
+  final List<AssistSize> sizes;
+
+  /// How many published sizes land inside the APPLY band (0.6–1.7×) of the
+  /// photo estimate. Grounding cannot tell sizes apart (every size's number
+  /// is on the same page), so more than one makes the pick a guess.
+  final int inBand;
+
+  /// The item's own name or unit names this size ("Large fries" → Large).
+  final bool sizeNamed;
+
+  /// The item names a size, and it is another published size or not this
+  /// one ("~8 pieces" against "10 piece").
+  final bool sizeConflict;
+
+  /// The size pick can be applied: nothing contradicts it, and the item
+  /// names it or it is the only published size inside the APPLY band.
+  bool get sizeUnambiguous => !sizeConflict && (sizeNamed || inBand <= 1);
+
   bool get isRange => caloriesRange != null;
 
   /// The calorie numbers that must be found on the source page.
@@ -724,10 +933,16 @@ num? _visionKcal(dynamic item) {
   return v != null && v > 0 ? v : null;
 }
 
+bool _inRatio(num kcal, num vision, double lo, double hi) {
+  final r = kcal / vision;
+  return r >= lo - _eps && r <= hi + _eps;
+}
+
 AssistPick? _pickFrom(
   dynamic item,
   List<_Option> options, {
   List<int> components = const [],
+  String menuItem = '',
 }) {
   final vision = _visionKcal(item);
   if (vision == null || options.isEmpty) return null;
@@ -735,21 +950,13 @@ AssistPick? _pickFrom(
   final qty = fields.qty;
   final single = (qty - 1).abs() < _eps;
   final itemUnit = _unitKey(fields.unit);
-  final candidates = <AssistPick>[];
-  void add(_Option o, num multiplier, bool agree) => candidates.add(
-    AssistPick(
-      optionIndex: components.isEmpty ? o.index : -1,
-      label: o.label,
-      serving: o.serving,
-      unit: o.unit,
-      published: o.published,
-      caloriesRange: o.range,
-      multiplier: multiplier,
-      kcal: o.kcal * multiplier,
-      unitsAgree: agree,
-      components: components,
-    ),
-  );
+  final candidates = <({_Option o, num multiplier, bool agree, num kcal})>[];
+  void add(_Option o, num multiplier, bool agree) => candidates.add((
+    o: o,
+    multiplier: multiplier,
+    agree: agree,
+    kcal: o.kcal * multiplier,
+  ));
   for (final o in options) {
     if (single) {
       add(o, 1, true);
@@ -765,13 +972,70 @@ AssistPick? _pickFrom(
   candidates.sort((a, b) {
     final d = (a.kcal - vision).abs().compareTo((b.kcal - vision).abs());
     if (d != 0) return d;
-    if (a.isRange != b.isRange) return a.isRange ? 1 : -1;
-    if (a.unitsAgree != b.unitsAgree) return a.unitsAgree ? -1 : 1;
+    final ar = a.o.range != null, br = b.o.range != null;
+    if (ar != br) return ar ? 1 : -1;
+    if (a.agree != b.agree) return a.agree ? -1 : 1;
     final k = a.kcal.compareTo(b.kcal);
     if (k != 0) return k;
-    return a.optionIndex.compareTo(b.optionIndex);
+    return a.o.index.compareTo(b.o.index);
   });
-  return candidates.first;
+
+  // A size the item names ("Large fries", "venti", "6 pieces") beats the
+  // nearest number, as long as it stays plausible for the photo.
+  final name = item is Map && item['name'] is String ? item['name'] : '';
+  final itemTags = _sizeTags('$name ${fields.unit}');
+  var chosen = candidates.first;
+  if (itemTags.isNotEmpty) {
+    for (final c in candidates) {
+      if (c.o.sizeTags.intersection(itemTags).isNotEmpty &&
+          _inRatio(
+            c.kcal,
+            vision,
+            kAssistSuggestRatioMin,
+            kAssistSuggestRatioMax,
+          )) {
+        chosen = c;
+        break;
+      }
+    }
+  }
+  final chosenTags = {...chosen.o.sizeTags, ..._sizeTags(menuItem)};
+  final otherTags = <String>{
+    for (final o in options)
+      if (o.index != chosen.o.index) ...o.sizeTags,
+  }.difference(chosenTags);
+  final named = itemTags.intersection(chosenTags).isNotEmpty;
+  final o = chosen.o;
+  return AssistPick(
+    optionIndex: components.isEmpty ? o.index : -1,
+    label: o.label,
+    serving: o.serving,
+    unit: o.unit,
+    published: o.published,
+    caloriesRange: o.range,
+    multiplier: chosen.multiplier,
+    kcal: chosen.kcal,
+    unitsAgree: chosen.agree,
+    components: components,
+    sizes: components.isEmpty
+        ? List.unmodifiable([for (final x in options) x.asSize])
+        : const [],
+    inBand: {
+      for (final c in candidates)
+        if (_inRatio(
+          c.kcal,
+          vision,
+          kAssistApplyRatioMin,
+          kAssistApplyRatioMax,
+        ))
+          c.o.index,
+    }.length,
+    sizeNamed: named,
+    sizeConflict:
+        itemTags.isNotEmpty &&
+        (itemTags.intersection(otherTags).isNotEmpty ||
+            (chosenTags.isNotEmpty && !named)),
+  );
 }
 
 /// The published option nearest the photographed [item]'s kcal (its
@@ -779,9 +1043,12 @@ AssistPick? _pickFrom(
 /// than one (qty ≠ 1), an option counted in the same unit is multiplied by
 /// qty; an option in another or no unit is tried at 1× and at qty× and
 /// flagged [AssistPick.unitsAgree] false. Ties go to a single value over a
-/// range, then to agreeing units, then to the smaller value. Null when the
-/// item has no positive kcal or no option carries a usable number.
-AssistPick? pickOption(dynamic item, dynamic options) {
+/// range, then to agreeing units, then to the smaller value. A size the
+/// item's name or unit names wins over the nearest number while it stays
+/// inside the suggestion band. Null when the item has no positive kcal or
+/// no option carries a usable number. [menuItem] (the published name) also
+/// counts for the size check ("Large Pepperoni Pizza").
+AssistPick? pickOption(dynamic item, dynamic options, {String menuItem = ''}) {
   final parsed = <_Option>[];
   var i = 0;
   for (final raw in (options is List ? options : const []).take(
@@ -790,7 +1057,7 @@ AssistPick? pickOption(dynamic item, dynamic options) {
     final o = _parseOption(raw, i++);
     if (o != null) parsed.add(o);
   }
-  return _pickFrom(item, parsed);
+  return _pickFrom(item, parsed, menuItem: menuItem);
 }
 
 /// A components_sum match as one pick: every component must publish
@@ -959,6 +1226,7 @@ final class AssistContext {
     required this.trigger,
     this.country,
     this.requestChainKeys = const [],
+    this.requestItems = const [],
     this.locationChainKeys = const [],
     this.placeChainKey,
     this.confirmedChainKeys = const {},
@@ -978,6 +1246,13 @@ final class AssistContext {
   /// The chain keys the request named, in rank order (LookupRequest
   /// .chainKeys). A lookup that picks any other chain is rejected.
   final List<String> requestChainKeys;
+
+  /// The items the request named, as composed (LookupRequest.body['items']).
+  /// A match counts only while the meal's item at its item_index still
+  /// composes to the same entry (name, count, unit, brand): a re-analysis,
+  /// an editor deletion or a stale job must never land published numbers
+  /// on another item. Without them nothing can be covered.
+  final List<Object?> requestItems;
 
   /// Of those, the chains that came from the photo's location.
   final List<String> locationChainKeys;
@@ -1127,6 +1402,21 @@ AssistDecision _terminal(
   evidence: evidence,
 );
 
+/// The meal's [item] still composes to the request's entry at [index].
+bool _sameRequestItem(dynamic item, List<Object?> requestItems, int index) {
+  if (index >= requestItems.length) return false;
+  final want = requestItems[index];
+  if (want is! Map) return false;
+  final now = composeLookupItem(item);
+  final q = now['qty'], wq = want['qty'];
+  return now['name'] == want['name'] &&
+      now['unit'] == want['unit'] &&
+      now['brand'] == want['brand'] &&
+      q is num &&
+      wq is num &&
+      q == wq;
+}
+
 /// Decides what a finished [lookup] may do to [meal] (see the library
 /// doc for the policy). Pure and total: any shape of lookup, meal or
 /// context yields a decision, never an exception.
@@ -1217,6 +1507,16 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       ctx.confirmedChainKeys.contains(chainKey) &&
       ctx.placeVerified &&
       !ctx.dense;
+  // Items printed with ANOTHER table chain's brand: never covered, and they
+  // contradict a location-only match (a Chipotle bowl at a "confirmed"
+  // Qdoba spot means the spot is wrong).
+  final otherBrandItems = <int>{
+    for (var i = 0; i < itemCount; i++)
+      if (rawItems[i] is Map &&
+          !brandItems.contains(i) &&
+          matchChain(itemContextFields(rawItems[i]).brand) != null)
+        i,
+  };
   final AssistEvidenceKind? evidence = brandItems.isNotEmpty
       ? AssistEvidenceKind.itemBrand
       : locationConfirmed
@@ -1233,6 +1533,20 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
         ? AssistReason.chainBlocked
         : AssistReason.locationNotRestaurant;
     return _terminal(AssistOutcome.reject, '', reason, ctx, provider);
+  }
+
+  // A leftover deduction counts what was EATEN; published numbers are one
+  // whole serving, and writing them would wipe the deduction. Not even a
+  // one-tap suggestion.
+  if (base['leftover'] is Map) {
+    return _terminal(
+      AssistOutcome.contextOnly,
+      AssistStatus.contextOnly,
+      AssistReason.hasLeftover,
+      ctx,
+      provider,
+      evidence: evidence,
+    );
   }
 
   // ── The source ──
@@ -1311,6 +1625,7 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
   final seenIndex = <int>{};
   final seenMenu = <String>{};
   var oneToOne = true;
+  var changed = 0;
   for (final m in rawMatches.take(kLookupMaxItems)) {
     if (m is! Map) continue;
     final idx = m['item_index'];
@@ -1325,6 +1640,10 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       continue;
     }
     if (menu.isEmpty) continue;
+    if (!_sameRequestItem(rawItems[idx], ctx.requestItems, idx)) {
+      changed++;
+      continue;
+    }
     if (!seenIndex.add(idx)) {
       oneToOne = false;
       continue;
@@ -1337,6 +1656,18 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       isDrinkFlag: m['is_drink'] == true,
       raw: m,
     ));
+  }
+  if (parsed.isEmpty && changed > 0) {
+    // Every match points at an item that is no longer the one the request
+    // named: the result belongs to another meal state. Nothing is written.
+    return _terminal(
+      AssistOutcome.reject,
+      '',
+      AssistReason.itemChanged,
+      ctx,
+      provider,
+      evidence: evidence,
+    );
   }
 
   // A published component that also stands as its own item in the meal
@@ -1367,18 +1698,24 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
     mealReason = AssistReason.sourceNotCited;
   } else if (!src.official) {
     mealReason = AssistReason.sourceNotOfficial;
+  } else if (src.foreign) {
+    mealReason = AssistReason.sourceForeign;
   } else if (!typeOfficial) {
     mealReason = AssistReason.sourceTypeNotOfficial;
   } else if (sourceOld) {
     mealReason = AssistReason.sourceOld;
   } else if (meal.corrected) {
     mealReason = AssistReason.mealCorrected;
-  } else if (base['leftover'] is Map) {
-    mealReason = AssistReason.hasLeftover;
   } else if (fields.portionState != PortionState.whole) {
     mealReason = AssistReason.portionNotWhole;
   } else if (fields.restaurantContext == RestaurantContext.packaged) {
     mealReason = AssistReason.contextPackaged;
+  } else if (fields.restaurantContext != RestaurantContext.restaurant &&
+      fields.restaurantContext != RestaurantContext.takeout) {
+    // Home, unknown or a missing context (an old server, a model that
+    // skipped the field): a chain-branded product bought at a store
+    // looks the same as café food. Unknown never applies anything.
+    mealReason = AssistReason.contextNotRestaurant;
   } else if (meal.date != isoDate(ctx.now)) {
     mealReason = AssistReason.notToday;
   } else if (mealAt == null) {
@@ -1401,13 +1738,14 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
     final vision = _visionKcal(item);
     final pick = p.matchType == 'components_sum'
         ? _pickComponents(item, p.raw['components'])
-        : pickOption(item, p.raw['options']);
+        : pickOption(item, p.raw['options'], menuItem: p.menuItem);
     if (pick == null || vision == null) continue;
     final ratio = (pick.kcal / vision).toDouble();
     final words = _wordSet(p.menuItem);
     final alcohol = words.any(_alcoholWords.contains);
     final isDrink = p.isDrinkFlag || alcohol || words.any(_drinkWords.contains);
     final ownBrand = brandItems.contains(p.index);
+    final otherBrand = otherBrandItems.contains(p.index);
     final figures = pick.figures;
     final isGrounded =
         figures.isNotEmpty &&
@@ -1436,6 +1774,12 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       reason = AssistReason.range;
     } else if (!pick.unitsAgree) {
       reason = AssistReason.unitMismatch;
+    } else if (_packagedItem(item)) {
+      reason = AssistReason.itemPackaged;
+    } else if (!pick.sizeUnambiguous) {
+      reason = AssistReason.sizeAmbiguous;
+    } else if (otherBrand) {
+      reason = AssistReason.brandConflict;
     } else if (isDrink && !ownBrand) {
       reason = AssistReason.drinkUnbranded;
     } else if (!ownBrand && !locationConfirmed) {
@@ -1444,6 +1788,10 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
         AssistEvidenceKind.location => AssistReason.locationUnconfirmed,
         _ => AssistReason.itemUnbranded,
       };
+    } else if (!ownBrand && otherBrandItems.isNotEmpty) {
+      // Location-only: an item printed with another chain's brand says the
+      // place step picked the wrong restaurant.
+      reason = AssistReason.brandConflict;
     } else if (!ownBrand && p.matchType != 'exact_item') {
       reason = AssistReason.locationNeedsExactItem;
     } else if (ratio < kAssistApplyRatioMin - _eps ||
@@ -1694,6 +2042,10 @@ Map<String, Object?> _matchJson(AssistItemDecision d, {required bool applied}) {
     if (p.caloriesRange != null) 'calories_range': p.caloriesRange,
     'before': d.before.toItemJson(),
     if (applied) 'applied': d.proposed.toItemJson(),
+    // A suggestion lists every published size, so the user can pick the
+    // one they had when the photo cannot tell.
+    if (!applied && p.sizes.length > 1)
+      'sizes': [for (final z in p.sizes) z.toJson()],
   };
 }
 
@@ -1713,13 +2065,13 @@ Map<String, Object?> _sourceJson(AssistDecision d) => {
 
 /// Writes an APPLY decision — or a suggestion the user accepted — into
 /// [analysis]. Starts from [assistBase] (a re-application keeps the FIRST
-/// before values), and returns null — write nothing — unless every
-/// covered item there still holds the numbers the decision compared
-/// against. Only the covered items' four numbers change and they gain
-/// `published: true` (any other item loses a stale flag); names,
-/// meal_description and every other key stay byte-identical; totals move
-/// by the covered items' delta. The block stamps before/applied per item
-/// and the totals, for [revertAssist].
+/// before values), and returns null — write nothing — on a meal with a
+/// leftover deduction, or unless every covered item there still holds the
+/// numbers the decision compared against. Only the covered items' four
+/// numbers change and they gain `published: true` (any other item loses a
+/// stale flag); names, meal_description and every other key stay
+/// byte-identical; totals move by the covered items' delta. The block
+/// stamps before/applied per item and the totals, for [revertAssist].
 Map<String, dynamic>? applyAssist(
   Map<String, dynamic> analysis,
   AssistDecision decision,
@@ -1730,6 +2082,9 @@ Map<String, dynamic>? applyAssist(
   }
   if (decision.items.isEmpty || decision.chainKey == null) return null;
   final base = assistBase(analysis);
+  // A leftover deduction landed (before or after the decision): published
+  // whole-serving numbers would wipe it.
+  if (base['leftover'] is Map) return null;
   final raw = base['food_items'];
   if (raw is! List) return null;
   final seen = <int>{};
