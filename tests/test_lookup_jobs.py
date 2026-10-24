@@ -120,9 +120,36 @@ def test_submit_runs_once_then_serves_the_cache(services):
     assert done["cited_urls"] == ["https://www.chipotle.com/nutrition-calculator"]
     assert done["evidence"][0]["url"] == done["cited_urls"][0]
     assert len(done["evidence"][0]["text"]) == lookup_jobs.EVIDENCE_TEXT_CAP
+    assert done["evidence"][0]["verbatim"] is False
     kind, cached = service.submit(_request())
     assert kind == "cached" and cached == done
     assert runner.calls == 1
+
+
+def test_evidence_is_labelled_search_prose_never_page_text(services):
+    """The CLI's WebSearch text is its sub-model's write-up of a whole
+    search, shared by every URL that search listed — not text from any
+    one page. Each entry says so (verbatim false, scope search), so the
+    app can let it back a suggestion but never an APPLY grounding check."""
+    urls = ["https://www.chipotle.com/nutrition-calculator",
+            "https://thirdparty.example/chipotle-bowl"]
+
+    def run():
+        out = _ok_run()
+        out.cited_urls = list(urls)
+        out.evidence = [{"urls": list(urls),
+                         "text": "bowl 180 calories (summary)"}]
+        return out
+
+    service = _service(ScriptedRunner([run]))
+    services.append(service)
+    _, body = service.submit(_request())
+    done = _wait_state(service, body["job_id"], {"done"})
+    assert done["evidence"] == [
+        {"url": url, "text": "bowl 180 calories (summary)",
+         "verbatim": False, "scope": "search"} for url in urls]
+    assert lookup_jobs.EVIDENCE_PROVENANCE == {"verbatim": False,
+                                               "scope": "search"}
 
 
 def test_same_request_twice_is_one_job(services):

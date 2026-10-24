@@ -99,8 +99,10 @@ def test_accepts_polls_and_then_serves_the_cache_purely(lookup):
     assert done["lookup"]["status"] == "found"
     assert done["analyzed_by"] == "claude"
     assert done["cited_urls"] == ["https://www.chipotle.com/nutrition-calculator"]
+    # Search prose, labelled as such: never page text (verbatim false).
     assert done["evidence"] == [{"url": done["cited_urls"][0],
-                                 "text": "180 calories"}]
+                                 "text": "180 calories",
+                                 "verbatim": False, "scope": "search"}]
     cached = _post(client, REQUEST_BODY)
     assert cached.status_code == 200
     assert cached.get_json() == done

@@ -128,14 +128,29 @@ def default_runner(request: Dict, on_start: Callable[[], bool]):
     )
 
 
+# Provenance of every evidence entry this server returns (see
+# _evidence_by_url). Pinned by tests; the app's server client must read
+# verbatim:false as LookupEvidence(verbatim: false).
+EVIDENCE_PROVENANCE = {"verbatim": False, "scope": "search"}
+
+
 def _evidence_by_url(run) -> list:
-    """[{url, text}] per cited URL: the text of the search result that
-    listed it — the app's grounding check looks for the published number
-    there."""
+    """[{url, text, verbatim: false, scope: "search"}] per cited URL.
+
+    PROVENANCE — what [text] is NOT: text extracted from that URL's page.
+    The CLI's WebSearch tool returns a link list plus its search
+    sub-model's own WRITE-UP of the results; [text] is that write-up for
+    the search that listed the URL, shared by every URL of that search.
+    A third-party page in the same results can put a number into it. So
+    it may back a SUGGESTION, but it must never satisfy an APPLY grounding
+    check ("the number appears in the provider's grounded text for that
+    URL"): verbatim is always false and scope "search" says the text
+    belongs to the whole search, not to this URL."""
     out = []
     for url in run.cited_urls:
         text = next((s["text"] for s in run.evidence if url in s["urls"]), "")
-        out.append({"url": url, "text": text[:EVIDENCE_TEXT_CAP]})
+        out.append(dict({"url": url, "text": text[:EVIDENCE_TEXT_CAP]},
+                        **EVIDENCE_PROVENANCE))
     return out
 
 
