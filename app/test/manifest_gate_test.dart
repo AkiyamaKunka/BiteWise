@@ -8,6 +8,8 @@ import 'package:calorie_tracker/services/photo/background_time.dart'
     show backgroundTimeChannelName;
 import 'package:calorie_tracker/services/photo/photo_changes.dart'
     show photoChangesChannelName;
+import 'package:calorie_tracker/services/places/places.dart'
+    show placesChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:calorie_tracker/ui/background_glue.dart'
     show backgroundNativeLaunchPrefsKey;
@@ -400,6 +402,113 @@ void main() {
         ?.group(0);
     expect(register, contains('registrar(forPlugin: "PhotoChangesPlugin")'));
     expect(register, contains('PhotoChangesPlugin.register(with:'));
+  });
+
+  // Restaurant assist's places (PlacesPlugin.swift, design R4,
+  // 2026-10-24): Apple Maps on the phone lists the food places around a
+  // photo's position. A Swift file missing from Runner answers
+  // MissingPluginException, which the Dart side turns into a quiet 'error'
+  // by design, so the wiring is pinned here. And it must never need a
+  // location permission: no CLLocationManager (the prompt), no geocoder
+  // (no city or street, ever), no NSLocation* key in either Info.plist —
+  // and on Android no location permission at all, ACCESS_MEDIA_LOCATION
+  // included (v1 reads no photo location there).
+  test('the places plugin is built into Runner, registered, and needs no '
+      'location permission on either platform', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/PlacesPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$placesChannelName"'));
+    expect(source, contains('MKLocalPointsOfInterestRequest'));
+    // The code, without its comments (which name what it never does).
+    final code = source
+        .split('\n')
+        .map((line) => line.replaceFirst(RegExp(r'//.*'), ''))
+        .join('\n');
+    for (final banned in [
+      'CLLocationManager',
+      'CLGeocoder',
+      'requestWhenInUseAuthorization',
+      'requestAlwaysAuthorization',
+      'requestLocation',
+      'startUpdatingLocation',
+      'MKReverseGeocodingRequest',
+      'MKGeocodingRequest',
+      'reverseGeocode',
+      // Nothing that identifies or addresses a place goes back to Dart.
+      'phoneNumber',
+      '.identifier',
+      'thoroughfare',
+      'postalAddress',
+      'addressRepresentations',
+      'UserDefaults',
+      'FileManager',
+    ]) {
+      expect(code, isNot(contains(banned)),
+          reason: 'PlacesPlugin.swift must not use $banned');
+    }
+
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* PlacesPlugin.swift \*/ = '
+            r'\{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* PlacesPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* PlacesPlugin.swift in '
+            'Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* PlacesPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('PlacesPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('registrar(forPlugin: "PlacesPlugin")'));
+    expect(register, contains('PlacesPlugin.register(with:'));
+
+    for (final target in ['Runner', 'ShareExtension']) {
+      final plist =
+          File('$ios/$target/Info.plist').readAsStringSync();
+      expect(RegExp(r'<key>NSLocation[A-Za-z]*</key>').hasMatch(plist),
+          isFalse,
+          reason: '$target/Info.plist declares a location key: places need '
+              'no location permission, and none may be asked for');
+    }
+
+    final manifest = File('${_appRoot().path}/android/app/src/main/'
+            'AndroidManifest.xml')
+        .readAsStringSync();
+    for (final permission in [
+      'ACCESS_MEDIA_LOCATION',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+    ]) {
+      expect(manifest, isNot(contains(permission)),
+          reason: 'v1 reads no location on Android');
+    }
   });
 
   // The iOS background run counts its time budgets from the moment

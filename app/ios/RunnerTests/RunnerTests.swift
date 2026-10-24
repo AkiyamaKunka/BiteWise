@@ -1,5 +1,7 @@
+import CoreLocation
 import Flutter
 import ImageIO
+import MapKit
 import Photos
 import UIKit
 import UniformTypeIdentifiers
@@ -1334,5 +1336,400 @@ class LateImportNativeScenarioTests: XCTestCase {
     XCTAssertEqual(again["status"] as? String, "ok")
     let againIds = (again["ids"] as? [[String: Any]] ?? []).compactMap { $0["id"] as? String }
     XCTAssertFalse(againIds.contains(id))
+  }
+}
+
+/// Restaurant assist's places channel (Runner/PlacesPlugin.swift, design
+/// R4): the category and error tables, the arguments, the reply's shape
+/// and order, one reply per call (the search's or the timeout's), and —
+/// against the real MapKit on this simulator — places at a public landmark
+/// with no location permission ever asked for.
+class PlacesPluginTests: XCTestCase {
+
+  // MARK: - helpers
+
+  /// Times Square, the probe's public landmark.
+  private let landmark = (lat: 40.7580, lon: -73.9855)
+
+  private func call(
+    _ plugin: PlacesPlugin, method: String = "nearbyFood", _ args: Any?,
+    timeout: TimeInterval = 30, file: StaticString = #filePath, line: UInt = #line
+  ) -> (reply: Any?, onMain: Bool) {
+    let replied = expectation(description: "\(method) reply")
+    var reply: Any?
+    var onMain = false
+    plugin.handle(FlutterMethodCall(methodName: method, arguments: args)) {
+      reply = $0
+      onMain = Thread.isMainThread
+      replied.fulfill()
+    }
+    wait(for: [replied], timeout: timeout)
+    return (reply, onMain)
+  }
+
+  private func map(
+    _ plugin: PlacesPlugin, _ args: Any?, file: StaticString = #filePath, line: UInt = #line
+  ) -> [String: Any] {
+    let (reply, onMain) = call(plugin, args, file: file, line: line)
+    XCTAssertTrue(onMain, "channel replies belong on the platform thread", file: file, line: line)
+    guard let map = reply as? [String: Any] else {
+      XCTFail("replied \(String(describing: reply)), not a map", file: file, line: line)
+      return [:]
+    }
+    return map
+  }
+
+  /// A plugin whose search answers [outcome] at once (on another thread,
+  /// as MapKit's need not be main) and records the queries it got.
+  private func plugin(
+    answering outcome: Result<[PlaceCandidate], Error>, queries: Box<[NearbyFoodQuery]>,
+    distillery: Bool = true
+  ) -> PlacesPlugin {
+    PlacesPlugin(
+      search: { query, done in
+        queries.value.append(query)
+        DispatchQueue.global().async { done(outcome) }
+        return {}
+      }, systemHasDistillery: distillery)
+  }
+
+  final class Box<T> {
+    var value: T
+    init(_ value: T) { self.value = value }
+  }
+
+  /// A place [metres] north of the landmark.
+  private func candidate(
+    _ name: String?, north metres: Double, _ category: MKPointOfInterestCategory? = .restaurant,
+    url: String? = nil
+  ) -> PlaceCandidate {
+    let lat = landmark.lat + metres / 111_320.0
+    return PlaceCandidate(
+      name: name, category: category,
+      location: CLLocation(latitude: lat, longitude: landmark.lon),
+      url: url.flatMap { URL(string: $0) })
+  }
+
+  private var landmarkCenter: CLLocationCoordinate2D {
+    CLLocationCoordinate2D(latitude: landmark.lat, longitude: landmark.lon)
+  }
+
+  // MARK: - channel
+
+  func testChannelNameMatchesDart() {
+    XCTAssertEqual(PlacesPlugin.channelName, "dev.calorietracker/places")
+  }
+
+  func testUnknownMethodIsNotImplemented() {
+    let (reply, _) = call(PlacesPlugin(), method: "nope", nil)
+    XCTAssertTrue((reply as AnyObject?) === FlutterMethodNotImplemented)
+  }
+
+  // MARK: - categories
+
+  /// app/lib/services/places/places.dart's PlaceCategory wire names, read
+  /// from the source tree: the two tables must agree name for name.
+  func testCategoryNamesMatchDart() throws {
+    let app = URL(fileURLWithPath: "\(#filePath)")
+      .deletingLastPathComponent()  // RunnerTests
+      .deletingLastPathComponent()  // ios
+      .deletingLastPathComponent()  // app
+    let dart = try String(
+      contentsOf: app.appendingPathComponent("lib/services/places/places.dart"), encoding: .utf8)
+    guard let start = dart.range(of: "enum PlaceCategory {"),
+      let end = dart.range(of: "const PlaceCategory(this.wire);", range: start.upperBound..<dart.endIndex)
+    else { return XCTFail("no PlaceCategory enum in places.dart") }
+    let body = String(dart[start.upperBound..<end.lowerBound])
+    let regex = try NSRegularExpression(pattern: "[a-zA-Z]+\\('([a-z_]+)'\\)")
+    let names = regex.matches(in: body, range: NSRange(body.startIndex..., in: body)).compactMap {
+      Range($0.range(at: 1), in: body).map { String(body[$0]) }
+    }
+    XCTAssertEqual(names, placesCategoryTable.map(\.name).filter { $0 != "food_market" }
+      + ["distillery", "food_market", "other"])
+    XCTAssertTrue(dart.contains("PlaceCategory.distillery,\n};"), "the defaults end with distillery")
+  }
+
+  func testCategoryMapping() {
+    let base: [MKPointOfInterestCategory] = [
+      .restaurant, .cafe, .bakery, .brewery, .winery, .nightlife,
+    ]
+    // No categories → the defaults: food markets only on request.
+    XCTAssertEqual(placesCategories([], systemHasDistillery: false), base)
+    if #available(iOS 18.0, *) {
+      XCTAssertEqual(placesCategories([], systemHasDistillery: true), base + [.distillery])
+      XCTAssertEqual(placesCategory("distillery", systemHasDistillery: true), .distillery)
+      XCTAssertEqual(placesCategoryName(.distillery), "distillery")
+    }
+    XCTAssertNil(placesCategory("distillery", systemHasDistillery: false))
+    XCTAssertFalse(placesCategories([], systemHasDistillery: true).contains(.foodMarket))
+    // Asked for: in the order asked, once each, unknown names left out.
+    XCTAssertEqual(
+      placesCategories(
+        ["food_market", "cafe", "cafe", "hotel", "MKPOICategoryRestaurant", ""],
+        systemHasDistillery: false),
+      [.foodMarket, .cafe])
+    // Nothing this OS can search for → nothing (the handler says
+    // unsupported).
+    XCTAssertEqual(placesCategories(["distillery"], systemHasDistillery: false), [])
+    XCTAssertEqual(placesCategories(["hotel"], systemHasDistillery: true), [])
+
+    for (name, category) in placesCategoryTable {
+      XCTAssertEqual(placesCategory(name, systemHasDistillery: false), category)
+      XCTAssertEqual(placesCategoryName(category), name)
+    }
+    XCTAssertEqual(placesCategoryName(nil), "other")
+    XCTAssertEqual(placesCategoryName(.hotel), "other")
+    XCTAssertEqual(placesCategoryName(.store), "other")
+  }
+
+  // MARK: - errors
+
+  func testErrorMapping() {
+    let none = placesStatus(for: NSError(domain: MKErrorDomain, code: 4))
+    XCTAssertEqual(none.status, "none")
+    XCTAssertNil(none.errorCode)
+    XCTAssertEqual(
+      placesStatus(for: NSError(domain: MKErrorDomain, code: Int(MKError.Code.placemarkNotFound.rawValue))).status,
+      "none")
+    let throttled = placesStatus(for: NSError(domain: MKErrorDomain, code: 3))
+    XCTAssertEqual(throttled.status, "throttled")
+    XCTAssertNil(throttled.errorCode)
+    XCTAssertEqual(
+      placesStatus(for: NSError(domain: MKErrorDomain, code: Int(MKError.Code.loadingThrottled.rawValue))).status,
+      "throttled")
+    let server = placesStatus(for: NSError(domain: MKErrorDomain, code: 2))
+    XCTAssertEqual(server.status, "error")
+    XCTAssertEqual(server.errorCode, "\(MKErrorDomain):2")
+    let offline = placesStatus(for: NSError(domain: NSURLErrorDomain, code: -1009))
+    XCTAssertEqual(offline.status, "error")
+    XCTAssertEqual(offline.errorCode, "\(NSURLErrorDomain):-1009")
+    // The same numbers in another domain are not MapKit's verdicts.
+    XCTAssertEqual(placesStatus(for: NSError(domain: "GEOErrorDomain", code: 4)).status, "error")
+    XCTAssertEqual(placesStatus(for: NSError(domain: "GEOErrorDomain", code: 3)).status, "error")
+    let long = placesStatus(for: NSError(domain: String(repeating: "d", count: 200), code: 1))
+    XCTAssertEqual(long.errorCode?.count, 80)
+  }
+
+  // MARK: - arguments
+
+  func testQueryArgumentsAreCheckedAndClamped() {
+    func query(_ args: [String: Any]) -> NearbyFoodQuery? {
+      NearbyFoodQuery(args, systemHasDistillery: false)
+    }
+    let q = query(["lat": landmark.lat, "lon": landmark.lon, "radius_m": 150])!
+    XCTAssertEqual(q.center.latitude, landmark.lat)
+    XCTAssertEqual(q.center.longitude, landmark.lon)
+    XCTAssertEqual(q.radius, 150)
+    XCTAssertEqual(q.categories.count, 6)
+    XCTAssertEqual(query(["lat": 1, "lon": 2])?.radius, 100, "the default")
+    XCTAssertEqual(query(["lat": 1, "lon": 2, "radius_m": 5])?.radius, 40)
+    XCTAssertEqual(query(["lat": 1, "lon": 2, "radius_m": 5000])?.radius, 300)
+    XCTAssertEqual(query(["lat": 1, "lon": 2, "radius_m": Double.nan])?.radius, 100)
+    XCTAssertEqual(query(["lat": 1, "lon": 2, "categories": ["food_market"]])?.categories, [.foodMarket])
+    XCTAssertEqual(query(["lat": 1, "lon": 2, "categories": "cafe"])?.categories.count, 6)
+    for bad: [String: Any] in [
+      [:], ["lat": 1], ["lon": 2], ["lat": "1", "lon": 2], ["lat": Double.nan, "lon": 2],
+      ["lat": 1, "lon": Double.infinity], ["lat": 91, "lon": 2], ["lat": 1, "lon": -181],
+    ] {
+      XCTAssertNil(query(bad), "\(bad)")
+    }
+  }
+
+  // MARK: - the reply
+
+  func testEntriesAreNearestFirstCleanedAndCapped() {
+    let entries = placesEntries(
+      [
+        candidate("Far Diner", north: 140),
+        candidate("Joe's\u{0}\u{7} Pizza\n", north: 25, url: "https://www.JoesPizzaNYC.com/menu?x=1"),
+        candidate("Starbucks Coffee Company", north: 60, .cafe, url: "https://www.starbucks.com"),
+        candidate("Abc", north: 60, .bakery, url: "https://under_score.example"),
+        candidate(nil, north: 5),
+        candidate("   ", north: 6),
+        PlaceCandidate(name: "Nowhere", category: .cafe, location: nil),
+        candidate("Hotel Bar", north: 80, .hotel, url: "https://localhost"),
+        candidate(String(repeating: "x", count: 300), north: 90, nil, url: "http://a..b.com"),
+      ], center: landmarkCenter)
+    XCTAssertEqual(
+      entries.map { $0["name"] as? String },
+      ["Joe's Pizza", "Abc", "Starbucks Coffee Company", "Hotel Bar", String(repeating: "x", count: 120), "Far Diner"])
+    let distances = entries.compactMap { $0["distance_m"] as? Int }
+    XCTAssertEqual(distances.count, entries.count)
+    XCTAssertEqual(distances, distances.sorted())
+    XCTAssertEqual(distances.first!, 25, accuracy: 1)
+    XCTAssertEqual(
+      entries.map { $0["category"] as? String },
+      ["restaurant", "bakery", "cafe", "other", "other", "restaurant"])
+    XCTAssertEqual(entries[0]["url_host"] as? String, "www.joespizzanyc.com")
+    XCTAssertNil(entries[1]["url_host"], "not an ASCII hostname")
+    XCTAssertEqual(entries[2]["url_host"] as? String, "www.starbucks.com")
+    XCTAssertNil(entries[3]["url_host"], "no dot")
+    XCTAssertNil(entries[4]["url_host"], "an empty label")
+    for entry in entries {
+      XCTAssertTrue(
+        Set(entry.keys).isSubset(of: ["name", "category", "distance_m", "url_host"]),
+        "\(entry.keys): nothing else goes back to Dart")
+    }
+
+    let many = (0..<80).map { candidate("P\($0)", north: Double($0)) }
+    XCTAssertEqual(placesEntries(many, center: landmarkCenter).count, placesMaxPlaces)
+    XCTAssertEqual(placesEntries(many, center: landmarkCenter, limit: 3).count, 3)
+  }
+
+  func testPlaceCandidateFromAMapItem() {
+    let coordinate = CLLocationCoordinate2D(latitude: landmark.lat + 0.0003, longitude: landmark.lon)
+    let item: MKMapItem
+    if #available(iOS 26.0, *) {
+      item = MKMapItem(
+        location: CLLocation(latitude: coordinate.latitude, longitude: coordinate.longitude),
+        address: nil)
+    } else {
+      item = MKMapItem(placemark: MKPlacemark(coordinate: coordinate))
+    }
+    item.name = "Starbucks Coffee Company"
+    item.pointOfInterestCategory = .cafe
+    item.url = URL(string: "https://WWW.Starbucks.com/store-locator")
+    let candidate = PlaceCandidate(item)
+    XCTAssertEqual(candidate.name, "Starbucks Coffee Company")
+    XCTAssertEqual(candidate.category, .cafe)
+    XCTAssertEqual(candidate.location?.coordinate.latitude ?? 0, coordinate.latitude, accuracy: 1e-9)
+    let entry = placesEntries([candidate], center: landmarkCenter).first
+    XCTAssertEqual(entry?["url_host"] as? String, "www.starbucks.com")
+    XCTAssertEqual(entry?["category"] as? String, "cafe")
+    XCTAssertEqual(entry?["distance_m"] as? Int ?? 0, 33, accuracy: 2)
+  }
+
+  // MARK: - the handler
+
+  func testHandleRepliesOnMainWithTheSearchesAnswer() {
+    let queries = Box<[NearbyFoodQuery]>([])
+    let found = plugin(
+      answering: .success([candidate("B", north: 50), candidate("A", north: 10, .cafe)]),
+      queries: queries)
+    let ok = map(
+      found,
+      ["lat": landmark.lat, "lon": landmark.lon, "radius_m": 1000, "categories": ["restaurant", "cafe"]])
+    XCTAssertEqual(ok["status"] as? String, "ok")
+    XCTAssertNil(ok["error_code"])
+    let places = ok["places"] as? [[String: Any]] ?? []
+    XCTAssertEqual(places.map { $0["name"] as? String }, ["A", "B"])
+    XCTAssertEqual(queries.value.count, 1)
+    XCTAssertEqual(queries.value.first?.radius, 300)
+    XCTAssertEqual(queries.value.first?.categories, [.restaurant, .cafe])
+
+    let empty = map(plugin(answering: .success([]), queries: queries), ["lat": 1, "lon": 2])
+    XCTAssertEqual(empty["status"] as? String, "none")
+    XCTAssertEqual((empty["places"] as? [Any])?.count, 0)
+
+    let unnamed = map(
+      plugin(answering: .success([candidate(nil, north: 1)]), queries: queries),
+      ["lat": landmark.lat, "lon": landmark.lon])
+    XCTAssertEqual(unnamed["status"] as? String, "none")
+
+    for (code, status) in [(4, "none"), (3, "throttled"), (2, "error")] {
+      let reply = map(
+        plugin(answering: .failure(NSError(domain: MKErrorDomain, code: code)), queries: queries),
+        ["lat": 1, "lon": 2])
+      XCTAssertEqual(reply["status"] as? String, status, "MKError \(code)")
+      XCTAssertEqual((reply["places"] as? [Any])?.count, 0)
+    }
+  }
+
+  func testBadArgumentsAndUnsearchableCategoriesNeverSearch() {
+    let queries = Box<[NearbyFoodQuery]>([])
+    let p = plugin(answering: .success([]), queries: queries, distillery: false)
+    let bad = map(p, ["lat": 91, "lon": 2])
+    XCTAssertEqual(bad["status"] as? String, "error")
+    XCTAssertEqual(bad["error_code"] as? String, "bad_arguments")
+    XCTAssertEqual(map(p, nil)["error_code"] as? String, "bad_arguments")
+    let unsupported = map(p, ["lat": 1, "lon": 2, "categories": ["distillery"]])
+    XCTAssertEqual(unsupported["status"] as? String, "unsupported")
+    XCTAssertTrue(queries.value.isEmpty, "MapKit was not asked")
+  }
+
+  func testATimeoutCancelsTheSearchAndRepliesOnce() {
+    var cancelled = 0
+    var late: ((Result<[PlaceCandidate], Error>) -> Void)?
+    let slow = PlacesPlugin(
+      search: { _, done in
+        late = done
+        return { cancelled += 1 }
+      }, timeout: 0.2)
+    let replied = expectation(description: "one reply")
+    replied.expectedFulfillmentCount = 1
+    replied.assertForOverFulfill = true
+    var replies: [[String: Any]] = []
+    let started = Date()
+    slow.handle(FlutterMethodCall(methodName: "nearbyFood", arguments: ["lat": 1, "lon": 2])) {
+      XCTAssertTrue(Thread.isMainThread)
+      replies.append($0 as? [String: Any] ?? [:])
+      replied.fulfill()
+    }
+    wait(for: [replied], timeout: 5)
+    XCTAssertLessThan(Date().timeIntervalSince(started), 2)
+    XCTAssertEqual(replies.first?["status"] as? String, "error")
+    XCTAssertEqual(replies.first?["error_code"] as? String, "timeout")
+    XCTAssertEqual(cancelled, 1, "the search was cancelled")
+
+    // MapKit answering after all changes nothing.
+    late?(.success([candidate("A", north: 1)]))
+    let settle = expectation(description: "settle")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { settle.fulfill() }
+    wait(for: [settle], timeout: 5)
+    XCTAssertEqual(replies.count, 1)
+    XCTAssertEqual(cancelled, 1)
+  }
+
+  func testAnAnswerBeforeTheTimeoutIsTheOnlyReply() {
+    var cancelled = 0
+    let quick = PlacesPlugin(
+      search: { _, done in
+        DispatchQueue.main.async { done(.failure(NSError(domain: MKErrorDomain, code: 4))) }
+        return { cancelled += 1 }
+      }, timeout: 0.3)
+    var replies = 0
+    let replied = expectation(description: "reply")
+    quick.handle(FlutterMethodCall(methodName: "nearbyFood", arguments: ["lat": 1, "lon": 2])) { _ in
+      replies += 1
+      replied.fulfill()
+    }
+    wait(for: [replied], timeout: 5)
+    let settle = expectation(description: "past the timeout")
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { settle.fulfill() }
+    wait(for: [settle], timeout: 5)
+    XCTAssertEqual(replies, 1)
+    XCTAssertEqual(cancelled, 0, "a finished search is not cancelled")
+  }
+
+  // MARK: - the real MapKit
+
+  /// The simulator's own MapKit at a public landmark: food places come
+  /// back nearest first in the reply's shape, and the app has still never
+  /// been asked about location (no CLLocationManager anywhere in it, no
+  /// NSLocation key). Skipped when the simulator cannot reach Apple's
+  /// servers.
+  func testRealMapKitAtAPublicLandmarkNeedsNoLocationPermission() throws {
+    let (reply, onMain) = call(
+      PlacesPlugin(), ["lat": landmark.lat, "lon": landmark.lon, "radius_m": 100], timeout: 15)
+    XCTAssertTrue(onMain)
+    let map = reply as? [String: Any] ?? [:]
+    let status = map["status"] as? String
+    if status == "error" || status == "throttled" {
+      throw XCTSkip("MapKit unavailable here: \(map["error_code"] ?? status ?? "-")")
+    }
+    XCTAssertEqual(status, "ok")
+    let places = map["places"] as? [[String: Any]] ?? []
+    XCTAssertGreaterThan(places.count, 3, "Times Square has food places within 100 m")
+    let distances = places.compactMap { $0["distance_m"] as? Int }
+    XCTAssertEqual(distances.count, places.count)
+    XCTAssertEqual(distances, distances.sorted())
+    for place in places {
+      XCTAssertTrue(Set(place.keys).isSubset(of: ["name", "category", "distance_m", "url_host"]))
+      XCTAssertFalse((place["name"] as? String ?? "").isEmpty)
+    }
+    XCTAssertTrue(places.contains { ($0["url_host"] as? String) != nil }, "some list a website")
+    XCTAssertEqual(
+      CLLocationManager().authorizationStatus, .notDetermined,
+      "the app asked for location: the places channel must never need it")
   }
 }

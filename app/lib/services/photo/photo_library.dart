@@ -6,6 +6,7 @@
 /// implementation.
 library;
 
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show MethodCall;
@@ -63,6 +64,19 @@ abstract class PhotoLibrary {
   Future<void> stopChangeNotify();
 }
 
+/// Where the photo library says an asset was taken (design R4, restaurant
+/// assist): PHAsset.location on iOS, the position the Photos app shows. A
+/// location the user changed there is the one read, and one removed there
+/// ('No Location') reads as none. Read from the library's record of the
+/// asset, never from its bytes: no original, file or thumbnail is opened.
+/// [PhotoLocationReader] (photo_location.dart) is the only caller; it
+/// checks the numbers and catches anything thrown.
+abstract class AssetLocationSource {
+  /// [assetId]'s coordinates, or null when it has none, is gone or is not
+  /// an image.
+  Future<({double latitude, double longitude})?> assetLatLng(String assetId);
+}
+
 class _PhotoManagerAsset implements LibraryAsset {
   _PhotoManagerAsset(this._entity);
   final AssetEntity _entity;
@@ -93,7 +107,7 @@ Future<bool?> photoLibraryAccess() async {
   }
 }
 
-class PhotoManagerLibrary implements PhotoLibrary {
+class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
   /// Ask Android for images only. The manifest declares READ_MEDIA_IMAGES
   /// (+ VISUAL_USER_SELECTED) and no video permission; photo_manager's
   /// default option asks for image|video, and its Android 14+ delegate folds
@@ -129,6 +143,22 @@ class PhotoManagerLibrary implements PhotoLibrary {
     } catch (_) {
       return null;
     }
+  }
+
+  /// iOS only: there, photo_manager answers from the PHAsset it fetches
+  /// fresh by identifier (never its cache), with no extra permission.
+  /// Android: null, always, without asking. A photo's location there comes
+  /// from the file's EXIF and needs ACCESS_MEDIA_LOCATION, which v1 never
+  /// declares or requests.
+  @override
+  Future<({double latitude, double longitude})?> assetLatLng(
+      String assetId) async {
+    if (!Platform.isIOS || assetId.isEmpty) return null;
+    final entity = await AssetEntity.fromId(assetId);
+    if (entity == null || entity.type != AssetType.image) return null;
+    final at = await entity.latlngAsync();
+    if (at == null) return null;
+    return (latitude: at.latitude, longitude: at.longitude);
   }
 
   @override

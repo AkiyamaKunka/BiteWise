@@ -100,10 +100,11 @@ import workmanager_apple
   }
 
   /// The plugins that live in this target (ImageIOPlugin.swift,
-  /// BackgroundTimePlugin.swift, PhotoChangesPlugin.swift), for every
-  /// engine: the app's own and workmanager's headless background engine.
-  /// Only the app's engine calls the background-time channel; registering
-  /// it in both keeps one path. The photo change history is read by both.
+  /// BackgroundTimePlugin.swift, PhotoChangesPlugin.swift,
+  /// PlacesPlugin.swift), for every engine: the app's own and workmanager's
+  /// headless background engine. Only the app's engine calls the
+  /// background-time and places channels; registering them in both keeps
+  /// one path. The photo change history is read by both.
   static func registerAppPlugins(with registry: FlutterPluginRegistry) {
     if let registrar = registry.registrar(forPlugin: "ImageIOPlugin") {
       ImageIOPlugin.register(with: registrar)
@@ -113,6 +114,9 @@ import workmanager_apple
     }
     if let registrar = registry.registrar(forPlugin: "PhotoChangesPlugin") {
       PhotoChangesPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "PlacesPlugin") {
+      PlacesPlugin.register(with: registrar)
     }
   }
 }
