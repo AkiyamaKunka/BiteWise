@@ -1050,6 +1050,8 @@ class _SinkCapturingIntake implements PhotoIntake {
           bool newestDayFirst = false}) async =>
       null;
   @override
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async {}
+  @override
   Future<void> start() async {}
   @override
   Future<void> stop() async {}

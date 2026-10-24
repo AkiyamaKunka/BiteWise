@@ -1261,6 +1261,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get diagBgRunWatermarkNone => 'none';
 
   @override
+  String get diagLateImportsTitle => 'Late imports (other apps, glasses)';
+
+  @override
+  String diagLateImportsSummary(int n, String time) {
+    return '$n caught in 7 days · last $time';
+  }
+
+  @override
+  String get diagLateImportsRescanning => 'History expired — rescanning';
+
+  @override
+  String get diagLateImportsNeedsIos16 => 'Needs iOS 16';
+
+  @override
   String get addPhotosTitle => 'Recent photos';
 
   @override

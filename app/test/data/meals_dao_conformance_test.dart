@@ -309,6 +309,52 @@ void main() {
     });
   });
 
+  // Design G1b: the late-import pass skips, without reading a byte, the
+  // photos a meal already names.
+  group('loggedAssetIds — which photos a meal already names', () {
+    Future<int> mealFor(String assetId, {String hash = ''}) => dao.saveMeal(
+        Meal(
+          id: 0,
+          date: '2026-07-17',
+          time: '12:00 PM',
+          timestamp: '2026-07-17T12:00:00.000',
+          source: MealSource.appWatch,
+          imageHash: hash,
+          fileId: assetId,
+          analysis: const {'is_food': true, 'total_calories': 100},
+        ));
+
+    test('answers only the ids a meal names; text meals name none',
+        () async {
+      await mealFor('A1/L0/001');
+      await mealFor('A2/L0/001', hash: 'a' * 32);
+      await insert(date: '2026-07-17'); // a text meal: file_id ''
+      expect(
+          await dao.loggedAssetIds(
+              ['A1/L0/001', 'A2/L0/001', 'B9/L0/001', '']),
+          {'A1/L0/001', 'A2/L0/001'});
+      expect(await dao.loggedAssetIds(const []), isEmpty);
+      expect(await dao.loggedAssetIds(const ['']), isEmpty,
+          reason: 'the empty id of every text meal is never a match');
+    });
+
+    test('a deleted meal no longer names its photo', () async {
+      final id = await mealFor('A1/L0/001', hash: 'b' * 32);
+      await dao.deleteMeal(id);
+      expect(await dao.loggedAssetIds(['A1/L0/001']), isEmpty);
+    });
+
+    test('more ids than one query may bind', () async {
+      for (var i = 0; i < 3; i++) {
+        await mealFor('id$i');
+      }
+      await mealFor('id1200');
+      final asked = [for (var i = 0; i < 1300; i++) 'id$i'];
+      expect(await dao.loggedAssetIds(asked),
+          {'id0', 'id1', 'id2', 'id1200'});
+    });
+  });
+
   test('exportJson wraps every table in the versioned envelope', () async {
     await insert(date: '2026-07-17');
     await dao.saveBodyWeight('2026-07-17', 70);

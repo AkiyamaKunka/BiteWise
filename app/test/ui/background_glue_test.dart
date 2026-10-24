@@ -4,6 +4,8 @@
 // first device use — the watcher only worked while the app was foreground —
 // so these tests pin every seam of the fix.
 import 'dart:async';
+import 'dart:convert' show utf8;
+import 'dart:io' show Directory;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -19,6 +21,10 @@ import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
 import 'package:calorie_tracker/services/photo/background.dart';
 import 'package:calorie_tracker/services/photo/background_runs.dart';
 import 'package:calorie_tracker/services/photo/deferred_assets.dart';
+import 'package:calorie_tracker/services/local_store.dart';
+import 'package:calorie_tracker/services/photo/photo_changes.dart';
+import 'package:calorie_tracker/services/photo/photo_library.dart';
+import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/refresh_signal.dart';
@@ -64,6 +70,9 @@ class EmittingIntake implements PhotoIntake {
   /// is counted covered without being read or offered.
   bool Function(String assetId)? passOver;
 
+  /// What was asked of the intake, in order: 'scan', 'late'.
+  final List<String> calls = [];
+
   @override
   Future<DateTime?> backfillScan(
       {int lookbackDays = 0,
@@ -71,6 +80,7 @@ class EmittingIntake implements PhotoIntake {
       bool Function()? shouldContinue,
       Future<void> Function(DateTime safeFrontier)? onCovered,
       bool newestDayFirst = false}) async {
+    calls.add('scan');
     scans++;
     sinceArgs.add(since);
     newestDayFirstArgs.add(newestDayFirst);
@@ -93,6 +103,31 @@ class EmittingIntake implements PhotoIntake {
     }
     if (throwAfterEmit) throw StateError('library query died mid-scan');
     return frontier;
+  }
+
+  /// The late-import pass (design G1b), like the real intake's: each
+  /// photo through the sink with no safeFrontier, the budget asked first.
+  List<IntakePhoto> lateBatch = const [];
+  int lateUnread = 0;
+
+  /// Late photos the sink released: they stay in the cursor's carry.
+  final List<String> lateReleased = [];
+
+  @override
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async {
+    calls.add('late');
+    for (final p in lateBatch) {
+      if (shouldContinue != null && !shouldContinue()) {
+        lateUnread++;
+        continue;
+      }
+      final sink = _sink;
+      if (sink == null) {
+        _controller.add(p);
+      } else if (!await sink(p, null)) {
+        lateReleased.add(p.assetId);
+      }
+    }
   }
 
   @override
@@ -163,6 +198,9 @@ class _LateIntake implements PhotoIntake {
     await _sink?.call(photo, null);
     return null;
   }
+
+  @override
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async {}
 
   @override
   Future<void> start() async {}
@@ -2200,4 +2238,357 @@ void main() {
       expect(intake.backfillScans, before);
     });
   });
+
+  // Design G1b, 2026-10-23: photos other apps imported late, which no
+  // createDate scan lists, go through the same pipeline after the scan.
+  group('late imports', () {
+    late SharedPreferences prefs;
+    final noon = DateTime(2026, 10, 23, 12);
+
+    setUp(() async {
+      SharedPreferences.setMockInitialValues({});
+      prefs = await SharedPreferences.getInstance();
+    });
+
+    AnalyzerService food() => FakeAnalyzer()
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true, 'food_items': []},
+          isFood: true,
+          wall: Duration.zero);
+
+    test('the background run takes them after its scan, through its sink, '
+        'announced like any meal — and they move no watermark', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()..lateBatch = [photo(9)];
+      final dao = FakeDao();
+      final cards = <String>[];
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: dao, analyzer: food()),
+        showMealCard: (_, body) async => cards.add(body),
+        clock: () => noon,
+      );
+      expect(intake.calls, ['scan', 'late']);
+      expect(dao.meals.single.fileId, 'asset9');
+      expect(cards, hasLength(1));
+      expect(prefs.getString(backgroundWatermarkPrefsKey), isNull,
+          reason: 'the scan covered nothing, and a late photo checkpoints '
+              'nothing');
+    });
+
+    test('the watermark a run leaves is the same with or without them',
+        () async {
+      final t1 = DateTime.utc(2026, 10, 23, 10);
+      Future<String?> runWith(List<IntakePhoto> late) async {
+        final settings = await settingsWith(key: 'k');
+        final p = await SharedPreferences.getInstance();
+        final intake = EmittingIntake()
+          ..batch = [photo(1)]
+          ..safeFrontiers = [t1]
+          ..frontier = t1
+          ..lateBatch = late;
+        final marks = <String?>[];
+        await headlessBackfillWith(
+          settings: settings,
+          prefs: p,
+          intake: intake,
+          pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+          showMealCard: (_, _) async =>
+              marks.add(p.getString(backgroundWatermarkPrefsKey)),
+          clock: () => noon,
+        );
+        if (late.isNotEmpty) {
+          // Each card comes before its photo's checkpoint: the late photos
+          // find the scan's mark, and leave it as they found it.
+          expect(marks.skip(1).toSet(), {t1.toIso8601String()},
+              reason: 'the late photos checkpointed nothing of their own');
+        }
+        return p.getString(backgroundWatermarkPrefsKey);
+      }
+
+      final without = await runWith(const []);
+      final withLate = await runWith([photo(8), photo(9)]);
+      expect(without, t1.toIso8601String());
+      expect(withLate, without);
+    });
+
+    test('only with budget left: a scan that spent it leaves them for the '
+        'next run, without counting them turned away', () async {
+      final settings = await settingsWith(key: 'k');
+      var now = noon;
+      final intake = EmittingIntake()
+        ..batch = [photo(1)]
+        ..lateBatch = [photo(9)];
+      final dao = FakeDao();
+      final recorder = BackgroundRunRecorder(prefs, platform: 'ios',
+          clock: () => now);
+      await recorder.begin();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: dao, analyzer: food()),
+        showMealCard: (_, _) async {
+          now = now.add(const Duration(seconds: 16));
+        },
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+        recorder: recorder,
+        launchRecorded: true,
+      );
+      expect(intake.calls, ['scan'], reason: 'the pass never started');
+      expect(dao.meals.map((m) => m.fileId), ['asset1']);
+      expect(recorder.current!.stopReason, BackgroundStop.done);
+    });
+
+    test('the late pass spends the same budget: past it, its photos wait '
+        'unread', () async {
+      final settings = await settingsWith(key: 'k');
+      var now = noon;
+      final intake = EmittingIntake()..lateBatch = [photo(8), photo(9)];
+      final dao = FakeDao();
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: dao, analyzer: food()),
+        showMealCard: (_, _) async {
+          now = now.add(const Duration(seconds: 16));
+        },
+        clock: () => now,
+        budget: const Duration(seconds: 15),
+      );
+      expect(dao.meals.map((m) => m.fileId), ['asset8']);
+      expect(intake.lateUnread, 1);
+    });
+
+    test('a scan that failed takes no late pass', () async {
+      final settings = await settingsWith(key: 'k');
+      final intake = EmittingIntake()
+        ..throwAfterEmit = true
+        ..lateBatch = [photo(9)];
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: prefs,
+        intake: intake,
+        pipeline: () async => PhotoPipeline(dao: FakeDao(), analyzer: food()),
+        showMealCard: (_, _) async {},
+        clock: () => noon,
+      );
+      expect(intake.calls, ['scan']);
+    });
+
+    test('with the real intake: a late photo the pipeline releases stays in '
+        'the cursor\'s carry, and a later run logs it', () async {
+      final settings = await settingsWith(key: 'k', lookback: 7);
+      final p = await SharedPreferences.getInstance();
+      // The background watermark is recent: the scan lists only the last
+      // hour or so, and the glasses photo was taken yesterday evening.
+      await p.setString(backgroundWatermarkPrefsKey,
+          noon.subtract(const Duration(minutes: 10)).toUtc().toIso8601String());
+      final root = Directory.systemTemp.createTempSync('glue_late_import');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final library = _Library();
+      final history = FakePhotoChangeSource();
+      final dao = FakeDao();
+      LateImportCursor cursor() => LateImportCursor(
+          source: history,
+          store: LocalNoBackupStore(
+              root: () async => root, createMissingDirectory: true),
+          clock: () => noon);
+      LibraryPhotoIntake intake() => LibraryPhotoIntake(
+          lookbackDays: () => settings.lookbackDays,
+          library: library,
+          clock: () => noon,
+          lateImports: cursor(),
+          loggedAssetIds: dao.loggedAssetIds);
+      await intake().lateImportScan(); // an earlier run started the cursor
+      library.assets.add(
+          _Asset('glasses', DateTime(2026, 10, 22, 19, 5)));
+      var reported = false;
+      history.onInsertedImagesSince = (token, _, _, _) {
+        final first = !reported;
+        reported = true;
+        return InsertedImages(PhotoChangeStatus.ok,
+            token: first ? history.nextToken() : token,
+            deviceTag: history.deviceTag,
+            ids: [
+              if (first)
+                InsertedImage('glasses',
+                    created: DateTime(2026, 10, 22, 19, 5)),
+            ]);
+      };
+      Future<void> run(PhotoOutcome outcome) => headlessBackfillWith(
+            settings: settings,
+            prefs: p,
+            intake: intake(),
+            pipeline: () async => _ScriptedPipeline([outcome]),
+            showMealCard: (_, _) async {},
+            clock: () => noon,
+          );
+      await run(const PhotoOutcome(PhotoOutcomeKind.failed, 'network',
+          retryable: true));
+      List<String> carry(LateImportCursorState? s) =>
+          [for (final e in s!.carry) e.id];
+      expect(carry(await cursor().read()), ['glasses']);
+      await run(const PhotoOutcome(PhotoOutcomeKind.saved, 'ok'));
+      expect(carry(await cursor().read()), isEmpty);
+      expect(library.reads, ['glasses', 'glasses']);
+    });
+
+    test('a new photo the scan defers is not offered again by the late pass: '
+        'one try, and one deferral, per run', () async {
+      final settings = await settingsWith(key: 'k', lookback: 7);
+      final p = await SharedPreferences.getInstance();
+      await p.setString(backgroundWatermarkPrefsKey,
+          noon.subtract(const Duration(minutes: 10)).toUtc().toIso8601String());
+      final root = Directory.systemTemp.createTempSync('glue_late_defer');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final library = _Library();
+      final history = FakePhotoChangeSource();
+      LibraryPhotoIntake intake(DeferredAssets deferred) => LibraryPhotoIntake(
+          lookbackDays: () => settings.lookbackDays,
+          library: library,
+          clock: () => noon,
+          passOver: deferred.passOver,
+          lateImports: LateImportCursor(
+              source: history,
+              store: LocalNoBackupStore(
+                  root: () async => root, createMissingDirectory: true),
+              clock: () => noon),
+          loggedAssetIds: FakeDao().loggedAssetIds);
+      await intake(await DeferredAssets.load(p)).lateImportScan();
+      // A HEIC taken a minute ago: in the scan's window AND in the history.
+      final taken = noon.subtract(const Duration(minutes: 1));
+      library.assets.add(_Asset('heic', taken));
+      history.onInsertedImagesSince = (token, _, _, _) =>
+          InsertedImages(PhotoChangeStatus.ok,
+              token: history.nextToken(),
+              deviceTag: history.deviceTag,
+              ids: [InsertedImage('heic', created: taken)]);
+      const undecodable = PhotoOutcome(PhotoOutcomeKind.failed, 'bad photo',
+          retryable: true, errorKind: AnalysisErrorKind.badPhoto);
+      final deferred = await DeferredAssets.load(p);
+      await headlessBackfillWith(
+        settings: settings,
+        prefs: p,
+        intake: intake(deferred),
+        pipeline: () async => _ScriptedPipeline([undecodable, undecodable]),
+        showMealCard: (_, _) async {},
+        clock: () => noon,
+        deferred: deferred,
+      );
+      expect(library.reads, ['heic'], reason: 'the scan tried it; the pass '
+          'left it to the next run');
+      expect(decodeDeferredAssets(p.getString(deferredAssetsPrefsKey))
+          .map((e) => (e.id, e.count)), [('heic', 1)],
+          reason: 'two deferrals in one run would pass it over after one');
+    });
+
+    test('the app\'s catch-up takes them after the window, and not once the '
+        'user has left', () async {
+      final t1 = DateTime.utc(2026, 10, 23, 10);
+      final intake = EmittingIntake()
+        ..batch = [photo(1)]
+        ..safeFrontiers = [t1]
+        ..lateBatch = [photo(9)];
+      final delivered = <String>[];
+      intake.attachSink((p, safe) async {
+        delivered.add('${p.assetId}:${safe == null ? 'none' : 'frontier'}');
+        return true;
+      });
+      await foregroundCatchUp(intake,
+          clock: () => noon, loadPrefs: () async => prefs);
+      expect(intake.calls, ['scan', 'late']);
+      expect(delivered, ['asset1:frontier', 'asset9:none']);
+
+      var open = true;
+      final left = EmittingIntake()
+        ..batch = [photo(1)]
+        ..lateBatch = [photo(9)];
+      left.attachSink((p, _) async {
+        open = false; // the user leaves during the first photo
+        return true;
+      });
+      await foregroundCatchUp(left,
+          clock: () => noon,
+          loadPrefs: () async => prefs,
+          shouldContinue: () => open);
+      expect(left.calls, ['scan'], reason: 'nothing more once they left');
+    });
+
+    test('a truncated window still gets its late pass, and still throws',
+        () async {
+      final intake = EmittingIntake()
+        ..throwAfterEmit = true
+        ..lateBatch = [photo(9)];
+      final delivered = <String>[];
+      intake.attachSink((p, _) async {
+        delivered.add(p.assetId);
+        return true;
+      });
+      await expectLater(
+          foregroundCatchUp(intake,
+              clock: () => noon, loadPrefs: () async => prefs),
+          throwsStateError);
+      expect(intake.calls, ['scan', 'late']);
+      expect(delivered, ['asset9']);
+    });
+  });
+}
+
+class _Asset implements LibraryAsset {
+  _Asset(this.id, this.createDateTime);
+  @override
+  final String id;
+  @override
+  final DateTime createDateTime;
+  void Function()? onRead;
+  @override
+  Future<String> fileName() async => '$id.HEIC';
+  @override
+  Future<Uint8List?> originBytes() async {
+    onRead?.call();
+    return Uint8List.fromList(utf8.encode(id));
+  }
+}
+
+/// A photo library for the real intake: what the scans list, and what the
+/// late-import pass looks up by id.
+class _Library implements PhotoLibrary {
+  final List<_Asset> assets = [];
+  final List<String> reads = [];
+
+  @override
+  Future<bool> hasFullAccess() async => true;
+  @override
+  Future<bool> requestPermission() async => true;
+  @override
+  Future<Uint8List?> thumbnailByAssetId(String assetId,
+          {int size = 160}) async =>
+      null;
+  @override
+  Future<Uint8List?> originBytesByAssetId(String assetId) async => null;
+  @override
+  Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
+          {int limit = 500}) async =>
+      [
+        for (final a in assets)
+          if (!a.createDateTime.isBefore(cutoff)) _reading(a),
+      ];
+  @override
+  Future<List<LibraryAsset>> recentImages(int limit) async => const [];
+  @override
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids) async => {
+        for (final id in ids)
+          id: assets.where((a) => a.id == id).map(_reading).firstOrNull,
+      };
+  @override
+  Future<void> startChangeNotify(void Function() onChange) async {}
+  @override
+  Future<void> stopChangeNotify() async {}
+
+  _Asset _reading(_Asset a) => a..onRead = () => reads.add(a.id);
 }

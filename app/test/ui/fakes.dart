@@ -323,6 +323,13 @@ class FakeIntake implements PhotoIntake {
     return null;
   }
 
+  /// Late-import passes asked for (design G1b).
+  int lateImportScans = 0;
+
+  @override
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async =>
+      lateImportScans++;
+
   @override
   Future<void> start() async => started = true;
 

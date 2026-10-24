@@ -269,6 +269,19 @@ class BaseFakeDao implements MealsDao {
     return (status: st, mealId: match.isEmpty ? null : match.first.id);
   }
 
+  /// Every call's ids, in order (the late-import pass's pre-filter).
+  final List<List<String>> loggedAssetIdsCalls = [];
+
+  @override
+  Future<Set<String>> loggedAssetIds(List<String> assetIds) async {
+    loggedAssetIdsCalls.add(List.of(assetIds));
+    final wanted = assetIds.where((id) => id.isNotEmpty).toSet();
+    return {
+      for (final m in meals)
+        if (wanted.contains(m.fileId)) m.fileId,
+    };
+  }
+
   @override
   Future<void> saveMealThumb(int mealId, Uint8List jpeg) async =>
       thumbs[mealId] = jpeg;

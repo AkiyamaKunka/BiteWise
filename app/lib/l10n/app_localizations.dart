@@ -2118,6 +2118,30 @@ abstract class AppLocalizations {
   /// **'none'**
   String get diagBgRunWatermarkNone;
 
+  /// Diagnostics section: photos other apps (the Meta AI app for glasses, AirDrop, WeChat) added to the library after they were taken, which the automatic scan caught through the photo library's change history.
+  ///
+  /// In en, this message translates to:
+  /// **'Late imports (other apps, glasses)'**
+  String get diagLateImportsTitle;
+
+  /// {time} is when the app last checked for late imports (yyyy-MM-dd HH:mm), or 'none'.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} caught in 7 days · last {time}'**
+  String diagLateImportsSummary(int n, String time);
+
+  /// No description provided for @diagLateImportsRescanning.
+  ///
+  /// In en, this message translates to:
+  /// **'History expired — rescanning'**
+  String get diagLateImportsRescanning;
+
+  /// No description provided for @diagLateImportsNeedsIos16.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs iOS 16'**
+  String get diagLateImportsNeedsIos16;
+
   /// No description provided for @addPhotosTitle.
   ///
   /// In en, this message translates to:

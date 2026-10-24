@@ -88,7 +88,9 @@ class AppServices {
     final executor = createExecutor(dao, analyzer, settings);
     // The photo module reads lookbackDays through the live settings object,
     // so slider edits apply to the next scan without rewiring (spec §6.4).
-    final photoIntake = createPhotoIntake(settings);
+    // Late imports skip photos a meal already names, without a read (G1b).
+    final photoIntake =
+        createPhotoIntake(settings, loggedAssetIds: dao.loggedAssetIds);
     final shareIntake = createShareIntake(settings);
     final ReportBuilder reports = createReportBuilder(dao);
 

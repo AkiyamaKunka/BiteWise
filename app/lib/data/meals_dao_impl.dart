@@ -636,6 +636,35 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     );
   }
 
+  /// Chunked under SQLite's bound-parameter limit; a pass asks about a
+  /// few hundred ids at most.
+  @override
+  Future<Set<String>> loggedAssetIds(List<String> assetIds) async {
+    final wanted = {
+      for (final id in assetIds)
+        if (id.isNotEmpty) id,
+    }.toList();
+    final logged = <String>{};
+    const chunk = 500;
+    for (var i = 0; i < wanted.length; i += chunk) {
+      final part = wanted.sublist(
+          i, i + chunk < wanted.length ? i + chunk : wanted.length);
+      final rows = await _db.query(
+        'meals',
+        columns: const ['file_id'],
+        distinct: true,
+        where: 'chat_id = ? AND file_id IN '
+            '(${List.filled(part.length, '?').join(',')})',
+        whereArgs: [localChatId, ...part],
+      );
+      for (final row in rows) {
+        final id = row['file_id'];
+        if (id is String && id.isNotEmpty) logged.add(id);
+      }
+    }
+    return logged;
+  }
+
   @override
   Future<void> saveMealThumb(int mealId, Uint8List jpeg) async {
     if (jpeg.isEmpty) return;

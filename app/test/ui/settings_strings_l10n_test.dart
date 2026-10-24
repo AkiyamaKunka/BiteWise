@@ -115,6 +115,9 @@ class _LimitedLibrary implements PhotoLibrary {
   Future<List<LibraryAsset>> recentImages(int limit) =>
       throw UnimplementedError();
   @override
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids) =>
+      throw UnimplementedError();
+  @override
   Future<void> startChangeNotify(void Function() onChange) =>
       throw UnimplementedError();
   @override

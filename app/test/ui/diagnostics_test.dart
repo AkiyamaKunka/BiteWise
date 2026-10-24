@@ -10,6 +10,7 @@ import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/photo/background_runs.dart';
+import 'package:calorie_tracker/services/photo/photo_changes.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
 import 'package:calorie_tracker/ui/provider_names.dart';
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
@@ -511,6 +512,97 @@ void main() {
       expect(lines, hasLength(7));
       expect(backgroundRunVerdict(l, ended('error:StateError')),
           'Stopped by an error (StateError).');
+    });
+  });
+
+  // Design G1b: what the change history caught for the automatic scan.
+  group('late imports', () {
+    final now = DateTime(2026, 10, 23, 12);
+    final lastAt = DateTime(2026, 10, 23, 11, 30);
+    LateImportStats stats(String status) => LateImportStats(caught: [
+          DateTime(2026, 10, 12, 9), // older than 7 days
+          DateTime(2026, 10, 20, 9),
+          DateTime(2026, 10, 22, 19),
+        ], lastAt: lastAt, lastStatus: status);
+
+    Future<void> pump(WidgetTester tester, LateImportStats? record,
+        {Locale? locale, Size size = const Size(800, 4000), double scale = 1}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      if (scale != 1) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiagnosticsScreen(
+              diagnostics: _diag(),
+              loadBackgroundRuns: () async => const [],
+              loadLateImports: () async => record,
+              now: () => now)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('how many were caught this week and when it last looked',
+        (tester) async {
+      await pump(tester, stats('ok'));
+      expect(find.text('Late imports (other apps, glasses)'), findsOneWidget);
+      expect(find.text('2 caught in 7 days · last ${localStamp(lastAt)}'),
+          findsOneWidget);
+      expect(find.text('History expired — rescanning'), findsNothing);
+      expect(find.text('Needs iOS 16'), findsNothing);
+    });
+
+    testWidgets('a rescan in progress says so', (tester) async {
+      await pump(tester, stats(lateImportRescanning));
+      expect(find.text('History expired — rescanning'), findsOneWidget);
+    });
+
+    testWidgets('an iPhone without the change history says so',
+        (tester) async {
+      await pump(tester, stats('unsupported'));
+      expect(find.text('Needs iOS 16'), findsOneWidget);
+    });
+
+    testWidgets('in Chinese', (tester) async {
+      await pump(tester, stats(lateImportRescanning),
+          locale: const Locale('zh'));
+      expect(find.text('后导入的照片（其他 App、眼镜）'), findsOneWidget);
+      expect(find.text('7 天内补录 2 张 · 最近 ${localStamp(lastAt)}'),
+          findsOneWidget);
+      expect(find.text('历史已过期 — 正在重新扫描'), findsOneWidget);
+    });
+
+    testWidgets('no record (Android, or never looked): no section',
+        (tester) async {
+      await pump(tester, null);
+      expect(find.byKey(const Key('diagLateImports')), findsNothing);
+    });
+
+    // The row wraps rather than cut: a narrow phone at the largest text
+    // size, both languages.
+    for (final locale in [const Locale('en'), const Locale('zh')]) {
+      testWidgets('fits a 320-pt phone at 2x text ($locale)', (tester) async {
+        await pump(tester, stats(lateImportRescanning),
+            locale: locale, size: const Size(320, 6000), scale: 2);
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('diagLateImports')), findsOneWidget);
+      });
+    }
+
+    test('status lines exist only where they help', () {
+      final l = AppLocalizationsEn();
+      expect(lateImportStatusLine(l, null), isNull);
+      expect(lateImportStatusLine(l, 'ok'), isNull);
+      expect(lateImportStatusLine(l, 'denied'), isNull);
+      expect(lateImportStatusLine(l, lateImportRescanning),
+          'History expired — rescanning');
+      expect(lateImportStatusLine(AppLocalizationsZh(), 'unsupported'),
+          '需要 iOS 16');
     });
   });
 }

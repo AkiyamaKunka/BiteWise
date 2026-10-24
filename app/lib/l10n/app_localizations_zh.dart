@@ -1174,6 +1174,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagBgRunWatermarkNone => '无';
 
   @override
+  String get diagLateImportsTitle => '后导入的照片（其他 App、眼镜）';
+
+  @override
+  String diagLateImportsSummary(int n, String time) {
+    return '7 天内补录 $n 张 · 最近 $time';
+  }
+
+  @override
+  String get diagLateImportsRescanning => '历史已过期 — 正在重新扫描';
+
+  @override
+  String get diagLateImportsNeedsIos16 => '需要 iOS 16';
+
+  @override
   String get addPhotosTitle => '最近照片';
 
   @override

@@ -7,6 +7,13 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/photo/background_runs.dart';
+import '../../services/photo/photo_changes.dart'
+    show
+        LateImportStats,
+        PhotoChangeStatus,
+        lateImportRescanning,
+        lateImportStatsWindow,
+        readLateImportStats;
 import '../diagnostics.dart';
 import '../l10n.dart';
 import '../widgets/small_spinner.dart';
@@ -20,8 +27,20 @@ class DiagnosticsScreen extends StatefulWidget {
   /// The background-scan history (background_runs.dart), newest first.
   /// Null reads it from the device (readBackgroundRuns).
   final Future<List<BackgroundRunRecord>> Function()? loadBackgroundRuns;
+
+  /// The late-import record (photo_changes.dart, design G1b); null reads
+  /// it from the device (readLateImportStats). No record, no section:
+  /// Android never writes one.
+  final Future<LateImportStats?> Function()? loadLateImports;
+
+  /// The clock for the "in 7 days" count.
+  final DateTime Function() now;
   const DiagnosticsScreen(
-      {super.key, required this.diagnostics, this.loadBackgroundRuns});
+      {super.key,
+      required this.diagnostics,
+      this.loadBackgroundRuns,
+      this.loadLateImports,
+      this.now = DateTime.now});
 
   @override
   State<DiagnosticsScreen> createState() => _DiagnosticsScreenState();
@@ -33,6 +52,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
   bool _ran = false;
   late final Future<List<BackgroundRunRecord>> _backgroundRuns =
       (widget.loadBackgroundRuns ?? readBackgroundRuns)();
+  late final Future<LateImportStats?> _lateImports =
+      (widget.loadLateImports ?? readLateImportStats)();
 
   Future<void> _run() async {
     setState(() {
@@ -171,11 +192,64 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 ? _BackgroundRuns(snap.data!)
                 : const SizedBox.shrink(),
           ),
+          FutureBuilder<LateImportStats?>(
+            future: _lateImports,
+            builder: (context, snap) => snap.data == null
+                ? const SizedBox.shrink()
+                : _LateImports(snap.data!, now: widget.now()),
+          ),
         ],
       ),
     );
   }
 }
+
+/// "Late imports": photos other apps added after they were taken, which
+/// the change history caught (G1b) — how many this week, when it last
+/// looked, and why it is not working when it is not.
+class _LateImports extends StatelessWidget {
+  const _LateImports(this.stats, {required this.now});
+  final LateImportStats stats;
+  final DateTime now;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = context.l10n;
+    final last = stats.lastAt;
+    final status = lateImportStatusLine(l, stats.lastStatus);
+    return Column(
+      key: const Key('diagLateImports'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(l.diagLateImportsTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+            l.diagLateImportsSummary(
+                stats.caughtSince(now.subtract(lateImportStatsWindow)),
+                last == null ? l.diagBgRunWatermarkNone : localStamp(last)),
+            style: theme.textTheme.bodyMedium),
+        if (status != null) ...[
+          const SizedBox(height: 4),
+          Text(status,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
+      ],
+    );
+  }
+}
+
+/// The line under the late-import count, for the states that need one:
+/// a rescan by date in progress, or an iPhone without the change history.
+String? lateImportStatusLine(AppLocalizations l, String? status) =>
+    switch (status) {
+      lateImportRescanning => l.diagLateImportsRescanning,
+      final s when s == PhotoChangeStatus.unsupported.name =>
+        l.diagLateImportsNeedsIos16,
+      _ => null,
+    };
 
 /// "Recent background scans": what the last runs did, as recorded by the
 /// background engine itself — the only view of a run iOS killed part-way

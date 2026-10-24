@@ -14,6 +14,8 @@
 // Whitespace and trailing commas are free; the wiring is not.
 import 'dart:io';
 
+import 'package:calorie_tracker/services/photo/photo_changes.dart'
+    show recordLateImportPass;
 import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,6 +122,16 @@ void main() {
     test('the stuck probe reads the runs and the watermark together', () {
       expect(init(), _wired(r'backgroundScanStuck: backgroundScanStuckNow,'));
     });
+
+    // G1b: without it every late import is read in full, logged or not.
+    test('late imports skip photos a meal already names, without a read', () {
+      expect(
+        init(),
+        _wired(
+          r'createPhotoIntake\(settings, loggedAssetIds: dao\.loggedAssetIds\)',
+        ),
+      );
+    });
   });
 
   group('lib/ui/app.dart (the resume catch-up)', () {
@@ -151,7 +163,8 @@ void main() {
         after(),
         _wired(
           r'intake: createPhotoIntake\(settings, onBackfillListed: '
-          r'recorder\.listed, passOver: deferred\.passOver\)',
+          r'recorder\.listed, passOver: deferred\.passOver, '
+          r'loggedAssetIds: inFlight\.loggedAssetIds\)',
         ),
       );
       expect(after(), _wired(r'\n\s*deferred: deferred,'));
@@ -176,6 +189,35 @@ void main() {
         _wired(
           r'return finishWithinGrant\(run, left: startedAt\.add\(iosRunDeadline\)'
           r'\.difference\(clock\(\)\), recorder: recorder, abandon: inFlight\.abandon\);',
+        ),
+      );
+    });
+
+    // G1b: photos other apps imported late, with the budget the scan left.
+    test('the run takes late imports after its scan, under its budget', () {
+      final headless = _body(glue(), 'Future<bool> headlessBackfillWith({');
+      expect(
+        headless,
+        _wired(
+          r'final drain = await drainBackfill\([^;]*\n\s*lateImports: true,',
+        ),
+      );
+      final drain = _body(glue(), 'Future<BackfillDrain> drainBackfill(');
+      expect(
+        drain,
+        _wired(
+          r'scanCompleted = true;[^}]*if \(lateImports && roomLeft\(\)\) \{\s*'
+          r'try \{\s*await intake\.lateImportScan\('
+          r'shouldContinue: timed \? budgetLeft : null\);',
+        ),
+      );
+      final catchUp = _body(glue(), 'Future<DateTime?> foregroundCatchUp(');
+      expect(
+        catchUp,
+        _wired(
+          r'\} finally \{[^}]*if \(shouldContinue\?\.call\(\) \?\? true\) \{\s*'
+          r'try \{\s*await intake\.lateImportScan\('
+          r'shouldContinue: shouldContinue\);',
         ),
       );
     });
@@ -217,6 +259,31 @@ void main() {
               as LibraryPhotoIntake;
       expect(intake.passOver, same(passOver));
       expect(intake.onBackfillListed, same(listed));
+    },
+  );
+
+  test(
+    'createPhotoIntake hands loggedAssetIds over, and reads the change '
+    'history (with its diagnostics record) on iOS only',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: _Keys(),
+      );
+      Future<Set<String>> logged(List<String> ids) async => {};
+      final ios =
+          createPhotoIntake(settings, loggedAssetIds: logged, isIOS: true)
+              as LibraryPhotoIntake;
+      expect(ios.loggedAssetIds, same(logged));
+      expect(ios.lateImports, isNotNull);
+      expect(ios.lateImports!.store, isNotNull);
+      expect(ios.onLateImportPass, equals(recordLateImportPass));
+      final android =
+          createPhotoIntake(settings, loggedAssetIds: logged, isIOS: false)
+              as LibraryPhotoIntake;
+      expect(android.lateImports, isNull);
+      expect(android.onLateImportPass, isNull);
     },
   );
 }

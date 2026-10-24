@@ -184,6 +184,11 @@ abstract class MealsDao {
   Future<({IngestionStatus status, int? mealId})?> photoStatus(
       String imageHash);
 
+  /// Those of [assetIds] a meal row already names as its photo
+  /// (meals.file_id): logged, so the late-import pass (design G1b) need not
+  /// read their bytes to find out. Read-only; empty ids never match.
+  Future<Set<String>> loggedAssetIds(List<String> assetIds);
+
   /// Tiny per-meal JPEG (spec §9 app-only): written by the pipeline at
   /// save time, deleted with the meal, shown beside the analysis so the
   /// user can check the numbers against the actual photo.
@@ -516,6 +521,19 @@ abstract class PhotoIntake {
       bool Function()? shouldContinue,
       Future<void> Function(DateTime safeFrontier)? onCovered,
       bool newestDayFirst});
+
+  /// Photos other apps added to the library LATE — keeping a capture date
+  /// older than the scans' cutoffs, so neither the live watcher nor a
+  /// watermark scan ever lists them: glasses photos the Meta AI app
+  /// imports, AirDrop, WeChat, iCloud downloads (design G1b; on iOS, the
+  /// library's change history, services/photo/photo_changes.dart). Each one
+  /// goes through the attached sink like any automatic photo, but with a
+  /// null safeFrontier: it never moves a cutoff or a watermark.
+  /// [shouldContinue] as in [backfillScan]. Never throws.
+  ///
+  /// Default: nothing to do — right for an intake with no such history
+  /// (Android's scans filter on the date a photo was ADDED).
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async {}
   Future<void> start();
   Future<void> stop();
 }
