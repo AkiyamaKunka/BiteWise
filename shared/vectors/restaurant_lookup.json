@@ -1214,6 +1214,38 @@
       "expected": null
     },
     {
+      "id": "match_receipt_store_number",
+      "fn": "match_chain",
+      "input": "KWIK TRIP #1234",
+      "expected": "kwik_trip"
+    },
+    {
+      "id": "match_two_token_brand_exact",
+      "fn": "match_chain",
+      "input": "Old Chicago",
+      "expected": "old_chicago"
+    },
+    {
+      "id": "match_name_shorter_than_every_variant",
+      "fn": "match_chain",
+      "input": "Green Mill",
+      "expected": null
+    },
+    {
+      "id": "match_audited_domain",
+      "fn": "match_chain",
+      "input": null,
+      "url_host": "locations.goldenkrust.com",
+      "expected": "golden_krust"
+    },
+    {
+      "id": "match_lapsed_domain",
+      "fn": "match_chain",
+      "input": null,
+      "url_host": "www.gongchausa.com",
+      "expected": null
+    },
+    {
       "id": "match_host_and_name_agree",
       "fn": "match_chain",
       "input": "Chipotle",

@@ -202,6 +202,23 @@ def test_single_token_variants_are_not_generic_words():
     ("Junior's Restaurant", None, None),
     ("John's Famous Hot Dogs", None, None),
     ("Sabrett Hot Dog Stand", None, None),
+    # Apple Maps names from the 2026-10-24 audit (MapKit name searches)
+    ("Kwik Trip", None, "kwik_trip"),
+    ("KWIK TRIP #1234", None, "kwik_trip"),
+    ("Old Chicago", None, "old_chicago"),
+    ("Oberweis", None, "oberweis"),
+    ("Great Harvest", None, "great_harvest"),
+    ("George Webb Restaurant", None, "george_webb"),
+    ("Papa Johns Pizza", None, "papa_johns"),
+    ("Bob Evans Restaurants", None, "bob_evans"),
+    # Chicago's Green Mill jazz club is not the Green Mill restaurant chain
+    ("Green Mill", "greenmilljazz.com", None),
+    ("Green Mill Restaurant & Bar", None, "green_mill"),
+    # A common surname alone stays out of the table; the place's own web
+    # host still finds the chain
+    ("Casey's", None, None),
+    ("Casey's", "www.caseys.com", "caseys"),
+    ("Perkins", "stores.perkinsrestaurants.com", "perkins"),
     # Normalization
     ("McDonald’s", None, "mcdonalds"),
     ("MCDONALDS", None, "mcdonalds"),
@@ -239,6 +256,34 @@ def test_single_token_variants_are_not_generic_words():
 ])
 def test_match_chain_table(name, url_host, expected):
     assert rl.match_chain(name, url_host) == expected
+
+
+# Found by the 2026-10-24 audit: a hosting placeholder, a parked domain, and
+# sites of unrelated businesses that share a chain's name. Anyone can put a
+# "nutrition" page on them, so they must never be official.
+NOT_THE_CHAINS_DOMAINS = (
+    "gongchausa.com",        # Nexcess placeholder, wrong TLS certificate
+    "goldenkrustbakery.com",  # parked
+    "chickenexpress.com",    # not Chicken Express's site (chickene.com is)
+    "mimiscafes.com",        # a single cafe in Wilmington, Illinois
+    "greenmilljazz.com",     # the Green Mill jazz club, Chicago
+    "friendlys.com",         # Dairy Farmers of America's grocery ice cream
+)
+
+
+@pytest.mark.parametrize("domain", NOT_THE_CHAINS_DOMAINS)
+def test_lapsed_and_unrelated_domains_stay_out(domain):
+    for c in CHAINS:
+        assert domain not in c["domains"], (c["key"], domain)
+    assert rl.match_chain(None, "www." + domain) is None
+
+
+def test_audit_fixes_map_to_the_right_chain():
+    assert rl.match_chain(None, "www.gong-cha.com") == "gong_cha"
+    assert rl.match_chain(None, "locations.goldenkrust.com") == "golden_krust"
+    assert rl.match_chain(None, "www.mrsfieldsstores.com") == "mrs_fields"
+    assert rl.match_chain(None, "locations.jollibeeusa.com") == "jollibee"
+    assert rl.match_chain(None, "locations.friendlysrestaurants.com") == "friendlys"
 
 
 def test_every_domain_and_subdomain_maps_to_its_chain():
