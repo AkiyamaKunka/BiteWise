@@ -110,9 +110,15 @@ start_tcc_granter() {
   echo $!
 }
 
-# Writes <dir>/make_heic.swift: a 640x480 HEIC whose EXIF capture time is
-# the one given and whose TIFF Make/Model say Meta glasses; the optional red
-# component makes each photo's bytes (and so its hash) its own.
+# Writes <dir>/make_heic.swift: a 2016x1512 HEIC of a drawn plate of food
+# whose EXIF capture time is the one given and whose TIFF Make/Model say
+# Meta glasses; the optional red component colours a corner patch, which
+# makes each photo's bytes (and so its hash) its own. Over 2 MP, so the
+# glasses preview guard (glasses.dart glassesPreviewMaxPixels) does not
+# hold it for a full-size copy. A plate, so the on-device food check
+# (design G3) lets it through either way: a classifier that sees scores it
+# as food (plate 0.34 on a Mac's), a blind one (the iOS 26.2 simulator's,
+# ImageIOBlindCheck) answers unsupported.
 write_heic_maker() {
   cat >"$1/make_heic.swift" <<'SWIFT'
 import CoreGraphics
@@ -121,11 +127,43 @@ import ImageIO
 import UniformTypeIdentifiers
 // make_heic.swift <out.HEIC> <EXIF DateTimeOriginal> <EXIF OffsetTimeOriginal> [red 0..1]
 let args = CommandLine.arguments
+let width = 2016, height = 1512
+let w = CGFloat(width), h = CGFloat(height)
 let ctx = CGContext(
-  data: nil, width: 640, height: 480, bitsPerComponent: 8, bytesPerRow: 0,
+  data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
-ctx.setFillColor(red: args.count > 4 ? CGFloat(Double(args[4]) ?? 0.85) : 0.85, green: 0.55, blue: 0.2, alpha: 1)
-ctx.fill(CGRect(x: 0, y: 0, width: 640, height: 480))
+func fill(_ r: CGFloat, _ g: CGFloat, _ b: CGFloat) {
+  ctx.setFillColor(red: r / 255, green: g / 255, blue: b / 255, alpha: 1)
+}
+fill(236, 228, 216) // the table
+ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+let plate = CGRect(x: w * 0.21, y: h * 0.17, width: w * 0.58, height: h * 0.66)
+fill(200, 200, 200) // the rim's edge
+ctx.fillEllipse(in: plate)
+fill(249, 249, 248)
+ctx.fillEllipse(in: plate.insetBy(dx: 8, dy: 8))
+ctx.setStrokeColor(red: 0.88, green: 0.88, blue: 0.88, alpha: 1)
+ctx.setLineWidth(5)
+ctx.strokeEllipse(in: plate.insetBy(dx: w * 0.065, dy: h * 0.087))
+let colours: [(CGFloat, CGFloat, CGFloat)] = [
+  (228, 200, 92), (216, 120, 60), (90, 145, 60), (160, 90, 40),
+]
+var seed: UInt64 = 20_261_024
+func next() -> CGFloat {
+  seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
+  return CGFloat(seed >> 33) / CGFloat(UInt64(1) << 31)
+}
+for i in 0..<48 {
+  let (r, g, b) = colours[i % colours.count]
+  fill(r, g, b)
+  let radius = (14 + next() * 26) * w / 1200
+  let x = w * (0.34 + next() * 0.32), y = h * (0.36 + next() * 0.30)
+  ctx.fillEllipse(in: CGRect(x: x - radius, y: y - radius, width: radius * 2, height: radius * 2))
+}
+// A corner patch in the given red: each photo's bytes (and hash) its own.
+ctx.setFillColor(
+  red: args.count > 4 ? CGFloat(Double(args[4]) ?? 0.85) : 0.85, green: 0.55, blue: 0.2, alpha: 1)
+ctx.fill(CGRect(x: 0, y: 0, width: 32, height: 32))
 let dest = CGImageDestinationCreateWithURL(
   URL(fileURLWithPath: args[1]) as CFURL, UTType.heic.identifier as CFString, 1, nil)!
 let props: [CFString: Any] = [
