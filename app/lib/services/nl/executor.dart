@@ -340,6 +340,18 @@ class DefaultNlExecutor implements NlExecutor {
     // change that happened — spec §4.4.5).
     final target = meals[mealIndex];
     final old = target.analysis;
+    // How the photo was taken (analysis.capture, design G2a) is the
+    // intake's reading of the photo's own bytes, never a model's: the chat
+    // model never even sees it (buildMealsList leaves it out). So the old
+    // block is carried over and anything the model wrote there is dropped
+    // — the Meta glasses badge stays, and the duplicate-capture guard
+    // (mealIdsWithShutterKey) still finds this shutter press, so a later
+    // file of the same press is not logged as a second meal.
+    sanitized.remove('capture');
+    final capture = old['capture'];
+    if (capture is Map) {
+      sanitized['capture'] = Map<String, dynamic>.from(capture);
+    }
     final oldCal = safeNumber(old['total_calories']);
     final newCal = safeNumber(sanitized['total_calories']);
     final oldDesc = _desc(old);

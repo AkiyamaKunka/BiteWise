@@ -5,6 +5,8 @@ library;
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/nl/executor.dart';
+import 'package:calorie_tracker/services/photo/glasses.dart'
+    show isMetaGlassesAnalysis, metaGlassesDevice;
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -400,6 +402,62 @@ void main() {
           'fix', await dao.recentMeals());
       expect(replies.single.text, '✏️ Corrected meal 2!\n📅 2026-07-17 12:30 PM\n\n'
           '面条 → 烧鸭饭\n🔥 550 kcal → 780 kcal (+230)\n\n💬 改为烧鸭饭');
+    });
+
+    test('a corrected glasses meal keeps its capture block', () async {
+      // analysis.capture comes from the photo's bytes (design G2a); the
+      // chat model never sees it. Losing it would drop the Meta glasses
+      // badge and blind the duplicate-capture guard to this shutter press
+      // (a later file of the same press would become a second meal).
+      const key = '0123456789abcdef';
+      final capture = {
+        'device': metaGlassesDevice,
+        'signal': 'exif_model',
+        'has_gps': true,
+        'gps_acc_m': 12,
+        'shutter_key': key,
+      };
+      final id = dao.seed('面条', 550, time: '12:30 PM', analysis: {
+        'is_food': true,
+        'meal_description': '面条',
+        'total_calories': 550,
+        'capture': capture,
+      });
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          [id]);
+      final replies = await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': 0,
+        'analysis': {
+          ...roastDuckAnalysis,
+          // A model that invents a capture block never gets to keep it.
+          'capture': {'device': 'other', 'shutter_key': 'fedcba9876543210'},
+        },
+      }, '改成烧鸭饭', await dao.recentMeals());
+      expect(replies.single.applied, isTrue);
+      final stored = dao.byId(id).analysis;
+      expect(stored['meal_description'], '烧鸭饭');
+      expect(stored['capture'], capture);
+      expect(isMetaGlassesAnalysis(stored), isTrue);
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          [id]);
+      expect(
+          await dao.mealIdsWithShutterKey(
+              'fedcba9876543210', '2026-07-17', '2026-07-17'),
+          isEmpty);
+    });
+
+    test('a meal without a capture block gets none from the model', () async {
+      final (_, lunchId, _) = seedThreeMeals();
+      await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': 1,
+        'analysis': {
+          ...roastDuckAnalysis,
+          'capture': {'device': metaGlassesDevice},
+        },
+      }, 'fix', await dao.recentMeals());
+      expect(dao.byId(lunchId).analysis.containsKey('capture'), isFalse);
     });
 
     test('reply names the rewritten row\'s day when the dish recurs', () async {
