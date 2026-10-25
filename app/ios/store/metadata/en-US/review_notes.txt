@@ -1,0 +1,34 @@
+BiteWise is a bring-your-own-key calorie tracker. It has no accounts and
+no backend of ours. The user pastes an API key for an AI provider they
+already pay for (Google Gemini, OpenAI, Anthropic, xAI, OpenRouter,
+DeepSeek, Alibaba Qwen, ByteDance Doubao, Zhipu GLM); that provider
+receives each photo being analyzed (with the user's dietary profile and
+a short summary of the day's meals) and returns a nutrition estimate.
+Before anything is sent to a provider for the first time, the app asks
+for permission in a dialog that names the company and what is sent;
+Settings › "Stop Sharing with …" withdraws it. Everything else stays on
+the phone in a local database.
+
+To test: a fresh install opens on Settings. Tap AI Provider › API Key;
+Google Gemini is already selected — paste the key below into "Gemini
+API key". Go to Today › "+ Log" › "From recent photos", allow Photos
+access, pick a food photo and tap Allow in the consent dialog; the
+estimate appears after a few seconds. Without food photos on the test
+device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
+soup"), or share a food image from Safari or Photos into Bitewise via
+the share sheet. There is no in-app camera: photos come from the system
+Camera app.
+
+Settings › Watch Camera Roll (optional) shows the same consent with a
+notice, needs full Photos access (limited access only shows a hint),
+and as soon as it is on it sends the photos from the last 2 days, then
+each new photo, to the selected provider; it uses Background App
+Refresh to check for new photos while the app is closed.
+
+AI Provider › Subscription is for people who run their own server (the
+open-source server in the same repository) with an AI plan on it; it
+cannot be tested without such a server, and choosing a plan there
+switches the app away from the Gemini key. The bitewise://setup link
+fills in that server's address and key after a confirmation dialog.
+
+Demo key (Gemini, capped, revoked after review): <key>
