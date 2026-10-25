@@ -891,6 +891,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         return l.assistLookupStillRunning;
       case AssistSkip.pickNeedsHttps:
         return l.assistLookupPickNeedsHttps;
+      case AssistSkip.outsideUs:
+        return l.assistLookupOutsideUs;
+      case AssistSkip.regionUnknown:
+        return l.assistLookupRegionUnknown;
       case AssistSkip.dailyCap:
       case 'lookup_daily_cap':
         return l.assistLookupDailyCap;

@@ -148,9 +148,37 @@ def test_photo_permission_text_mentions_the_photo_location():
     plist = _read("app", "ios", "Runner", "Info.plist")
     en = _read("app", "ios", "Runner", "en.lproj", "InfoPlist.strings")
     zh = _read("app", "ios", "Runner", "zh-Hans.lproj", "InfoPlist.strings")
-    assert "only to ask Apple Maps" in plist
-    assert "only to ask Apple Maps" in en
-    assert "仅用于向 Apple 地图查询" in zh
+    # Run 6: also, on the phone, whether a restaurant or takeout photo was
+    # taken in the US.
+    for text in (plist, en):
+        assert "where a restaurant or takeout meal photo was taken" in text
+        assert ("only to check on this phone whether it was taken in the US, "
+                "to ask Apple Maps") in text
+    assert "仅用于在本机判断照片是否在美国拍摄、向 Apple 地图查询" in zh
+
+
+def test_policy_and_consent_say_lookups_are_for_us_meals_only():
+    """Run 6: the chain table is US-only, so a meal eaten elsewhere is never
+    looked up; the photo's position (where it may be read) is checked on
+    the phone against an outline of the US, else the phone's region."""
+    en, zh = _policy_halves()
+    en_lookup = _lookup_section(en, "### Restaurant nutrition lookup")
+    zh_lookup = _lookup_section(zh, "### 餐厅营养查询")
+    assert "only a meal eaten in the US is looked up" in en_lookup
+    assert "the check sends nothing" in en_lookup
+    assert "a photo taken close to a border counts as outside" in en_lookup
+    assert "phone's region setting" in en_lookup
+    assert "always US: meals from elsewhere are not looked up" in en_lookup
+    assert "只有在美国吃的餐才会被查询" in zh_lookup
+    assert "这一判断不会发送任何内容" in zh_lookup
+    assert "靠近国境线拍摄的照片按不在美国处理" in zh_lookup
+    assert "手机的地区设置" in zh_lookup
+    assert "总是 US：不在美国吃的餐不会被查询" in zh_lookup
+    ena, zha = _arb("en"), _arb("zh")
+    assert "checks whether it was in the US" in ena["restaurantConsentMaps"]
+    assert "判断是否在美国" in zha["restaurantConsentMaps"]
+    for k in ("assistLookupOutsideUs", "assistLookupRegionUnknown"):
+        assert "US" in ena[k] and "美国" in zha[k], k
 
 
 def test_policy_and_consent_say_what_the_review_found_unsaid():

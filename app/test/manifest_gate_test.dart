@@ -679,13 +679,15 @@ void main() {
     expect(en, contains('AI service you choose in Settings'));
     expect(zh, contains('AI 服务'));
     // R7a: the photo's location, read only for restaurant lookup, and only
-    // to ask Apple Maps.
+    // to ask Apple Maps — and (run 6) to check on the phone whether a
+    // restaurant or takeout photo was taken in the US.
     expect(en, contains('restaurant lookup with photo location'));
-    expect(en, contains('where a restaurant meal photo was taken'));
-    expect(en, contains('only to ask Apple Maps'));
+    expect(en, contains('where a restaurant or takeout meal photo was taken'));
+    expect(en, contains('only to check on this phone whether it was taken in '
+        'the US, to ask Apple Maps'));
     expect(zh, contains('使用照片位置的餐厅查询'));
-    expect(zh, contains('拍摄位置'));
-    expect(zh, contains('仅用于向 Apple 地图查询'));
+    expect(zh, contains('餐厅餐或外卖照片的拍摄位置'));
+    expect(zh, contains('仅用于在本机判断照片是否在美国拍摄、向 Apple 地图查询'));
     // The editor's answers keep a ~100 m cell on the phone (review
     // 2026-10-25): the prompt says so too.
     expect(en, contains('to remember, on this phone, the restaurants you '

@@ -2483,7 +2483,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantConsentMaps =>
-      'On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.';
+      'On this phone, BiteWise reads where the photo was taken, checks whether it was in the US (lookups cover US restaurants only) and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.';
 
   @override
   String restaurantConsentSent(String recipient) {
@@ -2624,6 +2624,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get assistLookupNoChain =>
       'No restaurant chain BiteWise knows was found for this meal.';
+
+  @override
+  String get assistLookupOutsideUs =>
+      'This meal looks like it was eaten outside the US. BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.';
+
+  @override
+  String get assistLookupRegionUnknown =>
+      'BiteWise can\'t tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.';
 
   @override
   String get assistLookupDailyCap =>

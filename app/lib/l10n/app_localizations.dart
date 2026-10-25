@@ -3960,10 +3960,10 @@ abstract class AppLocalizations {
   /// **'When a meal looks like it came from a restaurant, BiteWise can check whether the chain publishes nutrition for it.'**
   String get restaurantConsentWhat;
 
-  /// Consent sheet bullet (iPhone): the photo's location goes only to Apple Maps.
+  /// Consent sheet bullet (iPhone): the photo's location is checked on the phone for being in the US (the chain table is US-only) and goes only to Apple Maps.
   ///
   /// In en, this message translates to:
-  /// **'On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.'**
+  /// **'On this phone, BiteWise reads where the photo was taken, checks whether it was in the US (lookups cover US restaurants only) and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.'**
   String get restaurantConsentMaps;
 
   /// Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.
@@ -4193,6 +4193,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No restaurant chain BiteWise knows was found for this meal.'**
   String get assistLookupNoChain;
+
+  /// A manual lookup was not made: the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal looks like it was eaten outside the US. BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.'**
+  String get assistLookupOutsideUs;
+
+  /// A manual lookup was not made: no photo location could be used and the phone has no region setting, so it is unknown whether the meal was eaten in the US.
+  ///
+  /// In en, this message translates to:
+  /// **'BiteWise can\'t tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.'**
+  String get assistLookupRegionUnknown;
 
   /// The daily cap of restaurant lookups is reached.
   ///

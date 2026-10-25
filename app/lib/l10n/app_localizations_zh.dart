@@ -2313,7 +2313,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restaurantConsentMaps =>
-      '筷拍会在本机读取照片的拍摄位置，并向 Apple 地图查询附近的餐厅。Apple 会收到该位置（与使用地图时相同）。';
+      '筷拍会在本机读取照片的拍摄位置，判断是否在美国（只查询美国的餐厅），并向 Apple 地图查询附近的餐厅。Apple 会收到该位置（与使用地图时相同）。';
 
   @override
   String restaurantConsentSent(String recipient) {
@@ -2444,6 +2444,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get assistLookupNoChain => '这餐没有找到筷拍认识的连锁餐厅。';
+
+  @override
+  String get assistLookupOutsideUs => '这一餐看起来不是在美国吃的。筷拍只查询美国餐厅公布的营养信息，所以没有查询。';
+
+  @override
+  String get assistLookupRegionUnknown =>
+      '筷拍无法判断这一餐是否在美国吃的，所以没有查询。公布的营养信息只适用于美国的餐厅。';
 
   @override
   String get assistLookupDailyCap => '今天的餐厅查询次数已用完，明天再试。';

@@ -38,16 +38,40 @@
 /// raw text read before the lookup. A false return (the meal changed while
 /// the lookup ran) drops the result and counts a miss.
 ///
+/// The MEAL COUNTRY (core/meal_country.dart): the table holds US chains and
+/// their published numbers are US menu labeling, so a meal is looked up
+/// only when it was eaten in the US — outside it ([AssistSkip.outsideUs])
+/// or with no way to tell ([AssistSkip.regionUnknown]) nothing is asked,
+/// no cached answer is used, no suggestion is made. [MealAssist._where]
+/// decides it once per lookup, and that ONE value is both the request's
+/// "country" and decideAssist's US rule. Strongest first: where the photo
+/// was taken — read only under the location path's own consent ('Use
+/// photo location' on, or the editor's "Use location"; a reader, i.e.
+/// iOS; locationAllowed; capture.has_gps) and only for a RESTAURANT or
+/// TAKEOUT meal (a takeout bag is eaten in the country it was bought in),
+/// tested on the phone against outlines of the US (pointInUs: near a
+/// border counts as outside) and never kept or sent; then Apple Maps'
+/// country for the nearest places, a veto when they were fetched; then the
+/// phone's region setting (weak: a traveller's phone stays on home);
+/// else unknown. Home, packaged and unknown meals never have their
+/// location read, Brand only reads none: those go by the region. The
+/// position is read only when something could be asked (a printed chain,
+/// or a fix Apple Maps may get), and Apple Maps is asked only about a
+/// photo taken in the US. A job or retry keeps the country it was
+/// submitted with.
+///
 /// The LOCATION path (R6c) adds the chains around where the photo was
 /// taken. It runs only with a location reader and a places resolver (iOS;
 /// di.dart builds neither on Android), the 'Use photo location' sub-toggle
 /// on (or the editor's "Use location"), LookupSupport.locationAllowed (an
 /// http:// own server is brand-only), capture.has_gps, and a RESTAURANT meal
-/// — never takeout, packaged, home or unknown, whose location is never
-/// read. Steps ([MealAssist._locate]): the fix's own gate (accuracy,
-/// freshness; place_match.dart placeGate) → PhotoLocationReader → a point
-/// in memory → its ~100 m cell against the 'Not from a restaurant' zones
-/// (no places call inside one) → Apple Maps' nearby food places → matchPlaces
+/// — never takeout, packaged, home or unknown (takeout's position serves
+/// the meal country only; the others' is never read). Steps
+/// ([MealAssist._where]): the fix's own gate (accuracy, freshness;
+/// place_match.dart placeGate) → PhotoLocationReader → a point in memory →
+/// the meal country (a photo taken outside the US stops here) → its ~100 m
+/// cell against the 'Not from a restaurant' zones (no places call inside
+/// one) → Apple Maps' nearby food places → their countries → matchPlaces
 /// → chain keys of OUR table, a pick, the dense flag, whether the fix is
 /// verified → the point, the cell and every place are dropped. The request
 /// names at most 3 chains (1 when one was auto-picked); decideAssist
@@ -98,10 +122,10 @@
 /// (evidence location or location_confirmed) — accepting a printed
 /// brand's numbers says nothing about the spot.
 ///
-/// Nothing here logs. A coordinate exists only inside [MealAssist._locate],
-/// for one places query; MapKit's places only inside matchPlaces. Neither
-/// is stored, sent, logged or shown — only chain keys of OUR table leave
-/// that method.
+/// Nothing here logs. A coordinate exists only inside [MealAssist._where],
+/// for the US test and one places query; MapKit's places only there and
+/// inside matchPlaces. Neither is stored, sent, logged or shown — only a
+/// country code and chain keys of OUR table leave that method.
 library;
 
 import 'dart:async';
@@ -115,6 +139,7 @@ import 'package:flutter/widgets.dart'
 import '../../core/chain_match.dart' show chainByKey;
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
+import '../../core/meal_country.dart';
 import '../../core/place_match.dart';
 import '../../core/restaurant_assist_logic.dart';
 import '../../core/restaurant_lookup_contract.dart';
@@ -172,6 +197,14 @@ abstract final class AssistSkip {
 
   // Per meal.
   static const String noBrand = 'no_brand';
+
+  /// Eaten outside the US (core/meal_country.dart): published US numbers
+  /// never apply there, so nothing is looked up — not even the cache.
+  static const String outsideUs = 'outside_us';
+
+  /// Nothing tells where the meal was eaten (no position may be read, no
+  /// region set): nothing could apply, so nothing is looked up.
+  static const String regionUnknown = 'region_unknown';
 
   /// Failed again after [assistMaxRetries] retries: written 'unavailable'.
   static const String retriesExhausted = 'retries_exhausted';
@@ -300,8 +333,9 @@ AssistTrigger? assistTriggerFor(dynamic analysis, AssistMode mode) {
 /// receipt merchant — the composer lists the chains the printed brands and
 /// the merchant name first, from OUR table only — then [chains], the keys
 /// the location path found (best first; none on the brand path), at most 3
-/// in all. [country] is the device region (ISO2; the composer defaults to
-/// US), [zh] asks for Chinese notes.
+/// in all. [country] is the meal country MealAssist decided (always US: no
+/// other is looked up; the composer's own default, US, keeps it the same
+/// bytes as the Python composer), [zh] asks for Chinese notes.
 LookupRequest composeAssistRequest(
   Map<String, dynamic> analysis, {
   String? country,
@@ -318,10 +352,10 @@ LookupRequest composeAssistRequest(
 });
 
 /// The region a locale name carries ("zh-Hans_US", "en_US" → US;
-/// "zh_Hant_TW" → TW), or null: where the phone is set to be, the only
-/// country the brand path knows (it reads no location). decideAssist
-/// applies published numbers only for the US; anything else, or none, is a
-/// suggestion at most.
+/// "zh_Hant_TW" → TW), or null: where the phone is set to be — the meal
+/// country's weakest signal (core/meal_country.dart), and the only one
+/// when no photo position may be read. A traveller's phone usually stays
+/// set to home.
 String? regionOfLocale(String localeName) {
   for (final part in localeName.split(RegExp('[-_.@]')).reversed) {
     if (_iso2Re.hasMatch(part)) return part;
@@ -334,7 +368,8 @@ String? regionOfLocale(String localeName) {
 /// order (PlatformDispatcher.locales) — that is one, else null. A locale
 /// name without a region ('zh_Hans', seen on a simulator) is not taken as
 /// "not the US" while the preferred languages still say where the phone is
-/// set to be.
+/// set to be. Null leaves the meal country unknown unless the photo's
+/// position tells: nothing is looked up then (AssistSkip.regionUnknown).
 String? deviceRegion(String localeName, Iterable<String?> countryCodes) {
   final region = regionOfLocale(localeName);
   if (region != null) return region;
@@ -521,18 +556,27 @@ final class AssistActionResult {
   final bool placeLearned;
 }
 
-/// What the location path made of one meal ([MealAssist._locate]): a code
-/// for the decision log, and the chain keys it found — nothing else.
-final class _Located {
-  const _Located(
-    this.code, {
+/// Where one meal was eaten, as [MealAssist._where] found out: the meal
+/// country, and what the location path made of it — a code for the
+/// decision log and the chain keys it found. Nothing else: no position,
+/// no place.
+final class _Where {
+  const _Where(
+    this.country, {
+    this.code,
     this.place,
     this.later = false,
     this.failed = false,
+    this.nothingToAsk = false,
   });
 
-  /// A PlaceMatchReason wire code or one of [AssistSkip]'s place codes.
-  final String code;
+  /// The meal country (core/meal_country.dart decideMealCountry): US, an
+  /// ISO2 code or XX, or null when nothing tells.
+  final String? country;
+
+  /// A PlaceMatchReason wire code or one of [AssistSkip]'s place codes;
+  /// null when the location path did not run.
+  final String? code;
 
   /// The chains (keys of OUR table) and flags, when places were matched.
   final AssistPlaceContext? place;
@@ -542,6 +586,11 @@ final class _Located {
 
   /// The places query failed: the brand path goes on alone.
   final bool failed;
+
+  /// Nothing printed names a chain and Apple Maps may not be asked:
+  /// nothing could be looked up, so nothing was read ([country] is only
+  /// the phone's region).
+  final bool nothingToAsk;
 }
 
 /// One meal's request, composed: what is sent, its hash, and what the
@@ -555,10 +604,10 @@ final class _Prepared {
   /// The chain the user picked in the editor (R7b), or null.
   final String? pick;
 
-  /// The device region the request was composed with (ISO2), read once,
-  /// so the decision judges the same country the request named. Null
-  /// (unknown) asks for the table's US menu and applies nothing.
-  final String? country;
+  /// The meal country the request was composed with ([MealAssist._where],
+  /// decided once): the decision judges the same country the request
+  /// named. Always US — no other country is looked up.
+  final String country;
 }
 
 final class _Run {
@@ -1214,33 +1263,47 @@ class MealAssist {
         return const _Run(AssistSkip.mealChanged);
       }
       final base = assistBase(meal.analysis);
+      // The chains printed brands (or the user's pick) name: known without
+      // reading anything.
+      final printed = composeAssistRequest(
+        base,
+        chains: pick != null ? [pick] : const [],
+      ).chainKeys.isNotEmpty;
 
-      // ── Where (R6c): the location path, or what a job kept of it ──
-      AssistPlaceContext? place;
-      String? placeCode;
-      var placeFailed = false;
-      if (useLocation && _locationPossible(meal, support)) {
-        final kept = job?.place;
-        if (kept != null) {
-          // A job or a retry: the position is not read again.
-          place = kept;
-        } else {
-          final located = await _locate(meal);
-          if (gen != _generation) return _Run.cancelled;
-          if (located.later) {
-            _scheduleRetry();
-            return _Run(located.code);
-          }
-          place = located.place;
-          placeCode = located.code;
-          placeFailed = located.failed;
-        }
+      // ── Where: the meal country and the location path (R6c), or what a
+      // job kept of them ──
+      final where = await _where(
+        meal,
+        support,
+        useLocation: useLocation,
+        printed: printed,
+        job: job,
+      );
+      if (gen != _generation) return _Run.cancelled;
+      if (where.later) {
+        _scheduleRetry();
+        return _Run(where.code ?? AssistSkip.placeThrottled);
       }
+      if (!where.nothingToAsk && where.country != kMealCountryUs) {
+        // Published US numbers never apply outside the US, and with no
+        // country known nothing could apply: no lookup, no cached answer,
+        // no suggestion. A job kept for this meal answers nothing now.
+        if (job != null) await _state.removeJob(mealId);
+        if (where.country == null) return const _Run(AssistSkip.regionUnknown);
+        if (!manual) {
+          // Where a meal was eaten does not change: not asked again.
+          await _logCode(AssistSkip.outsideUs);
+          await _state.addMiss(mealId, denylist: true);
+        }
+        return const _Run(AssistSkip.outsideUs);
+      }
+      var place = where.place;
+      final placeCode = where.code;
+      final placeFailed = where.failed;
 
-      final country = _region();
       final request = composeAssistRequest(
         base,
-        country: country,
+        country: kMealCountryUs,
         zh: _zh(),
         chains: pick != null ? [pick] : place?.chains ?? const [],
       );
@@ -1273,12 +1336,14 @@ class MealAssist {
       }
       place = place?.within(request.chainKeys);
       if (place != null && place.chains.isEmpty) place = null;
+      // The ONE country: the decision judges exactly what the request
+      // names.
       final prepared = _Prepared(
         request,
         lookupRequestHash(request),
         place,
         pick,
-        country,
+        request.body['country']! as String,
       );
 
       // ── The cache (R6c): the same items at the same chain, answered by
@@ -1376,50 +1441,121 @@ class MealAssist {
         RestaurantContext.restaurant;
   }
 
-  /// The location path for [meal] (see the library doc). The photo's
-  /// position is read here, lives in [point] for one places query, and is
-  /// gone when this returns: what comes back is a code and chain keys.
-  /// Never throws.
-  Future<_Located> _locate(Meal meal) async {
+  /// Whether [meal]'s photo position may be read for the meal country (no
+  /// read yet): the location path's own conditions — a reader (iOS), a
+  /// recipient that may receive location-derived chains (not an http://
+  /// own server, where 'Use photo location' is off), a library photo with
+  /// GPS — for a RESTAURANT or TAKEOUT meal (home, packaged and unknown
+  /// meals never have their location read). The caller adds 'Use photo
+  /// location' (or the editor's "Use location"); a lookup needs the
+  /// consent either way.
+  bool _countryReadPossible(Meal meal, LookupSupport support) {
+    final reader = _location;
+    if (reader == null || !reader.enabled) return false;
+    if (!support.supported || !support.locationAllowed) return false;
+    if (meal.fileId.trim().isEmpty) return false;
+    final capture = meal.analysis['capture'];
+    if (capture is! Map || capture['has_gps'] != true) return false;
+    final context = mealContextFields(meal.analysis).restaurantContext;
+    return context == RestaurantContext.restaurant ||
+        context == RestaurantContext.takeout;
+  }
+
+  /// Where [meal] was eaten (see the library doc): the meal country
+  /// (decideMealCountry) and, on the location path, the chains around the
+  /// photo. [printed]: something printed (or the user's pick) names a
+  /// chain. The photo's position is read here at most once, only where
+  /// [_countryReadPossible] and [useLocation] allow it and only when
+  /// something could be asked; it lives in [point] for the US test and one
+  /// places query, and is gone when this returns: what comes back is a
+  /// country code, a code and chain keys. A job or a retry keeps what its
+  /// first try found: nothing is read again. Never throws.
+  Future<_Where> _where(
+    Meal meal,
+    LookupSupport support, {
+    required bool useLocation,
+    required bool printed,
+    required AssistJob? job,
+  }) async {
+    final locating = useLocation && _locationPossible(meal, support);
+    final keptCountry = job?.country;
+    if (job != null && keptCountry != null) {
+      return _Where(keptCountry, place: locating ? job.place : null);
+    }
+    final region = _region();
     try {
-      final reader = _location;
-      final places = _places;
-      if (reader == null || places == null) {
-        return const _Located(AssistSkip.placeUnsupported);
-      }
       final analysis = meal.analysis;
       final geo = PhotoGeo.fromCapture(
         analysis['capture'],
         glasses: isMetaGlassesAnalysis(analysis),
       );
-      // The fix's own quality first: a coarse or stale fix is never read.
+      // The fix's own quality first: a coarse or stale fix never reaches
+      // Apple Maps.
       final gate = placeGate(geo);
-      final refused = gate.reason;
-      if (refused != null) return _Located(refused.wire);
-      final hold = _placesHoldUntil;
-      if (hold != null && _clock().isBefore(hold)) {
-        return const _Located(AssistSkip.placeThrottled, later: true);
+      final refused = locating ? gate.reason?.wire : null;
+      if (!printed && (!locating || refused != null)) {
+        // Nothing could be asked about: nothing is read.
+        return _Where(region, code: refused, nothingToAsk: true);
       }
-      final point = await reader.forAsset(meal.fileId);
-      if (point == null) return const _Located(AssistSkip.placeNoFix);
+      final hold = _placesHoldUntil;
+      if (locating &&
+          refused == null &&
+          job?.place == null &&
+          hold != null &&
+          _clock().isBefore(hold)) {
+        // Apple Maps asked us to wait: the meal waits too, and nothing is
+        // read meanwhile.
+        return const _Where(null, code: AssistSkip.placeThrottled, later: true);
+      }
+      final reader = _location;
+      final point =
+          reader != null && useLocation && _countryReadPossible(meal, support)
+          ? await reader.forAsset(meal.fileId)
+          : null;
+      final country = decideMealCountry(
+        lat: point?.lat,
+        lon: point?.lon,
+        accuracyM: geo.accuracyM,
+        deviceRegion: region,
+      );
+      // Outside the US, or nowhere known: Apple Maps is not asked either.
+      if (country != kMealCountryUs || !locating) return _Where(country);
+      if (refused != null) return _Where(country, code: refused);
+      // A job kept before meal countries were: Apple Maps is not asked
+      // again.
+      final kept = job?.place;
+      if (kept != null) return _Where(country, place: kept);
+      if (point == null) return _Where(country, code: AssistSkip.placeNoFix);
       final cell = PlaceCell.fromLatLon(point.lat, point.lon);
-      if (cell == null) return const _Located(AssistSkip.placeNoFix);
+      if (cell == null) return _Where(country, code: AssistSkip.placeNoFix);
       final learned = await _learnedPlaces();
       // A 'Not from a restaurant' zone: Apple Maps is not asked.
-      if (learned.inZone(cell)) return _Located(PlaceMatchReason.zone.wire);
-      final near = await places.nearbyFood(point, radiusM: gate.radiusM);
+      if (learned.inZone(cell)) {
+        return _Where(country, code: PlaceMatchReason.zone.wire);
+      }
+      final near = await _places!.nearbyFood(point, radiusM: gate.radiusM);
       switch (near.status) {
         case PlacesStatus.throttled:
           _placesHoldUntil = _clock().add(placesThrottleBackoff);
-          return const _Located(AssistSkip.placeThrottled, later: true);
+          return _Where(country, code: AssistSkip.placeThrottled, later: true);
         case PlacesStatus.error:
-          return const _Located(AssistSkip.placeError, failed: true);
+          return _Where(country, code: AssistSkip.placeError, failed: true);
         case PlacesStatus.unsupported:
-          return const _Located(AssistSkip.placeUnsupported);
+          return _Where(country, code: AssistSkip.placeUnsupported);
         case PlacesStatus.ok:
         case PlacesStatus.none:
           break;
       }
+      // Apple Maps' own word on the country: any of the nearest places
+      // filed outside the US makes the meal outside it.
+      final checked = decideMealCountry(
+        lat: point.lat,
+        lon: point.lon,
+        accuracyM: geo.accuracyM,
+        placeCountries: [for (final p in near.places) p.countryCode],
+        deviceRegion: region,
+      );
+      if (checked != kMealCountryUs) return _Where(checked);
       final match = matchPlaces(
         geo: geo,
         cell: cell,
@@ -1427,8 +1563,9 @@ class MealAssist {
         places: near.places,
         learned: learned,
       );
-      return _Located(
-        match.reason.wire,
+      return _Where(
+        checked,
+        code: match.reason.wire,
         place: AssistPlaceContext(
           chains: match.lookupChainKeys,
           picked: match.picked,
@@ -1439,7 +1576,8 @@ class MealAssist {
         ),
       );
     } catch (_) {
-      return const _Located(AssistSkip.placeError, failed: true);
+      // Nowhere known: nothing is looked up this time.
+      return const _Where(null, code: AssistSkip.placeError, failed: true);
     }
   }
 
@@ -1630,6 +1768,7 @@ class MealAssist {
             place: prepared.place,
             manual: manual,
             pick: prepared.pick,
+            country: prepared.country,
           );
           await _state.putJob(mealId, next);
           _schedulePoll(next);
@@ -1703,6 +1842,7 @@ class MealAssist {
             place: prepared.place,
             manual: manual,
             pick: prepared.pick,
+            country: prepared.country,
           ),
         );
       }
@@ -1735,6 +1875,7 @@ class MealAssist {
         nextAt: now.add(assistRetryDelays[attempts - 1]),
         attempts: attempts,
         place: prepared.place,
+        country: prepared.country,
       ),
     );
     return _Run(code, stop: true);

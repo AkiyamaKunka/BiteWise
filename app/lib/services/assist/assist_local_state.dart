@@ -217,6 +217,7 @@ final RegExp _codeRe = RegExp(r'^[a-z0-9_]{1,40}$');
 final RegExp _providerRe = RegExp(r'^[a-z0-9_]{0,20}$');
 final RegExp _jobIdRe = RegExp(r'^[A-Za-z0-9_-]{8,64}$');
 final RegExp _hashRe = RegExp(r'^[0-9a-f]{8,64}$');
+final RegExp _countryRe = RegExp(r'^[A-Z]{2}$');
 final RegExp _cacheKeyRe = RegExp(r'^[0-9a-f]{32}$');
 
 /// A kcal value worth logging: a whole number 0..20000.
@@ -392,6 +393,7 @@ final class AssistJob {
     this.place,
     this.manual = false,
     this.pick,
+    this.country,
   });
 
   /// The server's job id; null for a retry record.
@@ -423,6 +425,13 @@ final class AssistJob {
   /// (R7b; a key of OUR table), so a later poll asks about the same
   /// request; null otherwise.
   final String? pick;
+
+  /// The meal country the request was composed and is judged with
+  /// (core/meal_country.dart; always US, the only country a lookup is made
+  /// for), so a poll, a resubmit or a retry decides by the same value
+  /// without reading the photo's position again. Null for a record written
+  /// before meal countries were kept: decided afresh.
+  final String? country;
 
   /// A job the server is running.
   bool get isPending => jobId != null;
@@ -746,6 +755,7 @@ class AssistLocalState {
             ? null
             : AssistPlaceContext.fromJson(rawPlace);
         final pick = e['pick'];
+        final country = e['country'];
         if (id == null ||
             (job != null && (job is! String || !_jobIdRe.hasMatch(job))) ||
             hash is! String ||
@@ -753,7 +763,9 @@ class AssistLocalState {
             at == null ||
             next == null ||
             (rawPlace != null && place == null) ||
-            (pick != null && (pick is! String || chainByKey(pick) == null))) {
+            (pick != null && (pick is! String || chainByKey(pick) == null)) ||
+            (country != null &&
+                (country is! String || !_countryRe.hasMatch(country)))) {
           continue;
         }
         out[id] = AssistJob(
@@ -767,6 +779,7 @@ class AssistLocalState {
           place: place,
           manual: e['manual'] == true,
           pick: pick as String?,
+          country: country as String?,
         );
       }
       return out;
@@ -788,6 +801,7 @@ class AssistLocalState {
           'place': ?e.value.place?.toJson(),
           if (e.value.manual) 'manual': true,
           'pick': ?e.value.pick,
+          'country': ?e.value.country,
         },
     ];
     if (entries.isEmpty) return _store.delete(assistJobsDocument);

@@ -2029,9 +2029,9 @@
   "@restaurantConsentWhat": {
     "description": "Consent sheet bullet: what the feature does."
   },
-  "restaurantConsentMaps": "On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.",
+  "restaurantConsentMaps": "On this phone, BiteWise reads where the photo was taken, checks whether it was in the US (lookups cover US restaurants only) and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.",
   "@restaurantConsentMaps": {
-    "description": "Consent sheet bullet (iPhone): the photo's location goes only to Apple Maps."
+    "description": "Consent sheet bullet (iPhone): the photo's location is checked on the phone for being in the US (the chain table is US-only) and goes only to Apple Maps."
   },
   "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
   "@restaurantConsentSent": {
@@ -2223,6 +2223,14 @@
   "assistLookupNoChain": "No restaurant chain BiteWise knows was found for this meal.",
   "@assistLookupNoChain": {
     "description": "A manual lookup had no chain to ask about (no printed brand, no chain nearby)."
+  },
+  "assistLookupOutsideUs": "This meal looks like it was eaten outside the US. BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.",
+  "@assistLookupOutsideUs": {
+    "description": "A manual lookup was not made: the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only."
+  },
+  "assistLookupRegionUnknown": "BiteWise can't tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.",
+  "@assistLookupRegionUnknown": {
+    "description": "A manual lookup was not made: no photo location could be used and the phone has no region setting, so it is unknown whether the meal was eaten in the US."
   },
   "assistLookupDailyCap": "Today's restaurant lookups are used up. Try again tomorrow.",
   "@assistLookupDailyCap": {
