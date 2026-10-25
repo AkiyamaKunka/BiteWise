@@ -401,12 +401,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               executor: s.executor,
               thumbs: s.thumbs,
               garminDaily: s.garminDaily,
-              mealInUse: s.mealInUse),
+              mealInUse: s.mealInUse,
+              restaurantAssist: s.restaurantAssist,
+              settings: s.settings),
           HistoryScreen(
               key: _historyKey,
               dao: s.dao,
               thumbs: s.thumbs,
-              mealInUse: s.mealInUse),
+              mealInUse: s.mealInUse,
+              restaurantAssist: s.restaurantAssist,
+              settings: s.settings),
           BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
           SettingsScreen(
             settings: s.settings,

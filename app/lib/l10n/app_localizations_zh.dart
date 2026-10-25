@@ -2361,4 +2361,129 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restaurantConsentNotNow => '暂不';
+
+  @override
+  String assistChipApplied(String brand, int count) {
+    return '已采用 $brand 公布的数值（$count 项）';
+  }
+
+  @override
+  String assistChipSuggested(String brand, String kcal) {
+    return '$brand 公布为 $kcal 千卡 — 点按查看';
+  }
+
+  @override
+  String get assistUnseenLabel => '已按餐厅数值更新';
+
+  @override
+  String get assistCardApplied => '已采用公布的数值';
+
+  @override
+  String get assistCardSuggested => '建议：AI 的数值未改动';
+
+  @override
+  String assistSourceHost(String host) {
+    return '来源：$host';
+  }
+
+  @override
+  String get assistSourceNotOfficial => '不是该连锁店的官网';
+
+  @override
+  String assistVia(String provider, String date) {
+    return '通过 $provider · $date';
+  }
+
+  @override
+  String get assistGrounded => '数值见于来源页面';
+
+  @override
+  String get assistNotGrounded => '未在来源页面确认';
+
+  @override
+  String get assistUseEstimate => '改用 AI 估算';
+
+  @override
+  String get assistWrongRestaurant => '不是这家';
+
+  @override
+  String get assistNotRestaurant => '不是餐厅的';
+
+  @override
+  String get assistCorrect => '没错';
+
+  @override
+  String get assistUsePublished => '采用公布数值';
+
+  @override
+  String get assistLookUp => '查找餐厅营养';
+
+  @override
+  String get assistStale => '使用餐厅数值后，这餐又被修改过。';
+
+  @override
+  String get assistSuggestionStale => '提出这条建议后，这餐又被修改过。';
+
+  @override
+  String get assistContextOnly => '未找到公布的营养信息 — 保留 AI 估算';
+
+  @override
+  String get assistPickerTitle => '是哪家餐厅？';
+
+  @override
+  String get assistPickerSearch => '搜索连锁店';
+
+  @override
+  String get assistPickerNone => '没有匹配的连锁店。';
+
+  @override
+  String get assistLookingUp => '正在查找餐厅营养…';
+
+  @override
+  String get assistLookupStillRunning => '仍在查找，过一会儿再打开这餐看看。';
+
+  @override
+  String get assistLookupNoChain => '这餐没有找到筷拍认识的连锁餐厅。';
+
+  @override
+  String get assistLookupDailyCap => '今天的餐厅查询次数已用完，明天再试。';
+
+  @override
+  String get assistLookupFailed => '查询没有完成，请稍后再试。';
+
+  @override
+  String get assistNotRestaurantDone => '好的，已记下：不是餐厅的。';
+
+  @override
+  String assistCorrectDone(String brand) {
+    return '谢谢，筷拍会记住这里是$brand。';
+  }
+
+  @override
+  String get assistEditFirst => '请先保存修改，再使用这些按钮。';
+
+  @override
+  String get diagRestaurantTitle => '餐厅查询';
+
+  @override
+  String diagRestaurantToday(int count, int cap, String code) {
+    return '今天 $count/$cap · 最近 $code';
+  }
+
+  @override
+  String get diagRestaurantIntro => '最近 20 个决定：原因代码、千卡（之前 → 之后）、服务。不保存餐厅名称或地点。';
+
+  @override
+  String get diagRestaurantNone => '还没有餐厅查询的决定。';
+
+  @override
+  String get diagConfidenceTitle => 'AI 把握程度（14 天）';
+
+  @override
+  String get diagConfidenceIntro => 'AI 对每餐照片估算的把握程度。“不确定时”只查询把握低的餐厅餐。';
+
+  @override
+  String diagConfidenceLine(int low, int medium, int high, int unknown) {
+    return '低 $low · 中 $medium · 高 $high · 未给出 $unknown';
+  }
 }

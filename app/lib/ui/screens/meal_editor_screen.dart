@@ -18,6 +18,18 @@
 /// restaurant lookup) is never overwritten with the older copy: the save
 /// says so and the form reloads. While open, the editor holds the meal in
 /// the [MealInUseRegistry], so the restaurant assist leaves it alone.
+///
+/// The restaurant source card (design R7b; widgets/assist_source_card.dart)
+/// sits at the top of a stored meal: where a chain's published numbers came
+/// from, and the user's answers — Use AI estimate, Use published numbers,
+/// Wrong restaurant (then 'Which restaurant?', our chain table only, and a
+/// lookup of the chain picked), Not from a restaurant, Correct, and Look up
+/// restaurant nutrition. Each writes at once, as the user's own change,
+/// against the stored text the form was loaded from (MealAssist.act /
+/// lookupNow); a meal that changed meanwhile says "This meal was just
+/// updated — please review." and shows the newer meal. The buttons wait
+/// while the form has unsaved typing, so a write never lands under it.
+/// Opening a meal clears its 'updated' dot.
 library;
 
 import 'dart:convert' show jsonEncode;
@@ -26,20 +38,39 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart' as launcher;
 
-import '../../core/coerce.dart' show finiteAnalysis, normalizeImageHash;
+import '../../core/coerce.dart'
+    show finiteAnalysis, isFoodTruthy, normalizeImageHash;
 import '../../core/contracts.dart';
-import '../../core/restaurant_assist_logic.dart' show dropAssistClaims;
+import '../../core/restaurant_assist_logic.dart'
+    show dropAssistClaims, normalizeSourceUrl;
+import '../../services/assist/meal_assist.dart'
+    show
+        AssistActionResult,
+        AssistActionStatus,
+        AssistRun,
+        AssistSkip,
+        AssistUserAction,
+        kAssistPollInterval,
+        kAssistPollWindow;
 import '../../services/photo/filename_dates.dart'
     show captureWallClock, exifWallAndOffset;
 import '../../services/photo/glasses.dart'
     show captureAnalysis, isMetaGlassesAnalysis;
+import '../assist_view.dart';
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
 import '../large_text.dart';
 import '../meal_edit_logic.dart';
 import '../meal_in_use.dart';
+import '../restaurant_assist_controls.dart';
+import '../services.dart' show SettingsStore;
+import '../widgets/assist_source_card.dart';
+import '../widgets/chain_picker_sheet.dart';
 import '../widgets/glasses_badge.dart';
+import '../widgets/restaurant_consent_sheet.dart'
+    show restaurantManualLookupChoice;
 import '../widgets/macro_chart.dart';
 import '../widgets/small_spinner.dart';
 
@@ -55,9 +86,30 @@ class MealEditorScreen extends StatefulWidget {
     this.initialAnalysis,
     this.newMealSource = MealSource.appManual,
     this.inUse,
+    this.assist,
+    this.settings,
+    this.openUrl,
+    this.assistPollInterval = kAssistPollInterval,
   });
 
   final MealsDao dao;
+
+  /// The restaurant assist (design R7b): the source card's answers, the
+  /// manual lookup, the card's dot. Null (tests, a new meal) shows none of
+  /// it.
+  final RestaurantAssistControls? assist;
+
+  /// The assist's mode and consent (the manual lookup asks for a consent
+  /// that names the current recipient first). Null hides the lookup.
+  final SettingsStore? settings;
+
+  /// Opens the source page; injectable so widget tests need no
+  /// url_launcher.
+  final Future<bool> Function(Uri url)? openUrl;
+
+  /// How often a manual lookup still running on the owner's server is
+  /// asked again while the editor is open (for [kAssistPollWindow]).
+  final Duration assistPollInterval;
 
   /// Held for [meal] while the editor is open (design R6a): the restaurant
   /// assist skips a meal the user is editing. Null: nothing to tell.
@@ -131,6 +183,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   MealInUseHold? _hold;
 
+  /// An answer to the restaurant source card is being written.
+  bool _assistBusy = false;
+
+  /// A manual restaurant lookup is running (polled while a server job).
+  bool _lookingUp = false;
+
   @override
   void initState() {
     super.initState();
@@ -186,6 +244,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       _hold = widget.inUse?.acquire(meal.id);
       _loadedSignature = _signature();
       _basisRead = _confirmBasis();
+      // Opened: the card's 'updated' dot goes (design R7b).
+      final seen = widget.assist?.markSeen;
+      if (seen != null) {
+        seen(meal.id).then((_) {}, onError: (Object _) {});
+      }
     }
   }
 
@@ -564,6 +627,254 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     setState(() => _errors = const []);
   }
 
+  // ── The restaurant source card (design R7b) ──
+
+  /// The form shows something the user typed since the last load.
+  bool get _dirty => _meal != null && _signature() != _loadedSignature;
+
+  bool get _assistOn =>
+      widget.settings != null && widget.settings!.restaurantAssist != 'off';
+
+  void _say(String text, {Key? key}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(key: key, content: Text(text)));
+  }
+
+  /// Re-reads the row behind the form after an assist write: an untouched
+  /// form shows the newer meal; typing over an older copy becomes the
+  /// save's conflict ([_confirmBasis]).
+  Future<void> _refreshBasis() async {
+    final read = _confirmBasis();
+    _basisRead = read;
+    await read;
+    if (mounted) setState(() {});
+  }
+
+  /// The meal changed under an answer: say so, show the meal as it is now.
+  Future<void> _assistConflict() async {
+    _say(context.l10n.editorSaveConflict, key: const Key('assistConflict'));
+    final MealSnapshot? snap;
+    try {
+      snap = await widget.dao.mealSnapshot(_meal!.id);
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
+    if (snap == null) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    _load(snap);
+    setState(() {});
+  }
+
+  /// One of the source card's answers, written at once against the stored
+  /// text the form shows. 'Wrong restaurant' then asks which chain it was
+  /// and looks that one up (mode on).
+  Future<void> _assistAct(AssistUserAction action) async {
+    final meal = _meal;
+    final act = widget.assist?.act;
+    if (meal == null || act == null) return;
+    if (_assistBusy || _saving || _lookingUp) return;
+    final l = context.l10n;
+    if (_dirty) {
+      _say(l.assistEditFirst, key: const Key('assistEditFirstSnack'));
+      return;
+    }
+    final view = AssistView.of(meal.analysis);
+    setState(() => _assistBusy = true);
+    AssistActionResult result;
+    try {
+      final basis = _basisRead;
+      if (basis != null) await basis;
+      final raw = _draft.expectedRaw;
+      if (!mounted) return;
+      if (raw == null || _basisStale || !identical(meal, _meal)) {
+        result = const AssistActionResult(AssistActionStatus.changed);
+      } else {
+        result = await act(meal.id, action, expectedRaw: raw);
+      }
+    } finally {
+      if (mounted) setState(() => _assistBusy = false);
+    }
+    if (!mounted) return;
+    if (result.status == AssistActionStatus.changed) {
+      await _assistConflict();
+      return;
+    }
+    await _refreshBasis();
+    if (!mounted) return;
+    if (result.status == AssistActionStatus.done) {
+      if (action == AssistUserAction.notFromRestaurant) {
+        _say(l.assistNotRestaurantDone, key: const Key('assistDoneSnack'));
+      } else if (action == AssistUserAction.correct && result.placeLearned) {
+        _say(l.assistCorrectDone(view.brandLabel(l)),
+            key: const Key('assistDoneSnack'));
+      }
+    }
+    if (action == AssistUserAction.wrongRestaurant &&
+        _assistOn &&
+        widget.assist?.lookupNow != null) {
+      final pick = await showChainPickerSheet(context, exclude: view.chainKey);
+      if (pick != null && mounted) await _lookUp(chainKey: pick);
+    }
+  }
+
+  /// 'Look up restaurant nutrition' (or the chain picked after 'Wrong
+  /// restaurant'): the consent first when it does not name the current
+  /// recipient, then MealAssist.lookupNow — asked again every
+  /// [MealEditorScreen.assistPollInterval] while the owner's server still
+  /// runs it, for up to [kAssistPollWindow] (later, the sweep collects it).
+  Future<void> _lookUp({String? chainKey}) async {
+    final meal = _meal;
+    final assist = widget.assist;
+    final settings = widget.settings;
+    final lookupNow = assist?.lookupNow;
+    if (meal == null || assist == null || settings == null) return;
+    if (lookupNow == null || _lookingUp || _assistBusy || _saving) return;
+    final l = context.l10n;
+    if (_dirty) {
+      _say(l.assistEditFirst, key: const Key('assistEditFirstSnack'));
+      return;
+    }
+    final choice = await restaurantManualLookupChoice(context,
+        settings: settings, controls: assist);
+    if (choice == null || !mounted) return;
+    final useLocation = chainKey == null && choice.useLocation;
+    setState(() => _lookingUp = true);
+    var run = const AssistRun(AssistSkip.error);
+    try {
+      final tries = kAssistPollWindow.inMicroseconds ~/
+              widget.assistPollInterval.inMicroseconds +
+          1;
+      for (var i = 0; i < tries; i++) {
+        if (i > 0) {
+          await Future<void>.delayed(widget.assistPollInterval);
+          if (!mounted) return;
+        }
+        run = await lookupNow(meal.id,
+            useLocation: useLocation, chainKey: chainKey);
+        if (!mounted) return;
+        if (run.code != AssistSkip.pending) break;
+      }
+    } finally {
+      if (mounted) setState(() => _lookingUp = false);
+    }
+    if (!mounted) return;
+    if (run.wrote) {
+      await _refreshBasis();
+      return;
+    }
+    if (run.code == AssistSkip.casMiss) {
+      _say(l.editorSaveConflict, key: const Key('assistConflict'));
+      await _refreshBasis();
+      return;
+    }
+    final message = run.code == AssistSkip.pending
+        ? l.assistLookupStillRunning
+        : run.decision != null
+            // Answered, but nothing usable to write (another chain, items
+            // that changed meanwhile, a malformed answer).
+            ? l.assistContextOnly
+            : _lookupFailureText(l, run.code);
+    if (message != null) {
+      _say(message, key: const Key('assistLookupSnack'));
+    }
+  }
+
+  /// Why a manual lookup wrote nothing, or null when there is nothing to
+  /// say (it was not started, or already runs).
+  static String? _lookupFailureText(AppLocalizations l, String code) {
+    switch (code) {
+      case AssistSkip.consentNeeded:
+      case AssistSkip.working:
+      case AssistSkip.off:
+      case AssistSkip.cancelled:
+        return null;
+      case AssistSkip.dailyCap:
+      case 'lookup_daily_cap':
+        return l.assistLookupDailyCap;
+      case 'lookup_server_outdated':
+        return l.restaurantServerOutdated;
+      case 'lookup_disabled':
+        return l.restaurantServerDisabled;
+      case AssistSkip.placeThrottled:
+      case AssistSkip.placeError:
+      case AssistSkip.error:
+      case AssistSkip.unsupported:
+        return l.assistLookupFailed;
+    }
+    if (code.startsWith('lookup_')) return l.assistLookupFailed;
+    // No chain to ask about: nothing printed, none nearby, a zone.
+    return l.assistLookupNoChain;
+  }
+
+  /// Opens the source page: only a normalized https address, in the
+  /// browser.
+  Future<void> _openSource(String url) async {
+    if (normalizeSourceUrl(url) != url) return;
+    final uri = Uri.tryParse(url);
+    if (uri == null || uri.scheme != 'https') return;
+    final open = widget.openUrl ??
+        (u) => launcher.launchUrl(u,
+            mode: launcher.LaunchMode.externalApplication);
+    try {
+      await open(uri);
+    } catch (_) {}
+  }
+
+  /// The source card for the stored meal, or null when there is nothing to
+  /// show or do.
+  Widget? _assistSection() {
+    final meal = _meal;
+    final assist = widget.assist;
+    if (meal == null || assist == null) return null;
+    final view = AssistView.of(meal.analysis);
+    var supported = false;
+    // Off never asks who a lookup would reach (that builds the lookup
+    // client).
+    if (_assistOn) {
+      try {
+        supported = assist.lookupSupport().supported;
+      } catch (_) {}
+    }
+    final photoMeal = meal.source == MealSource.appWatch ||
+        meal.source == MealSource.appPhoto;
+    final canLookUp = _assistOn &&
+        supported &&
+        photoMeal &&
+        assist.lookupNow != null &&
+        isFoodTruthy(meal.analysis['is_food']);
+    final act = assist.act;
+    if (!view.hasSource &&
+        view.kind != AssistViewKind.contextOnly &&
+        !canLookUp &&
+        !_lookingUp) {
+      return null;
+    }
+    var canLearn = false;
+    try {
+      canLearn = assist.canLearnPlace?.call(meal) ?? false;
+    } catch (_) {}
+    VoidCallback? answer(AssistUserAction a) =>
+        act == null ? null : () => _assistAct(a);
+    return AssistSourceCard(
+      key: const Key('editorAssistCard'),
+      view: view,
+      busy: _assistBusy || _saving,
+      lookingUp: _lookingUp,
+      editFirst: _dirty,
+      onUseEstimate: answer(AssistUserAction.useEstimate),
+      onAccept: answer(AssistUserAction.acceptSuggestion),
+      onWrongRestaurant: answer(AssistUserAction.wrongRestaurant),
+      onNotRestaurant: answer(AssistUserAction.notFromRestaurant),
+      onCorrect: canLearn ? answer(AssistUserAction.correct) : null,
+      onLookUp: canLookUp ? () => _lookUp() : null,
+      onOpenSource: _openSource,
+    );
+  }
+
   Future<void> _delete() async {
     final meal = widget.meal;
     if (meal == null) return;
@@ -661,6 +972,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         parseNumberField(_cal.text, label: 'Calories', max: maxMealCalories)
                 .value ??
             0;
+    final assistCard = _assistSection();
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isNew
@@ -704,6 +1016,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                 alignment: AlignmentDirectional.centerStart,
                 child: MetaGlassesBadge(key: Key('editorMetaGlassesBadge')),
               ),
+            ),
+          if (assistCard != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: assistCard,
             ),
           TextField(
             key: const Key('editorDescription'),

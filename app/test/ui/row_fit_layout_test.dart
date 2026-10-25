@@ -42,7 +42,9 @@ import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
     show ProviderSettingsPage, kApiKeyChoices, kPlanChoices;
 import 'package:calorie_tracker/ui/screens/settings/subscription_page.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
+import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 
+import '../support/assist_fixtures.dart';
 import 'fakes.dart';
 
 Widget _app(Locale locale, Widget home, {ThemeData? theme}) => MaterialApp(
@@ -409,7 +411,60 @@ void main() {
           expect(_ellipsised(tester, calories), isEmpty);
           expect(tester.takeException(), isNull);
         });
+
+        // The restaurant assist (design R7b): the meal card's chip reads
+        // in full at the standard sizes — long chain names included — and
+        // the editor's answers wrap as buttons, never cut.
+        for (final scale in const [1.0, 1.35]) {
+          testWidgets('restaurant chip and source card, $lang at $width pt, '
+              '${scale}x', (tester) async {
+            _phone(tester, width, scale: scale);
+            for (final analysis in [
+              appliedBigMac(),
+              suggestedBigMac(),
+              _asChain(suggestedBigMac(), 'buffalo_wild_wings'),
+            ]) {
+              await tester.pumpWidget(_app(
+                  Locale(lang),
+                  Scaffold(
+                    key: UniqueKey(),
+                    body: ListView(children: [
+                      MealCard(meal: assistMeal(analysis), assistUnseen: true),
+                    ]),
+                  ),
+                  theme: iphoneTheme));
+              await tester.pumpAndSettle();
+              expect(_ellipsised(tester, find.byKey(const Key('assistChip'))),
+                  isEmpty,
+                  reason: 'the chip must read in full');
+              expect(tester.takeException(), isNull);
+            }
+            final dao = FakeDao()..seed(assistMeal(appliedBigMac()));
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                MealEditorScreen(
+                  key: UniqueKey(),
+                  dao: dao,
+                  meal: dao.meals.first,
+                  assist: FakeAssist(dao).controls(),
+                ),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            final card = find.byKey(const Key('assistSourceCard'));
+            expect(_ellipsised(tester, card), isEmpty);
+            expect(tester.getRect(card).right, lessThanOrEqualTo(width));
+            expect(tester.takeException(), isNull);
+          });
+        }
       }
     }
   }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');
 }
+
+/// [analysis] with its block naming another table chain (a longer name).
+Map<String, dynamic> _asChain(Map<String, dynamic> analysis, String key) =>
+    Map<String, dynamic>.from(analysis)
+      ..['assist'] = {
+        ...(analysis['assist'] as Map),
+        'chain_key': key,
+      };

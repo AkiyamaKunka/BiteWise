@@ -4043,6 +4043,228 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not now'**
   String get restaurantConsentNotNow;
+
+  /// Meal card chip while a chain's published numbers stand on the meal (design R7b). brand is the chain's name from BiteWise's table; count is how many items use them.
+  ///
+  /// In en, this message translates to:
+  /// **'{brand} numbers used for {count} item(s)'**
+  String assistChipApplied(String brand, int count);
+
+  /// Meal card chip for a one-tap suggestion: the chain's published calories for the covered items (a number or a range like 540–620).
+  ///
+  /// In en, this message translates to:
+  /// **'{brand} publishes {kcal} kcal — tap to review'**
+  String assistChipSuggested(String brand, String kcal);
+
+  /// Accessibility label of the dot on a meal card that an automatic restaurant lookup changed and the user has not opened since.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated from restaurant numbers'**
+  String get assistUnseenLabel;
+
+  /// Editor source card status line: the chain's published numbers replaced the AI's estimate.
+  ///
+  /// In en, this message translates to:
+  /// **'Published numbers in use'**
+  String get assistCardApplied;
+
+  /// Editor source card status line: published numbers are only suggested.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggestion: your AI\'s numbers are unchanged'**
+  String get assistCardSuggested;
+
+  /// The web host the published numbers came from (a link that opens the browser), e.g. Source: mcdonalds.com.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {host}'**
+  String assistSourceHost(String host);
+
+  /// Under the source link when the page is not on the chain's own website.
+  ///
+  /// In en, this message translates to:
+  /// **'Not the chain\'s own website'**
+  String get assistSourceNotOfficial;
+
+  /// Who looked the numbers up and when: provider is Claude Plan, Claude or OpenRouter; date is YYYY-MM-DD.
+  ///
+  /// In en, this message translates to:
+  /// **'via {provider} · {date}'**
+  String assistVia(String provider, String date);
+
+  /// The calorie number appeared in text taken from the source page.
+  ///
+  /// In en, this message translates to:
+  /// **'Number found on the source page'**
+  String get assistGrounded;
+
+  /// The calorie number was not found in text taken from the source page.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed on the source page'**
+  String get assistNotGrounded;
+
+  /// Editor button: put the AI's own numbers back.
+  ///
+  /// In en, this message translates to:
+  /// **'Use AI estimate'**
+  String get assistUseEstimate;
+
+  /// Editor button: the chain is wrong; then asks which chain it was.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong restaurant'**
+  String get assistWrongRestaurant;
+
+  /// Editor button: this meal did not come from a restaurant.
+  ///
+  /// In en, this message translates to:
+  /// **'Not from a restaurant'**
+  String get assistNotRestaurant;
+
+  /// Editor button: the chain is right (remembered for the place the photo was taken).
+  ///
+  /// In en, this message translates to:
+  /// **'Correct'**
+  String get assistCorrect;
+
+  /// Editor button on a suggestion: replace the AI's numbers with the chain's published ones.
+  ///
+  /// In en, this message translates to:
+  /// **'Use published numbers'**
+  String get assistUsePublished;
+
+  /// Editor button: look up the chain's published nutrition for this meal now.
+  ///
+  /// In en, this message translates to:
+  /// **'Look up restaurant nutrition'**
+  String get assistLookUp;
+
+  /// Replaces 'Use AI estimate' when the meal no longer shows the numbers the lookup applied.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal was changed after the restaurant numbers were used.'**
+  String get assistStale;
+
+  /// Replaces 'Use published numbers' when the meal changed after the suggestion was made.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal was changed after this suggestion.'**
+  String get assistSuggestionStale;
+
+  /// A lookup found nothing usable. Names no restaurant.
+  ///
+  /// In en, this message translates to:
+  /// **'No published nutrition found — AI estimate kept'**
+  String get assistContextOnly;
+
+  /// Title of the chain search after 'Wrong restaurant'. Lists only chains from BiteWise's own table.
+  ///
+  /// In en, this message translates to:
+  /// **'Which restaurant?'**
+  String get assistPickerTitle;
+
+  /// Hint in the chain search field.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chains'**
+  String get assistPickerSearch;
+
+  /// The chain search found nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No chain matches.'**
+  String get assistPickerNone;
+
+  /// Shown in the editor while a manual lookup runs (up to 2 minutes on your own server).
+  ///
+  /// In en, this message translates to:
+  /// **'Looking up restaurant nutrition…'**
+  String get assistLookingUp;
+
+  /// The manual lookup is still running on the server after 2 minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Still looking. Open this meal again in a minute.'**
+  String get assistLookupStillRunning;
+
+  /// A manual lookup had no chain to ask about (no printed brand, no chain nearby).
+  ///
+  /// In en, this message translates to:
+  /// **'No restaurant chain BiteWise knows was found for this meal.'**
+  String get assistLookupNoChain;
+
+  /// The daily cap of restaurant lookups is reached.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s restaurant lookups are used up. Try again tomorrow.'**
+  String get assistLookupDailyCap;
+
+  /// A manual lookup failed (network, busy, timeout).
+  ///
+  /// In en, this message translates to:
+  /// **'The lookup didn\'t finish. Try again later.'**
+  String get assistLookupFailed;
+
+  /// Snackbar after 'Not from a restaurant'.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it: not from a restaurant.'**
+  String get assistNotRestaurantDone;
+
+  /// Snackbar after 'Correct': the chain is remembered for the spot the photo was taken (kept on this phone only).
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks. BiteWise will remember {brand} here.'**
+  String assistCorrectDone(String brand);
+
+  /// Shown on the source card while the editor has unsaved changes.
+  ///
+  /// In en, this message translates to:
+  /// **'Save your changes first to use these buttons.'**
+  String get assistEditFirst;
+
+  /// Diagnostics section (design R7b): today's restaurant lookups and the last decisions.
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant lookups'**
+  String get diagRestaurantTitle;
+
+  /// count lookups sent today of the daily cap; code is the last decision's reason code (or —).
+  ///
+  /// In en, this message translates to:
+  /// **'Today {count}/{cap} · last {code}'**
+  String diagRestaurantToday(int count, int cap, String code);
+
+  /// Explains the decision list.
+  ///
+  /// In en, this message translates to:
+  /// **'The last 20 decisions: reason code, kcal before → after, provider. No restaurant names or places are kept.'**
+  String get diagRestaurantIntro;
+
+  /// The decision list is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'No restaurant decisions yet.'**
+  String get diagRestaurantNone;
+
+  /// Diagnostics: how sure the AI said it was about photo meals in the last 14 days.
+  ///
+  /// In en, this message translates to:
+  /// **'AI confidence (14 days)'**
+  String get diagConfidenceTitle;
+
+  /// Explains the confidence counts.
+  ///
+  /// In en, this message translates to:
+  /// **'How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.'**
+  String get diagConfidenceIntro;
+
+  /// Counts of photo meals by the AI's estimate_confidence; Not given = an older server or model that did not say.
+  ///
+  /// In en, this message translates to:
+  /// **'Low {low} · Medium {medium} · High {high} · Not given {unknown}'**
+  String diagConfidenceLine(int low, int medium, int high, int unknown);
 }
 
 class _AppLocalizationsDelegate

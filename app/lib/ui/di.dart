@@ -309,6 +309,18 @@ class AppServices {
       serverState: () async =>
           assistServerStateOf(await serverAnalyzer.serverFeatures()),
       locationSupported: Platform.isIOS,
+      // The meal card's dot, the editor's source card and lookup, and
+      // Diagnostics' 'Restaurant lookups' (design R7b).
+      lookupNow: mealAssist.lookupNow,
+      act: mealAssist.act,
+      canLearnPlace: mealAssist.canLearnPlace,
+      unseen: mealAssist.unseen,
+      markSeen: mealAssist.markSeen,
+      lookupsDiagnostics: () async => RestaurantLookupsDiagnostics(
+        today: mealAssist.lookupsToday,
+        cap: mealAssist.dailyCap,
+        decisions: await mealAssist.decisions(),
+      ),
     );
 
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's

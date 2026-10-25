@@ -502,6 +502,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                     completeClaudeAuth: widget.completeClaudeAuth,
                     serverLoginState: widget.serverLoginState,
                     openUrl: widget.openUrl,
+                    dao: widget.dao,
+                    restaurantAssist: widget.restaurantAssist,
                   ),
                 ));
                 if (mounted) setState(() {}); // provider label refresh

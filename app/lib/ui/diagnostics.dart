@@ -14,9 +14,14 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
+import '../core/coerce.dart'
+    show EstimateConfidence, isFoodTruthy, mealContextFields;
 import '../core/contracts.dart';
 import '../l10n/app_localizations.dart';
+import '../services/assist/assist_local_state.dart' show AssistDecisionEntry;
 import '../services/photo/glasses_check.dart';
+import 'assist_view.dart' show assistProviderLabel;
+import 'format.dart' show formatKcal;
 import 'provider_names.dart';
 import 'services.dart';
 
@@ -336,4 +341,48 @@ String glassesOutcomeLabel(AppLocalizations l, String outcome) =>
           : l.diagGlassesFood(food.toStringAsFixed(2)),
     ].join(' · '),
   );
+}
+
+/// The window of Diagnostics' AI-confidence counts (design R7b).
+const int diagConfidenceDays = 14;
+
+/// How sure the AI said it was (analysis.estimate_confidence, stage R1)
+/// about each photo meal among [meals]: food meals from the camera roll or
+/// a picked photo; a meal whose reply did not say (an older server or
+/// model) counts as unknown. Counts only — no meal is named.
+({int low, int medium, int high, int unknown}) confidenceCounts(
+    Iterable<Meal> meals) {
+  var low = 0, medium = 0, high = 0, unknown = 0;
+  for (final m in meals) {
+    if (m.source != MealSource.appWatch && m.source != MealSource.appPhoto) {
+      continue;
+    }
+    if (!isFoodTruthy(m.analysis['is_food'])) continue;
+    switch (mealContextFields(m.analysis).estimateConfidence) {
+      case EstimateConfidence.low:
+        low++;
+      case EstimateConfidence.medium:
+        medium++;
+      case EstimateConfidence.high:
+        high++;
+      case null:
+        unknown++;
+    }
+  }
+  return (low: low, medium: medium, high: high, unknown: unknown);
+}
+
+/// One restaurant decision as Diagnostics lists it: when, the reason code,
+/// the covered items' kcal before → after, and who answered. The entry
+/// holds nothing else — no chain, item, place or meal (design R7b).
+String restaurantDecisionLine(AppLocalizations l, AssistDecisionEntry e) {
+  final before = e.oldKcal, after = e.newKcal;
+  final provider = assistProviderLabel(l, e.provider);
+  return [
+    localStamp(e.at),
+    e.code,
+    if (before != null && after != null)
+      '${formatKcal(before)} → ${l.kcalAmount(formatKcal(after))}',
+    if (provider.isNotEmpty) provider,
+  ].join(' · ');
 }

@@ -5,6 +5,12 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
+    show AssistReason;
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
+    show LookupSupport;
+import 'package:calorie_tracker/services/assist/meal_assist.dart'
+    show AssistRun, AssistSkip, AssistUserAction;
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:crypto/crypto.dart';
@@ -12,6 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
 
+import '../support/assist_fixtures.dart';
 import 'fakes.dart';
 
 Meal meal({
@@ -542,6 +549,357 @@ void main() {
     expect(find.text('Add meal'), findsOneWidget);
     // The new meal defaults to the day being viewed, not today.
     expect(find.widgetWithText(OutlinedButton, '2026-07-19'), findsOneWidget);
+  });
+
+  group('the restaurant source card (design R7b)', () {
+    FakeSettings assistSettings({String mode = 'auto', bool consent = true}) =>
+        FakeSettings()
+          ..restaurantAssist = mode
+          ..restaurantAssistConsentAt = consent
+              ? DateTime(2026, 10, 24, 8)
+              : null
+          ..restaurantAssistConsentRecipient = consent ? 'anthropic' : null;
+
+    Future<(FakeDao, FakeAssist)> open(
+      WidgetTester tester,
+      Map<String, dynamic> analysis, {
+      FakeSettings? settings,
+      Future<bool> Function(Uri url)? openUrl,
+      void Function(FakeAssist a)? setUp,
+    }) async {
+      useTallSurface(tester);
+      final dao = FakeDao()..seed(assistMeal(analysis));
+      final assist = FakeAssist(dao);
+      setUp?.call(assist);
+      // A new app each time: a reused State would keep the old meal, and a
+      // reused messenger the old snackbars.
+      await tester.pumpWidget(
+        KeyedSubtree(
+          key: UniqueKey(),
+          child: host(
+            MealEditorScreen(
+              dao: dao,
+              meal: dao.meals.first,
+              now: clock,
+              assist: assist.controls(),
+              settings: settings ?? assistSettings(),
+              openUrl: openUrl,
+              assistPollInterval: const Duration(seconds: 1),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return (dao, assist);
+    }
+
+    String fieldText(WidgetTester tester, String key) =>
+        tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+
+    testWidgets('applied: Use AI estimate writes the revert against the '
+        'stored text, and the form shows the AI estimate', (tester) async {
+      final (dao, assist) = await open(tester, appliedBigMac());
+      expect(find.byKey(const Key('assistSourceCard')), findsOneWidget);
+      expect(find.text('Source: mcdonalds.com'), findsOneWidget);
+      expect(fieldText(tester, 'editorCalories'), '590');
+      expect(assist.seen, [1], reason: 'opening the meal clears its dot');
+
+      final stored = dao.rawOf(dao.meals.first);
+      await tester.tap(find.byKey(const Key('assistUseEstimate')));
+      await tester.pumpAndSettle();
+      expect(assist.acts.single.action, AssistUserAction.useEstimate);
+      expect(assist.acts.single.expectedRaw, stored);
+      expect(dao.meals.first.analysis['total_calories'], 540);
+      expect(dao.meals.first.corrected, isTrue);
+      expect(fieldText(tester, 'editorCalories'), '540');
+      expect(find.byKey(const Key('assistSourceCard')), findsNothing);
+      // Nothing stands any more: the lookup is offered instead.
+      expect(find.byKey(const Key('assistLookUp')), findsOneWidget);
+
+      // The form now saves against the newer row, no conflict.
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editorSaveConflict')), findsNothing);
+    });
+
+    testWidgets('a meal changed meanwhile: the answer says so and shows the '
+        'newer meal', (tester) async {
+      final (dao, assist) = await open(tester, appliedBigMac());
+      dao.meals[0] = assistMeal(
+        editedFirstItem(appliedBigMac(), 700)..['total_calories'] = 700,
+      );
+      await tester.tap(find.byKey(const Key('assistUseEstimate')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text('This meal was just updated — please review.'),
+        findsOneWidget,
+      );
+      expect(fieldText(tester, 'editorCalories'), '700');
+      expect(
+        find.byKey(const Key('assistUseEstimate')),
+        findsNothing,
+        reason: 'the newer meal has stale stamps',
+      );
+      expect(find.byKey(const Key('assistStale')), findsOneWidget);
+      expect(dao.meals.first.analysis['total_calories'], 700);
+    });
+
+    testWidgets('unsaved typing: the answers wait for a save', (tester) async {
+      final (dao, assist) = await open(tester, appliedBigMac());
+      await tester.enterText(
+        find.byKey(const Key('editorDescription')),
+        'Two Big Macs',
+      );
+      await tester.tap(find.byKey(const Key('assistUseEstimate')));
+      await tester.pumpAndSettle();
+      expect(assist.acts, isEmpty);
+      expect(
+        find.text('Save your changes first to use these buttons.'),
+        findsWidgets,
+      );
+      expect(dao.meals.first.analysis['total_calories'], 590);
+    });
+
+    testWidgets('Wrong restaurant: reverted, then our chain table, then a '
+        'lookup of the chain picked (no location)', (tester) async {
+      final (dao, assist) = await open(tester, appliedBigMac());
+      await tester.tap(find.byKey(const Key('assistWrongRestaurant')));
+      await tester.pumpAndSettle();
+      expect(assist.acts.single.action, AssistUserAction.wrongRestaurant);
+      expect(dao.meals.first.analysis['total_calories'], 540);
+      expect(find.text('Which restaurant?'), findsOneWidget);
+      expect(find.byKey(const Key('chainPick-mcdonalds')), findsNothing);
+      await tester.enterText(
+        find.byKey(const Key('chainPickerSearch')),
+        'burger king',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('chainPick-burger_king')));
+      await tester.pumpAndSettle();
+      expect(assist.lookups.single.chainKey, 'burger_king');
+      expect(assist.lookups.single.useLocation, isFalse);
+    });
+
+    testWidgets('Not from a restaurant and Correct say what was kept', (
+      tester,
+    ) async {
+      var (_, assist) = await open(tester, suggestedBigMac());
+      expect(find.byKey(const Key('assistCorrect')), findsNothing);
+      await tester.tap(find.byKey(const Key('assistNotRestaurant')));
+      await tester.pumpAndSettle();
+      expect(assist.acts.single.action, AssistUserAction.notFromRestaurant);
+      expect(find.text('Got it: not from a restaurant.'), findsOneWidget);
+      expect(find.byKey(const Key('assistSourceCard')), findsNothing);
+
+      (_, assist) = await open(tester, appliedBigMac());
+      await tester.tap(find.byKey(const Key('assistCorrect')));
+      await tester.pumpAndSettle();
+      expect(assist.acts.single.action, AssistUserAction.correct);
+      expect(
+        find.text("Thanks. BiteWise will remember McDonald's here."),
+        findsOneWidget,
+      );
+
+      // Where the spot cannot be learned, Correct is not offered.
+      (_, assist) = await open(
+        tester,
+        appliedBigMac(),
+        setUp: (a) => a.canLearn = false,
+      );
+      expect(find.byKey(const Key('assistCorrect')), findsNothing);
+    });
+
+    testWidgets('Look up: asked again while the server runs it; the '
+        'suggestion lands; Use published numbers applies it', (tester) async {
+      late FakeDao store;
+      var calls = 0;
+      final (dao, assist) = await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) {
+          store = a.dao as FakeDao;
+          a.onLookup = (id, useLocation, chainKey) async {
+            calls++;
+            if (calls < 3) return const AssistRun(AssistSkip.pending);
+            final m = store.meals.first;
+            await store.updateMealAnalysisIfUnchanged(
+              id,
+              expectedRaw: store.rawOf(m),
+              analysis: suggestedBigMac(),
+            );
+            return const AssistRun(AssistReason.notGrounded, wrote: true);
+          };
+        },
+      );
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pump();
+      expect(find.byKey(const Key('assistLookingUp')), findsOneWidget);
+      expect(find.text('Looking up restaurant nutrition…'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(calls, 3);
+      expect(
+        assist.lookups.first.useLocation,
+        isFalse,
+        reason: "'Use photo location' is off in these settings",
+      );
+      expect(find.byKey(const Key('assistUsePublished')), findsOneWidget);
+      expect(find.text('Not confirmed on the source page'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('assistUsePublished')));
+      await tester.pumpAndSettle();
+      expect(assist.acts.single.action, AssistUserAction.acceptSuggestion);
+      expect(dao.meals.first.analysis['total_calories'], 590);
+      expect(fieldText(tester, 'editorCalories'), '590');
+      expect(find.byKey(const Key('assistUseEstimate')), findsOneWidget);
+    });
+
+    testWidgets('Look up: still running after two minutes, or nothing to '
+        'ask about, says so', (tester) async {
+      var (_, assist) = await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) =>
+            a.onLookup = (_, _, _) async => const AssistRun(AssistSkip.pending),
+      );
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pump();
+      var waited = 0;
+      while (find.byKey(const Key('assistLookingUp')).evaluate().isNotEmpty &&
+          waited < 200) {
+        await tester.pump(const Duration(seconds: 1));
+        waited++;
+      }
+      await tester.pump();
+      expect(
+        waited,
+        inInclusiveRange(119, 122),
+        reason: 'asked for two minutes, then given up',
+      );
+      expect(
+        find.text('Still looking. Open this meal again in a minute.'),
+        findsOneWidget,
+      );
+      expect(assist.lookups.length, 121);
+      await tester.pumpAndSettle();
+
+      (_, assist) = await open(tester, bigMacAnalysis(brand: ''));
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          'No restaurant chain BiteWise knows was found for this meal.',
+        ),
+        findsOneWidget,
+      );
+
+      (_, assist) = await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) =>
+            a.onLookup = (_, _, _) async =>
+                const AssistRun(AssistSkip.dailyCap),
+      );
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(
+        find.text(
+          "Today's restaurant lookups are used up. Try again tomorrow.",
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('Look up without a consent for this recipient asks first; '
+        'Cancel looks nothing up', (tester) async {
+      final (_, assist) = await open(
+        tester,
+        bigMacAnalysis(),
+        settings: assistSettings(consent: false),
+      );
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('restaurantConsentSheet')), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+      await tester.tap(find.byKey(const Key('restaurantConsentDecline')));
+      await tester.pumpAndSettle();
+      expect(assist.lookups, isEmpty);
+    });
+
+    testWidgets('the source opens as its normalized https address', (
+      tester,
+    ) async {
+      final opened = <Uri>[];
+      await open(
+        tester,
+        appliedBigMac(),
+        openUrl: (u) async {
+          opened.add(u);
+          return true;
+        },
+      );
+      await tester.tap(find.byKey(const Key('assistSourceLink')));
+      await tester.pumpAndSettle();
+      expect(opened, [
+        Uri.parse('https://mcdonalds.com/us/en-us/product/big-mac.html'),
+      ]);
+    });
+
+    testWidgets('Off: no lookup offered; applied numbers can still be undone', (
+      tester,
+    ) async {
+      await open(
+        tester,
+        bigMacAnalysis(),
+        settings: assistSettings(mode: 'off'),
+      );
+      expect(find.byKey(const Key('editorAssistCard')), findsNothing);
+      await open(
+        tester,
+        appliedBigMac(),
+        settings: assistSettings(mode: 'off'),
+        setUp: (a) => a.canLearn = false,
+      );
+      expect(find.byKey(const Key('assistUseEstimate')), findsOneWidget);
+      expect(find.byKey(const Key('assistCorrect')), findsNothing);
+    });
+
+    testWidgets('an unsupported provider offers no lookup; a text meal none '
+        'either', (tester) async {
+      await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) => a.support = const LookupSupport.unsupported('gemini'),
+      );
+      expect(find.byKey(const Key('assistLookUp')), findsNothing);
+      useTallSurface(tester);
+      final dao = FakeDao()
+        ..seed(
+          Meal(
+            id: 1,
+            date: '2026-10-24',
+            time: '12:30 PM',
+            timestamp: '2026-10-24T12:30:00.000',
+            source: MealSource.manualText,
+            analysis: bigMacAnalysis(),
+          ),
+        );
+      await tester.pumpWidget(
+        host(
+          MealEditorScreen(
+            key: UniqueKey(),
+            dao: dao,
+            meal: dao.meals.first,
+            now: clock,
+            assist: FakeAssist(dao).controls(),
+            settings: assistSettings(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assistLookUp')), findsNothing);
+    });
   });
 }
 

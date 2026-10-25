@@ -2535,4 +2535,139 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantConsentNotNow => 'Not now';
+
+  @override
+  String assistChipApplied(String brand, int count) {
+    return '$brand numbers used for $count item(s)';
+  }
+
+  @override
+  String assistChipSuggested(String brand, String kcal) {
+    return '$brand publishes $kcal kcal — tap to review';
+  }
+
+  @override
+  String get assistUnseenLabel => 'Updated from restaurant numbers';
+
+  @override
+  String get assistCardApplied => 'Published numbers in use';
+
+  @override
+  String get assistCardSuggested =>
+      'Suggestion: your AI\'s numbers are unchanged';
+
+  @override
+  String assistSourceHost(String host) {
+    return 'Source: $host';
+  }
+
+  @override
+  String get assistSourceNotOfficial => 'Not the chain\'s own website';
+
+  @override
+  String assistVia(String provider, String date) {
+    return 'via $provider · $date';
+  }
+
+  @override
+  String get assistGrounded => 'Number found on the source page';
+
+  @override
+  String get assistNotGrounded => 'Not confirmed on the source page';
+
+  @override
+  String get assistUseEstimate => 'Use AI estimate';
+
+  @override
+  String get assistWrongRestaurant => 'Wrong restaurant';
+
+  @override
+  String get assistNotRestaurant => 'Not from a restaurant';
+
+  @override
+  String get assistCorrect => 'Correct';
+
+  @override
+  String get assistUsePublished => 'Use published numbers';
+
+  @override
+  String get assistLookUp => 'Look up restaurant nutrition';
+
+  @override
+  String get assistStale =>
+      'This meal was changed after the restaurant numbers were used.';
+
+  @override
+  String get assistSuggestionStale =>
+      'This meal was changed after this suggestion.';
+
+  @override
+  String get assistContextOnly =>
+      'No published nutrition found — AI estimate kept';
+
+  @override
+  String get assistPickerTitle => 'Which restaurant?';
+
+  @override
+  String get assistPickerSearch => 'Search chains';
+
+  @override
+  String get assistPickerNone => 'No chain matches.';
+
+  @override
+  String get assistLookingUp => 'Looking up restaurant nutrition…';
+
+  @override
+  String get assistLookupStillRunning =>
+      'Still looking. Open this meal again in a minute.';
+
+  @override
+  String get assistLookupNoChain =>
+      'No restaurant chain BiteWise knows was found for this meal.';
+
+  @override
+  String get assistLookupDailyCap =>
+      'Today\'s restaurant lookups are used up. Try again tomorrow.';
+
+  @override
+  String get assistLookupFailed =>
+      'The lookup didn\'t finish. Try again later.';
+
+  @override
+  String get assistNotRestaurantDone => 'Got it: not from a restaurant.';
+
+  @override
+  String assistCorrectDone(String brand) {
+    return 'Thanks. BiteWise will remember $brand here.';
+  }
+
+  @override
+  String get assistEditFirst => 'Save your changes first to use these buttons.';
+
+  @override
+  String get diagRestaurantTitle => 'Restaurant lookups';
+
+  @override
+  String diagRestaurantToday(int count, int cap, String code) {
+    return 'Today $count/$cap · last $code';
+  }
+
+  @override
+  String get diagRestaurantIntro =>
+      'The last 20 decisions: reason code, kcal before → after, provider. No restaurant names or places are kept.';
+
+  @override
+  String get diagRestaurantNone => 'No restaurant decisions yet.';
+
+  @override
+  String get diagConfidenceTitle => 'AI confidence (14 days)';
+
+  @override
+  String get diagConfidenceIntro =>
+      'How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.';
+
+  @override
+  String diagConfidenceLine(int low, int medium, int high, int unknown) {
+    return 'Low $low · Medium $medium · High $high · Not given $unknown';
+  }
 }

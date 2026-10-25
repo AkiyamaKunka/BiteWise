@@ -2094,5 +2094,212 @@
   "restaurantConsentNotNow": "Not now",
   "@restaurantConsentNotNow": {
     "description": "Consent button: nothing is turned on."
+  },
+  "assistChipApplied": "{brand} numbers used for {count} item(s)",
+  "@assistChipApplied": {
+    "description": "Meal card chip while a chain's published numbers stand on the meal (design R7b). brand is the chain's name from BiteWise's table; count is how many items use them.",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "assistChipSuggested": "{brand} publishes {kcal} kcal — tap to review",
+  "@assistChipSuggested": {
+    "description": "Meal card chip for a one-tap suggestion: the chain's published calories for the covered items (a number or a range like 540–620).",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "assistUnseenLabel": "Updated from restaurant numbers",
+  "@assistUnseenLabel": {
+    "description": "Accessibility label of the dot on a meal card that an automatic restaurant lookup changed and the user has not opened since."
+  },
+  "assistCardApplied": "Published numbers in use",
+  "@assistCardApplied": {
+    "description": "Editor source card status line: the chain's published numbers replaced the AI's estimate."
+  },
+  "assistCardSuggested": "Suggestion: your AI's numbers are unchanged",
+  "@assistCardSuggested": {
+    "description": "Editor source card status line: published numbers are only suggested."
+  },
+  "assistSourceHost": "Source: {host}",
+  "@assistSourceHost": {
+    "description": "The web host the published numbers came from (a link that opens the browser), e.g. Source: mcdonalds.com.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "assistSourceNotOfficial": "Not the chain's own website",
+  "@assistSourceNotOfficial": {
+    "description": "Under the source link when the page is not on the chain's own website."
+  },
+  "assistVia": "via {provider} · {date}",
+  "@assistVia": {
+    "description": "Who looked the numbers up and when: provider is Claude Plan, Claude or OpenRouter; date is YYYY-MM-DD.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "assistGrounded": "Number found on the source page",
+  "@assistGrounded": {
+    "description": "The calorie number appeared in text taken from the source page."
+  },
+  "assistNotGrounded": "Not confirmed on the source page",
+  "@assistNotGrounded": {
+    "description": "The calorie number was not found in text taken from the source page."
+  },
+  "assistUseEstimate": "Use AI estimate",
+  "@assistUseEstimate": {
+    "description": "Editor button: put the AI's own numbers back."
+  },
+  "assistWrongRestaurant": "Wrong restaurant",
+  "@assistWrongRestaurant": {
+    "description": "Editor button: the chain is wrong; then asks which chain it was."
+  },
+  "assistNotRestaurant": "Not from a restaurant",
+  "@assistNotRestaurant": {
+    "description": "Editor button: this meal did not come from a restaurant."
+  },
+  "assistCorrect": "Correct",
+  "@assistCorrect": {
+    "description": "Editor button: the chain is right (remembered for the place the photo was taken)."
+  },
+  "assistUsePublished": "Use published numbers",
+  "@assistUsePublished": {
+    "description": "Editor button on a suggestion: replace the AI's numbers with the chain's published ones."
+  },
+  "assistLookUp": "Look up restaurant nutrition",
+  "@assistLookUp": {
+    "description": "Editor button: look up the chain's published nutrition for this meal now."
+  },
+  "assistStale": "This meal was changed after the restaurant numbers were used.",
+  "@assistStale": {
+    "description": "Replaces 'Use AI estimate' when the meal no longer shows the numbers the lookup applied."
+  },
+  "assistSuggestionStale": "This meal was changed after this suggestion.",
+  "@assistSuggestionStale": {
+    "description": "Replaces 'Use published numbers' when the meal changed after the suggestion was made."
+  },
+  "assistContextOnly": "No published nutrition found — AI estimate kept",
+  "@assistContextOnly": {
+    "description": "A lookup found nothing usable. Names no restaurant."
+  },
+  "assistPickerTitle": "Which restaurant?",
+  "@assistPickerTitle": {
+    "description": "Title of the chain search after 'Wrong restaurant'. Lists only chains from BiteWise's own table."
+  },
+  "assistPickerSearch": "Search chains",
+  "@assistPickerSearch": {
+    "description": "Hint in the chain search field."
+  },
+  "assistPickerNone": "No chain matches.",
+  "@assistPickerNone": {
+    "description": "The chain search found nothing."
+  },
+  "assistLookingUp": "Looking up restaurant nutrition…",
+  "@assistLookingUp": {
+    "description": "Shown in the editor while a manual lookup runs (up to 2 minutes on your own server)."
+  },
+  "assistLookupStillRunning": "Still looking. Open this meal again in a minute.",
+  "@assistLookupStillRunning": {
+    "description": "The manual lookup is still running on the server after 2 minutes."
+  },
+  "assistLookupNoChain": "No restaurant chain BiteWise knows was found for this meal.",
+  "@assistLookupNoChain": {
+    "description": "A manual lookup had no chain to ask about (no printed brand, no chain nearby)."
+  },
+  "assistLookupDailyCap": "Today's restaurant lookups are used up. Try again tomorrow.",
+  "@assistLookupDailyCap": {
+    "description": "The daily cap of restaurant lookups is reached."
+  },
+  "assistLookupFailed": "The lookup didn't finish. Try again later.",
+  "@assistLookupFailed": {
+    "description": "A manual lookup failed (network, busy, timeout)."
+  },
+  "assistNotRestaurantDone": "Got it: not from a restaurant.",
+  "@assistNotRestaurantDone": {
+    "description": "Snackbar after 'Not from a restaurant'."
+  },
+  "assistCorrectDone": "Thanks. BiteWise will remember {brand} here.",
+  "@assistCorrectDone": {
+    "description": "Snackbar after 'Correct': the chain is remembered for the spot the photo was taken (kept on this phone only).",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      }
+    }
+  },
+  "assistEditFirst": "Save your changes first to use these buttons.",
+  "@assistEditFirst": {
+    "description": "Shown on the source card while the editor has unsaved changes."
+  },
+  "diagRestaurantTitle": "Restaurant lookups",
+  "@diagRestaurantTitle": {
+    "description": "Diagnostics section (design R7b): today's restaurant lookups and the last decisions."
+  },
+  "diagRestaurantToday": "Today {count}/{cap} · last {code}",
+  "@diagRestaurantToday": {
+    "description": "count lookups sent today of the daily cap; code is the last decision's reason code (or —).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "diagRestaurantIntro": "The last 20 decisions: reason code, kcal before → after, provider. No restaurant names or places are kept.",
+  "@diagRestaurantIntro": {
+    "description": "Explains the decision list."
+  },
+  "diagRestaurantNone": "No restaurant decisions yet.",
+  "@diagRestaurantNone": {
+    "description": "The decision list is empty."
+  },
+  "diagConfidenceTitle": "AI confidence (14 days)",
+  "@diagConfidenceTitle": {
+    "description": "Diagnostics: how sure the AI said it was about photo meals in the last 14 days."
+  },
+  "diagConfidenceIntro": "How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.",
+  "@diagConfidenceIntro": {
+    "description": "Explains the confidence counts."
+  },
+  "diagConfidenceLine": "Low {low} · Medium {medium} · High {high} · Not given {unknown}",
+  "@diagConfidenceLine": {
+    "description": "Counts of photo meals by the AI's estimate_confidence; Not given = an older server or model that did not say.",
+    "placeholders": {
+      "low": {
+        "type": "int"
+      },
+      "medium": {
+        "type": "int"
+      },
+      "high": {
+        "type": "int"
+      },
+      "unknown": {
+        "type": "int"
+      }
+    }
   }
 }

@@ -49,11 +49,13 @@ import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart'
     show ArithmeticRow, CalorieRing;
 import 'package:calorie_tracker/ui/widgets/grouped.dart';
+import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/assist_fixtures.dart';
 import 'fakes.dart';
 
 const sfPath = '/System/Library/Fonts/SFNS.ttf';
@@ -737,6 +739,74 @@ void main() {
             closeTo(tester.getSize(value).width, 0.01),
             reason: "'1,240' at 1.0x is not scaled down",
           );
+        });
+
+        testWidgets('$lang: the restaurant source card wraps its lines and '
+            'answers (design R7b)', (tester) async {
+          for (final analysis in [appliedBigMac(), suggestedBigMac()]) {
+            final dao = FakeDao()..seed(assistMeal(analysis));
+            await pumpAt(
+              tester,
+              lang,
+              MealEditorScreen(
+                key: UniqueKey(),
+                dao: dao,
+                meal: dao.meals.first,
+                now: clock,
+                assist: FakeAssist(dao).controls(),
+                settings: FakeSettings()
+                  ..restaurantAssist = 'auto'
+                  ..restaurantAssistConsentAt = DateTime(2026, 10, 24)
+                  ..restaurantAssistConsentRecipient = 'anthropic',
+              ),
+            );
+            expect(tester.takeException(), isNull);
+            final card = find.byKey(const Key('assistSourceCard'));
+            expect(card, findsOneWidget);
+            expect(tester.getRect(card).right, lessThanOrEqualTo(390));
+            for (final p in tester.renderObjectList<RenderParagraph>(
+              find.descendant(of: card, matching: find.byType(RichText)),
+            )) {
+              expect(p.didExceedMaxLines, isFalse,
+                  reason: '"${p.text.toPlainText()}" was cut');
+            }
+            for (final b in tester.widgetList<ButtonStyleButton>(
+              find.descendant(
+                  of: card, matching: find.byWidgetPredicate(
+                      (w) => w is ButtonStyleButton)),
+            )) {
+              expect(tester.getRect(find.byWidget(b)).right,
+                  lessThanOrEqualTo(390));
+            }
+          }
+        });
+
+        testWidgets('$lang: the meal card\'s restaurant chip wraps in full',
+            (tester) async {
+          for (final analysis in [appliedBigMac(), suggestedBigMac()]) {
+            await pumpAt(
+              tester,
+              lang,
+              Scaffold(
+                body: ListView(children: [
+                  MealCard(
+                    key: UniqueKey(),
+                    meal: assistMeal(analysis),
+                    assistUnseen: true,
+                  ),
+                ]),
+              ),
+            );
+            expect(tester.takeException(), isNull);
+            final chip = find.byKey(const Key('assistChip'));
+            expect(tester.getRect(chip).right, lessThanOrEqualTo(390));
+            for (final p in tester.renderObjectList<RenderParagraph>(
+              find.descendant(of: chip, matching: find.byType(RichText)),
+            )) {
+              expect(p.didExceedMaxLines, isFalse,
+                  reason: '"${p.text.toPlainText()}" was cut');
+            }
+          }
         });
 
         testWidgets('$lang: standard sizes keep the settings value beside '
