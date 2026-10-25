@@ -120,13 +120,39 @@ void main() {
     test('the stuck probe reads the runs and the watermark together', () {
       expect(init(), _wired(r'backgroundScanStuck: backgroundScanStuckNow,'));
     });
+  });
 
-    // App Store 5.1.2(i), review run 7: a shared photo waits for the AI
-    // consent through this gate. PR #19 rewrites the same line, and a
-    // merge that keeps its side would send shared photos unasked with
-    // every behavioural test still green (they drive the gate directly).
-    test('a shared photo goes through the AI consent gate, built on the '
-        'app\'s own store and handed to the app shell', () {
+  group('lib/ui/app.dart (the resume catch-up)', () {
+    test('is foregroundCatchUp, stopping on iOS once the app is left', () {
+      final resume = _body(
+        _source('lib/ui/app.dart'),
+        'Future<void> _resumeCatchUp() async {',
+        indent: '  ',
+      );
+      expect(
+        resume,
+        _wired(
+          r'foregroundCatchUp\(intake, shouldContinue: '
+          r'Platform\.isIOS \? appEngineInForeground : null\)',
+        ),
+      );
+      expect(resume, isNot(contains('.backfillScan(')));
+    });
+  });
+
+  // App Store 5.1.2(i), review run 7: a shared photo waits for the AI
+  // consent through this gate. PR #19 rewrites the same line, and a merge
+  // that keeps its side would send shared photos unasked with every
+  // behavioural test still green (they drive the gate directly).
+  group('lib/ui/di.dart (the AI consent for shared photos)', () {
+    String init() => _body(
+      _source('lib/ui/di.dart'),
+      'static Future<AppServices> init(',
+      indent: '  ',
+    );
+
+    test('a shared photo goes through the gate, built on the app\'s own '
+        'store and handed to the app shell', () {
       expect(
         init(),
         _wired(
@@ -145,24 +171,6 @@ void main() {
       );
       expect(init(), _wired(r'\n\s*settings: store,'));
       expect(init(), _wired(r'\n\s*sharedPhotoConsent: shareConsent,'));
-    });
-  });
-
-  group('lib/ui/app.dart (the resume catch-up)', () {
-    test('is foregroundCatchUp, stopping on iOS once the app is left', () {
-      final resume = _body(
-        _source('lib/ui/app.dart'),
-        'Future<void> _resumeCatchUp() async {',
-        indent: '  ',
-      );
-      expect(
-        resume,
-        _wired(
-          r'foregroundCatchUp\(intake, shouldContinue: '
-          r'Platform\.isIOS \? appEngineInForeground : null\)',
-        ),
-      );
-      expect(resume, isNot(contains('.backfillScan(')));
     });
   });
 
