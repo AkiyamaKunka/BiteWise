@@ -701,6 +701,8 @@ void main() {
       expect(h.analysisOf(id)['meal_description'], 'Edited 1');
       expect((await h.state.decisions()).single.code, AssistSkip.casMiss);
 
+      // No cached answer (R6c): the next sweep asks again.
+      await h.state.clearCache();
       await h.assist.sweep();
       expect(h.lookups.submits, hasLength(2));
       expect((await h.state.misses())[id], assistMissesBeforeDenylist);
@@ -884,7 +886,11 @@ void main() {
         lookupRequestHash(composeAssistRequest(_bigMac(), country: 'US')),
       );
       expect(h.analysisOf(id).containsKey('assist'), isFalse);
+      // Not polled again before its next poll is due (R6c: every 10 s).
+      await h.assist.sweep();
+      expect(h.lookups.polls, isEmpty);
 
+      h.now = _now.add(kAssistPollInterval);
       h.lookups.onPoll = (_) async =>
           _done(provider: LookupRecipient.claudePlan, verbatim: false);
       await h.assist.sweep();
@@ -904,6 +910,7 @@ void main() {
         jobId: 'job_abcdef12',
       );
       await h.assist.sweep();
+      h.now = _now.add(kAssistPollInterval);
       h.lookups.onPoll = (_) async => const LookupOutcome(
         kind: LookupOutcomeKind.pending,
         provider: LookupRecipient.claudePlan,
@@ -939,6 +946,7 @@ void main() {
         provider: LookupRecipient.claudePlan,
         jobId: 'job_second_99',
       );
+      h.now = _now.add(kAssistPollInterval);
       await h.assist.sweep();
       expect(h.lookups.polls, isEmpty);
       expect(h.lookups.submits, hasLength(2));
@@ -991,6 +999,8 @@ void main() {
       expect(h.lookups.submits, hasLength(2));
 
       final second = h.add(_bigMac(), timestamp: '2026-10-24T12:45:00.000');
+      // Not the cached answer for the same items (R6c): a lookup.
+      await h.state.clearCache();
       h.lookups.onSubmit = (_) async =>
           _failed(LookupFailureCode.auth, transient: false);
       await h.assist.sweep();

@@ -1,6 +1,8 @@
-/// MealAssist — the restaurant assist's engine, BRAND path (design R6b;
-/// decisions "Assist architecture: save first, enrich later", "Triggers",
-/// "Day window", "Write safety", "Consent", "Storage").
+/// MealAssist — the restaurant assist's engine (design R6b, the brand path;
+/// R6c, the location path, job polling, retries and the cache; decisions
+/// "Assist architecture: save first, enrich later", "Triggers", "Chain-first
+/// data minimization", "Location-only APPLY", "Day window", "Write safety",
+/// "Consent", "Storage").
 ///
 /// The meal is saved first; this enriches it later, in the app's own engine
 /// and in the foreground only. di.dart builds the one instance;
@@ -28,16 +30,42 @@
 /// and not denylisted after [assistMissesBeforeDenylist] dropped results.
 /// The trigger is [assistTriggerFor] (decision "Triggers").
 ///
-/// The BRAND path (this stage): the chains the items' printed brands and
-/// the receipt merchant name (core/restaurant_lookup_contract.dart composes
-/// them from OUR table; nothing location-derived is in the request) →
-/// submit (a direct provider answers at once; the owner's server answers
-/// with a job, kept in 'assist_jobs' and polled on the next sweep) →
+/// The BRAND path: the chains the items' printed brands and the receipt
+/// merchant name (core/restaurant_lookup_contract.dart composes them from
+/// OUR table) → the cache, else submit (a direct provider answers at once;
+/// the owner's server answers with a job, kept in 'assist_jobs') →
 /// decideAssist → recordAssistDecision → MealsDao.applyAssist against the
 /// raw text read before the lookup. A false return (the meal changed while
-/// the lookup ran) drops the result and counts a miss. The location path
-/// (R6c) comes later: a restaurant meal without a printed brand is skipped
-/// here.
+/// the lookup ran) drops the result and counts a miss.
+///
+/// The LOCATION path (R6c) adds the chains around where the photo was
+/// taken. It runs only with a location reader and a places resolver (iOS;
+/// di.dart builds neither on Android), the 'Use photo location' sub-toggle
+/// on (or the editor's "Use location"), LookupSupport.locationAllowed (an
+/// http:// own server is brand-only), capture.has_gps, and a RESTAURANT meal
+/// — never takeout, packaged, home or unknown, whose location is never
+/// read. Steps ([MealAssist._locate]): the fix's own gate (accuracy,
+/// freshness; place_match.dart placeGate) → PhotoLocationReader → a point
+/// in memory → its ~100 m cell against the 'Not from a restaurant' zones
+/// (no places call inside one) → Apple Maps' nearby food places → matchPlaces
+/// → chain keys of OUR table, a pick, the dense flag, whether the fix is
+/// verified → the point, the cell and every place are dropped. The request
+/// names at most 3 chains (1 when one was auto-picked); decideAssist
+/// derives location_confirmed when the user confirmed that chain at that
+/// spot, otherwise location (a suggestion at most).
+///
+/// Jobs and retries (R6c): a pending Claude Plan job is polled every 10 s
+/// for 2 minutes while the app is in the foreground, later on the next
+/// sweep. Busy, rate limited (not the daily cap), a timeout or a 5xx is
+/// tried again after 5 min, 30 min and 2 h; a 4th such failure and the
+/// meal is written 'unavailable'; offline, or a failure because the app left the
+/// foreground, is not a try. What the location path found is kept with the
+/// job or retry record, so a poll, a resubmit or a retry never reads the
+/// position again.
+///
+/// The cache (R6c, 'assist_cache', 30 days, 200): a finished answer keyed by
+/// its chain and the meal's item names (sorted, parenthetical weights
+/// dropped). A hit makes no lookup call.
 ///
 /// After an automatic APPLY: a snackbar with Undo ([AssistAppliedNotice];
 /// Undo writes revertAssist 'declined' through applyAssist), the meal joins
@@ -48,8 +76,10 @@
 /// result and forgets pending jobs. [MealAssist.lookupNow] is the editor's
 /// manual lookup (R7b).
 ///
-/// Nothing here logs. No coordinate, place or MapKit text exists on this
-/// path at all.
+/// Nothing here logs. A coordinate exists only inside [MealAssist._locate],
+/// for one places query; MapKit's places only inside matchPlaces. Neither
+/// is stored, sent, logged or shown — only chain keys of OUR table leave
+/// that method.
 library;
 
 import 'dart:async';
@@ -62,9 +92,15 @@ import 'package:flutter/widgets.dart'
 
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
+import '../../core/place_match.dart';
 import '../../core/restaurant_assist_logic.dart';
 import '../../core/restaurant_lookup_contract.dart';
+import '../photo/glasses.dart' show isMetaGlassesAnalysis;
+import '../photo/photo_location.dart' show PhotoLocationReader;
+import '../places/places.dart'
+    show PlaceResolver, PlacesStatus, placesThrottleBackoff;
 import 'assist_local_state.dart';
+import 'assist_places_store.dart';
 import 'clients/lookup_client.dart';
 import 'clients/lookup_contract_adapter.dart' show LookupRequestForClients;
 
@@ -82,8 +118,15 @@ const Duration kAssistSettleDelay = Duration(seconds: 5);
 const Duration kAssistBusyRetry = Duration(seconds: 30);
 
 /// After a transient failure (offline, busy, rate limited, a 5xx) no
-/// automatic lookup starts for this long. (R6c adds per-meal retries.)
+/// automatic lookup starts for this long; the meal itself waits for its
+/// own next try (assistRetryDelays).
 const Duration kAssistTransientBackoff = Duration(minutes: 5);
+
+/// A pending Claude Plan job is polled this often while the app is in the
+/// foreground, for [kAssistPollWindow] after it was submitted; after that,
+/// on the next sweep (design R6c).
+const Duration kAssistPollInterval = Duration(seconds: 10);
+const Duration kAssistPollWindow = Duration(minutes: 2);
 
 /// After the recipient said it cannot look up at all (an old server, the
 /// server's lookup knob off, a rejected key, no key, no search) no
@@ -106,6 +149,15 @@ abstract final class AssistSkip {
 
   // Per meal.
   static const String noBrand = 'no_brand';
+
+  /// Failed again after [assistMaxRetries] retries: written 'unavailable'.
+  static const String retriesExhausted = 'retries_exhausted';
+
+  // The location path (with place_match.dart's PlaceMatchReason codes).
+  static const String placeNoFix = 'place_no_fix';
+  static const String placeThrottled = 'place_throttled';
+  static const String placeError = 'place_error';
+  static const String placeUnsupported = 'place_unsupported';
   static const String mealGone = 'meal_gone';
   static const String mealChanged = 'meal_changed';
   static const String inUse = 'in_use';
@@ -153,7 +205,9 @@ final class AssistSettingsView {
 
   final AssistMode mode;
 
-  /// 'Use photo location' (R6c; iOS only). The brand path ignores it.
+  /// 'Use photo location' (R6c; iOS only): automatic lookups of
+  /// restaurant meals may add the chains around where the photo was taken.
+  /// Off, they are brand-only and no location is read.
   final bool useLocation;
   final DateTime? consentAt;
   final String? consentRecipient;
@@ -214,21 +268,23 @@ AssistTrigger? assistTriggerFor(dynamic analysis, AssistMode mode) {
   return assistBrandEvidence(analysis).itemBrand ? AssistTrigger.always : null;
 }
 
-/// The brand-path request for [analysis]: its items (positions kept) and
-/// receipt merchant, with no caller chains — the composer lists the chains
-/// the printed brands and the merchant name, from OUR table only. [country]
-/// is the device region (ISO2; the composer defaults to US), [zh] asks for
-/// Chinese notes.
+/// The lookup request for [analysis]: its items (positions kept) and
+/// receipt merchant — the composer lists the chains the printed brands and
+/// the merchant name first, from OUR table only — then [chains], the keys
+/// the location path found (best first; none on the brand path), at most 3
+/// in all. [country] is the device region (ISO2; the composer defaults to
+/// US), [zh] asks for Chinese notes.
 LookupRequest composeAssistRequest(
   Map<String, dynamic> analysis, {
   String? country,
   bool zh = false,
+  List<String> chains = const [],
 }) => LookupRequest.compose({
   'items': analysis['food_items'] is List
       ? analysis['food_items']
       : const <Object?>[],
   'order_merchant': analysis['order_merchant'],
-  'chains': const <String>[],
+  'chains': chains,
   'country': ?country,
   if (zh) 'lang': 'zh',
 });
@@ -250,6 +306,95 @@ String? regionOfLocale(String localeName) {
 /// same.
 String lookupRequestHash(LookupRequest request) =>
     sha256.convert(utf8.encode(request.toJson())).toString().substring(0, 16);
+
+// ─── The on-device cache's key (design R6c) ────────────────────────────
+
+/// A parenthetical holding a digit: an assumed weight or count the model
+/// added to a name ("Big Mac (220 g)", "Fries (约117克)", "Nuggets [6 pc]").
+final RegExp _measureRe = RegExp(
+  r'\([^()]*[0-9][^()]*\)|\[[^\[\]]*[0-9][^\[\]]*\]|【[^【】]*[0-9][^【】]*】',
+);
+final RegExp _spacesRe = RegExp(r'\s+');
+
+/// An item name as the cache compares it: the request's cleaned name,
+/// lower-cased, parenthetical weights removed, spaces collapsed.
+String assistCacheItemName(Object? name) => (name is String ? name : '')
+    .replaceAll(_measureRe, ' ')
+    .toLowerCase()
+    .replaceAll(_spacesRe, ' ')
+    .trim();
+
+/// [request]'s item names as the cache compares them, in request order.
+List<String> assistCacheNames(LookupRequest request) => [
+  for (final item in request.items)
+    assistCacheItemName(item is Map ? item['name'] : null),
+];
+
+/// The cache key: [chainKey] and [names] sorted — the first 32 hex
+/// characters of SHA-256 over them. The same items in another order, or
+/// with another assumed weight, are the same lookup.
+String assistCacheKey(String chainKey, List<String> names) {
+  final sorted = [...names]..sort();
+  return sha256
+      .convert(utf8.encode(jsonEncode([chainKey, sorted])))
+      .toString()
+      .substring(0, 32);
+}
+
+/// [lookup] — cached for a request whose items were named [from] — with
+/// every match's item_index moved onto [to], the same names in this meal's
+/// order (the k-th "fries" there is the k-th "fries" here). Null when the
+/// two are not the same names, so a cached answer can never land on
+/// another item.
+AssistLookup? remapCachedLookup(
+  AssistLookup lookup, {
+  required List<String> from,
+  required List<String> to,
+}) {
+  if (from.length != to.length) return null;
+  final a = [...from]..sort();
+  final b = [...to]..sort();
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return null;
+  }
+  final result = lookup.result;
+  if (result is! Map) return null;
+  final matches = result['matches'];
+  final moved = <Object?>[];
+  for (final m in matches is List ? matches : const []) {
+    if (m is! Map) continue;
+    final i = m['item_index'];
+    if (i is! int || i < 0 || i >= from.length) continue;
+    final name = from[i];
+    var k = 0;
+    for (var x = 0; x < i; x++) {
+      if (from[x] == name) k++;
+    }
+    var j = -1;
+    for (var y = 0, seen = 0; y < to.length; y++) {
+      if (to[y] != name) continue;
+      if (seen == k) {
+        j = y;
+        break;
+      }
+      seen++;
+    }
+    if (j < 0) return null;
+    moved.add(<String, Object?>{
+      for (final e in m.entries) '${e.key}': e.value,
+      'item_index': j,
+    });
+  }
+  return AssistLookup(
+    result: <String, Object?>{
+      for (final e in result.entries) '${e.key}': e.value,
+      'matches': moved,
+    },
+    provider: lookup.provider,
+    citedUrls: lookup.citedUrls,
+    evidence: lookup.evidence,
+  );
+}
 
 // ─── Public results ────────────────────────────────────────────────────
 
@@ -286,6 +431,38 @@ final class AssistRun {
   final String code;
   final AssistDecision? decision;
   final bool wrote;
+}
+
+/// What the location path made of one meal ([MealAssist._locate]): a code
+/// for the decision log, and the chain keys it found — nothing else.
+final class _Located {
+  const _Located(
+    this.code, {
+    this.place,
+    this.later = false,
+    this.failed = false,
+  });
+
+  /// A PlaceMatchReason wire code or one of [AssistSkip]'s place codes.
+  final String code;
+
+  /// The chains (keys of OUR table) and flags, when places were matched.
+  final AssistPlaceContext? place;
+
+  /// Apple Maps asked us to wait: the meal is tried again later.
+  final bool later;
+
+  /// The places query failed: the brand path goes on alone.
+  final bool failed;
+}
+
+/// One meal's request, composed: what is sent, its hash, and what the
+/// location path contributed to it.
+final class _Prepared {
+  const _Prepared(this.request, this.hash, this.place);
+  final LookupRequest request;
+  final String hash;
+  final AssistPlaceContext? place;
 }
 
 final class _Run {
@@ -339,9 +516,14 @@ class MealAssist {
     this._inForeground,
     this._country,
     this._repliesInChinese,
+    this._location,
+    this._places,
+    this._placesStore,
     DateTime Function()? clock,
     this.settleDelay = kAssistSettleDelay,
     this.busyRetry = kAssistBusyRetry,
+    this.pollInterval = kAssistPollInterval,
+    this.pollWindow = kAssistPollWindow,
   }) : _clock = clock ?? DateTime.now;
 
   final MealsDao _dao;
@@ -359,10 +541,18 @@ class MealAssist {
   final bool Function()? _inForeground;
   final String? Function()? _country;
   final bool Function()? _repliesInChinese;
+
+  /// The location path's seams (R6c). Without a reader and a resolver
+  /// (Android; di.dart builds neither there) every lookup is brand-only.
+  final PhotoLocationReader? _location;
+  final PlaceResolver? _places;
+  final AssistPlacesStore? _placesStore;
   final DateTime Function() _clock;
 
   final Duration settleDelay;
   final Duration busyRetry;
+  final Duration pollInterval;
+  final Duration pollWindow;
 
   /// Bumped by Off and dispose: every result of an older generation is
   /// discarded.
@@ -373,6 +563,14 @@ class MealAssist {
   bool _sweepAgain = false;
   Timer? _settleTimer;
   Timer? _retryTimer;
+  Timer? _pollTimer;
+
+  /// Bumped each time the app leaves the foreground: a call that ended in
+  /// a failure across a bump failed because of it, which is not a try.
+  int _backgroundEpoch = 0;
+
+  /// Apple Maps throttled: no location is read before this.
+  DateTime? _placesHoldUntil;
   bool _started = false;
   bool _disposed = false;
   bool _ownSignal = false;
@@ -442,6 +640,7 @@ class MealAssist {
     _tokens.clear();
     _settleTimer?.cancel();
     _retryTimer?.cancel();
+    _pollTimer?.cancel();
     _settingsChanges?.removeListener(_onSettingsChanged);
     _mealsChanged?.removeListener(_onMealsSignal);
     final observer = _observer;
@@ -455,6 +654,9 @@ class MealAssist {
 
   /// The app came back to the foreground.
   void onResumed() => _schedule(settleDelay);
+
+  /// The app left the foreground: a call failing from now on is not a try.
+  void onBackgrounded() => _backgroundEpoch++;
 
   void _onMealsSignal() {
     // Our own write's signal: nothing new to look at.
@@ -512,6 +714,19 @@ class MealAssist {
     _retryTimer = Timer(busyRetry, () => unawaited(sweep()));
   }
 
+  /// [job] is a pending server job: its next poll, while it is younger
+  /// than [pollWindow] (later polls wait for the next sweep).
+  void _schedulePoll(AssistJob job) {
+    if (_disposed || !job.isPending) return;
+    final now = _clock();
+    if (!now.isBefore(job.at.add(pollWindow))) return;
+    if (_pollTimer?.isActive ?? false) return;
+    var wait = job.nextAt.difference(now);
+    if (wait.isNegative) wait = Duration.zero;
+    if (wait > pollInterval) wait = pollInterval;
+    _pollTimer = Timer(wait, () => unawaited(sweep()));
+  }
+
   /// Mode Off: the call in flight is cancelled and its result discarded,
   /// pending jobs are forgotten, the consent prompt is withdrawn.
   Future<void> turnOff() async {
@@ -522,6 +737,7 @@ class MealAssist {
     _tokens.clear();
     _settleTimer?.cancel();
     _retryTimer?.cancel();
+    _pollTimer?.cancel();
     if (!_disposed) _consentNeeded.value = null;
     await _state.clearJobs();
   }
@@ -694,12 +910,30 @@ class MealAssist {
     for (final meal in ordered) {
       if (gen != _generation || _disposed) return;
       s = _readSettings();
-      final trigger = assistTriggerFor(meal.analysis, s.mode);
-      if (trigger == null) continue;
+      final job = jobs[meal.id];
+      // The editor's own lookup still running on the server: polled
+      // whatever the triggers say, with the location choice it was made
+      // with (its kept place), and answered as a manual lookup.
+      final manualJob = job != null && job.manual && job.isPending;
+      final trigger = manualJob
+          ? AssistTrigger.manual
+          : assistTriggerFor(meal.analysis, s.mode);
+      final useLocation = manualJob ? job.place != null : s.useLocation;
       final printed = assistBrandEvidence(meal.analysis);
-      if (!printed.itemBrand && !printed.merchant) {
-        // No printed chain: only the location path (R6c) could look this
-        // meal up.
+      if (trigger == null ||
+          (!manualJob &&
+              !printed.itemBrand &&
+              !printed.merchant &&
+              !(useLocation && _locationPossible(meal, support)))) {
+        // Not looked up (any more): no trigger, or nothing printed names a
+        // chain and the location may not be read. An automatic job or
+        // retry kept for it answers nothing now.
+        if (job != null && !job.manual) await _state.removeJob(meal.id);
+        continue;
+      }
+      if (job != null && _clock().isBefore(job.nextAt)) {
+        // Its job's next poll, or its next try, is not due yet.
+        _schedulePoll(job);
         continue;
       }
       // Every precondition again, right before each lookup.
@@ -716,8 +950,9 @@ class MealAssist {
         gen: gen,
         settings: s,
         support: support,
-        job: jobs[meal.id],
-        manual: false,
+        job: job,
+        manual: manualJob,
+        useLocation: useLocation,
       );
       if (run.stop) {
         _lastSkip = run.code;
@@ -747,11 +982,14 @@ class MealAssist {
     return !_mealInUse(m.id);
   }
 
-  /// The editor's manual lookup (R7b), brand path. Needs a consent that
-  /// names the current recipient (else [consentNeeded] asks for one) and
-  /// room under the daily cap; ignores the mode, the triggers, the 24 h
-  /// window and the miss list — the user asked. [useLocation] is the
-  /// location path's (R6c); the brand path never reads a location.
+  /// The editor's manual lookup (R7b). Needs a consent that names the
+  /// current recipient (else [consentNeeded] asks for one) and room under
+  /// the daily cap; ignores the mode, the triggers, the 24 h window, the
+  /// miss list and a retry's wait — the user asked. [useLocation] is the
+  /// user's choice ("Use location" / "Brand only"): with it, a restaurant
+  /// meal takes the location path under the same gates as an automatic
+  /// lookup (locationAllowed, has_gps, restaurant); without it no location
+  /// is read. A failure here is shown, not retried.
   Future<AssistRun> lookupNow(int mealId, {bool useLocation = false}) async {
     try {
       if (_disposed) return const AssistRun(AssistSkip.off);
@@ -772,6 +1010,7 @@ class MealAssist {
         support: support,
         job: jobs[mealId],
         manual: true,
+        useLocation: useLocation,
       );
       return run.public;
     } catch (_) {
@@ -787,6 +1026,7 @@ class MealAssist {
     required LookupSupport support,
     required AssistJob? job,
     required bool manual,
+    required bool useLocation,
   }) async {
     if (!_working.add(mealId)) return const _Run(AssistSkip.working);
     try {
@@ -801,27 +1041,86 @@ class MealAssist {
         return const _Run(AssistSkip.mealChanged);
       }
       final base = assistBase(meal.analysis);
-      final request = composeAssistRequest(base, country: _region(), zh: _zh());
-      if (request.chainKeys.isEmpty) return const _Run(AssistSkip.noBrand);
-      final hash = lookupRequestHash(request);
+
+      // ── Where (R6c): the location path, or what a job kept of it ──
+      AssistPlaceContext? place;
+      String? placeCode;
+      var placeFailed = false;
+      if (useLocation && _locationPossible(meal, support)) {
+        final kept = job?.place;
+        if (kept != null) {
+          // A job or a retry: the position is not read again.
+          place = kept;
+        } else {
+          final located = await _locate(meal);
+          if (gen != _generation) return _Run.cancelled;
+          if (located.later) {
+            _scheduleRetry();
+            return _Run(located.code);
+          }
+          place = located.place;
+          placeCode = located.code;
+          placeFailed = located.failed;
+        }
+      }
+
+      final request = composeAssistRequest(
+        base,
+        country: _region(),
+        zh: _zh(),
+        chains: place?.chains ?? const [],
+      );
+      if (request.chainKeys.isEmpty) {
+        // Nothing names a chain from OUR table: no lookup. The location
+        // found none (or could not be read): this meal is not asked again
+        // automatically — another sweep would only ask Apple Maps the same
+        // question; a failed places query gets one more chance. A job kept
+        // for a request this meal no longer makes answers nothing.
+        if (job != null) await _state.removeJob(mealId);
+        if (placeCode == null) return const _Run(AssistSkip.noBrand);
+        if (!manual) {
+          await _logCode(placeCode);
+          await _state.addMiss(mealId, denylist: !placeFailed);
+        }
+        return _Run(placeCode);
+      }
+      place = place?.within(request.chainKeys);
+      if (place != null && place.chains.isEmpty) place = null;
+      final prepared = _Prepared(request, lookupRequestHash(request), place);
+
+      // ── The cache (R6c): the same items at the same chain, answered ──
+      final cached = await _fromCache(request);
+      if (gen != _generation) return _Run.cancelled;
+      if (cached != null) {
+        if (job != null) await _state.removeJob(mealId);
+        return await _decide(
+          cached,
+          snap: snap,
+          base: base,
+          trigger: trigger,
+          prepared: prepared,
+          manual: manual,
+          gen: gen,
+        );
+      }
 
       final token = LookupCancelToken();
       _tokens.add(token);
+      final epoch = _backgroundEpoch;
       LookupOutcome outcome;
-      var fromJob = false;
+      var polled = false;
       try {
-        if (job != null && job.reqHash == hash) {
-          fromJob = true;
-          outcome = await _lookups.poll(job.jobId);
+        final jobId = job?.jobId;
+        if (jobId != null && job!.reqHash == prepared.hash) {
+          polled = true;
+          outcome = await _lookups.poll(jobId);
           if (gen == _generation && outcome.needsResubmit) {
             // The server lost the job: the same request again (a request
             // it still holds is the same job, a finished one a cache hit).
-            await _state.removeJob(mealId);
-            fromJob = false;
+            polled = false;
             outcome = await _submit(request, settings, support, token);
           }
         } else {
-          if (job != null) await _state.removeJob(mealId);
           outcome = await _submit(request, settings, support, token);
         }
       } finally {
@@ -829,20 +1128,18 @@ class MealAssist {
       }
       // Off (or dispose) during the call: whatever came back is dropped.
       if (gen != _generation || token.isCancelled) return _Run.cancelled;
-      if (fromJob && outcome.kind != LookupOutcomeKind.pending) {
-        await _state.removeJob(mealId);
-      }
       return await _settle(
         outcome,
         snap: snap,
         base: base,
         trigger: trigger,
-        request: request,
-        hash: hash,
+        prepared: prepared,
         job: job,
+        polled: polled,
         support: support,
         manual: manual,
         gen: gen,
+        wentBackground: _backgroundEpoch != epoch || !_foreground(),
       );
     } catch (_) {
       return const _Run(AssistSkip.error, stop: true);
@@ -864,17 +1161,188 @@ class MealAssist {
     expectedRecipientStamp: settings.consentRecipient,
   );
 
+  // ── The location path (R6c) ──
+
+  /// Whether [meal] may take the location path at all — no read yet: a
+  /// location reader and a places resolver (iOS), a recipient that may
+  /// receive location-derived chains (locationAllowed: not an http://
+  /// own server), a library photo with GPS, and a RESTAURANT meal (never
+  /// takeout, packaged, home or unknown).
+  bool _locationPossible(Meal meal, LookupSupport support) {
+    final reader = _location;
+    if (reader == null || !reader.enabled || _places == null) return false;
+    if (!support.supported || !support.locationAllowed) return false;
+    if (meal.fileId.trim().isEmpty) return false;
+    final capture = meal.analysis['capture'];
+    if (capture is! Map || capture['has_gps'] != true) return false;
+    return mealContextFields(meal.analysis).restaurantContext ==
+        RestaurantContext.restaurant;
+  }
+
+  /// The location path for [meal] (see the library doc). The photo's
+  /// position is read here, lives in [point] for one places query, and is
+  /// gone when this returns: what comes back is a code and chain keys.
+  /// Never throws.
+  Future<_Located> _locate(Meal meal) async {
+    try {
+      final reader = _location;
+      final places = _places;
+      if (reader == null || places == null) {
+        return const _Located(AssistSkip.placeUnsupported);
+      }
+      final analysis = meal.analysis;
+      final geo = PhotoGeo.fromCapture(
+        analysis['capture'],
+        glasses: isMetaGlassesAnalysis(analysis),
+      );
+      // The fix's own quality first: a coarse or stale fix is never read.
+      final gate = placeGate(geo);
+      final refused = gate.reason;
+      if (refused != null) return _Located(refused.wire);
+      final hold = _placesHoldUntil;
+      if (hold != null && _clock().isBefore(hold)) {
+        return const _Located(AssistSkip.placeThrottled, later: true);
+      }
+      final point = await reader.forAsset(meal.fileId);
+      if (point == null) return const _Located(AssistSkip.placeNoFix);
+      final cell = PlaceCell.fromLatLon(point.lat, point.lon);
+      if (cell == null) return const _Located(AssistSkip.placeNoFix);
+      final learned = await _learnedPlaces();
+      // A 'Not from a restaurant' zone: Apple Maps is not asked.
+      if (learned.inZone(cell)) return _Located(PlaceMatchReason.zone.wire);
+      final near = await places.nearbyFood(point, radiusM: gate.radiusM);
+      switch (near.status) {
+        case PlacesStatus.throttled:
+          _placesHoldUntil = _clock().add(placesThrottleBackoff);
+          return const _Located(AssistSkip.placeThrottled, later: true);
+        case PlacesStatus.error:
+          return const _Located(AssistSkip.placeError, failed: true);
+        case PlacesStatus.unsupported:
+          return const _Located(AssistSkip.placeUnsupported);
+        case PlacesStatus.ok:
+        case PlacesStatus.none:
+          break;
+      }
+      final match = matchPlaces(
+        geo: geo,
+        cell: cell,
+        context: mealContextFields(analysis).restaurantContext,
+        places: near.places,
+        learned: learned,
+      );
+      return _Located(
+        match.reason.wire,
+        place: AssistPlaceContext(
+          chains: match.lookupChainKeys,
+          picked: match.picked,
+          confirmed: match.confirmed,
+          blocked: match.blocked,
+          verified: match.verified,
+          dense: match.dense,
+        ),
+      );
+    } catch (_) {
+      return const _Located(AssistSkip.placeError, failed: true);
+    }
+  }
+
+  Future<LearnedPlaces> _learnedPlaces() async {
+    try {
+      return await _placesStore?.read() ?? LearnedPlaces.empty;
+    } catch (_) {
+      return LearnedPlaces.empty;
+    }
+  }
+
+  // ── The cache (R6c) ──
+
+  /// A cached answer for [request]: the first of its chains (rank order)
+  /// with one for these item names, moved onto this meal's item order.
+  Future<AssistLookup?> _fromCache(LookupRequest request) async {
+    final names = assistCacheNames(request);
+    for (final chain in request.chainKeys) {
+      final hit = await _state.cachedLookup(assistCacheKey(chain, names));
+      if (hit == null || hit.chainKey != chain) continue;
+      final moved = remapCachedLookup(hit.lookup, from: hit.names, to: names);
+      if (moved != null) return moved;
+    }
+    return null;
+  }
+
+  /// Keeps a finished [outcome] for [request] when it answers for one of
+  /// the request's chains: the answer, the search's URLs and its text for
+  /// the claimed source only (bounded; cutting text can only make a later
+  /// check stricter).
+  Future<void> _remember(LookupRequest request, LookupOutcome outcome) async {
+    final result = outcome.result;
+    final chain = result?.chainKey;
+    if (result == null ||
+        chain == null ||
+        !request.chainKeys.contains(chain) ||
+        outcome.provider == LookupRecipient.none) {
+      return;
+    }
+    final names = assistCacheNames(request);
+    final source = normalizeSourceUrl(result.sourceUrl);
+    final evidence = <AssistEvidence>[];
+    var room = assistCacheEvidenceMaxChars;
+    for (final e in outcome.evidence) {
+      if (source == null ||
+          evidence.length == assistCacheMaxEvidence ||
+          room <= 0) {
+        break;
+      }
+      if (normalizeSourceUrl(e.url) != source) continue;
+      final text = e.text.length > room ? e.text.substring(0, room) : e.text;
+      room -= text.length;
+      evidence.add(
+        AssistEvidence(
+          url: e.url,
+          text: text,
+          verbatim: e.verbatim,
+          pageAge: e.pageAge,
+        ),
+      );
+    }
+    await _state.putCachedLookup(
+      AssistCachedLookup(
+        key: assistCacheKey(chain, names),
+        chainKey: chain,
+        names: names,
+        lookup: AssistLookup(
+          result: result.json,
+          provider: outcome.provider.wire,
+          citedUrls: outcome.citedUrls.take(assistCacheMaxCitedUrls).toList(),
+          evidence: evidence,
+        ),
+        at: _clock(),
+      ),
+    );
+  }
+
+  // ── After the call ──
+
+  /// Failures that are not the lookup's fault and not a try: no network,
+  /// or a portal answering in the recipient's place.
+  static bool _offline(LookupOutcome o) {
+    final code = o.failure?.code;
+    if (code == null) return o.kind == LookupOutcomeKind.offline;
+    return code == LookupFailureCode.network ||
+        code == LookupFailureCode.captivePortal;
+  }
+
   Future<_Run> _settle(
     LookupOutcome outcome, {
     required MealSnapshot snap,
     required Map<String, dynamic> base,
     required AssistTrigger trigger,
-    required LookupRequest request,
-    required String hash,
+    required _Prepared prepared,
     required AssistJob? job,
+    required bool polled,
     required LookupSupport support,
     required bool manual,
     required int gen,
+    required bool wentBackground,
   }) async {
     final mealId = snap.meal.id;
     final now = _clock();
@@ -884,28 +1352,32 @@ class MealAssist {
       case LookupOutcomeKind.done:
         final lookup = outcome.toAssistLookup();
         if (lookup == null) break;
+        if (job != null) await _state.removeJob(mealId);
+        await _remember(prepared.request, outcome);
         return _decide(
           lookup,
           snap: snap,
           base: base,
           trigger: trigger,
-          request: request,
+          prepared: prepared,
           manual: manual,
           gen: gen,
         );
       case LookupOutcomeKind.pending:
         final jobId = outcome.jobId;
         if (jobId != null) {
-          await _state.putJob(
-            mealId,
-            AssistJob(
-              jobId: jobId,
-              reqHash: hash,
-              at: job?.at ?? now,
-              nextAt: now,
-              attempts: job?.attempts ?? 0,
-            ),
+          final next = AssistJob(
+            jobId: jobId,
+            reqHash: prepared.hash,
+            // The poll window runs from when THIS job was submitted.
+            at: job?.jobId == jobId ? job!.at : now,
+            nextAt: now.add(pollInterval),
+            attempts: job?.attempts ?? 0,
+            place: prepared.place,
+            manual: manual,
           );
+          await _state.putJob(mealId, next);
+          _schedulePoll(next);
         }
         return const _Run(AssistSkip.pending);
       case LookupOutcomeKind.unsupported:
@@ -924,16 +1396,8 @@ class MealAssist {
         _holdRecipient(support, now);
         return const _Run(AssistSkip.unavailable, stop: true);
       case LookupOutcomeKind.rateLimited:
-        await _logFailure(_failureCode(outcome), provider);
-        _backoffUntil = failure?.code == LookupFailureCode.dailyCap
-            ? DateTime(now.year, now.month, now.day + 1)
-            : now.add(kAssistTransientBackoff);
-        return const _Run(AssistSkip.backoff, stop: true);
       case LookupOutcomeKind.busy:
       case LookupOutcomeKind.offline:
-        await _logFailure(_failureCode(outcome), provider);
-        _backoffUntil = now.add(kAssistTransientBackoff);
-        return const _Run(AssistSkip.backoff, stop: true);
       case LookupOutcomeKind.failed:
         break;
     }
@@ -945,14 +1409,110 @@ class MealAssist {
       _holdRecipient(support, now);
       return _Run(code, stop: true);
     }
-    if (failure == null || failure.transient) {
-      _backoffUntil = now.add(kAssistTransientBackoff);
+    if (failure?.code == LookupFailureCode.dailyCap) {
+      // A day's cap (the app's or the server's): tomorrow. Not a try.
+      _backoffUntil = DateTime(now.year, now.month, now.day + 1);
       return _Run(code, stop: true);
     }
-    // Permanent for THIS meal (nothing sendable, a malformed or refused
-    // answer): never asked again automatically.
-    if (!manual) await _state.addMiss(mealId, denylist: true);
-    return _Run(code);
+    final transient =
+        failure == null ||
+        failure.transient ||
+        outcome.kind == LookupOutcomeKind.busy ||
+        outcome.kind == LookupOutcomeKind.rateLimited ||
+        outcome.kind == LookupOutcomeKind.offline;
+    if (!transient) {
+      // Permanent for THIS meal (nothing sendable, a malformed or refused
+      // answer): never asked again automatically.
+      if (job != null) await _state.removeJob(mealId);
+      if (!manual) await _state.addMiss(mealId, denylist: true);
+      return _Run(code);
+    }
+    if (wentBackground || _offline(outcome)) {
+      // Not a try: the network was gone, or the app left the foreground
+      // mid-call. What the location found is kept (a polled job keeps its
+      // id), so the next sweep asks again without reading it twice.
+      if (!wentBackground) _backoffUntil = now.add(kAssistTransientBackoff);
+      if (!manual || polled) {
+        // (The editor's lookup keeps only a job the server still runs.)
+        await _state.putJob(
+          mealId,
+          AssistJob(
+            jobId: polled ? job?.jobId : null,
+            reqHash: prepared.hash,
+            at: job?.at ?? now,
+            nextAt: now,
+            attempts: job?.attempts ?? 0,
+            place: prepared.place,
+            manual: manual,
+          ),
+        );
+      }
+      return _Run(code, stop: true);
+    }
+    // A try that failed: busy, rate limited, a timeout, a 5xx.
+    _backoffUntil = now.add(kAssistTransientBackoff);
+    if (manual) {
+      // Shown to the user, not retried: the editor's lookup ends here.
+      if (job != null) await _state.removeJob(mealId);
+      return _Run(code, stop: true);
+    }
+    final attempts = (job?.attempts ?? 0) + 1;
+    if (attempts > assistMaxRetries) {
+      await _state.removeJob(mealId);
+      final wrote = await _writeUnavailable(snap, trigger, provider, code);
+      return _Run(AssistSkip.retriesExhausted, wrote: wrote, stop: true);
+    }
+    await _state.putJob(
+      mealId,
+      AssistJob(
+        reqHash: prepared.hash,
+        at: job?.at ?? now,
+        nextAt: now.add(assistRetryDelays[attempts - 1]),
+        attempts: attempts,
+        place: prepared.place,
+      ),
+    );
+    return _Run(code, stop: true);
+  }
+
+  /// The meal's last try failed: it is written 'unavailable' (reason: the
+  /// last failure's code; no chain, brand, match or source), against the
+  /// raw text read before the lookup. False when it changed since (a miss)
+  /// or is open in a screen.
+  Future<bool> _writeUnavailable(
+    MealSnapshot snap,
+    AssistTrigger trigger,
+    String provider,
+    String reason,
+  ) async {
+    final meal = snap.meal;
+    final next = recordAssistDecision(
+      meal.analysis,
+      AssistDecision(
+        outcome: AssistOutcome.contextOnly,
+        status: AssistStatus.unavailable,
+        reason: reason,
+        trigger: trigger,
+        provider: provider == LookupRecipient.none.wire ? '' : provider,
+        decidedOn: isoDate(_clock()),
+      ),
+    );
+    if (next == null) return false;
+    if (_mealInUse(meal.id)) {
+      await _state.addMiss(meal.id);
+      return false;
+    }
+    final ok = await _dao.applyAssist(
+      meal.id,
+      expectedRaw: snap.rawAnalysis,
+      analysis: next,
+    );
+    if (!ok) {
+      await _state.addMiss(meal.id);
+      return false;
+    }
+    _signal();
+    return true;
   }
 
   Future<_Run> _decide(
@@ -960,12 +1520,14 @@ class MealAssist {
     required MealSnapshot snap,
     required Map<String, dynamic> base,
     required AssistTrigger trigger,
-    required LookupRequest request,
+    required _Prepared prepared,
     required bool manual,
     required int gen,
   }) async {
     final meal = snap.meal;
     final now = _clock();
+    final request = prepared.request;
+    final place = prepared.place;
     // Read now, not at the sweep's start: an application this sweep just
     // wrote on another meal counts for the 6 h repeat rule.
     final recent = await _dao.mealsBetween(
@@ -981,6 +1543,12 @@ class MealAssist {
         country: _region(),
         requestChainKeys: request.chainKeys,
         requestItems: request.items,
+        locationChainKeys: place?.chains ?? const [],
+        placeChainKey: place?.picked,
+        confirmedChainKeys: place?.confirmed ?? const {},
+        blockedChainKeys: place?.blocked ?? const {},
+        placeVerified: place?.verified ?? false,
+        dense: place?.dense ?? false,
         recentApplies: _recentApplies(recent, meal.id),
       ),
     );
@@ -1109,6 +1677,10 @@ class MealAssist {
     AssistDecisionEntry(at: _clock(), code: code, provider: provider),
   );
 
+  /// A code with no lookup behind it (the location path found no chain).
+  Future<void> _logCode(String code) =>
+      _state.logDecision(AssistDecisionEntry(at: _clock(), code: code));
+
   /// Applications standing on the OTHER meals of [meals] (the 6 h repeat
   /// rule): each covered menu item, at the time its meal was logged.
   static List<AssistRecentApply> _recentApplies(List<Meal> meals, int mealId) {
@@ -1148,5 +1720,9 @@ class _AssistLifecycle with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) _assist.onResumed();
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden) {
+      _assist.onBackgrounded();
+    }
   }
 }

@@ -1,12 +1,14 @@
 /// services/assist/assist_local_state.dart: the daily lookup counter in
 /// shared_preferences (assist.daily.v1) and the backup-excluded documents
-/// the assist keeps (unseen, decision log, miss list, jobs) — shapes, TTLs,
-/// caps, corrupt documents reading empty, and no export path touching them.
+/// the assist keeps (unseen, decision log, miss list, jobs and retries with
+/// their place context, the lookup cache) — shapes, TTLs, caps, corrupt
+/// documents reading empty, and no export path touching them.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:calorie_tracker/core/restaurant_assist_logic.dart';
 import 'package:calorie_tracker/services/assist/assist_local_state.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/local_store.dart';
@@ -176,6 +178,188 @@ void main() {
       expect(await s.jobs(), isEmpty);
     });
 
+    test('a retry record has no job id; the place context round-trips as '
+        'chain keys and flags only', () async {
+      final s = state();
+      const place = AssistPlaceContext(
+        chains: ['mcdonalds', 'starbucks'],
+        picked: 'mcdonalds',
+        confirmed: {'mcdonalds'},
+        blocked: {'subway'},
+        verified: true,
+        dense: false,
+      );
+      expect(
+        await s.putJob(
+          1,
+          AssistJob(
+            reqHash: '0123456789abcdef',
+            at: now,
+            nextAt: now.add(const Duration(minutes: 5)),
+            attempts: 1,
+            place: place,
+          ),
+        ),
+        isTrue,
+      );
+      final job = (await s.jobs())[1]!;
+      expect(job.jobId, isNull);
+      expect(job.isPending, isFalse);
+      expect(job.attempts, 1);
+      expect(job.place?.chains, ['mcdonalds', 'starbucks']);
+      expect(job.place?.picked, 'mcdonalds');
+      expect(job.place?.confirmed, {'mcdonalds'});
+      expect(job.place?.blocked, {'subway'});
+      expect(job.place?.verified, isTrue);
+      final raw = file(assistJobsDocument).readAsStringSync();
+      expect(raw, isNot(contains('job_id')));
+      expect(jsonDecode(raw)['jobs'][0]['place'], place.toJson());
+
+      // A context that is not table keys, or a pick outside its chains, is
+      // dropped with its entry.
+      for (final bad in [
+        {
+          'chains': ['Chipotle near 1st St'],
+          'verified': true,
+          'dense': false,
+        },
+        {
+          'chains': ['mcdonalds'],
+          'picked': 'subway',
+          'verified': true,
+          'dense': false,
+        },
+        {
+          'chains': ['mcdonalds'],
+          'verified': 'yes',
+          'dense': false,
+        },
+        {
+          'chains': ['mcdonalds', 'subway', 'qdoba', 'chipotle'],
+          'verified': true,
+          'dense': false,
+        },
+      ]) {
+        file(assistJobsDocument).writeAsStringSync(
+          jsonEncode({
+            'v': assistLocalVersion,
+            'jobs': [
+              {
+                'meal_id': 1,
+                'req_hash': '0123456789abcdef',
+                'attempts': 1,
+                'next_at': now.toIso8601String(),
+                'at': now.toIso8601String(),
+                'place': bad,
+              },
+            ],
+          }),
+        );
+        expect(await s.jobs(), isEmpty, reason: '$bad');
+      }
+    });
+
+    test('AssistPlaceContext.within keeps what the request carries', () {
+      const place = AssistPlaceContext(
+        chains: ['mcdonalds', 'starbucks'],
+        picked: 'starbucks',
+        confirmed: {'starbucks'},
+        blocked: {'subway', 'qdoba'},
+        verified: true,
+      );
+      final kept = place.within(['subway', 'mcdonalds']);
+      expect(kept.chains, ['mcdonalds']);
+      expect(kept.picked, isNull);
+      expect(kept.confirmed, isEmpty);
+      expect(kept.blocked, {'subway'});
+      expect(kept.verified, isTrue);
+    });
+
+    AssistCachedLookup entry(String key, {String text = 'Big Mac 590 Cal.'}) =>
+        AssistCachedLookup(
+          key: key,
+          chainKey: 'mcdonalds',
+          names: const ['big mac'],
+          lookup: AssistLookup(
+            result: const {'status': 'found', 'chain_key': 'mcdonalds'},
+            provider: 'anthropic',
+            citedUrls: const ['https://www.mcdonalds.com/big-mac'],
+            evidence: [
+              AssistEvidence(
+                url: 'https://www.mcdonalds.com/big-mac',
+                text: text,
+                pageAge: '2026-01-02',
+              ),
+            ],
+          ),
+          at: now,
+        );
+
+    test('the cache: put, read, replace, clear; 30 days', () async {
+      final s = state();
+      final key = 'a' * 32;
+      expect(await s.cachedLookup(key), isNull);
+      expect(await s.putCachedLookup(entry(key)), isTrue);
+      final hit = (await s.cachedLookup(key))!;
+      expect(hit.chainKey, 'mcdonalds');
+      expect(hit.names, ['big mac']);
+      expect(hit.lookup.provider, 'anthropic');
+      expect(hit.lookup.evidence.single.pageAge, '2026-01-02');
+      expect(hit.lookup.evidence.single.verbatim, isTrue);
+      expect(await s.putCachedLookup(entry(key, text: 'newer')), isTrue);
+      expect((await s.cachedLookup(key))!.lookup.evidence.single.text, 'newer');
+      expect(
+        (jsonDecode(file(assistCacheDocument).readAsStringSync())['entries']
+                as List)
+            .length,
+        1,
+      );
+      expect(await s.clearCache(), isTrue);
+      expect(await s.cachedLookup(key), isNull);
+      await s.putCachedLookup(entry(key));
+      now = now.add(const Duration(days: 31));
+      expect(await s.cachedLookup(key), isNull);
+    });
+
+    test('the cache keeps the newest 200 and refuses an oversized or '
+        'malformed entry', () async {
+      final s = state();
+      for (var i = 0; i < assistCacheCap + 3; i++) {
+        now = now.add(const Duration(minutes: 1));
+        await s.putCachedLookup(entry(i.toRadixString(16).padLeft(32, '0')));
+      }
+      expect(await s.cachedLookup('0' * 32), isNull);
+      expect(
+        await s.cachedLookup(
+          (assistCacheCap + 2).toRadixString(16).padLeft(32, '0'),
+        ),
+        isNotNull,
+      );
+      expect(
+        await s.putCachedLookup(entry('b' * 32, text: 'x' * 9000)),
+        isFalse,
+      );
+      expect(await s.putCachedLookup(entry('not a key')), isFalse);
+      file(assistCacheDocument).writeAsStringSync(
+        jsonEncode({
+          'v': assistLocalVersion,
+          'entries': [
+            {...entry('c' * 32).toJson(), 'chain_key': 'Chipotle'},
+            {...entry('d' * 32).toJson(), 'result': 'junk'},
+            {
+              ...entry('e' * 32).toJson(),
+              'result': {'status': 'found', 'chain_key': 'subway'},
+            },
+            entry('f' * 32).toJson(),
+          ],
+        }),
+      );
+      expect(await s.cachedLookup('c' * 32), isNull);
+      expect(await s.cachedLookup('d' * 32), isNull);
+      expect(await s.cachedLookup('e' * 32), isNull);
+      expect(await s.cachedLookup('f' * 32), isNotNull);
+    });
+
     test('decision entries are validated: a code or provider of another '
         'shape is refused on write and dropped on read', () async {
       final s = state();
@@ -216,6 +400,7 @@ void main() {
         assistMissDocument,
         assistJobsDocument,
         assistDecisionsDocument,
+        assistCacheDocument,
       ]) {
         file(name)
           ..parent.createSync(recursive: true)
@@ -225,6 +410,7 @@ void main() {
       expect(await s.misses(), isEmpty);
       expect(await s.jobs(), isEmpty);
       expect(await s.decisions(), isEmpty);
+      expect(await s.cachedLookup('a' * 32), isNull);
       file(assistUnseenDocument).writeAsStringSync(
         jsonEncode({
           'v': 99,
@@ -265,6 +451,7 @@ void main() {
           'assist_decisions',
           'assist_casmiss',
           'assist_jobs',
+          'assist_cache',
         ]) {
           expect(src, isNot(contains(banned)), reason: '${f.path}: $banned');
         }

@@ -21,9 +21,20 @@
 ///         was dropped because they changed meanwhile (compare-and-set
 ///         miss); at [assistMissesBeforeDenylist] the meal is skipped from
 ///         then on; 3 d, newest 200;
-///       - 'assist_jobs'      {jobs: [{meal_id, job_id, req_hash, attempts,
-///         next_at, at}]}: Claude Plan lookups the owner's server is still
-///         running; 24 h (the server keeps a job that long), newest 50.
+///       - 'assist_jobs'      {jobs: [{meal_id, job_id?, req_hash, attempts,
+///         next_at, at, place?, manual?}]}: Claude Plan lookups the owner's server is
+///         still running (with a job_id), and meals waiting for their next
+///         try after a transient failure (without one; design R6c: 5 min,
+///         30 min, 2 h, at most [assistMaxRetries] retries); 24 h (the
+///         server keeps a job that long), newest 50. `place` is what the
+///         location path found ([AssistPlaceContext]: chain keys and flags,
+///         never a coordinate, cell or place name), so a poll, a resubmit
+///         or a retry never reads the photo's position again;
+///       - 'assist_cache'     {entries: [{key, chain_key, names, provider,
+///         result, cited_urls, evidence, at}]}: finished lookups, keyed by
+///         the chain and the meal's item names ([AssistCachedLookup]), so
+///         the same meal at the same chain is never looked up twice; 30 d,
+///         newest 200 (design R6c). Not used for a later Gemini path (L1).
 ///
 /// Meal ids are row ids of this phone's database: they name no place and
 /// no restaurant. Nothing here is exported, backed up or logged. Reads never
@@ -38,7 +49,12 @@ import 'dart:convert';
 
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/chain_match.dart' show chainByKey;
 import '../../core/coerce.dart' show isoDate;
+import '../../core/restaurant_assist_logic.dart'
+    show AssistEvidence, AssistLookup;
+import '../../core/restaurant_lookup_contract.dart'
+    show kLookupMaxChains, kLookupMaxItems;
 import '../local_store.dart';
 import 'clients/lookup_client.dart' show LookupCost;
 import 'clients/lookup_cost.dart' show LookupBudget;
@@ -141,6 +157,7 @@ const String assistUnseenDocument = 'assist_unseen';
 const String assistDecisionsDocument = 'assist_decisions';
 const String assistMissDocument = 'assist_casmiss';
 const String assistJobsDocument = 'assist_jobs';
+const String assistCacheDocument = 'assist_cache';
 
 /// Every document's schema version.
 const int assistLocalVersion = 1;
@@ -162,10 +179,39 @@ const int assistJobsCap = 50;
 /// The owner's server keeps a job's result for 24 h (R3b).
 const Duration assistJobTtl = Duration(hours: 24);
 
+/// After a transient failure (busy, rate limited, a timeout, a 5xx) a
+/// meal's lookup is tried again at most this many times; one more such
+/// failure and it is 'unavailable' (design R6c).
+const int assistMaxRetries = 3;
+
+/// The wait before each retry, in order (design R6c: 5 min, 30 min, 2 h).
+const List<Duration> assistRetryDelays = [
+  Duration(minutes: 5),
+  Duration(minutes: 30),
+  Duration(hours: 2),
+];
+
+/// The on-device lookup cache (design R6c): 30 days, the newest 200.
+const Duration assistCacheTtl = Duration(days: 30);
+const int assistCacheCap = 200;
+
+/// One cache entry's most bytes as stored: 200 of them stay well under the
+/// store's document limit (local_store.dart localDocumentMaxBytes). A
+/// bigger answer is simply not cached.
+const int assistCacheEntryMaxBytes = 8000;
+
+/// Grounding text kept per cache entry, all pieces together (characters).
+/// Cutting text can only lose a number a check would have found, so a
+/// cached answer can only ever be judged more strictly, never less.
+const int assistCacheEvidenceMaxChars = 3000;
+const int assistCacheMaxEvidence = 3;
+const int assistCacheMaxCitedUrls = 20;
+
 final RegExp _codeRe = RegExp(r'^[a-z0-9_]{1,40}$');
 final RegExp _providerRe = RegExp(r'^[a-z0-9_]{0,20}$');
 final RegExp _jobIdRe = RegExp(r'^[A-Za-z0-9_-]{8,64}$');
 final RegExp _hashRe = RegExp(r'^[0-9a-f]{8,64}$');
+final RegExp _cacheKeyRe = RegExp(r'^[0-9a-f]{32}$');
 
 /// A kcal value worth logging: a whole number 0..20000.
 int? _kcal(Object? v) {
@@ -225,27 +271,259 @@ final class AssistDecisionEntry {
   }
 }
 
-/// A Claude Plan lookup the owner's server is still running for a meal.
+/// What the location path (design R6c) found for a meal, kept with its job
+/// or retry record: chain keys of OUR table and two flags. Never a
+/// coordinate, a ~100 m cell, a place name, a category or a distance —
+/// it says which table chains the request named because of the photo's
+/// position, which is what the request itself already told its recipient.
+final class AssistPlaceContext {
+  const AssistPlaceContext({
+    this.chains = const [],
+    this.picked,
+    this.confirmed = const {},
+    this.blocked = const {},
+    this.verified = false,
+    this.dense = false,
+  });
+
+  /// The chains the location adds to the request, best first: the
+  /// auto-picked chain alone when there is one (PlaceMatch
+  /// .lookupChainKeys), at most [kLookupMaxChains].
+  final List<String> chains;
+
+  /// The auto-picked chain (AssistContext.placeChainKey), or null.
+  final String? picked;
+
+  /// Of [chains], those the user confirmed at the spot.
+  final Set<String> confirmed;
+
+  /// Chains of the request the user blocked at the spot.
+  final Set<String> blocked;
+
+  /// The fix is trusted (AssistContext.placeVerified).
+  final bool verified;
+
+  /// The dense-area guard tripped (AssistContext.dense).
+  final bool dense;
+
+  /// This context as far as [requestChains] (the composed request's
+  /// chains) carries it: a chain the request had no room for is no
+  /// location evidence (nor a pick), and only the request's chains can be
+  /// blocked for it.
+  AssistPlaceContext within(List<String> requestChains) {
+    final kept = [
+      for (final k in chains)
+        if (requestChains.contains(k)) k,
+    ];
+    return AssistPlaceContext(
+      chains: List.unmodifiable(kept),
+      picked: kept.contains(picked) ? picked : null,
+      confirmed: Set.unmodifiable(confirmed.where(kept.contains)),
+      blocked: Set.unmodifiable(blocked.where(requestChains.contains)),
+      verified: verified,
+      dense: dense,
+    );
+  }
+
+  Map<String, Object?> toJson() => {
+    'chains': chains,
+    'picked': ?picked,
+    'confirmed': [...confirmed]..sort(),
+    'blocked': [...blocked]..sort(),
+    'verified': verified,
+    'dense': dense,
+  };
+
+  /// Null for anything that is not a well-formed context of table keys.
+  static AssistPlaceContext? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    List<String>? keys(Object? v) {
+      if (v is! List || v.length > kLookupMaxChains * 4) return null;
+      final out = <String>[];
+      for (final k in v) {
+        if (k is! String || chainByKey(k) == null) return null;
+        if (!out.contains(k)) out.add(k);
+      }
+      return out;
+    }
+
+    final chains = keys(raw['chains']);
+    final confirmed = keys(raw['confirmed'] ?? const []);
+    final blocked = keys(raw['blocked'] ?? const []);
+    final picked = raw['picked'];
+    final verified = raw['verified'];
+    final dense = raw['dense'];
+    if (chains == null ||
+        chains.length > kLookupMaxChains ||
+        confirmed == null ||
+        blocked == null ||
+        (picked != null && (picked is! String || !chains.contains(picked))) ||
+        verified is! bool ||
+        dense is! bool) {
+      return null;
+    }
+    return AssistPlaceContext(
+      chains: List.unmodifiable(chains),
+      picked: picked as String?,
+      confirmed: Set.unmodifiable(confirmed.where(chains.contains)),
+      blocked: Set.unmodifiable(blocked),
+      verified: verified,
+      dense: dense,
+    );
+  }
+}
+
+/// A meal's lookup in progress: a Claude Plan job the owner's server is
+/// still running ([jobId] set), or a lookup waiting for its next try after
+/// a transient failure ([jobId] null; design R6c).
 final class AssistJob {
   const AssistJob({
-    required this.jobId,
+    this.jobId,
     required this.reqHash,
     required this.at,
     required this.nextAt,
     this.attempts = 0,
+    this.place,
+    this.manual = false,
   });
 
-  final String jobId;
+  /// The server's job id; null for a retry record.
+  final String? jobId;
 
   /// The hash of the request the job was submitted for (meal_assist.dart
   /// lookupRequestHash): a meal whose request changed since is no longer
   /// what the job answers.
   final String reqHash;
+
+  /// Tries that ended in a transient failure so far.
   final int attempts;
+
+  /// Not asked about (polled or tried) again before this.
   final DateTime nextAt;
 
-  /// When the job was submitted.
+  /// When the job was submitted (a retry record: the first try).
   final DateTime at;
+
+  /// What the location path found for the request, or null when it named
+  /// no chain from the location.
+  final AssistPlaceContext? place;
+
+  /// The editor's lookup (MealAssist.lookupNow): the sweep polls it
+  /// whatever the triggers say, and writes its answer as a manual one.
+  final bool manual;
+
+  /// A job the server is running.
+  bool get isPending => jobId != null;
+}
+
+/// A finished lookup kept on the phone (design R6c, the 'assist_cache'
+/// document). [key] is meal_assist.dart assistCacheKey: the chain the
+/// answer chose and the meal's item names, sorted. [names] are those names
+/// in the order the looked-up request listed them, so the answer's
+/// item_index can be moved onto another meal's order of the same items.
+final class AssistCachedLookup {
+  const AssistCachedLookup({
+    required this.key,
+    required this.chainKey,
+    required this.names,
+    required this.lookup,
+    required this.at,
+  });
+
+  final String key;
+  final String chainKey;
+  final List<String> names;
+
+  /// The answer as decideAssist reads it (provider, result, the search's
+  /// URLs and its text for the source).
+  final AssistLookup lookup;
+  final DateTime at;
+
+  Map<String, Object?> toJson() => {
+    'key': key,
+    'chain_key': chainKey,
+    'names': names,
+    'provider': lookup.provider,
+    'result': lookup.result,
+    'cited_urls': lookup.citedUrls,
+    'evidence': [
+      for (final e in lookup.evidence)
+        {
+          'url': e.url,
+          'text': e.text,
+          'verbatim': e.verbatim,
+          'page_age': ?e.pageAge,
+        },
+    ],
+    'at': at.toUtc().toIso8601String(),
+  };
+
+  /// Null for anything that is not a well-formed entry.
+  static AssistCachedLookup? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final key = raw['key'];
+    final chainKey = raw['chain_key'];
+    final names = raw['names'];
+    final provider = raw['provider'];
+    final result = raw['result'];
+    final cited = raw['cited_urls'];
+    final evidence = raw['evidence'];
+    final at = DateTime.tryParse('${raw['at']}');
+    if (key is! String ||
+        !_cacheKeyRe.hasMatch(key) ||
+        chainKey is! String ||
+        chainByKey(chainKey) == null ||
+        names is! List ||
+        names.isEmpty ||
+        names.length > kLookupMaxItems ||
+        names.any((n) => n is! String) ||
+        provider is! String ||
+        !_providerRe.hasMatch(provider) ||
+        result is! Map ||
+        result['chain_key'] != chainKey ||
+        cited is! List ||
+        cited.any((u) => u is! String) ||
+        evidence is! List ||
+        at == null) {
+      return null;
+    }
+    final pieces = <AssistEvidence>[];
+    for (final e in evidence.take(assistCacheMaxEvidence)) {
+      if (e is! Map) return null;
+      final url = e['url'];
+      final text = e['text'];
+      final verbatim = e['verbatim'];
+      final age = e['page_age'];
+      if (url is! String ||
+          text is! String ||
+          verbatim is! bool ||
+          (age != null && age is! String)) {
+        return null;
+      }
+      pieces.add(
+        AssistEvidence(
+          url: url,
+          text: text,
+          verbatim: verbatim,
+          pageAge: age as String?,
+        ),
+      );
+    }
+    return AssistCachedLookup(
+      key: key,
+      chainKey: chainKey,
+      names: List.unmodifiable(names.cast<String>()),
+      lookup: AssistLookup(
+        result: Map<String, dynamic>.from(result),
+        provider: provider,
+        citedUrls: List.unmodifiable(
+          cited.cast<String>().take(assistCacheMaxCitedUrls),
+        ),
+        evidence: List.unmodifiable(pieces),
+      ),
+      at: at,
+    );
+  }
 }
 
 class AssistLocalState {
@@ -433,21 +711,29 @@ class AssistLocalState {
         final attempts = e['attempts'];
         final at = DateTime.tryParse('${e['at']}');
         final next = DateTime.tryParse('${e['next_at']}');
+        final rawPlace = e['place'];
+        final place = rawPlace == null
+            ? null
+            : AssistPlaceContext.fromJson(rawPlace);
         if (id == null ||
-            job is! String ||
-            !_jobIdRe.hasMatch(job) ||
+            (job != null && (job is! String || !_jobIdRe.hasMatch(job))) ||
             hash is! String ||
             !_hashRe.hasMatch(hash) ||
             at == null ||
-            next == null) {
+            next == null ||
+            (rawPlace != null && place == null)) {
           continue;
         }
         out[id] = AssistJob(
-          jobId: job,
+          jobId: job as String?,
           reqHash: hash,
           at: at,
           nextAt: next,
-          attempts: attempts is int && attempts >= 0 ? attempts : 0,
+          attempts: attempts is int && attempts >= 0
+              ? (attempts > assistMaxRetries ? assistMaxRetries : attempts)
+              : 0,
+          place: place,
+          manual: e['manual'] == true,
         );
       }
       return out;
@@ -461,11 +747,13 @@ class AssistLocalState {
       for (final e in jobs.entries)
         <String, Object?>{
           'meal_id': e.key,
-          'job_id': e.value.jobId,
+          'job_id': ?e.value.jobId,
           'req_hash': e.value.reqHash,
           'attempts': e.value.attempts,
           'next_at': e.value.nextAt.toUtc().toIso8601String(),
           'at': e.value.at.toUtc().toIso8601String(),
+          'place': ?e.value.place?.toJson(),
+          if (e.value.manual) 'manual': true,
         },
     ];
     if (entries.isEmpty) return _store.delete(assistJobsDocument);
@@ -475,7 +763,9 @@ class AssistLocalState {
   }
 
   Future<bool> putJob(int mealId, AssistJob job) => _serial(() async {
-    if (!_jobIdRe.hasMatch(job.jobId) || !_hashRe.hasMatch(job.reqHash)) {
+    final id = job.jobId;
+    if ((id != null && !_jobIdRe.hasMatch(id)) ||
+        !_hashRe.hasMatch(job.reqHash)) {
       return false;
     }
     final all = await jobs();
@@ -499,7 +789,58 @@ class AssistLocalState {
     return _writeJobs(all);
   }, false);
 
-  /// Mode Off: every pending job is forgotten.
+  /// Mode Off: every pending job and retry record is forgotten.
   Future<bool> clearJobs() =>
       _serial(() => _store.delete(assistJobsDocument), false);
+
+  // ── The lookup cache ──
+
+  Future<List<AssistCachedLookup>> _cacheEntries() async {
+    final out = <AssistCachedLookup>[];
+    for (final e in await _entries(
+      assistCacheDocument,
+      'entries',
+      'at',
+      assistCacheTtl,
+    )) {
+      final entry = AssistCachedLookup.fromJson(e);
+      if (entry != null) out.add(entry);
+    }
+    return out;
+  }
+
+  /// The cached answer for [key], or null (none, past 30 days, unreadable).
+  Future<AssistCachedLookup?> cachedLookup(String key) async {
+    try {
+      for (final e in (await _cacheEntries()).reversed) {
+        if (e.key == key) return e;
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Keeps [entry] (replacing one with its key), the newest
+  /// [assistCacheCap]. False — nothing kept — for an entry whose JSON is
+  /// over [assistCacheEntryMaxBytes].
+  Future<bool> putCachedLookup(AssistCachedLookup entry) => _serial(() async {
+    final json = entry.toJson();
+    if (utf8.encode(jsonEncode(json)).length > assistCacheEntryMaxBytes) {
+      return false;
+    }
+    if (AssistCachedLookup.fromJson(json) == null) return false;
+    final entries = [
+      for (final e in await _cacheEntries())
+        if (e.key != entry.key) e.toJson(),
+      json,
+    ];
+    return _store.write(assistCacheDocument, {
+      'entries': capNewest(entries, assistCacheCap, field: 'at'),
+    }, version: assistLocalVersion);
+  }, false);
+
+  /// Forgets every cached answer.
+  Future<bool> clearCache() =>
+      _serial(() => _store.delete(assistCacheDocument), false);
 }
