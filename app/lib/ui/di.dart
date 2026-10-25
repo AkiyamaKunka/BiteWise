@@ -20,6 +20,7 @@ import '../services/analyzer/platform_decode.dart' show isEngineBackgrounded;
 import '../services/analyzer/provider_analyzers.dart'
     show MultiProviderAnalyzer, ServerAnalyzer;
 import '../services/assist/assist_local_state.dart';
+import '../services/assist/assist_places_store.dart';
 import '../services/assist/meal_assist.dart';
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
@@ -35,7 +36,9 @@ import '../services/photo/glasses.dart' show captureMetaFor;
 import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../services/photo/photo_library.dart';
+import '../services/photo/photo_location.dart';
 import '../services/photo/share_intake.dart';
+import '../services/places/places.dart' show MapKitPlaces;
 import '../services/photo/watcher.dart';
 import '../services/report/builders.dart';
 import '../services/report/notifications.dart';
@@ -251,6 +254,8 @@ class AppServices {
     // request (design R6a); app engine only — background_glue builds none.
     final mealInUse = MealInUseRegistry();
 
+    final photoLibrary = PhotoManagerLibrary();
+
     // The restaurant assist (design R6b): saved meals are enriched later,
     // in the foreground only, when the pipeline is idle and no analyzer
     // call is in flight. The mode and the consent are R7a's settings
@@ -271,6 +276,13 @@ class AppServices {
       inForeground: appEngineInForeground,
       country: () => regionOfLocale(Platform.localeName),
       repliesInChinese: () => settings.repliesInChinese,
+      // The location path (design R6c), iOS only: the photo's position
+      // from the library's record of the asset, Apple Maps' food places
+      // around it (one instance: its rate limit is the engine's), and the
+      // places the user taught. Android reads no photo location: brand-only.
+      location: Platform.isIOS ? PhotoLocationReader(photoLibrary) : null,
+      places: Platform.isIOS ? MapKitPlaces() : null,
+      placesStore: AssistPlacesStore.platform(),
       onApplied: notifyAction == null
           ? null
           : (n) {
@@ -280,7 +292,6 @@ class AppServices {
             },
     );
 
-    final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
     // Permission.photos resolves to READ_MEDIA_IMAGES (SDK 33+ only) and
     // auto-DENIES with no dialog, dead-ending both photo flows on the

@@ -195,6 +195,11 @@ void main() {
         r'inForeground: appEngineInForeground,',
         r'country: \(\) => regionOfLocale\(Platform\.localeName\),',
         r'repliesInChinese: \(\) => settings\.repliesInChinese,',
+        // R6c: the location path is iOS only; Android is brand-only.
+        r'location: Platform\.isIOS \? PhotoLocationReader\(photoLibrary\) '
+            r': null,',
+        r'places: Platform\.isIOS \? MapKitPlaces\(\) : null,',
+        r'placesStore: AssistPlacesStore\.platform\(\),',
       ]) {
         expect(build, _wired(wire), reason: wire);
       }
@@ -220,6 +225,13 @@ void main() {
         'AssistDailyBudget',
         'lookupNow',
         'services/assist/',
+        // R6c: no photo position or places query in the background engine.
+        'PhotoLocationReader',
+        'photo_location',
+        'MapKitPlaces',
+        'PlaceResolver',
+        'services/places/',
+        'AssistPlacesStore',
       ]) {
         expect(glue, isNot(contains(banned)), reason: banned);
       }
