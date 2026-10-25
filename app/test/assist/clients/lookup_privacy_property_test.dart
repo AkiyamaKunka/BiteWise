@@ -4,7 +4,8 @@
 // profile, meal description or image — and only the headers a provider
 // needs. Random raw inputs (with the photo's fix, time and place seeded
 // into them), every supported client, settings seeded with sensitive
-// values.
+// values. The owner's server gets the §4 body itself (no prompt), and over
+// http only the chains printed text names.
 import 'dart:convert';
 import 'dart:math';
 
@@ -14,6 +15,8 @@ import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_clients.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
+import 'package:calorie_tracker/services/assist/clients/server_lookup_client.dart';
+import 'package:calorie_tracker/services/photo/photo_location.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -209,25 +212,29 @@ String _brand(Random r) =>
     r.nextBool() ? _printed[r.nextInt(_printed.length)] : _rand(r, 90);
 
 /// A raw input as a careless caller might hand it to the composer: the
-/// §4 fields, plus the photo's fix, time and place and the profile, at the
-/// top level and inside items and chains.
-LookupRequest _randomRequest(Random r) => LookupRequest.compose({
+/// §4 fields, plus the photo's fix ([lat], [lon], and the [point] itself),
+/// time and place and the profile, at the top level and inside items and
+/// chains.
+LookupRequest _randomRequest(Random r,
+        {String lat = _lat, String lon = _lon, Object? point}) =>
+    LookupRequest.compose({
       'items': [
         for (var i = 0; i < 1 + r.nextInt(15); i++)
           {
             // The fix also rides inside item text, where only the
             // composer's coordinate backstop can stop it.
             'name': switch (r.nextInt(4)) {
-              0 => '${_rand(r, 60)} $_lat, $_lon',
-              1 => '$_lat $_city',
+              0 => '${_rand(r, 60)} $lat, $lon',
+              1 => '$lat $_city',
               _ => _rand(r, 120),
             },
             'qty': r.nextInt(30) - 3,
-            'unit': r.nextInt(4) == 0 ? _lon : _rand(r, 30),
+            'unit': r.nextInt(4) == 0 ? lon : _rand(r, 30),
             'brand': _brand(r),
-            'lat': _lat,
+            'lat': lat,
             'captured_at': _when,
             'meal_description': _profile,
+            'point': ?point,
           },
       ],
       'order_merchant': _brand(r),
@@ -240,8 +247,9 @@ LookupRequest _randomRequest(Random r) => LookupRequest.compose({
       ],
       'country': r.nextBool() ? 'US' : _rand(r, 3),
       'lang': r.nextBool() ? 'zh' : null,
-      'lat': _lat,
-      'lon': _lon,
+      'lat': lat,
+      'lon': lon,
+      'point': ?point,
       'captured_at': _when,
       'city': _city,
       'street': _street,
@@ -361,5 +369,107 @@ void main() {
         expect(wire.contains(k), isFalse);
       }
     }
+  });
+  test('random requests × the owner server, over https and http', () async {
+    SharedPreferences.setMockInitialValues({});
+    final keys = _Keys()..data['server_api_key'] = 'k-srv';
+    final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(), keyStore: keys);
+    await settings.setDietaryProfile(_profile);
+    await settings.setProvider(AiProvider.server);
+
+    final s = ScriptedClient([
+      (req) => http.Response('{"state":"queued","job_id":"job_abcdefgh01"}',
+          202, headers: {'content-type': 'application/json'}),
+    ]);
+    final client = ServerLookupClient(settings, client: s.client);
+    final r = Random(20261024);
+    var sentHttps = 0, sentHttp = 0, heldBack = 0;
+    for (var round = 0; round < 60; round++) {
+      // A fresh photo position each round: its digits, and the point
+      // itself, ride in the raw input.
+      final point = PhotoPoint.tryCreate(
+          r.nextDouble() * 170 - 85, r.nextDouble() * 350 - 175)!;
+      final lat = point.lat.toStringAsFixed(5);
+      final lon = point.lon.toStringAsFixed(5);
+      final req = _randomRequest(r, lat: lat, lon: lon, point: point);
+      for (final https in [true, false]) {
+        await settings.setServerBaseUrl(
+            https ? 'https://srv.example' : 'http://10.0.0.5:5000');
+        final support = client.lookupSupport();
+        expect(support.locationAllowed, https);
+        final before = s.requests.length;
+        await client.submit(req,
+            chainDomains: mcdDomains,
+            expectedRecipient: LookupRecipient.claudePlan,
+            expectedRecipientStamp: support.recipientStamp);
+        final expected = https ? req : req.withoutLocationChains(req.chainKeys);
+        if (s.requests.length == before) {
+          // Held back only when there is nothing the server would run.
+          heldBack++;
+          final named = (expected.body['items'] as List)
+              .any((i) => ((i as Map)['name'] as String).isNotEmpty);
+          expect(!named || expected.chainKeys.isEmpty, isTrue,
+              reason: 'a sendable request was not sent');
+          continue;
+        }
+        https ? sentHttps++ : sentHttp++;
+        final sent = s.requests.last;
+        expect(
+            {'x-api-key', 'content-type', 'x-client-platform'}
+                .containsAll(sent.headers.keys.map((k) => k.toLowerCase())),
+            isTrue,
+            reason: 'headers ${sent.headers.keys}');
+        final body = jsonDecode(sent.body) as Map<String, dynamic>;
+        expect(body.remove('backend'), 'claude');
+        expect(body.keys.toSet().difference(
+            {'items', 'order_merchant', 'chains', 'country', 'lang'}), isEmpty);
+        // The composed §4 body, byte for byte — brand-only over http.
+        expect(jsonEncode(body), expected.toJson());
+        for (final item in body['items'] as List) {
+          expect((item as Map).keys.toSet(), {'name', 'qty', 'unit', 'brand'});
+        }
+        final named = <String?>{
+          for (final item in body['items'] as List)
+            matchChain((item as Map)['brand'] as String),
+          matchChain(body['order_merchant'] as String),
+        };
+        for (final c in body['chains'] as List) {
+          expect((c as Map).keys.toSet(), {'key', 'name', 'size'});
+          expect(c['name'], chainByKey(c['key'] as String)?.name);
+          if (!https) {
+            expect(named, contains(c['key']),
+                reason: 'a location chain went out over http');
+          }
+        }
+        final wire = sent.body;
+        for (final secret in [
+          lat,
+          lon,
+          point.lat.toStringAsFixed(4),
+          point.lon.toStringAsFixed(4),
+          _when,
+          _city,
+          _street,
+          _profile,
+          'k-srv',
+          'srv.example',
+        ]) {
+          expect(wire.contains(secret), isFalse, reason: secret);
+        }
+        expect(RegExp(r'\d{4}-\d\d-\d\dT\d\d:\d\d').hasMatch(wire), isFalse,
+            reason: 'an ISO timestamp');
+        expect(wire.contains('distance'), isFalse);
+        expect(wire.contains('image'), isFalse);
+        expect(wire.contains('base64'), isFalse);
+        // The server composes the prompt itself: none leaves the phone.
+        expect(wire.contains('<data>'), isFalse);
+        expect(wire.contains('prompt'), isFalse);
+      }
+    }
+    // The property ran on real traffic both ways, not on held-back calls.
+    expect(sentHttps, greaterThan(20));
+    expect(sentHttp, greaterThan(10));
+    expect(heldBack, greaterThan(0));
   });
 }

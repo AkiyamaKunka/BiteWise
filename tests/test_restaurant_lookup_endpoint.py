@@ -1,9 +1,11 @@
 """POST /api/restaurant_lookup and /api/restaurant_lookup/status
 (design stage R3b, data_contracts section 6)."""
 import copy
+import json
 import logging
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -15,6 +17,11 @@ from conftest import _ledger_rows, _meals
 from lookup_fakes import FOUND, REQUEST_BODY
 
 KEY = {"X-API-Key": "secret-key", "X-Client-Platform": "app"}
+
+# The app's ServerLookupClient tests send and read these files
+# (app/test/assist/clients/server_lookup_client_test.dart).
+APP_FIXTURES = (Path(__file__).resolve().parents[1] / "app" / "test"
+                / "assist" / "clients" / "fixtures")
 
 
 class FakeRunner:
@@ -109,6 +116,24 @@ def test_accepts_polls_and_then_serves_the_cache_purely(lookup):
     # Pure: no meal row, no ledger entry, no Telegram message.
     assert _meals() == 0 and _ledger_rows() == 0
     assert client.bot.messages == []
+
+
+def test_the_app_clients_request_and_done_reply_are_this_servers(lookup):
+    """The app's server lookup client (R5a) sends server_request.json and
+    reads server_done.json as this endpoint's done reply. Both are pinned
+    to the real endpoint here, so a server change that moves a key fails
+    in this suite, not on the phone."""
+    client, runner, _ = lookup
+    sent = json.loads(
+        (APP_FIXTURES / "server_request.json").read_text(encoding="utf-8"))
+    resp = _post(client, sent)
+    assert resp.status_code == 202
+    done = _poll_done(client, resp.get_json()["job_id"])
+    expected = json.loads(
+        (APP_FIXTURES / "server_done.json").read_text(encoding="utf-8"))
+    expected["job_id"] = done["job_id"]
+    assert done == expected
+    assert len(runner.requests) == 1
 
 
 def test_the_runner_only_ever_sees_the_rebuilt_request(lookup):

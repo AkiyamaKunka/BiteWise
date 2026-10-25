@@ -192,6 +192,43 @@ void main() {
       expect(server.submits, 0);
     });
 
+    test('a consent stamp is checked against the same reading and passed on',
+        () async {
+      final s = _anything();
+      final router = ProviderLookupRouter(
+          await _settings(AiProvider.anthropic),
+          client: s.client);
+      expect(router.lookupSupport().recipientStamp, 'anthropic');
+      final wrong = await router.submit(bigMacRequest,
+          expectedRecipient: LookupRecipient.anthropic,
+          expectedRecipientStamp: 'claude_plan:0a1b2c3d');
+      expect(wrong.failure!.code, LookupFailureCode.consentChanged);
+      expect(s.requests, isEmpty);
+      // The direct client itself cross-checks a stamp too.
+      final direct = await router.active.submit(bigMacRequest,
+          expectedRecipientStamp: 'openrouter');
+      expect(direct.failure!.code, LookupFailureCode.consentChanged);
+      expect(s.requests, isEmpty);
+      final right = await router.submit(bigMacRequest,
+          expectedRecipient: LookupRecipient.anthropic,
+          expectedRecipientStamp: 'anthropic');
+      expect(right.kind, LookupOutcomeKind.done, reason: '${right.failure}');
+
+      final server = _FakeServer();
+      final viaServer = ProviderLookupRouter(
+          await _settings(AiProvider.server),
+          serverClient: server);
+      await viaServer.submit(bigMacRequest,
+          expectedRecipient: LookupRecipient.claudePlan,
+          expectedRecipientStamp: 'claude_plan:0a1b2c3d');
+      expect(server.stamps, ['claude_plan:0a1b2c3d']);
+      final stale = await viaServer.submit(bigMacRequest,
+          expectedRecipient: LookupRecipient.claudePlan,
+          expectedRecipientStamp: 'claude_plan:ffffffff');
+      expect(stale.failure!.code, LookupFailureCode.consentChanged);
+      expect(server.submits, 1);
+    });
+
     test('a direct client cross-checks a named recipient', () async {
       final s = _anything();
       final settings = await _settings(AiProvider.openrouter);
@@ -216,17 +253,21 @@ void main() {
 
 class _FakeServer implements LookupClient {
   int submits = 0;
+  final List<String?> stamps = [];
   @override
   LookupSupport lookupSupport() => const LookupSupport(
       supported: true,
       recipient: LookupRecipient.claudePlan,
-      locationAllowed: false);
+      locationAllowed: false,
+      recipientHostTag: '0a1b2c3d');
   @override
   Future<LookupOutcome> submit(LookupRequest request,
       {List<String> chainDomains = const [],
       LookupCancelToken? cancel,
-      LookupRecipient? expectedRecipient}) async {
+      LookupRecipient? expectedRecipient,
+      String? expectedRecipientStamp}) async {
     submits++;
+    stamps.add(expectedRecipientStamp);
     return const LookupOutcome(
         kind: LookupOutcomeKind.pending,
         provider: LookupRecipient.claudePlan,

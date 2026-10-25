@@ -141,10 +141,15 @@ abstract class HttpLookupClient implements LookupClient {
   Future<LookupOutcome> submit(LookupRequest request,
       {List<String> chainDomains = const [],
       LookupCancelToken? cancel,
-      LookupRecipient? expectedRecipient}) async {
+      LookupRecipient? expectedRecipient,
+      String? expectedRecipientStamp}) async {
     if (expectedRecipient != null && expectedRecipient != recipient) {
       // Zero calls, and not counted against the day.
       return LookupOutcome.consentChanged(expectedRecipient, recipient);
+    }
+    final stamp = lookupSupport().recipientStamp;
+    if (expectedRecipientStamp != null && expectedRecipientStamp != stamp) {
+      return LookupOutcome.consentStampChanged(expectedRecipientStamp, stamp);
     }
     final run = LookupRun(policy, cancel);
     final key = (apiKey() ?? '').trim();

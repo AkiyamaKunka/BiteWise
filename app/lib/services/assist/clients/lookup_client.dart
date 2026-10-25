@@ -1,12 +1,16 @@
-/// The direct-provider restaurant lookup interface (design R5b + L2).
+/// The restaurant lookup interface (design R5a, R5b + L2).
 ///
 /// Method names and outcome kinds follow data_contracts §7
 /// (`RestaurantLookup {lookupSupport(); submit(LookupRequest);
 /// poll(jobId)}`, `LookupOutcome{kind, jobId, result, citedUrls, evidence,
-/// provider, searches}`), so R5a's `RestaurantLookup` in core/contracts.dart
-/// can be implemented by these clients as they are. Direct clients are
-/// synchronous: [LookupClient.submit] answers done or a failure, never
-/// pending, and [LookupClient.poll] is unsupported.
+/// provider, searches}`). [LookupClient] IS the design's
+/// `RestaurantLookup` (one contract, no second copy in core/contracts.dart):
+/// the direct clients, the owner's server job client
+/// (server_lookup_client.dart) and the provider router all implement it,
+/// and MultiProviderAnalyzer forwards it to the active provider. Direct
+/// clients are synchronous: [LookupClient.submit] answers done or a
+/// failure, never pending, and [LookupClient.poll] is unsupported. The
+/// server answers pending with a job id and is polled.
 library;
 
 import 'dart:async';
@@ -40,8 +44,18 @@ abstract final class LookupUnsupportedReason {
   /// no-cache path (design L1), not built yet.
   static const String needsL1 = 'needs_l1_gemini_grounding';
 
-  /// The owner's server answers lookups as async jobs (R5a), not here.
+  /// The router was built without the owner's server job client (R5a's
+  /// ServerLookupClient, which MultiProviderAnalyzer wires in).
   static const String serverJobs = 'server_jobs_r5a';
+
+  /// Claude Plan runs lookups only on the claude backend (design D18): the
+  /// glm and doubao backends have no search the server can use, and a
+  /// lookup must never spend a plan the user did not choose.
+  static const String serverBackendNotClaude = 'server_backend_not_claude';
+
+  /// No usable server address (empty, or not an http(s) URL with a host):
+  /// there is no recipient to name.
+  static const String noServerAddress = 'no_server_address';
 
   /// OpenAI / xAI clients exist but stay off until the owner signs off on
   /// their per-call cost (design L2).
@@ -54,21 +68,36 @@ class LookupSupport {
     required this.recipient,
     required this.locationAllowed,
     this.reason,
+    this.recipientHostTag,
   });
 
   const LookupSupport.unsupported(String this.reason)
       : supported = false,
         recipient = LookupRecipient.none,
-        locationAllowed = false;
+        locationAllowed = false,
+        recipientHostTag = null;
 
   final bool supported;
   final LookupRecipient recipient;
 
   /// Whether location-derived chains may be in the request. A direct
   /// provider is reached over https from the phone, so the client allows
-  /// it; consent and the iOS-only location path are the caller's gates.
+  /// it; the owner's server only when its address is https:// (design
+  /// D17). Consent and the iOS-only location path are the caller's gates.
   final bool locationAllowed;
   final String? reason;
+
+  /// Claude Plan only: the first 8 hex characters of SHA-256 of the
+  /// server's host name, lowercased (design D19). Never the host itself.
+  final String? recipientHostTag;
+
+  /// What a consent is stamped with and checked against (design D19, the
+  /// `restaurant_assist_consent_recipient` setting): the recipient's wire
+  /// id, plus `:<host tag>` for Claude Plan, so a different server is a
+  /// different recipient. `none` when unsupported.
+  String get recipientStamp => recipientHostTag == null
+      ? recipient.wire
+      : '${recipient.wire}:$recipientHostTag';
 }
 
 /// data_contracts §7 kinds. Direct clients use done, unsupported,
@@ -253,8 +282,26 @@ class LookupOutcome {
                     '${actual.wire}'),
       );
 
+  /// Nothing sent: the caller's consent is stamped [expected] (or it
+  /// named no stamp), and the recipient is [actual] now — for Claude Plan,
+  /// the server address changed to another host since the consent.
+  /// Permanent until the user answers the consent sheet again.
+  factory LookupOutcome.consentStampChanged(String? expected, String actual) =>
+      LookupOutcome(
+        kind: LookupOutcomeKind.unsupported,
+        provider: LookupRecipient.none,
+        failure: LookupFailure(LookupFailureCode.consentChanged,
+            transient: false,
+            message: expected == null
+                ? 'no consented recipient stamp named; recipient is $actual'
+                : 'consent covers $expected; recipient is now $actual'),
+      );
+
   final LookupOutcomeKind kind;
   final LookupRecipient provider;
+
+  /// The server job to poll, on [LookupOutcomeKind.pending]. A pending
+  /// outcome WITHOUT one is "resubmit" ([needsResubmit]).
   final String? jobId;
 
   /// Present only for [LookupOutcomeKind.done].
@@ -284,6 +331,12 @@ class LookupOutcome {
   final Map<String, dynamic>? raw;
 
   bool get isDone => kind == LookupOutcomeKind.done && result != null;
+
+  /// The server no longer knows the polled job (never seen, expired after
+  /// 24 h, or lost in a restart): submit the same request again. A
+  /// resubmit of a request the server still holds is the same job, and
+  /// one it finished is a cache hit with no new run.
+  bool get needsResubmit => kind == LookupOutcomeKind.pending && jobId == null;
 
   /// This outcome as lane B's acceptance input (decideAssist): the answer
   /// exactly as the model sent it, the recipient as
@@ -328,15 +381,23 @@ abstract class LookupClient {
   /// with zero HTTP calls. A direct client's recipient is fixed, so for it
   /// the argument is a cross-check; `ProviderLookupRouter` follows Settings
   /// and REQUIRES it (a null is refused the same way), because the provider
-  /// can change between the consent check and the send. Claude Plan's
-  /// consent also names the server host; binding that is the server job
-  /// client's job (R5a).
+  /// can change between the consent check and the send.
+  ///
+  /// [expectedRecipientStamp] is the consent's stamp
+  /// ([LookupSupport.recipientStamp]). When given and not the stamp of
+  /// the recipient this call would reach, the outcome is
+  /// [LookupFailureCode.consentChanged] with zero HTTP calls. Claude
+  /// Plan's stamp names the server host, and the server job client
+  /// REQUIRES it (a null is refused), because the server address can
+  /// change between the consent check and the send.
   Future<LookupOutcome> submit(LookupRequest request,
       {List<String> chainDomains = const [],
       LookupCancelToken? cancel,
-      LookupRecipient? expectedRecipient});
+      LookupRecipient? expectedRecipient,
+      String? expectedRecipientStamp});
 
-  /// Async jobs exist only on the owner's server (R5a).
+  /// Async jobs exist only on the owner's server (R5a). Sends nothing but
+  /// the job id.
   Future<LookupOutcome> poll(String jobId);
 }
 
@@ -352,7 +413,8 @@ class UnsupportedLookupClient implements LookupClient {
   Future<LookupOutcome> submit(LookupRequest request,
           {List<String> chainDomains = const [],
           LookupCancelToken? cancel,
-          LookupRecipient? expectedRecipient}) async =>
+          LookupRecipient? expectedRecipient,
+          String? expectedRecipientStamp}) async =>
       LookupOutcome.unsupported(reason);
 
   @override

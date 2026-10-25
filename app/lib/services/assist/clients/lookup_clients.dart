@@ -6,7 +6,8 @@
 ///   openrouter → OpenRouterLookupClient (user's model, Exa pinned)
 ///   openai     → OpenAiLookupClient   ┐ built and tested, but unsupported
 ///   xai        → XaiLookupClient      ┘ until the owner signs off on cost
-///   server     → R5a's job client (passed in), unsupported without it
+///   server     → R5a's job client (passed in; MultiProviderAnalyzer
+///                passes ServerLookupClient), unsupported without it
 ///   gemini     → unsupported until L1 (Search Suggestions + no cache)
 ///   qwen, doubao, glm, deepseek → unsupported: no citable US search
 /// Unsupported providers make zero HTTP calls.
@@ -104,21 +105,32 @@ class ProviderLookupRouter implements LookupClient {
   /// awaiting something after its consent check), or the caller named no
   /// recipient at all, the answer is [LookupFailureCode.consentChanged] with
   /// zero HTTP calls. The caller then re-reads [lookupSupport] and asks for
-  /// consent again (design D19: a new recipient pauses the assist).
+  /// consent again (design D19: a new recipient pauses the assist). A
+  /// given [expectedRecipientStamp] is checked against the same reading
+  /// and passed on (the server job client re-checks it against the
+  /// address it sends to, and requires it).
   @override
   Future<LookupOutcome> submit(LookupRequest request,
       {List<String> chainDomains = const [],
       LookupCancelToken? cancel,
-      LookupRecipient? expectedRecipient}) async {
+      LookupRecipient? expectedRecipient,
+      String? expectedRecipientStamp}) async {
     final client = active;
-    final now = client.lookupSupport().recipient;
+    final support = client.lookupSupport();
+    final now = support.recipient;
     if (expectedRecipient == null || expectedRecipient != now) {
       return LookupOutcome.consentChanged(expectedRecipient, now);
+    }
+    if (expectedRecipientStamp != null &&
+        expectedRecipientStamp != support.recipientStamp) {
+      return LookupOutcome.consentStampChanged(
+          expectedRecipientStamp, support.recipientStamp);
     }
     return client.submit(request,
         chainDomains: chainDomains,
         cancel: cancel,
-        expectedRecipient: expectedRecipient);
+        expectedRecipient: expectedRecipient,
+        expectedRecipientStamp: expectedRecipientStamp);
   }
 
   @override

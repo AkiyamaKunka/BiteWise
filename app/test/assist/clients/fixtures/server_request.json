@@ -1,0 +1,20 @@
+{
+  "items": [
+    {
+      "name": "Chicken burrito bowl (~500 g)",
+      "qty": 1,
+      "unit": "bowl",
+      "brand": "Chipotle"
+    }
+  ],
+  "order_merchant": "",
+  "chains": [
+    {
+      "key": "chipotle",
+      "name": "Chipotle",
+      "size": "20_plus"
+    }
+  ],
+  "country": "US",
+  "backend": "claude"
+}
