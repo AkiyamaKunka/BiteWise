@@ -18,9 +18,12 @@ class FixMealScreen extends StatefulWidget {
   final NlExecutor executor;
 
   /// For the AI consent before the request (and the last 7 days of meals
-  /// it carries) leaves the phone; null skips the question (tests).
-  final SettingsStore? settings;
-  const FixMealScreen({super.key, required this.executor, this.settings});
+  /// it carries) leaves the phone. Required, so a call site cannot drop
+  /// the question silently; tests that are about something else pass a
+  /// FakeSettings, which allows every recipient.
+  final SettingsStore settings;
+  const FixMealScreen(
+      {super.key, required this.executor, required this.settings});
 
   @override
   State<FixMealScreen> createState() => _FixMealScreenState();
@@ -41,14 +44,11 @@ class _FixMealScreenState extends State<FixMealScreen> {
   Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending || _askingConsent) return;
-    final settings = widget.settings;
-    if (settings != null) {
-      // App Store 5.1.2(i): permission for this AI recipient first.
-      _askingConsent = true;
-      final allowed = await ensureAiConsent(context, settings);
-      _askingConsent = false;
-      if (!allowed || !mounted || _sending) return;
-    }
+    // App Store 5.1.2(i): permission for this AI recipient first.
+    _askingConsent = true;
+    final allowed = await ensureAiConsent(context, widget.settings);
+    _askingConsent = false;
+    if (!allowed || !mounted || _sending) return;
     setState(() => _sending = true);
     try {
       final replies = await widget.executor.handleText(text);

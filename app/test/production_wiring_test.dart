@@ -120,6 +120,32 @@ void main() {
     test('the stuck probe reads the runs and the watermark together', () {
       expect(init(), _wired(r'backgroundScanStuck: backgroundScanStuckNow,'));
     });
+
+    // App Store 5.1.2(i), review run 7: a shared photo waits for the AI
+    // consent through this gate. PR #19 rewrites the same line, and a
+    // merge that keeps its side would send shared photos unasked with
+    // every behavioural test still green (they drive the gate directly).
+    test('a shared photo goes through the AI consent gate, built on the '
+        'app\'s own store and handed to the app shell', () {
+      expect(
+        init(),
+        _wired(
+          r'pipeline\.bindStream\(shareConsent\.gate\('
+          r'shareIntake\.photos\(\)\)\);',
+        ),
+      );
+      expect(
+        init(),
+        isNot(_wired(r'bindStream\(shareIntake\.photos\(\)\)')),
+        reason: 'no second, ungated subscription to the share sheet',
+      );
+      expect(
+        init(),
+        _wired(r'final shareConsent = SharedPhotoConsentGate\(store\);'),
+      );
+      expect(init(), _wired(r'\n\s*settings: store,'));
+      expect(init(), _wired(r'\n\s*sharedPhotoConsent: shareConsent,'));
+    });
   });
 
   group('lib/ui/app.dart (the resume catch-up)', () {

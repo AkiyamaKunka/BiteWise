@@ -596,10 +596,16 @@ class AddTextScreen extends StatefulWidget {
   final MealsDao dao;
 
   /// For the AI consent before the text (and the recent meals it carries)
-  /// leaves the phone; null skips the question (tests).
-  final SettingsStore? settings;
+  /// leaves the phone. Required, so a call site cannot drop the question
+  /// silently (a merge keeping another branch's constructor call fails to
+  /// compile instead); tests that are about something else pass a
+  /// FakeSettings, which allows every recipient.
+  final SettingsStore settings;
   const AddTextScreen(
-      {super.key, required this.executor, required this.dao, this.settings});
+      {super.key,
+      required this.executor,
+      required this.dao,
+      required this.settings});
 
   @override
   State<AddTextScreen> createState() => _AddTextScreenState();
@@ -625,15 +631,12 @@ class _AddTextScreenState extends State<AddTextScreen> {
   Future<void> _describe() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending || _askingConsent) return;
-    final settings = widget.settings;
-    if (settings != null) {
-      // App Store 5.1.2(i): the description and the last 7 days of meals
-      // go to the AI — permission for this recipient first.
-      _askingConsent = true;
-      final allowed = await ensureAiConsent(context, settings);
-      _askingConsent = false;
-      if (!allowed || !mounted || _sending) return;
-    }
+    // App Store 5.1.2(i): the description and the last 7 days of meals go
+    // to the AI — permission for this recipient first.
+    _askingConsent = true;
+    final allowed = await ensureAiConsent(context, widget.settings);
+    _askingConsent = false;
+    if (!allowed || !mounted || _sending) return;
     setState(() {
       _sending = true;
       _error = null;

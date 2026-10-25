@@ -317,6 +317,105 @@ void main() {
     });
   });
 
+  // The screens above are pumped directly. These go through the routes the
+  // app really takes, with a store that was never asked: a call site that
+  // stopped handing the screen the app's store (a merge resolution, say)
+  // would send unasked while every test above stayed green (review run 7).
+  group('the app\'s own routes ask', () {
+    testWidgets('the Meals sheet: Describe a meal and Fix a meal ask, and '
+        'the answer lands in the app\'s store', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final settings = _unasked();
+      final executor = FakeExecutor();
+      await tester.pumpWidget(CalorieTrackerApp(
+          services: makeServices(settings: settings, executor: executor)));
+      await tester.pumpAndSettle();
+
+      Future<void> fromSheet(String tile) async {
+        await tester.tap(find.byKey(const Key('addMealFab')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(Key(tile)));
+        await tester.pumpAndSettle();
+      }
+
+      await fromSheet('addFromText');
+      await tester.enterText(
+          find.byKey(const Key('addTextField')), 'beef noodle soup');
+      await tester.tap(find.byKey(const Key('addTextSend')));
+      await tester.pumpAndSettle();
+      expect(_dialog, findsOneWidget, reason: 'Describe a meal');
+      await _notNow(tester);
+      expect(executor.describedTexts, isEmpty);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+
+      await fromSheet('addFixMeal');
+      await tester.enterText(
+          find.byKey(const Key('fixMealField')), 'the soup was 400 kcal');
+      await tester.tap(find.byKey(const Key('fixMealSend')));
+      await tester.pumpAndSettle();
+      expect(_dialog, findsOneWidget, reason: 'Fix a meal');
+      await _notNow(tester);
+      expect(executor.handledTexts, isEmpty);
+      expect(settings.aiConsentWrites, isEmpty);
+
+      await tester.tap(find.byKey(const Key('fixMealSend')));
+      await tester.pumpAndSettle();
+      await _allow(tester);
+      expect(settings.aiConsentWrites, [('gemini', true)]);
+      expect(executor.handledTexts, ['the soup was 400 kcal']);
+    });
+
+    testWidgets('Settings › Photo Coverage: Log all asks first', (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final library = FakePhotoLibrary()
+        ..assets = [
+          FakeAsset('a2', 'IMG_2.jpg', DateTime(2026, 7, 26, 9), bytesOf(2)),
+        ];
+      final settings = _unasked();
+      final processed = <IntakePhoto>[];
+      await tester.pumpWidget(_app(Scaffold(
+          body: SettingsScreen(
+        settings: settings,
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        photoIntake: FakeIntake(),
+        requestPhotoPermission: () async => true,
+        coverage: CoverageAuditor(
+            library: library,
+            dao: FakeDao(),
+            hasher: (b) async => 'h${b.first}',
+            clock: () => DateTime(2026, 7, 26, 12)),
+        processPhoto: (p) async {
+          processed.add(p);
+          return const PhotoOutcome(PhotoOutcomeKind.saved, 'ok');
+        },
+      ))));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('coverageCheckTile')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('runCoverageCheck')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('logAllMissing')));
+      await tester.pumpAndSettle();
+      expect(_dialog, findsOneWidget);
+      await _notNow(tester);
+      expect(find.byKey(const Key('confirmBulkAction')), findsNothing);
+      expect(processed, isEmpty);
+
+      await tester.tap(find.byKey(const Key('logAllMissing')));
+      await tester.pumpAndSettle();
+      await _allow(tester);
+      expect(settings.aiConsentWrites, [('gemini', true)]);
+      expect(find.byKey(const Key('confirmBulkAction')), findsOneWidget,
+          reason: 'allowed: on to the usual how-long question');
+    });
+  });
+
   group('the camera-roll switch', () {
     Future<FakeIntake> pumpSettings(
         WidgetTester tester, FakeSettings settings) async {
