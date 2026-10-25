@@ -1271,6 +1271,9 @@ final class AssistContext {
   final AssistTrigger trigger;
 
   /// Where the meal was eaten, ISO2; null when unknown (never applies).
+  /// MealAssist passes the country its request named — the meal country
+  /// (core/meal_country.dart), always US, since a meal eaten anywhere else
+  /// is never looked up; the US rule here stays as the last guard.
   final String? country;
 
   /// The chain keys the request named, in rank order (LookupRequest

@@ -2226,7 +2226,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restaurantModeAlways => '总是';
 
   @override
-  String get restaurantModeHelper => '当 AI 对餐厅餐的估算没有把握时，筷拍会查看该连锁店是否公布了营养信息。';
+  String get restaurantModeHelper =>
+      '当 AI 对餐厅餐的估算没有把握时，筷拍会查看该连锁店是否公布了营养信息。只查询在美国吃的餐。';
 
   @override
   String get settingsRowRestaurantLocation => '使用照片位置';
@@ -2239,6 +2240,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restaurantLocationHttpHint => '附近餐厅查询需要你的服务器使用 https；仅按品牌查询仍可使用。';
+
+  @override
+  String get restaurantTimeZoneHint =>
+      '手机当前的时区不在美国，所以现在不会进行查询：公布的营养信息只适用于美国的餐厅。';
+
+  @override
+  String get restaurantRegionHint =>
+      '手机的地区不是美国，而这里不使用照片的位置，所以不会进行查询。公布的营养信息只适用于美国的餐厅。';
 
   @override
   String get restaurantRecipientClaudePlan =>
@@ -2313,16 +2322,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restaurantConsentMaps =>
-      '筷拍会在本机读取照片的拍摄位置，并向 Apple 地图查询附近的餐厅。Apple 会收到该位置（与使用地图时相同）。';
+      '筷拍会在本机读取照片的拍摄位置，判断是否在美国（只查询美国的餐厅），并向 Apple 地图查询附近的餐厅。Apple 会收到该位置（与使用地图时相同）。';
 
   @override
   String restaurantConsentSent(String recipient) {
-    return '如果附近的餐厅，或杯子、袋子、小票上印的品牌，是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称、食物名称和份量，以及你的地区代码（例如 US）和回复语言，会发送给$recipient，用于在网上查找该连锁店公布的营养信息。在附近找到的连锁店会显示你当时在它附近。照片本身、拍摄位置、城市、街道和距离都不会发送。';
+    return '如果附近的餐厅，或杯子、袋子、小票上印的品牌，是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称、食物名称和份量、国家代码 US（只查询在美国吃的餐）以及回复语言，会发送给$recipient，用于在网上查找该连锁店公布的营养信息。手机的时区不在美国时，不会进行任何查询。在附近找到的连锁店会显示你当时在它附近。照片本身、拍摄位置、城市、街道和距离都不会发送。';
   }
 
   @override
   String restaurantConsentSentAndroid(String recipient) {
-    return '在 Android 上，筷拍不会读取照片的拍摄位置。如果杯子、袋子或小票上印的品牌是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称、食物名称和份量，以及你的地区代码（例如 US）和回复语言，会发送给$recipient，用于在网上查找该连锁店公布的营养信息。照片本身不会为此发送。';
+    return '在 Android 上，筷拍不会读取照片的拍摄位置，而是按手机的时区和地区设置判断这一餐是否在美国吃的。如果杯子、袋子或小票上印的品牌是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称、食物名称和份量、国家代码 US（只查询在美国吃的餐）以及回复语言，会发送给$recipient，用于在网上查找该连锁店公布的营养信息。照片本身不会为此发送。';
   }
 
   @override
@@ -2444,6 +2453,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get assistLookupNoChain => '这餐没有找到筷拍认识的连锁餐厅。';
+
+  @override
+  String get assistLookupOutsideUs =>
+      '这一餐看起来不是在美国吃的（根据照片的拍摄位置、手机的时区或地区设置判断）。筷拍只查询美国餐厅公布的营养信息，所以没有查询。';
+
+  @override
+  String get assistLookupRegionUnknown =>
+      '筷拍无法判断这一餐是否在美国吃的，所以没有查询。公布的营养信息只适用于美国的餐厅。';
 
   @override
   String get assistLookupDailyCap => '今天的餐厅查询次数已用完，明天再试。';

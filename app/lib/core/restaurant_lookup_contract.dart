@@ -46,6 +46,10 @@ const int kLookupBrandMax = 60;
 const int kLookupUnitMax = 20;
 const int kLookupMerchantMax = 60;
 const int kLookupMaxChains = 3;
+/// The country of a raw request that names none — the Python composer's
+/// default too, so both compose the same bytes. MealAssist always names
+/// the meal country itself (core/meal_country.dart) and makes no request
+/// at all for a meal it cannot place in the US.
 const String kLookupDefaultCountry = 'US';
 const String kLookupRequestToken = '<<REQUEST_JSON>>';
 

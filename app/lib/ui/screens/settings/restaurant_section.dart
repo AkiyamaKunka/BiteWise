@@ -17,6 +17,7 @@ import 'package:flutter/material.dart';
 
 import '../../../services/assist/clients/lookup_client.dart'
     show LookupRecipient, LookupSupport, LookupUnsupportedReason;
+import '../../../services/assist/meal_assist.dart' show AssistWhereNow;
 import '../../l10n.dart';
 import '../../provider_names.dart' show providerDisplayLabel;
 import '../../restaurant_assist_controls.dart';
@@ -239,6 +240,14 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
     }
   }
 
+  AssistWhereNow? _whereNow() {
+    try {
+      return _c.whereNow?.call();
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// The footer lines under the group, in order.
   List<String> _footer(AppLocalizations l, LookupSupport support,
       {required bool on, required bool paused}) {
@@ -261,6 +270,22 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
       lines.add(l.restaurantLocationHttpHint);
     } else if (on && !_s.restaurantAssistLocation) {
       lines.add(l.restaurantLocationOffHint);
+    }
+    // Lookups are for US meals only: say so when, on this phone as it is
+    // set now, nothing would be looked up (a time zone outside the US), or
+    // only a photo's position could say the US and none can be read here.
+    if (on) {
+      switch (_whereNow()) {
+        case AssistWhereNow.timeZone:
+          lines.add(l.restaurantTimeZoneHint);
+        case AssistWhereNow.region
+            when !_c.locationSupported ||
+                !support.locationAllowed ||
+                !_s.restaurantAssistLocation:
+          lines.add(l.restaurantRegionHint);
+        case AssistWhereNow.region || AssistWhereNow.us || null:
+          break;
+      }
     }
     lines.add(copy.footnote);
     if (support.recipient == LookupRecipient.claudePlan) {

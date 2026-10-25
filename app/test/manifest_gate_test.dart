@@ -422,11 +422,39 @@ void main() {
     expect(source, contains('"$placesChannelName"'));
     expect(source, contains('MKLocalPointsOfInterestRequest'));
     // The code, without its comments (which name what it never does).
-    final code = source
+    final full = source
         .split('\n')
         .map((line) => line.replaceFirst(RegExp(r'//.*'), ''))
         .join('\n');
+    // The one part of an address it reads (run 6, the meal country): each
+    // place's ISO country — the region of addressRepresentations on iOS
+    // 26+, the placemark's isoCountryCode before — exactly here, once.
+    const countryReads = [
+      'let address: MKAddressRepresentations? = item.addressRepresentations',
+      'let region: Locale.Region? = address?.region',
+      'country = region?.identifier',
+      'country = item.placemark.isoCountryCode',
+    ];
+    var code = full;
+    for (final read in countryReads) {
+      expect(read.allMatches(full), hasLength(1), reason: read);
+      code = code.replaceFirst(read, '');
+    }
+    // Of a placemark, only its position and that country.
+    expect(
+        RegExp(r'placemark\.(?!location\b|isoCountryCode\b)').hasMatch(code),
+        isFalse,
+        reason: 'PlacesPlugin.swift reads more of a placemark');
     for (final banned in [
+      'isoCountryCode',
+      'fullAddress',
+      'cityName',
+      'cityWithContext',
+      'regionName',
+      'regionCode',
+      'locality',
+      'postalCode',
+      'administrativeArea',
       'CLLocationManager',
       'CLGeocoder',
       'requestWhenInUseAuthorization',
@@ -651,13 +679,15 @@ void main() {
     expect(en, contains('AI service you choose in Settings'));
     expect(zh, contains('AI 服务'));
     // R7a: the photo's location, read only for restaurant lookup, and only
-    // to ask Apple Maps.
+    // to ask Apple Maps — and (run 6) to check on the phone whether a
+    // restaurant or takeout photo was taken in the US.
     expect(en, contains('restaurant lookup with photo location'));
-    expect(en, contains('where a restaurant meal photo was taken'));
-    expect(en, contains('only to ask Apple Maps'));
+    expect(en, contains('where a restaurant or takeout meal photo was taken'));
+    expect(en, contains('only to check on this phone whether it was taken in '
+        'the US, to ask Apple Maps'));
     expect(zh, contains('使用照片位置的餐厅查询'));
-    expect(zh, contains('拍摄位置'));
-    expect(zh, contains('仅用于向 Apple 地图查询'));
+    expect(zh, contains('餐厅餐或外卖照片的拍摄位置'));
+    expect(zh, contains('仅用于在本机判断照片是否在美国拍摄、向 Apple 地图查询'));
     // The editor's answers keep a ~100 m cell on the phone (review
     // 2026-10-25): the prompt says so too.
     expect(en, contains('to remember, on this phone, the restaurants you '

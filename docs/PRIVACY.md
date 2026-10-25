@@ -117,14 +117,31 @@ service or server.
   unsure), meals whose cup, bag, box or receipt shows a chain's brand, and
   any meal you look up yourself. A meal marked as home-cooked, packaged or
   unknown never has its location read.
+- **US meals only:** the built-in list holds US chains, and the numbers
+  they publish are for their US restaurants, so only a meal eaten in the
+  US is looked up. While your phone's time zone is outside the US (its
+  offset from UTC is not between UTC−10, Hawaii, and UTC−4, Puerto Rico
+  and US Eastern daylight time), nothing is looked up at all, whatever
+  else says: phones set their time zone from the network by default, so
+  abroad it changes even when the region setting does not. The app reads
+  only that offset, on the phone, when it decides a lookup, and stores and
+  sends nothing about it. On iPhone with "Use photo location" on, the app
+  checks on the phone whether a restaurant or takeout photo was taken in
+  the US, against a built-in outline of the US (a photo taken close to a
+  border counts as outside); the check sends nothing. Otherwise it goes by
+  your phone's region setting. A meal from outside the US, or one the app
+  cannot place, is not looked up at all.
 - **Photo location (iPhone only, with "Use photo location" on):** for a
-  meal the AI marks as eaten at a restaurant, the app reads where the photo
-  was taken from your photo library and asks Apple Maps, on the phone,
-  which food places are nearby. Apple receives that location, as when you
-  use Maps, under Apple's own privacy policy. Nothing Apple Maps returns is
+  meal the AI marks as eaten at a restaurant or as takeout, the app reads
+  where the photo was taken from your photo library, to check that it was
+  in the US (see above). For a restaurant meal taken in the US, it also
+  asks Apple Maps, on the phone, which food places are nearby. Apple
+  receives that location, as when you use Maps, under Apple's own privacy
+  policy. Nothing Apple Maps returns is
   stored, shown or sent anywhere: the app only compares the places with its
-  own built-in list of US restaurant chains and then discards them. The
-  location exists only in the phone's memory for that one query. When you
+  own built-in list of US restaurant chains (and notes whether Apple files
+  them in the US) and then discards them. The location exists only in the
+  phone's memory for that one check and query. When you
   answer a lookup result in the meal editor (**Correct**, **Use published
   numbers**, **Wrong restaurant** or **Not from a restaurant**), the app
   reads that photo's location once more, only to remember your answer on
@@ -135,8 +152,9 @@ service or server.
 - **What a lookup sends:** up to three chain names from that built-in list
   (a chain found near where the photo was taken, or a brand printed on a
   cup, bag or receipt in the photo), the food names with their amounts and
-  units, your phone's region setting (for example US) and the reply
-  language. A chain found nearby shows you were near that chain.
+  units, the country code (always US: meals from elsewhere are not looked
+  up) and the reply language. A chain found nearby shows you were near
+  that chain.
 - **What a lookup never sends:** the photo, its location, the city, the
   street, the distance to any place, anything Apple Maps returned, the
   meal's time or description, your dietary profile or your meal history.
@@ -236,8 +254,9 @@ date. Questions: open an issue at
 当一张餐食照片看起来来自连锁餐厅时，应用可以查一下这家连锁店是否公布了该食物的营养信息。此功能默认关闭。开启时会显示一份说明，写明查询会发送给谁；当你换用其他 AI 服务或服务器时，应用会再次询问，在你同意之前不会发送任何查询。
 
 - **哪些餐会被查询：** AI 标记为在餐厅吃的或外卖的照片餐食（「不确定时」模式下，还要 AI 表示自己的估算没有把握），杯子、袋子、盒子或小票上印有连锁品牌的餐，以及你自己手动查询的任意一餐。被标记为家里做的、包装食品或无法判断的餐，绝不会读取其位置。
-- **照片位置（仅限 iPhone，且开启了「使用照片位置」）：** 对 AI 标记为在餐厅吃的餐，应用会从照片库读取这张照片的拍摄位置，并在手机上向 Apple 地图查询附近的餐饮场所。Apple 会收到该位置（与使用地图时相同），并按 Apple 自己的隐私政策处理。Apple 地图返回的任何内容都不会被保存、显示或发送到任何地方：应用只是把这些场所与它内置的美国连锁餐厅列表比对，然后丢弃。该位置只在这一次查询期间存在于手机内存中。当你在编辑页回应查询结果（**「没错」**、**「采用公布数值」**、**「不是这家」**或**「不是餐厅的」**）时，应用会再读取一次这张照片的拍摄位置，仅用于在手机上按约 100 米的范围记住你的回答（见上文）；按印出的品牌得到的数值不会让它记住任何地点。在 Android 上，应用绝不读取照片的拍摄位置，只按印出的品牌查询；在 iPhone 上选择**「仅按品牌」**也是如此，查询和你的回答都一样。
-- **查询会发送的内容：** 最多三个来自这份内置列表的连锁店名称（在照片拍摄地点附近找到的连锁店，或照片里杯子、袋子、小票上印的品牌），食物名称及其份量和单位，你手机的地区设置（例如 US）以及回复所用的语言。在附近找到的连锁店会显示你当时在它附近。
+- **只查询在美国吃的餐：** 内置列表里是美国的连锁店，它们公布的数值针对其美国餐厅，所以只有在美国吃的餐才会被查询。只要手机当前的时区不在美国（与 UTC 的时差不在 UTC−10（夏威夷）到 UTC−4（波多黎各及美国东部夏令时）之间），就完全不会查询，不论其他信息如何：手机默认按网络自动设置时区，所以在国外时区会变，即使地区设置没有变。应用只在决定是否查询时在手机上读取这个时差，不会保存或发送任何与它有关的内容。在 iPhone 上开启「使用照片位置」时，应用会在手机上把餐厅餐或外卖照片的拍摄位置与内置的美国轮廓比对，判断照片是否在美国拍摄（靠近国境线拍摄的照片按不在美国处理）；这一判断不会发送任何内容。否则以你手机的地区设置为准。不在美国吃的餐，或应用无法判断在哪里吃的餐，完全不会被查询。
+- **照片位置（仅限 iPhone，且开启了「使用照片位置」）：** 对 AI 标记为在餐厅吃的或外卖的餐，应用会从照片库读取这张照片的拍摄位置，用于判断是否在美国拍摄（见上文）；对在美国拍摄的餐厅餐，还会在手机上向 Apple 地图查询附近的餐饮场所。Apple 会收到该位置（与使用地图时相同），并按 Apple 自己的隐私政策处理。Apple 地图返回的任何内容都不会被保存、显示或发送到任何地方：应用只是把这些场所与它内置的美国连锁餐厅列表比对（并看 Apple 是否把它们归在美国），然后丢弃。该位置只在这一次判断和查询期间存在于手机内存中。当你在编辑页回应查询结果（**「没错」**、**「采用公布数值」**、**「不是这家」**或**「不是餐厅的」**）时，应用会再读取一次这张照片的拍摄位置，仅用于在手机上按约 100 米的范围记住你的回答（见上文）；按印出的品牌得到的数值不会让它记住任何地点。在 Android 上，应用绝不读取照片的拍摄位置，只按印出的品牌查询；在 iPhone 上选择**「仅按品牌」**也是如此，查询和你的回答都一样。
+- **查询会发送的内容：** 最多三个来自这份内置列表的连锁店名称（在照片拍摄地点附近找到的连锁店，或照片里杯子、袋子、小票上印的品牌），食物名称及其份量和单位，国家代码（总是 US：不在美国吃的餐不会被查询）以及回复所用的语言。在附近找到的连锁店会显示你当时在它附近。
 - **查询绝不会发送的内容：** 照片本身、拍摄位置、城市、街道、与任何场所的距离、Apple 地图返回的任何内容、这一餐的时间或描述、你的饮食档案或饮食记录。
 - **由谁接收、由谁进行网页搜索：**
   - **Claude Plan：** 你自己的服务器，它在你的套餐下使用 Anthropic 的 Claude 网页搜索。根据照片位置找到的连锁店名称，只有在服务器地址以 `https://` 开头时才会发送给你的服务器；地址是 `http://` 时，只按印出的品牌查询。你的服务器会在内存中保留一次查询的请求和结果，最长 24 小时。使用 Claude Plan 时，应用只会*建议*连锁店公布的数值：只有你采用后，这一餐才会改变。

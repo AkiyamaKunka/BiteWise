@@ -3801,7 +3801,7 @@ abstract class AppLocalizations {
   /// Footer line under the Restaurant nutrition group.
   ///
   /// In en, this message translates to:
-  /// **'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.'**
+  /// **'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.'**
   String get restaurantModeHelper;
 
   /// Switch: automatic lookups may use where a restaurant meal photo was taken (iOS only).
@@ -3827,6 +3827,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nearby-restaurant lookups need https on your server. Brand-only lookups still work.'**
   String get restaurantLocationHttpHint;
+
+  /// Footer line while the assist is on and the phone's UTC offset is not one the US keeps (UTC-10 to UTC-4): no lookup is made at all (the chain table is US-only).
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone\'s time zone is outside the US, so nothing is looked up now: published nutrition is for US restaurants only.'**
+  String get restaurantTimeZoneHint;
+
+  /// Footer line while the assist is on, the phone's region is not the US (or not set) and no photo location can be used (Android, Brand only, an http:// own server): only a photo taken in the US could be looked up, and none can be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone\'s region is not the US and the photo\'s location is not used here, so nothing is looked up. Published nutrition is for US restaurants only.'**
+  String get restaurantRegionHint;
 
   /// Footer line naming who receives lookups on Claude Plan.
   ///
@@ -3960,22 +3972,22 @@ abstract class AppLocalizations {
   /// **'When a meal looks like it came from a restaurant, BiteWise can check whether the chain publishes nutrition for it.'**
   String get restaurantConsentWhat;
 
-  /// Consent sheet bullet (iPhone): the photo's location goes only to Apple Maps.
+  /// Consent sheet bullet (iPhone): the photo's location is checked on the phone for being in the US (the chain table is US-only) and goes only to Apple Maps.
   ///
   /// In en, this message translates to:
-  /// **'On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.'**
+  /// **'On this phone, BiteWise reads where the photo was taken, checks whether it was in the US (lookups cover US restaurants only) and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.'**
   String get restaurantConsentMaps;
 
   /// Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.
   ///
   /// In en, this message translates to:
-  /// **'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.'**
+  /// **'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. While your phone\'s time zone is outside the US, nothing is looked up. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.'**
   String restaurantConsentSent(String recipient);
 
   /// Consent sheet bullet (Android): what leaves the phone, and to whom.
   ///
   /// In en, this message translates to:
-  /// **'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. The photo is never sent for this.'**
+  /// **'On Android, BiteWise does not read where the photo was taken: your phone\'s time zone and region tell whether a meal was eaten in the US. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. The photo is never sent for this.'**
   String restaurantConsentSentAndroid(String recipient);
 
   /// Consent sheet bullet (iPhone): what the Brand only button means.
@@ -4193,6 +4205,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No restaurant chain BiteWise knows was found for this meal.'**
   String get assistLookupNoChain;
+
+  /// A manual lookup was not made: the phone's time zone is outside the US, the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal looks like it was eaten outside the US (going by the photo\'s location, your phone\'s time zone or its region). BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.'**
+  String get assistLookupOutsideUs;
+
+  /// A manual lookup was not made: no photo location could be used and the phone has no region setting, so it is unknown whether the meal was eaten in the US.
+  ///
+  /// In en, this message translates to:
+  /// **'BiteWise can\'t tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.'**
+  String get assistLookupRegionUnknown;
 
   /// The daily cap of restaurant lookups is reached.
   ///

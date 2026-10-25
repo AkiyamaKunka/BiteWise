@@ -17,6 +17,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
+import 'package:calorie_tracker/services/assist/meal_assist.dart'
+    show AssistWhereNow;
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/screens/settings/restaurant_section.dart';
@@ -58,6 +60,9 @@ class _Controls {
   LookupSupport support;
   final bool location;
   AssistServerState server;
+
+  /// What the phone's time zone and region say (MealAssist.whereNow).
+  AssistWhereNow where = AssistWhereNow.us;
   int clears = 0;
   final ValueNotifier<LookupSupport?> consentNeeded =
       ValueNotifier<LookupSupport?>(null);
@@ -71,6 +76,7 @@ class _Controls {
         consentNeeded: consentNeeded,
         serverState: () async => server,
         locationSupported: location,
+        whereNow: () => where,
         now: () => _now,
       );
 }
@@ -186,9 +192,13 @@ void main() {
           findsOneWidget);
       // The recipient chain, and what never leaves the phone.
       expect(
-          inSheet('your region code (such as US) and the reply language are '
-              'sent to your own server (it uses Claude web search, by '
-              'Anthropic), which searches the web'),
+          inSheet('the country code US (only meals eaten in the US are looked '
+              'up) and the reply language are sent to your own server (it '
+              'uses Claude web search, by Anthropic), which searches the web'),
+          findsOneWidget);
+      expect(
+          inSheet("While your phone's time zone is outside the US, nothing "
+              'is looked up.'),
           findsOneWidget);
       // One "which" in the sentence: the recipient's name is a parenthesis.
       final sent = tester
@@ -663,6 +673,79 @@ void main() {
             contains('published numbers are only suggested'));
       });
     }
+
+    // Review (run 6): lookups are for US meals only; say so where nothing
+    // would be looked up on this phone as it is set now.
+    testWidgets('US meals only, always; on Shanghai time, nothing is looked '
+        'up', (tester) async {
+      final settings = _planSettings()
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistLocation = true
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'claude_plan:0a1b2c3d';
+      final c = _Controls(_plan, server: AssistServerState.ready);
+      await pump(tester, settings, c);
+      expect(footer(tester),
+          contains('Only meals eaten in the US are looked up.'));
+      expect(footer(tester), isNot(contains('time zone')));
+      expect(footer(tester), isNot(contains('region')));
+
+      c.where = AssistWhereNow.timeZone;
+      settings.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(footer(tester),
+          contains("Your phone's time zone is outside the US, so nothing is "
+              'looked up now'));
+
+      // Off: the helper's US line only.
+      settings.restaurantAssist = 'off';
+      settings.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(footer(tester), isNot(contains('time zone')));
+    });
+
+    testWidgets('a region other than the US: a hint only where no photo '
+        'location can be used', (tester) async {
+      final settings = _planSettings()
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistLocation = true
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'claude_plan:0a1b2c3d';
+      final c = _Controls(_plan, server: AssistServerState.ready)
+        ..where = AssistWhereNow.region;
+      await pump(tester, settings, c);
+      expect(footer(tester), isNot(contains("Your phone's region")),
+          reason: 'a photo taken in the US can still be looked up');
+
+      settings.restaurantAssistLocation = false;
+      settings.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(footer(tester),
+          contains("Your phone's region is not the US and the photo's "
+              'location is not used here, so nothing is looked up.'));
+
+      // An http own server reads no location either.
+      c.support = _planHttp;
+      settings.restaurantAssistLocation = true;
+      settings.serverBaseUrl = 'http://bitewise.example.test';
+      settings.notifyListeners();
+      await tester.pumpAndSettle();
+      expect(footer(tester), contains("Your phone's region is not the US"));
+    });
+
+    testWidgets('Android with another region: the hint', (tester) async {
+      final settings = FakeSettings()
+        ..provider = 'anthropic'
+        ..apiKey = 'k'
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      final c = _Controls(_anthropic, location: false)
+        ..where = AssistWhereNow.region;
+      await pump(tester, settings, c);
+      expect(footer(tester), contains('On Android, lookups use printed brands'));
+      expect(footer(tester), contains("Your phone's region is not the US"));
+    });
 
     testWidgets('a ready server adds no hint', (tester) async {
       final settings = _planSettings();
