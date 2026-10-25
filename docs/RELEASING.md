@@ -87,13 +87,31 @@ the glasses work (PRs #19/#20) are **not** in it. Recommended answers are in
    unticked, leaves `main` behind the App Store).
 4. Enrol, check the Team ID, create the App IDs, the App Group and the app
    record (§ 1.1–1.4): primary language **English (U.S.)**, zh-Hans as an
-   optional localization; name from step 1.
+   optional localization; name from step 1. **If the Team ID is no longer
+   `WLQB3YB22M`**, iOS will refuse to install the TestFlight build over
+   today's dev build (§ 1.2), and deleting the dev build wipes its meals
+   and settings. So, at step 6:
+   1. Settings › Your Data › *Export Data…* (你的数据 › 导出数据…) and
+      AirDrop the file to the Mac. It holds the meals, the photo ledger
+      (so the scan does not send those photos again) and the body and
+      workout data — not the settings, the dietary profile, the meal
+      thumbnails or the keys, so write down the dietary profile, the
+      lookback (7 days) and the report time.
+   2. Only then delete the dev build and install from TestFlight.
+   3. Open the file on the Mac, copy all of its text, and on the phone use
+      *Import Data…* › *Import from clipboard* (Universal Clipboard).
+   4. Set the provider again (Claude Plan: the setup link from
+      `scripts/provision_phone.sh --qr`; confirming it is the consent),
+      re-enter what you wrote down, and turn on *Watch Camera Roll* again
+      — expect the consent and camera-roll notice once.
 5. API key, certificate, profiles, GitHub secrets (§ 1.5, 1.6, 3) — or the
    Xcode shortcut (§ 2) for a same-day TestFlight build.
 6. **Tag `v1.5.0` on `main`** (§ 4.1, § 8) → TestFlight → install on your
-   iPhone through TestFlight and check § 4.2. You should see no consent
+   iPhone through TestFlight and check § 4.2. With an unchanged Team ID it
+   installs over the dev build, keeps everything, and shows no consent
    dialog: an install with the watcher on keeps its current recipient (the
-   one-time seed in `AppSettings._loadAiConsent`).
+   one-time seed in `AppSettings._loadAiConsent`). After a Team ID change
+   it is the fresh install from step 4, which asks once.
 7. **Demo key** (R-F6): **a paid Gemini key in its own Google Cloud
    project**, with the per-day request quota lowered (that is the hard cap;
    a budget only sends alerts) plus a budget alert. Gemini is the default
@@ -117,6 +135,27 @@ at first launch (R-F13), an on-device food check before the watcher uploads
 (`NSPhotoLibraryAddUsageDescription`, R-F10 — today iOS simply leaves the
 option out).
 
+**When PR #19 (restaurant assist) is merged on top of this build**, seven
+files conflict (`di.dart`, `add_flow.dart`, `fix_meal_screen.dart`,
+`provider_page.dart`, `settings_screen.dart`, `services.dart`, this
+document); every hunk keeps both sides:
+- `di.dart`: keep `pipeline.bindStream(shareConsent.gate(shareIntake.photos()))`
+  and then #19's `mealAssist.start()`. A resolution that keeps #19's bare
+  `shareIntake.photos()` fails `test/production_wiring_test.dart`.
+- `FixMealScreen` takes both `settings:` and `inUse:` (constructor and the
+  `add_flow.dart` call). `settings` is required, so a one-sided resolution
+  does not compile.
+- Regenerate l10n afterwards (`flutter gen-l10n` in `app/`).
+
+The assist's lookups (chain and item names to the user's server,
+Anthropic or OpenRouter/Exa) already have their own per-recipient consent
+(#19's restaurant consent sheet; every lookup checks `consentCovers`), so
+they need no second gate on the AI consent. Before #19 reaches a store
+build, though, *Stop Sharing with …* must also turn the assist off when
+its lookups go to the same company or server: that row says "nothing more
+is sent to …", while the assist keeps its own consent and could go on
+sending lookups (a manual one, or a meal still waiting for one).
+
 ---
 
 ## 1. Apple: one-time setup
@@ -136,16 +175,30 @@ this document works until the same Apple Account is enrolled:
 ### 1.2 Check the Team ID (keychain continuity)
 
 An individual who upgrades the same Apple Account normally keeps the same
-Team ID. Verify it in <https://developer.apple.com/account> → Membership
-details. **If it changed**, update `teamID` in `app/ios/ExportOptions.plist`
-and `DEVELOPMENT_TEAM` in `app/ios/Runner.xcodeproj/project.pbxproj` (every
-occurrence, Runner and ShareExtension), and expect this on the phone:
-`flutter_secure_storage` items live in the keychain access group
-`<TeamID>.dev.calorietracker.calorieTracker`, so a build from a new team
-cannot read the API/upload keys saved by today's dev build. The TestFlight
-build would start with empty key fields; paste them once. Either way, never
-install a build older than commit `9df6846` on the owner's iPhone again (the
-keychain migration is one-way).
+Team ID: the enrolment converts the personal team. Verify it in
+<https://developer.apple.com/account> → Membership details. **If it
+changed**, update `teamID` in `app/ios/ExportOptions.plist` and
+`DEVELOPMENT_TEAM` in `app/ios/Runner.xcodeproj/project.pbxproj` (every
+occurrence, Runner and ShareExtension), and expect this on the phone (not
+tested on a device; this is how iOS treats a new team prefix):
+
+- iOS refuses to upgrade an installed app whose `application-identifier`
+  (`<TeamID>.dev.calorietracker.calorieTracker`) differs from the new
+  build's (MIInstallerErrorDomain: the upgrade's application-identifier
+  "does not match" the installed one). The TestFlight build cannot replace
+  today's dev build in place.
+- The dev build must be deleted first, and that deletes its sandbox: the
+  meal database and every setting (the watcher switch and the AI consent
+  seed included). The keychain items stay behind in the old team's access
+  group, which the new build cannot read either.
+- So export the data first and import it into the TestFlight build: the
+  sequence is owner step 4. The fresh install asks for the AI consent once,
+  like any new install.
+- If § 1.3 then says an identifier is "not available", the old personal
+  team still holds it; Apple Developer Support can release it.
+
+Either way, never install a build older than commit `9df6846` on the
+owner's iPhone again (the keychain migration is one-way).
 
 ### 1.3 Identifiers: two App IDs and the App Group
 
@@ -420,8 +473,10 @@ TestFlight → Internal Testing → + group "Owner" → add your own App Store
 Connect user → tick *Enable automatic distribution*. Install TestFlight on
 the iPhone, accept the invite, install. First things to check on the
 phone (see § 1.2): Settings shows the saved provider keys and the server
-URL (if not, paste them once); the 后台扫描 row keeps advancing with the
-phone locked; the share sheet still offers Bitewise.
+URL (with an unchanged Team ID the build installs over the dev build and
+keeps them; after a Team ID change it is the fresh install of owner
+step 4); the 后台扫描 row keeps advancing with the phone locked; the share
+sheet still offers Bitewise.
 
 ### 4.3 App Privacy (nutrition labels) and the BYO-key model
 
