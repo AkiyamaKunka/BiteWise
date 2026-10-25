@@ -2206,4 +2206,159 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get assistUndo => '撤销';
+
+  @override
+  String get settingsSectionRestaurant => '餐厅营养';
+
+  @override
+  String get settingsRowRestaurantMode => '查询餐厅营养';
+
+  @override
+  String get restaurantModeSheetTitle => '查询餐厅营养';
+
+  @override
+  String get restaurantModeOff => '关闭';
+
+  @override
+  String get restaurantModeAuto => '不确定时';
+
+  @override
+  String get restaurantModeAlways => '总是';
+
+  @override
+  String get restaurantModeHelper => '当 AI 对餐厅餐的估算没有把握时，筷拍会查看该连锁店是否公布了营养信息。';
+
+  @override
+  String get settingsRowRestaurantLocation => '使用照片位置';
+
+  @override
+  String get restaurantLocationOffHint => '仅按品牌：只用杯子、袋子或小票上印的品牌名。';
+
+  @override
+  String get restaurantLocationAndroidHint => 'Android 目前只按印出的品牌查询。';
+
+  @override
+  String get restaurantLocationHttpHint => '附近餐厅查询需要你的服务器使用 https；仅按品牌查询仍可使用。';
+
+  @override
+  String get restaurantRecipientClaudePlan =>
+      '查询会发送到你自己的服务器，它使用 Anthropic 的 Claude 网页搜索。';
+
+  @override
+  String get restaurantRecipientAnthropic =>
+      '查询会用你的密钥发送给 Anthropic（Claude 网页搜索）。';
+
+  @override
+  String get restaurantRecipientOpenrouter => '查询会发送给 OpenRouter 及其搜索合作方 Exa。';
+
+  @override
+  String restaurantUnsupported(String provider) {
+    return '$provider 暂不支持此功能。';
+  }
+
+  @override
+  String get restaurantNeedsServerAddress => '先填写你的服务器地址才能使用。';
+
+  @override
+  String get restaurantSuggestOnly => '使用你自己的服务器时，公布的数值只作为建议，由你决定是否采用。';
+
+  @override
+  String get restaurantServerOutdated => '你的服务器需要更新才能使用此功能。';
+
+  @override
+  String get restaurantServerDisabled => '你的服务器未开启餐厅查询。';
+
+  @override
+  String get settingsRowRestaurantPaused => '查询已暂停';
+
+  @override
+  String get restaurantPausedReview => '查看';
+
+  @override
+  String get restaurantPausedHint => '在你同意把查询发送给新的 AI 服务或服务器之前，查询会暂停。';
+
+  @override
+  String get settingsRowClearLearnedPlaces => '清除已记住的地点';
+
+  @override
+  String get clearPlacesTitle => '清除已记住的地点？';
+
+  @override
+  String get clearPlacesBody =>
+      '筷拍会忘记你确认过或标记为不对的餐厅，以及你标记为\"不是餐厅\"的地点。这些只保存在这台手机上。';
+
+  @override
+  String get clearPlacesConfirm => '清除';
+
+  @override
+  String get clearPlacesDone => '已清除记住的地点。';
+
+  @override
+  String get restaurantOffTitle => '关闭餐厅查询？';
+
+  @override
+  String get restaurantOffBody => '未完成的查询会被取消。';
+
+  @override
+  String get restaurantOffClearPlaces => '同时清除已记住的地点';
+
+  @override
+  String get restaurantOffConfirm => '关闭';
+
+  @override
+  String get restaurantConsentTitle => '查找餐厅公布的营养？';
+
+  @override
+  String get restaurantConsentWhat => '当一餐看起来来自餐厅时，筷拍可以查一下这家连锁店是否公布了该菜品的营养信息。';
+
+  @override
+  String get restaurantConsentMaps =>
+      '筷拍会在本机读取照片的拍摄位置，并向 Apple 地图查询附近的餐厅。Apple 会收到该位置（与使用地图时相同）。';
+
+  @override
+  String restaurantConsentSent(String recipient) {
+    return '如果附近的餐厅，或杯子、袋子、小票上印的品牌，是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称以及食物名称和份量会发送给$recipient，用于在网上查找该连锁店公布的营养信息。在附近找到的连锁店会显示你当时在它附近。照片本身、拍摄位置、城市、街道和距离都不会发送。';
+  }
+
+  @override
+  String restaurantConsentSentAndroid(String recipient) {
+    return '在 Android 上，筷拍不会读取照片的拍摄位置。如果杯子、袋子或小票上印的品牌是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称以及食物名称和份量会发送给$recipient，用于在网上查找该连锁店公布的营养信息。照片本身不会为此发送。';
+  }
+
+  @override
+  String get restaurantConsentBrandOnly => '\"仅按品牌\"不使用位置，只用照片中杯子、袋子或小票上印的品牌名。';
+
+  @override
+  String get restaurantConsentHttps =>
+      '根据照片位置找到的连锁店名称，只会通过 https 发送到你的服务器；服务器地址是 http 时，只按印出的品牌查询。';
+
+  @override
+  String get restaurantConsentApply =>
+      '只有当连锁店官网公布了数值且匹配明确时，筷拍才会替换 AI 的数值；否则只给出建议。任何更改都可以撤销。';
+
+  @override
+  String get restaurantConsentSuggestOnly =>
+      '使用你自己的服务器时，筷拍只会建议连锁店公布的数值；只有你采用建议时，AI 的数值才会改变，而且可以撤销。';
+
+  @override
+  String get restaurantConsentOff => '可随时在设置中关闭。';
+
+  @override
+  String get restaurantRecipientNameClaudePlan =>
+      '你自己的服务器（它使用 Anthropic 的 Claude 网页搜索）';
+
+  @override
+  String get restaurantRecipientNameAnthropic => 'Anthropic（Claude 网页搜索）';
+
+  @override
+  String get restaurantRecipientNameOpenrouter => 'OpenRouter 及其搜索合作方 Exa';
+
+  @override
+  String get restaurantConsentUseLocation => '使用位置';
+
+  @override
+  String get restaurantConsentBrandOnlyButton => '仅按品牌';
+
+  @override
+  String get restaurantConsentNotNow => '暂不';
 }

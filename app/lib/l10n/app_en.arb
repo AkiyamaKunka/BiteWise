@@ -1891,5 +1891,208 @@
   "assistUndo": "Undo",
   "@assistUndo": {
     "description": "The action on assistAppliedSnack: puts the AI estimate back."
+  },
+  "settingsSectionRestaurant": "Restaurant nutrition",
+  "@settingsSectionRestaurant": {
+    "description": "Settings group header for the restaurant assist (design R7a)."
+  },
+  "settingsRowRestaurantMode": "Lookups",
+  "@settingsRowRestaurantMode": {
+    "description": "The mode row's title; its value is Off / When unsure / Always. Short in English so the title reads in full beside 'When unsure' on a 375 pt phone ('Nutrition lookup' was cut); the group header already says 'Restaurant nutrition'."
+  },
+  "restaurantModeSheetTitle": "Restaurant nutrition lookup",
+  "@restaurantModeSheetTitle": {
+    "description": "Title of the sheet that picks the restaurant lookup mode."
+  },
+  "restaurantModeOff": "Off",
+  "@restaurantModeOff": {
+    "description": "Restaurant lookup mode: never."
+  },
+  "restaurantModeAuto": "When unsure",
+  "@restaurantModeAuto": {
+    "description": "Restaurant lookup mode: only when the AI says its estimate of a restaurant meal is unsure."
+  },
+  "restaurantModeAlways": "Always",
+  "@restaurantModeAlways": {
+    "description": "Restaurant lookup mode: every restaurant or takeout meal (still never a home meal's location)."
+  },
+  "restaurantModeHelper": "When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.",
+  "@restaurantModeHelper": {
+    "description": "Footer line under the Restaurant nutrition group."
+  },
+  "settingsRowRestaurantLocation": "Use photo location",
+  "@settingsRowRestaurantLocation": {
+    "description": "Switch: automatic lookups may use where a restaurant meal photo was taken (iOS only)."
+  },
+  "restaurantLocationOffHint": "Brand only: uses brand names printed on cups, bags or receipts.",
+  "@restaurantLocationOffHint": {
+    "description": "Footer line while 'Use photo location' is off."
+  },
+  "restaurantLocationAndroidHint": "On Android, lookups use printed brands only for now.",
+  "@restaurantLocationAndroidHint": {
+    "description": "Footer line on Android, where the photo location is never read."
+  },
+  "restaurantLocationHttpHint": "Nearby-restaurant lookups need https on your server. Brand-only lookups still work.",
+  "@restaurantLocationHttpHint": {
+    "description": "Footer line when the own server's address is http:// — chain names found from the photo location are never sent over plain http."
+  },
+  "restaurantRecipientClaudePlan": "Lookups go to your own server, which uses Claude web search (Anthropic).",
+  "@restaurantRecipientClaudePlan": {
+    "description": "Footer line naming who receives lookups on Claude Plan."
+  },
+  "restaurantRecipientAnthropic": "Lookups go to Anthropic (Claude web search) with your key.",
+  "@restaurantRecipientAnthropic": {
+    "description": "Footer line naming who receives lookups with an Anthropic key."
+  },
+  "restaurantRecipientOpenrouter": "Lookups go to OpenRouter and its search partner Exa.",
+  "@restaurantRecipientOpenrouter": {
+    "description": "Footer line naming who receives lookups with an OpenRouter key."
+  },
+  "restaurantUnsupported": "Not available with {provider} yet.",
+  "@restaurantUnsupported": {
+    "description": "Footer line when the selected AI service has no lookup. provider is its display name.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantNeedsServerAddress": "Add your server address to use this.",
+  "@restaurantNeedsServerAddress": {
+    "description": "Footer line on Claude Plan with no usable server address."
+  },
+  "restaurantSuggestOnly": "With your own server, published numbers are only suggested: you decide whether to use them.",
+  "@restaurantSuggestOnly": {
+    "description": "Footer line on Claude Plan: lookups there never change a meal by themselves (the server's search text is not verbatim page text)."
+  },
+  "restaurantServerOutdated": "Your server needs an update for this feature.",
+  "@restaurantServerOutdated": {
+    "description": "Footer line when the own server predates restaurant lookups."
+  },
+  "restaurantServerDisabled": "Restaurant lookup is turned off on your server.",
+  "@restaurantServerDisabled": {
+    "description": "Footer line when the own server's lookup switch is off."
+  },
+  "settingsRowRestaurantPaused": "Lookups paused",
+  "@settingsRowRestaurantPaused": {
+    "description": "Row shown while lookups wait for consent to a new recipient (another AI service or server)."
+  },
+  "restaurantPausedReview": "Review",
+  "@restaurantPausedReview": {
+    "description": "Value of the paused row; tapping opens the consent sheet."
+  },
+  "restaurantPausedHint": "Lookups are paused until you agree to send them to the new AI service or server.",
+  "@restaurantPausedHint": {
+    "description": "Footer line while paused for a new recipient."
+  },
+  "settingsRowClearLearnedPlaces": "Clear learned places",
+  "@settingsRowClearLearnedPlaces": {
+    "description": "Row: forgets the restaurants and spots the user taught (kept only on this phone)."
+  },
+  "clearPlacesTitle": "Clear learned places?",
+  "@clearPlacesTitle": {
+    "description": "Confirm dialog title."
+  },
+  "clearPlacesBody": "BiteWise forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.",
+  "@clearPlacesBody": {
+    "description": "Confirm dialog body."
+  },
+  "clearPlacesConfirm": "Clear",
+  "@clearPlacesConfirm": {
+    "description": "Confirm dialog action."
+  },
+  "clearPlacesDone": "Learned places cleared.",
+  "@clearPlacesDone": {
+    "description": "Snackbar after clearing."
+  },
+  "restaurantOffTitle": "Turn off restaurant lookup?",
+  "@restaurantOffTitle": {
+    "description": "Dialog when the mode is set to Off."
+  },
+  "restaurantOffBody": "Pending lookups are cancelled.",
+  "@restaurantOffBody": {
+    "description": "Body of the Off dialog."
+  },
+  "restaurantOffClearPlaces": "Also clear learned places",
+  "@restaurantOffClearPlaces": {
+    "description": "Checkbox in the Off dialog."
+  },
+  "restaurantOffConfirm": "Turn off",
+  "@restaurantOffConfirm": {
+    "description": "The Off dialog's action."
+  },
+  "restaurantConsentTitle": "Look up restaurant nutrition?",
+  "@restaurantConsentTitle": {
+    "description": "Consent sheet title."
+  },
+  "restaurantConsentWhat": "When a meal looks like it came from a restaurant, BiteWise can check whether the chain publishes nutrition for it.",
+  "@restaurantConsentWhat": {
+    "description": "Consent sheet bullet: what the feature does."
+  },
+  "restaurantConsentMaps": "On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.",
+  "@restaurantConsentMaps": {
+    "description": "Consent sheet bullet (iPhone): the photo's location goes only to Apple Maps."
+  },
+  "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain's name and the food names and amounts are sent to {recipient}, which searches the web for the chain's published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
+  "@restaurantConsentSent": {
+    "description": "Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.",
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantConsentSentAndroid": "On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain's name and the food names and amounts are sent to {recipient}, which searches the web for the chain's published nutrition. The photo is never sent for this.",
+  "@restaurantConsentSentAndroid": {
+    "description": "Consent sheet bullet (Android): what leaves the phone, and to whom.",
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantConsentBrandOnly": "Brand only skips the location and uses only brand names printed on cups, bags or receipts in the photo.",
+  "@restaurantConsentBrandOnly": {
+    "description": "Consent sheet bullet (iPhone): what the Brand only button means."
+  },
+  "restaurantConsentHttps": "Chain names found from the photo's location go to your server only over https. With an http address, lookups use printed brands only.",
+  "@restaurantConsentHttps": {
+    "description": "Consent sheet bullet (iPhone, Claude Plan): the https rule for the own server."
+  },
+  "restaurantConsentApply": "BiteWise replaces your AI's numbers only when the chain's own website publishes them and the match is clear. Otherwise you get a suggestion. You can undo any change.",
+  "@restaurantConsentApply": {
+    "description": "Consent sheet bullet (Anthropic, OpenRouter): when numbers change by themselves."
+  },
+  "restaurantConsentSuggestOnly": "With your own server, BiteWise only suggests the chain's published numbers. Your AI's numbers change only when you accept a suggestion, and you can undo it.",
+  "@restaurantConsentSuggestOnly": {
+    "description": "Consent sheet bullet (Claude Plan): lookups there are suggestions only."
+  },
+  "restaurantConsentOff": "You can turn this off at any time in Settings.",
+  "@restaurantConsentOff": {
+    "description": "Consent sheet last bullet."
+  },
+  "restaurantRecipientNameClaudePlan": "your own server, which uses Claude web search (Anthropic)",
+  "@restaurantRecipientNameClaudePlan": {
+    "description": "The recipient inside restaurantConsentSent on Claude Plan."
+  },
+  "restaurantRecipientNameAnthropic": "Anthropic (Claude web search)",
+  "@restaurantRecipientNameAnthropic": {
+    "description": "The recipient inside restaurantConsentSent with an Anthropic key."
+  },
+  "restaurantRecipientNameOpenrouter": "OpenRouter and its search partner Exa",
+  "@restaurantRecipientNameOpenrouter": {
+    "description": "The recipient inside restaurantConsentSent with an OpenRouter key."
+  },
+  "restaurantConsentUseLocation": "Use location",
+  "@restaurantConsentUseLocation": {
+    "description": "Consent button: lookups may use the photo's location (disabled on Android and for an http server)."
+  },
+  "restaurantConsentBrandOnlyButton": "Brand only",
+  "@restaurantConsentBrandOnlyButton": {
+    "description": "Consent button: printed brands only, no location."
+  },
+  "restaurantConsentNotNow": "Not now",
+  "@restaurantConsentNotNow": {
+    "description": "Consent button: nothing is turned on."
   }
 }

@@ -56,7 +56,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Bitewise reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings.</string>
+	<string>Bitewise reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings. If you turn on restaurant lookup with photo location, Bitewise also reads where a restaurant meal photo was taken, only to ask Apple Maps which restaurants are nearby.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

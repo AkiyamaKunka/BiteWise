@@ -2365,4 +2365,174 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assistUndo => 'Undo';
+
+  @override
+  String get settingsSectionRestaurant => 'Restaurant nutrition';
+
+  @override
+  String get settingsRowRestaurantMode => 'Lookups';
+
+  @override
+  String get restaurantModeSheetTitle => 'Restaurant nutrition lookup';
+
+  @override
+  String get restaurantModeOff => 'Off';
+
+  @override
+  String get restaurantModeAuto => 'When unsure';
+
+  @override
+  String get restaurantModeAlways => 'Always';
+
+  @override
+  String get restaurantModeHelper =>
+      'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.';
+
+  @override
+  String get settingsRowRestaurantLocation => 'Use photo location';
+
+  @override
+  String get restaurantLocationOffHint =>
+      'Brand only: uses brand names printed on cups, bags or receipts.';
+
+  @override
+  String get restaurantLocationAndroidHint =>
+      'On Android, lookups use printed brands only for now.';
+
+  @override
+  String get restaurantLocationHttpHint =>
+      'Nearby-restaurant lookups need https on your server. Brand-only lookups still work.';
+
+  @override
+  String get restaurantRecipientClaudePlan =>
+      'Lookups go to your own server, which uses Claude web search (Anthropic).';
+
+  @override
+  String get restaurantRecipientAnthropic =>
+      'Lookups go to Anthropic (Claude web search) with your key.';
+
+  @override
+  String get restaurantRecipientOpenrouter =>
+      'Lookups go to OpenRouter and its search partner Exa.';
+
+  @override
+  String restaurantUnsupported(String provider) {
+    return 'Not available with $provider yet.';
+  }
+
+  @override
+  String get restaurantNeedsServerAddress =>
+      'Add your server address to use this.';
+
+  @override
+  String get restaurantSuggestOnly =>
+      'With your own server, published numbers are only suggested: you decide whether to use them.';
+
+  @override
+  String get restaurantServerOutdated =>
+      'Your server needs an update for this feature.';
+
+  @override
+  String get restaurantServerDisabled =>
+      'Restaurant lookup is turned off on your server.';
+
+  @override
+  String get settingsRowRestaurantPaused => 'Lookups paused';
+
+  @override
+  String get restaurantPausedReview => 'Review';
+
+  @override
+  String get restaurantPausedHint =>
+      'Lookups are paused until you agree to send them to the new AI service or server.';
+
+  @override
+  String get settingsRowClearLearnedPlaces => 'Clear learned places';
+
+  @override
+  String get clearPlacesTitle => 'Clear learned places?';
+
+  @override
+  String get clearPlacesBody =>
+      'BiteWise forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.';
+
+  @override
+  String get clearPlacesConfirm => 'Clear';
+
+  @override
+  String get clearPlacesDone => 'Learned places cleared.';
+
+  @override
+  String get restaurantOffTitle => 'Turn off restaurant lookup?';
+
+  @override
+  String get restaurantOffBody => 'Pending lookups are cancelled.';
+
+  @override
+  String get restaurantOffClearPlaces => 'Also clear learned places';
+
+  @override
+  String get restaurantOffConfirm => 'Turn off';
+
+  @override
+  String get restaurantConsentTitle => 'Look up restaurant nutrition?';
+
+  @override
+  String get restaurantConsentWhat =>
+      'When a meal looks like it came from a restaurant, BiteWise can check whether the chain publishes nutrition for it.';
+
+  @override
+  String get restaurantConsentMaps =>
+      'On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.';
+
+  @override
+  String restaurantConsentSent(String recipient) {
+    return 'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to $recipient, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.';
+  }
+
+  @override
+  String restaurantConsentSentAndroid(String recipient) {
+    return 'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to $recipient, which searches the web for the chain\'s published nutrition. The photo is never sent for this.';
+  }
+
+  @override
+  String get restaurantConsentBrandOnly =>
+      'Brand only skips the location and uses only brand names printed on cups, bags or receipts in the photo.';
+
+  @override
+  String get restaurantConsentHttps =>
+      'Chain names found from the photo\'s location go to your server only over https. With an http address, lookups use printed brands only.';
+
+  @override
+  String get restaurantConsentApply =>
+      'BiteWise replaces your AI\'s numbers only when the chain\'s own website publishes them and the match is clear. Otherwise you get a suggestion. You can undo any change.';
+
+  @override
+  String get restaurantConsentSuggestOnly =>
+      'With your own server, BiteWise only suggests the chain\'s published numbers. Your AI\'s numbers change only when you accept a suggestion, and you can undo it.';
+
+  @override
+  String get restaurantConsentOff =>
+      'You can turn this off at any time in Settings.';
+
+  @override
+  String get restaurantRecipientNameClaudePlan =>
+      'your own server, which uses Claude web search (Anthropic)';
+
+  @override
+  String get restaurantRecipientNameAnthropic =>
+      'Anthropic (Claude web search)';
+
+  @override
+  String get restaurantRecipientNameOpenrouter =>
+      'OpenRouter and its search partner Exa';
+
+  @override
+  String get restaurantConsentUseLocation => 'Use location';
+
+  @override
+  String get restaurantConsentBrandOnlyButton => 'Brand only';
+
+  @override
+  String get restaurantConsentNotNow => 'Not now';
 }

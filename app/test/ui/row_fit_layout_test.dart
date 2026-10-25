@@ -31,6 +31,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
+    show LookupRecipient, LookupSupport;
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
@@ -265,6 +268,58 @@ void main() {
               reason: 'the glasses switch title must read in full');
           expect(tester.takeException(), isNull);
         });
+
+        // Design R7a: the Restaurant nutrition rows. The mode row's title
+        // sits beside its value (Off / When unsure / Always), so the English
+        // title is the short 'Lookups' ('Nutrition lookup' was cut beside
+        // 'When unsure' at 375 pt); the group header says 'Restaurant'. The
+        // location row shares its line with a Switch; the paused row
+        // carries 'Review'.
+        for (final mode in const ['off', 'auto', 'always']) {
+          testWidgets('the Restaurant nutrition rows (mode $mode), $lang at '
+              '$width pt', (tester) async {
+            _phone(tester, width);
+            final settings = FakeSettings(apiKey: 'k')
+              ..provider = 'anthropic'
+              ..restaurantAssist = mode
+              ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+              // A consent for another recipient: the paused row shows.
+              ..restaurantAssistConsentRecipient = 'openrouter';
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                SettingsScreen(
+                  settings: settings,
+                  analyzer: FakeAnalyzer(),
+                  dao: FakeDao(),
+                  requestPhotoPermission: () async => true,
+                  restaurantAssist: RestaurantAssistControls(
+                    lookupSupport: () => const LookupSupport(
+                        supported: true,
+                        recipient: LookupRecipient.anthropic,
+                        locationAllowed: true),
+                    clearLearnedPlaces: () async => true,
+                    locationSupported: true,
+                  ),
+                ),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            for (final key in [
+              'restaurantModeRow',
+              if (mode != 'off') ...[
+                'restaurantLocationRow',
+                'restaurantPausedRow',
+              ],
+              'clearLearnedPlacesRow',
+            ]) {
+              final row = find.byKey(Key(key));
+              await tester.ensureVisible(row);
+              await tester.pumpAndSettle();
+              expect(_ellipsised(tester, row), isEmpty,
+                  reason: '$key must read in full');
+            }
+            expect(tester.takeException(), isNull);
+          });
+        }
 
         // Refresh on → the last-run time; off → the remedy, worded per
         // platform: 'Off' / '系统已关闭' on iOS (Background App Refresh),

@@ -200,9 +200,38 @@ void main() {
             r': null,',
         r'places: Platform\.isIOS \? MapKitPlaces\(\) : null,',
         r'placesStore: AssistPlacesStore\.platform\(\),',
+        // R7a: the mode, 'Use photo location' and the consent, read fresh
+        // from the real settings on every decision.
+        r'settings: \(\) => AssistSettingsView\( '
+            r'mode: AssistMode\.fromWire\(settings\.restaurantAssist\), '
+            r'useLocation: settings\.restaurantAssistLocation, '
+            r'consentAt: settings\.restaurantAssistConsentAt, '
+            r'consentRecipient: settings\.restaurantAssistConsentRecipient, '
+            r'\),',
       ]) {
         expect(build, _wired(wire), reason: wire);
       }
+      expect(build, isNot(contains('AssistSettingsView.off')),
+          reason: 'R7a stores the settings: the assist reads them');
+      // R7a: Settings' Restaurant nutrition group and the consent sheets
+      // see the same analyzer, MealAssist and server; the location only on
+      // iOS; and the shell gets them through UiServices.
+      final controlsAt = source.indexOf(
+          'final restaurantAssist = RestaurantAssistControls(');
+      expect(controlsAt, isNot(-1));
+      final controls = source.substring(
+          controlsAt, source.indexOf('\n    );\n', controlsAt));
+      for (final wire in [
+        r'lookupSupport: analyzer\.lookupSupport,',
+        r'clearLearnedPlaces: mealAssist\.clearLearnedPlaces,',
+        r'consentNeeded: mealAssist\.consentNeeded,',
+        r'serverState: \(\) async => '
+            r'assistServerStateOf\(await serverAnalyzer\.serverFeatures\(\)\),',
+        r'locationSupported: Platform\.isIOS,',
+      ]) {
+        expect(controls, _wired(wire), reason: wire);
+      }
+      expect(init(), _wired(r'restaurantAssist: restaurantAssist,'));
       expect(init(), _wired(r'mealAssist\.start\(\);'));
       expect(
         init(),
@@ -232,6 +261,10 @@ void main() {
         'PlaceResolver',
         'services/places/',
         'AssistPlacesStore',
+        // R7a: no consent sheet, Settings group or their seams either.
+        'RestaurantAssistControls',
+        'restaurant_assist_controls',
+        'restaurant_consent_sheet',
       ]) {
         expect(glue, isNot(contains(banned)), reason: banned);
       }

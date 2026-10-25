@@ -36,8 +36,11 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
+    show LookupRecipient, LookupSupport;
 import 'package:calorie_tracker/services/garmin_client.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
@@ -477,7 +480,11 @@ void main() {
             settings: FakeSettings(apiKey: 'k')
               ..provider = 'server'
               ..serverBackend = 'claude'
-              ..calorieGoal = 1800,
+              ..calorieGoal = 1800
+              ..restaurantAssist = 'auto'
+              ..restaurantAssistLocation = true
+              ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+              ..restaurantAssistConsentRecipient = 'claude_plan:ffffffff',
             analyzer: FakeAnalyzer(),
             dao: FakeDao(),
             requestPhotoPermission: () async => true,
@@ -486,6 +493,18 @@ void main() {
             backgroundRefreshEnabled: () async => true,
             openSystemSettings: () async {},
             nextSummaryAt: () async => now.add(const Duration(hours: 2)),
+            // Design R7a: Restaurant nutrition on, paused for a new server
+            // (every one of its rows shows).
+            restaurantAssist: RestaurantAssistControls(
+              lookupSupport: () => const LookupSupport(
+                supported: true,
+                recipient: LookupRecipient.claudePlan,
+                locationAllowed: true,
+                recipientHostTag: '0a1b2c3d',
+              ),
+              clearLearnedPlaces: () async => true,
+              locationSupported: true,
+            ),
           );
         }
 
@@ -536,7 +555,30 @@ void main() {
                   matching: find.byType(GroupedRow),
                 ),
               ),
-              for (final k in valueRows.skip(1)) (k, find.byKey(Key(k))),
+              // The Photos group's last value row, then Restaurant
+              // nutrition (design R7a), then the rest.
+              for (final k in valueRows.skip(1).take(1))
+                (k, find.byKey(Key(k))),
+              (
+                'restaurantModeRow',
+                find.byKey(const Key('restaurantModeRow')),
+              ),
+              (
+                'restaurantLocationToggle',
+                find.ancestor(
+                  of: find.byKey(const Key('restaurantLocationToggle')),
+                  matching: find.byType(GroupedRow),
+                ),
+              ),
+              (
+                'restaurantPausedRow',
+                find.byKey(const Key('restaurantPausedRow')),
+              ),
+              (
+                'clearLearnedPlacesRow',
+                find.byKey(const Key('clearLearnedPlacesRow')),
+              ),
+              for (final k in valueRows.skip(2)) (k, find.byKey(Key(k))),
             ];
             for (final (name, row) in rows) {
               await tester.scrollUntilVisible(row, 300, scrollable: scrollable);

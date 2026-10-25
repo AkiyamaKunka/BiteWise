@@ -16,6 +16,7 @@ import '../services/photo/photo_library.dart';
 import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
+import 'restaurant_assist_controls.dart';
 
 /// The settings surface the UI needs (spec §8 knobs the user edits).
 /// di.dart adapts the concrete AppSettings onto this; tests use in-memory
@@ -101,6 +102,29 @@ abstract class SettingsStore {
   /// Daily calorie goal for the coach notification; 0 = unset (the
   /// summary then compares against the typical-day median).
   int get calorieGoal;
+
+  /// The restaurant assist (design R7a; AppSettings.restaurantAssist…):
+  /// 'off' | 'auto' ('When unsure') | 'always'.
+  String get restaurantAssist;
+
+  /// 'Use photo location' (false on Android whatever is stored).
+  bool get restaurantAssistLocation;
+
+  /// The consent: when it was given and to which recipient
+  /// (LookupSupport.recipientStamp); both null without one.
+  DateTime? get restaurantAssistConsentAt;
+  String? get restaurantAssistConsentRecipient;
+
+  /// Writes the restaurant assist's settings together (one change signal,
+  /// so the assist never sees a mode without its consent). Null leaves a
+  /// value as it is; [clearConsent] forgets the consent.
+  Future<void> updateRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  });
 
   Future<void> update({
     String? apiKey,
@@ -237,6 +261,10 @@ class UiServices {
   /// restaurant assist leaves them alone. Null in tests that do not care.
   final MealInUseRegistry? mealInUse;
 
+  /// The restaurant assist as Settings and its consent sheets see it
+  /// (design R7a). Null hides the Settings group (most tests).
+  final RestaurantAssistControls? restaurantAssist;
+
   const UiServices({
     required this.dao,
     required this.analyzer,
@@ -266,5 +294,6 @@ class UiServices {
     this.backgroundRefreshEnabled,
     this.backgroundScanStuck,
     this.mealInUse,
+    this.restaurantAssist,
   });
 }

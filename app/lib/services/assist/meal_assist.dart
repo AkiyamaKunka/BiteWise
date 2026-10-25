@@ -607,6 +607,21 @@ class MealAssist {
   /// The meal was opened: its dot goes.
   Future<bool> markSeen(int mealId) => _state.markSeen(mealId);
 
+  /// 'Clear learned places' (R7a): the places the user taught — the 'Not
+  /// from a restaurant' zones and the confirmed and blocked chains — are
+  /// forgotten, through the same store instance the location path reads.
+  /// True when they are gone (none were ever kept without a store).
+  /// Never throws.
+  Future<bool> clearLearnedPlaces() async {
+    final store = _placesStore;
+    if (store == null) return true;
+    try {
+      return await store.clear();
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// Starts listening: meals-changed (a sweep 5 s later), settings (Off
   /// cancels, on sweeps), and — with [observeLifecycle] — the app coming
   /// back to the foreground. Idempotent.

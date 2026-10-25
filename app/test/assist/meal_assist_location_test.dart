@@ -590,6 +590,22 @@ void main() {
       expect(h.source.asked, hasLength(1), reason: 'denylisted');
     });
 
+    test("'Clear learned places' (R7a) forgets every zone, confirmation "
+        'and block, through the store the place step reads', () async {
+      await h.placesStore.addZone(h.cell);
+      await h.placesStore.confirm('mcdonalds', h.cell);
+      expect((await h.placesStore.read()).zones, isNotEmpty);
+      expect(await h.assist.clearLearnedPlaces(), isTrue);
+      final left = await h.placesStore.read();
+      expect(left.zones, isEmpty);
+      expect(left.confirmed, isEmpty);
+      expect(left.blocked, isEmpty);
+      // The zone is gone: Apple Maps is asked again for this spot.
+      h.add(_bigMac());
+      await h.assist.sweep();
+      expect(h.places.radii, isNotEmpty);
+    });
+
     test('a zone next door (the 3×3 neighbourhood) counts too', () async {
       await h.placesStore.addZone(PlaceCell.fromLatLon(_lat + 0.001, _lon)!);
       h.add(_bigMac());

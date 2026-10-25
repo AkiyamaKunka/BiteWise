@@ -618,4 +618,72 @@ void main() {
         reason: 'fullBackupContent does not exclude $localStoreDirName/');
     expect(full, isNot(contains('<include')));
   });
+
+  // Design R7a: while restaurant lookup uses the photo location, the app
+  // reads where a meal photo was taken. iOS shows NSPhotoLibraryUsageDescription
+  // in the permission prompt, from Info.plist and from each InfoPlist.strings
+  // (which wins for its language) — so all three must say it, in step: the
+  // English pair identical, the Chinese one saying the same. Neither may
+  // suggest the location leaves for anyone but Apple Maps.
+  test('the photo-library usage string says when the photo location is read, '
+      'in Info.plist and both InfoPlist.strings', () {
+    final ios = '${_appRoot().path}/ios/Runner';
+    final plist = File('$ios/Info.plist').readAsStringSync();
+    final fromPlist = RegExp(
+            r'<key>NSPhotoLibraryUsageDescription</key>\s*<string>([^<]*)</string>')
+        .firstMatch(plist)
+        ?.group(1);
+    String fromStrings(String lproj) {
+      final file = File('$ios/$lproj/InfoPlist.strings');
+      expect(file.existsSync(), isTrue, reason: file.path);
+      final value = RegExp(r'"NSPhotoLibraryUsageDescription" = "([^"]*)";')
+          .firstMatch(file.readAsStringSync())
+          ?.group(1);
+      expect(value, isNotNull, reason: '$lproj has no usage string');
+      return value!;
+    }
+
+    expect(fromPlist, isNotNull);
+    final en = fromStrings('en.lproj');
+    final zh = fromStrings('zh-Hans.lproj');
+    expect(en, fromPlist, reason: 'en.lproj mirrors Info.plist');
+    // The photo prompt's first purpose is unchanged.
+    expect(en, contains('AI service you choose in Settings'));
+    expect(zh, contains('AI 服务'));
+    // R7a: the photo's location, read only for restaurant lookup, and only
+    // to ask Apple Maps.
+    expect(en, contains('restaurant lookup with photo location'));
+    expect(en, contains('where a restaurant meal photo was taken'));
+    expect(en, contains('only to ask Apple Maps'));
+    expect(zh, contains('使用照片位置的餐厅查询'));
+    expect(zh, contains('拍摄位置'));
+    expect(zh, contains('仅用于向 Apple 地图查询'));
+  });
+
+  // App Store Connect's App Privacy answer is "Data Not Collected" with the
+  // rationale in docs/RELEASING.md § 4.3 (design "Store disclosures"): the
+  // developer collects nothing; data goes from the user's phone to the
+  // user's own server or provider account, and Apple Maps' queries are
+  // Apple's. Both manifests must say the same — no collected data types.
+  test('both privacy manifests declare no collected data types', () {
+    final ios = '${_appRoot().path}/ios';
+    for (final target in const ['Runner', 'ShareExtension']) {
+      final plist =
+          File('$ios/$target/PrivacyInfo.xcprivacy').readAsStringSync();
+      expect(
+          RegExp(r'<key>NSPrivacyCollectedDataTypes</key>\s*<array\s*/>')
+              .hasMatch(plist),
+          isTrue,
+          reason: '$target/PrivacyInfo.xcprivacy must keep '
+              'NSPrivacyCollectedDataTypes an empty array (RELEASING.md § 4.3)');
+      expect(
+          RegExp(r'<key>NSPrivacyTracking</key>\s*<false\s*/>').hasMatch(plist),
+          isTrue,
+          reason: target);
+    }
+    final releasing = File('${_appRoot().parent.path}/docs/RELEASING.md')
+        .readAsStringSync();
+    expect(releasing, contains('NSPrivacyCollectedDataTypes'));
+    expect(releasing, contains('Data Not Collected'));
+  });
 }

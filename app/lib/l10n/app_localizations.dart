@@ -3761,6 +3761,288 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Undo'**
   String get assistUndo;
+
+  /// Settings group header for the restaurant assist (design R7a).
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant nutrition'**
+  String get settingsSectionRestaurant;
+
+  /// The mode row's title; its value is Off / When unsure / Always. Short in English so the title reads in full beside 'When unsure' on a 375 pt phone ('Nutrition lookup' was cut); the group header already says 'Restaurant nutrition'.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups'**
+  String get settingsRowRestaurantMode;
+
+  /// Title of the sheet that picks the restaurant lookup mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant nutrition lookup'**
+  String get restaurantModeSheetTitle;
+
+  /// Restaurant lookup mode: never.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get restaurantModeOff;
+
+  /// Restaurant lookup mode: only when the AI says its estimate of a restaurant meal is unsure.
+  ///
+  /// In en, this message translates to:
+  /// **'When unsure'**
+  String get restaurantModeAuto;
+
+  /// Restaurant lookup mode: every restaurant or takeout meal (still never a home meal's location).
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get restaurantModeAlways;
+
+  /// Footer line under the Restaurant nutrition group.
+  ///
+  /// In en, this message translates to:
+  /// **'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.'**
+  String get restaurantModeHelper;
+
+  /// Switch: automatic lookups may use where a restaurant meal photo was taken (iOS only).
+  ///
+  /// In en, this message translates to:
+  /// **'Use photo location'**
+  String get settingsRowRestaurantLocation;
+
+  /// Footer line while 'Use photo location' is off.
+  ///
+  /// In en, this message translates to:
+  /// **'Brand only: uses brand names printed on cups, bags or receipts.'**
+  String get restaurantLocationOffHint;
+
+  /// Footer line on Android, where the photo location is never read.
+  ///
+  /// In en, this message translates to:
+  /// **'On Android, lookups use printed brands only for now.'**
+  String get restaurantLocationAndroidHint;
+
+  /// Footer line when the own server's address is http:// — chain names found from the photo location are never sent over plain http.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby-restaurant lookups need https on your server. Brand-only lookups still work.'**
+  String get restaurantLocationHttpHint;
+
+  /// Footer line naming who receives lookups on Claude Plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups go to your own server, which uses Claude web search (Anthropic).'**
+  String get restaurantRecipientClaudePlan;
+
+  /// Footer line naming who receives lookups with an Anthropic key.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups go to Anthropic (Claude web search) with your key.'**
+  String get restaurantRecipientAnthropic;
+
+  /// Footer line naming who receives lookups with an OpenRouter key.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups go to OpenRouter and its search partner Exa.'**
+  String get restaurantRecipientOpenrouter;
+
+  /// Footer line when the selected AI service has no lookup. provider is its display name.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available with {provider} yet.'**
+  String restaurantUnsupported(String provider);
+
+  /// Footer line on Claude Plan with no usable server address.
+  ///
+  /// In en, this message translates to:
+  /// **'Add your server address to use this.'**
+  String get restaurantNeedsServerAddress;
+
+  /// Footer line on Claude Plan: lookups there never change a meal by themselves (the server's search text is not verbatim page text).
+  ///
+  /// In en, this message translates to:
+  /// **'With your own server, published numbers are only suggested: you decide whether to use them.'**
+  String get restaurantSuggestOnly;
+
+  /// Footer line when the own server predates restaurant lookups.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server needs an update for this feature.'**
+  String get restaurantServerOutdated;
+
+  /// Footer line when the own server's lookup switch is off.
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant lookup is turned off on your server.'**
+  String get restaurantServerDisabled;
+
+  /// Row shown while lookups wait for consent to a new recipient (another AI service or server).
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups paused'**
+  String get settingsRowRestaurantPaused;
+
+  /// Value of the paused row; tapping opens the consent sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get restaurantPausedReview;
+
+  /// Footer line while paused for a new recipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups are paused until you agree to send them to the new AI service or server.'**
+  String get restaurantPausedHint;
+
+  /// Row: forgets the restaurants and spots the user taught (kept only on this phone).
+  ///
+  /// In en, this message translates to:
+  /// **'Clear learned places'**
+  String get settingsRowClearLearnedPlaces;
+
+  /// Confirm dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear learned places?'**
+  String get clearPlacesTitle;
+
+  /// Confirm dialog body.
+  ///
+  /// In en, this message translates to:
+  /// **'BiteWise forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.'**
+  String get clearPlacesBody;
+
+  /// Confirm dialog action.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clearPlacesConfirm;
+
+  /// Snackbar after clearing.
+  ///
+  /// In en, this message translates to:
+  /// **'Learned places cleared.'**
+  String get clearPlacesDone;
+
+  /// Dialog when the mode is set to Off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off restaurant lookup?'**
+  String get restaurantOffTitle;
+
+  /// Body of the Off dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending lookups are cancelled.'**
+  String get restaurantOffBody;
+
+  /// Checkbox in the Off dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Also clear learned places'**
+  String get restaurantOffClearPlaces;
+
+  /// The Off dialog's action.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off'**
+  String get restaurantOffConfirm;
+
+  /// Consent sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Look up restaurant nutrition?'**
+  String get restaurantConsentTitle;
+
+  /// Consent sheet bullet: what the feature does.
+  ///
+  /// In en, this message translates to:
+  /// **'When a meal looks like it came from a restaurant, BiteWise can check whether the chain publishes nutrition for it.'**
+  String get restaurantConsentWhat;
+
+  /// Consent sheet bullet (iPhone): the photo's location goes only to Apple Maps.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.'**
+  String get restaurantConsentMaps;
+
+  /// Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.
+  ///
+  /// In en, this message translates to:
+  /// **'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to {recipient}, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.'**
+  String restaurantConsentSent(String recipient);
+
+  /// Consent sheet bullet (Android): what leaves the phone, and to whom.
+  ///
+  /// In en, this message translates to:
+  /// **'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to {recipient}, which searches the web for the chain\'s published nutrition. The photo is never sent for this.'**
+  String restaurantConsentSentAndroid(String recipient);
+
+  /// Consent sheet bullet (iPhone): what the Brand only button means.
+  ///
+  /// In en, this message translates to:
+  /// **'Brand only skips the location and uses only brand names printed on cups, bags or receipts in the photo.'**
+  String get restaurantConsentBrandOnly;
+
+  /// Consent sheet bullet (iPhone, Claude Plan): the https rule for the own server.
+  ///
+  /// In en, this message translates to:
+  /// **'Chain names found from the photo\'s location go to your server only over https. With an http address, lookups use printed brands only.'**
+  String get restaurantConsentHttps;
+
+  /// Consent sheet bullet (Anthropic, OpenRouter): when numbers change by themselves.
+  ///
+  /// In en, this message translates to:
+  /// **'BiteWise replaces your AI\'s numbers only when the chain\'s own website publishes them and the match is clear. Otherwise you get a suggestion. You can undo any change.'**
+  String get restaurantConsentApply;
+
+  /// Consent sheet bullet (Claude Plan): lookups there are suggestions only.
+  ///
+  /// In en, this message translates to:
+  /// **'With your own server, BiteWise only suggests the chain\'s published numbers. Your AI\'s numbers change only when you accept a suggestion, and you can undo it.'**
+  String get restaurantConsentSuggestOnly;
+
+  /// Consent sheet last bullet.
+  ///
+  /// In en, this message translates to:
+  /// **'You can turn this off at any time in Settings.'**
+  String get restaurantConsentOff;
+
+  /// The recipient inside restaurantConsentSent on Claude Plan.
+  ///
+  /// In en, this message translates to:
+  /// **'your own server, which uses Claude web search (Anthropic)'**
+  String get restaurantRecipientNameClaudePlan;
+
+  /// The recipient inside restaurantConsentSent with an Anthropic key.
+  ///
+  /// In en, this message translates to:
+  /// **'Anthropic (Claude web search)'**
+  String get restaurantRecipientNameAnthropic;
+
+  /// The recipient inside restaurantConsentSent with an OpenRouter key.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenRouter and its search partner Exa'**
+  String get restaurantRecipientNameOpenrouter;
+
+  /// Consent button: lookups may use the photo's location (disabled on Android and for an http server).
+  ///
+  /// In en, this message translates to:
+  /// **'Use location'**
+  String get restaurantConsentUseLocation;
+
+  /// Consent button: printed brands only, no location.
+  ///
+  /// In en, this message translates to:
+  /// **'Brand only'**
+  String get restaurantConsentBrandOnlyButton;
+
+  /// Consent button: nothing is turned on.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get restaurantConsentNotNow;
 }
 
 class _AppLocalizationsDelegate

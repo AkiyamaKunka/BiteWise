@@ -11,6 +11,7 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/services.dart';
 
 import '../support/fake_meals_dao.dart';
@@ -215,6 +216,39 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   int calorieGoal = 0;
 
   @override
+  String restaurantAssist = 'off';
+  @override
+  bool restaurantAssistLocation = false;
+  @override
+  DateTime? restaurantAssistConsentAt;
+  @override
+  String? restaurantAssistConsentRecipient;
+  int restaurantAssistUpdates = 0;
+
+  @override
+  Future<void> updateRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  }) async {
+    restaurantAssistUpdates++;
+    if (mode != null) restaurantAssist = mode;
+    if (location != null) restaurantAssistLocation = location;
+    if (clearConsent) {
+      restaurantAssistConsentAt = null;
+      restaurantAssistConsentRecipient = null;
+    } else {
+      if (consentAt != null) restaurantAssistConsentAt = consentAt;
+      if (consentRecipient != null) {
+        restaurantAssistConsentRecipient = consentRecipient;
+      }
+    }
+    notifyListeners(); // one signal, as AppSettings.setRestaurantAssist
+  }
+
+  @override
   Future<void> update({
     String? apiKey,
     String? provider,
@@ -367,6 +401,7 @@ UiServices makeServices({
   Future<void> Function()? openSystemSettings,
   PhotoLibrary? photoLibrary,
   MealInUseRegistry? mealInUse,
+  RestaurantAssistControls? restaurantAssist,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -386,5 +421,6 @@ UiServices makeServices({
     openSystemSettings: openSystemSettings,
     photoLibrary: photoLibrary,
     mealInUse: mealInUse,
+    restaurantAssist: restaurantAssist,
   );
 }

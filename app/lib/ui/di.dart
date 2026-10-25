@@ -53,6 +53,7 @@ import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 import 'refresh_signal.dart';
+import 'restaurant_assist_controls.dart';
 import 'services.dart';
 
 /// Singleton wiring of the workflow-fixed factories, in the spec'd startup
@@ -258,9 +259,9 @@ class AppServices {
 
     // The restaurant assist (design R6b): saved meals are enriched later,
     // in the foreground only, when the pipeline is idle and no analyzer
-    // call is in flight. The mode and the consent are R7a's settings
-    // (settings.restaurant_assist…); until they are stored it reads Off,
-    // the design's default, and makes no call.
+    // call is in flight. The mode, 'Use photo location' and the consent
+    // are R7a's settings (settings.restaurant_assist…), read fresh on every
+    // decision; Off — the default — makes no call.
     final mealAssist = MealAssist(
       dao: dao,
       lookups: analyzer,
@@ -269,7 +270,12 @@ class AppServices {
       inUse: mealInUse.isInUse,
       budget: assistBudget,
       state: AssistLocalState.platform(),
-      settings: () => AssistSettingsView.off,
+      settings: () => AssistSettingsView(
+        mode: AssistMode.fromWire(settings.restaurantAssist),
+        useLocation: settings.restaurantAssistLocation,
+        consentAt: settings.restaurantAssistConsentAt,
+        consentRecipient: settings.restaurantAssistConsentRecipient,
+      ),
       settingsChanges: settings,
       mealsChanged: mealsChangedSignal,
       onMealsChanged: signalMealsChanged,
@@ -290,6 +296,19 @@ class AppServices {
               notifyAction(assistAppliedSnackbar(l, n), l.assistUndo,
                   () => unawaited(n.undo()));
             },
+    );
+
+    // Settings' Restaurant nutrition group and the consent sheets (design
+    // R7a): who a lookup would reach now, the assist's consent prompt and
+    // learned places, and what the owner's server says (Claude Plan only).
+    // The photo location is read on iOS only.
+    final restaurantAssist = RestaurantAssistControls(
+      lookupSupport: analyzer.lookupSupport,
+      clearLearnedPlaces: mealAssist.clearLearnedPlaces,
+      consentNeeded: mealAssist.consentNeeded,
+      serverState: () async =>
+          assistServerStateOf(await serverAnalyzer.serverFeatures()),
+      locationSupported: Platform.isIOS,
     );
 
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -354,6 +373,7 @@ class AppServices {
         await openAppSettings(); // permission_handler
       },
       mealInUse: mealInUse,
+      restaurantAssist: restaurantAssist,
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     pipeline.bindStream(shareIntake.photos()); // share sheet (deliberate)
@@ -484,6 +504,30 @@ class _AppSettingsStore implements SettingsStore {
   String get serverEffort => _s.serverEffort;
   @override
   int get calorieGoal => _s.calorieGoal;
+  @override
+  String get restaurantAssist => _s.restaurantAssist;
+  @override
+  bool get restaurantAssistLocation => _s.restaurantAssistLocation;
+  @override
+  DateTime? get restaurantAssistConsentAt => _s.restaurantAssistConsentAt;
+  @override
+  String? get restaurantAssistConsentRecipient =>
+      _s.restaurantAssistConsentRecipient;
+  @override
+  Future<void> updateRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  }) =>
+      _s.setRestaurantAssist(
+        mode: mode,
+        location: location,
+        consentAt: consentAt,
+        consentRecipient: consentRecipient,
+        clearConsent: clearConsent,
+      );
 
   @override
   Future<void> update({

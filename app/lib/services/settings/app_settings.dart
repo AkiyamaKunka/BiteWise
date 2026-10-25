@@ -236,6 +236,14 @@ enum AiProvider {
 const List<String> kServerPlanModels = ['opus', 'sonnet', 'haiku', 'fable'];
 const List<String> kServerPlanEfforts = ['low', 'medium', 'high'];
 
+/// `settings.restaurant_assist` values (design R7a): Off, 'When unsure',
+/// Always. MealAssist's AssistMode reads the same wire values.
+const List<String> restaurantAssistModes = ['off', 'auto', 'always'];
+
+/// A consent recipient as stored: a provider id, plus `:` and 8 lowercase
+/// hex characters for Claude Plan (LookupSupport.recipientStamp).
+final RegExp _consentRecipientRe = RegExp(r'^[a-z_]{1,20}(?::[0-9a-f]{8})?$');
+
 /// Sanity ceiling for the daily goal — a typo of 20000 must not become
 /// a permanent 'you are 18,000 under' message.
 const int maxDailyGoalKcal = 20000;
@@ -272,6 +280,14 @@ class AppSettings extends ChangeNotifier {
   static const String _kWatcherDisclosureSeen =
       'settings.watcher_disclosure_seen';
   static const String _kWatchGlasses = 'settings.watch_glasses';
+  // The restaurant assist (design R7a; data_contracts §9a).
+  static const String _kRestaurantAssist = 'settings.restaurant_assist';
+  static const String _kRestaurantAssistLocation =
+      'settings.restaurant_assist_location';
+  static const String _kRestaurantAssistConsentAt =
+      'settings.restaurant_assist_consent_at';
+  static const String _kRestaurantAssistConsentRecipient =
+      'settings.restaurant_assist_consent_recipient';
   static const String _kSummaryEnabled = 'settings.summary_enabled';
   static const String _kDietaryProfile = 'settings.dietary_profile';
   static const String _kQuotaPauseUntil = 'settings.quota_pause_until';
@@ -366,6 +382,10 @@ class AppSettings extends ChangeNotifier {
   bool _watcherEnabled = false;
   bool _watcherDisclosureSeen = false;
   bool _watchGlasses = true;
+  String _restaurantAssist = 'off';
+  bool _restaurantAssistLocation = false;
+  DateTime? _restaurantAssistConsentAt;
+  String? _restaurantAssistConsentRecipient;
   bool _summaryEnabled = true;
   String? _dietaryProfile;
   DateTime? _quotaPauseUntil;
@@ -442,6 +462,19 @@ class AppSettings extends ChangeNotifier {
     s._watcherEnabled = p.getBool(_kWatcherEnabled) ?? false;
     s._watcherDisclosureSeen = p.getBool(_kWatcherDisclosureSeen) ?? false;
     s._watchGlasses = p.getBool(_kWatchGlasses) ?? true;
+    final assist = p.getString(_kRestaurantAssist) ?? 'off';
+    s._restaurantAssist =
+        restaurantAssistModes.contains(assist) ? assist : 'off';
+    s._restaurantAssistLocation =
+        p.getBool(_kRestaurantAssistLocation) ?? false;
+    // Written as UTC, read back local (as the quota pause is).
+    s._restaurantAssistConsentAt = DateTime.tryParse(
+            p.getString(_kRestaurantAssistConsentAt) ?? '')
+        ?.toLocal();
+    final recipient =
+        (p.getString(_kRestaurantAssistConsentRecipient) ?? '').trim();
+    s._restaurantAssistConsentRecipient =
+        _consentRecipientRe.hasMatch(recipient) ? recipient : null;
     s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
@@ -897,6 +930,81 @@ class AppSettings extends ChangeNotifier {
   Future<void> setWatchGlasses(bool value) async {
     _watchGlasses = value;
     await _prefs.setBool(_kWatchGlasses, value);
+    notifyListeners();
+  }
+
+  /// The restaurant assist's mode (design R7a, `settings.restaurant_assist`):
+  /// 'off' (the default) | 'auto' ('When unsure') | 'always'. Anything else
+  /// stored reads as 'off'. Only the app engine reads it (MealAssist).
+  String get restaurantAssist => _restaurantAssist;
+
+  /// 'Use photo location' (`settings.restaurant_assist_location`): whether
+  /// automatic lookups of restaurant meals may add the chains around where
+  /// the photo was taken. iOS only — Android reads no photo location in v1,
+  /// so it reads false there whatever is stored.
+  bool get restaurantAssistLocation =>
+      _restaurantAssistLocation &&
+      defaultTargetPlatform == TargetPlatform.iOS;
+
+  /// When the user agreed to the consent sheet, or null (no consent). Meals
+  /// logged before it are never looked up automatically.
+  DateTime? get restaurantAssistConsentAt => _restaurantAssistConsentAt;
+
+  /// Whom that consent names: LookupSupport.recipientStamp — the provider id,
+  /// plus for Claude Plan `:` and 8 hex characters of SHA-256 of the server
+  /// host (never the host itself). Null without a consent.
+  String? get restaurantAssistConsentRecipient =>
+      _restaurantAssistConsentRecipient;
+
+  /// Writes the restaurant assist's settings together, with ONE change
+  /// notification, so MealAssist never sees a mode turned on without the
+  /// consent stamped with it. Null leaves a value as it is; [clearConsent]
+  /// forgets the consent. An unknown [mode] is stored as 'off'; a malformed
+  /// [consentRecipient] is not stored (and the consent is cleared with it).
+  Future<void> setRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  }) async {
+    if (mode != null) {
+      _restaurantAssist = restaurantAssistModes.contains(mode) ? mode : 'off';
+    }
+    if (location != null) _restaurantAssistLocation = location;
+    var forget = clearConsent;
+    if (consentRecipient != null &&
+        !_consentRecipientRe.hasMatch(consentRecipient)) {
+      forget = true;
+    }
+    if (forget) {
+      _restaurantAssistConsentAt = null;
+      _restaurantAssistConsentRecipient = null;
+    } else {
+      if (consentAt != null) _restaurantAssistConsentAt = consentAt;
+      if (consentRecipient != null) {
+        _restaurantAssistConsentRecipient = consentRecipient;
+      }
+    }
+    if (mode != null) {
+      await _prefs.setString(_kRestaurantAssist, _restaurantAssist);
+    }
+    if (location != null) {
+      await _prefs.setBool(_kRestaurantAssistLocation, location);
+    }
+    final at = _restaurantAssistConsentAt;
+    final who = _restaurantAssistConsentRecipient;
+    if (forget || at == null) {
+      await _prefs.remove(_kRestaurantAssistConsentAt);
+    } else {
+      await _prefs.setString(
+          _kRestaurantAssistConsentAt, at.toUtc().toIso8601String());
+    }
+    if (forget || who == null) {
+      await _prefs.remove(_kRestaurantAssistConsentRecipient);
+    } else {
+      await _prefs.setString(_kRestaurantAssistConsentRecipient, who);
+    }
     notifyListeners();
   }
 
