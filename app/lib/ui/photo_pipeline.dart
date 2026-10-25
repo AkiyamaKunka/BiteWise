@@ -349,6 +349,27 @@ class PhotoPipeline {
   // process() never throws (contract), so the chain cannot break.
   Future<void> _tail = Future.value();
 
+  /// Photos chained onto [_tail] whose turn has not ended yet, and
+  /// process() calls running (a direct call bypasses the tail) — what
+  /// [isIdle] reads.
+  int _queued = 0;
+  int _running = 0;
+
+  /// No photo is queued or in flight and no reservation is held (design
+  /// R6b): the restaurant assist starts a lookup only then, so a lookup
+  /// never competes with a photo for the analyzer, the network or the
+  /// iOS background time.
+  bool get isIdle => _queued == 0 && _running == 0 && _held == null;
+
+  /// Chains [photo] onto the global FIFO tail, counted for [isIdle] until
+  /// its turn ends.
+  Future<PhotoOutcome> _chain(IntakePhoto photo) {
+    _queued++;
+    final slot = _tail.then((_) => process(photo));
+    slot.whenComplete(() => _queued--).ignore();
+    return slot;
+  }
+
   PhotoPipeline(
       {required this.dao,
       required this.analyzer,
@@ -422,7 +443,7 @@ class PhotoPipeline {
   /// are re-offered by later scans.
   void bind(PhotoIntake intake) {
     intake.attachSink((p, _) {
-      final slot = _tail.then((_) => process(p));
+      final slot = _chain(p);
       _tail = slot.then((_) {});
       return slot.then((o) => !o.retryable);
     });
@@ -434,7 +455,7 @@ class PhotoPipeline {
   /// directly would run a second analyzer call concurrently (free-tier RPM
   /// 429s) and hold two originals in memory.
   Future<PhotoOutcome> enqueue(IntakePhoto photo) {
-    final slot = _tail.then((_) => process(photo));
+    final slot = _chain(photo);
     _tail = slot.then((_) {});
     return slot;
   }
@@ -453,7 +474,7 @@ class PhotoPipeline {
   /// watcher's bind() stays quiet about them.
   void bindStream(Stream<IntakePhoto> photos) {
     _subs.add(photos.listen((p) {
-      final slot = _tail.then((_) => process(p));
+      final slot = _chain(p);
       _tail = slot.then((o) {
         // A transient failure was released, and the share copy is already
         // gone: nothing will ever re-offer it, so silence read as "it
@@ -670,22 +691,27 @@ class PhotoPipeline {
   /// exactly one task per photo. A lost reservation's second settle
   /// ([_afterLost]) stays inside the same task.
   Future<PhotoOutcome> process(IntakePhoto photo) async {
-    _foodChecked = null;
-    final time = backgroundTime;
-    final outcome = !photo.deliberate && _inBackground()
-        ? _waitsForForeground
-        : await (time == null
-            ? _process(photo)
-            : time.guard('photo', () => _process(photo)));
-    // Settled or released by now: no reservation is held past process().
-    _held = null;
-    final checked = _foodChecked;
-    _foodChecked = null;
+    _running++;
     try {
-      onOutcome?.call(photo, outcome);
-    } catch (_) {}
-    await _recordGlasses(photo, outcome, checked);
-    return outcome;
+      _foodChecked = null;
+      final time = backgroundTime;
+      final outcome = !photo.deliberate && _inBackground()
+          ? _waitsForForeground
+          : await (time == null
+              ? _process(photo)
+              : time.guard('photo', () => _process(photo)));
+      // Settled or released by now: no reservation is held past process().
+      _held = null;
+      final checked = _foodChecked;
+      _foodChecked = null;
+      try {
+        onOutcome?.call(photo, outcome);
+      } catch (_) {}
+      await _recordGlasses(photo, outcome, checked);
+      return outcome;
+    } finally {
+      _running--;
+    }
   }
 
   /// [held]: a verdict this photo ALREADY got, with the meal snapshot its
