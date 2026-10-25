@@ -713,5 +713,7 @@
   "nlActivityLogged": "🏃 已记录活动：{bits}（{date}）。",
   "nlStepsAmount": "{steps} 步",
   "nlKmAmount": "{km} 公里",
-  "nlChatFallback": "我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！"
+  "nlChatFallback": "我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！",
+  "assistAppliedSnack": "已采用 {brand} 公布的数值：{before} → {after} 千卡",
+  "assistUndo": "撤销"
 }

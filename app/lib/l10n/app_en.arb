@@ -1872,5 +1872,24 @@
       }
     }
   },
-  "nlChatFallback": "I'm not sure what you mean. Try describing a meal or correction!"
+  "nlChatFallback": "I'm not sure what you mean. Try describing a meal or correction!",
+  "assistAppliedSnack": "Used {brand} published numbers: {before} → {after} kcal",
+  "@assistAppliedSnack": {
+    "description": "Snackbar after the restaurant assist replaced a meal's numbers with the chain's published ones. brand is the chain's name as an English possessive (McDonald's, Chipotle's); before and after are the meal's total kcal.",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "assistUndo": "Undo",
+  "@assistUndo": {
+    "description": "The action on assistAppliedSnack: puts the AI estimate back."
+  }
 }

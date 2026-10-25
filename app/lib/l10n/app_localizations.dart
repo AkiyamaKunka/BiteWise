@@ -3749,6 +3749,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I\'m not sure what you mean. Try describing a meal or correction!'**
   String get nlChatFallback;
+
+  /// Snackbar after the restaurant assist replaced a meal's numbers with the chain's published ones. brand is the chain's name as an English possessive (McDonald's, Chipotle's); before and after are the meal's total kcal.
+  ///
+  /// In en, this message translates to:
+  /// **'Used {brand} published numbers: {before} → {after} kcal'**
+  String assistAppliedSnack(String brand, String before, String after);
+
+  /// The action on assistAppliedSnack: puts the AI estimate back.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get assistUndo;
 }
 
 class _AppLocalizationsDelegate

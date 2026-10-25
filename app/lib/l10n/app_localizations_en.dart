@@ -2357,4 +2357,12 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get nlChatFallback =>
       'I\'m not sure what you mean. Try describing a meal or correction!';
+
+  @override
+  String assistAppliedSnack(String brand, String before, String after) {
+    return 'Used $brand published numbers: $before → $after kcal';
+  }
+
+  @override
+  String get assistUndo => 'Undo';
 }

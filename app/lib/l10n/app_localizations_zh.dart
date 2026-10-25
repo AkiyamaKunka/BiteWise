@@ -2198,4 +2198,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get nlChatFallback => '我不太明白你的意思。试着描述一顿餐，或者说说要改什么吧！';
+
+  @override
+  String assistAppliedSnack(String brand, String before, String after) {
+    return '已采用 $brand 公布的数值：$before → $after 千卡';
+  }
+
+  @override
+  String get assistUndo => '撤销';
 }

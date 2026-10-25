@@ -18,7 +18,9 @@ import '../core/contracts.dart';
 import '../data/meals_dao_impl.dart';
 import '../services/analyzer/platform_decode.dart' show isEngineBackgrounded;
 import '../services/analyzer/provider_analyzers.dart'
-    show ServerAnalyzer, createMultiProviderAnalyzer;
+    show MultiProviderAnalyzer, ServerAnalyzer;
+import '../services/assist/assist_local_state.dart';
+import '../services/assist/meal_assist.dart';
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
@@ -42,7 +44,7 @@ import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
 import 'migrations.dart';
-import 'outcome_text.dart' show outcomeSnackbar;
+import 'outcome_text.dart' show assistAppliedSnackbar, outcomeSnackbar;
 import 'os_summary.dart';
 import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
@@ -62,12 +64,20 @@ class AppServices {
   /// R6a): the screens hold, the restaurant assist (R6b) reads.
   final MealInUseRegistry mealInUse;
 
-  AppServices._(this.ui, this.pipeline, this.settings, this.mealInUse);
+  /// The restaurant assist (design R6b): app engine only — background_glue
+  /// never builds one.
+  final MealAssist mealAssist;
+
+  AppServices._(this.ui, this.pipeline, this.settings, this.mealInUse,
+      this.mealAssist);
 
   static AppServices? _instance;
   static AppServices get instance => _instance!;
 
-  static Future<AppServices> init({void Function(String)? notify}) async {
+  static Future<AppServices> init(
+      {void Function(String)? notify,
+      void Function(String message, String action, void Function() onAction)?
+          notifyAction}) async {
     if (_instance != null) return _instance!;
 
     final settings = await AppSettings.load();
@@ -88,7 +98,12 @@ class AppServices {
         // A repair must never block startup.
       }
     }
-    final analyzer = createMultiProviderAnalyzer(settings);
+    // The app's daily restaurant-lookup ledger (design R6b: 20 a day, in
+    // shared_preferences): every lookup client counts against it.
+    final assistBudget =
+        AssistDailyBudget(await SharedPreferences.getInstance());
+    final analyzer =
+        MultiProviderAnalyzer(settings, lookupBudget: assistBudget);
     // A dedicated ServerAnalyzer instance for the OAuth re-connect calls:
     // they exist regardless of the currently selected provider (the user
     // may re-connect Claude while temporarily on Gemini).
@@ -236,6 +251,35 @@ class AppServices {
     // request (design R6a); app engine only — background_glue builds none.
     final mealInUse = MealInUseRegistry();
 
+    // The restaurant assist (design R6b): saved meals are enriched later,
+    // in the foreground only, when the pipeline is idle and no analyzer
+    // call is in flight. The mode and the consent are R7a's settings
+    // (settings.restaurant_assist…); until they are stored it reads Off,
+    // the design's default, and makes no call.
+    final mealAssist = MealAssist(
+      dao: dao,
+      lookups: analyzer,
+      analyzerBusy: analyzer.analyzerBusy,
+      pipelineIdle: () => pipeline.isIdle,
+      inUse: mealInUse.isInUse,
+      budget: assistBudget,
+      state: AssistLocalState.platform(),
+      settings: () => AssistSettingsView.off,
+      settingsChanges: settings,
+      mealsChanged: mealsChangedSignal,
+      onMealsChanged: signalMealsChanged,
+      inForeground: appEngineInForeground,
+      country: () => regionOfLocale(Platform.localeName),
+      repliesInChinese: () => settings.repliesInChinese,
+      onApplied: notifyAction == null
+          ? null
+          : (n) {
+              final l = localizationsFor(settings.appLanguage);
+              notifyAction(assistAppliedSnackbar(l, n), l.assistUndo,
+                  () => unawaited(n.undo()));
+            },
+    );
+
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
     // Permission.photos resolves to READ_MEDIA_IMAGES (SDK 33+ only) and
@@ -302,6 +346,8 @@ class AppServices {
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     pipeline.bindStream(shareIntake.photos()); // share sheet (deliberate)
+    mealAssist.start();
+    var catchingUp = false;
     if (settings.watcherEnabled) {
       await photoIntake.start();
       // Launch catch-up over the FULL lookback window: change-notify only
@@ -313,8 +359,11 @@ class AppServices {
       // It also moves the background watermark over what it covers, so the
       // next background run starts from here (foregroundCatchUp).
       if (settings.canAutoAnalyze) {
+        catchingUp = true;
+        // The assist looks once the catch-up's photos are in (design R6b).
         unawaited(foregroundCatchUp(photoIntake,
                 shouldContinue: Platform.isIOS ? appEngineInForeground : null)
+            .whenComplete(() => unawaited(mealAssist.sweep()))
             .then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
@@ -326,11 +375,13 @@ class AppServices {
         }));
       }
     }
+    if (!catchingUp) unawaited(mealAssist.sweep());
     // Reconcile the periodic WorkManager backfill (background_glue) with the
     // persisted toggle so it also runs while the app is closed.
     await syncBackgroundScan(settings);
 
-    return _instance = AppServices._(ui, pipeline, settings, mealInUse);
+    return _instance =
+        AppServices._(ui, pipeline, settings, mealInUse, mealAssist);
   }
 }
 

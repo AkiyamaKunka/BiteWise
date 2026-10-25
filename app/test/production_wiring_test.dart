@@ -152,6 +152,97 @@ void main() {
     });
   });
 
+  // R6b: the restaurant assist lives in the app engine, reads the real
+  // pipeline, analyzer and registry, counts against the app's daily ledger,
+  // and looks once the launch catch-up's photos are in.
+  group('the restaurant assist (MealAssist)', () {
+    String init() => _body(
+      _source('lib/ui/di.dart'),
+      'static Future<AppServices> init(',
+      indent: '  ',
+    );
+
+    test('di.dart builds it from the real pipeline, analyzer and registry',
+        () {
+      expect(
+        init(),
+        _wired(
+          r'final analyzer = MultiProviderAnalyzer\(settings, '
+          r'lookupBudget: assistBudget\);',
+        ),
+      );
+      expect(
+        init(),
+        _wired(
+          r'final assistBudget = AssistDailyBudget\('
+          r'await SharedPreferences\.getInstance\(\)\);',
+        ),
+      );
+      final source = init();
+      final from = source.indexOf('final mealAssist = MealAssist(');
+      expect(from, isNot(-1));
+      final build = source.substring(from, source.indexOf('\n    );\n', from));
+      for (final wire in [
+        r'dao: dao,',
+        r'lookups: analyzer,',
+        r'analyzerBusy: analyzer\.analyzerBusy,',
+        r'pipelineIdle: \(\) => pipeline\.isIdle,',
+        r'inUse: mealInUse\.isInUse,',
+        r'budget: assistBudget,',
+        r'state: AssistLocalState\.platform\(\),',
+        r'mealsChanged: mealsChangedSignal,',
+        r'onMealsChanged: signalMealsChanged,',
+        r'inForeground: appEngineInForeground,',
+        r'country: \(\) => regionOfLocale\(Platform\.localeName\),',
+        r'repliesInChinese: \(\) => settings\.repliesInChinese,',
+      ]) {
+        expect(build, _wired(wire), reason: wire);
+      }
+      expect(init(), _wired(r'mealAssist\.start\(\);'));
+      expect(
+        init(),
+        _wired(
+          r'foregroundCatchUp\(photoIntake, shouldContinue: '
+          r'Platform\.isIOS \? appEngineInForeground : null\) '
+          r'\.whenComplete\(\(\) => unawaited\(mealAssist\.sweep\(\)\)\)',
+        ),
+      );
+      expect(init(), _wired(r'if \(!catchingUp\) unawaited\(mealAssist\.sweep\(\)\);'));
+    });
+
+    test('background_glue.dart never references it, and its PhotoPipeline '
+        'is built as before', () {
+      final glue = _source('lib/ui/background_glue.dart');
+      for (final banned in [
+        'MealAssist',
+        'meal_assist',
+        'assist_local_state',
+        'AssistDailyBudget',
+        'lookupNow',
+        'services/assist/',
+      ]) {
+        expect(glue, isNot(contains(banned)), reason: banned);
+      }
+      final after = _body(glue, 'Future<bool> _runAfterLaunch({');
+      expect(
+        after,
+        _wired(r'pipeline: \(\) async => inFlight\.pipeline = PhotoPipeline\('),
+      );
+      expect(after, _wired(r'analyzer: createMultiProviderAnalyzer\(settings\),'));
+    });
+
+    test('the pipeline constructor takes nothing from the assist', () {
+      final pipeline = _source('lib/ui/photo_pipeline.dart');
+      final from = pipeline.indexOf('\n  PhotoPipeline(\n');
+      expect(from, isNot(-1));
+      final ctor = pipeline.substring(
+          from, pipeline.indexOf('_clock = clock ?? DateTime.now;', from));
+      expect(ctor, isNot(contains('ssist')));
+      expect(pipeline, isNot(contains('meal_assist')));
+      expect(pipeline, contains('bool get isIdle =>'));
+    });
+  });
+
   group('lib/ui/app.dart (the resume catch-up)', () {
     test('is foregroundCatchUp, stopping on iOS once the app is left', () {
       final resume = _body(
