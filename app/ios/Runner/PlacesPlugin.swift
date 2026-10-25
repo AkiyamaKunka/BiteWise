@@ -17,7 +17,8 @@ import MapKit
 /// lib/services/places/places.dart):
 ///   nearbyFood {lat, lon, radius_m, categories?} →
 ///     {status: ok|none|throttled|error|unsupported,
-///      places: [{name, category, distance_m, url_host?}], error_code?}
+///      places: [{name, category, distance_m, url_host?, country?}],
+///      error_code?}
 ///
 /// - MKLocalPointsOfInterestRequest with an MKPointOfInterestFilter. With
 ///   no categories: restaurant, cafe, bakery, brewery, winery, nightlife,
@@ -27,7 +28,12 @@ import MapKit
 /// - radius_m is clamped to 40...300.
 /// - places are nearest first (distance from the point, whole metres), at
 ///   most 50. A place without a name or a position is left out.
-///   url_host is the place's website host, lowercase ASCII only.
+///   url_host is the place's website host, lowercase ASCII only. country
+///   is the place's ISO 3166 alpha-2 code as Apple files it (US; Puerto
+///   Rico is PR), two uppercase letters only: Dart reads it only to tell
+///   whether the photo was taken in the US (core/meal_country.dart), never
+///   stores or shows it. From MKMapItem.addressRepresentations.region on
+///   iOS 26+, the placemark's isoCountryCode before.
 /// - none: MapKit found nothing (MKError 4, placemarkNotFound, which is how
 ///   it reports an empty area — never an empty list). throttled: MKError
 ///   3, loadingThrottled (about 50 requests a minute, live probe
@@ -264,14 +270,19 @@ struct PlaceCandidate {
   var category: MKPointOfInterestCategory?
   var location: CLLocation?
   var url: URL?
+  /// The ISO country code as MapKit gives it (any spelling; the reply
+  /// keeps only a clean alpha-2 code, [placesCountryCode]).
+  var country: String?
 
   init(
-    name: String?, category: MKPointOfInterestCategory?, location: CLLocation?, url: URL? = nil
+    name: String?, category: MKPointOfInterestCategory?, location: CLLocation?, url: URL? = nil,
+    country: String? = nil
   ) {
     self.name = name
     self.category = category
     self.location = location
     self.url = url
+    self.country = country
   }
 
   init(_ item: MKMapItem) {
@@ -279,12 +290,16 @@ struct PlaceCandidate {
     category = item.pointOfInterestCategory
     url = item.url
     if #available(iOS 26.0, *) {
-      // An explicit optional, so this compiles whichever way an SDK
-      // declares MKMapItem.location.
+      // Explicit optionals, so this compiles whichever way an SDK declares
+      // MKMapItem.location, addressRepresentations or its region.
       let location: CLLocation? = item.location
       self.location = location
+      let address: MKAddressRepresentations? = item.addressRepresentations
+      let region: Locale.Region? = address?.region
+      country = region?.identifier
     } else {
       location = item.placemark.location
+      country = item.placemark.isoCountryCode
     }
   }
 }
@@ -319,7 +334,7 @@ func placesReply(
 }
 
 /// [candidates] → reply entries, nearest first (ties by name), at most
-/// [limit]: {name, category, distance_m, url_host?}.
+/// [limit]: {name, category, distance_m, url_host?, country?}.
 func placesEntries(
   _ candidates: [PlaceCandidate], center: CLLocationCoordinate2D,
   limit: Int = placesMaxPlaces
@@ -339,6 +354,7 @@ func placesEntries(
       "distance_m": distance,
     ]
     if let host = placesUrlHost(candidate.url) { entry["url_host"] = host }
+    if let country = placesCountryCode(candidate.country) { entry["country"] = country }
     rows.append((distance, name, entry))
   }
   rows.sort { $0.distance != $1.distance ? $0.distance < $1.distance : $0.name < $1.name }
@@ -368,6 +384,16 @@ func placesUrlHost(_ url: URL?) -> String? {
     })
   else { return nil }
   return host
+}
+
+/// [code] as an ISO 3166 alpha-2 code: two ASCII letters, uppercased
+/// (Dart's decoder checks the same shape); nil for anything else — a
+/// numeric UN M49 region, a longer code, an empty string.
+func placesCountryCode(_ code: String?) -> String? {
+  guard let code = code?.trimmingCharacters(in: .whitespaces).uppercased(), code.count == 2,
+    code.unicodeScalars.allSatisfy({ ("A"..."Z").contains($0) })
+  else { return nil }
+  return code
 }
 
 // MARK: - core end

@@ -14,12 +14,13 @@ import 'package:flutter_test/flutter_test.dart';
 final PhotoPoint _point = PhotoPoint.tryCreate(40.7580, -73.9855)!;
 
 Map<String, Object?> _place(String name, int distance,
-        {String category = 'restaurant', String? host}) =>
+        {String category = 'restaurant', String? host, Object? country}) =>
     {
       'name': name,
       'category': category,
       'distance_m': distance,
       'url_host': ?host,
+      'country': ?country,
     };
 
 void main() {
@@ -185,11 +186,44 @@ void main() {
     });
   });
 
-  test('toString never carries a place name or a position', () {
+  group('the places\' country (the meal country, run 6)', () {
+    test('an ISO2 code per place when Apple lists one, else null', () {
+      final r = decodeNearbyFood({
+        'status': 'ok',
+        'places': [
+          _place('McDonald\'s', 12, country: 'US'),
+          _place('Joe\'s Diner', 20),
+          _place('Pizzeria', 25, country: 'PR'),
+        ],
+      });
+      expect(r.places.map((p) => p.countryCode), ['US', null, 'PR']);
+    });
+
+    test('anything else is off the contract: the whole answer is an error',
+        () {
+      for (final bad in ['us', 'USA', 'U', '', 'U1', 840, true, <String>[]]) {
+        final r = decodeNearbyFood({
+          'status': 'ok',
+          'places': [
+            _place('A', 1, country: 'US'),
+            _place('B', 2, country: bad),
+          ],
+        });
+        expect(r.status, PlacesStatus.error, reason: '$bad');
+        expect(r.errorCode, placesMalformed, reason: '$bad');
+      }
+    });
+  });
+
+  test('toString never carries a place name, its country or a position', () {
     const place = NearbyPlace(
-        name: 'Joe\'s Pizza', category: PlaceCategory.restaurant, distanceM: 9);
+        name: 'Joe\'s Pizza',
+        category: PlaceCategory.restaurant,
+        distanceM: 9,
+        countryCode: 'CA');
     expect('$place', isNot(contains('Joe')));
     expect('$place', isNot(contains('9')));
+    expect('$place', isNot(contains('CA')));
     final food = NearbyFood(PlacesStatus.ok, places: [place]);
     expect('$food', isNot(contains('Joe')));
     expect('$_point', isNot(contains('40')));

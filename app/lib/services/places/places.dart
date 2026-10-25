@@ -8,9 +8,11 @@
 /// permission is involved. The places come back nearest first and stay in
 /// memory for one chain match (R2c): their names are compared with
 /// BiteWise's own US chain table, and only that table's canonical name can
-/// ever reach an AI recipient. Nothing returned here is stored, exported,
+/// ever reach an AI recipient. Each place's ISO country, when Apple lists
+/// one, only tells the assist whether the photo was taken in the US
+/// (core/meal_country.dart). Nothing returned here is stored, exported,
 /// logged or shown (Apple developer license, Attachment 6 §2.4–2.5), so
-/// [NearbyPlace.toString] leaves the name out.
+/// [NearbyPlace.toString] leaves the name and the country out.
 ///
 /// Android has no places in v1: [NullPlaces] answers unsupported.
 ///
@@ -117,6 +119,7 @@ class NearbyPlace implements PlacePoi {
     required this.category,
     required this.distanceM,
     this.urlHost,
+    this.countryCode,
   });
 
   /// As Apple Maps names it, in the phone's language (Starbucks comes back
@@ -138,7 +141,13 @@ class NearbyPlace implements PlacePoi {
   @override
   final String? urlHost;
 
-  /// No name: logs and error messages never carry Map Data.
+  /// The place's ISO 3166 country as Apple Maps files it (two uppercase
+  /// letters: US; Puerto Rico is PR), or null when it lists none. Read only
+  /// for the meal country (core/meal_country.dart decideMealCountry), with
+  /// the place, in memory.
+  final String? countryCode;
+
+  /// No name, no country: logs and error messages never carry Map Data.
   @override
   String toString() => 'NearbyPlace(${category.wire})';
 }
@@ -312,6 +321,9 @@ class MapKitPlaces implements PlaceResolver {
 final RegExp _hostShape =
     RegExp(r'^(?=.{1,253}$)[a-z0-9-]+(\.[a-z0-9-]+)+$');
 
+/// An ISO 3166 alpha-2 code, as the native side sends it.
+final RegExp _countryShape = RegExp(r'^[A-Z]{2}$');
+
 const NearbyFood _malformed =
     NearbyFood(PlacesStatus.error, errorCode: placesMalformed);
 
@@ -361,6 +373,7 @@ NearbyPlace? _decodePlace(Object? raw) {
   final category = raw['category'];
   final distance = raw['distance_m'];
   final host = raw['url_host'];
+  final country = raw['country'];
   // The native side keeps 120 characters; in UTF-16 units that can be a
   // few times more.
   if (name is! String || name.trim().isEmpty || name.length > 1000) {
@@ -371,10 +384,15 @@ NearbyPlace? _decodePlace(Object? raw) {
   if (host != null && (host is! String || !_hostShape.hasMatch(host))) {
     return null;
   }
+  if (country != null &&
+      (country is! String || !_countryShape.hasMatch(country))) {
+    return null;
+  }
   return NearbyPlace(
     name: name,
     category: PlaceCategory.fromWire(category),
     distanceM: distance,
     urlHost: host as String?,
+    countryCode: country as String?,
   );
 }

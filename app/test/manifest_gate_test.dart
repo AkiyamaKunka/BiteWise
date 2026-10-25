@@ -422,11 +422,39 @@ void main() {
     expect(source, contains('"$placesChannelName"'));
     expect(source, contains('MKLocalPointsOfInterestRequest'));
     // The code, without its comments (which name what it never does).
-    final code = source
+    final full = source
         .split('\n')
         .map((line) => line.replaceFirst(RegExp(r'//.*'), ''))
         .join('\n');
+    // The one part of an address it reads (run 6, the meal country): each
+    // place's ISO country — the region of addressRepresentations on iOS
+    // 26+, the placemark's isoCountryCode before — exactly here, once.
+    const countryReads = [
+      'let address: MKAddressRepresentations? = item.addressRepresentations',
+      'let region: Locale.Region? = address?.region',
+      'country = region?.identifier',
+      'country = item.placemark.isoCountryCode',
+    ];
+    var code = full;
+    for (final read in countryReads) {
+      expect(read.allMatches(full), hasLength(1), reason: read);
+      code = code.replaceFirst(read, '');
+    }
+    // Of a placemark, only its position and that country.
+    expect(
+        RegExp(r'placemark\.(?!location\b|isoCountryCode\b)').hasMatch(code),
+        isFalse,
+        reason: 'PlacesPlugin.swift reads more of a placemark');
     for (final banned in [
+      'isoCountryCode',
+      'fullAddress',
+      'cityName',
+      'cityWithContext',
+      'regionName',
+      'regionCode',
+      'locality',
+      'postalCode',
+      'administrativeArea',
       'CLLocationManager',
       'CLGeocoder',
       'requestWhenInUseAuthorization',

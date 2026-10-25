@@ -1617,13 +1617,13 @@ class PlacesPluginTests: XCTestCase {
   /// A place [metres] north of the landmark.
   private func candidate(
     _ name: String?, north metres: Double, _ category: MKPointOfInterestCategory? = .restaurant,
-    url: String? = nil
+    url: String? = nil, country: String? = nil
   ) -> PlaceCandidate {
     let lat = landmark.lat + metres / 111_320.0
     return PlaceCandidate(
       name: name, category: category,
       location: CLLocation(latitude: lat, longitude: landmark.lon),
-      url: url.flatMap { URL(string: $0) })
+      url: url.flatMap { URL(string: $0) }, country: country)
   }
 
   private var landmarkCenter: CLLocationCoordinate2D {
@@ -1783,13 +1783,39 @@ class PlacesPluginTests: XCTestCase {
     XCTAssertNil(entries[4]["url_host"], "an empty label")
     for entry in entries {
       XCTAssertTrue(
-        Set(entry.keys).isSubset(of: ["name", "category", "distance_m", "url_host"]),
+        Set(entry.keys).isSubset(of: ["name", "category", "distance_m", "url_host", "country"]),
         "\(entry.keys): nothing else goes back to Dart")
     }
 
     let many = (0..<80).map { candidate("P\($0)", north: Double($0)) }
     XCTAssertEqual(placesEntries(many, center: landmarkCenter).count, placesMaxPlaces)
     XCTAssertEqual(placesEntries(many, center: landmarkCenter, limit: 3).count, 3)
+  }
+
+  /// Run 6: each place's ISO country, only as a clean alpha-2 code (Dart
+  /// reads it to tell whether the photo was taken in the US).
+  func testEntriesCarryAnIsoCountryOnlyWhenItIsOne() {
+    let entries = placesEntries(
+      [
+        candidate("A", north: 10, country: "US"),
+        candidate("B", north: 20, country: "pr"),
+        candidate("C", north: 30),
+        candidate("D", north: 40, country: "USA"),
+        candidate("E", north: 50, country: "001"),
+        candidate("F", north: 60, country: ""),
+        candidate("G", north: 70, country: "C\u{0}"),
+        candidate("H", north: 80, country: " cn "),
+      ], center: landmarkCenter)
+    XCTAssertEqual(entries.map { $0["name"] as? String }, ["A", "B", "C", "D", "E", "F", "G", "H"])
+    XCTAssertEqual(
+      entries.map { $0["country"] as? String }, ["US", "PR", nil, nil, nil, nil, nil, "CN"])
+    XCTAssertEqual(placesCountryCode("US"), "US")
+    XCTAssertEqual(placesCountryCode("ca"), "CA")
+    XCTAssertNil(placesCountryCode(nil))
+    XCTAssertNil(placesCountryCode("U"))
+    XCTAssertNil(placesCountryCode("U1"))
+    XCTAssertNil(placesCountryCode("ÜS"))
+    XCTAssertNil(placesCountryCode("419"))
   }
 
   func testPlaceCandidateFromAMapItem() {
@@ -1940,8 +1966,11 @@ class PlacesPluginTests: XCTestCase {
     XCTAssertEqual(distances.count, places.count)
     XCTAssertEqual(distances, distances.sorted())
     for place in places {
-      XCTAssertTrue(Set(place.keys).isSubset(of: ["name", "category", "distance_m", "url_host"]))
+      XCTAssertTrue(
+        Set(place.keys).isSubset(of: ["name", "category", "distance_m", "url_host", "country"]))
       XCTAssertFalse((place["name"] as? String ?? "").isEmpty)
+      // Times Square: a place that names its country names the US.
+      if let country = place["country"] as? String { XCTAssertEqual(country, "US") }
     }
     XCTAssertTrue(places.contains { ($0["url_host"] as? String) != nil }, "some list a website")
     XCTAssertEqual(
