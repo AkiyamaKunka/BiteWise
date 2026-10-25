@@ -256,6 +256,12 @@ abstract final class AssistReason {
   static const String mappingNotOneToOne = 'mapping_not_one_to_one';
   static const String componentsOverlap = 'components_overlap';
 
+  /// The user turned these published numbers down for these items at this
+  /// chain before (Undo, Use AI estimate, Wrong restaurant, Not from a
+  /// restaurant): set by the app engine (meal_assist.dart), never by
+  /// [decideAssist].
+  static const String declinedBefore = 'declined_before';
+
   // Suggest: one item.
   static const String closestItem = 'closest_item';
   static const String combo = 'combo';

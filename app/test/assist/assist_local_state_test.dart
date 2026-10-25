@@ -373,6 +373,44 @@ void main() {
       expect(await s.cachedLookup(key), isNull);
     });
 
+    test('a declined mark: set and cleared in place, kept when a fresh '
+        'answer replaces the entry', () async {
+      final s = state();
+      final key = 'b' * 32;
+      expect(
+        await s.markCachedLookup(key, declined: true),
+        isTrue,
+        reason: 'nothing to mark',
+      );
+      expect(await s.cachedLookup(key), isNull);
+      await s.putCachedLookup(entry(key));
+      expect((await s.cachedLookup(key))!.declined, isFalse);
+      final stored = jsonDecode(file(assistCacheDocument).readAsStringSync());
+      expect(
+        ((stored['entries'] as List).single as Map).containsKey('declined'),
+        isFalse,
+      );
+
+      now = now.add(const Duration(days: 2));
+      expect(await s.markCachedLookup(key, declined: true), isTrue);
+      final marked = (await s.cachedLookup(key))!;
+      expect(marked.declined, isTrue);
+      expect(
+        marked.at,
+        now.subtract(const Duration(days: 2)),
+        reason: 'its age is unchanged',
+      );
+
+      // A fresh answer for the same key keeps the user's refusal.
+      await s.putCachedLookup(entry(key, text: 'fresh'));
+      final fresh = (await s.cachedLookup(key))!;
+      expect(fresh.lookup.evidence.single.text, 'fresh');
+      expect(fresh.declined, isTrue);
+
+      expect(await s.markCachedLookup(key, declined: false), isTrue);
+      expect((await s.cachedLookup(key))!.declined, isFalse);
+    });
+
     test('the cache keeps the newest 200 and refuses an oversized or '
         'malformed entry', () async {
       final s = state();

@@ -590,6 +590,33 @@ void main() {
       expect(h.source.asked, hasLength(1), reason: 'denylisted');
     });
 
+    test("'Clear learned places' also forgets the answer cache and the "
+        'jobs with what their location found', () async {
+      h.lookups.support = _claudePlanHttps;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: _claudePlanHttps.recipientStamp,
+      );
+      h.lookups.onSubmit = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      h.add(_bigMac());
+      await h.assist.sweep();
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      h.add(
+        _bigMac(name: 'Quarter Pounder'),
+        timestamp: '2026-10-24T12:40:00.000',
+        fileId: 'a2',
+      );
+      await h.assist.sweep();
+      expect(h.document(assistCacheDocument), isNot(isEmpty));
+      expect(await h.state.jobs(), hasLength(1));
+      expect(await h.assist.clearLearnedPlaces(), isTrue);
+      expect(h.document(assistCacheDocument), isEmpty);
+      expect(await h.state.jobs(), isEmpty);
+    });
+
     test("'Clear learned places' (R7a) forgets every zone, confirmation "
         'and block, through the store the place step reads', () async {
       await h.placesStore.addZone(h.cell);
@@ -1469,19 +1496,156 @@ void main() {
       expect(await raw(id), before);
     });
 
-    test('a picked chain answers from the cache only for that chain', () async {
+    test('the editor\'s lookup never answers from the cache — a picked '
+        'chain or not', () async {
       // McDonald's is cached for these items by the first lookup.
       final id = await suggested();
+      final calls = h.lookups.submits.length;
+      await h.assist.lookupNow(id, useLocation: true);
+      expect(h.lookups.submits, hasLength(calls + 1));
       await h.assist.act(
         id,
         AssistUserAction.wrongRestaurant,
         expectedRaw: await raw(id),
       );
-      final calls = h.lookups.submits.length;
       h.lookups.onSubmit = (request) async =>
           _done(json: _found(chainKey: 'burger_king'));
       await h.assist.lookupNow(id, chainKey: 'burger_king');
-      expect(h.lookups.submits, hasLength(calls + 1));
+      expect(h.lookups.submits, hasLength(calls + 2));
+    });
+
+    test('over http to the owner\'s server a picked chain is not sent: its '
+        'https gate would strip it', () async {
+      h.lookups.support = _claudePlanHttp;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: _claudePlanHttp.recipientStamp,
+      );
+      final id = h.add(_bigMac(brand: "McDonald's", context: 'takeout'));
+      final run = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(run.code, AssistSkip.pickNeedsHttps);
+      expect(run.wrote, isFalse);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull);
+    });
+
+    // Review 2026-10-25 (PROBE5): Correct on an item_brand application
+    // confirmed the chain at the spot, so later unbranded meals there were
+    // applied by themselves.
+    test('Correct or Use published numbers on a printed brand\'s numbers '
+        'teaches nothing about the spot, and reads no location', () async {
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.blockOf(id)?['status'], AssistStatus.applied);
+      expect(h.blockOf(id)?['evidence'], 'item_brand');
+      final asked = h.source.asked.length;
+      final r = await h.assist.act(
+        id,
+        AssistUserAction.correct,
+        expectedRaw: await raw(id),
+      );
+      expect(r.status, AssistActionStatus.done);
+      expect(r.placeLearned, isFalse);
+      expect(h.source.asked, hasLength(asked), reason: 'no position read');
+      expect((await h.placesStore.read()).confirmed, isEmpty);
+
+      // A printed brand's suggestion accepted: the same.
+      h.lookups.onSubmit = (_) async => _done(verbatim: false);
+      final other = h.add(
+        _bigMac(brand: "McDonald's", name: 'Quarter Pounder'),
+        timestamp: '2026-10-24T12:40:00.000',
+        fileId: 'a2',
+      );
+      await h.assist.sweep();
+      expect(h.blockOf(other)?['status'], AssistStatus.suggested);
+      final asked2 = h.source.asked.length;
+      final accepted = await h.assist.act(
+        other,
+        AssistUserAction.acceptSuggestion,
+        expectedRaw: await raw(other),
+      );
+      expect(accepted.status, AssistActionStatus.done);
+      expect(accepted.placeLearned, isFalse);
+      expect(h.source.asked, hasLength(asked2));
+      expect((await h.placesStore.read()).confirmed, isEmpty);
+
+      // The next unbranded meal there stays a suggestion.
+      h.lookups.onSubmit = null;
+      final next = h.add(
+        _bigMac(name: 'Filet-O-Fish'),
+        timestamp: '2026-10-24T12:50:00.000',
+        fileId: 'a3',
+      );
+      await h.assist.sweep();
+      expect(h.blockOf(next)?['evidence'], 'location');
+      expect(h.blockOf(next)?['status'], AssistStatus.suggested);
+    });
+
+    // Review 2026-10-25 (P4): after a switch to Brand only, answering an
+    // older location-based result still read the photo's position.
+    test('Brand only: no answer to a location-based result reads the '
+        'position or teaches the spot', () async {
+      final ids = <int>[];
+      for (var i = 0; i < 4; i++) {
+        ids.add(
+          h.add(
+            _bigMac(),
+            timestamp: '2026-10-24T12:${30 + i}:00.000',
+            fileId: 'asset-$i',
+          ),
+        );
+      }
+      await h.assist.sweep();
+      for (final id in ids) {
+        expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+        expect(h.blockOf(id)?['evidence'], 'location');
+      }
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final asked = h.source.asked.length;
+      final actions = [
+        AssistUserAction.correct,
+        AssistUserAction.acceptSuggestion,
+        AssistUserAction.wrongRestaurant,
+        AssistUserAction.notFromRestaurant,
+      ];
+      for (var i = 0; i < actions.length; i++) {
+        expect(h.assist.canLearnPlace(h.dao.byId(ids[i])), isFalse);
+        final r = await h.assist.act(
+          ids[i],
+          actions[i],
+          expectedRaw: await raw(ids[i]),
+        );
+        expect(r.status, AssistActionStatus.done, reason: '${actions[i]}');
+        expect(r.placeLearned, isFalse, reason: '${actions[i]}');
+      }
+      expect(h.source.asked, hasLength(asked), reason: 'no position read');
+      final learned = await h.placesStore.read();
+      expect(learned.confirmed, isEmpty);
+      expect(learned.blocked, isEmpty);
+      expect(learned.zones, isEmpty);
+    });
+
+    test('no consent for the recipient a lookup would reach now: nothing '
+        'is learned', () async {
+      final id = await suggested();
+      expect(h.assist.canLearnPlace(h.dao.byId(id)), isTrue);
+      // Another provider: the assist waits for a consent that names it.
+      h.lookups.support = _claudePlanHttps;
+      expect(h.assist.canLearnPlace(h.dao.byId(id)), isFalse);
+      final asked = h.source.asked.length;
+      final r = await h.assist.act(
+        id,
+        AssistUserAction.notFromRestaurant,
+        expectedRaw: await raw(id),
+      );
+      expect(r.placeLearned, isFalse);
+      expect(h.source.asked, hasLength(asked));
+      expect((await h.placesStore.read()).zones, isEmpty);
     });
 
     test('Not from a restaurant: a zone at the spot; the next restaurant '

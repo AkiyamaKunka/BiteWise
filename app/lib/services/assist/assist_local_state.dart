@@ -32,10 +32,15 @@
 ///         or a retry never reads the photo's position again. `pick` is
 ///         the chain the user picked in the editor (R7b), a table key;
 ///       - 'assist_cache'     {entries: [{key, chain_key, names, provider,
-///         result, cited_urls, evidence, at}]}: finished lookups, keyed by
-///         the chain and the meal's item names ([AssistCachedLookup]), so
-///         the same meal at the same chain is never looked up twice; 30 d,
-///         newest 200 (design R6c). Not used for a later Gemini path (L1).
+///         result, cited_urls, evidence, at, declined?}]}: finished lookups,
+///         keyed by the chain and the meal's item names
+///         ([AssistCachedLookup]), so the same meal at the same chain is
+///         never looked up twice by the same provider; 30 d, newest 200
+///         (design R6c). `declined` marks an answer the user turned down
+///         (Undo, Use AI estimate, Wrong restaurant, Not from a restaurant)
+///         for those items at that chain: from then on it can only be
+///         suggested, until the user accepts it or confirms it. Not used
+///         for a later Gemini path (L1).
 ///
 /// Meal ids are row ids of this phone's database: they name no place and
 /// no restaurant. Nothing here is exported, backed up or logged. Reads never
@@ -435,6 +440,7 @@ final class AssistCachedLookup {
     required this.names,
     required this.lookup,
     required this.at,
+    this.declined = false,
   });
 
   final String key;
@@ -445,6 +451,11 @@ final class AssistCachedLookup {
   /// URLs and its text for the source).
   final AssistLookup lookup;
   final DateTime at;
+
+  /// The user turned these published numbers down for these items at this
+  /// chain: they are only ever suggested again (meal_assist.dart), until
+  /// the user accepts or confirms them.
+  final bool declined;
 
   Map<String, Object?> toJson() => {
     'key': key,
@@ -463,7 +474,18 @@ final class AssistCachedLookup {
         },
     ],
     'at': at.toUtc().toIso8601String(),
+    if (declined) 'declined': true,
   };
+
+  /// [declined] changed, everything else kept.
+  AssistCachedLookup withDeclined(bool value) => AssistCachedLookup(
+    key: key,
+    chainKey: chainKey,
+    names: names,
+    lookup: lookup,
+    at: at,
+    declined: value,
+  );
 
   /// Null for anything that is not a well-formed entry.
   static AssistCachedLookup? fromJson(Object? raw) {
@@ -529,6 +551,7 @@ final class AssistCachedLookup {
         evidence: List.unmodifiable(pieces),
       ),
       at: at,
+      declined: raw['declined'] == true,
     );
   }
 }
@@ -835,16 +858,22 @@ class AssistLocalState {
   }
 
   /// Keeps [entry] (replacing one with its key), the newest
-  /// [assistCacheCap]. False — nothing kept — for an entry whose JSON is
-  /// over [assistCacheEntryMaxBytes].
+  /// [assistCacheCap]. A refusal stays with the key: an entry it replaces
+  /// that the user [AssistCachedLookup.declined] keeps that mark (a fresh
+  /// answer, from any provider, is still the numbers the user turned down
+  /// for these items at this chain). False — nothing kept — for an entry
+  /// whose JSON is over [assistCacheEntryMaxBytes].
   Future<bool> putCachedLookup(AssistCachedLookup entry) => _serial(() async {
-    final json = entry.toJson();
+    final current = await _cacheEntries();
+    final declined =
+        entry.declined || current.any((e) => e.key == entry.key && e.declined);
+    final json = entry.withDeclined(declined).toJson();
     if (utf8.encode(jsonEncode(json)).length > assistCacheEntryMaxBytes) {
       return false;
     }
     if (AssistCachedLookup.fromJson(json) == null) return false;
     final entries = [
-      for (final e in await _cacheEntries())
+      for (final e in current)
         if (e.key != entry.key) e.toJson(),
       json,
     ];
@@ -852,6 +881,29 @@ class AssistLocalState {
       'entries': capNewest(entries, assistCacheCap, field: 'at'),
     }, version: assistLocalVersion);
   }, false);
+
+  /// Marks the cached answer for [key] as turned down by the user
+  /// ([declined]) or accepted again. True when it is marked so now (or
+  /// there is no such answer to mark); its age is unchanged.
+  Future<bool> markCachedLookup(String key, {required bool declined}) =>
+      _serial(() async {
+        final current = await _cacheEntries();
+        var found = false;
+        final entries = <Map<String, Object?>>[];
+        for (final e in current) {
+          if (e.key == key) {
+            found = true;
+            if (e.declined == declined) return true;
+            entries.add(e.withDeclined(declined).toJson());
+          } else {
+            entries.add(e.toJson());
+          }
+        }
+        if (!found) return true;
+        return _store.write(assistCacheDocument, {
+          'entries': capNewest(entries, assistCacheCap, field: 'at'),
+        }, version: assistLocalVersion);
+      }, false);
 
   /// Forgets every cached answer.
   Future<bool> clearCache() =>
