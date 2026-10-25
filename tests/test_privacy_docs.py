@@ -204,8 +204,8 @@ def test_policy_and_consent_say_what_the_review_found_unsaid():
     assert "会删除这些地点、最近的查询结果和还在等待的查询" in zh_flat
     ena, zha = _arb("en"), _arb("zh")
     for k in ("restaurantConsentSent", "restaurantConsentSentAndroid"):
-        assert "region code" in ena[k] and "reply language" in ena[k], k
-        assert "地区代码" in zha[k] and "回复语言" in zha[k], k
+        assert "reply language" in ena[k], k
+        assert "回复语言" in zha[k], k
     # One "which" once the recipient's name is spliced in.
     sent = ena["restaurantConsentSent"].replace(
         "{recipient}", ena["restaurantRecipientNameClaudePlan"])
@@ -215,3 +215,46 @@ def test_policy_and_consent_say_what_the_review_found_unsaid():
             "app", "ios", "Runner", *f)
     assert "在本机记住" in _read(
         "app", "ios", "Runner", "zh-Hans.lproj", "InfoPlist.strings")
+
+
+def test_the_time_zone_check_and_the_us_country_code_are_said_everywhere():
+    """Review (run 6): the phone's time zone vetoes a lookup where no photo
+    position may be read (the owner's region stays US in China). The
+    policy, the consent and Settings say so; the consent names the country
+    code the request really carries (always US), not a region code."""
+    en, zh = _policy_halves()
+    en_lookup = _lookup_section(en, "### Restaurant nutrition lookup")
+    zh_lookup = _lookup_section(zh, "### 餐厅营养查询")
+    assert "While your phone's time zone is outside the US" in en_lookup
+    assert "nothing is looked up at all, whatever else says" in en_lookup
+    assert "between UTC−10, Hawaii, and UTC−4" in en_lookup
+    assert "stores and sends nothing about it" in en_lookup
+    assert "只要手机当前的时区不在美国" in zh_lookup
+    assert "就完全不会查询，不论其他信息如何" in zh_lookup
+    assert "UTC−10（夏威夷）到 UTC−4" in zh_lookup
+    assert "不会保存或发送任何与它有关的内容" in zh_lookup
+
+    ena, zha = _arb("en"), _arb("zh")
+    for k in ("restaurantConsentSent", "restaurantConsentSentAndroid"):
+        assert ("the country code US (only meals eaten in the US are looked "
+                "up)") in ena[k], k
+        assert "国家代码 US（只查询在美国吃的餐）" in zha[k], k
+        for stale in ("region code", "such as US"):
+            assert stale not in ena[k], (k, stale)
+        assert "地区代码" not in zha[k], k
+        assert "time zone" in ena[k], k
+        assert "时区" in zha[k], k
+    assert ("While your phone's time zone is outside the US, nothing is "
+            "looked up.") in ena["restaurantConsentSent"]
+    assert "手机的时区不在美国时，不会进行任何查询" in zha["restaurantConsentSent"]
+    # Settings: US meals only, in the line every phone shows; and why
+    # nothing would be looked up on this phone now.
+    assert "Only meals eaten in the US are looked up." in \
+        ena["restaurantModeHelper"]
+    assert "只查询在美国吃的餐" in zha["restaurantModeHelper"]
+    assert "time zone is outside the US" in ena["restaurantTimeZoneHint"]
+    assert "时区不在美国" in zha["restaurantTimeZoneHint"]
+    assert "region is not the US" in ena["restaurantRegionHint"]
+    assert "地区不是美国" in zha["restaurantRegionHint"]
+    assert "time zone" in ena["assistLookupOutsideUs"]
+    assert "时区" in zha["assistLookupOutsideUs"]

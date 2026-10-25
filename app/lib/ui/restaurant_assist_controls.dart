@@ -14,7 +14,7 @@ import '../services/analyzer/provider_analyzers.dart' show ServerFeatures;
 import '../services/assist/assist_local_state.dart' show AssistDecisionEntry;
 import '../services/assist/clients/lookup_client.dart' show LookupSupport;
 import '../services/assist/meal_assist.dart'
-    show AssistActionResult, AssistRun, AssistUserAction;
+    show AssistActionResult, AssistRun, AssistUserAction, AssistWhereNow;
 
 /// What the owner's server says about restaurant lookups (its
 /// /api/auth_check `features` map). Only Claude Plan asks.
@@ -70,6 +70,7 @@ class RestaurantAssistControls {
     this.consentNeeded,
     this.serverState,
     this.locationSupported = false,
+    this.whereNow,
     this.now = DateTime.now,
     this.lookupNow,
     this.act,
@@ -99,6 +100,10 @@ class RestaurantAssistControls {
   /// Whether this phone can read a photo's location for a lookup at all:
   /// iOS only in v1 (Android reads no photo location).
   final bool locationSupported;
+
+  /// What the phone's time zone and region say now (MealAssist.whereNow):
+  /// Settings says why nothing would be looked up. Null adds no hint.
+  final AssistWhereNow Function()? whereNow;
 
   /// The consent's time stamp.
   final DateTime Function() now;

@@ -294,6 +294,119 @@ void main() {
     });
   });
 
+  group('utcOffsetInUs: the US keeps UTC−10 (Hawaii) to UTC−4 (Puerto '
+      'Rico, eastern daylight time)', () {
+    test('every US zone, standard and daylight, is in', () {
+      for (final h in [-10, -9, -8, -7, -6, -5, -4]) {
+        expect(utcOffsetInUs(Duration(hours: h)), isTrue, reason: '$h');
+      }
+    });
+
+    test('the zones around it, and the traveller\'s, are out', () {
+      for (final d in const [
+        Duration(hours: -10, minutes: -30),
+        Duration(hours: -11), // American Samoa: outside every outline
+        Duration(hours: -12),
+        Duration(hours: -3, minutes: -59),
+        Duration(hours: -3, minutes: -30), // Newfoundland
+        Duration(hours: -3), // Atlantic daylight time
+        Duration.zero,
+        Duration(hours: 1),
+        Duration(hours: 5, minutes: 30),
+        Duration(hours: 8), // China Standard Time ("CST", like US Central)
+        Duration(hours: 9),
+        Duration(hours: 10), // Guam: outside every outline
+        Duration(hours: 14),
+      ]) {
+        expect(utcOffsetInUs(d), isFalse, reason: '$d');
+      }
+    });
+
+    test('the edges are in, a minute past them out', () {
+      expect(utcOffsetInUs(kMealCountryUsOffsetWest), isTrue);
+      expect(utcOffsetInUs(kMealCountryUsOffsetEast), isTrue);
+      expect(
+        utcOffsetInUs(kMealCountryUsOffsetWest - const Duration(minutes: 1)),
+        isFalse,
+      );
+      expect(
+        utcOffsetInUs(kMealCountryUsOffsetEast + const Duration(minutes: 1)),
+        isFalse,
+      );
+    });
+  });
+
+  group('decideMealCountry: the time zone vetoes first', () {
+    const shanghai = Duration(hours: 8);
+    const central = Duration(hours: -5);
+
+    test('outside the US\'s zones: XX whatever the position, places or '
+        'region say', () {
+      expect(
+        decideMealCountry(deviceRegion: 'US', utcOffset: shanghai),
+        kMealCountryOutside,
+        reason: 'the owner in China: region US, phone on +08:00',
+      );
+      expect(
+        decideMealCountry(
+          lat: 43.0731,
+          lon: -89.4012,
+          placeCountries: ['US'],
+          deviceRegion: 'US',
+          utcOffset: shanghai,
+        ),
+        kMealCountryOutside,
+        reason:
+            'a US photo looked up from abroad: may be missed, never '
+            'given numbers from the wrong place',
+      );
+      expect(
+        decideMealCountry(placeCountries: ['US'], utcOffset: Duration.zero),
+        kMealCountryOutside,
+      );
+      expect(decideMealCountry(utcOffset: shanghai), kMealCountryOutside);
+    });
+
+    test('inside them it changes nothing: the other signals decide', () {
+      expect(
+        decideMealCountry(deviceRegion: 'US', utcOffset: central),
+        kMealCountryUs,
+      );
+      expect(decideMealCountry(deviceRegion: 'CN', utcOffset: central), 'CN');
+      expect(
+        decideMealCountry(
+          lat: 31.2304,
+          lon: 121.4737,
+          deviceRegion: 'US',
+          utcOffset: central,
+        ),
+        kMealCountryOutside,
+      );
+      expect(decideMealCountry(utcOffset: central), isNull);
+    });
+
+    test('not given: no veto (the signals alone)', () {
+      expect(decideMealCountry(deviceRegion: 'US'), kMealCountryUs);
+    });
+
+    test('random inputs: "US" never comes with a zone outside the US\'s', () {
+      final rng = math.Random(20261025);
+      for (var i = 0; i < 2000; i++) {
+        final offset = Duration(minutes: -720 + rng.nextInt(1561));
+        final got = decideMealCountry(
+          lat: rng.nextBool() ? 20 + rng.nextDouble() * 40 : null,
+          lon: -160 + rng.nextDouble() * 100,
+          placeCountries: [if (rng.nextBool()) rng.nextBool() ? 'US' : 'CA'],
+          deviceRegion: rng.nextBool() ? 'US' : null,
+          utcOffset: offset,
+        );
+        if (!utcOffsetInUs(offset)) {
+          expect(got, kMealCountryOutside, reason: '$offset');
+        }
+      }
+    });
+  });
+
   group('decideMealCountry (priority: GPS, places, region, none)', () {
     test('(a) a GPS position decides, over the phone\'s region', () {
       expect(

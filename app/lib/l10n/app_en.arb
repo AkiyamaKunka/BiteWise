@@ -1916,7 +1916,7 @@
   "@restaurantModeAlways": {
     "description": "Restaurant lookup mode: every restaurant or takeout meal (still never a home meal's location)."
   },
-  "restaurantModeHelper": "When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.",
+  "restaurantModeHelper": "When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.",
   "@restaurantModeHelper": {
     "description": "Footer line under the Restaurant nutrition group."
   },
@@ -1935,6 +1935,14 @@
   "restaurantLocationHttpHint": "Nearby-restaurant lookups need https on your server. Brand-only lookups still work.",
   "@restaurantLocationHttpHint": {
     "description": "Footer line when the own server's address is http:// — chain names found from the photo location are never sent over plain http."
+  },
+  "restaurantTimeZoneHint": "Your phone's time zone is outside the US, so nothing is looked up now: published nutrition is for US restaurants only.",
+  "@restaurantTimeZoneHint": {
+    "description": "Footer line while the assist is on and the phone's UTC offset is not one the US keeps (UTC-10 to UTC-4): no lookup is made at all (the chain table is US-only)."
+  },
+  "restaurantRegionHint": "Your phone's region is not the US and the photo's location is not used here, so nothing is looked up. Published nutrition is for US restaurants only.",
+  "@restaurantRegionHint": {
+    "description": "Footer line while the assist is on, the phone's region is not the US (or not set) and no photo location can be used (Android, Brand only, an http:// own server): only a photo taken in the US could be looked up, and none can be read."
   },
   "restaurantRecipientClaudePlan": "Lookups go to your own server, which uses Claude web search (Anthropic).",
   "@restaurantRecipientClaudePlan": {
@@ -2033,7 +2041,7 @@
   "@restaurantConsentMaps": {
     "description": "Consent sheet bullet (iPhone): the photo's location is checked on the phone for being in the US (the chain table is US-only) and goes only to Apple Maps."
   },
-  "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
+  "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. While your phone's time zone is outside the US, nothing is looked up. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
   "@restaurantConsentSent": {
     "description": "Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.",
     "placeholders": {
@@ -2042,7 +2050,7 @@
       }
     }
   },
-  "restaurantConsentSentAndroid": "On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. The photo is never sent for this.",
+  "restaurantConsentSentAndroid": "On Android, BiteWise does not read where the photo was taken: your phone's time zone and region tell whether a meal was eaten in the US. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. The photo is never sent for this.",
   "@restaurantConsentSentAndroid": {
     "description": "Consent sheet bullet (Android): what leaves the phone, and to whom.",
     "placeholders": {
@@ -2224,9 +2232,9 @@
   "@assistLookupNoChain": {
     "description": "A manual lookup had no chain to ask about (no printed brand, no chain nearby)."
   },
-  "assistLookupOutsideUs": "This meal looks like it was eaten outside the US. BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.",
+  "assistLookupOutsideUs": "This meal looks like it was eaten outside the US (going by the photo's location, your phone's time zone or its region). BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.",
   "@assistLookupOutsideUs": {
-    "description": "A manual lookup was not made: the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only."
+    "description": "A manual lookup was not made: the phone's time zone is outside the US, the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only."
   },
   "assistLookupRegionUnknown": "BiteWise can't tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.",
   "@assistLookupRegionUnknown": {

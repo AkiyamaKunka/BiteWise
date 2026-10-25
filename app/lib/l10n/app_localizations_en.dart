@@ -2386,7 +2386,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantModeHelper =>
-      'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.';
+      'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.';
 
   @override
   String get settingsRowRestaurantLocation => 'Use photo location';
@@ -2402,6 +2402,14 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get restaurantLocationHttpHint =>
       'Nearby-restaurant lookups need https on your server. Brand-only lookups still work.';
+
+  @override
+  String get restaurantTimeZoneHint =>
+      'Your phone\'s time zone is outside the US, so nothing is looked up now: published nutrition is for US restaurants only.';
+
+  @override
+  String get restaurantRegionHint =>
+      'Your phone\'s region is not the US and the photo\'s location is not used here, so nothing is looked up. Published nutrition is for US restaurants only.';
 
   @override
   String get restaurantRecipientClaudePlan =>
@@ -2487,12 +2495,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String restaurantConsentSent(String recipient) {
-    return 'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.';
+    return 'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. While your phone\'s time zone is outside the US, nothing is looked up. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.';
   }
 
   @override
   String restaurantConsentSentAndroid(String recipient) {
-    return 'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. The photo is never sent for this.';
+    return 'On Android, BiteWise does not read where the photo was taken: your phone\'s time zone and region tell whether a meal was eaten in the US. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. The photo is never sent for this.';
   }
 
   @override
@@ -2627,7 +2635,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assistLookupOutsideUs =>
-      'This meal looks like it was eaten outside the US. BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.';
+      'This meal looks like it was eaten outside the US (going by the photo\'s location, your phone\'s time zone or its region). BiteWise looks up published nutrition for US restaurants only, so nothing was looked up.';
 
   @override
   String get assistLookupRegionUnknown =>

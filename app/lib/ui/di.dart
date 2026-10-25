@@ -313,6 +313,9 @@ class AppServices {
       serverState: () async =>
           assistServerStateOf(await serverAnalyzer.serverFeatures()),
       locationSupported: Platform.isIOS,
+      // Settings says why nothing would be looked up: a time zone or a
+      // region outside the US (lookups are for US meals only).
+      whereNow: mealAssist.whereNow,
       // The meal card's dot, the editor's source card and lookup, and
       // Diagnostics' 'Restaurant lookups' (design R7b).
       lookupNow: mealAssist.lookupNow,

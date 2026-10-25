@@ -10,6 +10,21 @@
 /// means no lookup at all (no plan usage, no suggestion with US numbers).
 ///
 /// The signals, strongest first:
+///   (0) the phone's time zone NOW — a veto that needs no consent and
+///       keeps nothing: an offset from UTC the US does not keep
+///       ([utcOffsetInUs]: UTC−10, Hawaii, through UTC−4, Puerto Rico and
+///       eastern daylight time) means "not the US", whatever the position,
+///       the places or the region say. iPhones and Android phones set the
+///       zone from the network by default, so in Shanghai it reads +08:00
+///       while the region setting stays US. Only the offset counts, never
+///       the zone's name or abbreviation ("CST" is both China Standard
+///       Time and US Central). It is read when the lookup is decided: an
+///       automatic lookup runs in the foreground within 24 h of the meal
+///       and an APPLY needs the meal to be today's and at most 12 h old,
+///       so the phone's zone then is, near enough, where the meal was
+///       eaten. Its limits: a zone set by hand, and a meal photographed
+///       abroad and first looked at after flying back to the US — there
+///       only the photo's position, where it may be read, can tell.
 ///   (a) where the photo was taken, when its position may be read (the
 ///       assist's location consent and 'Use photo location'; read on the
 ///       phone, never stored or sent): [pointInUs], a coarse test against
@@ -48,6 +63,22 @@ const double kMealCountryMaxAccuracyM = 10000;
 /// country is read from.
 const int kMealCountryNearestPlaces = 3;
 
+/// The US's westernmost offset from UTC (Hawaii–Aleutian standard time;
+/// American Samoa's UTC−11 is outside every outline anyway).
+const Duration kMealCountryUsOffsetWest = Duration(hours: -10);
+
+/// The US's easternmost offset from UTC (Puerto Rico's Atlantic standard
+/// time, and eastern daylight time; Guam's UTC+10 is outside every outline
+/// anyway).
+const Duration kMealCountryUsOffsetEast = Duration(hours: -4);
+
+/// True when [offset], the phone's offset from UTC, is one the US keeps
+/// (standard or daylight time): from [kMealCountryUsOffsetWest] to
+/// [kMealCountryUsOffsetEast], both included. Shanghai's +08:00, London's
+/// +00:00 or +01:00, Newfoundland's −03:30 are not.
+bool utcOffsetInUs(Duration offset) =>
+    offset >= kMealCountryUsOffsetWest && offset <= kMealCountryUsOffsetEast;
+
 /// Region and place codes that are the US for the assist: Apple files
 /// Puerto Rico under its own code.
 const Set<String> kMealCountryUsCodes = {'US', 'PR'};
@@ -56,16 +87,23 @@ final RegExp _iso2Re = RegExp(r'^[A-Z]{2}$');
 
 /// The meal country from the signals above, strongest first: 'US', another
 /// ISO2 code (the phone's region), [kMealCountryOutside], or null when
-/// nothing tells. [lat]/[lon] count only as a pair of finite numbers;
-/// [placeCountries] are the places' ISO codes nearest first (null for a
-/// place that names none); [deviceRegion] is the phone's region (ISO2).
+/// nothing tells. [utcOffset] is the phone's offset from UTC now (null:
+/// not given) — outside the US's ([utcOffsetInUs]) it is
+/// [kMealCountryOutside] whatever else says; [lat]/[lon] count only as a
+/// pair of finite numbers; [placeCountries] are the places' ISO codes
+/// nearest first (null for a place that names none); [deviceRegion] is
+/// the phone's region (ISO2).
 String? decideMealCountry({
   double? lat,
   double? lon,
   double? accuracyM,
   Iterable<String?> placeCountries = const [],
   String? deviceRegion,
+  Duration? utcOffset,
 }) {
+  if (utcOffset != null && !utcOffsetInUs(utcOffset)) {
+    return kMealCountryOutside;
+  }
   final places = placesCountry(placeCountries);
   if (lat != null && lon != null && lat.isFinite && lon.isFinite) {
     final precise =

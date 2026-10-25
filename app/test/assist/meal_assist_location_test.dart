@@ -73,6 +73,12 @@ const ({double latitude, double longitude}) _detroit = (
   longitude: -83.0458,
 );
 
+/// The phone's offset from UTC at home (US Central daylight time) and in
+/// Shanghai (China Standard Time) — the zone the phone sets from the
+/// network, while the region setting stays US.
+const Duration _central = Duration(hours: -5);
+const Duration _chinaTime = Duration(hours: 8);
+
 const LookupSupport _anthropic = LookupSupport(
   supported: true,
   recipient: LookupRecipient.anthropic,
@@ -338,6 +344,11 @@ class _Harness {
 
   /// The phone's region (MealAssist's deviceRegion).
   String? region = 'US';
+
+  /// The phone's offset from UTC (MealAssist's utcOffset): US Central
+  /// daylight time unless a test travels — never the machine's own, so CI
+  /// (UTC) runs the same. Null: reading it throws.
+  Duration? offset = _central;
   DateTime now = _now;
   AssistSettingsView settings = AssistSettingsView(
     mode: AssistMode.auto,
@@ -367,6 +378,7 @@ class _Harness {
     DateTime Function()? clock,
     Duration pollInterval = kAssistPollInterval,
     Duration pollWindow = kAssistPollWindow,
+    bool android = false,
   }) => MealAssist(
     dao: dao,
     lookups: lookups,
@@ -380,8 +392,12 @@ class _Harness {
     onApplied: notices.add,
     inForeground: () => foreground,
     country: () => region,
-    location: PhotoLocationReader(source, enabled: readerEnabled),
-    places: places,
+    utcOffset: () => offset ?? (throw StateError('no time zone')),
+    // Android: no location reader and no places resolver (di.dart).
+    location: android
+        ? null
+        : PhotoLocationReader(source, enabled: readerEnabled),
+    places: android ? null : places,
     placesStore: placesStore,
     clock: clock ?? () => now,
     settleDelay: const Duration(milliseconds: 10),
@@ -839,10 +855,38 @@ void main() {
 
   group('the meal country (run 6)', () {
     // The owner travels between the US and China; the phone's region
-    // stays US. A McDonald's in Shanghai is not a US McDonald's.
+    // stays US. A McDonald's in Shanghai is not a US McDonald's. In China
+    // the phone's time zone reads +08:00 (the first test); the others pin
+    // each later signal on its own, on a phone that stays on US time (a
+    // zone set by hand would look the same). The time zone's veto where
+    // no position may be read is the next group.
 
-    test('the China trip: a US-region phone, a branded photo taken in '
-        'Shanghai: no lookup, no places query, not asked again', () async {
+    test('the China trip: a US-region phone on Shanghai time, a branded '
+        'photo taken there: no lookup, nothing read, not asked again — not '
+        'even back home', () async {
+      h.offset = _chinaTime;
+      h.source.at = _shanghai;
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty, reason: 'the time zone decides first');
+      expect(h.places.radii, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull);
+      expect(h.assist.lookupsToday, 0);
+      expect(
+        [for (final e in await h.state.decisions()) e.code],
+        [AssistSkip.outsideUs],
+      );
+      expect((await h.state.misses())[id], assistMissesBeforeDenylist);
+      // Flown home within the day: decided at the first look.
+      h.offset = _central;
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.source.asked, isEmpty);
+    });
+
+    test('a photo taken in Shanghai, the phone on US time: its position '
+        'decides — no lookup, no places query, not asked again', () async {
       h.source.at = _shanghai;
       final id = h.add(_bigMac(brand: "McDonald's"));
       await h.assist.sweep();
@@ -864,8 +908,8 @@ void main() {
       }
     });
 
-    test('the China trip, takeout: the bag\'s brand is not enough, the '
-        'photo\'s position decides', () async {
+    test('a photo taken in Shanghai, takeout: the bag\'s brand is not '
+        'enough, the photo\'s position decides', () async {
       h.source.at = _shanghai;
       final id = h.add(_bigMac(context: 'takeout', brand: "McDonald's"));
       await h.assist.sweep();
@@ -875,7 +919,8 @@ void main() {
       expect(h.blockOf(id), isNull);
     });
 
-    test('the China trip: an answer cached in the US is not used', () async {
+    test('a photo taken in Shanghai: an answer cached in the US is not '
+        'used', () async {
       h.source.at = _madison;
       final us = h.add(_bigMac(brand: "McDonald's"));
       await h.assist.sweep();
@@ -892,8 +937,30 @@ void main() {
       expect(h.blockOf(cn), isNull, reason: 'and no cached numbers');
     });
 
-    test('the China trip, the editor: "Use location" says outside the US; '
-        '"Brand only" reads nothing and goes by the region', () async {
+    test('the China trip, the editor: "Use location" and "Brand only" both '
+        'say outside the US; nothing is read or sent', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.off,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      h.offset = _chinaTime;
+      h.source.at = _shanghai;
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      final located = await h.assist.lookupNow(id, useLocation: true);
+      expect(located.code, AssistSkip.outsideUs);
+      expect(located.wrote, isFalse);
+      final brandOnly = await h.assist.lookupNow(id);
+      expect(brandOnly.code, AssistSkip.outsideUs);
+      expect(brandOnly.wrote, isFalse);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.source.asked, isEmpty);
+      expect(h.blockOf(id), isNull);
+      expect(await h.state.decisions(), isEmpty, reason: 'shown, not logged');
+    });
+
+    test('a photo taken in Shanghai, the phone on US time, the editor: '
+        '"Use location" reads it once and says outside the US', () async {
       h.settings = AssistSettingsView(
         mode: AssistMode.off,
         consentAt: _consentAt,
@@ -907,15 +974,10 @@ void main() {
       expect(h.lookups.submits, isEmpty);
       expect(h.source.asked, ['asset-1']);
       expect(await h.state.decisions(), isEmpty, reason: 'shown, not logged');
-      // Brand only reads no location at all: the phone's region (US) is
-      // all it knows.
-      final brandOnly = await h.assist.lookupNow(id);
-      expect(h.source.asked, hasLength(1));
-      expect(brandOnly.wrote, isTrue);
-      expect(h.lookups.submits.single.body['country'], 'US');
     });
 
-    test('no GPS in the photo, a US region: looked up as before', () async {
+    test('no GPS in the photo, a US region on US time: looked up as '
+        'before', () async {
       final id = h.add(
         _bigMac(brand: "McDonald's", capture: _capture(hasGps: false)),
       );
@@ -1016,8 +1078,8 @@ void main() {
       expect(h.blockOf(other), isNotNull);
     });
 
-    test('an http:// own server: no position is read, not even for the '
-        'meal country — the region decides', () async {
+    test('an http:// own server on US time: no position is read, not even '
+        'for the meal country — the region decides', () async {
       h.lookups.support = _claudePlanHttp;
       h.settings = AssistSettingsView(
         mode: AssistMode.auto,
@@ -1075,7 +1137,18 @@ void main() {
       const regions = [null, 'US', 'PR', 'CN', 'CA', 'us'];
       const contexts = ['restaurant', 'takeout', 'home'];
       const placeCountries = [null, 'US', 'CA'];
-      for (var i = 0; i < 160; i++) {
+      const offsets = <Duration?>[
+        _central,
+        _central,
+        _chinaTime,
+        Duration(hours: -10), // Honolulu
+        Duration(hours: -4), // San Juan, New York in summer
+        Duration(hours: -3), // Halifax in summer
+        Duration(hours: -11),
+        Duration.zero,
+        null, // cannot be read
+      ];
+      for (var i = 0; i < 240; i++) {
         final dir = Directory.systemTemp.createTempSync('meal_country_prop');
         SharedPreferences.setMockInitialValues({});
         final t = _Harness(dir, await SharedPreferences.getInstance());
@@ -1087,7 +1160,10 @@ void main() {
           final useLocation = rng.nextBool();
           final http = rng.nextInt(4) == 0;
           final placeCountry = placeCountries[rng.nextInt(3)];
+          final offset = offsets[rng.nextInt(offsets.length)];
+          final android = rng.nextInt(5) == 0;
           t.region = region;
+          t.offset = offset;
           t.source.at = position;
           t.places.answer = NearbyFood(
             PlacesStatus.ok,
@@ -1114,18 +1190,28 @@ void main() {
               capture: _capture(hasGps: position != null),
             ),
           );
-          await t.assist.sweep();
+          final assist = android ? t.build(android: true) : t.assist;
+          try {
+            await assist.sweep();
+          } finally {
+            if (android) assist.dispose();
+          }
 
           final why =
               '#$i at=$position region=$region $context branded=$branded '
-              'useLocation=$useLocation http=$http places=$placeCountry';
+              'useLocation=$useLocation http=$http places=$placeCountry '
+              'offset=$offset android=$android';
+          final usZone = offset != null && utcOffsetInUs(offset);
           final pointRead =
+              usZone &&
+              !android &&
               useLocation &&
               !http &&
               position != null &&
               (context == 'restaurant' || context == 'takeout');
           final locating = pointRead && context == 'restaurant';
           final askedMaps = t.places.radii.isNotEmpty;
+          if (!pointRead) expect(t.source.asked, isEmpty, reason: why);
           if (askedMaps) {
             expect(locating, isTrue, reason: why);
             expect(
@@ -1140,7 +1226,9 @@ void main() {
             accuracyM: 10,
             placeCountries: askedMaps ? [placeCountry, placeCountry] : const [],
             deviceRegion: region,
+            utcOffset: offset ?? const Duration(hours: 99),
           );
+          if (!usZone) expect(expected, kMealCountryOutside, reason: why);
           final askable = branded || locating;
           final submitted = t.lookups.submits.isNotEmpty;
           expect(submitted, expected == kMealCountryUs && askable, reason: why);
@@ -1157,6 +1245,307 @@ void main() {
           dir.deleteSync(recursive: true);
         }
       }
+    });
+  });
+
+  group('the phone\'s time zone (review: where no position may be read)', () {
+    // The owner's region stays US in China, and most paths read no photo
+    // position: Brand only, an http:// own server, Android, home and
+    // packaged meals, the editor's picked chain, photos without GPS. The
+    // time zone the phone sets from the network is what tells there.
+
+    setUp(() {
+      h.offset = _chinaTime;
+      h.source.at = _shanghai;
+    });
+
+    /// Nothing was read, asked, sent, written or counted for [id].
+    Future<void> expectOutside(int id, {bool logged = true}) async {
+      expect(h.source.asked, isEmpty, reason: 'no position read');
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps not asked');
+      expect(h.lookups.submits, isEmpty, reason: 'nothing sent');
+      expect(h.lookups.polls, isEmpty);
+      expect(h.blockOf(id), isNull, reason: 'no numbers, no suggestion');
+      expect(h.assist.lookupsToday, 0, reason: 'no plan usage');
+      if (logged) {
+        expect(
+          [for (final e in await h.state.decisions()) e.code],
+          [AssistSkip.outsideUs],
+        );
+        expect((await h.state.misses())[id], assistMissesBeforeDenylist);
+      }
+    }
+
+    test('Brand only: a McDonald\'s-branded restaurant photo on Shanghai '
+        'time is not looked up (it was applied with US numbers)', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: false,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      await expectOutside(id);
+    });
+
+    test('the owner\'s http:// Claude Plan server on Shanghai time: no '
+        'lookup, no plan quota, no suggestion', () async {
+      h.lookups.support = _claudePlanHttp;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      h.lookups.onSubmit = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      await expectOutside(id);
+      expect((await h.state.jobs())[id], isNull);
+    });
+
+    test('Android (no location reader): nothing', () async {
+      final android = h.build(android: true);
+      addTearDown(android.dispose);
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await android.sweep();
+      await expectOutside(id);
+    });
+
+    test('home, packaged and unknown meals with a printed brand, in Always: '
+        'nothing', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.always,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final ids = [
+        for (final (i, context) in ['home', 'packaged', 'unknown'].indexed)
+          h.add(
+            _bigMac(context: context, brand: "McDonald's"),
+            timestamp: '2026-10-24T12:0$i:00.000',
+            fileId: 'asset-$i',
+          ),
+      ];
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.source.asked, isEmpty);
+      for (final id in ids) {
+        expect(h.blockOf(id), isNull);
+        expect((await h.state.misses())[id], assistMissesBeforeDenylist);
+      }
+    });
+
+    test('the editor\'s picked chain (after "Wrong restaurant"): outside the '
+        'US, nothing sent', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.off,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final id = h.add(_bigMac());
+      final run = await h.assist.lookupNow(id, chainKey: 'mcdonalds');
+      expect(run.code, AssistSkip.outsideUs);
+      expect(run.wrote, isFalse);
+      await expectOutside(id, logged: false);
+      expect(await h.state.decisions(), isEmpty, reason: 'shown, not logged');
+    });
+
+    test('no GPS in the photo, a US region: nothing', () async {
+      final id = h.add(
+        _bigMac(brand: "McDonald's", capture: _capture(hasGps: false)),
+      );
+      await h.assist.sweep();
+      await expectOutside(id);
+    });
+
+    test('"Use photo location" on, a restaurant photo with GPS: the zone '
+        'decides first, so the position is not even read', () async {
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      final other = h.add(
+        _bigMac(),
+        timestamp: '2026-10-24T12:10:00.000',
+        fileId: 'asset-2',
+      );
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty);
+      expect(h.places.radii, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull);
+      expect(h.blockOf(other), isNull);
+    });
+
+    test('a time zone that cannot be read counts as outside the US', () async {
+      h.offset = null;
+      final id = h.add(
+        _bigMac(brand: "McDonald's", capture: _capture(hasGps: false)),
+      );
+      await h.assist.sweep();
+      await expectOutside(id);
+    });
+
+    test('a meal with nothing to ask (home, no brand) is unchanged: nothing '
+        'read, nothing logged', () async {
+      final id = h.add(_bigMac(context: 'home'));
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull);
+      expect(await h.state.decisions(), isEmpty);
+    });
+
+    test('US Central time (−5 h) keeps today\'s behavior: Brand only, no GPS '
+        'and the editor\'s pick are looked up with US', () async {
+      h.offset = _central;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: false,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final brandOnly = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty);
+      expect(h.lookups.submits.single.body['country'], 'US');
+      expect(h.blockOf(brandOnly)?['status'], AssistStatus.applied);
+
+      final noGps = h.add(
+        _bigMac(
+          brand: "McDonald's",
+          name: 'Quarter Pounder',
+          capture: _capture(hasGps: false),
+        ),
+        timestamp: '2026-10-24T12:10:00.000',
+        fileId: 'asset-2',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(2));
+      expect(h.blockOf(noGps), isNotNull);
+
+      final picked = h.add(
+        _bigMac(name: 'McChicken'),
+        timestamp: '2026-10-24T12:20:00.000',
+        fileId: 'asset-3',
+      );
+      final run = await h.assist.lookupNow(picked, chainKey: 'mcdonalds');
+      expect(run.code, isNot(AssistSkip.outsideUs));
+      expect(h.lookups.submits, hasLength(3));
+      expect(h.lookups.submits.last.body['country'], 'US');
+    });
+
+    test('the US\'s zones, Hawaii (−10 h) to Puerto Rico (−4 h), look up; '
+        'every other zone does not', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: false,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      const zones = <(Duration, bool)>[
+        (Duration(hours: -10), true), // Honolulu
+        (Duration(hours: -9), true), // Anchorage in winter
+        (Duration(hours: -8), true),
+        (Duration(hours: -7), true),
+        (Duration(hours: -6), true),
+        (Duration(hours: -5), true),
+        (Duration(hours: -4), true), // San Juan; New York in summer
+        (Duration(hours: -10, minutes: -30), false),
+        (Duration(hours: -11), false), // Pago Pago
+        (Duration(hours: -3), false), // Halifax in summer
+        (Duration(hours: -3, minutes: -30), false), // St. John's
+        (Duration.zero, false), // London in winter
+        (Duration(hours: 1), false),
+        (Duration(hours: 5, minutes: 30), false), // Mumbai
+        (Duration(hours: 8), false), // Shanghai
+        (Duration(hours: 10), false), // Guam
+      ];
+      for (final (i, (zone, us)) in zones.indexed) {
+        h.offset = zone;
+        final id = h.add(
+          _bigMac(brand: "McDonald's", name: 'Item $i'),
+          timestamp: '2026-10-24T12:${i.toString().padLeft(2, '0')}:00.000',
+          fileId: 'asset-$i',
+        );
+        await h.assist.sweep();
+        expect(h.blockOf(id) != null, us, reason: '$zone');
+      }
+      expect(h.lookups.submits, hasLength(7));
+      for (final r in h.lookups.submits) {
+        expect(r.body['country'], 'US');
+      }
+    });
+
+    test(
+      'a job submitted on US time keeps its country when it is polled '
+      'on Shanghai time: the meal was eaten where it was submitted',
+      () async {
+        h.offset = _central;
+        h.source.at = (latitude: _lat, longitude: _lon);
+        h.lookups.support = _claudePlanHttps;
+        h.settings = AssistSettingsView(
+          mode: AssistMode.auto,
+          useLocation: true,
+          consentAt: _consentAt,
+          consentRecipient: 'claude_plan:abcd1234',
+        );
+        final id = h.add(_bigMac(context: 'takeout', brand: "McDonald's"));
+        h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+        await h.assist.sweep();
+        expect((await h.state.jobs())[id]?.country, 'US');
+        h.offset = _chinaTime;
+        h.now = _now.add(kAssistPollInterval);
+        h.lookups.onPoll = (_) async =>
+            _done(provider: LookupRecipient.claudePlan, verbatim: false);
+        await h.assist.sweep();
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect(h.lookups.submits, hasLength(1));
+        expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+      },
+    );
+
+    test('the default is the phone\'s own offset, never a zone name ("CST" '
+        'is China and US Central both)', () {
+      final src = File(
+        '${_appRoot()}/lib/services/assist/meal_assist.dart',
+      ).readAsStringSync();
+      expect(
+        src,
+        contains(
+          'static Duration _phoneUtcOffset() => DateTime.now().timeZoneOffset;',
+        ),
+      );
+      expect(src, contains('_utcOffset = utcOffset ?? _phoneUtcOffset;'));
+      expect(src, isNot(contains('timeZoneName')));
+      final where = _body(src, 'Future<_Where> _where(');
+      final veto = where.indexOf(
+        'if (offset == null || !utcOffsetInUs(offset))',
+      );
+      expect(veto, isNot(-1));
+      expect(
+        veto,
+        lessThan(where.indexOf('await reader.forAsset(')),
+        reason: 'the zone decides before the position is read',
+      );
+    });
+
+    test('whereNow: what Settings says — the zone first, then the '
+        'region', () {
+      h.offset = _chinaTime;
+      expect(h.assist.whereNow(), AssistWhereNow.timeZone);
+      h.offset = null;
+      expect(h.assist.whereNow(), AssistWhereNow.timeZone);
+      h.offset = _central;
+      expect(h.assist.whereNow(), AssistWhereNow.us);
+      h.region = 'PR';
+      expect(h.assist.whereNow(), AssistWhereNow.us);
+      h.region = 'CN';
+      expect(h.assist.whereNow(), AssistWhereNow.region);
+      h.region = null;
+      expect(h.assist.whereNow(), AssistWhereNow.region);
+      expect(h.source.asked, isEmpty, reason: 'reads no photo');
     });
   });
 

@@ -295,6 +295,9 @@ class _Harness {
     onApplied: notices.add,
     inForeground: () => foreground,
     country: () => 'US',
+    // US Central daylight time: the meal country's time-zone veto stays
+    // out of the way wherever the tests run (CI's clock is UTC).
+    utcOffset: () => const Duration(hours: -5),
     clock: () => now,
     settleDelay: const Duration(milliseconds: 10),
     busyRetry: const Duration(milliseconds: 20),
@@ -452,6 +455,7 @@ void main() {
         settings: () => h.settings,
         repliesInChinese: () => true,
         country: () => 'US',
+        utcOffset: () => const Duration(hours: -5),
         clock: () => h.now,
       );
       h.add(_bigMac());

@@ -215,6 +215,9 @@ void main() {
       ]) {
         expect(build, _wired(wire), reason: wire);
       }
+      // The meal country's time zone is the phone's own (MealAssist's
+      // default, DateTime.now().timeZoneOffset): di passes no other.
+      expect(build, isNot(contains('utcOffset')));
       expect(build, isNot(contains('AssistSettingsView.off')),
           reason: 'R7a stores the settings: the assist reads them');
       // R7a: Settings' Restaurant nutrition group and the consent sheets
@@ -232,6 +235,8 @@ void main() {
         r'serverState: \(\) async => '
             r'assistServerStateOf\(await serverAnalyzer\.serverFeatures\(\)\),',
         r'locationSupported: Platform\.isIOS,',
+        // Review (run 6): Settings says why nothing would be looked up.
+        r'whereNow: mealAssist\.whereNow,',
       ]) {
         expect(controls, _wired(wire), reason: wire);
       }

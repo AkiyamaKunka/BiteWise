@@ -44,20 +44,27 @@
 /// or with no way to tell ([AssistSkip.regionUnknown]) nothing is asked,
 /// no cached answer is used, no suggestion is made. [MealAssist._where]
 /// decides it once per lookup, and that ONE value is both the request's
-/// "country" and decideAssist's US rule. Strongest first: where the photo
-/// was taken — read only under the location path's own consent ('Use
-/// photo location' on, or the editor's "Use location"; a reader, i.e.
-/// iOS; locationAllowed; capture.has_gps) and only for a RESTAURANT or
+/// "country" and decideAssist's US rule. First, a veto that needs no
+/// consent and keeps nothing: the phone's offset from UTC now (the
+/// utcOffset seam, DateTime.now().timeZoneOffset): outside the US's
+/// UTC−10…UTC−4 (Shanghai's +08:00) the meal is outside the US, whatever
+/// else says, and nothing is read — this is what holds where no position
+/// may be read (Brand only, Android, an http:// own server, home or
+/// packaged meals, the editor's picked chain, photos without GPS) on a
+/// traveller's phone whose region stays US. Then, strongest first: where
+/// the photo was taken — read only under the location path's own consent
+/// ('Use photo location' on, or the editor's "Use location"; a reader,
+/// i.e. iOS; locationAllowed; capture.has_gps) and only for a RESTAURANT or
 /// TAKEOUT meal (a takeout bag is eaten in the country it was bought in),
 /// tested on the phone against outlines of the US (pointInUs: near a
 /// border counts as outside) and never kept or sent; then Apple Maps'
 /// country for the nearest places, a veto when they were fetched; then the
 /// phone's region setting (weak: a traveller's phone stays on home);
 /// else unknown. Home, packaged and unknown meals never have their
-/// location read, Brand only reads none: those go by the region. The
-/// position is read only when something could be asked (a printed chain,
-/// or a fix Apple Maps may get), and Apple Maps is asked only about a
-/// photo taken in the US. A job or retry keeps the country it was
+/// location read, Brand only reads none: those go by the time zone and
+/// the region. The position is read only when something could be asked
+/// (a printed chain, or a fix Apple Maps may get), and Apple Maps is asked
+/// only about a photo taken in the US. A job or retry keeps the country it was
 /// submitted with.
 ///
 /// The LOCATION path (R6c) adds the chains around where the photo was
@@ -476,6 +483,21 @@ AssistLookup? remapCachedLookup(
 
 // ─── Public results ────────────────────────────────────────────────────
 
+/// What the phone itself says now about where meals are eaten — its time
+/// zone and region, no photo ([MealAssist.whereNow]; Settings' hint).
+enum AssistWhereNow {
+  /// A US time zone and a US region: a lookup can go ahead.
+  us,
+
+  /// The phone's time zone is not one the US keeps: nothing is looked up
+  /// at all, not even for a photo taken in the US.
+  timeZone,
+
+  /// A US time zone, but the region is not the US (or not set): only a
+  /// photo's position (iPhone, 'Use photo location') can say the US.
+  region,
+}
+
 /// What the snackbar says after an automatic APPLY, and its Undo.
 final class AssistAppliedNotice {
   const AssistAppliedNotice({
@@ -671,11 +693,18 @@ class MealAssist {
     this._places,
     this._placesStore,
     DateTime Function()? clock,
+    Duration Function()? utcOffset,
     this.settleDelay = kAssistSettleDelay,
     this.busyRetry = kAssistBusyRetry,
     this.pollInterval = kAssistPollInterval,
     this.pollWindow = kAssistPollWindow,
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now,
+       _utcOffset = utcOffset ?? _phoneUtcOffset;
+
+  /// The phone's offset from UTC now: the zone iOS and Android set from
+  /// the network by default (the offset, never the zone's name: "CST" is
+  /// both China Standard Time and US Central).
+  static Duration _phoneUtcOffset() => DateTime.now().timeZoneOffset;
 
   final MealsDao _dao;
   final LookupClient _lookups;
@@ -699,6 +728,10 @@ class MealAssist {
   final PlaceResolver? _places;
   final AssistPlacesStore? _placesStore;
   final DateTime Function() _clock;
+
+  /// The meal country's first word (core/meal_country.dart utcOffsetInUs):
+  /// read when a lookup is decided, never kept or sent.
+  final Duration Function() _utcOffset;
 
   final Duration settleDelay;
   final Duration busyRetry;
@@ -964,6 +997,33 @@ class MealAssist {
     } catch (_) {
       return null;
     }
+  }
+
+  /// The phone's offset from UTC now, or null when it cannot be read —
+  /// which counts as outside the US: nothing could be told.
+  Duration? _offset() {
+    try {
+      return _utcOffset();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// True when the phone's time zone now is one the US keeps.
+  bool _usTimeZone() {
+    final offset = _offset();
+    return offset != null && utcOffsetInUs(offset);
+  }
+
+  /// What the phone's time zone and region say now (Settings' hint, R7a):
+  /// [AssistWhereNow.timeZone] while nothing at all would be looked up,
+  /// [AssistWhereNow.region] when only a photo's position could say the
+  /// US, else [AssistWhereNow.us]. Reads no photo. Never throws.
+  AssistWhereNow whereNow() {
+    if (!_usTimeZone()) return AssistWhereNow.timeZone;
+    return decideMealCountry(deviceRegion: _region()) == kMealCountryUs
+        ? AssistWhereNow.us
+        : AssistWhereNow.region;
   }
 
   bool _zh() {
@@ -1464,8 +1524,10 @@ class MealAssist {
   /// Where [meal] was eaten (see the library doc): the meal country
   /// (decideMealCountry) and, on the location path, the chains around the
   /// photo. [printed]: something printed (or the user's pick) names a
-  /// chain. The photo's position is read here at most once, only where
-  /// [_countryReadPossible] and [useLocation] allow it and only when
+  /// chain. The phone's time zone comes first: outside the US's, the meal
+  /// is outside the US and nothing is read. The photo's position is read
+  /// here at most once, only where [_countryReadPossible] and
+  /// [useLocation] allow it and only when
   /// something could be asked; it lives in [point] for the US test and one
   /// places query, and is gone when this returns: what comes back is a
   /// country code, a code and chain keys. A job or a retry keeps what its
@@ -1479,10 +1541,14 @@ class MealAssist {
   }) async {
     final locating = useLocation && _locationPossible(meal, support);
     final keptCountry = job?.country;
+    // A job or retry keeps the country it was submitted with — decided
+    // then, under the time zone of then: a poll from abroad later answers
+    // a meal that was eaten in the US.
     if (job != null && keptCountry != null) {
       return _Where(keptCountry, place: locating ? job.place : null);
     }
     final region = _region();
+    final offset = _offset();
     try {
       final analysis = meal.analysis;
       final geo = PhotoGeo.fromCapture(
@@ -1496,6 +1562,13 @@ class MealAssist {
       if (!printed && (!locating || refused != null)) {
         // Nothing could be asked about: nothing is read.
         return _Where(region, code: refused, nothingToAsk: true);
+      }
+      // The phone's clock follows where the phone is: in a time zone the
+      // US does not keep (or none that can be read) the meal was not
+      // eaten in the US — whatever the region says, and before anything
+      // is read or asked.
+      if (offset == null || !utcOffsetInUs(offset)) {
+        return const _Where(kMealCountryOutside);
       }
       final hold = _placesHoldUntil;
       if (locating &&
@@ -1517,6 +1590,7 @@ class MealAssist {
         lon: point?.lon,
         accuracyM: geo.accuracyM,
         deviceRegion: region,
+        utcOffset: offset,
       );
       // Outside the US, or nowhere known: Apple Maps is not asked either.
       if (country != kMealCountryUs || !locating) return _Where(country);
@@ -1554,6 +1628,7 @@ class MealAssist {
         accuracyM: geo.accuracyM,
         placeCountries: [for (final p in near.places) p.countryCode],
         deviceRegion: region,
+        utcOffset: offset,
       );
       if (checked != kMealCountryUs) return _Where(checked);
       final match = matchPlaces(
