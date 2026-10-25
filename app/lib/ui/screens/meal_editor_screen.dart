@@ -8,16 +8,28 @@
 /// MealSource.manualText (describe-a-meal preview, no hash), or
 /// MealSource.appManualPhoto WITH the photo's md5 when the user hand-enters
 /// a photo the model refused.
+///
+/// Write safety (design R6a): an existing meal's save is a compare-and-set
+/// against the analysis text the draft was loaded from
+/// (MealsDao.updateMealFieldsIfUnchanged). The row is read once more as the
+/// editor opens (mealSnapshot): if the list handed over an older copy and
+/// nothing was typed yet, the form shows the meal as stored. A meal that
+/// changed while the editor was open (a leftover deduction, a chat fix, a
+/// restaurant lookup) is never overwritten with the older copy: the save
+/// says so and the form reloads. While open, the editor holds the meal in
+/// the [MealInUseRegistry], so the restaurant assist leaves it alone.
 library;
 
+import 'dart:convert' show jsonEncode;
 import 'dart:math' show min;
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 
-import '../../core/coerce.dart' show normalizeImageHash;
+import '../../core/coerce.dart' show finiteAnalysis, normalizeImageHash;
 import '../../core/contracts.dart';
+import '../../core/restaurant_assist_logic.dart' show dropAssistClaims;
 import '../../services/photo/filename_dates.dart'
     show captureWallClock, exifWallAndOffset;
 import '../../services/photo/glasses.dart'
@@ -26,6 +38,7 @@ import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
 import '../large_text.dart';
 import '../meal_edit_logic.dart';
+import '../meal_in_use.dart';
 import '../widgets/glasses_badge.dart';
 import '../widgets/macro_chart.dart';
 import '../widgets/small_spinner.dart';
@@ -41,9 +54,14 @@ class MealEditorScreen extends StatefulWidget {
     this.makeThumb,
     this.initialAnalysis,
     this.newMealSource = MealSource.appManual,
+    this.inUse,
   });
 
   final MealsDao dao;
+
+  /// Held for [meal] while the editor is open (design R6a): the restaurant
+  /// assist skips a meal the user is editing. Null: nothing to tell.
+  final MealInUseRegistry? inUse;
 
   /// null = create a new meal.
   final Meal? meal;
@@ -93,6 +111,25 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   List<String> _errors = const [];
   bool _saving = false;
   final ScrollController _scroll = ScrollController();
+
+  /// The stored meal the form shows (design R6a): [MealEditorScreen.meal]
+  /// at first, the row as re-read after a reload. Null for a new meal.
+  Meal? _meal;
+
+  /// The open-time re-read of the row ([_confirmBasis]) while it runs; a
+  /// save of an existing meal waits for it. Never completes with an error.
+  Future<void>? _basisRead;
+
+  /// The stored row no longer matches what the form was loaded from (or is
+  /// gone), and the user already typed over the older copy: the next save
+  /// is answered with the conflict dialog instead of a write.
+  bool _basisStale = false;
+
+  /// The form's contents right after a load: equal to [_signature] while
+  /// the user has typed nothing.
+  String _loadedSignature = '';
+
+  MealInUseHold? _hold;
 
   @override
   void initState() {
@@ -144,6 +181,105 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     for (final c in [_cal, _pro, _carb, _fat]) {
       c.addListener(_syncTotals);
     }
+    _meal = meal;
+    if (meal != null) {
+      _hold = widget.inUse?.acquire(meal.id);
+      _loadedSignature = _signature();
+      _basisRead = _confirmBasis();
+    }
+  }
+
+  /// Everything the form shows, as one string: unchanged while the user has
+  /// typed nothing since the last load.
+  String _signature() => [
+        _desc.text,
+        _cal.text,
+        _pro.text,
+        _carb.text,
+        _fat.text,
+        _draft.dateIso,
+        _draft.time,
+        for (final r in _itemCtrls) ...[
+          r.name.text,
+          r.cal.text,
+          r.pro.text,
+          r.carb.text,
+          r.fat.text,
+        ],
+      ].join('\u0000');
+
+  static String? _analysisText(Map<String, dynamic> analysis) {
+    try {
+      return jsonEncode(finiteAnalysis(analysis));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// [stored] is the meal [shown] was: same day, clock and analysis.
+  static bool _sameBasis(Meal stored, Meal shown) {
+    if (stored.date != shown.date || stored.time != shown.time) return false;
+    final a = _analysisText(stored.analysis);
+    return a != null && a == _analysisText(shown.analysis);
+  }
+
+  /// Reads the stored row behind the form (design R6a). Still the meal the
+  /// form shows: its raw text becomes the save's compare-and-set basis. A
+  /// newer row while nothing was typed and no save is under way: the form
+  /// shows it instead (the list was a moment stale). A newer row the user
+  /// is already typing over or saving, or a meal that is gone: the save
+  /// answers with the conflict dialog. A failed read leaves the basis
+  /// unknown; the save reads again.
+  Future<void> _confirmBasis() async {
+    final shown = _meal;
+    if (shown == null) return;
+    try {
+      final MealSnapshot? snap;
+      try {
+        snap = await widget.dao.mealSnapshot(shown.id);
+      } catch (_) {
+        return;
+      }
+      if (!mounted || !identical(shown, _meal)) return;
+      if (snap == null) {
+        _basisStale = true;
+      } else if (_sameBasis(snap.meal, shown)) {
+        _draft.expectedRaw = snap.rawAnalysis;
+      } else if (!_saving && _signature() == _loadedSignature) {
+        _load(snap);
+        setState(() {});
+      } else {
+        _basisStale = true;
+      }
+    } finally {
+      _basisRead = null;
+    }
+  }
+
+  /// The form, rebuilt from [snap]: the draft, every field and the item
+  /// rows, with [snap]'s raw text as the save's basis.
+  void _load(MealSnapshot snap) {
+    _meal = snap.meal;
+    final fresh = MealDraft.fromMeal(snap.meal)..expectedRaw = snap.rawAnalysis;
+    for (final row in _itemCtrls) {
+      row.name.dispose();
+      row.cal.dispose();
+      row.pro.dispose();
+      row.carb.dispose();
+      row.fat.dispose();
+    }
+    _itemCtrls.clear();
+    _draft = fresh;
+    _desc.text = fresh.description;
+    _cal.text = fresh.calories;
+    _pro.text = fresh.protein;
+    _carb.text = fresh.carbs;
+    _fat.text = fresh.fat;
+    for (final it in fresh.items) {
+      _itemCtrls.add(_controllersFor(it));
+    }
+    _basisStale = false;
+    _loadedSignature = _signature();
   }
 
   ({TextEditingController name, TextEditingController cal,
@@ -207,6 +343,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   @override
   void dispose() {
+    _hold?.release();
     _scroll.dispose();
     for (final c in [_desc, _cal, _pro, _carb, _fat]) {
       c.dispose();
@@ -249,6 +386,19 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   Future<void> _save() async {
     if (_saving) return;
+    // The open-time read decides what this save compares against: wait for
+    // it (milliseconds). Landing now, a newer row no longer replaces the
+    // form — the user pressed Save on what they saw — it is a conflict.
+    final basis = _basisRead;
+    if (basis != null) {
+      _saving = true; // also the re-entry guard
+      try {
+        await basis;
+      } finally {
+        _saving = false;
+      }
+      if (!mounted) return;
+    }
     _harvest();
     final errors = _draft.validate(context.l10n);
     if (errors.isNotEmpty) {
@@ -277,8 +427,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         final photo = widget.fromPhoto;
         // How the photo was taken (design G2a), from the intake's reading
         // of its bytes — never from a model's preview — as the automatic
-        // pipeline stores it.
+        // pipeline stores it. Nor an assist block or a published flag a
+        // describe preview's model wrote (design R6a): only a verified
+        // restaurant lookup writes those.
         analysis.remove('capture');
+        dropAssistClaims(analysis);
         final capture = photo?.capture;
         if (capture != null) analysis['capture'] = captureAnalysis(capture);
         // md5 of the ORIGINAL bytes: the same identity the watcher uses, so
@@ -329,13 +482,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             // A missing thumb is cosmetic; the meal is already saved.
           }
         }
-      } else {
-        await widget.dao.updateMealFields(
-          widget.meal!.id,
-          analysis: analysis,
-          date: _draft.dateIso.trim(),
-          time: _draft.time.trim(),
-        );
+      } else if (!await _saveExisting(analysis)) {
+        if (!mounted) return;
+        await _conflict();
+        return;
       }
       if (!mounted) return;
       Navigator.of(context).pop(true); // changed
@@ -346,6 +496,72 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         _errors = [context.l10n.editorSaveFailed('$e')];
       });
     }
+  }
+
+  /// The compare-and-set save of a stored meal (design R6a). False — nothing
+  /// written — when the row changed since the form was loaded, is gone, or
+  /// the basis could not be read.
+  Future<bool> _saveExisting(Map<String, dynamic> analysis) async {
+    final meal = _meal!;
+    if (_basisStale) return false;
+    if (_draft.expectedRaw == null) {
+      // The open-time read failed: try once more (typing since then means a
+      // newer row cannot replace the form — it becomes a conflict).
+      await _confirmBasis();
+      if (!mounted) return false;
+    }
+    final raw = _draft.expectedRaw;
+    if (raw == null || _basisStale) return false;
+    return widget.dao.updateMealFieldsIfUnchanged(
+      meal.id,
+      expectedRaw: raw,
+      analysis: analysis,
+      date: _draft.dateIso.trim(),
+      time: _draft.time.trim(),
+    );
+  }
+
+  /// The meal changed while the editor was open: say so, then show it as
+  /// it is now. The user's typed changes are not written over the newer
+  /// meal; they redo them on the fresh form. A meal deleted meanwhile
+  /// closes the editor.
+  Future<void> _conflict() async {
+    // The spinner stops before the dialog (an animating FAB behind a modal
+    // never settles), and until the reload below every save is this
+    // conflict again.
+    setState(() {
+      _saving = false;
+      _basisStale = true;
+    });
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('editorSaveConflict'),
+        content: Text(ctx.l10n.editorSaveConflict),
+        actions: [
+          TextButton(
+              key: const Key('editorSaveConflictOk'),
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(ctx.l10n.okButton)),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    final MealSnapshot? snap;
+    try {
+      snap = await widget.dao.mealSnapshot(_meal!.id);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _errors = [context.l10n.editorSaveFailed('$e')]);
+      return;
+    }
+    if (!mounted) return;
+    if (snap == null) {
+      Navigator.of(context).pop(true);
+      return;
+    }
+    _load(snap);
+    setState(() => _errors = const []);
   }
 
   Future<void> _delete() async {
@@ -433,7 +649,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// The meal's photo came from Meta glasses (design G2a): the stored
   /// meal says so, or the photo being logged by hand does.
   bool get _fromMetaGlasses {
-    final meal = widget.meal;
+    final meal = _meal;
     if (meal != null) return isMetaGlassesAnalysis(meal.analysis);
     return widget.fromPhoto?.capture?.isMetaGlasses ?? false;
   }

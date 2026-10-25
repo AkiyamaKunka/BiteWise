@@ -8,13 +8,19 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
+import '../meal_in_use.dart';
 import '../nl_presenter.dart';
 import '../l10n.dart';
 import '../widgets/small_spinner.dart';
 
 class FixMealScreen extends StatefulWidget {
   final NlExecutor executor;
-  const FixMealScreen({super.key, required this.executor});
+
+  /// Every meal is held while a request is pending (design R6a): the model
+  /// picks which meal a sentence fixes, so the restaurant assist waits
+  /// until the correction has landed. Null: nothing to tell.
+  final MealInUseRegistry? inUse;
+  const FixMealScreen({super.key, required this.executor, this.inUse});
 
   @override
   State<FixMealScreen> createState() => _FixMealScreenState();
@@ -35,8 +41,16 @@ class _FixMealScreenState extends State<FixMealScreen> {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending) return;
     setState(() => _sending = true);
+    // Held until the executor returns: its write is done by then (a staged
+    // delete only lands after the modal, through confirmPendingDelete).
+    final hold = widget.inUse?.acquireAll();
     try {
-      final replies = await widget.executor.handleText(text);
+      final List<NlReply> replies;
+      try {
+        replies = await widget.executor.handleText(text);
+      } finally {
+        hold?.release();
+      }
       if (!mounted) return;
       // Sending ends when the executor returns; presentation (incl. the
       // blocking delete-confirmation modal) is not "sending".

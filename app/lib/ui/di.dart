@@ -44,6 +44,7 @@ import 'background_glue.dart';
 import 'migrations.dart';
 import 'outcome_text.dart' show outcomeSnackbar;
 import 'os_summary.dart';
+import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 import 'refresh_signal.dart';
@@ -57,7 +58,11 @@ class AppServices {
   final PhotoPipeline pipeline;
   final AppSettings settings;
 
-  AppServices._(this.ui, this.pipeline, this.settings);
+  /// The app engine's one registry of meals a screen is working on (design
+  /// R6a): the screens hold, the restaurant assist (R6b) reads.
+  final MealInUseRegistry mealInUse;
+
+  AppServices._(this.ui, this.pipeline, this.settings, this.mealInUse);
 
   static AppServices? _instance;
   static AppServices get instance => _instance!;
@@ -227,6 +232,10 @@ class AppServices {
         foodCheck: Platform.isIOS ? foodScoreViaImageIO : null,
         glassesCheckLog: recordGlassesCheckLocally);
 
+    // Held by the editor, a leftover selection and a pending fix-meal
+    // request (design R6a); app engine only — background_glue builds none.
+    final mealInUse = MealInUseRegistry();
+
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
     // Permission.photos resolves to READ_MEDIA_IMAGES (SDK 33+ only) and
@@ -289,6 +298,7 @@ class AppServices {
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },
+      mealInUse: mealInUse,
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     pipeline.bindStream(shareIntake.photos()); // share sheet (deliberate)
@@ -320,7 +330,7 @@ class AppServices {
     // persisted toggle so it also runs while the app is closed.
     await syncBackgroundScan(settings);
 
-    return _instance = AppServices._(ui, pipeline, settings);
+    return _instance = AppServices._(ui, pipeline, settings, mealInUse);
   }
 }
 

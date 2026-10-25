@@ -16,6 +16,7 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
+import '../core/restaurant_assist_logic.dart' show dropAssistClaims;
 import '../services/analyzer/platform_decode.dart';
 import '../services/photo/background_time.dart';
 import '../services/photo/capture_dating.dart' show glassesCapturedAt;
@@ -148,6 +149,11 @@ const String glassesExcludedReason = 'glasses_off';
 /// slot left for (design G3, GlassesQuota): released for the next scan.
 const String glassesCappedReason = 'glasses_capped';
 
+/// [PhotoOutcome.reason] of a leftover verdict whose meal changed (twice)
+/// or was deleted before the deduction could be written (design R6a):
+/// released, nothing deducted; a later scan or a retry asks again.
+const String leftoverConflictReason = 'leftover_conflict';
+
 /// The Glasses check card's outcome (glasses_check.dart) for [o], or null
 /// for a verdict that is not this photo's own: already logged, being
 /// analyzed by another run, a deliberate duplicate of minutes ago.
@@ -195,6 +201,7 @@ PhotoOutcome? unannouncedOutcome(PhotoOutcome o,
           retryable: true,
           errorKind: o.errorKind,
           detail: o.detail,
+          reason: o.reason,
           shared: shared,
           picked: picked),
       PhotoOutcomeKind.saved ||
@@ -943,17 +950,45 @@ class PhotoPipeline {
       final autoIdx =
           autoLeftoverIndex(analysis, candidateCount: recent.length);
       if (autoIdx != null) {
-        final original = recent[autoIdx];
-        final applied = applyLeftover(original.analysis, analysis,
-            leftoverPhotoMd5: hash,
-            appliedAtIso: DateTime.now().toIso8601String());
-        if (applied != null) {
+        final candidate = recent[autoIdx];
+        // Design R6a: [recent] is as old as the model call (10–60 s). The
+        // deduction is re-based on the meal as stored NOW — same model
+        // fractions — and written only while the meal still holds exactly
+        // that text (compare-and-set). A meal changed between that read
+        // and the write (a restaurant lookup, an edit) gets one more
+        // re-based try; a second miss, or a meal deleted meanwhile,
+        // releases the photo for the next scan rather than cutting numbers
+        // that no longer exist, or logging the leftovers as a meal.
+        final appliedAt = DateTime.now().toIso8601String();
+        ({Meal meal, LeftoverResult applied})? cut;
+        var unusable = false;
+        for (var attempt = 0; attempt < 2 && cut == null; attempt++) {
+          final snap = await dao.mealSnapshot(candidate.id);
+          if (snap == null) break;
+          final applied = applyLeftover(snap.meal.analysis, analysis,
+              leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
+          if (applied == null) {
+            unusable = true;
+            break;
+          }
           // Tombstone and deduction in ONE owner-checked transaction: a run
           // that lost the photo (to another run, or to the user's own
           // 手动记录) must not cut the earlier meal, and a kill or a failed
           // update can no longer tombstone the photo without the deduction.
-          await dao.applyLeftoverVerdict(hash, original.id, applied.adjusted,
-              ownerStamp: stamp);
+          if (await dao.applyLeftoverVerdict(
+              hash, candidate.id, applied.adjusted,
+              ownerStamp: stamp, expectedRaw: snap.rawAnalysis)) {
+            cut = (meal: snap.meal, applied: applied);
+          }
+        }
+        if (cut == null && !unusable) {
+          await dao.releasePhotoHash(hash, ownerStamp: stamp);
+          _held = null;
+          return _leftoverConflict;
+        }
+        if (cut != null) {
+          final original = cut.meal;
+          final applied = cut.applied;
           final newKcal =
               safeNumber(applied.adjusted['total_calories']).round();
           final name = mealDescription(original.analysis);
@@ -988,8 +1023,12 @@ class PhotoPipeline {
 
       // How the photo was taken (design G2a): the intake's reading of its
       // own bytes, never the model's — a reply carrying a 'capture' key is
-      // not evidence of a camera. No coordinates, no timestamps.
+      // not evidence of a camera. No coordinates, no timestamps. Nor is an
+      // assist block or a `published` flag in the reply evidence that a
+      // chain published anything (design R6a): only a verified lookup,
+      // later, writes those.
       analysis.remove('capture');
+      dropAssistClaims(analysis);
       final capture = photo.capture;
       if (capture != null) analysis['capture'] = captureAnalysis(capture);
 
@@ -1191,6 +1230,17 @@ class PhotoPipeline {
       errorKind: AnalysisErrorKind.unknown,
       detail: 'glasses preview',
       reason: glassesPreviewReason);
+
+  /// An automatic leftover verdict whose meal changed twice between the
+  /// re-read and the write, or was deleted meanwhile (design R6a):
+  /// released, so the next scan asks again against the day as it is then.
+  static const _leftoverConflict = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The meal these leftovers belong to changed while the photo was '
+      'analyzed: nothing was deducted.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'leftover conflict',
+      reason: leftoverConflictReason);
 
   /// [abandon]'s verdict: released, offered again by a later scan.
   static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,

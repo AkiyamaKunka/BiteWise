@@ -20,6 +20,7 @@ import '../widgets/calorie_ring.dart';
 import '../widgets/day_report.dart';
 import '../widgets/grouped.dart' show GroupedCard;
 import '../widgets/macro_chart.dart' show MacroPalette;
+import '../meal_in_use.dart';
 import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
 import '../widgets/meal_card.dart';
@@ -37,12 +38,16 @@ class TodayScreen extends StatefulWidget {
   /// (null = feature off): Today must not know how the server is reached,
   /// only that a day may have an active-burn number.
   final GarminDailyFetch? garminDaily;
+
+  /// Held while a meal's editor is open (design R6a); null in tests.
+  final MealInUseRegistry? mealInUse;
   const TodayScreen(
       {super.key,
       required this.dao,
       required this.executor,
       this.thumbs,
-      this.garminDaily});
+      this.garminDaily,
+      this.mealInUse});
 
   @override
   State<TodayScreen> createState() => TodayScreenState();
@@ -106,7 +111,8 @@ class TodayScreenState extends State<TodayScreen> {
   /// than typing a sentence, and it costs no model call.
   Future<void> _editMeal(Meal meal) async {
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => MealEditorScreen(dao: widget.dao, meal: meal),
+      builder: (_) => MealEditorScreen(
+          dao: widget.dao, meal: meal, inUse: widget.mealInUse),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie
     // An edit or delete changes the summary the iOS OS card carries; the

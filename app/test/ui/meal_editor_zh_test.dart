@@ -5,6 +5,7 @@
 // 'kcal' / 'P g' while the meal cards one screen back say 蛋/碳/脂.
 // The English values stay byte-identical (meal_editor_screen_test.dart and
 // meal_edit_logic_test.dart pin them without delegates).
+import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/meal_edit_logic.dart';
@@ -50,6 +51,39 @@ void main() {
     expect(find.textContaining('cannot be negative'), findsNothing);
     expect(find.textContaining('things need fixing'), findsNothing);
     expect(dao.saved, isEmpty);
+  });
+
+  testWidgets('zh: the save-conflict notice is Chinese (design R6a)',
+      (tester) async {
+    useTallSurface(tester);
+    final dao = FakeDao()
+      ..seed(const Meal(
+          id: 1,
+          date: '2026-07-24',
+          time: '01:30 PM',
+          timestamp: '2026-07-24T13:30:00.000',
+          source: 'app_photo',
+          analysis: {
+            'is_food': true,
+            'meal_description': '鸡肉沙拉',
+            'total_calories': 450,
+          }));
+    await tester.pumpWidget(zhHost(
+        MealEditorScreen(dao: dao, meal: dao.meals.first, now: clock)));
+    await tester.pump();
+    // A restaurant lookup lands while the editor is open.
+    final snap = (await dao.mealSnapshot(1))!;
+    await dao.applyAssist(1,
+        expectedRaw: snap.rawAnalysis,
+        analysis: {...snap.meal.analysis, 'total_calories': 610});
+
+    await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('这餐刚刚被更新，请查看。'), findsOneWidget);
+    expect(find.text('好'), findsOneWidget);
+    expect(find.textContaining('just updated'), findsNothing);
+    expect(dao.fieldUpdates, isEmpty);
   });
 
   testWidgets('zh: item rows use 千卡/蛋/碳/脂 and name the row in Chinese',

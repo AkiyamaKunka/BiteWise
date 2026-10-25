@@ -13,6 +13,7 @@ import '../core/contracts.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/coverage.dart';
 import '../services/photo/photo_library.dart';
+import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 
@@ -231,6 +232,11 @@ class UiServices {
   /// this is the ONLY way back). Null in tests hides the buttons.
   final Future<void> Function()? openSystemSettings;
 
+  /// The meals a screen is working on (design R6a): the editor, a leftover
+  /// selection and a pending fix-meal request hold them, and the
+  /// restaurant assist leaves them alone. Null in tests that do not care.
+  final MealInUseRegistry? mealInUse;
+
   const UiServices({
     required this.dao,
     required this.analyzer,
@@ -259,5 +265,6 @@ class UiServices {
     this.lastBackgroundScan,
     this.backgroundRefreshEnabled,
     this.backgroundScanStuck,
+    this.mealInUse,
   });
 }

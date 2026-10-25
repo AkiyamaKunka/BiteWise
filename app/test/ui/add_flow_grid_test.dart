@@ -332,6 +332,36 @@ void main() {
       expect(find.textContaining('changed or deleted'), findsOneWidget);
     });
 
+    // Design R6a: the undo writes compare-and-set against the text it
+    // re-read, so a write landing between its read and its write (a
+    // restaurant lookup, a chat fix) is never undone along with it.
+    testWidgets('a write racing the undo wins; the undo says it left the '
+        'meal alone', (tester) async {
+      final f = setUpFlow();
+      await tester.pumpWidget(
+          MaterialApp(home: AddPhotoScreen(services: f.services)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('recentPhoto0')));
+      await tester.pumpAndSettle();
+
+      f.dao.beforeCompareAndSet = (id) async {
+        final snap = (await f.dao.mealSnapshot(id))!;
+        expect(
+            await f.dao.updateMealAnalysisIfUnchanged(id,
+                expectedRaw: snap.rawAnalysis,
+                analysis: {...snap.meal.analysis, 'note': 'landed in between'}),
+            isTrue);
+      };
+      await tester.tap(find.byKey(const Key('undoLeftoverButton')));
+      await tester.pumpAndSettle();
+
+      final meal = f.dao.byId(1);
+      expect(meal.analysis['note'], 'landed in between');
+      expect(meal.analysis['total_calories'], 665,
+          reason: 'still the deduction: the undo did not write');
+      expect(find.textContaining('changed or deleted'), findsOneWidget);
+    });
+
     testWidgets('no undo offer on an ordinary save', (tester) async {
       final services = makeServices(
           picker: FakePicker()..photos = [_photo('a0')],

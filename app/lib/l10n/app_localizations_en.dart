@@ -792,6 +792,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Couldn\'t estimate the leftovers from that photo.';
 
   @override
+  String get leftoverConflict =>
+      'That meal changed while the leftovers were being estimated, so nothing was deducted. Try again.';
+
+  @override
   String get leftoverNoMeals =>
       'No meals from today or yesterday to deduct from.';
 
@@ -1631,6 +1635,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fixAppliedHeader => 'Applied this session';
 
   @override
+  String get editorSaveConflict =>
+      'This meal was just updated — please review.';
+
+  @override
   String editorSaveFailed(String error) {
     return 'Could not save: $error';
   }
@@ -2068,6 +2076,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reasonServerFailed => 'your server could not analyze it';
+
+  @override
+  String get reasonLeftoverConflict =>
+      'the meal it belongs to changed meanwhile';
 
   @override
   String get reasonNoApiKey => 'no API key is set';

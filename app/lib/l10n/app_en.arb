@@ -532,6 +532,7 @@
   },
   "leftoverApplied": "Leftovers deducted.",
   "leftoverFailed": "Couldn't estimate the leftovers from that photo.",
+  "leftoverConflict": "That meal changed while the leftovers were being estimated, so nothing was deducted. Try again.",
   "leftoverNoMeals": "No meals from today or yesterday to deduct from.",
   "planTuningHeader": "Model & thinking",
   "planTuningFooter": "Which Claude model analyzes on your server, and how hard it thinks. Default follows the server's own setting; only the Claude plan offers this — the other plans choose models themselves.",
@@ -1121,6 +1122,7 @@
   "working": "Working…",
   "fixApply": "Apply the fix",
   "fixAppliedHeader": "Applied this session",
+  "editorSaveConflict": "This meal was just updated — please review.",
   "editorSaveFailed": "Could not save: {error}",
   "@editorSaveFailed": {
     "placeholders": {
@@ -1578,6 +1580,7 @@
   "reasonNetwork": "network or service issue",
   "reasonServerBusy": "your server is busy with another analysis",
   "reasonServerFailed": "your server could not analyze it",
+  "reasonLeftoverConflict": "the meal it belongs to changed meanwhile",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
   "errRegionBlocked": "{provider} is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).",

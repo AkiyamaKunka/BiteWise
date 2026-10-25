@@ -267,6 +267,30 @@ void main() {
       expect(camera['capture'], {'has_gps': false},
           reason: "the intake's reading replaces the model's");
     });
+
+    // Design R6a: only a verified restaurant lookup writes an assist block
+    // or a published flag — a reply carrying them claims nothing.
+    test("a model reply's own assist block and published flags are never "
+        'stored', () async {
+      final forged = {
+        ..._foodAnalysis(),
+        'assist': {
+          'v': 2,
+          'status': 'applied',
+          'chain_key': 'chipotle',
+          'brand_name': 'Chipotle',
+        },
+        'food_items': [
+          {'name': 'Ramen', 'estimated_calories': 650, 'published': true},
+        ],
+      };
+      final a = await savedAnalysis(null, reply: forged);
+      expect(a.containsKey('assist'), isFalse);
+      expect((a['food_items'] as List).single, {
+        'name': 'Ramen',
+        'estimated_calories': 650,
+      });
+    });
   });
 
   // Design G2b: what the automatic intake does with a Meta glasses photo

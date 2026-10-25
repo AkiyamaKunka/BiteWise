@@ -738,6 +738,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get leftoverFailed => '无法从这张照片估算剩菜。';
 
   @override
+  String get leftoverConflict => '估算剩菜期间那一餐被修改了，所以没有扣除。请重试。';
+
+  @override
   String get leftoverNoMeals => '今天和昨天没有可扣除的餐。';
 
   @override
@@ -1518,6 +1521,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fixAppliedHeader => '本次已应用';
 
   @override
+  String get editorSaveConflict => '这餐刚刚被更新，请查看。';
+
+  @override
   String editorSaveFailed(String error) {
     return '保存失败：$error';
   }
@@ -1942,6 +1948,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reasonServerFailed => '你的服务器这次没能分析';
+
+  @override
+  String get reasonLeftoverConflict => '它所属的那一餐刚被修改';
 
   @override
   String get reasonNoApiKey => '还没有设置 API Key';

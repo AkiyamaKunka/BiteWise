@@ -2277,3 +2277,28 @@ Map<String, Object?>? supersedeAssist(dynamic assist) {
   final reason = _code(assist['reason'], _reasonRe);
   return _residualBlock(assist, status, reason);
 }
+
+/// Drops, in place, every assist claim a MODEL wrote into [analysis]
+/// (design R6a, "Write safety"): the `assist` block and the items'
+/// `published` flags. Only [applyAssist], [recordAssistDecision],
+/// [revertAssist] and [supersedeAssist] write those, from a verified
+/// lookup; a photo, chat or describe reply carrying them is not evidence
+/// that any chain published anything (the stored-prompt-injection item).
+/// Item maps are copied before a flag is removed, never edited in place.
+void dropAssistClaims(Map<String, dynamic> analysis) {
+  analysis.remove('assist');
+  final items = analysis['food_items'];
+  if (items is! List ||
+      !items.any((e) => e is Map && e.containsKey('published'))) {
+    return;
+  }
+  analysis['food_items'] = [
+    for (final e in items)
+      e is Map && e.containsKey('published')
+          ? <String, dynamic>{
+              for (final kv in e.entries)
+                if (kv.key != 'published') '${kv.key}': kv.value,
+            }
+          : e,
+  ];
+}

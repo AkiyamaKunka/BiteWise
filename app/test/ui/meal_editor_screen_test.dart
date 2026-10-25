@@ -1,6 +1,7 @@
 // Editor + day-detail flows: edit an existing meal, add one by hand, delete
 // with confirmation. These pin the wiring the pure-logic tests can't see —
 // which DAO call each button makes, and that the day list reflects it.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -372,6 +373,163 @@ void main() {
     expect(find.text('~1,100 kcal'), findsOneWidget);
   });
 
+  // Write safety (design R6a): the save is a compare-and-set against the
+  // analysis text the form was loaded from.
+  group('a meal that changed while the editor was open', () {
+    /// A write that lands while the editor is open: a restaurant lookup
+    /// applying published numbers (never marks the meal corrected).
+    Future<void> landLookup(FakeDao dao, int id, num kcal) async {
+      final snap = (await dao.mealSnapshot(id))!;
+      expect(
+          await dao.applyAssist(id,
+              expectedRaw: snap.rawAnalysis,
+              analysis: {...snap.meal.analysis, 'total_calories': kcal}),
+          isTrue);
+    }
+
+    testWidgets('is never overwritten: the save says so, then shows the '
+        'meal as it is now', (tester) async {
+      final dao = FakeDao()..seed(meal());
+      await tester.pumpWidget(host(
+          MealEditorScreen(dao: dao, meal: dao.meals.first, now: clock)));
+      await tester.pump();
+
+      await landLookup(dao, 1, 610);
+      await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('editorSaveConflict')), findsOneWidget);
+      expect(find.text('This meal was just updated — please review.'),
+          findsOneWidget);
+      expect(dao.fieldUpdates, isEmpty, reason: 'the older copy is not saved');
+      expect(dao.byId(1).analysis['total_calories'], 610);
+      expect(dao.byId(1).corrected, isFalse);
+
+      await tester.tap(find.byKey(const Key('editorSaveConflictOk')));
+      await tester.pumpAndSettle();
+      expect(find.byType(MealEditorScreen), findsOneWidget,
+          reason: 'the editor stays open for a review');
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('editorCalories')))
+              .controller!
+              .text,
+          '610');
+
+      // Edited again on the fresh form, the save lands.
+      await tester.enterText(find.byKey(const Key('editorCalories')), '600');
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(dao.fieldUpdates, hasLength(1));
+      expect(dao.byId(1).analysis['total_calories'], 600);
+      expect(dao.byId(1).corrected, isTrue);
+    });
+
+    testWidgets('an older copy from the list is replaced before anything is '
+        'typed', (tester) async {
+      final dao = FakeDao()..seed(meal());
+      final listCopy = dao.meals.first; // what the day list loaded
+      await landLookup(dao, 1, 610); // landed before the tap
+      await tester.pumpWidget(
+          host(MealEditorScreen(dao: dao, meal: listCopy, now: clock)));
+      await tester.pumpAndSettle();
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('editorCalories')))
+              .controller!
+              .text,
+          '610');
+
+      await tester.enterText(find.byKey(const Key('editorProtein')), '60');
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editorSaveConflict')), findsNothing);
+      expect(dao.byId(1).analysis['total_calories'], 610);
+      expect(dao.byId(1).analysis['total_protein_g'], 60);
+    });
+
+    testWidgets('typing over an older copy before the re-read lands is a '
+        'conflict, never a silent reload', (tester) async {
+      final dao = _SlowSnapshotDao()..seed(meal());
+      final listCopy = dao.meals.first;
+      await landLookup(dao, 1, 610);
+      dao.gate = Completer<void>();
+      await tester.pumpWidget(
+          host(MealEditorScreen(dao: dao, meal: listCopy, now: clock)));
+      await tester.pump();
+      await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+      dao.gate!.complete();
+      await tester.pump();
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('editorCalories')))
+              .controller!
+              .text,
+          '520',
+          reason: "the user's typing is not wiped under them");
+
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editorSaveConflict')), findsOneWidget);
+      expect(dao.fieldUpdates, isEmpty);
+      expect(dao.byId(1).analysis['total_calories'], 610);
+    });
+
+    testWidgets('a meal deleted meanwhile closes the editor after the '
+        'notice, writing nothing', (tester) async {
+      final dao = FakeDao()..seed(meal());
+      await tester.pumpWidget(host(Builder(
+        builder: (context) => TextButton(
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => MealEditorScreen(
+                  dao: dao, meal: dao.meals.first, now: clock))),
+          child: const Text('open'),
+        ),
+      )));
+      await tester.tap(find.text('open'));
+      await tester.pumpAndSettle();
+
+      await dao.deleteMeal(1);
+      await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editorSaveConflict')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('editorSaveConflictOk')));
+      await tester.pumpAndSettle();
+      expect(find.byType(MealEditorScreen), findsNothing);
+      expect(dao.meals, isEmpty);
+      expect(dao.fieldUpdates, isEmpty);
+    });
+  });
+
+  testWidgets("a describe preview's assist block and published flags are "
+      'not saved (design R6a)', (tester) async {
+    useTallSurface(tester);
+    final dao = FakeDao();
+    await tester.pumpWidget(host(MealEditorScreen(
+      dao: dao,
+      now: clock,
+      newMealSource: MealSource.manualText,
+      initialAnalysis: const {
+        'is_food': true,
+        'meal_description': 'Burrito bowl',
+        'total_calories': 1050,
+        'assist': {'v': 2, 'status': 'applied', 'chain_key': 'chipotle'},
+        'food_items': [
+          {'name': 'Burrito bowl', 'estimated_calories': 1050, 'published': true},
+        ],
+      },
+    )));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+    final saved = dao.saved.single.analysis;
+    expect(saved.containsKey('assist'), isFalse);
+    expect((saved['food_items'] as List).single.containsKey('published'),
+        isFalse);
+  });
+
   testWidgets('empty day offers the add path', (tester) async {
     final dao = FakeDao();
     await tester.pumpWidget(host(
@@ -385,4 +543,17 @@ void main() {
     // The new meal defaults to the day being viewed, not today.
     expect(find.widgetWithText(OutlinedButton, '2026-07-19'), findsOneWidget);
   });
+}
+
+/// mealSnapshot waits for [gate] while it is set: the editor's open-time
+/// re-read still in flight.
+class _SlowSnapshotDao extends FakeDao {
+  Completer<void>? gate;
+
+  @override
+  Future<MealSnapshot?> mealSnapshot(int mealId) async {
+    final g = gate;
+    if (g != null) await g.future;
+    return super.mealSnapshot(mealId);
+  }
 }

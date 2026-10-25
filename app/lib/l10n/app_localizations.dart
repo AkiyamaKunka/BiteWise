@@ -1362,6 +1362,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t estimate the leftovers from that photo.'**
   String get leftoverFailed;
 
+  /// No description provided for @leftoverConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'That meal changed while the leftovers were being estimated, so nothing was deducted. Try again.'**
+  String get leftoverConflict;
+
   /// No description provided for @leftoverNoMeals.
   ///
   /// In en, this message translates to:
@@ -2730,6 +2736,12 @@ abstract class AppLocalizations {
   /// **'Applied this session'**
   String get fixAppliedHeader;
 
+  /// No description provided for @editorSaveConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal was just updated — please review.'**
+  String get editorSaveConflict;
+
   /// No description provided for @editorSaveFailed.
   ///
   /// In en, this message translates to:
@@ -3341,6 +3353,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'your server could not analyze it'**
   String get reasonServerFailed;
+
+  /// No description provided for @reasonLeftoverConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'the meal it belongs to changed meanwhile'**
+  String get reasonLeftoverConflict;
 
   /// No description provided for @reasonNoApiKey.
   ///

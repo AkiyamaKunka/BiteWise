@@ -11,6 +11,7 @@ import '../../core/contracts.dart';
 import '../format.dart';
 import '../l10n.dart';
 import '../large_text.dart';
+import '../meal_in_use.dart';
 import '../meal_thumbs.dart';
 import '../widgets/macro_chart.dart';
 import '../widgets/meal_thumb.dart';
@@ -23,6 +24,7 @@ class DayDetailScreen extends StatefulWidget {
     required this.date,
     this.now,
     this.thumbs,
+    this.mealInUse,
   });
 
   final MealsDao dao;
@@ -31,6 +33,9 @@ class DayDetailScreen extends StatefulWidget {
 
   /// Photo thumbnails for the rows; null (tests) renders placeholders.
   final MealThumbResolver? thumbs;
+
+  /// Held while a meal's editor is open (design R6a); null in tests.
+  final MealInUseRegistry? mealInUse;
 
   @override
   State<DayDetailScreen> createState() => _DayDetailScreenState();
@@ -75,6 +80,7 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
         meal: meal,
         initialDate: widget.date,
         now: widget.now,
+        inUse: widget.mealInUse,
       ),
     ));
     if (saved == true) {

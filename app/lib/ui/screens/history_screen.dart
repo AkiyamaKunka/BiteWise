@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../format.dart';
+import '../meal_in_use.dart';
 import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
 import '../l10n.dart';
@@ -18,8 +19,15 @@ class HistoryScreen extends StatefulWidget {
   final MealsDao dao;
   final int days;
   final MealThumbResolver? thumbs;
+
+  /// Handed to the day's editor (design R6a); null in tests.
+  final MealInUseRegistry? mealInUse;
   const HistoryScreen(
-      {super.key, required this.dao, this.days = 30, this.thumbs});
+      {super.key,
+      required this.dao,
+      this.days = 30,
+      this.thumbs,
+      this.mealInUse});
 
   @override
   State<HistoryScreen> createState() => HistoryScreenState();
@@ -68,7 +76,11 @@ class HistoryScreenState extends State<HistoryScreen> {
   Future<void> _openDay(String date) async {
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) =>
-          DayDetailScreen(dao: widget.dao, date: date, thumbs: widget.thumbs),
+          DayDetailScreen(
+              dao: widget.dao,
+              date: date,
+              thumbs: widget.thumbs,
+              mealInUse: widget.mealInUse),
     ));
     // Same reason for the signal: today's meals edited from here must
     // reach Today and the iOS OS card, not only this list.

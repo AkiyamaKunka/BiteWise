@@ -34,6 +34,12 @@ String? _shownName(AppLocalizations l, PhotoOutcome o) {
 String outcomeBody(AppLocalizations l, PhotoOutcome o,
     {bool deliberate = false}) {
   final d = o.detail;
+  // The photo WAS analyzed — as leftovers of a meal that changed before the
+  // deduction could land (design R6a). Nothing was cut; Retry asks again.
+  if (o.kind == PhotoOutcomeKind.failed &&
+      o.reason == leftoverConflictReason) {
+    return l.leftoverConflict;
+  }
   if (deliberate && o.kind == PhotoOutcomeKind.failed && o.retryable) {
     final reason = switch (o.errorKind) {
       // These lines promise nothing and name the fix.
@@ -127,20 +133,23 @@ String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
 /// A short "why" for a released (retryable) failure, for the lines that
 /// wrap it in parentheses; null for a kind without one (the caller falls
 /// back to its own wording).
-String? retryReason(AppLocalizations l, PhotoOutcome o) =>
-    switch (o.errorKind) {
-      AnalysisErrorKind.rateLimited => l.reasonRateLimited,
-      AnalysisErrorKind.quotaPaused => l.reasonQuotaPaused,
-      AnalysisErrorKind.billing => l.reasonBilling,
-      AnalysisErrorKind.network => l.reasonNetwork,
-      AnalysisErrorKind.serverBusy => l.reasonServerBusy,
-      AnalysisErrorKind.serverError => l.reasonServerFailed,
-      AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
-      AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
-      AnalysisErrorKind.regionBlocked =>
-        l.reasonRegionBlocked(regionProvider(l, o.message)),
-      _ => null,
-    };
+String? retryReason(AppLocalizations l, PhotoOutcome o) {
+  // Analyzed, but the meal its leftovers belong to changed (design R6a).
+  if (o.reason == leftoverConflictReason) return l.reasonLeftoverConflict;
+  return switch (o.errorKind) {
+    AnalysisErrorKind.rateLimited => l.reasonRateLimited,
+    AnalysisErrorKind.quotaPaused => l.reasonQuotaPaused,
+    AnalysisErrorKind.billing => l.reasonBilling,
+    AnalysisErrorKind.network => l.reasonNetwork,
+    AnalysisErrorKind.serverBusy => l.reasonServerBusy,
+    AnalysisErrorKind.serverError => l.reasonServerFailed,
+    AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
+    AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
+    AnalysisErrorKind.regionBlocked =>
+      l.reasonRegionBlocked(regionProvider(l, o.message)),
+    _ => null,
+  };
+}
 
 /// Who refused the network region, out of the analyzers' "`Provider` is
 /// not available from your current network region …" (Gemini's region

@@ -9,6 +9,7 @@ import 'package:flutter/foundation.dart' show ChangeNotifier;
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
+import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/services.dart';
 
@@ -365,6 +366,7 @@ UiServices makeServices({
   void Function(PhotoOutcome outcome)? announceOutcome,
   Future<void> Function()? openSystemSettings,
   PhotoLibrary? photoLibrary,
+  MealInUseRegistry? mealInUse,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -383,5 +385,6 @@ UiServices makeServices({
     announceOutcome: announceOutcome,
     openSystemSettings: openSystemSettings,
     photoLibrary: photoLibrary,
+    mealInUse: mealInUse,
   );
 }
