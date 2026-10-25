@@ -144,7 +144,8 @@ document); every hunk keeps both sides:
   `shareIntake.photos()` fails `test/production_wiring_test.dart`.
 - `FixMealScreen` takes both `settings:` and `inUse:` (constructor and the
   `add_flow.dart` call). `settings` is required, so a one-sided resolution
-  does not compile.
+  does not compile; #19's `test/ui/meal_in_use_test.dart` call gains
+  `settings: FakeSettings()`.
 - Regenerate l10n afterwards (`flutter gen-l10n` in `app/`).
 
 The assist's lookups (chain and item names to the user's server,
