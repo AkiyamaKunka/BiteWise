@@ -229,7 +229,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get settingsAiFooter => '照片由你选择的服务分析 — 它的 Key 不会离开这台手机。';
+  String get settingsAiFooter => '照片由你选择的服务分析。它的 Key 只保存在这台手机上，也只发送给该服务。';
 
   @override
   String get settingsRowAiProvider => 'AI 服务';
@@ -255,6 +255,94 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watcherDisclosureContinue => '继续';
+
+  @override
+  String get aiConsentTitle => '允许 AI 分析吗？';
+
+  @override
+  String aiConsentBody(String recipient) {
+    return '筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 $recipient：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要\n• 剩菜照片，连同它对应的那一餐\n• 你为描述或修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。';
+  }
+
+  @override
+  String aiConsentCompany(String provider) {
+    String _temp0 = intl.Intl.selectLogic(provider, {
+      'gemini': 'Google（Gemini）',
+      'openai': 'OpenAI',
+      'anthropic': 'Anthropic（Claude）',
+      'xai': 'xAI（Grok）',
+      'openrouter': 'OpenRouter',
+      'deepseek': '深度求索（DeepSeek）',
+      'qwen': '阿里云（通义千问）',
+      'doubao': '火山引擎（豆包）',
+      'glm': '智谱 AI（GLM）',
+      'other': '你的 AI 服务',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String aiConsentPlanCompany(String backend) {
+    String _temp0 = intl.Intl.selectLogic(backend, {
+      'glm': '智谱 AI（GLM）',
+      'doubao': '火山引擎（豆包）',
+      'other': 'Anthropic（Claude）',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get aiConsentRelayRecipient => 'OpenRouter，再由它转交给你所选模型的厂商';
+
+  @override
+  String aiConsentServerRecipient(String host, String company) {
+    return '你自己的服务器（$host），再由它转交给 $company';
+  }
+
+  @override
+  String aiConsentServerRecipientNoHost(String company) {
+    return '你自己的服务器，再由它转交给 $company';
+  }
+
+  @override
+  String aiConsentChinaNote(String company) {
+    return '$company 在中国大陆的服务器上处理这些内容。';
+  }
+
+  @override
+  String get aiConsentAllow => '允许';
+
+  @override
+  String get aiConsentNotNow => '暂不';
+
+  @override
+  String get aiConsentDeclined => '没有发送任何内容。';
+
+  @override
+  String get shareConsentDeclined => '分享的照片没有分析 — 没有发送任何内容。';
+
+  @override
+  String aiStopSharingRow(String provider) {
+    return '停止发送给 $provider';
+  }
+
+  @override
+  String aiStopSharingTitle(String provider) {
+    return '停止发送给 $provider？';
+  }
+
+  @override
+  String aiStopSharingBody(String provider) {
+    return '筷拍不再把照片和餐食文字发送给 $provider，「监控相册」也会关闭。已记录的餐食仍保存在这台手机上。下次使用 AI 分析时，筷拍会再次征求你的同意。';
+  }
+
+  @override
+  String get aiStopSharingConfirm => '停止发送';
+
+  @override
+  String aiStopSharingDone(String provider) {
+    return '已停止 — 不再向 $provider 发送任何内容。';
+  }
 
   @override
   String get settingsRowLookback => '补扫回溯';
@@ -1751,6 +1839,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get setupLinkInvalid => '这个配置链接无效。';
+
+  @override
+  String setupLinkSharing(String company) {
+    return '服务器会把你的照片、饮食档案、餐食描述和最近的餐食转交给 $company。确认即表示你同意；可以在设置里停止。';
+  }
 
   @override
   String get serverLoginRow => '服务器 Claude 登录';

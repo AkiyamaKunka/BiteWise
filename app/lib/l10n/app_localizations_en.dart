@@ -236,7 +236,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAiFooter =>
-      'Photos are analysed by the provider you pick — its key never leaves this phone.';
+      'Photos are analyzed by the provider you pick. Its key is stored only on this phone and sent only to that provider.';
 
   @override
   String get settingsRowAiProvider => 'AI Provider';
@@ -274,6 +274,96 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watcherDisclosureContinue => 'Continue';
+
+  @override
+  String get aiConsentTitle => 'Allow AI analysis?';
+
+  @override
+  String aiConsentBody(String recipient) {
+    return 'Bitewise estimates calories with an AI service. If you allow it, Bitewise sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe or fix a meal, with your meals from the last 7 days\n\nBitewise has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
+  }
+
+  @override
+  String aiConsentCompany(String provider) {
+    String _temp0 = intl.Intl.selectLogic(provider, {
+      'gemini': 'Google (Gemini)',
+      'openai': 'OpenAI',
+      'anthropic': 'Anthropic (Claude)',
+      'xai': 'xAI (Grok)',
+      'openrouter': 'OpenRouter',
+      'deepseek': 'DeepSeek',
+      'qwen': 'Alibaba Cloud (Qwen)',
+      'doubao': 'ByteDance Volcengine (Doubao)',
+      'glm': 'Zhipu AI (GLM)',
+      'other': 'your AI provider',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String aiConsentPlanCompany(String backend) {
+    String _temp0 = intl.Intl.selectLogic(backend, {
+      'glm': 'Zhipu AI (GLM)',
+      'doubao': 'ByteDance Volcengine (Doubao)',
+      'other': 'Anthropic (Claude)',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get aiConsentRelayRecipient =>
+      'OpenRouter, which passes it on to the maker of the model you picked';
+
+  @override
+  String aiConsentServerRecipient(String host, String company) {
+    return 'your own server ($host), which passes it to $company';
+  }
+
+  @override
+  String aiConsentServerRecipientNoHost(String company) {
+    return 'your own server, which passes it to $company';
+  }
+
+  @override
+  String aiConsentChinaNote(String company) {
+    return '$company processes it on servers in mainland China.';
+  }
+
+  @override
+  String get aiConsentAllow => 'Allow';
+
+  @override
+  String get aiConsentNotNow => 'Not now';
+
+  @override
+  String get aiConsentDeclined => 'Nothing was sent.';
+
+  @override
+  String get shareConsentDeclined =>
+      'The shared photo was not analyzed — nothing was sent.';
+
+  @override
+  String aiStopSharingRow(String provider) {
+    return 'Stop Sharing with $provider';
+  }
+
+  @override
+  String aiStopSharingTitle(String provider) {
+    return 'Stop sharing with $provider?';
+  }
+
+  @override
+  String aiStopSharingBody(String provider) {
+    return 'Bitewise stops sending photos and meal text to $provider, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Bitewise asks again.';
+  }
+
+  @override
+  String get aiStopSharingConfirm => 'Stop Sharing';
+
+  @override
+  String aiStopSharingDone(String provider) {
+    return 'Stopped — nothing more is sent to $provider.';
+  }
 
   @override
   String get settingsRowLookback => 'Backfill Lookback';
@@ -1874,6 +1964,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setupLinkInvalid => 'That setup link is not valid.';
+
+  @override
+  String setupLinkSharing(String company) {
+    return 'The server passes your photos, dietary profile, meal descriptions and recent meals to $company. Confirming allows that; you can stop it in Settings.';
+  }
 
   @override
   String get serverLoginRow => 'Server Claude sign-in';

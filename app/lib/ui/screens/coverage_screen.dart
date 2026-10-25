@@ -28,6 +28,7 @@ class CoverageScreen extends StatefulWidget {
     required this.requestPhotoPermission,
     required this.initialLookbackDays,
     this.canAnalyze = _alwaysCan,
+    this.ensureConsent,
     this.library,
     this.logManually,
   });
@@ -46,6 +47,11 @@ class CoverageScreen extends StatefulWidget {
   /// construction would wave photos 2..N into the reserve-then-release
   /// shredder that [_processAll] exists to avoid.
   final bool Function() canAnalyze;
+
+  /// Asks for the AI consent (ui/ai_consent.dart ensureAiConsent) before a
+  /// bulk Log/Retry sends anything; false = the user said Not now. Null in
+  /// tests that do not exercise it.
+  final Future<bool> Function(BuildContext context)? ensureConsent;
 
   /// For missing-photo thumbnails; null degrades to icons.
   final PhotoLibrary? library;
@@ -134,6 +140,10 @@ class _CoverageScreenState extends State<CoverageScreen> {
           SnackBar(content: Text(context.l10n.covNoAnalysis)));
       return false;
     }
+    // App Store 5.1.2(i): these photos go to the AI — permission first.
+    final consent = widget.ensureConsent;
+    if (consent != null && !await consent(context)) return false;
+    if (!mounted) return false;
     final minutes = (items.length * 22 / 60).ceil();
     final ok = await showDialog<bool>(
       context: context,

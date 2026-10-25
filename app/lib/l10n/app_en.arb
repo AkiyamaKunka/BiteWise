@@ -207,7 +207,7 @@
       }
     }
   },
-  "settingsAiFooter": "Photos are analysed by the provider you pick — its key never leaves this phone.",
+  "settingsAiFooter": "Photos are analyzed by the provider you pick. Its key is stored only on this phone and sent only to that provider.",
   "settingsRowAiProvider": "AI Provider",
   "settingsSectionPhotos": "Photos",
   "settingsPhotosFooter": "The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos — and, when you turn it on, the photos from the last {days, plural, =1{day} other{{days} days}} — are sent to the AI service you chose.",
@@ -234,6 +234,105 @@
     }
   },
   "watcherDisclosureContinue": "Continue",
+  "aiConsentTitle": "Allow AI analysis?",
+  "@aiConsentTitle": {
+    "description": "Consent dialog (App Store 5.1.2(i)) shown before meal data first goes to an AI recipient from a foreground action: picking a photo, a photo shared into the app, Describe or Fix a meal, Leftovers, Test This Provider, Photo Coverage. Asked again for each new recipient."
+  },
+  "aiConsentBody": "Bitewise estimates calories with an AI service. If you allow it, Bitewise sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe or fix a meal, with your meals from the last 7 days\n\nBitewise has no server of its own, and its developer never receives any of this. The AI company's own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.",
+  "@aiConsentBody": {
+    "description": "Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline recent meals, nl/executor 7-day window, leftover_flow).",
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentCompany": "{provider, select, gemini{Google (Gemini)} openai{OpenAI} anthropic{Anthropic (Claude)} xai{xAI (Grok)} openrouter{OpenRouter} deepseek{DeepSeek} qwen{Alibaba Cloud (Qwen)} doubao{ByteDance Volcengine (Doubao)} glm{Zhipu AI (GLM)} other{your AI provider}}",
+  "@aiConsentCompany": {
+    "description": "The company that receives the data for an API-key provider id.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentPlanCompany": "{backend, select, glm{Zhipu AI (GLM)} doubao{ByteDance Volcengine (Doubao)} other{Anthropic (Claude)}}",
+  "@aiConsentPlanCompany": {
+    "description": "The company the user's own server passes the data to, by plan id (claude, glm, doubao).",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentRelayRecipient": "OpenRouter, which passes it on to the maker of the model you picked",
+  "aiConsentServerRecipient": "your own server ({host}), which passes it to {company}",
+  "@aiConsentServerRecipient": {
+    "description": "{host} is the server address the user entered; {company} is aiConsentPlanCompany.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentServerRecipientNoHost": "your own server, which passes it to {company}",
+  "@aiConsentServerRecipientNoHost": {
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentChinaNote": "{company} processes it on servers in mainland China.",
+  "@aiConsentChinaNote": {
+    "description": "Added to the consent dialog for DeepSeek, Qwen, Doubao, GLM and the GLM/Doubao server plans, whose endpoints are in mainland China.",
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentAllow": "Allow",
+  "aiConsentNotNow": "Not now",
+  "aiConsentDeclined": "Nothing was sent.",
+  "shareConsentDeclined": "The shared photo was not analyzed — nothing was sent.",
+  "aiStopSharingRow": "Stop Sharing with {provider}",
+  "@aiStopSharingRow": {
+    "description": "Settings > AI row that withdraws the AI consent for the current recipient and turns Watch Camera Roll off. {provider} is the provider's short display name.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStopSharingTitle": "Stop sharing with {provider}?",
+  "@aiStopSharingTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStopSharingBody": "Bitewise stops sending photos and meal text to {provider}, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Bitewise asks again.",
+  "@aiStopSharingBody": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStopSharingConfirm": "Stop Sharing",
+  "aiStopSharingDone": "Stopped — nothing more is sent to {provider}.",
+  "@aiStopSharingDone": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "settingsRowLookback": "Backfill Lookback",
   "lookbackDays": "{count, plural, =1{1 day} other{{count} days}}",
   "@lookbackDays": {
@@ -1388,6 +1487,15 @@
   "setupLinkConfirm": "Use this server",
   "setupLinkDone": "Server configured — photos will be analyzed through your plan.",
   "setupLinkInvalid": "That setup link is not valid.",
+  "setupLinkSharing": "The server passes your photos, dietary profile, meal descriptions and recent meals to {company}. Confirming allows that; you can stop it in Settings.",
+  "@setupLinkSharing": {
+    "description": "Second paragraph of the setup-link dialog: confirming counts as the AI consent for this plan (App Store 5.1.2(i)). {company} is aiConsentPlanCompany.",
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
   "serverLoginRow": "Server Claude sign-in",
   "serverLoginOk": "Signed in ✓",
   "serverLoginMissing": "Not signed in",

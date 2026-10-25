@@ -13,6 +13,7 @@ import '../core/contracts.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/coverage.dart';
 import '../services/photo/photo_library.dart';
+import 'ai_consent.dart' show SharedPhotoConsentGate;
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 
@@ -61,6 +62,14 @@ abstract class SettingsStore {
   /// rejected-key pause, and a blocked-region one only when the probe
   /// [reachedGeneration] (went through the endpoint that refuses regions).
   Future<void> credentialsProven({required bool reachedGeneration});
+
+  /// Whether the user allowed meal data to go to the AI recipient [route]
+  /// (core/ai_consent.dart aiConsentRoute: the provider id, or
+  /// `server:<plan>`). App Store 5.1.2(i): ui/ai_consent.dart asks before
+  /// the first send to a recipient; [setAiConsent] records the answer, and
+  /// Settings' Stop sharing row withdraws it.
+  bool hasAiConsent(String route);
+  Future<void> setAiConsent(String route, {required bool granted});
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time
@@ -179,6 +188,11 @@ class UiServices {
   /// Null in tests that never back out.
   final void Function(PhotoOutcome outcome)? announceOutcome;
 
+  /// Holds a shared photo until the user allows AI sharing for the current
+  /// recipient (App Store 5.1.2(i)); the app shell attaches the dialog.
+  /// Null in tests that never share.
+  final SharedPhotoConsentGate? sharedPhotoConsent;
+
   /// Library access for coverage thumbnails; null in tests.
   final PhotoLibrary? photoLibrary;
 
@@ -240,6 +254,7 @@ class UiServices {
     this.coverage,
     this.processPhoto,
     this.announceOutcome,
+    this.sharedPhotoConsent,
     this.photoLibrary,
     this.startClaudeAuth,
     this.completeClaudeAuth,

@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
+import '../../ai_consent.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
@@ -95,6 +96,14 @@ class _SubscriptionProviderPageState
         widget.settings.serverBackend == backend;
     if (already) return;
     HapticFeedback.selectionClick();
+    // The plan is the AI company behind the server: a new recipient while
+    // Watch Camera Roll is on asks now (App Store 5.1.2(i)); Not now keeps
+    // the previous plan or provider.
+    if (!await confirmAiRecipientChange(context, widget.settings,
+            provider: 'server', serverBackend: backend) ||
+        !mounted) {
+      return;
+    }
     await widget.settings.update(serverBackend: backend);
     if (widget.settings.provider != 'server') {
       await widget.settings.update(provider: 'server');

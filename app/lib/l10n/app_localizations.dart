@@ -459,7 +459,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAiFooter.
   ///
   /// In en, this message translates to:
-  /// **'Photos are analysed by the provider you pick — its key never leaves this phone.'**
+  /// **'Photos are analyzed by the provider you pick. Its key is stored only on this phone and sent only to that provider.'**
   String get settingsAiFooter;
 
   /// No description provided for @settingsRowAiProvider.
@@ -503,6 +503,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get watcherDisclosureContinue;
+
+  /// Consent dialog (App Store 5.1.2(i)) shown before meal data first goes to an AI recipient from a foreground action: picking a photo, a photo shared into the app, Describe or Fix a meal, Leftovers, Test This Provider, Photo Coverage. Asked again for each new recipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow AI analysis?'**
+  String get aiConsentTitle;
+
+  /// Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline recent meals, nl/executor 7-day window, leftover_flow).
+  ///
+  /// In en, this message translates to:
+  /// **'Bitewise estimates calories with an AI service. If you allow it, Bitewise sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe or fix a meal, with your meals from the last 7 days\n\nBitewise has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.'**
+  String aiConsentBody(String recipient);
+
+  /// The company that receives the data for an API-key provider id.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider, select, gemini{Google (Gemini)} openai{OpenAI} anthropic{Anthropic (Claude)} xai{xAI (Grok)} openrouter{OpenRouter} deepseek{DeepSeek} qwen{Alibaba Cloud (Qwen)} doubao{ByteDance Volcengine (Doubao)} glm{Zhipu AI (GLM)} other{your AI provider}}'**
+  String aiConsentCompany(String provider);
+
+  /// The company the user's own server passes the data to, by plan id (claude, glm, doubao).
+  ///
+  /// In en, this message translates to:
+  /// **'{backend, select, glm{Zhipu AI (GLM)} doubao{ByteDance Volcengine (Doubao)} other{Anthropic (Claude)}}'**
+  String aiConsentPlanCompany(String backend);
+
+  /// No description provided for @aiConsentRelayRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenRouter, which passes it on to the maker of the model you picked'**
+  String get aiConsentRelayRecipient;
+
+  /// {host} is the server address the user entered; {company} is aiConsentPlanCompany.
+  ///
+  /// In en, this message translates to:
+  /// **'your own server ({host}), which passes it to {company}'**
+  String aiConsentServerRecipient(String host, String company);
+
+  /// No description provided for @aiConsentServerRecipientNoHost.
+  ///
+  /// In en, this message translates to:
+  /// **'your own server, which passes it to {company}'**
+  String aiConsentServerRecipientNoHost(String company);
+
+  /// Added to the consent dialog for DeepSeek, Qwen, Doubao, GLM and the GLM/Doubao server plans, whose endpoints are in mainland China.
+  ///
+  /// In en, this message translates to:
+  /// **'{company} processes it on servers in mainland China.'**
+  String aiConsentChinaNote(String company);
+
+  /// No description provided for @aiConsentAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get aiConsentAllow;
+
+  /// No description provided for @aiConsentNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get aiConsentNotNow;
+
+  /// No description provided for @aiConsentDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing was sent.'**
+  String get aiConsentDeclined;
+
+  /// No description provided for @shareConsentDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'The shared photo was not analyzed — nothing was sent.'**
+  String get shareConsentDeclined;
+
+  /// Settings > AI row that withdraws the AI consent for the current recipient and turns Watch Camera Roll off. {provider} is the provider's short display name.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Sharing with {provider}'**
+  String aiStopSharingRow(String provider);
+
+  /// No description provided for @aiStopSharingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop sharing with {provider}?'**
+  String aiStopSharingTitle(String provider);
+
+  /// No description provided for @aiStopSharingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Bitewise stops sending photos and meal text to {provider}, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Bitewise asks again.'**
+  String aiStopSharingBody(String provider);
+
+  /// No description provided for @aiStopSharingConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Sharing'**
+  String get aiStopSharingConfirm;
+
+  /// No description provided for @aiStopSharingDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped — nothing more is sent to {provider}.'**
+  String aiStopSharingDone(String provider);
 
   /// No description provided for @settingsRowLookback.
   ///
@@ -3017,6 +3119,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'That setup link is not valid.'**
   String get setupLinkInvalid;
+
+  /// Second paragraph of the setup-link dialog: confirming counts as the AI consent for this plan (App Store 5.1.2(i)). {company} is aiConsentPlanCompany.
+  ///
+  /// In en, this message translates to:
+  /// **'The server passes your photos, dietary profile, meal descriptions and recent meals to {company}. Confirming allows that; you can stop it in Settings.'**
+  String setupLinkSharing(String company);
 
   /// No description provided for @serverLoginRow.
   ///

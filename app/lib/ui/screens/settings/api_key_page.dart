@@ -7,6 +7,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
+import '../../ai_consent.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
@@ -55,6 +56,13 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
   Future<void> _selectProvider(String id) async {
     if (id == widget.settings.provider) return;
     HapticFeedback.selectionClick();
+    // A new AI recipient while Watch Camera Roll is on: ask now (App Store
+    // 5.1.2(i)); Not now keeps the previous provider.
+    if (!await confirmAiRecipientChange(context, widget.settings,
+            provider: id, serverBackend: widget.settings.serverBackend) ||
+        !mounted) {
+      return;
+    }
     await widget.settings.update(provider: id);
     if (!mounted) return;
     setState(() {

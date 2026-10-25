@@ -8,13 +8,19 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
+import '../ai_consent.dart';
 import '../nl_presenter.dart';
 import '../l10n.dart';
+import '../services.dart' show SettingsStore;
 import '../widgets/small_spinner.dart';
 
 class FixMealScreen extends StatefulWidget {
   final NlExecutor executor;
-  const FixMealScreen({super.key, required this.executor});
+
+  /// For the AI consent before the request (and the last 7 days of meals
+  /// it carries) leaves the phone; null skips the question (tests).
+  final SettingsStore? settings;
+  const FixMealScreen({super.key, required this.executor, this.settings});
 
   @override
   State<FixMealScreen> createState() => _FixMealScreenState();
@@ -23,6 +29,7 @@ class FixMealScreen extends StatefulWidget {
 class _FixMealScreenState extends State<FixMealScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _sending = false;
+  bool _askingConsent = false;
   final List<String> _log = []; // requests that changed something, newest last
 
   @override
@@ -33,7 +40,15 @@ class _FixMealScreenState extends State<FixMealScreen> {
 
   Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _sending || _askingConsent) return;
+    final settings = widget.settings;
+    if (settings != null) {
+      // App Store 5.1.2(i): permission for this AI recipient first.
+      _askingConsent = true;
+      final allowed = await ensureAiConsent(context, settings);
+      _askingConsent = false;
+      if (!allowed || !mounted || _sending) return;
+    }
     setState(() => _sending = true);
     try {
       final replies = await widget.executor.handleText(text);

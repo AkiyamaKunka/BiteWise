@@ -12,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../../core/contracts.dart';
+import '../../ai_consent.dart';
 import '../../diagnostics.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
@@ -263,15 +264,24 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
               icon: Icons.verified_outlined,
               iconColor: scheme.primary,
               title: context.l10n.testProvider,
-              onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                builder: (_) => DiagnosticsScreen(
-                  diagnostics: ProviderDiagnostics(
-                    settings: settings,
-                    analyzer: widget.analyzer,
-                    l10n: context.l10n,
+              onTap: () async {
+                // App Store 5.1.2(i): the test sends a photo and the
+                // dietary profile to this recipient — permission first.
+                if (!await ensureAiConsent(context, settings) ||
+                    !context.mounted) {
+                  return;
+                }
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => DiagnosticsScreen(
+                    diagnostics: ProviderDiagnostics(
+                      settings: settings,
+                      analyzer: widget.analyzer,
+                      l10n: context.l10n,
+                    ),
                   ),
-                ),
-              )),
+                ));
+                if (mounted) setState(() {}); // the consent may have changed
+              },
             ),
           ],
         ),
