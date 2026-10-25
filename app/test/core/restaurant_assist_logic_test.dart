@@ -2715,6 +2715,231 @@ void main() {
       expect(brand.runes.any((r) => r < 0x20), isFalse);
     });
   });
+
+  group("the editor's answers (R7b)", () {
+    /// An unbranded bowl at a restaurant: nothing in the photo names a
+    /// chain, so only the user's pick can.
+    Map<String, dynamic> unbranded() => analysis(
+      items: [food(brand: '', name: 'Chicken bowl')],
+      description: 'A chicken bowl',
+    );
+
+    AssistContext picked(
+      Map<String, dynamic> a, {
+      String? pick = 'chipotle',
+      List<String> request = const ['chipotle'],
+    }) => AssistContext(
+      now: now,
+      trigger: AssistTrigger.manual,
+      country: 'US',
+      requestChainKeys: request,
+      requestItems: requestItemsOf(a),
+      userChainKey: pick,
+    );
+
+    test('a picked chain is evidence for a suggestion, never an apply', () {
+      final a = unbranded();
+      final d = decideAssist(mealOf(a), lookupOf(result()), picked(a));
+      expect(d.outcome, AssistOutcome.suggest);
+      expect(d.evidence, AssistEvidenceKind.userPicked);
+      expect(d.reason, AssistReason.userPicked);
+      expect(d.chainKey, 'chipotle');
+      final block = recordAssistDecision(a, d)!['assist'] as Map;
+      expect(block['status'], AssistStatus.suggested);
+      expect(block['evidence'], 'user_picked');
+      // Without the pick the same answer has no evidence at all.
+      final none = decideAssist(
+        mealOf(a),
+        lookupOf(result()),
+        picked(a, pick: null),
+      );
+      expect(none.outcome, AssistOutcome.reject);
+      expect(none.reason, AssistReason.noEvidence);
+    });
+
+    test('an answer for another chain than the pick is rejected', () {
+      final a = analysis(); // printed Chipotle — the user said: wrong
+      final d = decideAssist(
+        mealOf(a),
+        lookupOf(result()),
+        picked(a, pick: 'qdoba', request: const ['chipotle', 'qdoba']),
+      );
+      expect(d.outcome, AssistOutcome.reject);
+      expect(d.reason, AssistReason.chainNotPicked);
+      expect(recordAssistDecision(a, d), isNull);
+    });
+
+    test('a printed brand of the picked chain still counts as printed', () {
+      final a = analysis();
+      final d = decideAssist(mealOf(a), lookupOf(result()), picked(a));
+      expect(d.evidence, AssistEvidenceKind.itemBrand);
+      expect(d.outcome, AssistOutcome.apply);
+    });
+
+    test('revertAssist takes the feedback reason; junk falls back', () {
+      final applied = applyAssist(analysis(), decide())!;
+      final wrong = revertAssist(
+        applied,
+        reason: AssistReason.userWrongRestaurant,
+      )!;
+      expect(wrong['assist']['status'], AssistStatus.reverted);
+      expect(wrong['assist']['reason'], 'user_wrong_restaurant');
+      expect(wrong['total_calories'], 900);
+      final junk = revertAssist(applied, reason: 'Not A Code!')!;
+      expect(junk['assist']['reason'], AssistReason.userReverted);
+    });
+
+    test('declineAssistSuggestion shrinks a suggestion, numbers untouched', () {
+      final a = analysis();
+      final suggested = recordAssistDecision(
+        a,
+        decide(r: result(type: 'third_party_db')),
+      )!;
+      final declined = declineAssistSuggestion(
+        suggested,
+        reason: AssistReason.userNotRestaurant,
+      )!;
+      final block = declined['assist'] as Map;
+      expect(block['status'], AssistStatus.declined);
+      expect(block['reason'], 'user_not_restaurant');
+      expect(block['chain_key'], 'chipotle');
+      for (final k in ['matches', 'source', 'notes', 'grounded']) {
+        expect(block.containsKey(k), isFalse, reason: k);
+      }
+      expect(declined['food_items'], a['food_items']);
+      expect(declined['total_calories'], a['total_calories']);
+      expect(assistStampValid(declined), isFalse);
+      // Only a suggestion can be declined this way.
+      expect(declineAssistSuggestion(applyAssist(a, decide())!), isNull);
+      expect(declineAssistSuggestion(a), isNull);
+    });
+
+    test('acceptAssistSuggestion applies it; a revert restores exactly', () {
+      final a = analysis();
+      final suggested = recordAssistDecision(
+        a,
+        decide(r: result(type: 'third_party_db')),
+      )!;
+      final later = DateTime(2026, 10, 24, 9, 0);
+      final accepted = acceptAssistSuggestion(suggested, now: later)!;
+      final block = accepted['assist'] as Map;
+      expect(block['status'], AssistStatus.applied);
+      expect(block['reason'], AssistReason.userAccepted);
+      expect(block['decided_on'], '2026-10-24');
+      expect(block['chain_key'], 'chipotle');
+      expect(
+        block['source']['url'],
+        'https://chipotle.com/nutrition-calculator',
+      );
+      final item = (accepted['food_items'] as List).first as Map;
+      expect(item['estimated_calories'], 1050);
+      expect(item['protein_g'], 56);
+      expect(item['published'], isTrue);
+      expect(item['name'], (a['food_items'] as List).first['name']);
+      expect(accepted['total_calories'], 1050);
+      expect(accepted['meal_description'], a['meal_description']);
+      expect(assistStampValid(accepted), isTrue);
+      final back = revertAssist(accepted)!;
+      expect(back['food_items'], a['food_items']);
+      for (final k in [
+        'total_calories',
+        'total_protein_g',
+        'total_carbs_g',
+        'total_fat_g',
+      ]) {
+        expect(back[k], a[k], reason: k);
+      }
+    });
+
+    test('acceptAssistSuggestion refuses what it cannot apply', () {
+      final a = analysis();
+      Map<String, dynamic> suggestion() =>
+          recordAssistDecision(a, decide(r: result(type: 'third_party_db')))!;
+      // Not a suggestion.
+      expect(acceptAssistSuggestion(a, now: now), isNull);
+      expect(
+        acceptAssistSuggestion(applyAssist(a, decide())!, now: now),
+        isNull,
+      );
+      // The user changed the item since.
+      final edited = suggestion();
+      edited['food_items'] = [
+        {
+          ...(edited['food_items'] as List).first as Map,
+          'estimated_calories': 700,
+        },
+      ];
+      expect(acceptAssistSuggestion(edited, now: now), isNull);
+      // A leftover deduction landed.
+      expect(
+        acceptAssistSuggestion(
+          suggestion()..['leftover'] = {'fraction': 0.5},
+          now: now,
+        ),
+        isNull,
+      );
+      // A range publishes no single value.
+      final range = recordAssistDecision(
+        a,
+        decide(
+          r: result(
+            matches: [
+              match(
+                options: [
+                  option(kcal: null, range: [900, 1100]),
+                ],
+              ),
+            ],
+          ),
+        ),
+      )!;
+      expect(range['assist']['status'], AssistStatus.suggested);
+      expect(acceptAssistSuggestion(range, now: now), isNull);
+      // An imported block is untrusted: a fractional "published" value, a
+      // chain outside the table.
+      Map<String, dynamic> tampered(void Function(Map block) f) {
+        final x = suggestion();
+        final block = Map<String, dynamic>.from(x['assist'] as Map);
+        block['matches'] = [
+          for (final m in block['matches'] as List)
+            Map<String, dynamic>.from(m as Map)
+              ..['published'] = Map<String, dynamic>.from(m['published']),
+        ];
+        f(block);
+        return x..['assist'] = block;
+      }
+
+      expect(
+        acceptAssistSuggestion(
+          tampered((b) => b['matches'][0]['published']['calories'] = 1050.5),
+          now: now,
+        ),
+        isNull,
+      );
+      expect(
+        acceptAssistSuggestion(
+          tampered((b) => b['chain_key'] = 'joes_diner'),
+          now: now,
+        ),
+        isNull,
+      );
+      final dirty = acceptAssistSuggestion(
+        tampered((b) {
+          b['matches'][0]['menu_item'] = '<b>Bowl</b>\u0007';
+          b['notes'] = 'see https://evil.example ${'x' * 400}';
+          b['source'] = {'url': 'javascript:alert(1)', 'type': 'official'};
+        }),
+        now: now,
+      )!;
+      final block = dirty['assist'] as Map;
+      expect(block['matches'][0]['menu_item'], isNot(contains('<')));
+      expect(
+        (block['notes'] as String).runes.length,
+        lessThanOrEqualTo(kAssistNotesMax),
+      );
+      expect(block['source']['url'], isNull);
+    });
+  });
 }
 
 Map<String, dynamic> chipotleComponents() => match(

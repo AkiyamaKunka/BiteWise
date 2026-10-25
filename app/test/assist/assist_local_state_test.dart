@@ -259,6 +259,58 @@ void main() {
       }
     });
 
+    test('the editor\'s picked chain (R7b) round-trips as a table key; '
+        'anything else drops the entry', () async {
+      final s = state();
+      expect(
+        await s.putJob(
+          1,
+          AssistJob(
+            jobId: 'job_pick_0001',
+            reqHash: '0123456789abcdef',
+            at: now,
+            nextAt: now,
+            manual: true,
+            pick: 'qdoba',
+          ),
+        ),
+        isTrue,
+      );
+      expect((await s.jobs())[1]!.pick, 'qdoba');
+      expect((await s.jobs())[1]!.manual, isTrue);
+      expect(
+        await s.putJob(
+          2,
+          AssistJob(
+            jobId: 'job_pick_0002',
+            reqHash: '0123456789abcdef',
+            at: now,
+            nextAt: now,
+            pick: 'Joe\'s Diner',
+          ),
+        ),
+        isFalse,
+      );
+      file(assistJobsDocument).writeAsStringSync(
+        jsonEncode({
+          'v': assistLocalVersion,
+          'jobs': [
+            {
+              'meal_id': 1,
+              'job_id': 'job_pick_0001',
+              'req_hash': '0123456789abcdef',
+              'attempts': 0,
+              'next_at': now.toIso8601String(),
+              'at': now.toIso8601String(),
+              'manual': true,
+              'pick': 'Chipotle on 5th Ave',
+            },
+          ],
+        }),
+      );
+      expect(await s.jobs(), isEmpty);
+    });
+
     test('AssistPlaceContext.within keeps what the request carries', () {
       const place = AssistPlaceContext(
         chains: ['mcdonalds', 'starbucks'],

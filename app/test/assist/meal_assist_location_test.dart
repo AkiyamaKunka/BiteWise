@@ -810,14 +810,25 @@ void main() {
       }
     });
 
-    test('the position lives only inside _locate: no field, no other '
+    test('the position lives only inside _locate (and, for the editor\'s '
+        'feedback, _photoCell, which returns a cell): no field, no other '
         'method, no place text', () {
       final src = File(
         '${_appRoot()}/lib/services/assist/meal_assist.dart',
       ).readAsStringSync();
       final body = _body(src, 'Future<_Located> _locate(Meal meal) async {');
       expect(body, contains('final point = await reader.forAsset('));
-      final rest = src.replaceFirst(body, '');
+      final cell = _body(
+        src,
+        'Future<PlaceCell?> _photoCell(Meal meal) async {',
+      );
+      expect(cell, contains('final point = await reader.forAsset('));
+      expect(
+        cell,
+        contains('return PlaceCell.fromLatLon(point.lat, point.lon);'),
+      );
+      expect('point'.allMatches(cell), hasLength(4));
+      final rest = src.replaceFirst(body, '').replaceFirst(cell, '');
       for (final banned in [
         'forAsset(',
         'nearbyFood(',
@@ -1313,6 +1324,344 @@ void main() {
       await h.assist.sweep();
       expect(h.lookups.submits, hasLength(1));
       expect(h.places.radii, hasLength(2));
+    });
+  });
+
+  group("the editor's answers (R7b)", () {
+    Future<String> raw(int id) async =>
+        (await h.dao.mealSnapshot(id))!.rawAnalysis;
+
+    /// Meal [id] changed in place by another writer, corrected kept.
+    void rewrite(
+      int id,
+      Map<String, dynamic> Function(Map<String, dynamic>) change,
+    ) {
+      final i = h.dao.meals.indexWhere((m) => m.id == id);
+      final m = h.dao.meals[i];
+      h.dao.meals[i] = Meal(
+        id: m.id,
+        date: m.date,
+        time: m.time,
+        timestamp: m.timestamp,
+        source: m.source,
+        imageHash: m.imageHash,
+        fileId: m.fileId,
+        analysis: change(Map<String, dynamic>.from(m.analysis)),
+        corrected: m.corrected,
+      );
+    }
+
+    /// A first-visit location suggestion at the lone McDonald's.
+    Future<int> suggested() async {
+      final id = h.add(_bigMac());
+      await h.assist.sweep();
+      expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+      return id;
+    }
+
+    test('Use published numbers: applied as the user\'s change, the chain '
+        'confirmed at the spot; Use AI estimate restores exactly', () async {
+      final id = await suggested();
+      final before = Map<String, dynamic>.from(h.analysisOf(id));
+      final accepted = await h.assist.act(
+        id,
+        AssistUserAction.acceptSuggestion,
+        expectedRaw: await raw(id),
+      );
+      expect(accepted.status, AssistActionStatus.done);
+      expect(accepted.placeLearned, isTrue);
+      expect(h.analysisOf(id)['total_calories'], 590);
+      expect(h.blockOf(id)?['status'], AssistStatus.applied);
+      expect(h.blockOf(id)?['reason'], AssistReason.userAccepted);
+      expect(h.dao.byId(id).corrected, isTrue);
+      final learned = await h.placesStore.read();
+      expect(learned.confirmed.single.chainKey, 'mcdonalds');
+      expect(learned.confirmed.single.cell.wire, h.cell.wire);
+
+      final reverted = await h.assist.act(
+        id,
+        AssistUserAction.useEstimate,
+        expectedRaw: await raw(id),
+      );
+      expect(reverted.status, AssistActionStatus.done);
+      final after = h.analysisOf(id);
+      expect(after['food_items'], before['food_items']);
+      expect(after['total_calories'], 540);
+      expect(after['assist']['status'], AssistStatus.reverted);
+
+      final codes = [for (final e in await h.assist.decisions()) e.code];
+      expect(codes, containsAllInOrder(['user_accepted', 'user_reverted']));
+      final log = await h.assist.decisions();
+      expect(log.last.oldKcal, 590);
+      expect(log.last.newKcal, 540);
+      final stored = h.everythingStored();
+      for (final digits in _coordinateDigits) {
+        expect(stored, isNot(contains(digits)));
+      }
+    });
+
+    test('Wrong restaurant: the suggestion declined, the chain blocked at '
+        'the spot; the picked chain is looked up with no location read, '
+        'and can only be suggested', () async {
+      final id = await suggested();
+      final wrong = await h.assist.act(
+        id,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(id),
+      );
+      expect(wrong.status, AssistActionStatus.done);
+      expect(wrong.placeLearned, isTrue);
+      expect(h.blockOf(id)?['status'], AssistStatus.declined);
+      expect(h.blockOf(id)?['reason'], AssistReason.userWrongRestaurant);
+      expect(h.blockOf(id)?.containsKey('matches'), isFalse);
+      expect(h.dao.byId(id).corrected, isTrue);
+      final learned = await h.placesStore.read();
+      expect(learned.blocked.single.chainKey, 'mcdonalds');
+
+      final asked = h.source.asked.length;
+      final radii = h.places.radii.length;
+      h.lookups.onSubmit = (request) async => _done(
+        json: _found(chainKey: 'burger_king')
+          ..['source_url'] = 'https://www.bk.com/menu/item-big-burger',
+      );
+      final run = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(h.lookups.submits.last.chainKeys, ['burger_king']);
+      expect(h.source.asked, hasLength(asked), reason: 'no location read');
+      expect(h.places.radii, hasLength(radii));
+      expect(run.wrote, isTrue);
+      final block = h.blockOf(id)!;
+      expect(block['status'], AssistStatus.suggested);
+      expect(block['evidence'], 'user_picked');
+      expect(block['chain_key'], 'burger_king');
+      // The meal was corrected by the decline: the result went through the
+      // user's own compare-and-set, not applyAssist.
+      expect(h.dao.updates.last.$2['assist']['chain_key'], 'burger_king');
+    });
+
+    test('an answer for another chain than the pick writes nothing — not '
+        'even for the chain a printed brand names', () async {
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.blockOf(id)?['status'], AssistStatus.applied);
+      await h.assist.act(
+        id,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(id),
+      );
+      expect(h.analysisOf(id)['total_calories'], 540);
+      final before = await raw(id);
+      h.lookups.onSubmit = (request) async => _done();
+      final run = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(
+        h.lookups.submits.last.chainKeys,
+        ['mcdonalds', 'burger_king'],
+        reason: 'the composer lists a printed brand\'s chain first',
+      );
+      expect(run.wrote, isFalse);
+      expect(run.code, AssistReason.chainNotPicked);
+      expect(await raw(id), before);
+
+      // A chain the request never named is no answer either.
+      h.lookups.onSubmit = (request) async =>
+          _done(json: _found(chainKey: 'wendys'));
+      final other = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(other.wrote, isFalse);
+      expect(await raw(id), before);
+    });
+
+    test('a picked chain answers from the cache only for that chain', () async {
+      // McDonald's is cached for these items by the first lookup.
+      final id = await suggested();
+      await h.assist.act(
+        id,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(id),
+      );
+      final calls = h.lookups.submits.length;
+      h.lookups.onSubmit = (request) async =>
+          _done(json: _found(chainKey: 'burger_king'));
+      await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(h.lookups.submits, hasLength(calls + 1));
+    });
+
+    test('Not from a restaurant: a zone at the spot; the next restaurant '
+        'photo there asks Apple Maps nothing', () async {
+      final id = await suggested();
+      final r = await h.assist.act(
+        id,
+        AssistUserAction.notFromRestaurant,
+        expectedRaw: await raw(id),
+      );
+      expect(r.status, AssistActionStatus.done);
+      expect(r.placeLearned, isTrue);
+      expect(h.blockOf(id)?['reason'], AssistReason.userNotRestaurant);
+      expect((await h.placesStore.read()).inZone(h.cell), isTrue);
+      final radii = h.places.radii.length;
+      h.add(_bigMac(), timestamp: '2026-10-24T12:50:00.000', fileId: 'a2');
+      await h.assist.sweep();
+      expect(h.places.radii, hasLength(radii));
+    });
+
+    test('Correct confirms the chain at the spot and writes no meal', () async {
+      final id = await suggested();
+      final before = await raw(id);
+      final r = await h.assist.act(
+        id,
+        AssistUserAction.correct,
+        expectedRaw: before,
+      );
+      expect(r.status, AssistActionStatus.done);
+      expect(r.placeLearned, isTrue);
+      expect(await raw(id), before);
+      expect(h.dao.byId(id).corrected, isFalse);
+      expect(
+        (await h.placesStore.read()).confirmed.single.chainKey,
+        'mcdonalds',
+      );
+    });
+
+    test('brand only: no location is read and nothing is learned', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: false,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.blockOf(id)?['status'], AssistStatus.applied);
+      expect(h.assist.canLearnPlace(h.dao.byId(id)), isFalse);
+      final r = await h.assist.act(
+        id,
+        AssistUserAction.notFromRestaurant,
+        expectedRaw: await raw(id),
+      );
+      expect(r.status, AssistActionStatus.done);
+      expect(r.placeLearned, isFalse);
+      expect(h.analysisOf(id)['total_calories'], 540);
+      expect(h.source.asked, isEmpty);
+      expect((await h.placesStore.read()).zones, isEmpty);
+    });
+
+    test('Off, an http server or a coarse fix: nothing is learned', () async {
+      final id = await suggested();
+      final meal = h.dao.byId(id);
+      expect(h.assist.canLearnPlace(meal), isTrue);
+      h.lookups.support = _claudePlanHttp;
+      expect(h.assist.canLearnPlace(meal), isFalse);
+      h.lookups.support = _anthropic;
+      h.settings = AssistSettingsView(
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      expect(h.assist.canLearnPlace(meal), isFalse);
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final coarse = h.add(
+        _bigMac(capture: _capture(accuracy: 900)),
+        fileId: 'a3',
+      );
+      expect(h.assist.canLearnPlace(h.dao.byId(coarse)), isFalse);
+    });
+
+    test('a stale editor copy changes nothing; stale stamps leave nothing '
+        'to revert', () async {
+      final id = await suggested();
+      final old = await raw(id);
+      rewrite(id, (a) => a..['meal_description'] = 'edited elsewhere');
+      final r = await h.assist.act(
+        id,
+        AssistUserAction.acceptSuggestion,
+        expectedRaw: old,
+      );
+      expect(r.status, AssistActionStatus.changed);
+      expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+      expect((await h.placesStore.read()).confirmed, isEmpty);
+
+      // The user changed the item after the suggestion: nothing to accept.
+      rewrite(
+        id,
+        (a) => a
+          ..['food_items'] = [
+            {
+              ...(a['food_items'] as List).first as Map,
+              'estimated_calories': 700,
+            },
+          ],
+      );
+      final stale = await h.assist.act(
+        id,
+        AssistUserAction.acceptSuggestion,
+        expectedRaw: await raw(id),
+      );
+      expect(stale.status, AssistActionStatus.nothing);
+      expect(h.analysisOf(id)['food_items'][0]['estimated_calories'], 700);
+    });
+
+    test('a picked-chain job on the owner\'s server: polled by the editor '
+        'past the daily cap, and by the sweep once the editor is closed, '
+        'on the corrected meal', () async {
+      h.lookups.support = _claudePlanHttps;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: _claudePlanHttps.recipientStamp,
+      );
+      final id = h.add(_bigMac(brand: "McDonald's", context: 'takeout'));
+      h.lookups.onSubmit = (request) async => _pending('job_pick_0001');
+      await h.assist.sweep();
+      // Suggest-only on Claude Plan: make the first answer a suggestion.
+      h.lookups.onPoll = (jobId) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        jobId: jobId,
+      );
+      await h.assist.lookupNow(id);
+      expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+      await h.assist.act(
+        id,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(id),
+      );
+      expect(h.dao.byId(id).corrected, isTrue);
+
+      h.lookups.onSubmit = (request) async => _pending('job_pick_0002');
+      final first = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(first.code, AssistSkip.pending);
+      final job = (await h.state.jobs())[id]!;
+      expect(job.manual, isTrue);
+      expect(job.pick, 'burger_king');
+
+      // The day's cap is reached meanwhile: a poll is no new lookup.
+      for (var i = 0; i < assistDailyCap; i++) {
+        h.budget.tryStartLookup(0);
+      }
+      expect(h.budget.capReached, isTrue);
+      h.lookups.onPoll = (jobId) async => _pending(jobId);
+      final again = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(again.code, AssistSkip.pending);
+      expect(h.lookups.polls.last, 'job_pick_0002');
+
+      // The editor is closed; once the sweep may run again (the cap holds
+      // it back, as any lookup), it answers the job with the same pick.
+      await h.prefs.remove(assistDailyPrefsKey);
+      h.lookups.onPoll = (jobId) async => _done(
+        json: _found(chainKey: 'burger_king'),
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        jobId: jobId,
+      );
+      h.now = h.now.add(const Duration(seconds: 30));
+      await h.assist.sweep();
+      expect(h.lookups.polls.last, 'job_pick_0002');
+      expect(h.blockOf(id)?['chain_key'], 'burger_king');
+      expect(h.blockOf(id)?['evidence'], 'user_picked');
+      expect((await h.state.jobs())[id], isNull);
     });
   });
 }

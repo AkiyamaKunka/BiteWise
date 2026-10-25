@@ -38,6 +38,8 @@
 ///     100 kcal); the calorie number found word-bounded in the provider's
 ///     verbatim text for that exact URL; and not the same chain and menu
 ///     item applied in the last 6 h.
+/// A chain the user picked in the editor (stage R7b) is evidence for a
+/// suggestion only, and an answer for any other chain is rejected.
 /// Otherwise items at 0.4–2.5× become a SUGGESTION. A lookup that found
 /// nothing, an unusable source, only implausible numbers, or a meal with a
 /// leftover deduction (published numbers are one whole serving; the meal
@@ -153,7 +155,12 @@ enum AssistEvidenceKind {
   itemBrand('item_brand'),
   orderMerchant('order_merchant'),
   locationConfirmed('location_confirmed'),
-  location('location');
+  location('location'),
+
+  /// The user named the chain in the editor's 'Which restaurant?' search
+  /// (stage R7b, after 'Wrong restaurant'): their word, not the photo's —
+  /// a suggestion at most.
+  userPicked('user_picked');
 
   const AssistEvidenceKind(this.wire);
   final String wire;
@@ -203,6 +210,12 @@ abstract final class AssistReason {
   static const String userDeclined = 'user_declined';
   static const String nlCorrection = 'nl_correction';
 
+  // The editor's feedback (stage R7b; the decision log and residual
+  // blocks).
+  static const String userWrongRestaurant = 'user_wrong_restaurant';
+  static const String userNotRestaurant = 'user_not_restaurant';
+  static const String userConfirmed = 'user_confirmed';
+
   // Reject: nothing is written.
   static const String malformed = 'lookup_malformed';
   static const String chainNotRequested = 'chain_not_requested';
@@ -210,6 +223,10 @@ abstract final class AssistReason {
   static const String noEvidence = 'no_evidence';
   static const String locationNotRestaurant = 'location_not_restaurant';
   static const String itemChanged = 'item_changed';
+
+  /// The user picked a chain in the editor and the lookup answered for
+  /// another one.
+  static const String chainNotPicked = 'chain_not_picked';
 
   // Context only.
   static const String notPublished = 'not_published';
@@ -252,6 +269,7 @@ abstract final class AssistReason {
   static const String locationUnconfirmed = 'location_unconfirmed';
   static const String itemUnbranded = 'item_unbranded';
   static const String locationNeedsExactItem = 'location_needs_exact_item';
+  static const String userPicked = 'user_picked';
   static const String ratioOutOfBand = 'ratio_out_of_band';
   static const String macrosMissing = 'macros_missing';
   static const String macroMismatch = 'macro_mismatch';
@@ -1239,6 +1257,7 @@ final class AssistContext {
     this.placeVerified = false,
     this.dense = false,
     this.recentApplies = const [],
+    this.userChainKey,
   });
 
   /// The device clock, local time.
@@ -1283,6 +1302,11 @@ final class AssistContext {
 
   /// Applications on OTHER meals (this meal's own is re-based instead).
   final List<AssistRecentApply> recentApplies;
+
+  /// The chain the user picked in the editor's 'Which restaurant?' search
+  /// (stage R7b), or null. A lookup that answers for any other chain is
+  /// rejected; the pick itself is evidence for a suggestion only.
+  final String? userChainKey;
 }
 
 // ─── The decision ──────────────────────────────────────────────────────
@@ -1479,6 +1503,18 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       provider,
     );
   }
+  // The user said which chain it was: an answer for another one (a printed
+  // brand the user just called wrong, say) is not theirs.
+  final pick = ctx.userChainKey;
+  if (pick != null && pick != chainKey) {
+    return _terminal(
+      AssistOutcome.reject,
+      '',
+      AssistReason.chainNotPicked,
+      ctx,
+      provider,
+    );
+  }
   final chain = chainByKey(chainKey)!;
 
   // The meal as the decision sees it: an earlier, still-intact application
@@ -1530,6 +1566,8 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       ? AssistEvidenceKind.orderMerchant
       : locationChain
       ? AssistEvidenceKind.location
+      : pick == chainKey
+      ? AssistEvidenceKind.userPicked
       : null;
   if (evidence == null) {
     final reason = !fromLocation
@@ -1795,6 +1833,7 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       reason = switch (evidence) {
         AssistEvidenceKind.orderMerchant => AssistReason.orderMerchantOnly,
         AssistEvidenceKind.location => AssistReason.locationUnconfirmed,
+        AssistEvidenceKind.userPicked => AssistReason.userPicked,
         _ => AssistReason.itemUnbranded,
       };
     } else if (!ownBrand && otherBrandItems.isNotEmpty) {
@@ -2238,10 +2277,12 @@ Map<String, Object?> _residualBlock(Map block, String status, String reason) {
 /// (snackbar Undo) or 'reverted' (editor) record. Null — write nothing —
 /// when the block is not applied or anything changed since (an editor
 /// save, a leftover deduction, a correction): that is the user's newer
-/// truth.
+/// truth. [reason] overrides the record's reason code (the editor's
+/// 'Wrong restaurant' and 'Not from a restaurant', stage R7b).
 Map<String, dynamic>? revertAssist(
   Map<String, dynamic> analysis, {
   AssistRevertKind kind = AssistRevertKind.reverted,
+  String? reason,
 }) {
   final block = _block(analysis);
   if (block == null ||
@@ -2250,12 +2291,155 @@ Map<String, dynamic>? revertAssist(
     return null;
   }
   final declined = kind == AssistRevertKind.declined;
+  final code = _code(reason, _reasonRe);
   return _restore(analysis, block)
     ..['assist'] = _residualBlock(
       block,
       declined ? AssistStatus.declined : AssistStatus.reverted,
-      declined ? AssistReason.userDeclined : AssistReason.userReverted,
+      code.isNotEmpty
+          ? code
+          : declined
+          ? AssistReason.userDeclined
+          : AssistReason.userReverted,
     );
+}
+
+/// The user turned a SUGGESTED block down (stage R7b: 'Wrong restaurant',
+/// 'Not from a restaurant'): the meal's numbers were never touched, so only
+/// the block shrinks to a 'declined' record with [reason] — no matches,
+/// published numbers or source, nothing a chip could show. Null for any
+/// other block.
+Map<String, dynamic>? declineAssistSuggestion(
+  Map<String, dynamic> analysis, {
+  String reason = AssistReason.userDeclined,
+}) {
+  final block = _block(analysis);
+  if (block == null || block['status'] != AssistStatus.suggested) return null;
+  final code = _code(reason, _reasonRe);
+  return Map<String, dynamic>.from(analysis)
+    ..['assist'] = _residualBlock(
+      block,
+      AssistStatus.declined,
+      code.isEmpty ? AssistReason.userDeclined : code,
+    );
+}
+
+/// 'Use published numbers' (stage R7b): the SUGGESTED block of [analysis]
+/// applied as the user accepted it, through [applyAssist] — the same
+/// stamps, deltas and exact revert as an automatic application, reason
+/// user_accepted, decided on [now]'s date. Every value is re-read from the
+/// block as untrusted (an imported meal can carry anything): a covered
+/// item counts only with a single published calorie value (a range has
+/// nothing to use) and while it still holds its before stamp. Null —
+/// write nothing — when the block is not an intact suggestion, names a
+/// chain outside the table, has nothing usable, or the meal carries a
+/// leftover deduction.
+Map<String, dynamic>? acceptAssistSuggestion(
+  Map<String, dynamic> analysis, {
+  required DateTime now,
+}) {
+  final block = _block(analysis);
+  if (block == null ||
+      block['status'] != AssistStatus.suggested ||
+      !assistStampValid(analysis)) {
+    return null;
+  }
+  final key = block['chain_key'];
+  final chain = key is String ? chainByKey(key) : null;
+  if (chain == null) return null;
+  final raw = analysis['food_items'] as List;
+  final grounded = block['grounded'] == true;
+  final items = <AssistItemDecision>[];
+  for (final m in block['matches'] as List) {
+    final match = m as Map;
+    final index = match['item_index'] as int;
+    final pub = match['published'];
+    final p = pub is Map ? pub : const {};
+    final calories = _publishedKcal(p['calories']);
+    if (calories == null) continue;
+    final published = AssistNumbers(
+      calories: calories,
+      proteinG: _publishedGrams(p['protein_g']),
+      carbsG: _publishedGrams(p['carbs_g']),
+      fatG: _publishedGrams(p['fat_g']),
+    );
+    final multiplier = coerceQty(match['qty']);
+    final type = match['match_type'];
+    final pick = AssistPick(
+      optionIndex: 0,
+      label: sanitizeAssistText(match['option_label'], kAssistOptionLabelMax),
+      serving: sanitizeAssistText(match['serving'], kAssistServingMax),
+      unit: '',
+      published: published,
+      caloriesRange: null,
+      multiplier: multiplier,
+      kcal: calories * multiplier,
+      unitsAgree: true,
+    );
+    final before = AssistNumbers.ofItem(raw[index]);
+    final vision = before.calories;
+    items.add(
+      AssistItemDecision(
+        itemIndex: index,
+        menuItem: sanitizeAssistText(match['menu_item'], kAssistMenuItemMax),
+        matchType:
+            type == 'exact_item' ||
+                type == 'closest_item' ||
+                type == 'components_sum'
+            ? type as String
+            : 'closest_item',
+        isDrink: false,
+        pick: pick,
+        before: before,
+        proposed: _proposed(pick, before),
+        ratio: vision != null && vision > 0
+            ? (pick.kcal / vision).toDouble()
+            : 0,
+        grounded: grounded,
+        applyOk: false,
+        suggestOk: true,
+        reason: AssistReason.userAccepted,
+      ),
+    );
+  }
+  if (items.isEmpty) return null;
+  final source = block['source'];
+  final url = normalizeSourceUrl(source is Map ? source['url'] : null);
+  final host = url?.substring(8).split('/').first;
+  final kind = source is Map ? source['type'] : null;
+  final year = source is Map ? source['year'] : null;
+  return applyAssist(
+    analysis,
+    AssistDecision(
+      outcome: AssistOutcome.suggest,
+      status: AssistStatus.applied,
+      reason: AssistReason.userAccepted,
+      trigger: AssistTrigger.fromWire(block['trigger']) ?? AssistTrigger.manual,
+      provider: _code(block['provider'], _providerRe),
+      decidedOn: isoDate(now),
+      evidence: AssistEvidenceKind.fromWire(block['evidence']),
+      chainKey: key as String,
+      brandName: sanitizeAssistText(chain.name, kAssistBrandNameMax),
+      items: List.unmodifiable(items),
+      source: url == null
+          ? null
+          : SourceVerdict(
+              url: url,
+              host: host,
+              cited: true,
+              official: isChainHost(host, key),
+              ascii: true,
+            ),
+      sourceType: kind == 'official' || kind == 'third_party'
+          ? kind as String
+          : 'other',
+      sourceYear: year is int && year >= 1990 && year <= now.year + 1
+          ? year
+          : null,
+      grounded: grounded && items.length == (block['matches'] as List).length,
+      notes: sanitizeAssistText(block['notes'], kAssistNotesMax),
+    ),
+  );
 }
 
 /// The block an NL chat correction carries onto the corrected analysis:

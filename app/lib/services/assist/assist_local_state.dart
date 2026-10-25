@@ -22,14 +22,15 @@
 ///         miss); at [assistMissesBeforeDenylist] the meal is skipped from
 ///         then on; 3 d, newest 200;
 ///       - 'assist_jobs'      {jobs: [{meal_id, job_id?, req_hash, attempts,
-///         next_at, at, place?, manual?}]}: Claude Plan lookups the owner's server is
+///         next_at, at, place?, manual?, pick?}]}: Claude Plan lookups the owner's server is
 ///         still running (with a job_id), and meals waiting for their next
 ///         try after a transient failure (without one; design R6c: 5 min,
 ///         30 min, 2 h, at most [assistMaxRetries] retries); 24 h (the
 ///         server keeps a job that long), newest 50. `place` is what the
 ///         location path found ([AssistPlaceContext]: chain keys and flags,
 ///         never a coordinate, cell or place name), so a poll, a resubmit
-///         or a retry never reads the photo's position again;
+///         or a retry never reads the photo's position again. `pick` is
+///         the chain the user picked in the editor (R7b), a table key;
 ///       - 'assist_cache'     {entries: [{key, chain_key, names, provider,
 ///         result, cited_urls, evidence, at}]}: finished lookups, keyed by
 ///         the chain and the meal's item names ([AssistCachedLookup]), so
@@ -385,6 +386,7 @@ final class AssistJob {
     this.attempts = 0,
     this.place,
     this.manual = false,
+    this.pick,
   });
 
   /// The server's job id; null for a retry record.
@@ -411,6 +413,11 @@ final class AssistJob {
   /// The editor's lookup (MealAssist.lookupNow): the sweep polls it
   /// whatever the triggers say, and writes its answer as a manual one.
   final bool manual;
+
+  /// The chain the user picked in the editor's 'Which restaurant?' search
+  /// (R7b; a key of OUR table), so a later poll asks about the same
+  /// request; null otherwise.
+  final String? pick;
 
   /// A job the server is running.
   bool get isPending => jobId != null;
@@ -715,13 +722,15 @@ class AssistLocalState {
         final place = rawPlace == null
             ? null
             : AssistPlaceContext.fromJson(rawPlace);
+        final pick = e['pick'];
         if (id == null ||
             (job != null && (job is! String || !_jobIdRe.hasMatch(job))) ||
             hash is! String ||
             !_hashRe.hasMatch(hash) ||
             at == null ||
             next == null ||
-            (rawPlace != null && place == null)) {
+            (rawPlace != null && place == null) ||
+            (pick != null && (pick is! String || chainByKey(pick) == null))) {
           continue;
         }
         out[id] = AssistJob(
@@ -734,6 +743,7 @@ class AssistLocalState {
               : 0,
           place: place,
           manual: e['manual'] == true,
+          pick: pick as String?,
         );
       }
       return out;
@@ -754,6 +764,7 @@ class AssistLocalState {
           'at': e.value.at.toUtc().toIso8601String(),
           'place': ?e.value.place?.toJson(),
           if (e.value.manual) 'manual': true,
+          'pick': ?e.value.pick,
         },
     ];
     if (entries.isEmpty) return _store.delete(assistJobsDocument);
@@ -764,8 +775,10 @@ class AssistLocalState {
 
   Future<bool> putJob(int mealId, AssistJob job) => _serial(() async {
     final id = job.jobId;
+    final pick = job.pick;
     if ((id != null && !_jobIdRe.hasMatch(id)) ||
-        !_hashRe.hasMatch(job.reqHash)) {
+        !_hashRe.hasMatch(job.reqHash) ||
+        (pick != null && chainByKey(pick) == null)) {
       return false;
     }
     final all = await jobs();

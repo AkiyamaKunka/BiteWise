@@ -74,7 +74,13 @@
 ///
 /// Mode Off cancels the call in flight (LookupCancelToken), discards its
 /// result and forgets pending jobs. [MealAssist.lookupNow] is the editor's
-/// manual lookup (R7b).
+/// manual lookup (R7b), also with the chain the user picked after 'Wrong
+/// restaurant'; its result on a meal the user already corrected is written
+/// through the user's own compare-and-set. [MealAssist.act] is the editor's
+/// answer to a result — Use AI estimate, Use published numbers, Wrong
+/// restaurant, Not from a restaurant, Correct: the user's own change
+/// (updateMealAnalysisIfUnchanged, corrected = 1), and the photo's ~100 m
+/// cell taught to the places store only where its location may be read.
 ///
 /// Nothing here logs. A coordinate exists only inside [MealAssist._locate],
 /// for one places query; MapKit's places only inside matchPlaces. Neither
@@ -90,6 +96,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart'
     show AppLifecycleState, WidgetsBinding, WidgetsBindingObserver;
 
+import '../../core/chain_match.dart' show chainByKey;
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/place_match.dart';
@@ -433,6 +440,51 @@ final class AssistRun {
   final bool wrote;
 }
 
+/// The editor's answers to a restaurant result (R7b; design "Feedback
+/// actions").
+enum AssistUserAction {
+  /// 'Use AI estimate': an applied block reverted exactly.
+  useEstimate,
+
+  /// 'Use published numbers': a suggestion applied as accepted; the chain
+  /// is confirmed at the photo's spot.
+  acceptSuggestion,
+
+  /// 'Wrong restaurant': reverted (or the suggestion declined), the chain
+  /// blocked at the photo's spot; the editor then asks which chain it was.
+  wrongRestaurant,
+
+  /// 'Not from a restaurant': reverted (or declined), and the photo's spot
+  /// becomes a zone where no places are looked up.
+  notFromRestaurant,
+
+  /// 'Correct': the chain confirmed at the photo's spot; the meal itself
+  /// is not written.
+  correct,
+}
+
+/// How an editor action ended.
+enum AssistActionStatus {
+  /// Written (or, for 'Correct', taken note of).
+  done,
+
+  /// The meal changed since the editor read it (or is gone): nothing was
+  /// written; the editor reloads it.
+  changed,
+
+  /// Nothing to act on: no such block, or its stamps no longer match the
+  /// meal (the user's later edit stands).
+  nothing,
+}
+
+/// What [MealAssist.act] did: its status, and whether the photo's spot was
+/// learned ([AssistPlacesStore]) — false wherever no location may be read.
+final class AssistActionResult {
+  const AssistActionResult(this.status, {this.placeLearned = false});
+  final AssistActionStatus status;
+  final bool placeLearned;
+}
+
 /// What the location path made of one meal ([MealAssist._locate]): a code
 /// for the decision log, and the chain keys it found — nothing else.
 final class _Located {
@@ -459,10 +511,13 @@ final class _Located {
 /// One meal's request, composed: what is sent, its hash, and what the
 /// location path contributed to it.
 final class _Prepared {
-  const _Prepared(this.request, this.hash, this.place);
+  const _Prepared(this.request, this.hash, this.place, this.pick);
   final LookupRequest request;
   final String hash;
   final AssistPlaceContext? place;
+
+  /// The chain the user picked in the editor (R7b), or null.
+  final String? pick;
 }
 
 final class _Run {
@@ -492,6 +547,12 @@ const Set<LookupFailureCode> _recipientFailures = {
 };
 
 final RegExp _iso2Re = RegExp(r'^[A-Z]{2}$');
+final RegExp _providerCodeRe = RegExp(r'^[a-z0-9_]{1,20}$');
+
+/// A block's provider as the decision log may keep it (an imported block
+/// is untrusted), else ''.
+String _providerCode(Object? v) =>
+    v is String && _providerCodeRe.hasMatch(v) ? v : '';
 final RegExp _upperRe = RegExp('[A-Z]');
 
 String _snake(String camel) =>
@@ -920,7 +981,9 @@ class MealAssist {
     }
     final ordered = [
       for (final m in meals)
-        if (_eligible(m, now, consentAt, misses)) m,
+        if (_eligible(m, now, consentAt, misses) ||
+            _manualPending(m, jobs[m.id]))
+          m,
     ]..sort((a, b) => _timeOf(b).compareTo(_timeOf(a)));
     for (final meal in ordered) {
       if (gen != _generation || _disposed) return;
@@ -968,6 +1031,7 @@ class MealAssist {
         job: job,
         manual: manualJob,
         useLocation: useLocation,
+        pick: manualJob ? job.pick : null,
       );
       if (run.stop) {
         _lastSkip = run.code;
@@ -978,6 +1042,14 @@ class MealAssist {
 
   static DateTime _timeOf(Meal m) =>
       DateTime.tryParse(m.timestamp) ?? DateTime.fromMillisecondsSinceEpoch(0);
+
+  /// The editor's own lookup is still running on the server for [m]
+  /// (R7b): polled even on a meal the automatic sweep would skip — one the
+  /// user corrected (a 'Wrong restaurant' revert is a user write), one
+  /// with an assist block, one logged before the consent — once the editor
+  /// that started it is closed.
+  bool _manualPending(Meal m, AssistJob? job) =>
+      job != null && job.manual && job.isPending && !_mealInUse(m.id);
 
   bool _eligible(
     Meal m,
@@ -1005,9 +1077,24 @@ class MealAssist {
   /// meal takes the location path under the same gates as an automatic
   /// lookup (locationAllowed, has_gps, restaurant); without it no location
   /// is read. A failure here is shown, not retried.
-  Future<AssistRun> lookupNow(int mealId, {bool useLocation = false}) async {
+  ///
+  /// [chainKey] is the chain the user picked in the editor's 'Which
+  /// restaurant?' search after 'Wrong restaurant' (R7b): the request names
+  /// it (after any chain a printed brand names — the composer's rule), no
+  /// location is read, the cache answers only for it, and decideAssist
+  /// accepts an answer for that chain alone, as a suggestion at most.
+  /// Calling again while the server still runs this meal's job polls it
+  /// (no new lookup, so not held by the daily cap).
+  Future<AssistRun> lookupNow(
+    int mealId, {
+    bool useLocation = false,
+    String? chainKey,
+  }) async {
     try {
       if (_disposed) return const AssistRun(AssistSkip.off);
+      if (chainKey != null && chainByKey(chainKey) == null) {
+        return const AssistRun(AssistSkip.error);
+      }
       final s = _readSettings();
       final support = _support();
       if (!support.supported) return const AssistRun(AssistSkip.unsupported);
@@ -1015,17 +1102,22 @@ class MealAssist {
         _consentNeeded.value = support;
         return const AssistRun(AssistSkip.consentNeeded);
       }
-      if (_budget.capReached) return const AssistRun(AssistSkip.dailyCap);
       final jobs = await _state.jobs();
+      final job = jobs[mealId];
+      final polling = job != null && job.manual && job.isPending;
+      if (!polling && _budget.capReached) {
+        return const AssistRun(AssistSkip.dailyCap);
+      }
       final run = await _run(
         mealId,
         AssistTrigger.manual,
         gen: _generation,
         settings: s,
         support: support,
-        job: jobs[mealId],
+        job: job,
         manual: true,
-        useLocation: useLocation,
+        useLocation: chainKey == null && useLocation,
+        pick: chainKey,
       );
       return run.public;
     } catch (_) {
@@ -1042,6 +1134,7 @@ class MealAssist {
     required AssistJob? job,
     required bool manual,
     required bool useLocation,
+    String? pick,
   }) async {
     if (!_working.add(mealId)) return const _Run(AssistSkip.working);
     try {
@@ -1083,7 +1176,7 @@ class MealAssist {
         base,
         country: _region(),
         zh: _zh(),
-        chains: place?.chains ?? const [],
+        chains: pick != null ? [pick] : place?.chains ?? const [],
       );
       if (request.chainKeys.isEmpty) {
         // Nothing names a chain from OUR table: no lookup. The location
@@ -1101,10 +1194,15 @@ class MealAssist {
       }
       place = place?.within(request.chainKeys);
       if (place != null && place.chains.isEmpty) place = null;
-      final prepared = _Prepared(request, lookupRequestHash(request), place);
+      final prepared = _Prepared(
+        request,
+        lookupRequestHash(request),
+        place,
+        pick,
+      );
 
       // ── The cache (R6c): the same items at the same chain, answered ──
-      final cached = await _fromCache(request);
+      final cached = await _fromCache(request, only: pick);
       if (gen != _generation) return _Run.cancelled;
       if (cached != null) {
         if (job != null) await _state.removeJob(mealId);
@@ -1272,10 +1370,15 @@ class MealAssist {
   // ── The cache (R6c) ──
 
   /// A cached answer for [request]: the first of its chains (rank order)
-  /// with one for these item names, moved onto this meal's item order.
-  Future<AssistLookup?> _fromCache(LookupRequest request) async {
+  /// with one for these item names, moved onto this meal's item order —
+  /// with [only] (the user's pick), for that chain alone.
+  Future<AssistLookup?> _fromCache(
+    LookupRequest request, {
+    String? only,
+  }) async {
     final names = assistCacheNames(request);
     for (final chain in request.chainKeys) {
+      if (only != null && chain != only) continue;
       final hit = await _state.cachedLookup(assistCacheKey(chain, names));
       if (hit == null || hit.chainKey != chain) continue;
       final moved = remapCachedLookup(hit.lookup, from: hit.names, to: names);
@@ -1390,6 +1493,7 @@ class MealAssist {
             attempts: job?.attempts ?? 0,
             place: prepared.place,
             manual: manual,
+            pick: prepared.pick,
           );
           await _state.putJob(mealId, next);
           _schedulePoll(next);
@@ -1459,6 +1563,7 @@ class MealAssist {
             attempts: job?.attempts ?? 0,
             place: prepared.place,
             manual: manual,
+            pick: prepared.pick,
           ),
         );
       }
@@ -1565,6 +1670,7 @@ class MealAssist {
         placeVerified: place?.verified ?? false,
         dense: place?.dense ?? false,
         recentApplies: _recentApplies(recent, meal.id),
+        userChainKey: prepared.pick,
       ),
     );
     final next = recordAssistDecision(meal.analysis, decision);
@@ -1585,11 +1691,7 @@ class MealAssist {
       await _state.addMiss(meal.id);
       return _Run(AssistSkip.inUse, decision: decision);
     }
-    final ok = await _dao.applyAssist(
-      meal.id,
-      expectedRaw: snap.rawAnalysis,
-      analysis: next,
-    );
+    final ok = await _writeDecision(snap, next, manual: manual);
     if (!ok) {
       // The meal changed while the lookup ran: the result is dropped.
       await _log(decision, AssistSkip.casMiss);
@@ -1604,6 +1706,27 @@ class MealAssist {
     }
     return _Run(decided, decision: decision, wrote: true);
   }
+
+  /// The decision's write, against the raw text read before the lookup.
+  /// The editor's lookup on a meal the user already corrected writes
+  /// through the user's own compare-and-set (corrected stays 1);
+  /// everything else through applyAssist, which never sets corrected and
+  /// never writes over a corrected meal.
+  Future<bool> _writeDecision(
+    MealSnapshot snap,
+    Map<String, dynamic> next, {
+    required bool manual,
+  }) => manual && snap.corrected
+      ? _dao.updateMealAnalysisIfUnchanged(
+          snap.meal.id,
+          expectedRaw: snap.rawAnalysis,
+          analysis: next,
+        )
+      : _dao.applyAssist(
+          snap.meal.id,
+          expectedRaw: snap.rawAnalysis,
+          analysis: next,
+        );
 
   void _announce(
     int mealId,
@@ -1661,6 +1784,161 @@ class MealAssist {
       return true;
     } catch (_) {
       return false;
+    }
+  }
+
+  // ── The editor's actions (R7b) ──
+
+  /// One of the editor's answers to the meal's assist block ([action]),
+  /// written as the user's own change: compare-and-set against
+  /// [expectedRaw] — the stored text the editor shows — through
+  /// updateMealAnalysisIfUnchanged (corrected = 1). The spot is learned in
+  /// the backup-excluded places store only where the photo's location may
+  /// be read at all ([canLearnPlace]); the coordinate lives in memory for
+  /// the one conversion to a ~100 m cell. 'Wrong restaurant' and 'Not from
+  /// a restaurant' still teach the spot when stale stamps leave nothing to
+  /// revert. One decision-log entry (codes and kcal only). Never throws.
+  Future<AssistActionResult> act(
+    int mealId,
+    AssistUserAction action, {
+    required String expectedRaw,
+  }) async {
+    try {
+      final snap = await _dao.mealSnapshot(mealId);
+      if (snap == null || snap.rawAnalysis != expectedRaw) {
+        return const AssistActionResult(AssistActionStatus.changed);
+      }
+      final meal = snap.meal;
+      final analysis = meal.analysis;
+      final block = analysis['assist'];
+      if (block is! Map || block['v'] != kAssistVersion) {
+        return const AssistActionResult(AssistActionStatus.nothing);
+      }
+      final status = block['status'];
+      final key = block['chain_key'];
+      final chainKey = key is String && chainByKey(key) != null ? key : null;
+      Map<String, dynamic>? withdrawn(String reason) =>
+          status == AssistStatus.applied
+          ? revertAssist(analysis, reason: reason)
+          : status == AssistStatus.suggested
+          ? declineAssistSuggestion(analysis, reason: reason)
+          : null;
+      final (next, code) = switch (action) {
+        AssistUserAction.useEstimate => (
+          revertAssist(analysis),
+          AssistReason.userReverted,
+        ),
+        AssistUserAction.acceptSuggestion => (
+          acceptAssistSuggestion(analysis, now: _clock()),
+          AssistReason.userAccepted,
+        ),
+        AssistUserAction.wrongRestaurant => (
+          withdrawn(AssistReason.userWrongRestaurant),
+          AssistReason.userWrongRestaurant,
+        ),
+        AssistUserAction.notFromRestaurant => (
+          withdrawn(AssistReason.userNotRestaurant),
+          AssistReason.userNotRestaurant,
+        ),
+        AssistUserAction.correct => (null, AssistReason.userConfirmed),
+      };
+      final placeOnly =
+          action == AssistUserAction.correct ||
+          action == AssistUserAction.wrongRestaurant ||
+          action == AssistUserAction.notFromRestaurant;
+      if (next == null && !placeOnly) {
+        return const AssistActionResult(AssistActionStatus.nothing);
+      }
+      if (next == null &&
+          action != AssistUserAction.notFromRestaurant &&
+          chainKey == null) {
+        return const AssistActionResult(AssistActionStatus.nothing);
+      }
+      if (next != null) {
+        final ok = await _dao.updateMealAnalysisIfUnchanged(
+          mealId,
+          expectedRaw: expectedRaw,
+          analysis: next,
+        );
+        if (!ok) return const AssistActionResult(AssistActionStatus.changed);
+      }
+      var learned = false;
+      final store = _placesStore;
+      if (store != null && canLearnPlace(meal)) {
+        final cell = await _photoCell(meal);
+        if (cell != null) {
+          learned = switch (action) {
+            AssistUserAction.notFromRestaurant => await store.addZone(cell),
+            AssistUserAction.wrongRestaurant =>
+              chainKey != null && await store.block(chainKey, cell),
+            AssistUserAction.acceptSuggestion || AssistUserAction.correct =>
+              chainKey != null && await store.confirm(chainKey, cell),
+            AssistUserAction.useEstimate => false,
+          };
+        }
+      }
+      await _state.markSeen(mealId);
+      await _state.logDecision(
+        AssistDecisionEntry(
+          at: _clock(),
+          code: code,
+          oldKcal: next == null
+              ? null
+              : safeNumber(analysis['total_calories']).round(),
+          newKcal: next == null
+              ? null
+              : safeNumber(next['total_calories']).round(),
+          provider: _providerCode(block['provider']),
+        ),
+      );
+      if (next != null) _signal();
+      return AssistActionResult(AssistActionStatus.done, placeLearned: learned);
+    } catch (_) {
+      return const AssistActionResult(AssistActionStatus.nothing);
+    }
+  }
+
+  /// Whether the editor's feedback on [meal] may learn the photo's spot
+  /// (no read yet): the mode is on, the photo's location may be read for
+  /// this meal at all (iOS, a recipient that may receive location-derived
+  /// chains, GPS, a RESTAURANT meal — [_locationPossible]), the user
+  /// allowed it ('Use photo location', or the block's chain came from the
+  /// location, which needed that consent), and the fix passes the place
+  /// step's own gate (no coarse or stale fix becomes a cell). Never throws.
+  bool canLearnPlace(Meal meal) {
+    try {
+      final s = _readSettings();
+      if (_disposed || s.mode == AssistMode.off) return false;
+      final block = meal.analysis['assist'];
+      final evidence = AssistEvidenceKind.fromWire(
+        block is Map ? block['evidence'] : null,
+      );
+      final fromLocation =
+          evidence == AssistEvidenceKind.location ||
+          evidence == AssistEvidenceKind.locationConfirmed;
+      if (!fromLocation && !s.useLocation) return false;
+      if (!_locationPossible(meal, _support())) return false;
+      final geo = PhotoGeo.fromCapture(
+        meal.analysis['capture'],
+        glasses: isMetaGlassesAnalysis(meal.analysis),
+      );
+      return placeGate(geo).reason == null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The ~100 m cell [meal]'s photo was taken in, or null. The coordinate
+  /// is read here and dropped when this returns.
+  Future<PlaceCell?> _photoCell(Meal meal) async {
+    try {
+      final reader = _location;
+      if (reader == null) return null;
+      final point = await reader.forAsset(meal.fileId);
+      if (point == null) return null;
+      return PlaceCell.fromLatLon(point.lat, point.lon);
+    } catch (_) {
+      return null;
     }
   }
 
