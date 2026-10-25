@@ -1,0 +1,60 @@
+{
+  "state": "done",
+  "job_id": "fixtureJob_0001",
+  "lookup": {
+    "status": "found",
+    "chain_key": "chipotle",
+    "restaurant_name": "Chipotle Mexican Grill",
+    "matches": [
+      {
+        "item_index": 0,
+        "menu_item": "Chicken Burrito Bowl",
+        "match_type": "components_sum",
+        "is_drink": false,
+        "components": [
+          {
+            "name": "Chicken",
+            "calories": 180,
+            "protein_g": 32,
+            "carbs_g": 0,
+            "fat_g": 7
+          },
+          {
+            "name": "White Rice",
+            "calories": 210,
+            "protein_g": 4,
+            "carbs_g": 40,
+            "fat_g": 4
+          },
+          {
+            "name": "Black Beans",
+            "calories": 130,
+            "protein_g": 8,
+            "carbs_g": 22,
+            "fat_g": 1.5
+          }
+        ],
+        "options": []
+      }
+    ],
+    "source_url": "https://www.chipotle.com/nutrition-calculator",
+    "source_title": "Nutrition Calculator | Chipotle",
+    "source_type": "official_site",
+    "source_year": 2026,
+    "match_confidence": 0.8,
+    "notes": "Build-your-own bowl; summed the published components."
+  },
+  "cited_urls": [
+    "https://www.chipotle.com/nutrition-calculator"
+  ],
+  "evidence": [
+    {
+      "url": "https://www.chipotle.com/nutrition-calculator",
+      "text": "180 calories",
+      "verbatim": false,
+      "scope": "search"
+    }
+  ],
+  "searches": 1,
+  "analyzed_by": "claude"
+}

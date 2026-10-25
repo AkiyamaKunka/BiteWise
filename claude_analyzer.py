@@ -59,14 +59,18 @@ import base64
 import json
 import logging
 import os
+import re
+import selectors
 import shlex
 import shutil
+import signal
 import subprocess
 import tempfile
 import threading
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Callable, Dict, List, Optional, Tuple
 
 from config import FOOD_DETECTION_PROMPT
 from utils import parse_ai_json, parse_boolish
@@ -108,7 +112,51 @@ class AnalyzerTimeout(Exception):
 # immediately so the photo falls through to Gemini instead of waiting out
 # another photo's full CLI run (measured ~42-63s cards on album bursts). The
 # subprocess timeout bounds how long the one holder keeps the lock.
+#
+# The one exception to "a contended caller does not wait": a background
+# RESTAURANT LOOKUP (run_lookup_exclusive) never makes a photo, leftover
+# or text request wait or fail. Those callers pre-empt it — the lookup's
+# process group is killed and the caller waits at most
+# PREEMPT_WAIT_SECONDS for the lock (_acquire_cli_for_foreground). The
+# lookup job is requeued by lookup_jobs.
+#
+# A lookup takes AND releases _CLI_LOCK only while holding
+# _LOOKUP_STATE_LOCK, so a foreground caller that holds the state lock
+# sees a stable owner. While a foreground caller waits for a lookup to
+# let go ("fg_waiting"), no lookup may take the lock: the worker's next
+# queued job can never win the (non-FIFO) race against that caller.
 _CLI_LOCK = threading.Lock()
+PREEMPT_WAIT_SECONDS = 5
+
+# Who holds _CLI_LOCK for a lookup, its process and its cancel event
+# (for pre-emption), and how many foreground callers wait for it.
+_LOOKUP_STATE_LOCK = threading.Lock()
+_LOOKUP_STATE: Dict[str, object] = {
+    "holding": False, "proc": None, "preempted": False, "cancel": None,
+    "fg_waiting": 0}
+
+
+def _acquire_cli_for_foreground() -> bool:
+    """_CLI_LOCK for a photo/leftover/text request. Contended by another
+    FOREGROUND request: False at once, as always. Contended by a lookup:
+    kill the lookup and wait (bounded) for the lock it releases — the
+    first such caller only; a second one would lose to the first anyway,
+    so it is told False at once like any other contended caller."""
+    if _CLI_LOCK.acquire(blocking=False):
+        return True
+    with _LOOKUP_STATE_LOCK:
+        if _CLI_LOCK.acquire(blocking=False):  # released meanwhile
+            return True
+        if not _LOOKUP_STATE["holding"] or _LOOKUP_STATE["fg_waiting"]:
+            return False
+        _LOOKUP_STATE["fg_waiting"] += 1
+        _preempt_locked()
+    _lookup_log.info("Restaurant lookup pre-empted by a foreground request.")
+    try:
+        return _CLI_LOCK.acquire(timeout=PREEMPT_WAIT_SECONDS)
+    finally:
+        with _LOOKUP_STATE_LOCK:
+            _LOOKUP_STATE["fg_waiting"] -= 1
 
 
 def _timeout_seconds() -> int:
@@ -792,7 +840,7 @@ def analyze_text_prompt(prompt: str, backend: str = "claude",
     cli = _cli_path()
     if cli is None or not (prompt or "").strip():
         return None
-    if not _CLI_LOCK.acquire(blocking=False):
+    if not _acquire_cli_for_foreground():
         log.info("Claude CLI busy — text intent declined.")
         if raise_on_busy:
             raise AnalyzerBusy()
@@ -868,7 +916,7 @@ def analyze_leftover_photo(
     cli = _cli_path()
     if cli is None or not image_bytes or not (prompt or "").strip():
         return None
-    if not _CLI_LOCK.acquire(blocking=False):
+    if not _acquire_cli_for_foreground():
         log.info("Claude CLI busy — leftover estimation declined.")
         if raise_on_busy:
             raise AnalyzerBusy()
@@ -939,7 +987,7 @@ def analyze_food_photo(
 
     # Contended-CLI bypass: another photo already owns the (up to 120s) CLI
     # run. Don't queue behind it — Gemini answers this photo in seconds.
-    if not _CLI_LOCK.acquire(blocking=False):
+    if not _acquire_cli_for_foreground():
         log.info("Claude CLI busy — falling back to Gemini for this photo.")
         # Default False keeps the TELEGRAM contract ("None → use Gemini")
         # byte-identical; only the API endpoints opt in, because only they
@@ -1004,3 +1052,681 @@ def analyze_food_photo(
         return None
     finally:
         _CLI_LOCK.release()
+
+
+# ─── Restaurant lookup (R3a): WebSearch-only runner, streaming init guard ──
+#
+# The ONLY CLI path that gets a network tool, so every part of it is
+# pinned here rather than shared with the photo/text paths:
+#   * argv: build_lookup_argv — one builder, never CLAUDE_ANALYZER_EXTRA_FLAGS
+#     or a caller-chosen flag; the prompt goes in on stdin;
+#   * env: exactly LOOKUP_ENV_KEYS plus two fixed knobs — no upload key,
+#     plan key or API key reaches a process that reads web pages;
+#   * the FIRST stdout line must be the system/init event and match
+#     LOOKUP_INIT_EXPECT, or the process group is SIGKILLed before another
+#     line is read. Verified on 2026-10-23 against the installed
+#     claude 2.1.233 with this exact argv (offline: fake token, API base
+#     on a closed localhost port): tools == [StructuredOutput, WebSearch]
+#     (--json-schema adds StructuredOutput), mcp_servers == [],
+#     plugins == [], permissionMode dontAsk, memory_paths absent under
+#     --safe-mode (present without it), apiKeySource "none" with
+#     CLAUDE_CODE_OAUTH_TOKEN set, init 1.2 s after spawn;
+#   * a tool_use for any other tool later in the stream is also a kill;
+#   * cited URLs come only from the structured WebSearch link list, never
+#     from model-written text;
+#   * its own logging: status, verdict, duration and counts. Never the
+#     prompt, queries, URLs or output — those hold restaurant and dish
+#     names (_finish_analysis / _log_cli_exit are never called here).
+
+LOOKUP_DISALLOWED_TOOLS = ("Bash,Read,Write,Edit,Glob,Grep,LS,WebFetch,"
+                           "NotebookEdit,Task,mcp__*")
+LOOKUP_INIT_EXPECT = {
+    "tools": frozenset({"WebSearch", "StructuredOutput"}),
+    "mcp_servers": [],
+    "plugins": [],
+    "permissionMode": "dontAsk",
+    "absent": ("memory_paths",),
+}
+LOOKUP_KEY_SOURCES_DEFAULT = ("none",)
+LOOKUP_ENV_KEYS = ("PATH", "HOME", "LANG", "CLAUDE_CODE_OAUTH_TOKEN")
+LOOKUP_MODEL_DEFAULT = "sonnet"
+LOOKUP_INIT_DEADLINE_SECONDS = 10  # default for CLAUDE_LOOKUP_INIT_SECONDS
+LOOKUP_READ_SLICE_SECONDS = 0.25  # how often a blocked read checks cancel
+LOOKUP_EXIT_GRACE_SECONDS = 5
+LOOKUP_MAX_OUTPUT_BYTES = 8 * 1024 * 1024
+LOOKUP_MAX_LINE_BYTES = 2 * 1024 * 1024
+LOOKUP_EVIDENCE_TEXT_CAP = 4000
+LOOKUP_MAX_URLS = 20
+LOOKUP_URL_CAP = 500
+
+_lookup_log = logging.getLogger("claude_analyzer.lookup")
+_LOOKUP_MODEL_RE = re.compile(r"^[A-Za-z0-9._\[\]-]{1,64}$")
+_LOOKUP_CODE_RE = re.compile(r"^[a-z_]{1,40}$")
+_LINKS_PREFIX = "Links: "
+
+
+def lookup_model() -> str:
+    """CLAUDE_LOOKUP_MODEL (default 'sonnet'); anything that is not a
+    plain model name/alias falls back to the default — it becomes argv."""
+    raw = (os.environ.get("CLAUDE_LOOKUP_MODEL") or "").strip()
+    return raw if raw and _LOOKUP_MODEL_RE.match(raw) else LOOKUP_MODEL_DEFAULT
+
+
+def lookup_timeout_seconds() -> int:
+    try:
+        value = int(os.environ.get("CLAUDE_LOOKUP_TIMEOUT_SECONDS", "75"))
+    except ValueError:
+        return 75
+    return min(max(value, 20), 300)
+
+
+def lookup_init_deadline_seconds() -> float:
+    """CLAUDE_LOOKUP_INIT_SECONDS: how long the CLI may take to print its
+    init event (default 10, clamp 5..30) — a cold Node start on a small
+    VM can be slow; the smoke script prints the measured latency."""
+    raw = os.environ.get("CLAUDE_LOOKUP_INIT_SECONDS")
+    if raw is None or not raw.strip():
+        return LOOKUP_INIT_DEADLINE_SECONDS
+    try:
+        value = int(raw)
+    except ValueError:
+        return LOOKUP_INIT_DEADLINE_SECONDS
+    return min(max(value, 5), 30)
+
+
+def lookup_key_sources() -> frozenset:
+    """apiKeySource values the init guard accepts. Default {'none'} — what
+    2.1.233 reports for an OAuth token; CLAUDE_LOOKUP_KEY_SOURCE
+    (comma-separated) overrides it once the VM smoke shows its value."""
+    raw = os.environ.get("CLAUDE_LOOKUP_KEY_SOURCE")
+    parts = [p.strip() for p in (raw or "").split(",") if p.strip()]
+    return frozenset(parts or LOOKUP_KEY_SOURCES_DEFAULT)
+
+
+def build_lookup_argv(cli: str, schema_json: str, model: str) -> List[str]:
+    """The lookup argv — the single builder, pinned by tests."""
+    return [
+        cli, "-p",
+        "--safe-mode",
+        "--output-format", "stream-json",
+        "--verbose",
+        "--tools", "WebSearch",
+        "--allowedTools", "WebSearch",
+        "--disallowedTools", LOOKUP_DISALLOWED_TOOLS,
+        "--permission-mode", "dontAsk",
+        "--strict-mcp-config",
+        "--no-session-persistence",
+        "--json-schema", schema_json,
+        "--model", model,
+    ]
+
+
+def lookup_env() -> Dict[str, str]:
+    """The lookup child's ENTIRE environment: an allowlist, not a scrub."""
+    env = {k: os.environ[k] for k in LOOKUP_ENV_KEYS if os.environ.get(k)}
+    env.setdefault("LANG", "C.UTF-8")
+    env["DISABLE_AUTOUPDATER"] = "1"
+    env["CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"] = "1"
+    return env
+
+
+def lookup_init_verdict(event, key_sources=None) -> Optional[str]:
+    """None when the init event matches LOOKUP_INIT_EXPECT, else the name
+    of the first field that does not (missing counts as different)."""
+    if not isinstance(event, dict) or event.get("type") != "system" \
+            or event.get("subtype") != "init":
+        return "not_init"
+    tools = event.get("tools")
+    expected = LOOKUP_INIT_EXPECT["tools"]
+    if not isinstance(tools, list) or len(tools) != len(expected) \
+            or not all(isinstance(t, str) for t in tools) \
+            or set(tools) != expected:
+        return "tools"
+    for key in ("mcp_servers", "plugins", "permissionMode"):
+        if key not in event or event[key] != LOOKUP_INIT_EXPECT[key]:
+            return key
+    for key in LOOKUP_INIT_EXPECT["absent"]:
+        if key in event:
+            return key
+    source = event.get("apiKeySource")
+    sources = lookup_key_sources() if key_sources is None else key_sources
+    if not isinstance(source, str) or source not in sources:
+        return "apiKeySource"
+    return None
+
+
+def _init_summary(event) -> Dict:
+    """The non-secret init facts the smoke script prints."""
+    if not isinstance(event, dict):
+        return {}
+    tools = event.get("tools")
+    source = event.get("apiKeySource")
+    version = event.get("claude_code_version")
+    mode = event.get("permissionMode")
+    return {
+        "tools": (sorted(t for t in tools if isinstance(t, str))
+                  if isinstance(tools, list) else None),
+        "apiKeySource": source[:40] if isinstance(source, str) else None,
+        "claude_code_version": version[:20] if isinstance(version, str) else None,
+        "permissionMode": mode[:20] if isinstance(mode, str) else None,
+        "mcp_servers": (len(event["mcp_servers"])
+                        if isinstance(event.get("mcp_servers"), list) else None),
+        "plugins": (len(event["plugins"])
+                    if isinstance(event.get("plugins"), list) else None),
+        "memory_paths": "memory_paths" in event,
+    }
+
+
+@dataclass
+class LookupRun:
+    """One lookup CLI run. status: ok | init_ok (stop_after_init) |
+    guard_fail | timeout | preempted | cli_error | bad_output |
+    plan_refused | unavailable | refused. verdict refines it with a fixed
+    code (guard_fail:<field>, no_result, …) — never caller or model text."""
+    status: str
+    verdict: str = ""
+    result: Optional[Dict] = None
+    cited_urls: List[str] = field(default_factory=list)
+    evidence: List[Dict] = field(default_factory=list)
+    searches: int = 0
+    duration_s: float = 0.0
+    init_s: float = 0.0
+    lines_read: int = 0
+    started: bool = False
+    init: Dict = field(default_factory=dict)
+
+
+class _ReadTimeout(Exception):
+    pass
+
+
+class _OutputOverflow(Exception):
+    pass
+
+
+class _Cancelled(Exception):
+    pass
+
+
+class _LineReader:
+    """Line-at-a-time reads from a pipe with a deadline (a selector +
+    os.read), so the caller decides about EACH line before the next is
+    parsed, and a silent or flooding child can never hold the CLI lock
+    past the limit. A set [cancel] event ends a blocked read within
+    LOOKUP_READ_SLICE_SECONDS — a pre-emption never waits for pipe EOF,
+    which a descendant that left the process group could hold open."""
+
+    def __init__(self, fd: int, cancel: Optional[threading.Event] = None):
+        self._fd = fd
+        self._cancel = cancel
+        self._buf = b""
+        self._eof = False
+        self._total = 0
+        # selectors, not select.select: no FD_SETSIZE limit in a
+        # long-running process with many sockets.
+        self._selector = selectors.DefaultSelector()
+        self._selector.register(fd, selectors.EVENT_READ)
+
+    def close(self) -> None:
+        try:
+            self._selector.close()
+        except (OSError, ValueError):  # pragma: no cover - best effort
+            pass
+
+    def readline(self, deadline: float) -> bytes:
+        while True:
+            nl = self._buf.find(b"\n")
+            if nl >= 0:
+                line, self._buf = self._buf[:nl + 1], self._buf[nl + 1:]
+                return line
+            if self._eof:
+                line, self._buf = self._buf, b""
+                return line
+            if len(self._buf) > LOOKUP_MAX_LINE_BYTES:
+                raise _OutputOverflow()
+            if self._cancel is not None and self._cancel.is_set():
+                raise _Cancelled()
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise _ReadTimeout()
+            if self._cancel is not None:
+                remaining = min(remaining, LOOKUP_READ_SLICE_SECONDS)
+            if not self._selector.select(remaining):
+                continue  # re-checks cancel and the deadline
+            chunk = os.read(self._fd, 65536)
+            if not chunk:
+                self._eof = True
+                continue
+            self._total += len(chunk)
+            if self._total > LOOKUP_MAX_OUTPUT_BYTES:
+                raise _OutputOverflow()
+            self._buf += chunk
+
+
+def _signal_group(proc) -> None:
+    """SIGKILL the lookup's whole process group (it runs in its own
+    session). Only while the leader is unreaped, so the group id cannot
+    have been recycled. Never waits."""
+    if proc is not None and proc.returncode is None:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except OSError:
+            pass
+
+
+def _safe_lookup_url(value) -> Optional[str]:
+    if not isinstance(value, str) or len(value) > LOOKUP_URL_CAP:
+        return None
+    if not re.match(r"^https?://[^\s/?#]+", value):
+        return None
+    if any(ch.isspace() or ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        return None
+    return value
+
+
+def _tool_result_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(
+            b["text"] for b in content
+            if isinstance(b, dict) and isinstance(b.get("text"), str))
+    return ""
+
+
+def _links_from_structured(tool_use_result) -> Optional[Tuple[list, str]]:
+    """(urls, text) from the WebSearch tool's structured result
+    {query, results: [{tool_use_id, content: [{title, url}]} | str],
+    durationSeconds}; None when it is not that shape. Only the link
+    objects' url fields count — strings are the search's prose."""
+    if not isinstance(tool_use_result, dict):
+        return None
+    results = tool_use_result.get("results")
+    if not isinstance(results, list):
+        return None
+    urls, texts = [], []
+    for entry in results:
+        if isinstance(entry, str):
+            texts.append(entry)
+        elif isinstance(entry, dict) and isinstance(entry.get("content"), list):
+            urls.extend(link.get("url") for link in entry["content"]
+                        if isinstance(link, dict))
+    return urls, "\n".join(texts)
+
+
+def _links_from_text(text: str) -> Tuple[list, str]:
+    """(urls, prose) from a WebSearch tool_result's text: each line that
+    STARTS with 'Links: ' followed by a JSON array of {title, url} objects
+    and nothing else is parsed with json (raw_decode), never a URL regex;
+    an array of any other shape is just prose. The header line (the
+    search query) and the CLI's REMINDER line are not evidence."""
+    decoder = json.JSONDecoder()
+    urls, prose = [], []
+    for line in text.splitlines():
+        if line.startswith(_LINKS_PREFIX):
+            try:
+                arr, end = decoder.raw_decode(line, len(_LINKS_PREFIX))
+            except ValueError:
+                arr, end = None, 0
+            if isinstance(arr, list) and arr and not line[end:].strip() \
+                    and all(isinstance(e, dict) and set(e) <= {"title", "url"}
+                            for e in arr):
+                urls.extend(e.get("url") for e in arr)
+                continue
+        if line.startswith("Web search results for query:") \
+                or line.startswith("REMINDER:"):
+            continue
+        prose.append(line)
+    return urls, "\n".join(prose)
+
+
+def _collect_search_results(event: Dict, ws_ids: set, searches: list) -> None:
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, list):
+        return
+    blocks = [b for b in content
+              if isinstance(b, dict) and b.get("type") == "tool_result"
+              and isinstance(b.get("tool_use_id"), str)
+              and b["tool_use_id"] in ws_ids]
+    # The event-level tool_use_result belongs to the event's tool result;
+    # it is only unambiguous when there is exactly one.
+    structured = (_links_from_structured(event.get("tool_use_result"))
+                  if len(blocks) == 1 else None)
+    for block in blocks:
+        if block.get("is_error"):
+            continue
+        if structured is not None:
+            urls, text = structured
+        else:
+            urls, text = _links_from_text(
+                _tool_result_text(block.get("content")))
+        clean: List[str] = []
+        for url in urls:
+            url = _safe_lookup_url(url)
+            if url and url not in clean:
+                clean.append(url)
+        searches.append({"urls": clean,
+                         "text": text.strip()[:LOOKUP_EVIDENCE_TEXT_CAP]})
+
+
+# Tool calls a lookup may make, per content-block type. Any other block
+# whose type ends in "tool_use" (server_tool_use web_fetch or
+# code_execution, mcp_tool_use, a type a future CLI adds) is a kill.
+_LOOKUP_TOOL_USES = {
+    "tool_use": frozenset({"WebSearch", "StructuredOutput"}),
+    # The API's own search tool, the one WebSearch wraps.
+    "server_tool_use": frozenset({"web_search"}),
+}
+
+
+def _unexpected_tool_use(event: Dict, ws_ids: set) -> bool:
+    """Record WebSearch tool_use ids; True for any tool outside the
+    expected set (the init guard's promise, re-checked per call)."""
+    message = event.get("message")
+    content = message.get("content") if isinstance(message, dict) else None
+    if not isinstance(content, list):
+        return False
+    for block in content:
+        if not isinstance(block, dict):
+            continue
+        kind = block.get("type")
+        if not isinstance(kind, str) or not kind.endswith("tool_use"):
+            continue
+        name = block.get("name")
+        if name not in _LOOKUP_TOOL_USES.get(kind, ()):
+            return True
+        if kind == "tool_use" and name == "WebSearch" \
+                and isinstance(block.get("id"), str):
+            ws_ids.add(block["id"])
+    return False
+
+
+def _finish_lookup(run: LookupRun, envelope: Dict, refused: bool) -> None:
+    if envelope.get("is_error"):
+        text = envelope.get("result")
+        if refused or envelope.get("api_error_status") == 429 or (
+                isinstance(text, str) and "credit" in text.lower()):
+            run.status = run.verdict = "plan_refused"
+        else:
+            subtype = envelope.get("subtype")
+            run.status = "cli_error"
+            run.verdict = (subtype if isinstance(subtype, str)
+                           and _LOOKUP_CODE_RE.match(subtype) else "is_error")
+        return
+    result = envelope.get("structured_output")
+    if not isinstance(result, dict):
+        result = None
+        text = envelope.get("result")
+        if isinstance(text, str) and text.strip():
+            try:
+                parsed = parse_ai_json(text)
+            except (ValueError, RecursionError):
+                parsed = None
+            result = parsed if isinstance(parsed, dict) else None
+    if result is None:
+        run.status = run.verdict = "bad_output"
+        return
+    run.result = result
+    run.status = run.verdict = "ok"
+
+
+def _read_lookup_stream(proc, run: LookupRun, start: float,
+                        on_line, stop_after_init: bool,
+                        cancel: Optional[threading.Event] = None) -> None:
+    reader = _LineReader(proc.stdout.fileno(), cancel)
+    deadline = start + lookup_timeout_seconds()
+    ws_ids: set = set()
+    searches: list = []
+    envelope = None
+    refused = False
+    try:
+        line = reader.readline(
+            min(deadline, start + lookup_init_deadline_seconds()))
+        if not line:
+            run.status, run.verdict = "cli_error", "no_init"
+            return
+        run.lines_read = 1
+        run.init_s = round(time.monotonic() - start, 2)
+        try:
+            event = json.loads(line)
+        except (ValueError, RecursionError):
+            event = None
+        verdict = lookup_init_verdict(event)
+        if verdict is not None:
+            _signal_group(proc)  # before ANY further line is read
+            run.status, run.verdict = "guard_fail", f"guard_fail:{verdict}"
+            run.init = _init_summary(event)
+            return
+        run.init = _init_summary(event)
+        if on_line is not None:
+            on_line(line.decode("utf-8", "replace"))
+        if stop_after_init:
+            _signal_group(proc)
+            run.status = run.verdict = "init_ok"
+            return
+        while True:
+            line = reader.readline(deadline)
+            if not line:
+                break
+            run.lines_read += 1
+            if on_line is not None:
+                on_line(line.decode("utf-8", "replace"))
+            try:
+                event = json.loads(line)
+            except (ValueError, RecursionError):
+                continue
+            if not isinstance(event, dict):
+                continue
+            kind = event.get("type")
+            if kind == "assistant":
+                if _unexpected_tool_use(event, ws_ids):
+                    _signal_group(proc)
+                    run.status, run.verdict = "guard_fail", "guard_fail:tool_use"
+                    return
+            elif kind == "user":
+                _collect_search_results(event, ws_ids, searches)
+            elif kind == "rate_limit_event":
+                info = event.get("rate_limit_info")
+                if isinstance(info, dict) and (
+                        info.get("status") == "rejected"
+                        or info.get("errorCode") == "credits_required"):
+                    refused = True
+            elif kind == "result":
+                envelope = event
+                break
+    except _ReadTimeout:
+        _signal_group(proc)
+        if run.lines_read == 0:
+            run.status, run.verdict = "guard_fail", "guard_fail:init_timeout"
+        else:
+            run.status, run.verdict = "timeout", "timeout"
+        return
+    except _OutputOverflow:
+        _signal_group(proc)
+        run.status, run.verdict = "cli_error", "output_too_large"
+        return
+    except _Cancelled:
+        # Pre-empted: the group is already dead or dying; do not wait
+        # for EOF (an escaped descendant could hold the pipe open).
+        _signal_group(proc)
+        run.status = run.verdict = "preempted"
+        return
+    except (OSError, ValueError):
+        _signal_group(proc)
+        run.status, run.verdict = "cli_error", "read_error"
+        return
+    finally:
+        reader.close()
+        run.searches = len(ws_ids)
+        cited: List[str] = []
+        for search in searches:
+            for url in search["urls"]:
+                if url not in cited and len(cited) < LOOKUP_MAX_URLS:
+                    cited.append(url)
+        run.cited_urls = cited
+        run.evidence = searches
+    _signal_group(proc)  # the answer is in; nothing else is needed
+    if envelope is None:
+        run.status, run.verdict = "cli_error", "no_result"
+        return
+    _finish_lookup(run, envelope, refused)
+
+
+def lookup_restaurant(
+    prompt_text: str,
+    schema_json: str,
+    model: Optional[str] = None,
+    on_proc: Optional[Callable] = None,
+    on_line: Optional[Callable[[str], None]] = None,
+    stop_after_init: bool = False,
+    cancel: Optional[threading.Event] = None,
+) -> LookupRun:
+    """Run ONE restaurant lookup through the CLI (Claude backend only).
+
+    [prompt_text] is composed server-side (lookup_contract.compose_prompt)
+    and goes in on stdin. [on_proc] is called with the Popen right after
+    spawn (False → kill at once: pre-empted before it began) and with None
+    right before the child is reaped. [on_line] sees each raw line the
+    runner processed (the smoke script's fixture recorder).
+    [stop_after_init] kills the run right after a PASSING init guard —
+    the smoke script's zero-usage check of the guard on the VM.
+    [cancel] set (pre-emption) ends the run as 'preempted' at once: no
+    spawn if it is already set, and a blocked read stops within
+    LOOKUP_READ_SLICE_SECONDS instead of waiting for pipe EOF.
+
+    Never raises for run failures; the LookupRun says what happened.
+    Does NOT take _CLI_LOCK — run_lookup_exclusive does.
+    """
+    start = time.monotonic()
+    run = LookupRun(status="unavailable", verdict="cli_missing")
+    cli = _cli_path()
+    if not is_configured() or cli is None:
+        _log_lookup(run)
+        return run
+    if not (prompt_text or "").strip():
+        run.verdict = "empty_prompt"
+        _log_lookup(run)
+        return run
+    if cancel is not None and cancel.is_set():
+        run.status = run.verdict = "preempted"
+        _log_lookup(run)
+        return run
+    work_dir = tempfile.mkdtemp(prefix="ct_lookup_")
+    proc = None
+    try:
+        try:
+            proc = subprocess.Popen(
+                build_lookup_argv(cli, schema_json, model or lookup_model()),
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.DEVNULL,
+                cwd=work_dir,
+                env=lookup_env(),
+                start_new_session=True,
+            )
+        except OSError:
+            run.status, run.verdict = "cli_error", "spawn_failed"
+            return run
+        run.started = True
+        if on_proc is not None and on_proc(proc) is False:
+            _signal_group(proc)
+            run.status = run.verdict = "preempted"
+            return run
+        try:
+            proc.stdin.write(prompt_text.encode("utf-8"))
+            proc.stdin.close()
+        except OSError:
+            pass  # the child died early; the reader sees its exit
+        _read_lookup_stream(proc, run, start, on_line, stop_after_init,
+                            cancel)
+        return run
+    finally:
+        if proc is not None:
+            if on_proc is not None:
+                on_proc(None)
+            _signal_group(proc)
+            try:
+                proc.wait(timeout=LOOKUP_EXIT_GRACE_SECONDS)
+            except subprocess.TimeoutExpired:
+                pass
+            for pipe in (proc.stdin, proc.stdout):
+                try:
+                    pipe.close()
+                except (OSError, AttributeError):
+                    pass
+        shutil.rmtree(work_dir, ignore_errors=True)
+        run.duration_s = round(time.monotonic() - start, 2)
+        if run.status != "unavailable":
+            _log_lookup(run)
+
+
+def _log_lookup(run: LookupRun) -> None:
+    level = logging.WARNING if run.status in (
+        "guard_fail", "cli_error", "bad_output") else logging.INFO
+    _lookup_log.log(
+        level, "Restaurant lookup %s (%s) in %.1fs; searches=%d lines=%d",
+        run.status, run.verdict, run.duration_s, run.searches, run.lines_read)
+
+
+def _register_lookup_proc(proc) -> bool:
+    with _LOOKUP_STATE_LOCK:
+        _LOOKUP_STATE["proc"] = proc
+        return not (proc is not None and _LOOKUP_STATE["preempted"])
+
+
+def _preempt_locked() -> None:
+    """Mark the holding lookup pre-empted, wake its reader and kill its
+    process group. Call with _LOOKUP_STATE_LOCK held."""
+    _LOOKUP_STATE["preempted"] = True
+    cancel = _LOOKUP_STATE["cancel"]
+    if cancel is not None:
+        cancel.set()
+    _signal_group(_LOOKUP_STATE["proc"])
+
+
+def preempt_lookup() -> bool:
+    """Kill a lookup that holds the CLI so a foreground request can run.
+    True when a lookup held it. (Foreground callers go through
+    _acquire_cli_for_foreground, which also keeps the next lookup from
+    taking the lock while they wait.)"""
+    with _LOOKUP_STATE_LOCK:
+        if not _LOOKUP_STATE["holding"]:
+            return False
+        _preempt_locked()
+    _lookup_log.info("Restaurant lookup pre-empted by a foreground request.")
+    return True
+
+
+def run_lookup_exclusive(
+    prompt_text: str,
+    schema_json: str,
+    model: Optional[str] = None,
+    on_start: Optional[Callable[[], bool]] = None,
+) -> Optional[LookupRun]:
+    """lookup_restaurant under _CLI_LOCK, pre-emptible by any photo,
+    leftover or text request. None = the CLI is busy right now, or a
+    foreground request is waiting for it (the job worker polls again).
+    [on_start] runs once the lock is held and before the CLI starts;
+    False aborts with status 'refused' (the daily cap)."""
+    with _LOOKUP_STATE_LOCK:
+        if _LOOKUP_STATE["fg_waiting"] or not _CLI_LOCK.acquire(blocking=False):
+            return None
+        cancel = threading.Event()
+        _LOOKUP_STATE.update(holding=True, proc=None, preempted=False,
+                             cancel=cancel)
+    try:
+        if on_start is not None and not on_start():
+            return LookupRun(status="refused", verdict="refused")
+        run = lookup_restaurant(prompt_text, schema_json, model,
+                                on_proc=_register_lookup_proc, cancel=cancel)
+        with _LOOKUP_STATE_LOCK:
+            preempted = bool(_LOOKUP_STATE["preempted"])
+        if preempted and run.status != "ok":
+            run.status = run.verdict = "preempted"
+        return run
+    finally:
+        with _LOOKUP_STATE_LOCK:
+            _LOOKUP_STATE.update(holding=False, proc=None, preempted=False,
+                                 cancel=None)
+            _CLI_LOCK.release()

@@ -16,6 +16,7 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
+import '../core/restaurant_assist_logic.dart' show dropAssistClaims;
 import '../services/analyzer/platform_decode.dart';
 import '../services/photo/background_time.dart';
 import '../services/photo/capture_dating.dart' show glassesCapturedAt;
@@ -148,6 +149,11 @@ const String glassesExcludedReason = 'glasses_off';
 /// slot left for (design G3, GlassesQuota): released for the next scan.
 const String glassesCappedReason = 'glasses_capped';
 
+/// [PhotoOutcome.reason] of a leftover verdict whose meal changed (twice)
+/// or was deleted before the deduction could be written (design R6a):
+/// released, nothing deducted; a later scan or a retry asks again.
+const String leftoverConflictReason = 'leftover_conflict';
+
 /// The Glasses check card's outcome (glasses_check.dart) for [o], or null
 /// for a verdict that is not this photo's own: already logged, being
 /// analyzed by another run, a deliberate duplicate of minutes ago.
@@ -195,6 +201,7 @@ PhotoOutcome? unannouncedOutcome(PhotoOutcome o,
           retryable: true,
           errorKind: o.errorKind,
           detail: o.detail,
+          reason: o.reason,
           shared: shared,
           picked: picked),
       PhotoOutcomeKind.saved ||
@@ -342,6 +349,27 @@ class PhotoPipeline {
   // process() never throws (contract), so the chain cannot break.
   Future<void> _tail = Future.value();
 
+  /// Photos chained onto [_tail] whose turn has not ended yet, and
+  /// process() calls running (a direct call bypasses the tail) — what
+  /// [isIdle] reads.
+  int _queued = 0;
+  int _running = 0;
+
+  /// No photo is queued or in flight and no reservation is held (design
+  /// R6b): the restaurant assist starts a lookup only then, so a lookup
+  /// never competes with a photo for the analyzer, the network or the
+  /// iOS background time.
+  bool get isIdle => _queued == 0 && _running == 0 && _held == null;
+
+  /// Chains [photo] onto the global FIFO tail, counted for [isIdle] until
+  /// its turn ends.
+  Future<PhotoOutcome> _chain(IntakePhoto photo) {
+    _queued++;
+    final slot = _tail.then((_) => process(photo));
+    slot.whenComplete(() => _queued--).ignore();
+    return slot;
+  }
+
   PhotoPipeline(
       {required this.dao,
       required this.analyzer,
@@ -415,7 +443,7 @@ class PhotoPipeline {
   /// are re-offered by later scans.
   void bind(PhotoIntake intake) {
     intake.attachSink((p, _) {
-      final slot = _tail.then((_) => process(p));
+      final slot = _chain(p);
       _tail = slot.then((_) {});
       return slot.then((o) => !o.retryable);
     });
@@ -427,7 +455,7 @@ class PhotoPipeline {
   /// directly would run a second analyzer call concurrently (free-tier RPM
   /// 429s) and hold two originals in memory.
   Future<PhotoOutcome> enqueue(IntakePhoto photo) {
-    final slot = _tail.then((_) => process(photo));
+    final slot = _chain(photo);
     _tail = slot.then((_) {});
     return slot;
   }
@@ -446,7 +474,7 @@ class PhotoPipeline {
   /// watcher's bind() stays quiet about them.
   void bindStream(Stream<IntakePhoto> photos) {
     _subs.add(photos.listen((p) {
-      final slot = _tail.then((_) => process(p));
+      final slot = _chain(p);
       _tail = slot.then((o) {
         // A transient failure was released, and the share copy is already
         // gone: nothing will ever re-offer it, so silence read as "it
@@ -663,22 +691,27 @@ class PhotoPipeline {
   /// exactly one task per photo. A lost reservation's second settle
   /// ([_afterLost]) stays inside the same task.
   Future<PhotoOutcome> process(IntakePhoto photo) async {
-    _foodChecked = null;
-    final time = backgroundTime;
-    final outcome = !photo.deliberate && _inBackground()
-        ? _waitsForForeground
-        : await (time == null
-            ? _process(photo)
-            : time.guard('photo', () => _process(photo)));
-    // Settled or released by now: no reservation is held past process().
-    _held = null;
-    final checked = _foodChecked;
-    _foodChecked = null;
+    _running++;
     try {
-      onOutcome?.call(photo, outcome);
-    } catch (_) {}
-    await _recordGlasses(photo, outcome, checked);
-    return outcome;
+      _foodChecked = null;
+      final time = backgroundTime;
+      final outcome = !photo.deliberate && _inBackground()
+          ? _waitsForForeground
+          : await (time == null
+              ? _process(photo)
+              : time.guard('photo', () => _process(photo)));
+      // Settled or released by now: no reservation is held past process().
+      _held = null;
+      final checked = _foodChecked;
+      _foodChecked = null;
+      try {
+        onOutcome?.call(photo, outcome);
+      } catch (_) {}
+      await _recordGlasses(photo, outcome, checked);
+      return outcome;
+    } finally {
+      _running--;
+    }
   }
 
   /// [held]: a verdict this photo ALREADY got, with the meal snapshot its
@@ -944,17 +977,45 @@ class PhotoPipeline {
       final autoIdx =
           autoLeftoverIndex(analysis, candidateCount: recent.length);
       if (autoIdx != null) {
-        final original = recent[autoIdx];
-        final applied = applyLeftover(original.analysis, analysis,
-            leftoverPhotoMd5: hash,
-            appliedAtIso: DateTime.now().toIso8601String());
-        if (applied != null) {
+        final candidate = recent[autoIdx];
+        // Design R6a: [recent] is as old as the model call (10–60 s). The
+        // deduction is re-based on the meal as stored NOW — same model
+        // fractions — and written only while the meal still holds exactly
+        // that text (compare-and-set). A meal changed between that read
+        // and the write (a restaurant lookup, an edit) gets one more
+        // re-based try; a second miss, or a meal deleted meanwhile,
+        // releases the photo for the next scan rather than cutting numbers
+        // that no longer exist, or logging the leftovers as a meal.
+        final appliedAt = DateTime.now().toIso8601String();
+        ({Meal meal, LeftoverResult applied})? cut;
+        var unusable = false;
+        for (var attempt = 0; attempt < 2 && cut == null; attempt++) {
+          final snap = await dao.mealSnapshot(candidate.id);
+          if (snap == null) break;
+          final applied = applyLeftover(snap.meal.analysis, analysis,
+              leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
+          if (applied == null) {
+            unusable = true;
+            break;
+          }
           // Tombstone and deduction in ONE owner-checked transaction: a run
           // that lost the photo (to another run, or to the user's own
           // 手动记录) must not cut the earlier meal, and a kill or a failed
           // update can no longer tombstone the photo without the deduction.
-          await dao.applyLeftoverVerdict(hash, original.id, applied.adjusted,
-              ownerStamp: stamp);
+          if (await dao.applyLeftoverVerdict(
+              hash, candidate.id, applied.adjusted,
+              ownerStamp: stamp, expectedRaw: snap.rawAnalysis)) {
+            cut = (meal: snap.meal, applied: applied);
+          }
+        }
+        if (cut == null && !unusable) {
+          await dao.releasePhotoHash(hash, ownerStamp: stamp);
+          _held = null;
+          return _leftoverConflict;
+        }
+        if (cut != null) {
+          final original = cut.meal;
+          final applied = cut.applied;
           final newKcal =
               safeNumber(applied.adjusted['total_calories']).round();
           final name = mealDescription(original.analysis);
@@ -989,8 +1050,12 @@ class PhotoPipeline {
 
       // How the photo was taken (design G2a): the intake's reading of its
       // own bytes, never the model's — a reply carrying a 'capture' key is
-      // not evidence of a camera. No coordinates, no timestamps.
+      // not evidence of a camera. No coordinates, no timestamps. Nor is an
+      // assist block or a `published` flag in the reply evidence that a
+      // chain published anything (design R6a): only a verified lookup,
+      // later, writes those.
       analysis.remove('capture');
+      dropAssistClaims(analysis);
       final capture = photo.capture;
       if (capture != null) analysis['capture'] = captureAnalysis(capture);
 
@@ -1192,6 +1257,17 @@ class PhotoPipeline {
       errorKind: AnalysisErrorKind.unknown,
       detail: 'glasses preview',
       reason: glassesPreviewReason);
+
+  /// An automatic leftover verdict whose meal changed twice between the
+  /// re-read and the write, or was deleted meanwhile (design R6a):
+  /// released, so the next scan asks again against the day as it is then.
+  static const _leftoverConflict = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The meal these leftovers belong to changed while the photo was '
+      'analyzed: nothing was deducted.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'leftover conflict',
+      reason: leftoverConflictReason);
 
   /// [abandon]'s verdict: released, offered again by a later scan.
   static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,

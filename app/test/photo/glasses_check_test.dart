@@ -83,6 +83,29 @@ void main() {
       expect(e.model, hasLength(glassesCheckMaxText));
     });
 
+    test('a photo whose creation date is only its import time: the lag '
+        'runs from the EXIF shutter, not 0 s', () {
+      // Shot at lunch yesterday (-05:00), imported 25 h later with
+      // creationDate = the import (the case the dating guard re-dates).
+      final importedAt = DateTime.utc(2026, 10, 24, 17, 30).toLocal();
+      final e = GlassesCheckEntry.of(
+          photo('g1',
+              capture: CaptureMeta(
+                  device: CaptureDevice.metaGlasses,
+                  strength: CaptureStrength.strong,
+                  signal: CaptureSignal.filename,
+                  exif: ExifCapture(
+                      make: 'Meta AI',
+                      model: 'Ray-Ban Meta Smart Glasses',
+                      dateTimeOriginal: DateTime(2026, 10, 23, 11, 30),
+                      offsetTimeOriginal: const Duration(hours: -5)),
+                  createDate: importedAt,
+                  addedDate: importedAt.add(const Duration(seconds: 20)))),
+          outcome: GlassesCheckOutcome.logged,
+          at: importedAt.add(const Duration(minutes: 1)));
+      expect(e.lagSeconds, 25 * 3600 + 20);
+    });
+
     test('a broken clock gives no lag rather than a silly one', () {
       final e = GlassesCheckEntry.of(
           photo('g1',
@@ -159,6 +182,38 @@ void main() {
       final rows = await readGlassesChecks(store: store, now: now);
       expect([for (final r in rows) (r.assetId, r.outcome)],
           [('a', 'logged'), ('b', 'logged')]);
+    });
+
+    test('a later verdict that does not know the import lag (a deliberate '
+        're-add) keeps the one the earlier row knew', () async {
+      GlassesCheckEntry withLag(String id, DateTime at, String outcome,
+              int? lag) =>
+          GlassesCheckEntry(
+              assetId: id, at: at, outcome: outcome, lagSeconds: lag);
+      final earlier = now.subtract(const Duration(hours: 1));
+      await recordGlassesCheck(
+          store, withLag('a', earlier, 'not_food', 25 * 3600),
+          now: now);
+      await recordGlassesCheck(store, withLag('a', now, 'logged', null),
+          now: now);
+      var rows = await readGlassesChecks(store: store, now: now);
+      expect([for (final r in rows) (r.outcome, r.lagSeconds)],
+          [('logged', 25 * 3600)]);
+      // A lag the new verdict knows is the one kept.
+      await recordGlassesCheck(store, withLag('a', now, 'logged', 90),
+          now: now);
+      rows = await readGlassesChecks(store: store, now: now);
+      expect(rows.single.lagSeconds, 90);
+      // Another photo's lag never carries over, nor a shared file's.
+      await recordGlassesCheck(store, withLag('b', now, 'logged', null),
+          now: now);
+      await recordGlassesCheck(store, withLag('', earlier, 'logged', 60),
+          now: now);
+      await recordGlassesCheck(store, withLag('', now, 'logged', null),
+          now: now);
+      rows = await readGlassesChecks(store: store, now: now);
+      expect({for (final r in rows) (r.assetId, r.lagSeconds)},
+          {('a', 90), ('b', null), ('', 60), ('', null)});
     });
 
     test('the newest 20 of the last 14 days', () async {

@@ -152,6 +152,146 @@ void main() {
     });
   });
 
+  // R6b: the restaurant assist lives in the app engine, reads the real
+  // pipeline, analyzer and registry, counts against the app's daily ledger,
+  // and looks once the launch catch-up's photos are in.
+  group('the restaurant assist (MealAssist)', () {
+    String init() => _body(
+      _source('lib/ui/di.dart'),
+      'static Future<AppServices> init(',
+      indent: '  ',
+    );
+
+    test('di.dart builds it from the real pipeline, analyzer and registry',
+        () {
+      expect(
+        init(),
+        _wired(
+          r'final analyzer = MultiProviderAnalyzer\(settings, '
+          r'lookupBudget: assistBudget\);',
+        ),
+      );
+      expect(
+        init(),
+        _wired(
+          r'final assistBudget = AssistDailyBudget\('
+          r'await SharedPreferences\.getInstance\(\)\);',
+        ),
+      );
+      final source = init();
+      final from = source.indexOf('final mealAssist = MealAssist(');
+      expect(from, isNot(-1));
+      final build = source.substring(from, source.indexOf('\n    );\n', from));
+      for (final wire in [
+        r'dao: dao,',
+        r'lookups: analyzer,',
+        r'analyzerBusy: analyzer\.analyzerBusy,',
+        r'pipelineIdle: \(\) => pipeline\.isIdle,',
+        r'inUse: mealInUse\.isInUse,',
+        r'budget: assistBudget,',
+        r'state: AssistLocalState\.platform\(\),',
+        r'mealsChanged: mealsChangedSignal,',
+        r'onMealsChanged: signalMealsChanged,',
+        r'inForeground: appEngineInForeground,',
+        // The region: the locale name's, else the preferred languages'
+        // (review 2026-10-25: a region-less 'zh_Hans' read as not the US).
+        r'country: \(\) => deviceRegion\( Platform\.localeName, '
+            r'PlatformDispatcher\.instance\.locales\.map\(\(l\) => '
+            r'l\.countryCode\) \),',
+        r'repliesInChinese: \(\) => settings\.repliesInChinese,',
+        // R6c: the location path is iOS only; Android is brand-only.
+        r'location: Platform\.isIOS \? PhotoLocationReader\(photoLibrary\) '
+            r': null,',
+        r'places: Platform\.isIOS \? MapKitPlaces\(\) : null,',
+        r'placesStore: AssistPlacesStore\.platform\(\),',
+        // R7a: the mode, 'Use photo location' and the consent, read fresh
+        // from the real settings on every decision.
+        r'settings: \(\) => AssistSettingsView\( '
+            r'mode: AssistMode\.fromWire\(settings\.restaurantAssist\), '
+            r'useLocation: settings\.restaurantAssistLocation, '
+            r'consentAt: settings\.restaurantAssistConsentAt, '
+            r'consentRecipient: settings\.restaurantAssistConsentRecipient, '
+            r'\),',
+      ]) {
+        expect(build, _wired(wire), reason: wire);
+      }
+      expect(build, isNot(contains('AssistSettingsView.off')),
+          reason: 'R7a stores the settings: the assist reads them');
+      // R7a: Settings' Restaurant nutrition group and the consent sheets
+      // see the same analyzer, MealAssist and server; the location only on
+      // iOS; and the shell gets them through UiServices.
+      final controlsAt = source.indexOf(
+          'final restaurantAssist = RestaurantAssistControls(');
+      expect(controlsAt, isNot(-1));
+      final controls = source.substring(
+          controlsAt, source.indexOf('\n    );\n', controlsAt));
+      for (final wire in [
+        r'lookupSupport: analyzer\.lookupSupport,',
+        r'clearLearnedPlaces: mealAssist\.clearLearnedPlaces,',
+        r'consentNeeded: mealAssist\.consentNeeded,',
+        r'serverState: \(\) async => '
+            r'assistServerStateOf\(await serverAnalyzer\.serverFeatures\(\)\),',
+        r'locationSupported: Platform\.isIOS,',
+      ]) {
+        expect(controls, _wired(wire), reason: wire);
+      }
+      expect(init(), _wired(r'restaurantAssist: restaurantAssist,'));
+      expect(init(), _wired(r'mealAssist\.start\(\);'));
+      expect(
+        init(),
+        _wired(
+          r'foregroundCatchUp\(photoIntake, shouldContinue: '
+          r'Platform\.isIOS \? appEngineInForeground : null\) '
+          r'\.whenComplete\(\(\) => unawaited\(mealAssist\.sweep\(\)\)\)',
+        ),
+      );
+      expect(init(), _wired(r'if \(!catchingUp\) unawaited\(mealAssist\.sweep\(\)\);'));
+    });
+
+    test('background_glue.dart never references it, and its PhotoPipeline '
+        'is built as before', () {
+      final glue = _source('lib/ui/background_glue.dart');
+      for (final banned in [
+        'MealAssist',
+        'meal_assist',
+        'assist_local_state',
+        'AssistDailyBudget',
+        'lookupNow',
+        'services/assist/',
+        // R6c: no photo position or places query in the background engine.
+        'PhotoLocationReader',
+        'photo_location',
+        'MapKitPlaces',
+        'PlaceResolver',
+        'services/places/',
+        'AssistPlacesStore',
+        // R7a: no consent sheet, Settings group or their seams either.
+        'RestaurantAssistControls',
+        'restaurant_assist_controls',
+        'restaurant_consent_sheet',
+      ]) {
+        expect(glue, isNot(contains(banned)), reason: banned);
+      }
+      final after = _body(glue, 'Future<bool> _runAfterLaunch({');
+      expect(
+        after,
+        _wired(r'pipeline: \(\) async => inFlight\.pipeline = PhotoPipeline\('),
+      );
+      expect(after, _wired(r'analyzer: createMultiProviderAnalyzer\(settings\),'));
+    });
+
+    test('the pipeline constructor takes nothing from the assist', () {
+      final pipeline = _source('lib/ui/photo_pipeline.dart');
+      final from = pipeline.indexOf('\n  PhotoPipeline(\n');
+      expect(from, isNot(-1));
+      final ctor = pipeline.substring(
+          from, pipeline.indexOf('_clock = clock ?? DateTime.now;', from));
+      expect(ctor, isNot(contains('ssist')));
+      expect(pipeline, isNot(contains('meal_assist')));
+      expect(pipeline, contains('bool get isIdle =>'));
+    });
+  });
+
   group('lib/ui/app.dart (the resume catch-up)', () {
     test('is foregroundCatchUp, stopping on iOS once the app is left', () {
       final resume = _body(

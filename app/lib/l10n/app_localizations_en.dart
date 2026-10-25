@@ -792,6 +792,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Couldn\'t estimate the leftovers from that photo.';
 
   @override
+  String get leftoverConflict =>
+      'That meal changed while the leftovers were being estimated, so nothing was deducted. Try again.';
+
+  @override
   String get leftoverNoMeals =>
       'No meals from today or yesterday to deduct from.';
 
@@ -1631,6 +1635,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fixAppliedHeader => 'Applied this session';
 
   @override
+  String get editorSaveConflict =>
+      'This meal was just updated — please review.';
+
+  @override
   String editorSaveFailed(String error) {
     return 'Could not save: $error';
   }
@@ -2070,6 +2078,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reasonServerFailed => 'your server could not analyze it';
 
   @override
+  String get reasonLeftoverConflict =>
+      'the meal it belongs to changed meanwhile';
+
+  @override
   String get reasonNoApiKey => 'no API key is set';
 
   @override
@@ -2345,4 +2357,362 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get nlChatFallback =>
       'I\'m not sure what you mean. Try describing a meal or correction!';
+
+  @override
+  String assistAppliedSnack(String brand, String before, String after) {
+    return 'Used $brand published numbers: $before → $after kcal';
+  }
+
+  @override
+  String get assistUndo => 'Undo';
+
+  @override
+  String get settingsSectionRestaurant => 'Restaurant nutrition';
+
+  @override
+  String get settingsRowRestaurantMode => 'Lookups';
+
+  @override
+  String get restaurantModeSheetTitle => 'Restaurant nutrition lookup';
+
+  @override
+  String get restaurantModeOff => 'Off';
+
+  @override
+  String get restaurantModeAuto => 'When unsure';
+
+  @override
+  String get restaurantModeAlways => 'Always';
+
+  @override
+  String get restaurantModeHelper =>
+      'When your AI is unsure about a restaurant meal, BiteWise checks whether the chain publishes nutrition for it.';
+
+  @override
+  String get settingsRowRestaurantLocation => 'Use photo location';
+
+  @override
+  String get restaurantLocationOffHint =>
+      'Brand only: uses brand names printed on cups, bags or receipts.';
+
+  @override
+  String get restaurantLocationAndroidHint =>
+      'On Android, lookups use printed brands only for now.';
+
+  @override
+  String get restaurantLocationHttpHint =>
+      'Nearby-restaurant lookups need https on your server. Brand-only lookups still work.';
+
+  @override
+  String get restaurantRecipientClaudePlan =>
+      'Lookups go to your own server, which uses Claude web search (Anthropic).';
+
+  @override
+  String get restaurantRecipientAnthropic =>
+      'Lookups go to Anthropic (Claude web search) with your key.';
+
+  @override
+  String get restaurantRecipientOpenrouter =>
+      'Lookups go to OpenRouter and its search partner Exa.';
+
+  @override
+  String restaurantUnsupported(String provider) {
+    return 'Not available with $provider yet.';
+  }
+
+  @override
+  String get restaurantNeedsServerAddress =>
+      'Add your server address to use this.';
+
+  @override
+  String get restaurantSuggestOnly =>
+      'With your own server, published numbers are only suggested: you decide whether to use them.';
+
+  @override
+  String get restaurantServerOutdated =>
+      'Your server needs an update for this feature.';
+
+  @override
+  String get restaurantServerDisabled =>
+      'Restaurant lookup is turned off on your server.';
+
+  @override
+  String get settingsRowRestaurantPaused => 'Lookups paused';
+
+  @override
+  String get restaurantPausedReview => 'Review';
+
+  @override
+  String get restaurantPausedHint =>
+      'Lookups are paused until you agree to send them to the new AI service or server.';
+
+  @override
+  String get settingsRowClearLearnedPlaces => 'Clear learned places';
+
+  @override
+  String get clearPlacesTitle => 'Clear learned places?';
+
+  @override
+  String get clearPlacesBody =>
+      'BiteWise forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.';
+
+  @override
+  String get clearPlacesConfirm => 'Clear';
+
+  @override
+  String get clearPlacesDone => 'Learned places cleared.';
+
+  @override
+  String get restaurantOffTitle => 'Turn off restaurant lookup?';
+
+  @override
+  String get restaurantOffBody => 'Pending lookups are cancelled.';
+
+  @override
+  String get restaurantOffClearPlaces => 'Also clear learned places';
+
+  @override
+  String get restaurantOffConfirm => 'Turn off';
+
+  @override
+  String get restaurantConsentTitle => 'Look up restaurant nutrition?';
+
+  @override
+  String get restaurantConsentWhat =>
+      'When a meal looks like it came from a restaurant, BiteWise can check whether the chain publishes nutrition for it.';
+
+  @override
+  String get restaurantConsentMaps =>
+      'On this phone, BiteWise reads where the photo was taken and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.';
+
+  @override
+  String restaurantConsentSent(String recipient) {
+    return 'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.';
+  }
+
+  @override
+  String restaurantConsentSentAndroid(String recipient) {
+    return 'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. The photo is never sent for this.';
+  }
+
+  @override
+  String get restaurantConsentBrandOnly =>
+      'Brand only skips the location and uses only brand names printed on cups, bags or receipts in the photo.';
+
+  @override
+  String get restaurantConsentHttps =>
+      'Chain names found from the photo\'s location go to your server only over https. With an http address, lookups use printed brands only.';
+
+  @override
+  String get restaurantConsentApply =>
+      'BiteWise replaces your AI\'s numbers only when the chain\'s own website publishes them and the match is clear. Otherwise you get a suggestion. You can undo any change.';
+
+  @override
+  String get restaurantConsentSuggestOnly =>
+      'With your own server, BiteWise only suggests the chain\'s published numbers. Your AI\'s numbers change only when you accept a suggestion, and you can undo it.';
+
+  @override
+  String get restaurantConsentOff =>
+      'You can turn this off at any time in Settings.';
+
+  @override
+  String get restaurantRecipientNameClaudePlan =>
+      'your own server (it uses Claude web search, by Anthropic)';
+
+  @override
+  String get restaurantRecipientNameAnthropic =>
+      'Anthropic (Claude web search)';
+
+  @override
+  String get restaurantRecipientNameOpenrouter =>
+      'OpenRouter and its search partner Exa';
+
+  @override
+  String get restaurantConsentUseLocation => 'Use location';
+
+  @override
+  String get restaurantConsentBrandOnlyButton => 'Brand only';
+
+  @override
+  String get restaurantConsentNotNow => 'Not now';
+
+  @override
+  String assistChipApplied(String brand, int count) {
+    return '$brand numbers used for $count item(s)';
+  }
+
+  @override
+  String assistChipSuggested(String brand, String kcal) {
+    return '$brand publishes $kcal kcal — tap to review';
+  }
+
+  @override
+  String get assistUnseenLabel => 'Updated from restaurant numbers';
+
+  @override
+  String get assistCardApplied => 'Published numbers in use';
+
+  @override
+  String get assistCardSuggested =>
+      'Suggestion: your AI\'s numbers are unchanged';
+
+  @override
+  String assistSourceHost(String host) {
+    return 'Source: $host';
+  }
+
+  @override
+  String get assistSourceNotOfficial => 'Not the chain\'s own website';
+
+  @override
+  String assistVia(String provider, String date) {
+    return 'via $provider · $date';
+  }
+
+  @override
+  String get assistGrounded => 'Number found on the source page';
+
+  @override
+  String get assistNotGrounded => 'Not confirmed on the source page';
+
+  @override
+  String get assistUseEstimate => 'Use AI estimate';
+
+  @override
+  String get assistWrongRestaurant => 'Wrong restaurant';
+
+  @override
+  String get assistNotRestaurant => 'Not from a restaurant';
+
+  @override
+  String get assistCorrect => 'Correct';
+
+  @override
+  String get assistUsePublished => 'Use published numbers';
+
+  @override
+  String get assistLookUp => 'Look up restaurant nutrition';
+
+  @override
+  String get assistStale =>
+      'This meal was changed after the restaurant numbers were used.';
+
+  @override
+  String get assistSuggestionStale =>
+      'This meal was changed after this suggestion.';
+
+  @override
+  String get assistContextOnly =>
+      'No published nutrition found — AI estimate kept';
+
+  @override
+  String get assistPickerTitle => 'Which restaurant?';
+
+  @override
+  String get assistPickerSearch => 'Search chains';
+
+  @override
+  String get assistPickerNone => 'No chain matches.';
+
+  @override
+  String get assistLookingUp => 'Looking up restaurant nutrition…';
+
+  @override
+  String get assistLookupStillRunning =>
+      'Still looking. Open this meal again in a minute.';
+
+  @override
+  String get assistLookupNoChain =>
+      'No restaurant chain BiteWise knows was found for this meal.';
+
+  @override
+  String get assistLookupDailyCap =>
+      'Today\'s restaurant lookups are used up. Try again tomorrow.';
+
+  @override
+  String get assistLookupFailed =>
+      'The lookup didn\'t finish. Try again later.';
+
+  @override
+  String get assistNotRestaurantDone => 'Got it: not from a restaurant.';
+
+  @override
+  String assistCorrectDone(String brand) {
+    return 'Thanks. BiteWise will remember $brand here.';
+  }
+
+  @override
+  String get assistEditFirst => 'Save your changes first to use these buttons.';
+
+  @override
+  String get assistWhyPortion =>
+      'The photo looked shared or partly eaten — the published number is one whole serving.';
+
+  @override
+  String get assistWhySize =>
+      'The photo doesn\'t show which size. Check the published sizes before using these numbers.';
+
+  @override
+  String get assistWhyCombo =>
+      'This looks like a combo or a choice of items — the published number may not match what you had.';
+
+  @override
+  String get assistWhyClosest => 'The closest menu item, not an exact match.';
+
+  @override
+  String get assistWhyUnits =>
+      'The published serving may not match the amount in the photo.';
+
+  @override
+  String get assistWhyDeclined =>
+      'You turned these numbers down before, so they were not used by themselves.';
+
+  @override
+  String assistSizes(String sizes) {
+    return 'Published sizes: $sizes';
+  }
+
+  @override
+  String assistChipSuggestedWhole(String brand, String kcal) {
+    return '$brand: $kcal kcal for a whole serving';
+  }
+
+  @override
+  String get assistAcceptTitle => 'Use the published numbers?';
+
+  @override
+  String assistAcceptTotal(String kcal) {
+    return 'This meal\'s total will be $kcal kcal.';
+  }
+
+  @override
+  String get assistLookupPickNeedsHttps =>
+      'Looking up a restaurant you pick needs https on your server.';
+
+  @override
+  String get diagRestaurantTitle => 'Restaurant lookups';
+
+  @override
+  String diagRestaurantToday(int count, int cap, String code) {
+    return 'Today $count/$cap · last $code';
+  }
+
+  @override
+  String get diagRestaurantIntro =>
+      'The last 20 decisions: reason code, kcal before → after, provider. No restaurant names or places are kept.';
+
+  @override
+  String get diagRestaurantNone => 'No restaurant decisions yet.';
+
+  @override
+  String get diagConfidenceTitle => 'AI confidence (14 days)';
+
+  @override
+  String get diagConfidenceIntro =>
+      'How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.';
+
+  @override
+  String diagConfidenceLine(int low, int medium, int high, int unknown) {
+    return 'Low $low · Medium $medium · High $high · Not given $unknown';
+  }
 }

@@ -323,6 +323,53 @@ def test_auth_check_reports_backend_status(client, monkeypatch):
     assert "DOUBAO_PLAN_KEY" in body["backends"]["doubao"]
 
 
+def test_auth_check_reports_the_features_map(client, monkeypatch):
+    """Restaurant assist R1: a new app reads which newer contracts this
+    server speaks from "features"; an old server omits the map and the app
+    treats every capability as off. The lookup endpoints exist from R3b on
+    (lookup_jobs), but the lookup itself is advertised only while its knob
+    is on (test_restaurant_lookup_endpoint pins the knob and the backend)."""
+    monkeypatch.delenv("CLAUDE_LOOKUP_ENABLED", raising=False)
+    resp = client.http.post(
+        "/api/auth_check", headers={"X-API-Key": "secret-key"})
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body["features"] == {"estimate_confidence": True,
+                                "restaurant_lookup": False,
+                                "lookup_jobs": True}
+    # Strict booleans: the app reads only a literal true as "on".
+    assert all(isinstance(v, bool) for v in body["features"].values())
+    # Additive: everything an old app reads is still there.
+    for key in ("ok", "analyzer", "backends", "claude_login"):
+        assert key in body, key
+    # Nothing about features leaks to an unauthenticated caller.
+    unauth = client.http.post("/api/auth_check")
+    assert unauth.status_code == 401
+    assert "features" not in (unauth.get_json() or {})
+
+
+def test_photo_reply_passes_the_meal_context_fields_through(
+        client, monkeypatch):
+    """The server returns the model's analysis as-is: the R1 fields reach
+    the app (which coerces them on read) without a server-side whitelist
+    dropping them."""
+    rich = dict(ANALYSIS, estimate_confidence="low",
+                restaurant_context="restaurant", portion_state="whole",
+                order_merchant="",
+                food_items=[{"name": "Bowl", "estimated_calories": 450,
+                             "brand": "", "qty": 1, "unit": "bowl"}])
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    monkeypatch.setattr(claude_analyzer, "analyze_food_photo",
+                        lambda b, p=None, allow_file_fallback=True,
+                        backend="claude", raise_on_busy=False, **kw:
+                        dict(rich))
+    resp = client.http.post(
+        "/api/analyze_photo", headers={"X-API-Key": "secret-key"},
+        data={"photo": (io.BytesIO(b"jpegbytes"), "m.jpg")})
+    assert resp.status_code == 200
+    assert resp.get_json()["analysis"] == rich
+
+
 def test_busy_and_terminal_503s_are_distinguishable(client, monkeypatch):
     """A contended CLI is worth retrying; a run that already answered is
     NOT — three more 120 s CLI runs spend the subscription for the same

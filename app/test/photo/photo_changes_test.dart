@@ -435,6 +435,70 @@ void main() {
       expect((await stored())!.rescanBefore, isNull);
     });
 
+    // The native side keeps the NEWEST inserts by creation date, so in a
+    // burst it is the late imports (old shutter times) that are left out,
+    // behind a token that has already moved past them. Here the carry stays
+    // well under its bound (most of the 200 were handled already), so only
+    // the left-out count can ask for the rescan that finds them.
+    for (final dropped in [0, 37]) {
+      test(
+          '200 read, $dropped left out, the oldest read inside the window '
+          'and the carry under its bound: '
+          '${dropped > 0 ? 'a rescan by date is owed' : 'no rescan'}',
+          () async {
+        final ids = [
+          for (var i = 0; i < 200; i++) 'p$i',
+        ];
+        for (var i = 0; i < ids.length; i++) {
+          // Half an hour apart, p0 newest: all 200 inside the window.
+          watcher.add(ids[i], now.subtract(Duration(minutes: 30 * (i + 1))));
+          if (i < 120) {
+            watcher.settled.add(ids[i]); // this session's scans had them
+          } else if (i < 150) {
+            watcher.logged.add(ids[i]); // a meal names them
+          }
+        }
+        expect(watcher.library[ids.last]!.createDateTime.isBefore(cutoff),
+            isFalse);
+        await seed();
+        source.onInsertedImagesSince =
+            (_, _, _, _) => inserted(ids, dropped: dropped);
+        final r = await pass(rescan: false);
+        expect(watcher.offered.single,
+            [for (var i = 150; i < 200; i++) 'p$i'],
+            reason: '50 in the carry: the bound did not ask for anything');
+        final s = await stored();
+        expect(carried(s), isEmpty);
+        if (dropped > 0) {
+          expect(s!.rescanBefore, now);
+          expect(s.rescanAt, now);
+          expect(r.rescanning, isTrue);
+        } else {
+          expect(s!.rescanBefore, isNull);
+          expect(r.rescanning, isFalse);
+        }
+      });
+    }
+
+    test('photos left out behind one whose creation date is unknown, or '
+        'behind none at all, may be in the window: a rescan is owed',
+        () async {
+      watcher.add('dated', DateTime(2026, 9, 1)); // before the window
+      await seed();
+      // 'undated' is not in the library: its reply entry has no date.
+      source.onInsertedImagesSince =
+          (_, _, _, _) => inserted(['dated', 'undated'], dropped: 5);
+      await pass(rescan: false);
+      expect((await stored())!.rescanBefore, now);
+
+      await seed();
+      source.onInsertedImagesSince =
+          (_, _, _, _) => inserted(const [], dropped: 5);
+      final r = await pass(rescan: false);
+      expect((await stored())!.rescanBefore, now);
+      expect(r.rescanning, isTrue);
+    });
+
     test('carried photos that are gone, hidden or older than the window are '
         'let go; one the library cannot answer for stays', () async {
       watcher.add('live', hoursAgo(10));

@@ -36,8 +36,11 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
+    show LookupRecipient, LookupSupport;
 import 'package:calorie_tracker/services/garmin_client.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
@@ -46,11 +49,13 @@ import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart'
     show ArithmeticRow, CalorieRing;
 import 'package:calorie_tracker/ui/widgets/grouped.dart';
+import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/assist_fixtures.dart';
 import 'fakes.dart';
 
 const sfPath = '/System/Library/Fonts/SFNS.ttf';
@@ -477,7 +482,11 @@ void main() {
             settings: FakeSettings(apiKey: 'k')
               ..provider = 'server'
               ..serverBackend = 'claude'
-              ..calorieGoal = 1800,
+              ..calorieGoal = 1800
+              ..restaurantAssist = 'auto'
+              ..restaurantAssistLocation = true
+              ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+              ..restaurantAssistConsentRecipient = 'claude_plan:ffffffff',
             analyzer: FakeAnalyzer(),
             dao: FakeDao(),
             requestPhotoPermission: () async => true,
@@ -486,6 +495,18 @@ void main() {
             backgroundRefreshEnabled: () async => true,
             openSystemSettings: () async {},
             nextSummaryAt: () async => now.add(const Duration(hours: 2)),
+            // Design R7a: Restaurant nutrition on, paused for a new server
+            // (every one of its rows shows).
+            restaurantAssist: RestaurantAssistControls(
+              lookupSupport: () => const LookupSupport(
+                supported: true,
+                recipient: LookupRecipient.claudePlan,
+                locationAllowed: true,
+                recipientHostTag: '0a1b2c3d',
+              ),
+              clearLearnedPlaces: () async => true,
+              locationSupported: true,
+            ),
           );
         }
 
@@ -536,7 +557,30 @@ void main() {
                   matching: find.byType(GroupedRow),
                 ),
               ),
-              for (final k in valueRows.skip(1)) (k, find.byKey(Key(k))),
+              // The Photos group's last value row, then Restaurant
+              // nutrition (design R7a), then the rest.
+              for (final k in valueRows.skip(1).take(1))
+                (k, find.byKey(Key(k))),
+              (
+                'restaurantModeRow',
+                find.byKey(const Key('restaurantModeRow')),
+              ),
+              (
+                'restaurantLocationToggle',
+                find.ancestor(
+                  of: find.byKey(const Key('restaurantLocationToggle')),
+                  matching: find.byType(GroupedRow),
+                ),
+              ),
+              (
+                'restaurantPausedRow',
+                find.byKey(const Key('restaurantPausedRow')),
+              ),
+              (
+                'clearLearnedPlacesRow',
+                find.byKey(const Key('clearLearnedPlacesRow')),
+              ),
+              for (final k in valueRows.skip(2)) (k, find.byKey(Key(k))),
             ];
             for (final (name, row) in rows) {
               await tester.scrollUntilVisible(row, 300, scrollable: scrollable);
@@ -695,6 +739,74 @@ void main() {
             closeTo(tester.getSize(value).width, 0.01),
             reason: "'1,240' at 1.0x is not scaled down",
           );
+        });
+
+        testWidgets('$lang: the restaurant source card wraps its lines and '
+            'answers (design R7b)', (tester) async {
+          for (final analysis in [appliedBigMac(), suggestedBigMac()]) {
+            final dao = FakeDao()..seed(assistMeal(analysis));
+            await pumpAt(
+              tester,
+              lang,
+              MealEditorScreen(
+                key: UniqueKey(),
+                dao: dao,
+                meal: dao.meals.first,
+                now: clock,
+                assist: FakeAssist(dao).controls(),
+                settings: FakeSettings()
+                  ..restaurantAssist = 'auto'
+                  ..restaurantAssistConsentAt = DateTime(2026, 10, 24)
+                  ..restaurantAssistConsentRecipient = 'anthropic',
+              ),
+            );
+            expect(tester.takeException(), isNull);
+            final card = find.byKey(const Key('assistSourceCard'));
+            expect(card, findsOneWidget);
+            expect(tester.getRect(card).right, lessThanOrEqualTo(390));
+            for (final p in tester.renderObjectList<RenderParagraph>(
+              find.descendant(of: card, matching: find.byType(RichText)),
+            )) {
+              expect(p.didExceedMaxLines, isFalse,
+                  reason: '"${p.text.toPlainText()}" was cut');
+            }
+            for (final b in tester.widgetList<ButtonStyleButton>(
+              find.descendant(
+                  of: card, matching: find.byWidgetPredicate(
+                      (w) => w is ButtonStyleButton)),
+            )) {
+              expect(tester.getRect(find.byWidget(b)).right,
+                  lessThanOrEqualTo(390));
+            }
+          }
+        });
+
+        testWidgets('$lang: the meal card\'s restaurant chip wraps in full',
+            (tester) async {
+          for (final analysis in [appliedBigMac(), suggestedBigMac()]) {
+            await pumpAt(
+              tester,
+              lang,
+              Scaffold(
+                body: ListView(children: [
+                  MealCard(
+                    key: UniqueKey(),
+                    meal: assistMeal(analysis),
+                    assistUnseen: true,
+                  ),
+                ]),
+              ),
+            );
+            expect(tester.takeException(), isNull);
+            final chip = find.byKey(const Key('assistChip'));
+            expect(tester.getRect(chip).right, lessThanOrEqualTo(390));
+            for (final p in tester.renderObjectList<RenderParagraph>(
+              find.descendant(of: chip, matching: find.byType(RichText)),
+            )) {
+              expect(p.didExceedMaxLines, isFalse,
+                  reason: '"${p.text.toPlainText()}" was cut');
+            }
+          }
         });
 
         testWidgets('$lang: standard sizes keep the settings value beside '

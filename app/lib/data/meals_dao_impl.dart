@@ -136,6 +136,82 @@ class SqfliteMealsDao implements MealsDao {
     );
   }
 
+  // ------------------------------------------------- compare-and-set (R6a)
+
+  @override
+  Future<MealSnapshot?> mealSnapshot(int mealId) async {
+    final rows = await _db.query('meals',
+        where: 'id = ? AND chat_id = ?',
+        whereArgs: [mealId, localChatId],
+        limit: 1);
+    if (rows.isEmpty) return null;
+    final row = rows.first;
+    final meal = mealFromRow(row);
+    // The column is TEXT NOT NULL (TEXT affinity stores any number as
+    // text), so a String is what comes back; anything else stringified
+    // simply never compares equal — the write fails closed.
+    final raw = row['analysis'];
+    return (
+      meal: meal,
+      rawAnalysis: raw is String ? raw : '$raw',
+      corrected: meal.corrected,
+    );
+  }
+
+  /// The row a compare-and-set may still write: this meal, its analysis
+  /// column exactly the text the writer read.
+  static const String _unchangedWhere =
+      'id = ? AND chat_id = ? AND analysis = ?';
+
+  @override
+  Future<bool> applyAssist(int mealId,
+      {required String expectedRaw,
+      required Map<String, dynamic> analysis}) async {
+    // corrected=0 in the same conditional UPDATE: a meal the user edited
+    // is theirs, whatever text it holds. corrected is not in the SET list.
+    final updated = await _db.update(
+      'meals',
+      {'analysis': jsonEncode(finiteAnalysis(analysis))},
+      where: '$_unchangedWhere AND IFNULL(corrected, 0) = 0',
+      whereArgs: [mealId, localChatId, expectedRaw],
+    );
+    return updated > 0;
+  }
+
+  @override
+  Future<bool> updateMealAnalysisIfUnchanged(int mealId,
+      {required String expectedRaw,
+      required Map<String, dynamic> analysis}) async {
+    final updated = await _db.update(
+      'meals',
+      {'analysis': jsonEncode(finiteAnalysis(analysis)), 'corrected': 1},
+      where: _unchangedWhere,
+      whereArgs: [mealId, localChatId, expectedRaw],
+    );
+    return updated > 0;
+  }
+
+  @override
+  Future<bool> updateMealFieldsIfUnchanged(int mealId,
+      {required String expectedRaw,
+      Map<String, dynamic>? analysis,
+      String? date,
+      String? time}) async {
+    final values = <String, Object?>{'corrected': 1};
+    if (analysis != null) {
+      values['analysis'] = jsonEncode(finiteAnalysis(analysis));
+    }
+    if (date != null) values['date'] = date;
+    if (time != null) values['time'] = time;
+    final updated = await _db.update(
+      'meals',
+      values,
+      where: _unchangedWhere,
+      whereArgs: [mealId, localChatId, expectedRaw],
+    );
+    return updated > 0;
+  }
+
   @override
   Future<void> deleteMeal(int mealId) async {
     // Spec §2.4: delete the row; a non-empty image_hash tombstones the ledger
@@ -320,10 +396,22 @@ class SqfliteMealsDao implements MealsDao {
   }
 
   @override
-  Future<void> applyLeftoverVerdict(
+  Future<bool> applyLeftoverVerdict(
       String imageHash, int mealId, Map<String, dynamic> analysis,
-      {String? ownerStamp}) {
+      {String? ownerStamp, String? expectedRaw}) async {
     final hash = normalizeImageHash(imageHash);
+    try {
+      await _leftoverVerdict(hash, mealId, analysis,
+          ownerStamp: ownerStamp, expectedRaw: expectedRaw);
+      return true;
+    } on _MealChanged {
+      return false;
+    }
+  }
+
+  Future<void> _leftoverVerdict(
+      String hash, int mealId, Map<String, dynamic> analysis,
+      {String? ownerStamp, String? expectedRaw}) {
     return _db.transaction((txn) async {
       if (hash.isNotEmpty && ownerStamp == null) {
         await _upsertLedger(txn, hash, IngestionStatus.skipped);
@@ -344,12 +432,18 @@ class SqfliteMealsDao implements MealsDao {
         );
         if (updated == 0) throw const ReservationLost();
       }
-      await txn.update(
+      // After the stamp check: a photo that is no longer ours drops its
+      // verdict (ReservationLost) whatever happened to the meal.
+      final cut = await txn.update(
         'meals',
         {'analysis': jsonEncode(finiteAnalysis(analysis)), 'corrected': 1},
-        where: 'id = ? AND chat_id = ?',
-        whereArgs: [mealId, localChatId],
+        where: expectedRaw == null ? 'id = ? AND chat_id = ?' : _unchangedWhere,
+        whereArgs: [mealId, localChatId, ?expectedRaw],
       );
+      // The meal changed since the caller read it: throwing rolls the
+      // tombstone back with it, so the photo stays held for the re-based
+      // retry.
+      if (expectedRaw != null && cut == 0) throw const _MealChanged();
     });
   }
 
@@ -891,4 +985,11 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
         columns: ['1'], where: where, whereArgs: args, limit: 1);
     return hit.isNotEmpty;
   }
+}
+
+/// Thrown inside [SqfliteMealsDao.applyLeftoverVerdict]'s transaction when
+/// the meal no longer holds the analysis text the caller read: rolls the
+/// whole verdict back, and the method answers false.
+class _MealChanged implements Exception {
+  const _MealChanged();
 }

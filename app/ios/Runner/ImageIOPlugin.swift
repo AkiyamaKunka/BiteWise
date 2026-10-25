@@ -40,7 +40,9 @@ import Vision
 /// before. Where some stage has no CPU device and the app is in the
 /// background (iOS refuses GPU work there, the same lesson as the decode
 /// above), nothing runs: deferred_gpu, and the photo waits for the
-/// foreground. Past [imageIOFoodTimeout] the reply is error. Every failure
+/// foreground. Past [imageIOFoodTimeout] the reply is error. A classifier
+/// that answers a black and a white probe alike ([ImageIOBlindCheck], the
+/// iOS 26.2 simulator's) is unsupported. Every failure
 /// is an answer, never a throw: the Dart side then lets the photo through
 /// (fail open), which is what it did before the check existed.
 ///
@@ -309,23 +311,106 @@ func imageIOUseCPU(_ request: VNRequest) {
 }
 
 /// The production classifier: VNClassifyImageRequest, on the CPU whenever
-/// it can be ([imageIOFoodComputeChoice]).
+/// it can be ([imageIOFoodComputeChoice]), once [ImageIOBlindCheck.shared]
+/// has found that it sees what it is shown.
 func imageIOVisionClassify(_ image: CGImage, background: Bool) throws -> ImageIOClassification {
-  let request = VNClassifyImageRequest()
-  switch imageIOFoodComputeChoice(
-    cpuOnEveryStage: imageIOCPUOnEveryStage(request), background: background)
-  {
-  case .deferGPU:
-    return .deferGPU
-  case .cpu:
-    imageIOUseCPU(request)
-  case .defaultDevices:
-    break
+  try imageIOVisionClassify(image, background: background, blindCheck: .shared)
+}
+
+/// [imageIOVisionClassify] with the blind check passed in (tests).
+func imageIOVisionClassify(
+  _ image: CGImage, background: Bool, blindCheck: ImageIOBlindCheck
+) throws -> ImageIOClassification {
+  let compute = imageIOFoodComputeChoice(
+    cpuOnEveryStage: imageIOCPUOnEveryStage(VNClassifyImageRequest()), background: background)
+  if compute == .deferGPU { return .deferGPU }
+  let run = { (input: CGImage) throws -> [(String, Float)] in
+    let request = VNClassifyImageRequest()
+    if compute == .cpu { imageIOUseCPU(request) }
+    try VNImageRequestHandler(cgImage: input, options: [:]).perform([request])
+    let results: [VNClassificationObservation] = request.results ?? []
+    return results.map { ($0.identifier, $0.confidence) }
   }
-  let handler = VNImageRequestHandler(cgImage: image, options: [:])
-  try handler.perform([request])
-  let results: [VNClassificationObservation] = request.results ?? []
-  return .observations(results.map { ($0.identifier, $0.confidence) })
+  guard try blindCheck.seesInput(run) else { throw imageIOBlindClassifierError }
+  return .observations(try run(image))
+}
+
+// MARK: - the blind check
+
+/// A classifier can run without an error and still not see its input. On
+/// the iOS 26.2 simulator (2026-10-24) every image reaches the CPU path as
+/// black: a pizza, a plate and a white frame all score outdoor / night_sky
+/// ≈ 0.49 — exactly what a black frame scores on a Mac — and a food score
+/// near 0, so every automatic glasses photo was tombstoned not food, for
+/// good. Before its first classification in a process, the production
+/// classifier is shown two flat probes, black and white; a classifier that
+/// answers them alike ([imageIOSameAnswer]) cannot tell images apart, and
+/// every check on it is unsupported: the photo goes on unchecked (fail
+/// open), as it did before the check existed. A classifier that sees moves
+/// its top class by about 0.5 between the two (outdoor 0.49 → 0.00).
+final class ImageIOBlindCheck {
+  static let shared = ImageIOBlindCheck()
+
+  private let lock = NSLock()
+  private var verdict: Bool?
+
+  /// The verdict: nil until a check ran to the end.
+  var known: Bool? {
+    lock.lock()
+    defer { lock.unlock() }
+    return verdict
+  }
+
+  /// Whether [classify] sees its input: the kept verdict, or [classify] on
+  /// the probes (kept only when both ran; a throw is rethrown and asks
+  /// again next time).
+  func seesInput(_ classify: (CGImage) throws -> [(String, Float)]) throws -> Bool {
+    if let known { return known }
+    guard let black = imageIOFlatProbe(gray: 0), let white = imageIOFlatProbe(gray: 1) else {
+      return true  // nothing to show it: no verdict, the check runs as before
+    }
+    let sees = !imageIOSameAnswer(try classify(black), try classify(white))
+    lock.lock()
+    verdict = sees
+    lock.unlock()
+    return sees
+  }
+}
+
+/// What a blind classifier throws: [imageIOFoodUnsupported] says unsupported.
+let imageIOBlindClassifierError = NSError(
+  domain: "dev.calorietracker.imageio.food", code: 1,
+  userInfo: [
+    NSLocalizedDescriptionKey: "the classifier gives a black and a white image the same answer"
+  ])
+
+/// A [size] x [size] image of one grey level (0 black, 1 white).
+func imageIOFlatProbe(gray: CGFloat, size: Int = 64) -> CGImage? {
+  guard
+    let ctx = CGContext(
+      data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+  else { return nil }
+  ctx.setFillColor(red: gray, green: gray, blue: gray, alpha: 1)
+  ctx.fill(CGRect(x: 0, y: 0, width: size, height: size))
+  return ctx.makeImage()
+}
+
+/// Whether two classifications are the same answer: every class either one
+/// scored is within [tolerance] in the other (a class one left out counts as
+/// 0). Two empty answers are the same.
+func imageIOSameAnswer(
+  _ a: [(String, Float)], _ b: [(String, Float)], tolerance: Float = 0.05
+) -> Bool {
+  var left: [String: Float] = [:]
+  for (id, conf) in a { left[id] = max(left[id] ?? 0, conf) }
+  var right: [String: Float] = [:]
+  for (id, conf) in b { right[id] = max(right[id] ?? 0, conf) }
+  for id in Set(left.keys).union(right.keys) {
+    if abs((left[id] ?? 0) - (right[id] ?? 0)) > tolerance { return false }
+  }
+  return true
 }
 
 /// One check's answer, as the channel sends it.
@@ -378,9 +463,13 @@ func imageIOFoodScoreOf(_ observations: [(String, Float)], labels: Set<String>)
 }
 
 /// Whether [error] says this device cannot run the request at all, rather
-/// than that this one run failed.
+/// than that this one run failed (a blind classifier, [ImageIOBlindCheck],
+/// is one of those).
 func imageIOFoodUnsupported(_ error: Error) -> Bool {
   let ns = error as NSError
+  if ns.domain == imageIOBlindClassifierError.domain {
+    return ns.code == imageIOBlindClassifierError.code
+  }
   guard ns.domain == VNErrorDomain else { return false }
   let codes: Set<Int> = [
     VNErrorCode.unsupportedRevision.rawValue,

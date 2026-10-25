@@ -17,10 +17,18 @@ final GlobalKey<ScaffoldMessengerState> messengerKey =
 /// DB-only) resolves while init is still running, and
 /// `currentState?.showSnackBar` dropped it on the floor. Held until a frame
 /// has mounted the ScaffoldMessenger, then shown in arrival order.
-final List<String> _pendingSnackbars = [];
+final List<({String message, SnackBarAction? action})> _pendingSnackbars = [];
 
-void showAppSnackbar(String message) {
-  _pendingSnackbars.add(message);
+void showAppSnackbar(String message) => _holdSnackbar(message, null);
+
+/// [showAppSnackbar] with one action button: the restaurant assist's Undo
+/// after it applied a chain's published numbers (di.dart `notifyAction`).
+void showAppSnackbarWithAction(
+        String message, String action, void Function() onAction) =>
+    _holdSnackbar(message, SnackBarAction(label: action, onPressed: onAction));
+
+void _holdSnackbar(String message, SnackBarAction? action) {
+  _pendingSnackbars.add((message: message, action: action));
   if (!_flushSnackbars()) {
     WidgetsBinding.instance.addPostFrameCallback((_) => _flushSnackbars());
   }
@@ -31,8 +39,8 @@ void showAppSnackbar(String message) {
 bool _flushSnackbars() {
   final messenger = messengerKey.currentState;
   if (messenger == null) return false;
-  for (final message in _pendingSnackbars) {
-    messenger.showSnackBar(SnackBar(content: Text(message)));
+  for (final s in _pendingSnackbars) {
+    messenger.showSnackBar(SnackBar(content: Text(s.message), action: s.action));
   }
   _pendingSnackbars.clear();
   return true;
@@ -55,6 +63,8 @@ Future<void> _boot() async {
       // Notification-style snackbar for background photo saves and
       // share-sheet verdicts (spec §6).
       notify: showAppSnackbar,
+      // The restaurant assist's "used the chain's numbers" line and its Undo.
+      notifyAction: showAppSnackbarWithAction,
     );
     runApp(CalorieTrackerApp(services: services.ui, messengerKey: messengerKey));
   } catch (e) {

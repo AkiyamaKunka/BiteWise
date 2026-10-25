@@ -156,7 +156,11 @@ Done in this change:
 
 Still to do in code (each needs an Xcode project edit, i.e. a normal PR):
 
-1. **Privacy manifests.** Neither target has a `PrivacyInfo.xcprivacy`;
+1. **Privacy manifests.** *Done since this list was written (0c49ab0):
+   both targets ship a `PrivacyInfo.xcprivacy`, and
+   `NSPrivacyCollectedDataTypes` stays an empty array in both, pinned by
+   `app/test/manifest_gate_test.dart` (rationale in § 4.3). Kept for the
+   record:* Neither target had a `PrivacyInfo.xcprivacy`;
    the share extension compiles `receive_sharing_intent`'s
    `UserDefaults(suiteName:)` call (a required-reason API) into its own
    executable. In Xcode: File → New → File → *App Privacy* → name
@@ -324,6 +328,41 @@ back on, is to declare what leaves the device:
 
 Pick one answer and keep the privacy policy (§ 1.7.3) and the
 `NSPrivacyCollectedDataTypes` arrays consistent with it.
+
+**Restaurant nutrition lookup** (design R7a; off by default) does not change
+the answer. Both `PrivacyInfo.xcprivacy` files keep
+`NSPrivacyCollectedDataTypes` empty (pinned by `manifest_gate_test.dart`),
+and the App Privacy answer stays *Data Not Collected*, because:
+
+- **The developer collects nothing.** There is still no developer backend;
+  nothing about a lookup reaches the developer.
+- **Lookups go to the user's own accounts.** The request (up to three
+  chain names from the app's bundled table, the food names with amounts,
+  the region code and reply language — never the photo, coordinates,
+  city, street or distance) goes from the phone to the server the user
+  runs (Claude Plan, which searches with Claude web search) or to the
+  user's own provider account (Anthropic web search; OpenRouter with Exa),
+  exactly like the photos. Other providers make no lookup calls.
+- **The photo location goes only to Apple.** On iOS, with "Use photo
+  location" on, the photo's position is read from PhotoKit and used for
+  one MapKit nearby-places query; MapKit is Apple's service, collected by
+  Apple under its terms. The app keeps the position only in memory for
+  that query and stores, shows or sends nothing MapKit returns (developer
+  license Attachment 6 §2.4–2.5). Chain names derived from it go only to
+  the recipient above, and only over https for the user's own server.
+  There is no `NSLocation*` key and no location permission (also pinned).
+- **What stays on the phone** (learned places as ~100 m cells, pending
+  jobs, the 30-day answer cache, the decision log) lives in the
+  backup-excluded store and is never exported.
+
+If the conservative table above is used instead, the Location row stays
+*No* for the reasons above; restaurant chain and food names sent for a
+lookup fall under the same "sent to the user-selected AI provider, not
+retained by the developer" answer as the photos. `docs/PRIVACY.md` (§
+*Restaurant nutrition lookup*, English and 中文) is the user-facing text
+for all of this; keep it, the consent sheet
+(`app/lib/ui/widgets/restaurant_consent_sheet.dart`) and these answers in
+step. Revisit if the app is ever published with a developer-run service.
 
 ### 4.4 Review submission checklist
 
@@ -510,6 +549,10 @@ every upload; § 9 says why and how to change that.
   ephemerally, not stored by the developer); nothing is collected by the
   developer; data is encrypted in transit; users can delete everything by
   uninstalling (no account). Declare the local database as on-device only.
+  Restaurant nutrition lookup changes nothing here in v1: on Android it
+  reads no photo location (brand only, no `ACCESS_MEDIA_LOCATION`), and the
+  chain and food names it sends go to the same user-selected provider, so
+  there is no Location row.
 - **Photo and video permissions**: the manifest declares
   `READ_MEDIA_IMAGES` and `READ_MEDIA_VISUAL_USER_SELECTED` because the core
   feature is watching the camera roll for new food photos; Play requires

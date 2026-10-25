@@ -112,6 +112,45 @@ void main() {
     expect(dao.meals, hasLength(5));
   });
 
+  // Design R6b: the restaurant assist starts a lookup only while the
+  // pipeline is idle.
+  test('isIdle: false while a photo is queued, in flight or a reservation '
+      'is held; true once the queue drains', () async {
+    final dao = FakeDao();
+    final gate = Completer<void>();
+    final analyzer = FakeAnalyzer()
+      ..nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': true}, isFood: true, wall: Duration.zero)
+      ..onAnalyze = () => gate.future;
+    final pipeline = PhotoPipeline(
+        dao: dao, analyzer: analyzer, hasher: (b) async => 'h${b.first}');
+    expect(pipeline.isIdle, isTrue);
+
+    IntakePhoto photo(int n) =>
+        IntakePhoto(Uint8List.fromList([n]), 'a$n', 'IMG_$n.jpg',
+            deliberate: true);
+    final first = pipeline.enqueue(photo(1));
+    final second = pipeline.enqueue(photo(2));
+    expect(pipeline.isIdle, isFalse, reason: 'queued');
+    await _until(() => dao.ledger['h1'] == IngestionStatus.processing);
+    expect(pipeline.isIdle, isFalse, reason: 'reserved, analyzing');
+    gate.complete();
+    await first;
+    expect(pipeline.isIdle, isFalse, reason: 'the second is still queued');
+    await second;
+    expect(pipeline.isIdle, isTrue);
+    expect(dao.meals, hasLength(2));
+
+    // A direct process() call (no tail) counts too.
+    final hold = Completer<void>();
+    analyzer.onAnalyze = () => hold.future;
+    final direct = pipeline.process(photo(3));
+    expect(pipeline.isIdle, isFalse);
+    hold.complete();
+    await direct;
+    expect(pipeline.isIdle, isTrue);
+  });
+
   test('a saved photo meal gets a stored thumbnail (spec §9)', () async {
     final dao = FakeDao();
     final analyzer = FakeAnalyzer()
@@ -266,6 +305,30 @@ void main() {
       final camera = await savedAnalysis(const CaptureMeta(), reply: forged);
       expect(camera['capture'], {'has_gps': false},
           reason: "the intake's reading replaces the model's");
+    });
+
+    // Design R6a: only a verified restaurant lookup writes an assist block
+    // or a published flag — a reply carrying them claims nothing.
+    test("a model reply's own assist block and published flags are never "
+        'stored', () async {
+      final forged = {
+        ..._foodAnalysis(),
+        'assist': {
+          'v': 2,
+          'status': 'applied',
+          'chain_key': 'chipotle',
+          'brand_name': 'Chipotle',
+        },
+        'food_items': [
+          {'name': 'Ramen', 'estimated_calories': 650, 'published': true},
+        ],
+      };
+      final a = await savedAnalysis(null, reply: forged);
+      expect(a.containsKey('assist'), isFalse);
+      expect((a['food_items'] as List).single, {
+        'name': 'Ramen',
+        'estimated_calories': 650,
+      });
     });
   });
 

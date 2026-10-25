@@ -335,7 +335,9 @@ class GroupedToggleRow extends StatelessWidget {
   final Color? iconColor;
   final String title;
   final bool value;
-  final ValueChanged<bool> onChanged;
+
+  /// Null disables the row: dimmed title, inert switch and row.
+  final ValueChanged<bool>? onChanged;
 
   /// Key on the SWITCH itself — existing tests find toggles by key.
   final Key? switchKey;
@@ -345,21 +347,25 @@ class GroupedToggleRow extends StatelessWidget {
     // One screen-reader node, as SwitchListTile does: unmerged, the title
     // was one stop and an unnamed switch another, so the state was never
     // read with the name it belongs to.
+    final change = onChanged;
     return MergeSemantics(
       child: GroupedRow(
         icon: icon,
         iconColor: iconColor,
         title: title,
         showChevron: false,
+        enabled: change != null,
         trailing: Switch.adaptive(
           key: switchKey,
           value: value,
-          onChanged: (v) {
-            HapticFeedback.selectionClick();
-            onChanged(v);
-          },
+          onChanged: change == null
+              ? null
+              : (v) {
+                  HapticFeedback.selectionClick();
+                  change(v);
+                },
         ),
-        onTap: () => onChanged(!value),
+        onTap: change == null ? null : () => change(!value),
       ),
     );
   }

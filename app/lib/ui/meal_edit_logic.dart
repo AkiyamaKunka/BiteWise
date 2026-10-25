@@ -13,6 +13,16 @@
 ///     user is explicitly curating should read 0 g in totals, and the
 ///     display helpers render a stored 0 as 0 (calories included — see
 ///     format.displayTotalCalories), so card and day total agree.
+///   - an item row the user did not touch keeps every key it was stored
+///     with (design R6a): the printed brand, qty and unit the photo model
+///     read, a restaurant lookup's `published` flag, a leftover fraction.
+///     Fixing a meal's date or name must not strip what the row says about
+///     itself. A row the user changed is rebuilt from what the editor shows
+///     — a user-curated row makes no printed-brand claim, and its numbers
+///     are no longer anyone's published ones.
+///   - a draft of a STORED meal carries [MealDraft.expectedRaw], the
+///     analysis text it was loaded from: the save is a compare-and-set
+///     against it (MealsDao.updateMealFieldsIfUnchanged).
 library;
 
 import '../core/coerce.dart';
@@ -64,7 +74,19 @@ class MealItemDraft {
     this.protein = '',
     this.carbs = '',
     this.fat = '',
-  });
+  })  : stored = null,
+        _loaded = null;
+
+  MealItemDraft._fromStored(Map<String, dynamic> m)
+      : name = (m['name'] ?? '').toString(),
+        calories = _numText(m['estimated_calories']),
+        protein = _numText(m['protein_g']),
+        carbs = _numText(m['carbs_g']),
+        fat = _numText(m['fat_g']),
+        stored = m,
+        _loaded = null {
+    _loaded = (name, calories, protein, carbs, fat);
+  }
 
   String name;
   String calories;
@@ -72,13 +94,19 @@ class MealItemDraft {
   String carbs;
   String fat;
 
-  static MealItemDraft fromMap(Map<String, dynamic> m) => MealItemDraft(
-        name: (m['name'] ?? '').toString(),
-        calories: _numText(m['estimated_calories']),
-        protein: _numText(m['protein_g']),
-        carbs: _numText(m['carbs_g']),
-        fat: _numText(m['fat_g']),
-      );
+  /// The stored item this row was loaded from; null for a row the user
+  /// added.
+  final Map<String, dynamic>? stored;
+
+  /// The five field texts as loaded, to tell an untouched row.
+  (String, String, String, String, String)? _loaded;
+
+  static MealItemDraft fromMap(Map<String, dynamic> m) =>
+      MealItemDraft._fromStored(m);
+
+  /// A stored row whose five fields still read exactly as loaded.
+  bool get untouched =>
+      stored != null && _loaded == (name, calories, protein, carbs, fat);
 
   bool get isBlank =>
       name.trim().isEmpty &&
@@ -105,6 +133,19 @@ class MealItemDraft {
                 .value ??
             0,
       };
+
+  /// The item to persist: an [untouched] row keeps every key it was stored
+  /// with, its name and four numbers normalized exactly as [toMap] writes
+  /// them (a numeric string becomes the number it already read as); any
+  /// other row is [toMap].
+  Map<String, dynamic> toStoredMap() {
+    final src = stored;
+    if (src == null || !untouched) return toMap();
+    return {
+      for (final e in src.entries) e.key: e.value,
+      ...toMap(),
+    };
+  }
 }
 
 /// Field text for a stored value. Numeric STRINGS must parse: the analyzer
@@ -150,6 +191,13 @@ class MealDraft {
 
   /// The analysis map this draft started from; unknown keys survive the save.
   final Map<String, dynamic> base;
+
+  /// The stored analysis TEXT [base] was decoded from (MealSnapshot
+  /// .rawAnalysis), once the editor has read it: what the save of an
+  /// existing meal compares against, so a meal that changed while it was
+  /// open is never overwritten with this older copy. Null for a new meal,
+  /// and until the read confirmed the row still matches this draft.
+  String? expectedRaw;
 
   static MealDraft fromMeal(Meal meal) => MealDraft(
         description: mealDescriptionRaw(meal.analysis),
@@ -269,7 +317,7 @@ class MealDraft {
     // A hand-curated meal is food by definition — see the library note.
     out['is_food'] = true;
     out['food_items'] = [
-      for (final it in items.where((i) => !i.isBlank)) it.toMap()
+      for (final it in items.where((i) => !i.isBlank)) it.toStoredMap()
     ];
     return out;
   }

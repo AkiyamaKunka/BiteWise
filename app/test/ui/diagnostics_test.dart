@@ -9,11 +9,15 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/services/assist/assist_local_state.dart'
+    show AssistDecisionEntry;
 import 'package:calorie_tracker/services/photo/background_runs.dart';
 import 'package:calorie_tracker/services/photo/glasses_check.dart';
 import 'package:calorie_tracker/services/photo/photo_changes.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
 import 'package:calorie_tracker/ui/provider_names.dart';
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart'
+    show RestaurantLookupsDiagnostics;
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -730,6 +734,173 @@ void main() {
       expect(signedClock(-725), '-12:05');
       expect(signedClock(3723), '+1:02:03');
       expect(signedClock(0), '+0:00');
+    });
+  });
+
+  group('restaurant lookups (design R7b)', () {
+    final decisions = [
+      AssistDecisionEntry(
+          at: DateTime(2026, 10, 24, 12, 31),
+          code: 'not_grounded',
+          oldKcal: 540,
+          newKcal: 590,
+          provider: 'claude_plan'),
+      AssistDecisionEntry(
+          at: DateTime(2026, 10, 24, 12, 40),
+          code: 'lookup_timeout',
+          provider: 'anthropic'),
+      AssistDecisionEntry(
+          at: DateTime(2026, 10, 24, 12, 45),
+          code: 'user_reverted',
+          oldKcal: 1590,
+          newKcal: 1540,
+          provider: 'openrouter'),
+      AssistDecisionEntry(at: DateTime(2026, 10, 24, 12, 50), code: 'zone'),
+    ];
+
+    Future<void> pump(WidgetTester tester,
+        {RestaurantLookupsDiagnostics? diag,
+        ({int low, int medium, int high, int unknown})? counts,
+        Locale? locale,
+        Size size = const Size(800, 4000),
+        double scale = 1}) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      if (scale != 1) {
+        tester.platformDispatcher.textScaleFactorTestValue = scale;
+        addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      }
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiagnosticsScreen(
+            diagnostics: _diag(),
+            loadBackgroundRuns: () async => const [],
+            loadLateImports: () async => null,
+            loadGlassesChecks: () async => const [],
+            loadRestaurantLookups: diag == null ? null : () async => diag,
+            loadConfidence: counts == null ? null : () async => counts,
+          )));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('today against the cap, the last code, then the decisions '
+        'newest first: codes, kcal and providers only', (tester) async {
+      await pump(tester,
+          diag: RestaurantLookupsDiagnostics(
+              today: 3, cap: 20, decisions: decisions),
+          counts: (low: 2, medium: 5, high: 9, unknown: 1));
+      expect(find.text('Restaurant lookups'), findsOneWidget);
+      expect(find.text('Today 3/20 · last zone'), findsOneWidget);
+      final lines = [
+        '${localStamp(decisions[3].at)} · zone',
+        '${localStamp(decisions[2].at)} · user_reverted · 1,590 → 1,540 kcal '
+            '· OpenRouter',
+        '${localStamp(decisions[1].at)} · lookup_timeout · Claude',
+        '${localStamp(decisions[0].at)} · not_grounded · 540 → 590 kcal · '
+            'Claude Plan',
+      ];
+      for (final line in lines) {
+        expect(find.text(line), findsOneWidget, reason: line);
+      }
+      // Newest first.
+      final ys = [
+        for (final line in lines) tester.getTopLeft(find.text(line)).dy,
+      ];
+      expect([...ys]..sort(), ys);
+      expect(find.text('AI confidence (14 days)'), findsOneWidget);
+      expect(find.text('Low 2 · Medium 5 · High 9 · Not given 1'),
+          findsOneWidget);
+    });
+
+    testWidgets('in Chinese; none yet says so', (tester) async {
+      await pump(tester,
+          diag: const RestaurantLookupsDiagnostics(today: 0, cap: 20),
+          counts: (low: 0, medium: 0, high: 0, unknown: 0),
+          locale: const Locale('zh'));
+      expect(find.text('餐厅查询'), findsOneWidget);
+      expect(find.text('今天 0/20 · 最近 —'), findsOneWidget);
+      expect(find.text('还没有餐厅查询的决定。'), findsOneWidget);
+      expect(find.text('AI 把握程度（14 天）'), findsOneWidget);
+      expect(find.text('低 0 · 中 0 · 高 0 · 未给出 0'), findsOneWidget);
+    });
+
+    testWidgets('no assist (tests, the background engine): no section',
+        (tester) async {
+      await pump(tester);
+      expect(find.byKey(const Key('diagRestaurantLookups')), findsNothing);
+      expect(find.byKey(const Key('diagConfidence')), findsNothing);
+    });
+
+    testWidgets('a section whose read fails is left out', (tester) async {
+      tester.view.physicalSize = const Size(800, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+          home: DiagnosticsScreen(
+        diagnostics: _diag(),
+        loadBackgroundRuns: () async => const [],
+        loadLateImports: () async => null,
+        loadGlassesChecks: () async => const [],
+        loadRestaurantLookups: () async => throw StateError('disk'),
+        loadConfidence: () async => throw StateError('db'),
+      )));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('diagRestaurantLookups')), findsNothing);
+    });
+
+    for (final locale in [const Locale('en'), const Locale('zh')]) {
+      testWidgets('fits a 320-pt phone at 2x text ($locale)', (tester) async {
+        await pump(tester,
+            diag: RestaurantLookupsDiagnostics(
+                today: 3, cap: 20, decisions: decisions),
+            counts: (low: 12, medium: 25, high: 109, unknown: 31),
+            locale: locale,
+            size: const Size(320, 8000),
+            scale: 2);
+        expect(tester.takeException(), isNull);
+        expect(find.byKey(const Key('diagRestaurantLookups')), findsOneWidget);
+      });
+    }
+
+    test('confidence counts: photo food meals only, unknown when unsaid', () {
+      Meal m(String source, Map<String, dynamic> a) => Meal(
+          id: 1,
+          date: '2026-10-24',
+          time: '12:00 PM',
+          timestamp: '2026-10-24T12:00:00',
+          source: source,
+          analysis: a);
+      final counts = confidenceCounts([
+        m(MealSource.appWatch, {'is_food': true, 'estimate_confidence': 'low'}),
+        m(MealSource.appPhoto, {'is_food': true, 'estimate_confidence': 'high'}),
+        m(MealSource.appWatch,
+            {'is_food': true, 'estimate_confidence': 'medium'}),
+        m(MealSource.appWatch, {'is_food': true}),
+        m(MealSource.appWatch, {'is_food': true, 'estimate_confidence': 'meh'}),
+        m(MealSource.appWatch,
+            {'is_food': false, 'estimate_confidence': 'low'}),
+        m(MealSource.manualText,
+            {'is_food': true, 'estimate_confidence': 'low'}),
+        m(MealSource.appManual,
+            {'is_food': true, 'estimate_confidence': 'low'}),
+      ]);
+      expect(counts, (low: 1, medium: 1, high: 1, unknown: 2));
+    });
+
+    test('a decision line names no restaurant or place: the entry has none',
+        () {
+      final l = AppLocalizationsEn();
+      final line = restaurantDecisionLine(l, decisions[0]);
+      expect(line, '${localStamp(decisions[0].at)} · not_grounded · '
+          '540 → 590 kcal · Claude Plan');
+      // The log entry's JSON has exactly these fields.
+      expect(decisions[0].toJson().keys.toSet(),
+          {'at', 'code', 'old_kcal', 'new_kcal', 'provider'});
     });
   });
 }

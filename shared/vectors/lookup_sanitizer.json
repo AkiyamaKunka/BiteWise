@@ -1,0 +1,2225 @@
+{
+  "generator": "scripts/generate_shared_vectors.py",
+  "encoding": "Inputs/outputs are plain JSON except: {\"__special__\": \"nan\"|\"inf\"|\"-inf\"} encodes a non-JSON float, and an expected of {\"__raises__\": true} means the call raises. Decode specials before calling the implementation.",
+  "now": "2026-10-23T14:00:00",
+  "meal": {
+    "date": "2026-10-23",
+    "time": "12:30 PM",
+    "timestamp": "2026-10-23T12:30:00"
+  },
+  "cited": [
+    "https://chipotle.com/nutrition-calculator"
+  ],
+  "cases": [
+    {
+      "id": "exact_item_applies",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    },
+    {
+      "id": "second_match_after_an_unusable_one",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": null,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": []
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "contextOnly",
+        "no_usable_match"
+      ]
+    },
+    {
+      "id": "same_item_again_without_a_published_value",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 590.5,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "suggest",
+        "mapping_not_one_to_one"
+      ]
+    },
+    {
+      "id": "another_item_same_menu_without_a_published_value",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          },
+          {
+            "name": "Steak burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 1800,
+        "total_protein_g": 100,
+        "total_carbs_g": 180,
+        "total_fat_g": 70,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "Steak burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 1,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 590.5,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 1,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "suggest",
+        "mapping_not_one_to_one"
+      ]
+    },
+    {
+      "id": "soft_hyphen_menu_item",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "\u00ad",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "\u00ad",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "suggest",
+        "mapping_not_one_to_one"
+      ]
+    },
+    {
+      "id": "compatibility_digit_in_a_menu_name",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          },
+          {
+            "name": "Chips & guacamole (~200 g)",
+            "estimated_calories": 500,
+            "protein_g": 7,
+            "carbs_g": 56,
+            "fat_g": 32,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bag"
+          }
+        ],
+        "total_calories": 1400,
+        "total_protein_g": 57,
+        "total_carbs_g": 146,
+        "total_fat_g": 67,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "Chips & guacamole (~200 g)",
+            "qty": 1,
+            "unit": "bag",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 1,
+            "menu_item": "Chicken Burrito Bowl²",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bag",
+                "unit": "bag",
+                "calories": 540,
+                "calories_range": null,
+                "protein_g": 7,
+                "carbs_g": 56,
+                "fat_g": 32
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 1,
+            "menu_item": "Chicken Burrito Bowl²",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bag",
+                "unit": "bag",
+                "calories": 540,
+                "calories_range": null,
+                "protein_g": 7,
+                "carbs_g": 56,
+                "fat_g": 32
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "suggest",
+        "mapping_not_one_to_one"
+      ]
+    },
+    {
+      "id": "index_past_the_request_but_in_the_meal",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          },
+          {
+            "name": "Chips & guacamole (~200 g)",
+            "estimated_calories": 500,
+            "protein_g": 7,
+            "carbs_g": 56,
+            "fat_g": 32,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bag"
+          }
+        ],
+        "total_calories": 1400,
+        "total_protein_g": 57,
+        "total_carbs_g": 146,
+        "total_fat_g": 67,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 1,
+            "menu_item": "Chips & Guacamole",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bag",
+                "unit": "bag",
+                "calories": 540,
+                "calories_range": null,
+                "protein_g": 7,
+                "carbs_g": 56,
+                "fat_g": 32
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 1,
+            "menu_item": "Chips & Guacamole",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bag",
+                "unit": "bag",
+                "calories": 540,
+                "calories_range": null,
+                "protein_g": 7,
+                "carbs_g": 56,
+                "fat_g": 32
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "reject",
+        "item_changed"
+      ]
+    },
+    {
+      "id": "long_component_name_overlaps_an_item",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          },
+          {
+            "name": "Sour cream (~30 g)",
+            "estimated_calories": 110,
+            "protein_g": 1,
+            "carbs_g": 2,
+            "fat_g": 10,
+            "brand": "",
+            "qty": 1,
+            "unit": "serving"
+          }
+        ],
+        "total_calories": 1010,
+        "total_protein_g": 51,
+        "total_carbs_g": 92,
+        "total_fat_g": 45,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "Sour cream (~30 g)",
+            "qty": 1,
+            "unit": "serving",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Burrito Bowl",
+            "match_type": "components_sum",
+            "is_drink": false,
+            "components": [
+              {
+                "name": "Chicken, white rice, black beans, fajita veggies, salsa and sour cream",
+                "calories": 940,
+                "protein_g": 50,
+                "carbs_g": 90,
+                "fat_g": 35
+              }
+            ],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Burrito Bowl",
+            "match_type": "components_sum",
+            "is_drink": false,
+            "components": [
+              {
+                "name": "Chicken, white rice, black beans, fajita veggies, salsa and sour cream",
+                "calories": 940,
+                "protein_g": 50,
+                "carbs_g": 90,
+                "fat_g": 35
+              }
+            ],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "suggest",
+        "components_overlap"
+      ]
+    },
+    {
+      "id": "component_name_past_lane_bs_cap",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          },
+          {
+            "name": "Sour cream (~30 g)",
+            "estimated_calories": 110,
+            "protein_g": 1,
+            "carbs_g": 2,
+            "fat_g": 10,
+            "brand": "",
+            "qty": 1,
+            "unit": "serving"
+          }
+        ],
+        "total_calories": 1010,
+        "total_protein_g": 51,
+        "total_carbs_g": 92,
+        "total_fat_g": 45,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "Sour cream (~30 g)",
+            "qty": 1,
+            "unit": "serving",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Burrito Bowl",
+            "match_type": "components_sum",
+            "is_drink": false,
+            "components": [
+              {
+                "name": "Chicken burrito bowl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx with sour cream",
+                "calories": 940,
+                "protein_g": 50,
+                "carbs_g": 90,
+                "fat_g": 35
+              }
+            ],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Burrito Bowl",
+            "match_type": "components_sum",
+            "is_drink": false,
+            "components": [
+              {
+                "name": "Chicken burrito bowl xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+                "calories": 940,
+                "protein_g": 50,
+                "carbs_g": 90,
+                "fat_g": 35
+              }
+            ],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    },
+    {
+      "id": "component_without_calories_voids_the_sum",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Burrito Bowl",
+            "match_type": "components_sum",
+            "is_drink": false,
+            "components": [
+              {
+                "name": "Chicken",
+                "calories": 180,
+                "protein_g": 32,
+                "carbs_g": 0,
+                "fat_g": 7
+              },
+              {
+                "name": "Rice",
+                "calories": null,
+                "protein_g": null,
+                "carbs_g": null,
+                "fat_g": null
+              }
+            ],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Burrito Bowl",
+            "match_type": "components_sum",
+            "is_drink": false,
+            "components": [
+              {
+                "name": "Chicken",
+                "calories": 180,
+                "protein_g": 32,
+                "carbs_g": 0,
+                "fat_g": 7
+              },
+              {
+                "name": "Rice",
+                "calories": null,
+                "protein_g": null,
+                "carbs_g": null,
+                "fat_g": null
+              }
+            ],
+            "options": []
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "contextOnly",
+        "no_usable_match"
+      ]
+    },
+    {
+      "id": "range_wins_over_a_value",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": [
+                  900,
+                  1100
+                ],
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": null,
+                "calories_range": [
+                  900,
+                  1100
+                ],
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "suggest",
+        "range"
+      ]
+    },
+    {
+      "id": "bad_entries_are_skipped",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          "junk",
+          {
+            "item_index": -1,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 12,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": true,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0.0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "guess",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "<>",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": " \u200b ",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          },
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    },
+    {
+      "id": "source_url_with_spaces_around_it",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": " https://www.chipotle.com/nutrition-calculator\n",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    },
+    {
+      "id": "source_url_upper_case_scheme",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "HTTPS://WWW.CHIPOTLE.COM/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "HTTPS://WWW.CHIPOTLE.COM/nutrition-calculator",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    },
+    {
+      "id": "source_url_long_query",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator?ref=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator?ref=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "source_title": "Nutrition Calculator | Chipotle",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    },
+    {
+      "id": "superscript_year_in_the_title",
+      "analysis": {
+        "is_food": true,
+        "food_items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "estimated_calories": 900,
+            "protein_g": 50,
+            "carbs_g": 90,
+            "fat_g": 35,
+            "brand": "Chipotle",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ],
+        "total_calories": 900,
+        "total_protein_g": 50,
+        "total_carbs_g": 90,
+        "total_fat_g": 35,
+        "meal_description": "Chipotle lunch",
+        "estimate_confidence": "low",
+        "restaurant_context": "restaurant",
+        "portion_state": "whole",
+        "order_merchant": ""
+      },
+      "request": {
+        "items": [
+          {
+            "name": "Chicken burrito bowl (~550 g)",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      },
+      "raw": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator ²⁰¹⁹",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "sanitized": {
+        "status": "found",
+        "chain_key": "chipotle",
+        "restaurant_name": "Chipotle",
+        "matches": [
+          {
+            "item_index": 0,
+            "menu_item": "Chicken Burrito Bowl",
+            "match_type": "exact_item",
+            "is_drink": false,
+            "components": [],
+            "options": [
+              {
+                "label": "Regular",
+                "serving": "1 bowl",
+                "unit": "bowl",
+                "calories": 1050,
+                "calories_range": null,
+                "protein_g": 56,
+                "carbs_g": 98,
+                "fat_g": 44
+              }
+            ]
+          }
+        ],
+        "source_url": "https://www.chipotle.com/nutrition-calculator",
+        "source_title": "Nutrition Calculator ²⁰¹⁹",
+        "source_type": "official_site",
+        "source_year": 2026,
+        "match_confidence": 0.9,
+        "notes": "An exact menu item."
+      },
+      "raw_verbatim": [
+        "apply",
+        "ok"
+      ]
+    }
+  ]
+}

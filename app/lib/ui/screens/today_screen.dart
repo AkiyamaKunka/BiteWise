@@ -20,8 +20,11 @@ import '../widgets/calorie_ring.dart';
 import '../widgets/day_report.dart';
 import '../widgets/grouped.dart' show GroupedCard;
 import '../widgets/macro_chart.dart' show MacroPalette;
+import '../meal_in_use.dart';
 import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
+import '../restaurant_assist_controls.dart';
+import '../services.dart' show SettingsStore;
 import '../widgets/meal_card.dart';
 import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
@@ -37,12 +40,25 @@ class TodayScreen extends StatefulWidget {
   /// (null = feature off): Today must not know how the server is reached,
   /// only that a day may have an active-burn number.
   final GarminDailyFetch? garminDaily;
+
+  /// Held while a meal's editor is open (design R6a); null in tests.
+  final MealInUseRegistry? mealInUse;
+
+  /// The restaurant assist (design R7b): the cards' 'updated' dot and the
+  /// editor's source card. Null (tests) shows neither.
+  final RestaurantAssistControls? restaurantAssist;
+
+  /// The assist's mode and consent, for the editor's lookup.
+  final SettingsStore? settings;
   const TodayScreen(
       {super.key,
       required this.dao,
       required this.executor,
       this.thumbs,
-      this.garminDaily});
+      this.garminDaily,
+      this.mealInUse,
+      this.restaurantAssist,
+      this.settings});
 
   @override
   State<TodayScreen> createState() => TodayScreenState();
@@ -54,6 +70,10 @@ class TodayScreenState extends State<TodayScreen> {
   List<Meal> _todayMeals = const [];
   Map<String, num> _priorDayTotals = const {};
   GarminDaily? _garmin;
+
+  /// Meals an automatic restaurant lookup changed that were not opened
+  /// since (design R7b).
+  Set<int> _assistUnseen = const {};
 
   @override
   void initState() {
@@ -79,6 +99,7 @@ class TodayScreenState extends State<TodayScreen> {
     try {
       final todayMeals =
           byMealClock(await widget.dao.mealsBetween(today, today));
+      final unseen = await _readUnseen();
       // Typical-day window: prior 7 local days EXCLUDING today (spec §5.1).
       final prior = await widget.dao.mealsBetween(
         // Calendar days, matching summaryForDay — a 24 h step goes wrong
@@ -89,6 +110,7 @@ class TodayScreenState extends State<TodayScreen> {
       if (!mounted) return;
       setState(() {
         _todayMeals = todayMeals;
+        _assistUnseen = unseen;
         _priorDayTotals = dailyCalorieTotals(prior);
         _loading = false;
         _error = null;
@@ -102,11 +124,32 @@ class TodayScreenState extends State<TodayScreen> {
     }
   }
 
+  /// The 'updated' dots; none when the assist cannot say (never fails
+  /// the list).
+  Future<Set<int>> _readUnseen() async {
+    final read = widget.restaurantAssist?.unseen;
+    if (read == null) return const {};
+    try {
+      return await read();
+    } catch (_) {
+      return const {};
+    }
+  }
+
   /// Tap-through to the editor: correcting a number by hand is often faster
   /// than typing a sentence, and it costs no model call.
   Future<void> _editMeal(Meal meal) async {
+    // Opened: its dot goes now (the editor tells the assist too).
+    if (_assistUnseen.contains(meal.id)) {
+      setState(() => _assistUnseen = {..._assistUnseen}..remove(meal.id));
+    }
     await Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => MealEditorScreen(dao: widget.dao, meal: meal),
+      builder: (_) => MealEditorScreen(
+          dao: widget.dao,
+          meal: meal,
+          inUse: widget.mealInUse,
+          assist: widget.restaurantAssist,
+          settings: widget.settings),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie
     // An edit or delete changes the summary the iOS OS card carries; the
@@ -269,6 +312,7 @@ class TodayScreenState extends State<TodayScreen> {
                 meal: meal,
                 onTap: () => _editMeal(meal),
                 thumb: widget.thumbs?.thumbFor(meal),
+                assistUnseen: _assistUnseen.contains(meal.id),
               ),
           ]),
         ),

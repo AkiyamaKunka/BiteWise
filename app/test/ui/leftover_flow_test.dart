@@ -142,6 +142,105 @@ void main() {
         665);
   });
 
+  // Write safety (design R6a): the deduction is re-based on the meal as
+  // stored when the user confirms, and written compare-and-set.
+  group('a meal that changed before the confirm', () {
+    /// A restaurant lookup that lands meanwhile: published numbers for the
+    /// pork, totals moved by the same delta (no corrected flag).
+    Future<void> landLookup(int id) async {
+      final snap = (await dao.mealSnapshot(id))!;
+      final a = snap.meal.analysis;
+      final items = [
+        for (final it in a['food_items'] as List) Map<String, dynamic>.from(it),
+      ];
+      items[1]['estimated_calories'] = 865;
+      items[1]['published'] = true;
+      expect(
+          await dao.applyAssist(id, expectedRaw: snap.rawAnalysis, analysis: {
+            ...a,
+            'food_items': items,
+            'total_calories': 1165,
+            'assist': {'v': 2, 'status': 'applied', 'chain_key': 'chipotle'},
+          }),
+          isTrue);
+    }
+
+    testWidgets('deducts from the post-lookup total, with the same fractions',
+        (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      await pump(tester);
+      await runToConfirm(tester);
+      await landLookup(1); // while the confirm dialog is up
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+
+      final m = dao.byId(1);
+      expect(m.analysis['total_calories'], 865,
+          reason: 'rice left (1.0), the published pork eaten (0.0 left)');
+      expect(m.analysis['leftover']['original']['total_calories'], 1165,
+          reason: 'the base is the meal as it was when confirmed');
+      expect(m.corrected, isTrue);
+      expect(dao.ledger[_photoMd5], IngestionStatus.skipped);
+    });
+
+    testWidgets('a write between the re-read and the write gets one '
+        're-based retry', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      await pump(tester);
+      await runToConfirm(tester);
+      var landed = false;
+      dao.beforeCompareAndSet = (id) async {
+        if (landed) return;
+        landed = true;
+        await landLookup(id);
+      };
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+      expect(dao.compareMisses, 1);
+      expect(dao.byId(1).analysis['total_calories'], 865);
+      expect(dao.ledger[_photoMd5], IngestionStatus.skipped);
+    });
+
+    testWidgets('a second miss deducts nothing and says why', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      await pump(tester);
+      await runToConfirm(tester);
+      var bump = 0;
+      dao.beforeCompareAndSet = (id) async {
+        // Something keeps rewriting the meal.
+        final snap = (await dao.mealSnapshot(id))!;
+        await dao.applyAssist(id,
+            expectedRaw: snap.rawAnalysis,
+            analysis: {...snap.meal.analysis, 'rewrites': ++bump});
+      };
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+      expect(dao.compareMisses, 2);
+      expect(
+          find.text('That meal changed while the leftovers were being '
+              'estimated, so nothing was deducted. Try again.'),
+          findsOneWidget);
+      expect(dao.byId(1).analysis['total_calories'], 965);
+      expect(dao.byId(1).analysis.containsKey('leftover'), isFalse);
+      expect(dao.ledger.containsKey(_photoMd5), isFalse,
+          reason: 'the photo is not settled for a deduction that never landed');
+    });
+
+    testWidgets('a meal deleted before the confirm: the old error, nothing '
+        'written', (tester) async {
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      await pump(tester);
+      await runToConfirm(tester);
+      await dao.deleteMeal(1);
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+      expect(find.text("Couldn't estimate the leftovers from that photo."),
+          findsOneWidget);
+      expect(dao.updates, isEmpty);
+      expect(dao.ledger.containsKey(_photoMd5), isFalse);
+    });
+  });
+
   testWidgets('a different-meal verdict warns and cancel changes nothing',
       (tester) async {
     analyzer.nextLeftover = {

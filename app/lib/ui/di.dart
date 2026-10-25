@@ -7,6 +7,7 @@ library;
 import 'dart:async' show Completer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show compute;
@@ -18,7 +19,10 @@ import '../core/contracts.dart';
 import '../data/meals_dao_impl.dart';
 import '../services/analyzer/platform_decode.dart' show isEngineBackgrounded;
 import '../services/analyzer/provider_analyzers.dart'
-    show ServerAnalyzer, createMultiProviderAnalyzer;
+    show MultiProviderAnalyzer, ServerAnalyzer;
+import '../services/assist/assist_local_state.dart';
+import '../services/assist/assist_places_store.dart';
+import '../services/assist/meal_assist.dart';
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
@@ -33,7 +37,9 @@ import '../services/photo/glasses.dart' show captureMetaFor;
 import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../services/photo/photo_library.dart';
+import '../services/photo/photo_location.dart';
 import '../services/photo/share_intake.dart';
+import '../services/places/places.dart' show MapKitPlaces;
 import '../services/photo/watcher.dart';
 import '../services/report/builders.dart';
 import '../services/report/notifications.dart';
@@ -42,11 +48,13 @@ import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'background_glue.dart';
 import 'migrations.dart';
-import 'outcome_text.dart' show outcomeSnackbar;
+import 'outcome_text.dart' show assistAppliedSnackbar, outcomeSnackbar;
 import 'os_summary.dart';
+import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
 import 'refresh_signal.dart';
+import 'restaurant_assist_controls.dart';
 import 'services.dart';
 
 /// Singleton wiring of the workflow-fixed factories, in the spec'd startup
@@ -57,12 +65,24 @@ class AppServices {
   final PhotoPipeline pipeline;
   final AppSettings settings;
 
-  AppServices._(this.ui, this.pipeline, this.settings);
+  /// The app engine's one registry of meals a screen is working on (design
+  /// R6a): the screens hold, the restaurant assist (R6b) reads.
+  final MealInUseRegistry mealInUse;
+
+  /// The restaurant assist (design R6b): app engine only — background_glue
+  /// never builds one.
+  final MealAssist mealAssist;
+
+  AppServices._(this.ui, this.pipeline, this.settings, this.mealInUse,
+      this.mealAssist);
 
   static AppServices? _instance;
   static AppServices get instance => _instance!;
 
-  static Future<AppServices> init({void Function(String)? notify}) async {
+  static Future<AppServices> init(
+      {void Function(String)? notify,
+      void Function(String message, String action, void Function() onAction)?
+          notifyAction}) async {
     if (_instance != null) return _instance!;
 
     final settings = await AppSettings.load();
@@ -83,7 +103,12 @@ class AppServices {
         // A repair must never block startup.
       }
     }
-    final analyzer = createMultiProviderAnalyzer(settings);
+    // The app's daily restaurant-lookup ledger (design R6b: 20 a day, in
+    // shared_preferences): every lookup client counts against it.
+    final assistBudget =
+        AssistDailyBudget(await SharedPreferences.getInstance());
+    final analyzer =
+        MultiProviderAnalyzer(settings, lookupBudget: assistBudget);
     // A dedicated ServerAnalyzer instance for the OAuth re-connect calls:
     // they exist regardless of the currently selected provider (the user
     // may re-connect Claude while temporarily on Gemini).
@@ -227,7 +252,81 @@ class AppServices {
         foodCheck: Platform.isIOS ? foodScoreViaImageIO : null,
         glassesCheckLog: recordGlassesCheckLocally);
 
+    // Held by the editor, a leftover selection and a pending fix-meal
+    // request (design R6a); app engine only — background_glue builds none.
+    final mealInUse = MealInUseRegistry();
+
     final photoLibrary = PhotoManagerLibrary();
+
+    // The restaurant assist (design R6b): saved meals are enriched later,
+    // in the foreground only, when the pipeline is idle and no analyzer
+    // call is in flight. The mode, 'Use photo location' and the consent
+    // are R7a's settings (settings.restaurant_assist…), read fresh on every
+    // decision; Off — the default — makes no call.
+    final mealAssist = MealAssist(
+      dao: dao,
+      lookups: analyzer,
+      analyzerBusy: analyzer.analyzerBusy,
+      pipelineIdle: () => pipeline.isIdle,
+      inUse: mealInUse.isInUse,
+      budget: assistBudget,
+      state: AssistLocalState.platform(),
+      settings: () => AssistSettingsView(
+        mode: AssistMode.fromWire(settings.restaurantAssist),
+        useLocation: settings.restaurantAssistLocation,
+        consentAt: settings.restaurantAssistConsentAt,
+        consentRecipient: settings.restaurantAssistConsentRecipient,
+      ),
+      settingsChanges: settings,
+      mealsChanged: mealsChangedSignal,
+      onMealsChanged: signalMealsChanged,
+      inForeground: appEngineInForeground,
+      country: () => deviceRegion(
+            Platform.localeName,
+            PlatformDispatcher.instance.locales.map((l) => l.countryCode),
+          ),
+      repliesInChinese: () => settings.repliesInChinese,
+      // The location path (design R6c), iOS only: the photo's position
+      // from the library's record of the asset, Apple Maps' food places
+      // around it (one instance: its rate limit is the engine's), and the
+      // places the user taught. Android reads no photo location: brand-only.
+      location: Platform.isIOS ? PhotoLocationReader(photoLibrary) : null,
+      places: Platform.isIOS ? MapKitPlaces() : null,
+      placesStore: AssistPlacesStore.platform(),
+      onApplied: notifyAction == null
+          ? null
+          : (n) {
+              final l = localizationsFor(settings.appLanguage);
+              notifyAction(assistAppliedSnackbar(l, n), l.assistUndo,
+                  () => unawaited(n.undo()));
+            },
+    );
+
+    // Settings' Restaurant nutrition group and the consent sheets (design
+    // R7a): who a lookup would reach now, the assist's consent prompt and
+    // learned places, and what the owner's server says (Claude Plan only).
+    // The photo location is read on iOS only.
+    final restaurantAssist = RestaurantAssistControls(
+      lookupSupport: analyzer.lookupSupport,
+      clearLearnedPlaces: mealAssist.clearLearnedPlaces,
+      consentNeeded: mealAssist.consentNeeded,
+      serverState: () async =>
+          assistServerStateOf(await serverAnalyzer.serverFeatures()),
+      locationSupported: Platform.isIOS,
+      // The meal card's dot, the editor's source card and lookup, and
+      // Diagnostics' 'Restaurant lookups' (design R7b).
+      lookupNow: mealAssist.lookupNow,
+      act: mealAssist.act,
+      canLearnPlace: mealAssist.canLearnPlace,
+      unseen: mealAssist.unseen,
+      markSeen: mealAssist.markSeen,
+      lookupsDiagnostics: () async => RestaurantLookupsDiagnostics(
+        today: mealAssist.lookupsToday,
+        cap: mealAssist.dailyCap,
+        decisions: await mealAssist.decisions(),
+      ),
+    );
+
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
     // Permission.photos resolves to READ_MEDIA_IMAGES (SDK 33+ only) and
     // auto-DENIES with no dialog, dead-ending both photo flows on the
@@ -289,9 +388,13 @@ class AppServices {
       openSystemSettings: () async {
         await openAppSettings(); // permission_handler
       },
+      mealInUse: mealInUse,
+      restaurantAssist: restaurantAssist,
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     pipeline.bindStream(shareIntake.photos()); // share sheet (deliberate)
+    mealAssist.start();
+    var catchingUp = false;
     if (settings.watcherEnabled) {
       await photoIntake.start();
       // Launch catch-up over the FULL lookback window: change-notify only
@@ -303,8 +406,11 @@ class AppServices {
       // It also moves the background watermark over what it covers, so the
       // next background run starts from here (foregroundCatchUp).
       if (settings.canAutoAnalyze) {
+        catchingUp = true;
+        // The assist looks once the catch-up's photos are in (design R6b).
         unawaited(foregroundCatchUp(photoIntake,
                 shouldContinue: Platform.isIOS ? appEngineInForeground : null)
+            .whenComplete(() => unawaited(mealAssist.sweep()))
             .then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
@@ -316,11 +422,13 @@ class AppServices {
         }));
       }
     }
+    if (!catchingUp) unawaited(mealAssist.sweep());
     // Reconcile the periodic WorkManager backfill (background_glue) with the
     // persisted toggle so it also runs while the app is closed.
     await syncBackgroundScan(settings);
 
-    return _instance = AppServices._(ui, pipeline, settings);
+    return _instance =
+        AppServices._(ui, pipeline, settings, mealInUse, mealAssist);
   }
 }
 
@@ -412,6 +520,30 @@ class _AppSettingsStore implements SettingsStore {
   String get serverEffort => _s.serverEffort;
   @override
   int get calorieGoal => _s.calorieGoal;
+  @override
+  String get restaurantAssist => _s.restaurantAssist;
+  @override
+  bool get restaurantAssistLocation => _s.restaurantAssistLocation;
+  @override
+  DateTime? get restaurantAssistConsentAt => _s.restaurantAssistConsentAt;
+  @override
+  String? get restaurantAssistConsentRecipient =>
+      _s.restaurantAssistConsentRecipient;
+  @override
+  Future<void> updateRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  }) =>
+      _s.setRestaurantAssist(
+        mode: mode,
+        location: location,
+        consentAt: consentAt,
+        consentRecipient: consentRecipient,
+        clearConsent: clearConsent,
+      );
 
   @override
   Future<void> update({

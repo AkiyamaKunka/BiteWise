@@ -1,0 +1,43 @@
+{
+ "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+ "type": "message",
+ "role": "assistant",
+ "model": "claude-haiku-5-5",
+ "content": [
+  {
+   "type": "text",
+   "text": "I'll look up McDonald's published nutrition for the Big Mac."
+  },
+  {
+   "type": "server_tool_use",
+   "id": "srvtoolu_011111111111111111111111",
+   "name": "web_search",
+   "input": {
+    "query": "McDonald's Big Mac calories nutrition"
+   }
+  },
+  {
+   "type": "web_search_tool_result",
+   "tool_use_id": "srvtoolu_011111111111111111111111",
+   "content": {
+    "type": "web_search_tool_result_error",
+    "error_code": "too_many_requests"
+   }
+  },
+  {
+   "type": "text",
+   "text": "I could not search right now."
+  }
+ ],
+ "stop_reason": "end_turn",
+ "stop_sequence": null,
+ "usage": {
+  "input_tokens": 2100,
+  "cache_creation_input_tokens": 0,
+  "cache_read_input_tokens": 0,
+  "output_tokens": 60,
+  "server_tool_use": {
+   "web_search_requests": 0
+  }
+ }
+}

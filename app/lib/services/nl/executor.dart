@@ -13,6 +13,8 @@ import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/outcome_kind.dart';
 import '../../core/prompts.dart';
+import '../../core/restaurant_assist_logic.dart'
+    show dropAssistClaims, supersedeAssist;
 import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/coach_strings.dart' show localizationsFor;
@@ -340,6 +342,30 @@ class DefaultNlExecutor implements NlExecutor {
     // change that happened — spec §4.4.5).
     final target = meals[mealIndex];
     final old = target.analysis;
+    // The row as it is NOW, for what the correction carries over: the
+    // prompt's snapshot was taken before the model call, and a restaurant
+    // lookup may have landed on this meal since (design R6a).
+    final current = await _currentAnalysis(target.id) ?? old;
+    // How the photo was taken (analysis.capture, design G2a) is the
+    // intake's reading of the photo's own bytes, never a model's: the chat
+    // model never even sees it (buildMealsList leaves it out). So the
+    // stored block is carried over and anything the model wrote there is
+    // dropped — the Meta glasses badge stays, and the duplicate-capture
+    // guard (mealIdsWithShutterKey) still finds this shutter press, so a
+    // later file of the same press is not logged as a second meal.
+    sanitized.remove('capture');
+    final capture = current['capture'];
+    if (capture is Map) {
+      sanitized['capture'] = Map<String, dynamic>.from(capture);
+    }
+    // The restaurant assist's block (design R6a), likewise never shown to
+    // the model: whatever the model wrote there, or as a `published` flag,
+    // is dropped, and the stored block is kept as provenance — an applied
+    // or suggested one marked 'superseded', since its stamps describe
+    // numbers this correction replaces.
+    dropAssistClaims(sanitized);
+    final assist = supersedeAssist(current['assist']);
+    if (assist != null) sanitized['assist'] = assist;
     final oldCal = safeNumber(old['total_calories']);
     final newCal = safeNumber(sanitized['total_calories']);
     final oldDesc = _desc(old);
@@ -367,6 +393,16 @@ class DefaultNlExecutor implements NlExecutor {
     ];
     if (isTruthy(reason)) lines.add('\n💬 $reason');
     return NlReply(lines.join('\n'), applied: true);
+  }
+
+  /// The stored analysis of meal [mealId] right now, or null when it is
+  /// gone or cannot be read (the caller falls back to its snapshot).
+  Future<Map<String, dynamic>?> _currentAnalysis(int mealId) async {
+    try {
+      return (await dao.mealSnapshot(mealId))?.meal.analysis;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// _nl_delete (spec §4.5, telegram_bot.py:4035-4094). Stages ids + labels
@@ -463,6 +499,10 @@ class DefaultNlExecutor implements NlExecutor {
     if (sanitized.containsKey('food_items')) {
       sanitized['food_items'] = safeFoodItems(sanitized);
     }
+    // A text meal has no photo and no lookup behind it: a capture or
+    // assist block the model wrote is not evidence of either (design R6a).
+    sanitized.remove('capture');
+    dropAssistClaims(sanitized);
     final now = DateTime.now();
     await dao.saveMeal(Meal(
       id: 0, // assigned by the DAO

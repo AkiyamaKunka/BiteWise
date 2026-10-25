@@ -8,8 +8,10 @@
 /// not recognise falls back to the raw message rather than a wrong guess.
 library;
 
+import '../core/chain_match.dart' show chainByKey;
 import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
+import '../services/assist/meal_assist.dart' show AssistAppliedNotice;
 import 'format.dart' show mealDescription;
 import 'photo_pipeline.dart';
 import 'provider_names.dart';
@@ -34,6 +36,12 @@ String? _shownName(AppLocalizations l, PhotoOutcome o) {
 String outcomeBody(AppLocalizations l, PhotoOutcome o,
     {bool deliberate = false}) {
   final d = o.detail;
+  // The photo WAS analyzed — as leftovers of a meal that changed before the
+  // deduction could land (design R6a). Nothing was cut; Retry asks again.
+  if (o.kind == PhotoOutcomeKind.failed &&
+      o.reason == leftoverConflictReason) {
+    return l.leftoverConflict;
+  }
   if (deliberate && o.kind == PhotoOutcomeKind.failed && o.retryable) {
     final reason = switch (o.errorKind) {
       // These lines promise nothing and name the fix.
@@ -124,23 +132,61 @@ String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
       : body;
 }
 
+/// A chain's name as the app language shows it: the Chinese name our chain
+/// table gives it in the Chinese UI (麦当劳), else [brandName] — the
+/// table's canonical name the assist block carries. Never the model's
+/// spelling.
+String assistBrandLabel(AppLocalizations l, String? chainKey, String brandName) {
+  if (l.localeName.startsWith('zh')) {
+    final zh = chainByKey(chainKey)?.zhName;
+    if (zh != null && zh.isNotEmpty) return zh;
+  }
+  return brandName;
+}
+
+/// The snackbar after the restaurant assist applied a chain's published
+/// numbers (design R6b): "Used McDonald's published numbers: 540 → 590
+/// kcal" / "已采用 麦当劳 公布的数值：540 → 590 千卡". Its action is
+/// [AppLocalizations.assistUndo]. English takes the name's possessive
+/// ([_possessive]); Chinese the name as it is.
+String assistAppliedSnackbar(AppLocalizations l, AssistAppliedNotice n) {
+  final name = assistBrandLabel(l, n.chainKey, n.brandName);
+  return l.assistAppliedSnack(
+    l.localeName.startsWith('zh') ? name : _possessive(name),
+    '${n.oldKcal}',
+    '${n.newKcal}',
+  );
+}
+
+/// An English possessive of a chain name: "Chipotle's", "Popeyes'", and
+/// a name that already is one as it is ("McDonald's", "Wendy’s").
+String _possessive(String name) {
+  final lower = name.toLowerCase();
+  if (lower.endsWith("'s") || lower.endsWith('’s')) return name;
+  if (lower.endsWith('s')) return "$name'";
+  return "$name's";
+}
+
 /// A short "why" for a released (retryable) failure, for the lines that
 /// wrap it in parentheses; null for a kind without one (the caller falls
 /// back to its own wording).
-String? retryReason(AppLocalizations l, PhotoOutcome o) =>
-    switch (o.errorKind) {
-      AnalysisErrorKind.rateLimited => l.reasonRateLimited,
-      AnalysisErrorKind.quotaPaused => l.reasonQuotaPaused,
-      AnalysisErrorKind.billing => l.reasonBilling,
-      AnalysisErrorKind.network => l.reasonNetwork,
-      AnalysisErrorKind.serverBusy => l.reasonServerBusy,
-      AnalysisErrorKind.serverError => l.reasonServerFailed,
-      AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
-      AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
-      AnalysisErrorKind.regionBlocked =>
-        l.reasonRegionBlocked(regionProvider(l, o.message)),
-      _ => null,
-    };
+String? retryReason(AppLocalizations l, PhotoOutcome o) {
+  // Analyzed, but the meal its leftovers belong to changed (design R6a).
+  if (o.reason == leftoverConflictReason) return l.reasonLeftoverConflict;
+  return switch (o.errorKind) {
+    AnalysisErrorKind.rateLimited => l.reasonRateLimited,
+    AnalysisErrorKind.quotaPaused => l.reasonQuotaPaused,
+    AnalysisErrorKind.billing => l.reasonBilling,
+    AnalysisErrorKind.network => l.reasonNetwork,
+    AnalysisErrorKind.serverBusy => l.reasonServerBusy,
+    AnalysisErrorKind.serverError => l.reasonServerFailed,
+    AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
+    AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
+    AnalysisErrorKind.regionBlocked =>
+      l.reasonRegionBlocked(regionProvider(l, o.message)),
+    _ => null,
+  };
+}
 
 /// Who refused the network region, out of the analyzers' "`Provider` is
 /// not available from your current network region …" (Gemini's region

@@ -8,6 +8,8 @@ import 'package:calorie_tracker/services/photo/background_time.dart'
     show backgroundTimeChannelName;
 import 'package:calorie_tracker/services/photo/photo_changes.dart'
     show photoChangesChannelName;
+import 'package:calorie_tracker/services/places/places.dart'
+    show placesChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:calorie_tracker/ui/background_glue.dart'
     show backgroundNativeLaunchPrefsKey;
@@ -402,6 +404,113 @@ void main() {
     expect(register, contains('PhotoChangesPlugin.register(with:'));
   });
 
+  // Restaurant assist's places (PlacesPlugin.swift, design R4,
+  // 2026-10-24): Apple Maps on the phone lists the food places around a
+  // photo's position. A Swift file missing from Runner answers
+  // MissingPluginException, which the Dart side turns into a quiet 'error'
+  // by design, so the wiring is pinned here. And it must never need a
+  // location permission: no CLLocationManager (the prompt), no geocoder
+  // (no city or street, ever), no NSLocation* key in either Info.plist —
+  // and on Android no location permission at all, ACCESS_MEDIA_LOCATION
+  // included (v1 reads no photo location there).
+  test('the places plugin is built into Runner, registered, and needs no '
+      'location permission on either platform', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/PlacesPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$placesChannelName"'));
+    expect(source, contains('MKLocalPointsOfInterestRequest'));
+    // The code, without its comments (which name what it never does).
+    final code = source
+        .split('\n')
+        .map((line) => line.replaceFirst(RegExp(r'//.*'), ''))
+        .join('\n');
+    for (final banned in [
+      'CLLocationManager',
+      'CLGeocoder',
+      'requestWhenInUseAuthorization',
+      'requestAlwaysAuthorization',
+      'requestLocation',
+      'startUpdatingLocation',
+      'MKReverseGeocodingRequest',
+      'MKGeocodingRequest',
+      'reverseGeocode',
+      // Nothing that identifies or addresses a place goes back to Dart.
+      'phoneNumber',
+      '.identifier',
+      'thoroughfare',
+      'postalAddress',
+      'addressRepresentations',
+      'UserDefaults',
+      'FileManager',
+    ]) {
+      expect(code, isNot(contains(banned)),
+          reason: 'PlacesPlugin.swift must not use $banned');
+    }
+
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* PlacesPlugin.swift \*/ = '
+            r'\{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* PlacesPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* PlacesPlugin.swift in '
+            'Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* PlacesPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('PlacesPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('registrar(forPlugin: "PlacesPlugin")'));
+    expect(register, contains('PlacesPlugin.register(with:'));
+
+    for (final target in ['Runner', 'ShareExtension']) {
+      final plist =
+          File('$ios/$target/Info.plist').readAsStringSync();
+      expect(RegExp(r'<key>NSLocation[A-Za-z]*</key>').hasMatch(plist),
+          isFalse,
+          reason: '$target/Info.plist declares a location key: places need '
+              'no location permission, and none may be asked for');
+    }
+
+    final manifest = File('${_appRoot().path}/android/app/src/main/'
+            'AndroidManifest.xml')
+        .readAsStringSync();
+    for (final permission in [
+      'ACCESS_MEDIA_LOCATION',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+    ]) {
+      expect(manifest, isNot(contains(permission)),
+          reason: 'v1 reads no location on Android');
+    }
+  });
+
   // The iOS background run counts its time budgets from the moment
   // workmanager started its engine (2026-10-19): the AppDelegate stamps it
   // in the registrant callback, which runs right after the engine is
@@ -508,5 +617,78 @@ void main() {
     expect(exclude.hasMatch(full), isTrue,
         reason: 'fullBackupContent does not exclude $localStoreDirName/');
     expect(full, isNot(contains('<include')));
+  });
+
+  // Design R7a: while restaurant lookup uses the photo location, the app
+  // reads where a meal photo was taken. iOS shows NSPhotoLibraryUsageDescription
+  // in the permission prompt, from Info.plist and from each InfoPlist.strings
+  // (which wins for its language) — so all three must say it, in step: the
+  // English pair identical, the Chinese one saying the same. Neither may
+  // suggest the location leaves for anyone but Apple Maps.
+  test('the photo-library usage string says when the photo location is read, '
+      'in Info.plist and both InfoPlist.strings', () {
+    final ios = '${_appRoot().path}/ios/Runner';
+    final plist = File('$ios/Info.plist').readAsStringSync();
+    final fromPlist = RegExp(
+            r'<key>NSPhotoLibraryUsageDescription</key>\s*<string>([^<]*)</string>')
+        .firstMatch(plist)
+        ?.group(1);
+    String fromStrings(String lproj) {
+      final file = File('$ios/$lproj/InfoPlist.strings');
+      expect(file.existsSync(), isTrue, reason: file.path);
+      final value = RegExp(r'"NSPhotoLibraryUsageDescription" = "([^"]*)";')
+          .firstMatch(file.readAsStringSync())
+          ?.group(1);
+      expect(value, isNotNull, reason: '$lproj has no usage string');
+      return value!;
+    }
+
+    expect(fromPlist, isNotNull);
+    final en = fromStrings('en.lproj');
+    final zh = fromStrings('zh-Hans.lproj');
+    expect(en, fromPlist, reason: 'en.lproj mirrors Info.plist');
+    // The photo prompt's first purpose is unchanged.
+    expect(en, contains('AI service you choose in Settings'));
+    expect(zh, contains('AI 服务'));
+    // R7a: the photo's location, read only for restaurant lookup, and only
+    // to ask Apple Maps.
+    expect(en, contains('restaurant lookup with photo location'));
+    expect(en, contains('where a restaurant meal photo was taken'));
+    expect(en, contains('only to ask Apple Maps'));
+    expect(zh, contains('使用照片位置的餐厅查询'));
+    expect(zh, contains('拍摄位置'));
+    expect(zh, contains('仅用于向 Apple 地图查询'));
+    // The editor's answers keep a ~100 m cell on the phone (review
+    // 2026-10-25): the prompt says so too.
+    expect(en, contains('to remember, on this phone, the restaurants you '
+        'confirm or rule out'));
+    expect(zh, contains('在本机记住你在那里确认或排除的餐厅'));
+  });
+
+  // App Store Connect's App Privacy answer is "Data Not Collected" with the
+  // rationale in docs/RELEASING.md § 4.3 (design "Store disclosures"): the
+  // developer collects nothing; data goes from the user's phone to the
+  // user's own server or provider account, and Apple Maps' queries are
+  // Apple's. Both manifests must say the same — no collected data types.
+  test('both privacy manifests declare no collected data types', () {
+    final ios = '${_appRoot().path}/ios';
+    for (final target in const ['Runner', 'ShareExtension']) {
+      final plist =
+          File('$ios/$target/PrivacyInfo.xcprivacy').readAsStringSync();
+      expect(
+          RegExp(r'<key>NSPrivacyCollectedDataTypes</key>\s*<array\s*/>')
+              .hasMatch(plist),
+          isTrue,
+          reason: '$target/PrivacyInfo.xcprivacy must keep '
+              'NSPrivacyCollectedDataTypes an empty array (RELEASING.md § 4.3)');
+      expect(
+          RegExp(r'<key>NSPrivacyTracking</key>\s*<false\s*/>').hasMatch(plist),
+          isTrue,
+          reason: target);
+    }
+    final releasing = File('${_appRoot().parent.path}/docs/RELEASING.md')
+        .readAsStringSync();
+    expect(releasing, contains('NSPrivacyCollectedDataTypes'));
+    expect(releasing, contains('Data Not Collected'));
   });
 }

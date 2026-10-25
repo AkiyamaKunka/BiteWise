@@ -128,6 +128,18 @@ class ReservationLost implements Exception {
 /// ITS [id] — nothing from this save was written to the meals table.
 typedef MealSaveResult = ({int id, bool inserted});
 
+/// One meal row exactly as stored, for a compare-and-set writer (design
+/// R6a, "Write safety"): [meal] decoded as every reader sees it, and
+/// [rawAnalysis] — the analysis column's TEXT, byte for byte. A writer
+/// hands [rawAnalysis] back as `expectedRaw`, and the write lands only
+/// while the column still holds exactly that text: whatever changed the
+/// meal in between (an editor save, a leftover deduction, a chat fix, a
+/// restaurant lookup) wins, and the stale writer is told so. The raw text,
+/// never a re-encoding of [meal]: a row an import or the server wrote with
+/// other spacing or key order would never compare equal to Dart's
+/// jsonEncode, and its writers would fail forever.
+typedef MealSnapshot = ({Meal meal, String rawAnalysis, bool corrected});
+
 /// Persistence seam (spec §2, §5 read shapes).
 abstract class MealsDao {
   /// [ownerStamp]: the [PhotoReservationResult.stamp] this save settles —
@@ -150,6 +162,36 @@ abstract class MealsDao {
   /// corrected=1 like [updateMealAnalysis].
   Future<void> updateMealFields(int mealId,
       {Map<String, dynamic>? analysis, String? date, String? time});
+
+  /// The meal [mealId] as stored ([MealSnapshot]), or null when no such
+  /// meal exists. Read-only.
+  Future<MealSnapshot?> mealSnapshot(int mealId);
+
+  /// The restaurant assist's write (design R6a/R6b): [analysis] lands only
+  /// while the meal is still uncorrected (corrected=0) and its analysis
+  /// column still holds exactly [expectedRaw] — one conditional UPDATE, so
+  /// nothing can slip between the check and the write. NEVER sets
+  /// corrected: published numbers are not the user's own edit, and an
+  /// Undo goes through here too. False — nothing written — when the meal
+  /// is gone, was corrected, or changed since [expectedRaw] was read.
+  Future<bool> applyAssist(int mealId,
+      {required String expectedRaw, required Map<String, dynamic> analysis});
+
+  /// [updateMealAnalysis] as a compare-and-set: sets corrected=1 and writes
+  /// [analysis] only while the analysis column still holds exactly
+  /// [expectedRaw]. False — nothing written — when the meal is gone or
+  /// changed since.
+  Future<bool> updateMealAnalysisIfUnchanged(int mealId,
+      {required String expectedRaw, required Map<String, dynamic> analysis});
+
+  /// [updateMealFields] as a compare-and-set against [expectedRaw] (the
+  /// editor's save): false — nothing written — when the meal is gone or
+  /// its analysis changed since the editor loaded it.
+  Future<bool> updateMealFieldsIfUnchanged(int mealId,
+      {required String expectedRaw,
+      Map<String, dynamic>? analysis,
+      String? date,
+      String? time});
   Future<void> deleteMeal(int mealId); // tombstones the ledger row (spec §2)
   Future<List<Meal>> mealsBetween(String startDate, String endDate);
   Future<List<Meal>> recentMeals({int days = 7}); // food-only, oldest-first
@@ -171,9 +213,16 @@ abstract class MealsDao {
   /// deduction written to meal [mealId] (as [updateMealAnalysis]). Two
   /// separate writes lost the deduction silently when the app was killed,
   /// or the update threw, between them. [ReservationLost] as [markPhotoHash].
-  Future<void> applyLeftoverVerdict(
+  ///
+  /// [expectedRaw] (design R6a): the deduction lands only while meal
+  /// [mealId]'s analysis column still holds exactly that text, checked in
+  /// the same transaction after the [ownerStamp] check. False — nothing
+  /// written, the photo still held — when it no longer does (or the meal
+  /// is gone); the caller re-reads, re-bases and tries once more. True
+  /// otherwise, including every call without [expectedRaw].
+  Future<bool> applyLeftoverVerdict(
       String imageHash, int mealId, Map<String, dynamic> analysis,
-      {String? ownerStamp});
+      {String? ownerStamp, String? expectedRaw});
   Future<void> reclaimStaleProcessing(); // launch-time sweep (spec §2 delta)
 
   /// Forget every verdict from [source] that did not become a meal

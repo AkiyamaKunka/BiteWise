@@ -18,6 +18,7 @@ import '../../services/photo/photo_changes.dart'
         readLateImportStats;
 import '../diagnostics.dart';
 import '../l10n.dart';
+import '../restaurant_assist_controls.dart' show RestaurantLookupsDiagnostics;
 import '../widgets/small_spinner.dart';
 
 /// How many background runs the page lists (20 are kept).
@@ -39,6 +40,15 @@ class DiagnosticsScreen extends StatefulWidget {
   /// first; null reads it from the device (readGlassesChecks).
   final Future<List<GlassesCheckEntry>> Function()? loadGlassesChecks;
 
+  /// The restaurant assist's lookups today and its last decisions (design
+  /// R7b; MealAssist). Null: no section (the assist is not built).
+  final Future<RestaurantLookupsDiagnostics> Function()? loadRestaurantLookups;
+
+  /// How sure the AI said it was about the last 14 days' photo meals
+  /// (confidenceCounts). Null: no section.
+  final Future<({int low, int medium, int high, int unknown})> Function()?
+      loadConfidence;
+
   /// The clock for the "in 7 days" count.
   final DateTime Function() now;
   const DiagnosticsScreen(
@@ -47,6 +57,8 @@ class DiagnosticsScreen extends StatefulWidget {
       this.loadBackgroundRuns,
       this.loadLateImports,
       this.loadGlassesChecks,
+      this.loadRestaurantLookups,
+      this.loadConfidence,
       this.now = DateTime.now});
 
   @override
@@ -63,6 +75,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       (widget.loadLateImports ?? readLateImportStats)();
   late final Future<List<GlassesCheckEntry>> _glassesChecks =
       (widget.loadGlassesChecks ?? readGlassesChecks)();
+  late final Future<RestaurantLookupsDiagnostics?> _restaurant =
+      _quiet(widget.loadRestaurantLookups);
+  late final Future<({int low, int medium, int high, int unknown})?>
+      _confidence = _quiet(widget.loadConfidence);
+
+  /// [load]'s answer, or null when there is no loader or it fails: a
+  /// section that cannot be read is left out, never an error page.
+  static Future<T?> _quiet<T>(Future<T> Function()? load) async {
+    if (load == null) return null;
+    try {
+      return await load();
+    } catch (_) {
+      return null;
+    }
+  }
 
   Future<void> _run() async {
     setState(() {
@@ -213,6 +240,18 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 ? _GlassesChecks(snap.data!)
                 : const SizedBox.shrink(),
           ),
+          FutureBuilder<RestaurantLookupsDiagnostics?>(
+            future: _restaurant,
+            builder: (context, snap) => snap.data == null
+                ? const SizedBox.shrink()
+                : _RestaurantLookups(snap.data!),
+          ),
+          FutureBuilder<({int low, int medium, int high, int unknown})?>(
+            future: _confidence,
+            builder: (context, snap) => snap.data == null
+                ? const SizedBox.shrink()
+                : _Confidence(snap.data!),
+          ),
         ],
       ),
     );
@@ -299,6 +338,80 @@ class _GlassesChecks extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+/// "Restaurant lookups" (design R7b): today's lookups against the cap and
+/// the last decision's code, then the last 20 decisions — reason codes,
+/// kcal and providers only. The log holds no restaurant, item or place, so
+/// none can show.
+class _RestaurantLookups extends StatelessWidget {
+  const _RestaurantLookups(this.diag);
+  final RestaurantLookupsDiagnostics diag;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = context.l10n;
+    final muted = theme.textTheme.bodySmall
+        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final newestFirst = diag.decisions.reversed.toList();
+    return Column(
+      key: const Key('diagRestaurantLookups'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(l.diagRestaurantTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+            l.diagRestaurantToday(diag.today, diag.cap,
+                newestFirst.isEmpty ? '—' : newestFirst.first.code),
+            key: const Key('diagRestaurantToday'),
+            style: theme.textTheme.bodyMedium),
+        const SizedBox(height: 4),
+        Text(
+            newestFirst.isEmpty
+                ? l.diagRestaurantNone
+                : l.diagRestaurantIntro,
+            style: muted),
+        for (final e in newestFirst) ...[
+          const SizedBox(height: 4),
+          Text(restaurantDecisionLine(l, e),
+              style: theme.textTheme.bodySmall),
+        ],
+      ],
+    );
+  }
+}
+
+/// "AI confidence (14 days)": how many photo meals the AI called low,
+/// medium or high confidence, and how many replies did not say — what
+/// 'When unsure' triggers on (design R7b).
+class _Confidence extends StatelessWidget {
+  const _Confidence(this.counts);
+  final ({int low, int medium, int high, int unknown}) counts;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = context.l10n;
+    return Column(
+      key: const Key('diagConfidence'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(l.diagConfidenceTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(
+            l.diagConfidenceLine(
+                counts.low, counts.medium, counts.high, counts.unknown),
+            style: theme.textTheme.bodyMedium),
+        const SizedBox(height: 4),
+        Text(l.diagConfidenceIntro,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
       ],
     );
   }

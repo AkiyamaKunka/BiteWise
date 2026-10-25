@@ -21,6 +21,7 @@ import 'dart:async';
 
 import '../../core/contracts.dart';
 import '../local_store.dart';
+import 'capture_dating.dart' show glassesImportLag;
 import 'food_prefilter.dart';
 import 'glasses.dart' show captureAnalysis;
 
@@ -117,8 +118,11 @@ class GlassesCheckEntry {
   final String? make;
   final String? model;
 
-  /// When it joined the library minus its creation date, in seconds: the
-  /// import lag. Null when the library did not say (before iOS 26).
+  /// When it joined the library minus its shutter, in seconds: the import
+  /// lag (capture_dating.dart glassesImportLag — the creation date, or the
+  /// EXIF shutter where the dating guard dates the photo by it). Null when
+  /// the library did not say (before iOS 26). A later verdict that does not
+  /// know it keeps the one an earlier row knew ([recordGlassesCheck]).
   final int? lagSeconds;
 
   /// Whether its EXIF carries a GPS position (never the position itself).
@@ -180,10 +184,9 @@ class GlassesCheckEntry {
     final capture = photo.capture;
     final exif = capture?.exif;
     int? lag;
-    final created = capture?.createDate, added = capture?.addedDate;
-    if (created != null && added != null) {
-      final s = added.difference(created).inSeconds;
-      if (s.abs() <= _maxSeconds) lag = s;
+    final sinceShutter = glassesImportLag(capture, now: at)?.inSeconds;
+    if (sinceShutter != null && sinceShutter.abs() <= _maxSeconds) {
+      lag = sinceShutter;
     }
     int? fixDelta;
     try {
@@ -227,7 +230,9 @@ String? _text(String? v) {
 
 /// Adds [entry] to the record in [store]: it replaces an earlier row of the
 /// same asset, then rows older than [glassesCheckWindow] and all but the
-/// newest [glassesCheckKept] go. Never throws.
+/// newest [glassesCheckKept] go. The import lag is the photo's, not the
+/// verdict's: when [entry] does not know it (a deliberate re-add, whose
+/// intake never asks the library) the replaced row's is kept. Never throws.
 Future<void> recordGlassesCheck(LocalNoBackupStore store,
     GlassesCheckEntry entry,
     {DateTime? now}) async {
@@ -235,12 +240,22 @@ Future<void> recordGlassesCheck(LocalNoBackupStore store,
     final at = now ?? DateTime.now();
     final doc =
         await store.read(glassesCheckDocument, version: glassesCheckVersion);
-    final rows = [
-      for (final row in pruneByTtl(doc['entries'], 'at', glassesCheckWindow,
-          now: at))
-        if (entry.assetId.isEmpty || row['asset'] != entry.assetId) row,
-      entry.toJson(),
-    ];
+    final json = entry.toJson();
+    final rows = <Map<String, Object?>>[];
+    for (final row in pruneByTtl(doc['entries'], 'at', glassesCheckWindow,
+        now: at)) {
+      if (entry.assetId.isEmpty || row['asset'] != entry.assetId) {
+        rows.add(row);
+        continue;
+      }
+      final known = row['lag_s'];
+      if (entry.lagSeconds == null &&
+          known is int &&
+          known.abs() <= _maxSeconds) {
+        json['lag_s'] = known;
+      }
+    }
+    rows.add(json);
     await store.write(glassesCheckDocument,
         {'entries': capNewest(rows, glassesCheckKept, field: 'at')},
         version: glassesCheckVersion);
