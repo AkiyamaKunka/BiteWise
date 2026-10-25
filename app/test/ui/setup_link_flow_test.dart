@@ -3,6 +3,8 @@
 // the server configured. Malformed links are refused with a message.
 import 'dart:async';
 
+import 'package:calorie_tracker/core/setup_link.dart'
+    show setupLinkRepeatWindow;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/services.dart';
@@ -125,6 +127,53 @@ void main() {
     await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
+  });
+
+  // Review 2026-10-25: app_links' stream also carries the link that
+  // cold-started the app, which the initial-link read delivered already —
+  // two confirmations for one link (simctl openurl on a cold start).
+  testWidgets('a cold-start link that the stream repeats asks once',
+      (tester) async {
+    final settings = FakeSettings(apiKey: 'old', watcherEnabled: false);
+    final links = StreamController<Uri>.broadcast();
+    final services = UiServices(
+      dao: FakeDao(),
+      analyzer: FakeAnalyzer(),
+      executor: FakeExecutor(),
+      settings: settings,
+      picker: FakePicker(),
+      requestPhotoPermission: () async => true,
+      reports: FakeReports(),
+      setupLinks: links.stream,
+      initialSetupLink: () async => good,
+    );
+    await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+    links.add(good);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('setupLinkConfirm')), findsNothing,
+        reason: 'no second dialog behind the first');
+    expect(settings.apiKey, key);
+    await links.close();
+  });
+
+  testWidgets('the same link opened again later asks again', (tester) async {
+    final (services, settings, links) = rig();
+    await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
+    links.add(good);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    // The window is measured on the wall clock.
+    await tester.runAsync(() => Future<void>.delayed(
+        setupLinkRepeatWindow + const Duration(milliseconds: 50)));
+    links.add(good);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
+    expect(settings.apiKey, 'old');
+    await links.close();
   });
 
   // iOS share sheet: receive_sharing_intent bounces the extension to the

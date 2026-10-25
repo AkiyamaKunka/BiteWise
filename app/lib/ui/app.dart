@@ -233,6 +233,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// The last setup link handled, and when: app_links' stream also
+  /// carries the link that cold-started the app, which the initial-link
+  /// read already delivered — one link, one confirmation.
+  ({String uri, DateTime at})? _lastSetupLink;
+
   /// A setup link arrived. Never applied silently: a crafted link could
   /// point every future photo upload at a stranger's server, so the user
   /// sees exactly what it names and confirms with one tap.
@@ -241,6 +246,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // bounce on iOS, which app_links also forwards — is ignored silently.
     // Only a malformed bitewise:// link earns the "not valid" message.
     if (!isSetupLinkScheme(uri)) return;
+    final now = DateTime.now();
+    final text = uri.toString();
+    final last = _lastSetupLink;
+    if (last != null &&
+        last.uri == text &&
+        now.difference(last.at) < setupLinkRepeatWindow) {
+      return;
+    }
+    _lastSetupLink = (uri: text, at: now);
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {

@@ -151,3 +151,39 @@ def test_photo_permission_text_mentions_the_photo_location():
     assert "only to ask Apple Maps" in plist
     assert "only to ask Apple Maps" in en
     assert "仅用于向 Apple 地图查询" in zh
+
+
+def test_policy_and_consent_say_what_the_review_found_unsaid():
+    """Review 2026-10-25: the editor's answers read the photo's location to
+    keep a ~100 m cell (only with 'Use photo location' on); the meal's
+    record keeps the lookup's notes and how the chain was found; 'Clear
+    learned places' also drops recent answers; the consent names the region
+    code and reply language a lookup sends."""
+    en, zh = _policy_halves()
+    en_lookup = _lookup_section(en, "### Restaurant nutrition lookup")
+    zh_lookup = _lookup_section(zh, "### 餐厅营养查询")
+    assert "reads that photo's location once more" in en_lookup
+    assert "for lookups and for your answers alike" in en_lookup
+    assert "再读取一次这张照片的拍摄位置" in zh_lookup
+    assert "查询和你的回答都一样" in zh_lookup
+    assert "the lookup's notes (at most 200 characters" in en_lookup
+    assert "the photo's location, or your own pick" in en_lookup
+    assert "查询的备注（最多 200 个字符" in zh_lookup
+    assert "照片的拍摄位置，或你自己选的" in zh_lookup
+    en_flat, zh_flat = _flat(en), _flat(zh)
+    assert ("deletes the places, the recent lookup answers and the lookups "
+            "still waiting") in en_flat
+    assert "会删除这些地点、最近的查询结果和还在等待的查询" in zh_flat
+    ena, zha = _arb("en"), _arb("zh")
+    for k in ("restaurantConsentSent", "restaurantConsentSentAndroid"):
+        assert "region code" in ena[k] and "reply language" in ena[k], k
+        assert "地区代码" in zha[k] and "回复语言" in zha[k], k
+    # One "which" once the recipient's name is spliced in.
+    sent = ena["restaurantConsentSent"].replace(
+        "{recipient}", ena["restaurantRecipientNameClaudePlan"])
+    assert sent.count(" which ") == 1
+    for f in (("Info.plist",), ("en.lproj", "InfoPlist.strings")):
+        assert "to remember, on this phone" in _read(
+            "app", "ios", "Runner", *f)
+    assert "在本机记住" in _read(
+        "app", "ios", "Runner", "zh-Hans.lproj", "InfoPlist.strings")

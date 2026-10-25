@@ -7,6 +7,7 @@ library;
 import 'dart:async' show Completer, unawaited;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
+import 'dart:ui' show PlatformDispatcher;
 
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show compute;
@@ -280,7 +281,10 @@ class AppServices {
       mealsChanged: mealsChangedSignal,
       onMealsChanged: signalMealsChanged,
       inForeground: appEngineInForeground,
-      country: () => regionOfLocale(Platform.localeName),
+      country: () => deviceRegion(
+            Platform.localeName,
+            PlatformDispatcher.instance.locales.map((l) => l.countryCode),
+          ),
       repliesInChinese: () => settings.repliesInChinese,
       // The location path (design R6c), iOS only: the photo's position
       // from the library's record of the asset, Apple Maps' food places

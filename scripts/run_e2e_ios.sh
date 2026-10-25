@@ -537,13 +537,18 @@ PY
   sleep 1
   mark="$(la_pref background.last_scan_iso)"
   [[ -n "$mark" ]] || la_fail "no background watermark was set"
+  # `simctl addmedia` DOES reach the app's library observer on current
+  # runtimes (review 2026-10-25), so the foreground live watcher would log
+  # the photo first and the background run would find it already tracked.
+  # Stop it: the app stays idle, as in the background, and no launch or
+  # resume runs a catch-up until scenario 2 relaunches it. (Leaving the app
+  # would be closer to life, but the VM service connection does not
+  # reliably survive that.)
+  la_eval package:calorie_tracker/ui/di.dart \
+    "AppServices.instance.ui.photoIntake?.stop()"
   la_addmedia "$LA_WORK/$b_name"
   # The headless engine, as a BGAppRefresh launch starts it, right away.
-  # The app stays idle: `simctl addmedia` tells its library observer
-  # nothing, and no launch or resume runs a catch-up. (Leaving the app
-  # first would be closer to life, but the VM service connection does not
-  # reliably survive that.) The run's record below says which engine
-  # logged the photo.
+  # The run's record below says which engine logged the photo.
   la_eval package:calorie_tracker/services/photo/background.dart \
     "Workmanager().registerOneOffTask(photoBackfillUniqueName, photoBackfillTaskName)"
   la_wait_meals 1 "$b_date" "background run"
@@ -574,8 +579,7 @@ sys.exit(0 if r["enumerated"] == 0 and r["saved"] == 1 else 1)' "$runs" 2>/dev/n
     "appEngineBackgrounded()")" == *'=> false'* ]] || la_fail "the app is not in the foreground"
   cp "$LA_WORK/$e_name" "$cont/tmp/$e_name"
   # Saved from inside the app, with its capture time: what the Meta AI app
-  # does, and a change the app's own library observer is told about
-  # (`simctl addmedia` sends none).
+  # does, and a change the app's own library observer is told about.
   la_eval package:calorie_tracker/services/photo/photo_library.dart \
     "PhotoManager.editor.saveImageWithPath('$cont/tmp/$e_name', title: '$e_name', creationDate: DateTime.now().subtract(const Duration(hours: 53)))"
   la_wait_meals 2 "$e_date" "live watcher"

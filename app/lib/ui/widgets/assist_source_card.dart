@@ -3,7 +3,11 @@
 /// answers to them.
 ///
 /// Per covered item: the menu item, its option and serving, and the
-/// published kcal/P/C/F — all plain text. Then 'Source: {host}' (the
+/// published kcal/P/C/F — all plain text; on a suggestion, every size the
+/// chain publishes when there are several, and a line saying why the
+/// numbers were not used by themselves (a shared or partly eaten plate, an
+/// unclear size, a combo, the closest menu item, another unit, numbers the
+/// user turned down before). Then 'Source: {host}' (the
 /// normalized https address only, opened in the browser on tap; anything
 /// else is never a link), 'via {provider} · {date}', whether the number
 /// was found on the source page, and the lookup's notes as plain text
@@ -14,9 +18,11 @@
 ///
 /// Buttons: Use AI estimate (a note replaces it once the meal changed
 /// after the numbers were used), Wrong restaurant, Not from a restaurant,
-/// Correct (only where it can teach the spot); on a suggestion, Use
-/// published numbers; with no result, Look up restaurant nutrition. A
-/// null callback hides its button; [busy] disables them all.
+/// Correct (only where it can teach the spot: the place step named the
+/// chain there); on a suggestion, Use published numbers (the editor asks
+/// first, with the new total, when the reason says the numbers may not fit
+/// what was eaten); with no result, Look up restaurant nutrition. A null
+/// callback hides its button; [busy] disables them all.
 library;
 
 import 'package:flutter/material.dart';
@@ -220,9 +226,20 @@ class AssistSourceCard extends StatelessWidget {
               applied ? l.assistCardApplied : l.assistCardSuggested,
               style: muted,
             ),
+            if (view.whyText(l) case final why?) ...[
+              const SizedBox(height: 6),
+              Text(
+                why,
+                key: const Key('assistWhy'),
+                style: theme.textTheme.bodyMedium,
+              ),
+            ],
             for (final item in view.items) ...[
               const SizedBox(height: 10),
-              _ItemLines(item: item),
+              _ItemLines(
+                item: item,
+                showSizes: view.kind == AssistViewKind.suggested,
+              ),
             ],
             const SizedBox(height: 10),
             if (url != null && host != null)
@@ -303,9 +320,12 @@ class AssistSourceCard extends StatelessWidget {
 /// One covered item: its menu name, option and serving, and the published
 /// numbers.
 class _ItemLines extends StatelessWidget {
-  const _ItemLines({required this.item});
+  const _ItemLines({required this.item, this.showSizes = false});
 
   final AssistItemView item;
+
+  /// A suggestion: every published size is listed (the user decides).
+  final bool showSizes;
 
   static String _grams(num v) =>
       v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
@@ -338,6 +358,7 @@ class _ItemLines extends StatelessWidget {
     final qty = item.qty == 1
         ? ''
         : ' × ${item.qty == item.qty.roundToDouble() ? item.qty.round() : item.qty}';
+    final sizes = showSizes ? assistSizesText(l, item) : null;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -346,6 +367,8 @@ class _ItemLines extends StatelessWidget {
         if (detail.isNotEmpty) Text(detail, style: muted),
         if (numbers.isNotEmpty)
           Text('$numbers$qty', style: theme.textTheme.bodyMedium),
+        if (sizes != null)
+          Text(sizes, key: const Key('assistSizes'), style: muted),
       ],
     );
   }

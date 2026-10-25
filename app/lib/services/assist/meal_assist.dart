@@ -329,6 +329,21 @@ String? regionOfLocale(String localeName) {
   return null;
 }
 
+/// The phone's region: [localeName]'s ([regionOfLocale]), else the first
+/// of [countryCodes] — the preferred languages' regions, in the user's
+/// order (PlatformDispatcher.locales) — that is one, else null. A locale
+/// name without a region ('zh_Hans', seen on a simulator) is not taken as
+/// "not the US" while the preferred languages still say where the phone is
+/// set to be.
+String? deviceRegion(String localeName, Iterable<String?> countryCodes) {
+  final region = regionOfLocale(localeName);
+  if (region != null) return region;
+  for (final c in countryCodes) {
+    if (c != null && _iso2Re.hasMatch(c)) return c;
+  }
+  return null;
+}
+
 /// The first 16 hex characters of SHA-256 over [request]'s canonical JSON:
 /// a stored job answers the meal only while its request still hashes the
 /// same.

@@ -3969,13 +3969,13 @@ abstract class AppLocalizations {
   /// Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.
   ///
   /// In en, this message translates to:
-  /// **'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to {recipient}, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.'**
+  /// **'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.'**
   String restaurantConsentSent(String recipient);
 
   /// Consent sheet bullet (Android): what leaves the phone, and to whom.
   ///
   /// In en, this message translates to:
-  /// **'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to {recipient}, which searches the web for the chain\'s published nutrition. The photo is never sent for this.'**
+  /// **'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. The photo is never sent for this.'**
   String restaurantConsentSentAndroid(String recipient);
 
   /// Consent sheet bullet (iPhone): what the Brand only button means.
@@ -4011,7 +4011,7 @@ abstract class AppLocalizations {
   /// The recipient inside restaurantConsentSent on Claude Plan.
   ///
   /// In en, this message translates to:
-  /// **'your own server, which uses Claude web search (Anthropic)'**
+  /// **'your own server (it uses Claude web search, by Anthropic)'**
   String get restaurantRecipientNameClaudePlan;
 
   /// The recipient inside restaurantConsentSent with an Anthropic key.
@@ -4223,6 +4223,72 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save your changes first to use these buttons.'**
   String get assistEditFirst;
+
+  /// Source card line under a suggestion that was not applied because the photo showed a shared plate or a partly eaten portion (reason portion_not_whole).
+  ///
+  /// In en, this message translates to:
+  /// **'The photo looked shared or partly eaten — the published number is one whole serving.'**
+  String get assistWhyPortion;
+
+  /// Source card line under a suggestion not applied because the size is unclear (reason size_ambiguous); the sizes are listed per item.
+  ///
+  /// In en, this message translates to:
+  /// **'The photo doesn\'t show which size. Check the published sizes before using these numbers.'**
+  String get assistWhySize;
+
+  /// Source card line under a suggestion not applied because the menu entry is a combo or lists alternatives (reason combo).
+  ///
+  /// In en, this message translates to:
+  /// **'This looks like a combo or a choice of items — the published number may not match what you had.'**
+  String get assistWhyCombo;
+
+  /// Source card line under a suggestion not applied because the chain's menu has no exact match (reason closest_item).
+  ///
+  /// In en, this message translates to:
+  /// **'The closest menu item, not an exact match.'**
+  String get assistWhyClosest;
+
+  /// Source card line under a suggestion not applied because the published unit differs from the photographed amount (reason unit_mismatch).
+  ///
+  /// In en, this message translates to:
+  /// **'The published serving may not match the amount in the photo.'**
+  String get assistWhyUnits;
+
+  /// Source card line under a suggestion not applied because the user undid or rejected the same published numbers for the same items before (reason declined_before).
+  ///
+  /// In en, this message translates to:
+  /// **'You turned these numbers down before, so they were not used by themselves.'**
+  String get assistWhyDeclined;
+
+  /// Source card line under a suggested item listing every size the chain publishes, e.g. 'Small 230 kcal · Medium 320 kcal'.
+  ///
+  /// In en, this message translates to:
+  /// **'Published sizes: {sizes}'**
+  String assistSizes(String sizes);
+
+  /// Meal card chip for a suggestion on a shared or partly eaten meal: the chain's number is for one whole serving, not what was eaten.
+  ///
+  /// In en, this message translates to:
+  /// **'{brand}: {kcal} kcal for a whole serving'**
+  String assistChipSuggestedWhole(String brand, String kcal);
+
+  /// Confirm dialog before 'Use published numbers' on a suggestion whose numbers may not fit what was eaten (shared plate, combo, unclear size or unit).
+  ///
+  /// In en, this message translates to:
+  /// **'Use the published numbers?'**
+  String get assistAcceptTitle;
+
+  /// Second line of the accept confirm dialog: the meal's total after using the published numbers.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal\'s total will be {kcal} kcal.'**
+  String assistAcceptTotal(String kcal);
+
+  /// Snackbar when the user picked a chain after 'Wrong restaurant' but their own server is on http: only printed brands may be sent there, so nothing was sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking up a restaurant you pick needs https on your server.'**
+  String get assistLookupPickNeedsHttps;
 
   /// Diagnostics section (design R7b): today's restaurant lookups and the last decisions.
   ///

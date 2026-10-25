@@ -658,6 +658,11 @@ void main() {
     expect(zh, contains('使用照片位置的餐厅查询'));
     expect(zh, contains('拍摄位置'));
     expect(zh, contains('仅用于向 Apple 地图查询'));
+    // The editor's answers keep a ~100 m cell on the phone (review
+    // 2026-10-25): the prompt says so too.
+    expect(en, contains('to remember, on this phone, the restaurants you '
+        'confirm or rule out'));
+    expect(zh, contains('在本机记住你在那里确认或排除的餐厅'));
   });
 
   // App Store Connect's App Privacy answer is "Data Not Collected" with the

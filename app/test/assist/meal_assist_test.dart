@@ -1536,6 +1536,15 @@ void main() {
     });
   });
 
+  test('deviceRegion: the locale name\'s region, else the preferred '
+      'languages\' (review 2026-10-25: a region-less zh_Hans read as "not '
+      'the US")', () {
+    expect(deviceRegion('zh-Hans_US', const ['CN']), 'US');
+    expect(deviceRegion('zh_Hans', const [null, 'US', 'CN']), 'US');
+    expect(deviceRegion('zh_Hans', const [null, 'us']), isNull);
+    expect(deviceRegion('en', const []), isNull);
+  });
+
   test('regionOfLocale', () {
     expect(regionOfLocale('en_US'), 'US');
     expect(regionOfLocale('zh-Hans_US'), 'US');

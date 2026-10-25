@@ -193,7 +193,11 @@ void main() {
         r'mealsChanged: mealsChangedSignal,',
         r'onMealsChanged: signalMealsChanged,',
         r'inForeground: appEngineInForeground,',
-        r'country: \(\) => regionOfLocale\(Platform\.localeName\),',
+        // The region: the locale name's, else the preferred languages'
+        // (review 2026-10-25: a region-less 'zh_Hans' read as not the US).
+        r'country: \(\) => deviceRegion\( Platform\.localeName, '
+            r'PlatformDispatcher\.instance\.locales\.map\(\(l\) => '
+            r'l\.countryCode\) \),',
         r'repliesInChinese: \(\) => settings\.repliesInChinese,',
         // R6c: the location path is iOS only; Android is brand-only.
         r'location: Platform\.isIOS \? PhotoLocationReader\(photoLibrary\) '

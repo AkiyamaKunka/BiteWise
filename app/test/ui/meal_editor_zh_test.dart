@@ -202,7 +202,8 @@ void main() {
     }
 
     testWidgets('applied: every line and answer in Chinese', (tester) async {
-      await open(tester, appliedBigMac());
+      // Applied where the user confirmed the chain: Correct is offered.
+      await open(tester, appliedBigMacAtSpot());
       expect(find.text('麦当劳'), findsOneWidget);
       expect(find.text('已采用公布的数值'), findsOneWidget);
       expect(find.text('来源：mcdonalds.com'), findsOneWidget);

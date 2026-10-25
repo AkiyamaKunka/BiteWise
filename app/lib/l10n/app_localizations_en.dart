@@ -2487,12 +2487,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String restaurantConsentSent(String recipient) {
-    return 'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to $recipient, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.';
+    return 'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.';
   }
 
   @override
   String restaurantConsentSentAndroid(String recipient) {
-    return 'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name and the food names and amounts are sent to $recipient, which searches the web for the chain\'s published nutrition. The photo is never sent for this.';
+    return 'On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain\'s name, the food names and amounts, your region code (such as US) and the reply language are sent to $recipient, which searches the web for the chain\'s published nutrition. The photo is never sent for this.';
   }
 
   @override
@@ -2517,7 +2517,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantRecipientNameClaudePlan =>
-      'your own server, which uses Claude web search (Anthropic)';
+      'your own server (it uses Claude web search, by Anthropic)';
 
   @override
   String get restaurantRecipientNameAnthropic =>
@@ -2643,6 +2643,51 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get assistEditFirst => 'Save your changes first to use these buttons.';
+
+  @override
+  String get assistWhyPortion =>
+      'The photo looked shared or partly eaten — the published number is one whole serving.';
+
+  @override
+  String get assistWhySize =>
+      'The photo doesn\'t show which size. Check the published sizes before using these numbers.';
+
+  @override
+  String get assistWhyCombo =>
+      'This looks like a combo or a choice of items — the published number may not match what you had.';
+
+  @override
+  String get assistWhyClosest => 'The closest menu item, not an exact match.';
+
+  @override
+  String get assistWhyUnits =>
+      'The published serving may not match the amount in the photo.';
+
+  @override
+  String get assistWhyDeclined =>
+      'You turned these numbers down before, so they were not used by themselves.';
+
+  @override
+  String assistSizes(String sizes) {
+    return 'Published sizes: $sizes';
+  }
+
+  @override
+  String assistChipSuggestedWhole(String brand, String kcal) {
+    return '$brand: $kcal kcal for a whole serving';
+  }
+
+  @override
+  String get assistAcceptTitle => 'Use the published numbers?';
+
+  @override
+  String assistAcceptTotal(String kcal) {
+    return 'This meal\'s total will be $kcal kcal.';
+  }
+
+  @override
+  String get assistLookupPickNeedsHttps =>
+      'Looking up a restaurant you pick needs https on your server.';
 
   @override
   String get diagRestaurantTitle => 'Restaurant lookups';

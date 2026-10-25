@@ -44,7 +44,7 @@ import '../../core/coerce.dart'
     show finiteAnalysis, isFoodTruthy, normalizeImageHash;
 import '../../core/contracts.dart';
 import '../../core/restaurant_assist_logic.dart'
-    show dropAssistClaims, normalizeSourceUrl;
+    show acceptAssistSuggestion, dropAssistClaims, normalizeSourceUrl;
 import '../../services/assist/meal_assist.dart'
     show
         AssistActionResult,
@@ -189,6 +189,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// A manual restaurant lookup is running (polled while a server job).
   bool _lookingUp = false;
 
+  /// [_load] is setting the fields one by one: their listener must not copy
+  /// a half-updated form into the draft.
+  bool _loading = false;
+
   @override
   void initState() {
     super.initState();
@@ -332,12 +336,22 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       row.fat.dispose();
     }
     _itemCtrls.clear();
+    // The total fields' listener (_syncTotals) copies all four into the
+    // draft. Unmuted, setting kcal first copied the macros the form still
+    // showed from the OLDER meal over the fresh draft's, so after an
+    // accept (or Use AI estimate, a manual lookup, a conflict reload) the
+    // form read the new kcal over the old macros, and Save wrote them.
+    _loading = true;
+    try {
+      _desc.text = fresh.description;
+      _cal.text = fresh.calories;
+      _pro.text = fresh.protein;
+      _carb.text = fresh.carbs;
+      _fat.text = fresh.fat;
+    } finally {
+      _loading = false;
+    }
     _draft = fresh;
-    _desc.text = fresh.description;
-    _cal.text = fresh.calories;
-    _pro.text = fresh.protein;
-    _carb.text = fresh.carbs;
-    _fat.text = fresh.fat;
     for (final it in fresh.items) {
       _itemCtrls.add(_controllersFor(it));
     }
@@ -422,6 +436,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   }
 
   void _syncTotals() {
+    if (_loading) return;
     setState(() {
       _draft.calories = _cal.text;
       _draft.protein = _pro.text;
@@ -635,6 +650,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   bool get _assistOn =>
       widget.settings != null && widget.settings!.restaurantAssist != 'off';
 
+  /// The app has left the foreground (unknown counts as foreground).
+  static bool _inBackground() {
+    final state = WidgetsBinding.instance.lifecycleState;
+    return state != null && state != AppLifecycleState.resumed;
+  }
+
   void _say(String text, {Key? key}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context)
@@ -683,6 +704,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       return;
     }
     final view = AssistView.of(meal.analysis);
+    // A shared plate, a combo, an unclear size or unit: the published
+    // numbers may not be what was eaten, so the user sees the new total
+    // and confirms first.
+    if (action == AssistUserAction.acceptSuggestion &&
+        view.acceptNeedsConfirm &&
+        await _confirmAccept(meal, view) != true) {
+      return;
+    }
+    if (!mounted || !identical(meal, _meal)) return;
     setState(() => _assistBusy = true);
     AssistActionResult result;
     try {
@@ -708,17 +738,69 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     if (result.status == AssistActionStatus.done) {
       if (action == AssistUserAction.notFromRestaurant) {
         _say(l.assistNotRestaurantDone, key: const Key('assistDoneSnack'));
-      } else if (action == AssistUserAction.correct && result.placeLearned) {
+      } else if ((action == AssistUserAction.correct ||
+              action == AssistUserAction.acceptSuggestion) &&
+          result.placeLearned) {
+        // Never a silent confirmation: the spot is remembered.
         _say(l.assistCorrectDone(view.brandLabel(l)),
             key: const Key('assistDoneSnack'));
       }
     }
     if (action == AssistUserAction.wrongRestaurant &&
         _assistOn &&
-        widget.assist?.lookupNow != null) {
+        widget.assist?.lookupNow != null &&
+        _pickSendable()) {
       final pick = await showChainPickerSheet(context, exclude: view.chainKey);
       if (pick != null && mounted) await _lookUp(chainKey: pick);
     }
+  }
+
+  /// A chain the user picks can be looked up: not to the owner's server
+  /// over http, whose https gate sends printed brands only (the pick is
+  /// neither), and not where lookups cannot run at all.
+  bool _pickSendable() {
+    try {
+      final support = widget.assist!.lookupSupport();
+      return support.supported && support.locationAllowed;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 'Use published numbers' on a suggestion whose numbers may not fit what
+  /// was eaten: why, and the meal's total after it. True to go on.
+  Future<bool?> _confirmAccept(Meal meal, AssistView view) {
+    final l = context.l10n;
+    final clock = widget.now ?? DateTime.now;
+    final after = acceptAssistSuggestion(meal.analysis, now: clock());
+    final total = after?['total_calories'];
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('assistAcceptConfirm'),
+        title: Text(l.assistAcceptTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (view.whyText(l) case final why?) Text(why),
+            if (total is num) ...[
+              const SizedBox(height: 8),
+              Text(l.assistAcceptTotal(formatKcal(total))),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(l.cancel)),
+          FilledButton(
+              key: const Key('assistAcceptConfirmOk'),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: Text(l.assistUsePublished)),
+        ],
+      ),
+    );
   }
 
   /// 'Look up restaurant nutrition' (or the chain picked after 'Wrong
@@ -752,11 +834,22 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         if (i > 0) {
           await Future<void>.delayed(widget.assistPollInterval);
           if (!mounted) return;
+          // Foreground only: in the background the server's job is left
+          // to the sweep, which collects it when the app is back.
+          if (_inBackground()) {
+            run = const AssistRun(AssistSkip.background);
+            break;
+          }
         }
         run = await lookupNow(meal.id,
             useLocation: useLocation, chainKey: chainKey);
         if (!mounted) return;
-        if (run.code != AssistSkip.pending) break;
+        // Pending on the server, or the automatic lookup of this meal
+        // still running here (its result is dropped: the editor holds the
+        // meal): asked again shortly.
+        if (run.code != AssistSkip.pending && run.code != AssistSkip.working) {
+          break;
+        }
       }
     } finally {
       if (mounted) setState(() => _lookingUp = false);
@@ -771,7 +864,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       await _refreshBasis();
       return;
     }
-    final message = run.code == AssistSkip.pending
+    final message = run.code == AssistSkip.pending ||
+            run.code == AssistSkip.working ||
+            run.code == AssistSkip.background
         ? l.assistLookupStillRunning
         : run.decision != null
             // Answered, but nothing usable to write (another chain, items
@@ -788,10 +883,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   static String? _lookupFailureText(AppLocalizations l, String code) {
     switch (code) {
       case AssistSkip.consentNeeded:
-      case AssistSkip.working:
       case AssistSkip.off:
       case AssistSkip.cancelled:
         return null;
+      case AssistSkip.working:
+      case AssistSkip.background:
+        return l.assistLookupStillRunning;
+      case AssistSkip.pickNeedsHttps:
+        return l.assistLookupPickNeedsHttps;
       case AssistSkip.dailyCap:
       case 'lookup_daily_cap':
         return l.assistLookupDailyCap;
@@ -869,7 +968,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       onAccept: answer(AssistUserAction.acceptSuggestion),
       onWrongRestaurant: answer(AssistUserAction.wrongRestaurant),
       onNotRestaurant: answer(AssistUserAction.notFromRestaurant),
-      onCorrect: canLearn ? answer(AssistUserAction.correct) : null,
+      // Correct teaches the spot, so only where the place step named the
+      // chain there: a printed brand says nothing about where it was eaten.
+      onCorrect: canLearn && view.namedByPlace
+          ? answer(AssistUserAction.correct)
+          : null,
       onLookUp: canLookUp ? () => _lookUp() : null,
       onOpenSource: _openSource,
     );

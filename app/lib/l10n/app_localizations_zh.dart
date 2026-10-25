@@ -2317,12 +2317,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String restaurantConsentSent(String recipient) {
-    return '如果附近的餐厅，或杯子、袋子、小票上印的品牌，是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称以及食物名称和份量会发送给$recipient，用于在网上查找该连锁店公布的营养信息。在附近找到的连锁店会显示你当时在它附近。照片本身、拍摄位置、城市、街道和距离都不会发送。';
+    return '如果附近的餐厅，或杯子、袋子、小票上印的品牌，是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称、食物名称和份量，以及你的地区代码（例如 US）和回复语言，会发送给$recipient，用于在网上查找该连锁店公布的营养信息。在附近找到的连锁店会显示你当时在它附近。照片本身、拍摄位置、城市、街道和距离都不会发送。';
   }
 
   @override
   String restaurantConsentSentAndroid(String recipient) {
-    return '在 Android 上，筷拍不会读取照片的拍摄位置。如果杯子、袋子或小票上印的品牌是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称以及食物名称和份量会发送给$recipient，用于在网上查找该连锁店公布的营养信息。照片本身不会为此发送。';
+    return '在 Android 上，筷拍不会读取照片的拍摄位置。如果杯子、袋子或小票上印的品牌是筷拍认识的连锁店（例如 Chipotle），该连锁店的名称、食物名称和份量，以及你的地区代码（例如 US）和回复语言，会发送给$recipient，用于在网上查找该连锁店公布的营养信息。照片本身不会为此发送。';
   }
 
   @override
@@ -2461,6 +2461,45 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get assistEditFirst => '请先保存修改，再使用这些按钮。';
+
+  @override
+  String get assistWhyPortion => '照片看起来是分享的或没吃完 — 公布的数值是一整份。';
+
+  @override
+  String get assistWhySize => '照片看不出是哪种份量。使用这些数值前，请先核对公布的各个份量。';
+
+  @override
+  String get assistWhyCombo => '这看起来是套餐或可选搭配 — 公布的数值可能和你吃的不一样。';
+
+  @override
+  String get assistWhyClosest => '这是最接近的菜单项，不是完全一致的。';
+
+  @override
+  String get assistWhyUnits => '公布的份量可能和照片里的量不一致。';
+
+  @override
+  String get assistWhyDeclined => '你之前拒绝过这些数值，所以没有自动采用。';
+
+  @override
+  String assistSizes(String sizes) {
+    return '公布的份量：$sizes';
+  }
+
+  @override
+  String assistChipSuggestedWhole(String brand, String kcal) {
+    return '$brand：整份 $kcal 千卡';
+  }
+
+  @override
+  String get assistAcceptTitle => '采用公布的数值？';
+
+  @override
+  String assistAcceptTotal(String kcal) {
+    return '这餐的总热量将变为 $kcal 千卡。';
+  }
+
+  @override
+  String get assistLookupPickNeedsHttps => '按你选的餐厅查询需要服务器使用 https。';
 
   @override
   String get diagRestaurantTitle => '餐厅查询';

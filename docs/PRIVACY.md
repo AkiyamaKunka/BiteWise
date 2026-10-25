@@ -30,11 +30,13 @@ accounts, and receives none of your data.**
   confirmed or marked as wrong and the spots you marked as "not a
   restaurant" (each kept as an area of roughly 100 m, for up to 180 days;
   only on iPhone, where photo locations are used), lookups still waiting
-  for an answer, recent lookup answers (up to 30 days), which updated
-  meals you have not opened yet, and a log of the last 20 lookup decisions
-  (result codes and calorie numbers only). These
-  are kept outside your phone's backups and are never exported. **Clear
-  learned places** in Settings deletes the places.
+  for an answer, recent lookup answers (up to 30 days, each marked if you
+  turned it down, so it is only suggested again), which updated meals you
+  have not opened yet, and a log of the last 20 lookup decisions (result
+  codes and calorie numbers only). These are kept outside your phone's
+  backups and are never exported. **Clear learned places** in Settings
+  deletes the places, the recent lookup answers and the lookups still
+  waiting.
 
 The app contains no analytics, no crash reporting, no advertising and no
 tracking SDK, and it does not use your data to track you across apps or
@@ -122,9 +124,14 @@ service or server.
   use Maps, under Apple's own privacy policy. Nothing Apple Maps returns is
   stored, shown or sent anywhere: the app only compares the places with its
   own built-in list of US restaurant chains and then discards them. The
-  location exists only in the phone's memory for that one query. On
-  Android the app never reads a photo's location; lookups there use printed
-  brands only. **Brand only** does the same on iPhone.
+  location exists only in the phone's memory for that one query. When you
+  answer a lookup result in the meal editor (**Correct**, **Use published
+  numbers**, **Wrong restaurant** or **Not from a restaurant**), the app
+  reads that photo's location once more, only to remember your answer on
+  the phone as an area of roughly 100 m (see above); a printed brand's
+  numbers teach it nothing about the place. On Android the app never reads
+  a photo's location; lookups there use printed brands only. **Brand only**
+  does the same on iPhone, for lookups and for your answers alike.
 - **What a lookup sends:** up to three chain names from that built-in list
   (a chain found near where the photo was taken, or a brand printed on a
   cup, bag or receipt in the photo), the food names with their amounts and
@@ -149,8 +156,12 @@ service or server.
   send.
 - **What is saved with the meal:** the chain, the matched menu items, the
   published numbers, the address of the chain's page they came from, which
-  service answered, the date, and each item's numbers before and after.
-  This holds no location and is part of the meal in exports.
+  service answered, the date, each item's numbers before and after, the
+  lookup's notes (at most 200 characters, shown as plain text), why a
+  suggestion was not used by itself (a code), and how the meal was tied to
+  the chain (a brand printed on an item or receipt, the photo's location,
+  or your own pick). This holds no location and is part of the meal in
+  exports.
 - Turning it off cancels lookups in progress, drops pending ones, and can
   clear learned places at the same time.
 
@@ -169,8 +180,8 @@ service or server.
 ### Deleting your data
 
 Delete meals inside the app, use **Clear learned places** (Settings ›
-Restaurant nutrition) to delete the places the restaurant lookup learned,
-or uninstall the app to delete everything it stored on the phone. Copies you exported or that sit in your own backups,
+Restaurant nutrition) to delete the places the restaurant lookup learned
+and its recent answers, or uninstall the app to delete everything it stored on the phone. Copies you exported or that sit in your own backups,
 and anything already sent to the AI service you chose, are governed by
 where they now live (your files, your backup, or that provider's policy).
 
@@ -193,7 +204,7 @@ date. Questions: open an issue at
 - API Key（以及你自己服务器的密钥，如果你使用的话）保存在 iOS 钥匙串中；在 Android 上保存在由 Android Keystore 保护的加密存储中。
 - 通知（餐食卡片、每日总结）在手机上生成。
 - 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
-- 仅当你开启**「餐厅营养」查询**时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、最近的查询结果（最长 30 天）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的**「清除已记住的地点」**会删除这些地点。
+- 仅当你开启**「餐厅营养」查询**时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、最近的查询结果（最长 30 天；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的**「清除已记住的地点」**会删除这些地点、最近的查询结果和还在等待的查询。
 
 应用不包含任何统计分析、崩溃上报、广告或追踪 SDK，也不会利用你的数据在其他应用或网站之间追踪你。
 
@@ -225,7 +236,7 @@ date. Questions: open an issue at
 当一张餐食照片看起来来自连锁餐厅时，应用可以查一下这家连锁店是否公布了该食物的营养信息。此功能默认关闭。开启时会显示一份说明，写明查询会发送给谁；当你换用其他 AI 服务或服务器时，应用会再次询问，在你同意之前不会发送任何查询。
 
 - **哪些餐会被查询：** AI 标记为在餐厅吃的或外卖的照片餐食（「不确定时」模式下，还要 AI 表示自己的估算没有把握），杯子、袋子、盒子或小票上印有连锁品牌的餐，以及你自己手动查询的任意一餐。被标记为家里做的、包装食品或无法判断的餐，绝不会读取其位置。
-- **照片位置（仅限 iPhone，且开启了「使用照片位置」）：** 对 AI 标记为在餐厅吃的餐，应用会从照片库读取这张照片的拍摄位置，并在手机上向 Apple 地图查询附近的餐饮场所。Apple 会收到该位置（与使用地图时相同），并按 Apple 自己的隐私政策处理。Apple 地图返回的任何内容都不会被保存、显示或发送到任何地方：应用只是把这些场所与它内置的美国连锁餐厅列表比对，然后丢弃。该位置只在这一次查询期间存在于手机内存中。在 Android 上，应用绝不读取照片的拍摄位置，只按印出的品牌查询；在 iPhone 上选择**「仅按品牌」**也是如此。
+- **照片位置（仅限 iPhone，且开启了「使用照片位置」）：** 对 AI 标记为在餐厅吃的餐，应用会从照片库读取这张照片的拍摄位置，并在手机上向 Apple 地图查询附近的餐饮场所。Apple 会收到该位置（与使用地图时相同），并按 Apple 自己的隐私政策处理。Apple 地图返回的任何内容都不会被保存、显示或发送到任何地方：应用只是把这些场所与它内置的美国连锁餐厅列表比对，然后丢弃。该位置只在这一次查询期间存在于手机内存中。当你在编辑页回应查询结果（**「没错」**、**「采用公布数值」**、**「不是这家」**或**「不是餐厅的」**）时，应用会再读取一次这张照片的拍摄位置，仅用于在手机上按约 100 米的范围记住你的回答（见上文）；按印出的品牌得到的数值不会让它记住任何地点。在 Android 上，应用绝不读取照片的拍摄位置，只按印出的品牌查询；在 iPhone 上选择**「仅按品牌」**也是如此，查询和你的回答都一样。
 - **查询会发送的内容：** 最多三个来自这份内置列表的连锁店名称（在照片拍摄地点附近找到的连锁店，或照片里杯子、袋子、小票上印的品牌），食物名称及其份量和单位，你手机的地区设置（例如 US）以及回复所用的语言。在附近找到的连锁店会显示你当时在它附近。
 - **查询绝不会发送的内容：** 照片本身、拍摄位置、城市、街道、与任何场所的距离、Apple 地图返回的任何内容、这一餐的时间或描述、你的饮食档案或饮食记录。
 - **由谁接收、由谁进行网页搜索：**
@@ -235,7 +246,7 @@ date. Questions: open an issue at
   - 其他任何 AI 服务：完全不会进行查询。
 
   它们如何处理你发送的内容，以它们各自的隐私政策和条款为准。
-- **随餐保存的内容：** 连锁店、匹配到的菜品、公布的数值、数值来源的连锁店网页地址、由哪个服务给出的结果、日期，以及每项食物在采用前后的数值。其中不含任何位置，导出时作为这一餐的一部分。
+- **随餐保存的内容：** 连锁店、匹配到的菜品、公布的数值、数值来源的连锁店网页地址、由哪个服务给出的结果、日期、每项食物在采用前后的数值、查询的备注（最多 200 个字符，以纯文本显示）、建议没有被自动采用的原因（一个代码），以及这一餐是如何与该连锁店对应上的（食物或小票上印的品牌、照片的拍摄位置，或你自己选的）。其中不含任何位置，导出时作为这一餐的一部分。
 - 关闭此功能会取消进行中的查询、丢弃待处理的查询，并可同时清除已记住的地点。
 
 ### 导出、导入与备份
@@ -245,7 +256,7 @@ date. Questions: open an issue at
 
 ### 删除数据
 
-在应用内删除餐食，用**「清除已记住的地点」**（设置 › 餐厅营养）删除餐厅查询记住的地点，或卸载应用以删除它在手机上保存的全部数据。你导出的文件、你自己备份中的副本，以及已经发送给你所选 AI 服务的内容，分别由它们现在所在的位置（你的文件、你的备份或该服务商的政策）决定。
+在应用内删除餐食，用**「清除已记住的地点」**（设置 › 餐厅营养）删除餐厅查询记住的地点和最近的查询结果，或卸载应用以删除它在手机上保存的全部数据。你导出的文件、你自己备份中的副本，以及已经发送给你所选 AI 服务的内容，分别由它们现在所在的位置（你的文件、你的备份或该服务商的政策）决定。
 
 ### 变更与联系
 

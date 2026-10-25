@@ -126,6 +126,45 @@ void main() {
       .firstWhere((t) => t.startsWith('When your AI is unsure') ||
           t.startsWith('当 AI 对餐厅餐'));
 
+  // Review 2026-10-25 (device): with long content the sheet's title sat
+  // right under the status bar.
+  testWidgets('a tall consent sheet stays below the status bar',
+      (tester) async {
+    tester.view.physicalSize = const Size(390, 640);
+    tester.view.devicePixelRatio = 1;
+    tester.view.padding = const FakeViewPadding(top: 47, bottom: 34);
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+      home: MediaQuery(
+        data: const MediaQueryData(
+          size: Size(390, 640),
+          padding: EdgeInsets.only(top: 47, bottom: 34),
+          textScaler: TextScaler.linear(1.6),
+        ),
+        child: Scaffold(
+          body: Builder(
+            builder: (context) => TextButton(
+              onPressed: () => showRestaurantConsentSheet(context,
+                  kind: RestaurantConsentKind.enable,
+                  support: _plan,
+                  locationSupported: true),
+              child: const Text('open'),
+            ),
+          ),
+        ),
+      ),
+    ));
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    final title = find.text('Look up restaurant nutrition?');
+    expect(title, findsOneWidget);
+    // The sheet's surface (its drag handle first) starts below the status
+    // bar, so the title is never under it.
+    expect(tester.getTopLeft(find.byType(BottomSheet)).dy,
+        greaterThanOrEqualTo(47));
+    expect(tester.getTopLeft(title).dy, greaterThanOrEqualTo(47 + 48));
+  });
+
   group('the first enable', () {
     testWidgets('the sheet names the recipient chain; Not now keeps Off and '
         'stamps nothing', (tester) async {
@@ -147,9 +186,17 @@ void main() {
           findsOneWidget);
       // The recipient chain, and what never leaves the phone.
       expect(
-          inSheet('sent to your own server, which uses Claude web search '
-              '(Anthropic)'),
+          inSheet('your region code (such as US) and the reply language are '
+              'sent to your own server (it uses Claude web search, by '
+              'Anthropic), which searches the web'),
           findsOneWidget);
+      // One "which" in the sentence: the recipient's name is a parenthesis.
+      final sent = tester
+          .widgetList<Text>(
+              find.descendant(of: sheet(), matching: find.byType(Text)))
+          .map((t) => t.data ?? '')
+          .firstWhere((t) => t.contains('sent to your own server'));
+      expect(RegExp(r'\bwhich\b').allMatches(sent), hasLength(1));
       expect(
           inSheet('The photo, its location, the city, the street and the '
               'distance are never sent.'),

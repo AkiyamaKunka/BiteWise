@@ -198,6 +198,9 @@ Future<RestaurantConsentChoice?> showRestaurantConsentSheet(
     return await showModalBottomSheet<RestaurantConsentChoice>(
       context: context,
       isScrollControlled: true,
+      // A tall sheet (long bullets, large text) stops below the status bar
+      // instead of putting its title under it.
+      useSafeArea: true,
       showDragHandle: true,
       builder: (_) => RestaurantConsentSheet(
         key: const Key('restaurantConsentSheet'),

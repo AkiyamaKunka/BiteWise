@@ -62,6 +62,7 @@ final class AssistItemView {
     this.proteinG,
     this.carbsG,
     this.fatG,
+    this.sizes = const [],
   });
 
   final String menuItem;
@@ -77,10 +78,52 @@ final class AssistItemView {
   final num? proteinG;
   final num? carbsG;
   final num? fatG;
+
+  /// Every size the chain publishes for it, as a suggestion stores them
+  /// (only when there is more than one), so the user sees which one the
+  /// photo was matched to and what the others are.
+  final List<AssistSize> sizes;
 }
+
+/// Suggestion reasons whose published numbers may not fit what was eaten
+/// — a shared or partly eaten plate, a combo, an unclear size or unit:
+/// 'Use published numbers' asks first, with the meal's new total.
+const Set<String> assistConfirmReasons = {
+  AssistReason.portionNotWhole,
+  AssistReason.combo,
+  AssistReason.sizeAmbiguous,
+  AssistReason.unitMismatch,
+};
 
 final RegExp _isoDateRe = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 final RegExp _providerRe = RegExp(r'^[a-z0-9_]{1,20}$');
+final RegExp _reasonRe = RegExp(r'^[a-z0-9_]{1,40}$');
+
+/// A block's published sizes, read as untrusted.
+List<AssistSize> _sizes(Object? raw) {
+  final out = <AssistSize>[];
+  for (final z in (raw is List ? raw : const []).take(kAssistMaxOptions)) {
+    if (z is! Map) continue;
+    final range = z['calories_range'];
+    List<int>? caloriesRange;
+    if (range is List && range.length == 2) {
+      final lo = _kcal(range[0]);
+      final hi = _kcal(range[1]);
+      if (lo != null && hi != null && lo <= hi) caloriesRange = [lo, hi];
+    }
+    final calories = _kcal(z['calories']);
+    if (calories == null && caloriesRange == null) continue;
+    out.add(
+      AssistSize(
+        label: sanitizeAssistText(z['label'], kAssistOptionLabelMax),
+        serving: sanitizeAssistText(z['serving'], kAssistServingMax),
+        calories: calories,
+        caloriesRange: caloriesRange,
+      ),
+    );
+  }
+  return out.length > 1 ? List.unmodifiable(out) : const [];
+}
 
 int? _kcal(Object? v) {
   if (v is bool || v is! num || !v.isFinite) return null;
@@ -110,6 +153,7 @@ final class AssistView {
     this.grounded = false,
     this.notes = '',
     this.evidence,
+    this.reason = '',
   });
 
   static const AssistView none = AssistView._(kind: AssistViewKind.none);
@@ -145,6 +189,20 @@ final class AssistView {
 
   /// How the meal was tied to the chain (data_contracts §3 evidence).
   final AssistEvidenceKind? evidence;
+
+  /// Why the block is what it is: for a suggestion, the first rule that
+  /// kept the numbers from being used by themselves (AssistReason), or ''.
+  final String reason;
+
+  /// The place step named the chain at the photo's spot (evidence location
+  /// or location_confirmed): only then can 'Correct' teach the spot.
+  bool get namedByPlace =>
+      evidence == AssistEvidenceKind.location ||
+      evidence == AssistEvidenceKind.locationConfirmed;
+
+  /// 'Use published numbers' asks first ([assistConfirmReasons]).
+  bool get acceptNeedsConfirm =>
+      kind == AssistViewKind.suggested && assistConfirmReasons.contains(reason);
 
   /// The meal card shows a chip (design R7b: only while the stamps still
   /// hold).
@@ -222,6 +280,7 @@ final class AssistView {
           proteinG: _grams(p['protein_g']),
           carbsG: _grams(p['carbs_g']),
           fatG: _grams(p['fat_g']),
+          sizes: _sizes(m['sizes']),
         ),
       );
     }
@@ -231,6 +290,7 @@ final class AssistView {
     final provider = block['provider'];
     final decided = block['decided_on'];
     final notes = block['notes'];
+    final reason = block['reason'];
     return AssistView._(
       kind: kind,
       chainKey: chain?.key,
@@ -252,6 +312,7 @@ final class AssistView {
       grounded: block['grounded'] == true,
       notes: sanitizeAssistText(notes, kAssistNotesMax),
       evidence: AssistEvidenceKind.fromWire(block['evidence']),
+      reason: reason is String && _reasonRe.hasMatch(reason) ? reason : '',
     );
   }
 
@@ -292,11 +353,49 @@ final class AssistView {
         return l.assistChipApplied(brandLabel(l), items.length);
       case AssistViewKind.suggested:
         final kcal = publishedKcalText;
-        return kcal == null ? null : l.assistChipSuggested(brandLabel(l), kcal);
+        if (kcal == null) return null;
+        // A shared or partly eaten plate: the number is one whole serving,
+        // not something to "review" into the meal.
+        return reason == AssistReason.portionNotWhole
+            ? l.assistChipSuggestedWhole(brandLabel(l), kcal)
+            : l.assistChipSuggested(brandLabel(l), kcal);
       default:
         return null;
     }
   }
+
+  /// Why a suggestion was not used by itself, in a line the user can act
+  /// on, or null for a reason with nothing to add (the grounding line and
+  /// the source already say the rest).
+  String? whyText(AppLocalizations l) {
+    if (kind != AssistViewKind.suggested) return null;
+    return switch (reason) {
+      AssistReason.portionNotWhole => l.assistWhyPortion,
+      AssistReason.sizeAmbiguous => l.assistWhySize,
+      AssistReason.combo => l.assistWhyCombo,
+      AssistReason.closestItem => l.assistWhyClosest,
+      AssistReason.unitMismatch => l.assistWhyUnits,
+      AssistReason.declinedBefore => l.assistWhyDeclined,
+      _ => null,
+    };
+  }
+}
+
+/// [item]'s published sizes as one line ("Small 230 kcal · Medium 320
+/// kcal"), or null when it lists fewer than two.
+String? assistSizesText(AppLocalizations l, AssistItemView item) {
+  if (item.sizes.length < 2) return null;
+  final parts = <String>[];
+  for (final z in item.sizes) {
+    final c = z.calories;
+    final r = z.caloriesRange;
+    final kcal = c != null
+        ? l.kcalAmount(formatKcal(c))
+        : l.kcalAmount('${formatKcal(r![0])}–${formatKcal(r[1])}');
+    final name = z.label.isNotEmpty ? z.label : z.serving;
+    parts.add(name.isEmpty ? kcal : '$name $kcal');
+  }
+  return l.assistSizes(parts.join(' · '));
 }
 
 /// Who looked the numbers up, as Settings names the provider: Claude Plan

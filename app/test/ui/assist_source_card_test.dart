@@ -111,6 +111,77 @@ void main() {
       }
     });
 
+    // Review 2026-10-25 (PROBE6): a suggestion never said why it was not
+    // applied, and listed none of the sizes it stores.
+    test('why a suggestion was not used, its sizes, and the chip of a '
+        'shared plate', () {
+      final shared = AssistView.of(suggestedSharedBigMac());
+      expect(shared.reason, AssistReason.portionNotWhole);
+      expect(shared.acceptNeedsConfirm, isTrue);
+      expect(
+        shared.whyText(_en),
+        'The photo looked shared or partly eaten — the published number is '
+        'one whole serving.',
+      );
+      expect(shared.whyText(_zh), '照片看起来是分享的或没吃完 — 公布的数值是一整份。');
+      expect(shared.chipText(_en), "McDonald's: 590 kcal for a whole serving");
+      expect(shared.chipText(_zh), '麦当劳：整份 590 千卡');
+
+      final fries = AssistView.of(suggestedFriesSizes());
+      expect(fries.reason, AssistReason.sizeAmbiguous);
+      expect(fries.acceptNeedsConfirm, isTrue);
+      expect(fries.items.single.sizes.map((z) => z.calories), [230, 320, 480]);
+      expect(
+        assistSizesText(_en, fries.items.single),
+        'Published sizes: Small 230 kcal · Medium 320 kcal · Large 480 kcal',
+      );
+      expect(
+        assistSizesText(_zh, fries.items.single),
+        '公布的份量：Small 230 千卡 · Medium 320 千卡 · Large 480 千卡',
+      );
+
+      // Claude Plan's plain suggestion: nothing to add (the grounding line
+      // says it), no confirm.
+      final plain = AssistView.of(suggestedBigMac());
+      expect(plain.reason, AssistReason.notGrounded);
+      expect(plain.whyText(_en), isNull);
+      expect(plain.acceptNeedsConfirm, isFalse);
+      expect(assistSizesText(_en, plain.items.single), isNull);
+
+      // An applied or stale block says nothing of the kind.
+      expect(AssistView.of(appliedBigMac()).whyText(_en), isNull);
+      final stale = AssistView.of(
+        editedFirstItem(suggestedSharedBigMac(), 600),
+      );
+      expect(stale.whyText(_en), isNull);
+      expect(stale.acceptNeedsConfirm, isFalse);
+
+      // Every reason line, en and zh.
+      for (final (reason, en, zh) in [
+        (AssistReason.combo, 'combo', '套餐'),
+        (AssistReason.closestItem, 'closest menu item', '最接近'),
+        (AssistReason.unitMismatch, 'published serving', '公布的份量'),
+        (AssistReason.declinedBefore, 'turned these numbers down', '拒绝过'),
+      ]) {
+        final a = suggestedBigMac();
+        (a['assist'] as Map)['reason'] = reason;
+        final v = AssistView.of(a);
+        expect(v.whyText(_en), contains(en), reason: reason);
+        expect(v.whyText(_zh), contains(zh), reason: reason);
+      }
+      // A reason that is not a code is no reason.
+      final hostile = suggestedBigMac();
+      (hostile['assist'] as Map)['reason'] = '<b>portion_not_whole</b>';
+      expect(AssistView.of(hostile).reason, isEmpty);
+    });
+
+    test('the place step named the chain: only then can Correct teach the '
+        'spot', () {
+      expect(AssistView.of(appliedBigMac()).namedByPlace, isFalse);
+      expect(AssistView.of(appliedBigMacAtSpot()).namedByPlace, isTrue);
+      expect(AssistView.of(suggestedBigMacAtSpot()).namedByPlace, isTrue);
+    });
+
     test('a hostile source is never a link; notes stay plain text', () {
       for (final url in [
         'javascript:alert(1)',
@@ -322,6 +393,42 @@ void main() {
       expect(find.byKey(const Key('assistUsePublished')), findsNothing);
       expect(find.byKey(const Key('assistWrongRestaurant')), findsNothing);
       expect(find.byKey(const Key('assistLookUp')), findsOneWidget);
+    });
+
+    testWidgets('a suggestion says why it was not used and lists the '
+        'published sizes (en, zh)', (tester) async {
+      for (final (lang, why, sizes) in [
+        (
+          'en',
+          "The photo doesn't show which size. Check the published sizes "
+              'before using these numbers.',
+          'Published sizes: Small 230 kcal · Medium 320 kcal · Large 480 kcal',
+        ),
+        (
+          'zh',
+          '照片看不出是哪种份量。使用这些数值前，请先核对公布的各个份量。',
+          '公布的份量：Small 230 千卡 · Medium 320 千卡 · Large 480 千卡',
+        ),
+      ]) {
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(suggestedFriesSizes()),
+              onAccept: () {},
+            ),
+            lang: lang,
+          ),
+        );
+        expect(find.byKey(const Key('assistWhy')), findsOneWidget);
+        expect(find.text(why), findsOneWidget, reason: lang);
+        expect(find.text(sizes), findsOneWidget, reason: lang);
+      }
+      // Applied numbers list no sizes and no reason.
+      await tester.pumpWidget(
+        _app(AssistSourceCard(view: AssistView.of(appliedBigMac()))),
+      );
+      expect(find.byKey(const Key('assistWhy')), findsNothing);
+      expect(find.byKey(const Key('assistSizes')), findsNothing);
     });
 
     testWidgets('context only names no restaurant (en, zh)', (tester) async {

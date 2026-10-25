@@ -30,6 +30,7 @@ final DateTime assistFixtureNow = DateTime(2026, 10, 24, 13, 0);
 Map<String, dynamic> bigMacAnalysis({
   String brand = "McDonald's",
   String context = 'restaurant',
+  String portion = 'whole',
 }) => {
   'is_food': true,
   'food_items': [
@@ -51,7 +52,7 @@ Map<String, dynamic> bigMacAnalysis({
   'meal_description': 'A Big Mac in its box',
   'estimate_confidence': 'low',
   'restaurant_context': context,
-  'portion_state': 'whole',
+  'portion_state': portion,
   'order_merchant': '',
 };
 
@@ -97,15 +98,23 @@ Map<String, dynamic> bigMacFound({
 /// decideAssist for [analysis] and [result] as the assist would call it.
 /// [verbatim] false is the owner's server (search summaries): a one-tap
 /// suggestion at most.
+///
+/// [atSpot] plays the location path: the place step named McDonald's at
+/// the photo's spot — a chain the user confirmed there ([confirmed]:
+/// location_confirmed, which can apply) or a first visit (location: a
+/// suggestion at most).
 AssistDecision decideFixture(
   Map<String, dynamic> analysis,
   Map<String, dynamic> result, {
   bool verbatim = true,
   String provider = 'anthropic',
+  bool atSpot = false,
+  bool confirmed = false,
 }) {
   final request = LookupRequest.compose({
     'items': analysis['food_items'],
     'order_merchant': analysis['order_merchant'],
+    if (atSpot) 'chains': ['mcdonalds'],
   });
   final url = result['source_url'] is String
       ? result['source_url'] as String
@@ -137,6 +146,10 @@ AssistDecision decideFixture(
       country: 'US',
       requestChainKeys: request.chainKeys,
       requestItems: request.body['items'] as List<Object?>,
+      locationChainKeys: atSpot ? const ['mcdonalds'] : const [],
+      placeChainKey: atSpot ? 'mcdonalds' : null,
+      confirmedChainKeys: confirmed ? const {'mcdonalds'} : const {},
+      placeVerified: atSpot,
     ),
   );
 }
@@ -147,6 +160,91 @@ Map<String, dynamic> appliedBigMac({String notes = ''}) {
   final d = decideFixture(a, bigMacFound(notes: notes));
   assert(d.outcome == AssistOutcome.apply);
   return applyAssist(a, d)!;
+}
+
+/// McDonald's published numbers applied on location alone: an unbranded
+/// Big Mac at a spot where the user confirmed McDonald's
+/// (location_confirmed) — 'Correct' can teach that spot.
+Map<String, dynamic> appliedBigMacAtSpot() {
+  final a = bigMacAnalysis(brand: '');
+  final d = decideFixture(a, bigMacFound(), atSpot: true, confirmed: true);
+  assert(d.outcome == AssistOutcome.apply);
+  assert(d.evidence == AssistEvidenceKind.locationConfirmed);
+  return applyAssist(a, d)!;
+}
+
+/// A first visit: an unbranded Big Mac where the place step named
+/// McDonald's (evidence location) — a suggestion.
+Map<String, dynamic> suggestedBigMacAtSpot() {
+  final a = bigMacAnalysis(brand: '');
+  final d = decideFixture(a, bigMacFound(), atSpot: true);
+  assert(d.outcome == AssistOutcome.suggest);
+  assert(d.evidence == AssistEvidenceKind.location);
+  return recordAssistDecision(a, d)!;
+}
+
+/// A shared plate (portion_state shared): the published number is one
+/// whole serving, so a suggestion with reason portion_not_whole.
+Map<String, dynamic> suggestedSharedBigMac() {
+  final a = bigMacAnalysis(portion: 'shared');
+  final d = decideFixture(a, bigMacFound());
+  assert(d.outcome == AssistOutcome.suggest);
+  assert(d.reason == AssistReason.portionNotWhole);
+  return recordAssistDecision(a, d)!;
+}
+
+/// A suggestion whose size the photo cannot tell: McDonald's fries
+/// published in three sizes (reason size_ambiguous, every size listed).
+Map<String, dynamic> suggestedFriesSizes() {
+  final a = {
+    ...bigMacAnalysis(),
+    'food_items': [
+      {
+        'name': 'French Fries',
+        'estimated_calories': 320,
+        'protein_g': 4,
+        'carbs_g': 42,
+        'fat_g': 15,
+        'brand': "McDonald's",
+        'qty': 1,
+        'unit': 'serving',
+      },
+    ],
+    'total_calories': 320,
+    'total_protein_g': 4,
+    'total_carbs_g': 42,
+    'total_fat_g': 15,
+  };
+  Map<String, Object?> size(String label, int kcal, num p, num c, num f) => {
+    'label': label,
+    'serving': '1 $label fries',
+    'unit': 'serving',
+    'calories': kcal,
+    'calories_range': null,
+    'protein_g': p,
+    'carbs_g': c,
+    'fat_g': f,
+  };
+  final d = decideFixture(a, {
+    ...bigMacFound(),
+    'matches': [
+      {
+        'item_index': 0,
+        'menu_item': 'World Famous Fries',
+        'match_type': 'exact_item',
+        'is_drink': false,
+        'components': <Object>[],
+        'options': [
+          size('Small', 230, 3, 29, 11),
+          size('Medium', 320, 5, 43, 15),
+          size('Large', 480, 7, 65, 23),
+        ],
+      },
+    ],
+  });
+  assert(d.outcome == AssistOutcome.suggest);
+  assert(d.reason == AssistReason.sizeAmbiguous);
+  return recordAssistDecision(a, d)!;
 }
 
 /// A one-tap suggestion (the owner's server: no verbatim page text).

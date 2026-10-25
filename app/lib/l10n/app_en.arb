@@ -2033,7 +2033,7 @@
   "@restaurantConsentMaps": {
     "description": "Consent sheet bullet (iPhone): the photo's location goes only to Apple Maps."
   },
-  "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain's name and the food names and amounts are sent to {recipient}, which searches the web for the chain's published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
+  "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
   "@restaurantConsentSent": {
     "description": "Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.",
     "placeholders": {
@@ -2042,7 +2042,7 @@
       }
     }
   },
-  "restaurantConsentSentAndroid": "On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain's name and the food names and amounts are sent to {recipient}, which searches the web for the chain's published nutrition. The photo is never sent for this.",
+  "restaurantConsentSentAndroid": "On Android, BiteWise does not read where the photo was taken. If a brand printed on a cup, bag or receipt is a chain BiteWise knows (for example, Chipotle), the chain's name, the food names and amounts, your region code (such as US) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. The photo is never sent for this.",
   "@restaurantConsentSentAndroid": {
     "description": "Consent sheet bullet (Android): what leaves the phone, and to whom.",
     "placeholders": {
@@ -2071,7 +2071,7 @@
   "@restaurantConsentOff": {
     "description": "Consent sheet last bullet."
   },
-  "restaurantRecipientNameClaudePlan": "your own server, which uses Claude web search (Anthropic)",
+  "restaurantRecipientNameClaudePlan": "your own server (it uses Claude web search, by Anthropic)",
   "@restaurantRecipientNameClaudePlan": {
     "description": "The recipient inside restaurantConsentSent on Claude Plan."
   },
@@ -2248,6 +2248,68 @@
   "assistEditFirst": "Save your changes first to use these buttons.",
   "@assistEditFirst": {
     "description": "Shown on the source card while the editor has unsaved changes."
+  },
+  "assistWhyPortion": "The photo looked shared or partly eaten — the published number is one whole serving.",
+  "@assistWhyPortion": {
+    "description": "Source card line under a suggestion that was not applied because the photo showed a shared plate or a partly eaten portion (reason portion_not_whole)."
+  },
+  "assistWhySize": "The photo doesn't show which size. Check the published sizes before using these numbers.",
+  "@assistWhySize": {
+    "description": "Source card line under a suggestion not applied because the size is unclear (reason size_ambiguous); the sizes are listed per item."
+  },
+  "assistWhyCombo": "This looks like a combo or a choice of items — the published number may not match what you had.",
+  "@assistWhyCombo": {
+    "description": "Source card line under a suggestion not applied because the menu entry is a combo or lists alternatives (reason combo)."
+  },
+  "assistWhyClosest": "The closest menu item, not an exact match.",
+  "@assistWhyClosest": {
+    "description": "Source card line under a suggestion not applied because the chain's menu has no exact match (reason closest_item)."
+  },
+  "assistWhyUnits": "The published serving may not match the amount in the photo.",
+  "@assistWhyUnits": {
+    "description": "Source card line under a suggestion not applied because the published unit differs from the photographed amount (reason unit_mismatch)."
+  },
+  "assistWhyDeclined": "You turned these numbers down before, so they were not used by themselves.",
+  "@assistWhyDeclined": {
+    "description": "Source card line under a suggestion not applied because the user undid or rejected the same published numbers for the same items before (reason declined_before)."
+  },
+  "assistSizes": "Published sizes: {sizes}",
+  "@assistSizes": {
+    "description": "Source card line under a suggested item listing every size the chain publishes, e.g. 'Small 230 kcal · Medium 320 kcal'.",
+    "placeholders": {
+      "sizes": {
+        "type": "String"
+      }
+    }
+  },
+  "assistChipSuggestedWhole": "{brand}: {kcal} kcal for a whole serving",
+  "@assistChipSuggestedWhole": {
+    "description": "Meal card chip for a suggestion on a shared or partly eaten meal: the chain's number is for one whole serving, not what was eaten.",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "assistAcceptTitle": "Use the published numbers?",
+  "@assistAcceptTitle": {
+    "description": "Confirm dialog before 'Use published numbers' on a suggestion whose numbers may not fit what was eaten (shared plate, combo, unclear size or unit)."
+  },
+  "assistAcceptTotal": "This meal's total will be {kcal} kcal.",
+  "@assistAcceptTotal": {
+    "description": "Second line of the accept confirm dialog: the meal's total after using the published numbers.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "assistLookupPickNeedsHttps": "Looking up a restaurant you pick needs https on your server.",
+  "@assistLookupPickNeedsHttps": {
+    "description": "Snackbar when the user picked a chain after 'Wrong restaurant' but their own server is on http: only printed brands may be sent there, so nothing was sent."
   },
   "diagRestaurantTitle": "Restaurant lookups",
   "@diagRestaurantTitle": {
