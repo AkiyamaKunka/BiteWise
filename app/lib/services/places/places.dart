@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart' show immutable, visibleForTesting;
 import 'package:flutter/services.dart'
     show MethodChannel, MissingPluginException, PlatformException;
 
+import '../../core/place_match.dart' show PlacePoi;
 import '../photo/photo_location.dart' show PhotoPoint;
 
 /// ios/Runner/PlacesPlugin.swift.
@@ -107,9 +108,10 @@ const int placesMaxRadiusM = 300;
 const int placesMaxPlaces = 50;
 
 /// One place MapKit listed. Apple's Map Data: kept in memory for one
-/// match, never stored, logged or shown.
+/// match (core/place_match.dart matchPlaces takes these as they are),
+/// never stored, logged or shown.
 @immutable
-class NearbyPlace {
+class NearbyPlace implements PlacePoi {
   const NearbyPlace({
     required this.name,
     required this.category,
@@ -120,14 +122,20 @@ class NearbyPlace {
   /// As Apple Maps names it, in the phone's language (Starbucks comes back
   /// as 星巴克咖啡公司 under zh-Hans), so chain matching also uses
   /// [urlHost].
+  @override
   final String name;
   final PlaceCategory category;
 
+  @override
+  String get categoryWire => category.wire;
+
   /// From the photo's position, whole metres.
+  @override
   final int distanceM;
 
   /// The place's website host, lowercase ASCII (e.g. www.starbucks.com);
   /// null when it lists none.
+  @override
   final String? urlHost;
 
   /// No name: logs and error messages never carry Map Data.
