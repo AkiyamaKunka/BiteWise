@@ -16,12 +16,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/contracts.dart';
 import '../data/meals_dao_impl.dart';
+import '../services/analyzer/platform_decode.dart' show isEngineBackgrounded;
 import '../services/analyzer/provider_analyzers.dart'
     show ServerAnalyzer, createMultiProviderAnalyzer;
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
     show androidBackgroundAllowed;
+import '../services/photo/background_time.dart';
+import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
@@ -64,6 +67,9 @@ class AppServices {
     // before services start (spec §2.3 single-process simplification).
     await dao.reclaimStaleProcessing();
     if (Platform.isIOS) {
+      // This engine's GPU goes off whenever the app is in the background:
+      // no dart:ui decode may start there (platform_decode.dart).
+      isEngineBackgrounded = appEngineBackgrounded;
       try {
         // iPhone photos are HEIC; earlier builds showed them to the model
         // unreadable. Forget those verdicts once (migrations.dart).
@@ -193,7 +199,20 @@ class AppServices {
         // Open screens re-query instead of showing pre-save data.
         onMealSaved: signalMealsChanged,
         // A rejected key / blocked region parks the automatic scan.
-        latch: autoScanLatchFor(settings));
+        latch: autoScanLatchFor(settings),
+        // iOS suspends the app seconds after the user leaves it: each photo
+        // asks for the time to finish its upload and save first, and no
+        // automatic photo starts once the app is in the background.
+        backgroundTime: Platform.isIOS ? const BackgroundTime() : null,
+        backgrounded: Platform.isIOS ? appEngineBackgrounded : null,
+        // A photo the background run kept deferring is forgotten once it
+        // has a verdict here. 'Already logged' was settled by an earlier
+        // run, which forgot it then.
+        onOutcome: (photo, o) {
+          if (!o.retryable && o.kind != PhotoOutcomeKind.alreadyTracked) {
+            unawaited(clearDeferredAsset(photo.assetId));
+          }
+        });
 
     final photoLibrary = PhotoManagerLibrary();
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -241,6 +260,9 @@ class AppServices {
         return notifier.scheduledDailyAt();
       },
       lastBackgroundScan: lastBackgroundRun,
+      // Read fresh: the background engine writes the runs, and a catch-up
+      // here that moved the watermark since clears it.
+      backgroundScanStuck: backgroundScanStuckNow,
       // BGTaskScheduler refuses every request (error 1, swallowed by the
       // plugin) while Background App Refresh is off — without this the
       // row would say "not run yet" forever and never say why. Android's
@@ -265,8 +287,12 @@ class AppServices {
       // Fire-and-forget: startup must not block on Gemini analyses. Key
       // guard: without a key nothing can succeed, so don't read photo bytes
       // (nor while a rejected key / blocked region latched the scan).
+      // It also moves the background watermark over what it covers, so the
+      // next background run starts from here (foregroundCatchUp).
       if (settings.canAutoAnalyze) {
-        unawaited(photoIntake.backfillScan().then((_) {},
+        unawaited(foregroundCatchUp(photoIntake,
+                shouldContinue: Platform.isIOS ? appEngineInForeground : null)
+            .then((_) {},
             onError: (Object e) {
           // Truncation must not vanish silently: >2000 window images means
           // the catch-up cannot promise full coverage.

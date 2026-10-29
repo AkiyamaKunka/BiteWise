@@ -339,6 +339,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.';
 
   @override
+  String get backgroundScanStuck =>
+      'Background scan is stuck — opening Bitewise once catches up.';
+
+  @override
   String get settingsSectionProfile => 'Profile';
 
   @override
@@ -1171,6 +1175,90 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagQuotaOk => 'No quota pause is active.';
+
+  @override
+  String get diagBgRunsTitle => 'Recent background scans';
+
+  @override
+  String get diagBgRunsIntro =>
+      'What the last background scans did, newest first. A scan with no end time was stopped by the system part-way; its last step shows where.';
+
+  @override
+  String get diagBgRunsNone => 'No background scan has been recorded yet.';
+
+  @override
+  String get diagBgRunUnfinished => 'did not finish';
+
+  @override
+  String diagBgRunSeconds(int seconds) {
+    return '$seconds s';
+  }
+
+  @override
+  String diagBgRunCounts(
+    int listed,
+    int read,
+    int processed,
+    int logged,
+    int later,
+  ) {
+    return 'Photos: $listed listed, $read read, $processed processed, $logged logged, $later left for later';
+  }
+
+  @override
+  String diagBgRunKilled(String step) {
+    return 'Ended by the system before it finished — last step: $step.';
+  }
+
+  @override
+  String get diagBgStageBoot => 'starting';
+
+  @override
+  String get diagBgStageSettings => 'loading settings';
+
+  @override
+  String get diagBgStageScan => 'listing photos';
+
+  @override
+  String get diagBgStagePhoto => 'processing a photo';
+
+  @override
+  String get diagBgStageCheckpoint => 'saving progress';
+
+  @override
+  String get diagBgStageDone => 'finished';
+
+  @override
+  String get diagBgStopDone => 'Finished.';
+
+  @override
+  String get diagBgStopBudget =>
+      'Used its time; the rest waits for the next scan.';
+
+  @override
+  String get diagBgStopPaused => 'Automatic analysis is paused.';
+
+  @override
+  String get diagBgStopNoKey => 'No API key is set.';
+
+  @override
+  String get diagBgStopWatcherOff => 'Watch Camera Roll is off.';
+
+  @override
+  String get diagBgStopNoPermission => 'No access to photos.';
+
+  @override
+  String diagBgStopError(String kind) {
+    return 'Stopped by an error ($kind).';
+  }
+
+  @override
+  String diagBgRunWatermark(String before, String after) {
+    return 'Scanned up to: $before → $after';
+  }
+
+  @override
+  String get diagBgRunWatermarkNone => 'none';
 
   @override
   String get addPhotosTitle => 'Recent photos';

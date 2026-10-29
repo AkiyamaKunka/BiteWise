@@ -600,6 +600,12 @@ abstract class AppLocalizations {
   /// **'iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.'**
   String get backgroundScanIosHint;
 
+  /// Photos footer line in Settings when the recorded background runs keep starting but log nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'Background scan is stuck — opening Bitewise once catches up.'**
+  String get backgroundScanStuck;
+
   /// No description provided for @settingsSectionProfile.
   ///
   /// In en, this message translates to:
@@ -1973,6 +1979,144 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No quota pause is active.'**
   String get diagQuotaOk;
+
+  /// Heading of the background-scan history on the Test AI provider page.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent background scans'**
+  String get diagBgRunsTitle;
+
+  /// No description provided for @diagBgRunsIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'What the last background scans did, newest first. A scan with no end time was stopped by the system part-way; its last step shows where.'**
+  String get diagBgRunsIntro;
+
+  /// No description provided for @diagBgRunsNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No background scan has been recorded yet.'**
+  String get diagBgRunsNone;
+
+  /// No description provided for @diagBgRunUnfinished.
+  ///
+  /// In en, this message translates to:
+  /// **'did not finish'**
+  String get diagBgRunUnfinished;
+
+  /// No description provided for @diagBgRunSeconds.
+  ///
+  /// In en, this message translates to:
+  /// **'{seconds} s'**
+  String diagBgRunSeconds(int seconds);
+
+  /// No description provided for @diagBgRunCounts.
+  ///
+  /// In en, this message translates to:
+  /// **'Photos: {listed} listed, {read} read, {processed} processed, {logged} logged, {later} left for later'**
+  String diagBgRunCounts(
+    int listed,
+    int read,
+    int processed,
+    int logged,
+    int later,
+  );
+
+  /// No description provided for @diagBgRunKilled.
+  ///
+  /// In en, this message translates to:
+  /// **'Ended by the system before it finished — last step: {step}.'**
+  String diagBgRunKilled(String step);
+
+  /// No description provided for @diagBgStageBoot.
+  ///
+  /// In en, this message translates to:
+  /// **'starting'**
+  String get diagBgStageBoot;
+
+  /// No description provided for @diagBgStageSettings.
+  ///
+  /// In en, this message translates to:
+  /// **'loading settings'**
+  String get diagBgStageSettings;
+
+  /// No description provided for @diagBgStageScan.
+  ///
+  /// In en, this message translates to:
+  /// **'listing photos'**
+  String get diagBgStageScan;
+
+  /// No description provided for @diagBgStagePhoto.
+  ///
+  /// In en, this message translates to:
+  /// **'processing a photo'**
+  String get diagBgStagePhoto;
+
+  /// No description provided for @diagBgStageCheckpoint.
+  ///
+  /// In en, this message translates to:
+  /// **'saving progress'**
+  String get diagBgStageCheckpoint;
+
+  /// No description provided for @diagBgStageDone.
+  ///
+  /// In en, this message translates to:
+  /// **'finished'**
+  String get diagBgStageDone;
+
+  /// No description provided for @diagBgStopDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished.'**
+  String get diagBgStopDone;
+
+  /// No description provided for @diagBgStopBudget.
+  ///
+  /// In en, this message translates to:
+  /// **'Used its time; the rest waits for the next scan.'**
+  String get diagBgStopBudget;
+
+  /// No description provided for @diagBgStopPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic analysis is paused.'**
+  String get diagBgStopPaused;
+
+  /// No description provided for @diagBgStopNoKey.
+  ///
+  /// In en, this message translates to:
+  /// **'No API key is set.'**
+  String get diagBgStopNoKey;
+
+  /// No description provided for @diagBgStopWatcherOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch Camera Roll is off.'**
+  String get diagBgStopWatcherOff;
+
+  /// No description provided for @diagBgStopNoPermission.
+  ///
+  /// In en, this message translates to:
+  /// **'No access to photos.'**
+  String get diagBgStopNoPermission;
+
+  /// No description provided for @diagBgStopError.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped by an error ({kind}).'**
+  String diagBgStopError(String kind);
+
+  /// No description provided for @diagBgRunWatermark.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanned up to: {before} → {after}'**
+  String diagBgRunWatermark(String before, String after);
+
+  /// No description provided for @diagBgRunWatermarkNone.
+  ///
+  /// In en, this message translates to:
+  /// **'none'**
+  String get diagBgRunWatermarkNone;
 
   /// No description provided for @addPhotosTitle.
   ///

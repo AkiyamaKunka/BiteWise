@@ -6,8 +6,10 @@
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/services/photo/background_runs.dart';
 import 'package:calorie_tracker/ui/diagnostics.dart';
 import 'package:calorie_tracker/ui/provider_names.dart';
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
@@ -393,5 +395,122 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('1 problem'), findsOneWidget);
     expect(find.textContaining('TEMPORARY'), findsOneWidget);
+  });
+
+  // 2026-10-18: what the background scans did, from their own record.
+  group('recent background scans', () {
+    final t0 = DateTime.utc(2026, 10, 18, 3, 0);
+    final killed = BackgroundRunRecord(
+        start: t0,
+        platform: 'ios',
+        stage: BackgroundRunStage.photo,
+        enumerated: 3,
+        offered: 2,
+        analyzed: 1,
+        saved: 1,
+        watermarkBefore: DateTime.utc(2026, 10, 11, 2, 26));
+    final budget = BackgroundRunRecord(
+        start: t0.subtract(const Duration(minutes: 30)),
+        end: t0.subtract(const Duration(minutes: 29, seconds: 46)),
+        platform: 'ios',
+        stage: BackgroundRunStage.done,
+        stopReason: BackgroundStop.budget,
+        released: 2);
+    final failed = BackgroundRunRecord(
+        start: t0.subtract(const Duration(hours: 1)),
+        end: t0.subtract(const Duration(hours: 1)),
+        platform: 'ios',
+        stage: BackgroundRunStage.done,
+        stopReason: 'error:PlatformException');
+
+    Future<void> pump(WidgetTester tester, List<BackgroundRunRecord> runs,
+        {Locale? locale}) async {
+      tester.view.physicalSize = const Size(800, 4000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiagnosticsScreen(
+              diagnostics: _diag(), loadBackgroundRuns: () async => runs)));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a killed run shows the step it was on and its counts; '
+        'finished ones say how they ended', (tester) async {
+      await pump(tester, [killed, budget, failed]);
+      expect(find.text('Recent background scans'), findsOneWidget);
+      expect(
+          find.text('Ended by the system before it finished — last step: '
+              'processing a photo.'),
+          findsOneWidget);
+      expect(find.textContaining('did not finish'), findsOneWidget);
+      expect(
+          find.text('Photos: 3 listed, 2 read, 1 processed, 1 logged, '
+              '0 left for later'),
+          findsOneWidget);
+      expect(find.textContaining('2026-10-'), findsWidgets);
+      expect(find.text('Used its time; the rest waits for the next scan.'),
+          findsOneWidget);
+      expect(find.textContaining('14 s'), findsOneWidget);
+      expect(find.text('Stopped by an error (PlatformException).'),
+          findsOneWidget);
+    });
+
+    testWidgets('in Chinese', (tester) async {
+      await pump(tester, [killed], locale: const Locale('zh'));
+      expect(find.text('最近的后台扫描'), findsOneWidget);
+      expect(find.text('在完成前被系统结束，最后一步：处理照片。'), findsOneWidget);
+      expect(find.text('照片：列出 3，读取 2，处理完 1，记录 1，留待之后 0'),
+          findsOneWidget);
+      expect(find.textContaining('未完成'), findsOneWidget);
+    });
+
+    testWidgets('only the latest five are listed', (tester) async {
+      final runs = [
+        for (var i = 0; i < 7; i++)
+          BackgroundRunRecord(
+              start: t0.subtract(Duration(minutes: 30 * i)),
+              end: t0.subtract(Duration(minutes: 30 * i)),
+              platform: 'android',
+              stage: BackgroundRunStage.done,
+              stopReason: BackgroundStop.done),
+      ];
+      await pump(tester, runs);
+      expect(find.text('Finished.'), findsNWidgets(diagBackgroundRunsShown));
+    });
+
+    testWidgets('no record yet says so', (tester) async {
+      await pump(tester, const []);
+      expect(find.text('No background scan has been recorded yet.'),
+          findsOneWidget);
+    });
+
+    test('every stop reason has its own words', () {
+      final l = AppLocalizationsEn();
+      BackgroundRunRecord ended(String reason) => BackgroundRunRecord(
+          start: t0,
+          end: t0,
+          platform: 'ios',
+          stage: BackgroundRunStage.done,
+          stopReason: reason);
+      final lines = {
+        for (final r in [
+          BackgroundStop.done,
+          BackgroundStop.budget,
+          BackgroundStop.paused,
+          BackgroundStop.noKey,
+          BackgroundStop.watcherOff,
+          BackgroundStop.noPermission,
+          'error:StateError',
+        ])
+          backgroundRunVerdict(l, ended(r)),
+      };
+      expect(lines, hasLength(7));
+      expect(backgroundRunVerdict(l, ended('error:StateError')),
+          'Stopped by an error (StateError).');
+    });
   });
 }

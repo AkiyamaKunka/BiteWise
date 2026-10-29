@@ -491,7 +491,31 @@ abstract class PhotoIntake {
   /// at/before it terminally handled (a retryable release or transient read
   /// failure halts it) — watermarks must never advance past it. Null =
   /// nothing covered.
-  Future<DateTime?> backfillScan({int lookbackDays, DateTime? since});
+  ///
+  /// [shouldContinue] (the iOS background run's time budget) is asked
+  /// before each photo's original bytes are read. False leaves that photo
+  /// UNREAD: not offered, not marked seen, not covered — the frontier stops
+  /// in front of it and a later scan offers it. Every later unread photo is
+  /// asked about too, so the caller can count what it left.
+  ///
+  /// [onCovered] hears the safeFrontier (see [attachSink]) each time a
+  /// delivered photo terminates — the value a caller may persist as a
+  /// watermark mid-scan, before the final frontier is known. Never called
+  /// for a truncated window. A throwing callback never stops the scan.
+  ///
+  /// [newestDayFirst] (the app's launch/resume catch-up): the photos of the
+  /// newest day not yet handled this session go first, in shooting order,
+  /// then the usual oldest-first pass. Each photo is offered at most once
+  /// per scan, and only the second pass reports frontiers, so coverage is
+  /// exactly as without it. A whole day, in order, because the automatic
+  /// leftover check compares a photo with the meals already logged on its
+  /// own day.
+  Future<DateTime?> backfillScan(
+      {int lookbackDays,
+      DateTime? since,
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst});
   Future<void> start();
   Future<void> stop();
 }

@@ -13,6 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
+import 'package:calorie_tracker/ui/widgets/grouped.dart' show RowBadge;
 
 import 'fakes.dart';
 
@@ -1051,6 +1052,62 @@ void planTuningTests() {
       await tester.pumpWidget(bg(null));
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
+    });
+
+    // 2026-10-19: the launch time kept advancing through the Oct 11 and
+    // Oct 15 stalls while no run logged a thing; the recorded runs say so.
+    testWidgets('a stuck background scan turns the row red and the footer '
+        'says to open the app once', (tester) async {
+      Widget bg({
+        bool stuck = true,
+        bool watcher = true,
+        bool refreshOn = true,
+      }) =>
+          _wrap(SettingsScreen(
+            key: UniqueKey(),
+            settings: FakeSettings(apiKey: 'k', watcherEnabled: watcher),
+            analyzer: FakeAnalyzer(),
+            dao: FakeDao(),
+            requestPhotoPermission: () async => true,
+            lastBackgroundScan: () async => DateTime.now(),
+            backgroundRefreshEnabled: () async => refreshOn,
+            backgroundScanStuck: () async => stuck,
+            openSystemSettings: () async {},
+          ));
+      const hint = 'Background scan is stuck';
+      await tester.pumpWidget(bg());
+      await tester.pumpAndSettle();
+      expect(find.textContaining(hint), findsOneWidget);
+      expect(find.textContaining('Today'), findsOneWidget,
+          reason: 'the last launch time stays in the row');
+      final badge = tester.widget<RowBadge>(find.descendant(
+          of: find.byKey(const Key('backgroundScanRow')),
+          matching: find.byType(RowBadge)));
+      final context =
+          tester.element(find.byKey(const Key('backgroundScanRow')));
+      expect(badge.color, Theme.of(context).colorScheme.error);
+
+      for (final quiet in [
+        bg(stuck: false),
+        bg(watcher: false),
+        bg(refreshOn: false), // the Off remedy says what to do already
+      ]) {
+        await tester.pumpWidget(quiet);
+        await tester.pumpAndSettle();
+        expect(find.textContaining(hint), findsNothing);
+      }
+      // Watcher off: no red row either, since nothing would explain it.
+      await tester.pumpWidget(bg(watcher: false));
+      await tester.pumpAndSettle();
+      final calm = tester.widget<RowBadge>(find.descendant(
+          of: find.byKey(const Key('backgroundScanRow')),
+          matching: find.byType(RowBadge)));
+      expect(
+          calm.color,
+          isNot(Theme.of(tester.element(
+                  find.byKey(const Key('backgroundScanRow'))))
+              .colorScheme
+              .error));
     });
 
     // 2026-10-10: iOS alone decides when BGAppRefresh launches the scan (a

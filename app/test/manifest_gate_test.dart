@@ -1,6 +1,12 @@
 import 'dart:io';
 
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show imageIOChannelName;
+import 'package:calorie_tracker/services/photo/background_time.dart'
+    show backgroundTimeChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
+import 'package:calorie_tracker/ui/background_glue.dart'
+    show backgroundNativeLaunchPrefsKey;
 import 'package:flutter_test/flutter_test.dart';
 
 Directory _appRoot() {
@@ -205,5 +211,139 @@ void main() {
           reason: 'the $target manifest reference is not in the $target '
               'group, so its path would resolve elsewhere');
     });
+  });
+
+  // The background scan decodes HEIC through ImageIOPlugin.swift: the
+  // headless engine's GPU is off for the whole run, and dart:ui decoding
+  // never finishes there (2026-10-18). Nothing in Dart can see a Swift file
+  // that is missing from the Runner target, or a channel registered only in
+  // the app's engine — the call just answers MissingPluginException and the
+  // photo is deferred on every run. So: compiled into Runner (and only
+  // Runner — the share extension has no Flutter engine), and registered in
+  // BOTH registrant paths.
+  test('the ImageIO plugin is built into Runner and registered for both '
+      'engines', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/ImageIOPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    // The Dart side's channel (platform_decode.dart) is the one Swift serves.
+    expect(swift.readAsStringSync(), contains('"$imageIOChannelName"'));
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* ImageIOPlugin.swift \*/ = '
+            r'\{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* ImageIOPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* ImageIOPlugin.swift in '
+            'Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* ImageIOPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('ImageIOPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final workmanager = RegExp(
+            r'setPluginRegistrantCallback \{ registry in(.*?)\n    \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(1);
+    expect(workmanager, isNotNull);
+    expect(workmanager, contains('registerAppPlugins(with: registry)'),
+        reason: 'the headless background engine would lack the channel');
+    final implicit = RegExp(
+            r'func didInitializeImplicitFlutterEngine\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(implicit, isNotNull);
+    expect(implicit,
+        contains('registerAppPlugins(with: engineBridge.pluginRegistry)'));
+    expect(delegate, contains('ImageIOPlugin.register(with:'));
+  });
+
+  // The app's photo in flight asks iOS for time to finish when the user
+  // leaves (BackgroundTimePlugin.swift, 2026-10-19). A Swift file missing
+  // from Runner answers MissingPluginException, which the Dart side
+  // swallows by design — so nothing but this gate would notice.
+  test('the background-time plugin is built into Runner and registered',
+      () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/BackgroundTimePlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$backgroundTimeChannelName"'));
+    // The expiration handler must END the task, or iOS kills the app —
+    // through the plugin, and without it too (its engine gone).
+    expect(
+        RegExp(r'beginBackgroundTask\(withName: name\) \{[^}]*end\(token\)'
+                r'[^}]*task\.end\(\)')
+            .hasMatch(source),
+        isTrue);
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* BackgroundTimePlugin.swift '
+            r'\*/ = \{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* BackgroundTimePlugin.swift */'));
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* BackgroundTimePlugin.swift '
+            'in Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+        .firstMatch(
+            _pbxObject(pbxproj, comment: 'Runner', isa: 'PBXNativeTarget'))
+        ?.group(1);
+    expect(
+        _pbxObject(pbxproj,
+            id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase'),
+        contains('$buildFile /* BackgroundTimePlugin.swift in Sources */'));
+    // The app's engine registers app-local plugins through this one path.
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('BackgroundTimePlugin.register(with:'));
+  });
+
+  // The iOS background run counts its time budgets from the moment
+  // workmanager started its engine (2026-10-19): the AppDelegate stamps it
+  // in the registrant callback, which runs right after the engine is
+  // created and started and before Dart's task, under the name
+  // shared_preferences gives the Dart key. A renamed key, or a stamp written later in the callback,
+  // silently falls back to the Dart entry and the boot is uncounted again.
+  test('the background launch stamp is written first, under the Dart key',
+      () {
+    final delegate = File('${_appRoot().path}/ios/Runner/AppDelegate.swift')
+        .readAsStringSync();
+    expect(delegate,
+        contains('"flutter.$backgroundNativeLaunchPrefsKey"'));
+    final callback = RegExp(
+            r'setPluginRegistrantCallback \{ registry in\s*\n(\s*)(\S[^\n]*)')
+        .firstMatch(delegate);
+    expect(callback?.group(2), 'AppDelegate.stampBackgroundLaunch()');
   });
 }

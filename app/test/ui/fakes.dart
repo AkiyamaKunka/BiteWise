@@ -305,10 +305,21 @@ class FakeIntake implements PhotoIntake {
 
   int backfillScans = 0;
 
+  /// Per scan: whether it asked for the newest day first, and whether it
+  /// carried a coverage checkpoint — both set only by foregroundCatchUp.
+  final List<bool> newestDayFirstArgs = [];
+  final List<bool> checkpointed = [];
+
   @override
   Future<DateTime?> backfillScan(
-      {int lookbackDays = 2, DateTime? since}) async {
+      {int lookbackDays = 2,
+      DateTime? since,
+      bool Function()? shouldContinue,
+      Future<void> Function(DateTime safeFrontier)? onCovered,
+      bool newestDayFirst = false}) async {
     backfillScans++;
+    newestDayFirstArgs.add(newestDayFirst);
+    checkpointed.add(onCovered != null);
     return null;
   }
 
