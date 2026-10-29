@@ -15,7 +15,7 @@ API key". Go to Today › "+ Log" › "From recent photos", allow Photos
 access, pick a food photo and tap Allow in the consent dialog; the
 estimate appears after a few seconds. Without food photos on the test
 device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
-soup"), or share a food image from Safari or Photos into Bitewise via
+soup"), or share a food image from Safari or Photos into BiteWise via
 the share sheet. There is no in-app camera: photos come from the system
 Camera app.
 
@@ -25,10 +25,12 @@ and as soon as it is on it sends the photos from the last 2 days, then
 each new photo, to the selected provider; it uses Background App
 Refresh to check for new photos while the app is closed.
 
-AI Provider › Subscription is for people who run their own server (the
-open-source server in the same repository) with an AI plan on it; it
-cannot be tested without such a server, and choosing a plan there
-switches the app away from the Gemini key. The bitewise://setup link
-fills in that server's address and key after a confirmation dialog.
+AI Provider › Your own server is for people who run their own server
+(the open-source server in the same repository) with an AI plan signed in
+on it; it cannot be tested without such a server, and choosing an AI
+there switches the app away from the Gemini key. Nothing is sold in the
+app: there are no in-app purchases, and this option unlocks nothing. The
+bitewise://setup link fills in that server's address and key after a
+confirmation dialog.
 
 Demo key (Gemini, capped, revoked after review): <key>
