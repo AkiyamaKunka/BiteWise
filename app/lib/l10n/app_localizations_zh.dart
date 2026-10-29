@@ -261,7 +261,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String aiConsentBody(String recipient) {
-    return '筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 $recipient：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要\n• 剩菜照片，连同它对应的那一餐\n• 你为描述或修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。';
+    return '筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 $recipient：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要\n• 剩菜照片，连同它对应的那一餐\n• 你为描述一餐输入的文字\n• 你为修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。';
   }
 
   @override
@@ -464,13 +464,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectionTypeFooter =>
-      'API Key 按张照片计费，Key 保存在这台手机上。订阅是固定月费套餐，由你自己的云服务器登录使用 — 照片不再额外花钱。';
+      'API Key 保存在这台手机上，每张照片由你选择的服务商按你的账户计费。你自己的服务器用它上面配置的 AI 分析照片；这台手机只保存它的地址和上传密钥。';
 
   @override
   String get typeApiKey => 'API Key';
 
   @override
-  String get typeSubscription => '订阅';
+  String get typeSubscription => '你自己的服务器';
 
   @override
   String get testProvider => '测试当前服务';
@@ -576,6 +576,9 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get modelFreeMark => 'FREE 免费';
+
+  @override
   String modelHelperDeepseek(String model) {
     return '默认：$model — DeepSeek 唯一能识别照片的模型。';
   }
@@ -586,29 +589,28 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get apiInactiveFooter => '当前使用的是订阅。在上方选择一家服务商即可切换为按张计费的 API Key。';
+  String get apiInactiveFooter => '当前使用的是你自己的服务器。在上方选择一家服务商即可切换为按张计费的 API Key。';
 
   @override
-  String get subPageTitle => '订阅';
+  String get subPageTitle => '你自己的服务器';
 
   @override
-  String get planHeader => '套餐';
+  String get planHeader => '服务器上的 AI';
 
   @override
-  String get planFooter =>
-      '固定月费：你自己的云服务器登录一个套餐并用它分析照片 — 每张照片不再额外花钱。套餐凭证保存在那台机器上。';
+  String get planFooter => '选择你的服务器已登录的 AI。登录凭证保存在你的服务器上，不在这台手机上。';
 
   @override
-  String get planClaude => 'Claude 订阅';
+  String get planClaude => 'Claude';
 
   @override
-  String get planClaudeNote => 'Anthropic 订阅';
+  String get planClaudeNote => 'Anthropic';
 
   @override
-  String get planGlmNote => '智谱订阅';
+  String get planGlmNote => '智谱';
 
   @override
-  String get planDoubaoNote => '火山引擎订阅';
+  String get planDoubaoNote => '火山引擎';
 
   @override
   String get noteManyModels => '多家模型';
@@ -620,25 +622,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nlCannotUndo => '此操作无法撤销。';
 
   @override
-  String get planGlm => 'GLM 编程套餐';
+  String get planGlm => 'GLM';
 
   @override
-  String get planDoubao => '豆包 Agent 套餐';
+  String get planDoubao => '豆包';
 
   @override
-  String get planShortClaude => 'Claude 订阅';
+  String get planShortClaude => '你服务器上的 Claude';
 
   @override
-  String get planShortGlm => 'GLM 套餐';
+  String get planShortGlm => '你服务器上的 GLM';
 
   @override
-  String get planShortDoubao => '豆包套餐';
+  String get planShortDoubao => '你服务器上的豆包';
 
   @override
   String get serverHeader => '你的服务器';
 
   @override
-  String get serverFooter => '保存套餐登录并执行分析的云端机器 — 不是这台手机。手机上只保存与它通信的上传密钥。';
+  String get serverFooter => '保存 AI 登录并执行分析的服务器 — 不是这台手机。手机上只保存与它通信的上传密钥。';
 
   @override
   String get serverAddressLabel => '服务器地址';
@@ -650,10 +652,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectClaude => '连接 Claude';
 
   @override
-  String get connectClaudeFooter => '让服务器登录你的 Anthropic 订阅。中国大陆需要 VPN。';
+  String get connectClaudeFooter => '让服务器登录你的 Anthropic 账户。中国大陆需要 VPN。';
 
   @override
-  String get subInactiveFooter => '当前使用的是 API Key。在上方选择一个套餐即可切换为经你服务器的订阅分析。';
+  String get subInactiveFooter => '当前使用的是 API Key。在上方选择一项即可改由你自己的服务器分析照片。';
 
   @override
   String get connectDialogTitle => '完成 Claude 连接';
@@ -674,7 +676,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectBrowserFailed => '无法打开浏览器。';
 
   @override
-  String get connectDone => 'Claude 已连接 — 分析将使用你的订阅。';
+  String get connectDone => 'Claude 已连接 — 你的服务器将用你的 Anthropic 账户分析照片。';
 
   @override
   String get profilePageTitle => '饮食偏好';
@@ -830,7 +832,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get planTuningFooter =>
-      '服务器用哪个 Claude 模型分析、思考多少。默认跟随服务器自身设置；仅 Claude 订阅提供此选项 — 其他套餐由服务商决定模型。';
+      '服务器用哪个 Claude 模型分析、思考多少。默认跟随服务器自身设置；仅 Claude 提供此选项 — GLM 和豆包由服务商决定模型。';
 
   @override
   String get planModelRow => '模型';
@@ -866,7 +868,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get planEffortHighShort => '高';
 
   @override
-  String get planModelFable => 'Fable — 旗舰 · Pro 需另购额度';
+  String get planModelFable => 'Fable — 旗舰';
 
   @override
   String typicalDayOnly(String typical) {
@@ -1828,14 +1830,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String setupLinkBody(String server, String backend, String keyTail) {
-    return '服务器：$server\n套餐：$backend\n上传密钥：••••$keyTail\n\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。';
+    return '服务器：$server\nAI：$backend\n上传密钥：••••$keyTail\n\n你的餐食照片会发送到这台服务器进行分析，请确认它是你自己的。';
   }
 
   @override
   String get setupLinkConfirm => '使用这台服务器';
 
   @override
-  String get setupLinkDone => '服务器已配置 —— 照片将通过你的套餐分析。';
+  String get setupLinkDone => '服务器已配置 —— 照片将由你的服务器分析。';
 
   @override
   String get setupLinkInvalid => '这个配置链接无效。';
@@ -1877,12 +1879,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String errServerModelRefused(String reason) {
-    return '你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。';
+    return '你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 你自己的服务器 › 模型 里换一个模型。';
   }
 
   @override
   String nlServerModelRefused(String reason) {
-    return '❌ 你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。';
+    return '❌ 你的服务器无法使用所选模型：$reason —— 请在 设置 › AI 服务 › 你自己的服务器 › 模型 里换一个模型。';
   }
 
   @override

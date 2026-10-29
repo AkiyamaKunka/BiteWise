@@ -1,5 +1,6 @@
-/// The Subscription connection type (user-designed IA, 2026-08-02 v2:
-/// each connection type gets its OWN page). Three flat-rate plans as a
+/// The "Your own server" connection type (user-designed IA, 2026-08-02 v2:
+/// each connection type gets its OWN page; called Subscription until the
+/// owner's R-F5 decision, 2026-10-29). Three flat-rate plans as a
 /// checkmark list; picking one selects the server route AND that plan.
 /// The server config (address, upload key, Claude connect) appears once
 /// a plan is active.
@@ -13,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart' as launcher;
 import '../../ai_consent.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
+import '../../provider_names.dart' show serverPlanName;
 import '../../widgets/grouped.dart';
 import '../../widgets/small_spinner.dart';
 import 'provider_page.dart' show kPlanChoices, noteLabel;
@@ -285,11 +287,7 @@ class _SubscriptionProviderPageState
             for (final (backend, _, note) in kPlanChoices)
               GroupedRow(
                 key: Key('planChoice-$backend'),
-                title: switch (backend) {
-                  'glm' => context.l10n.planGlm,
-                  'doubao' => context.l10n.planDoubao,
-                  _ => context.l10n.planClaude,
-                },
+                title: serverPlanName(context.l10n, backend),
                 value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: _planActive &&

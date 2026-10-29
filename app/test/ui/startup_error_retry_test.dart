@@ -10,7 +10,7 @@ void main() {
     var attempts = 0;
     await tester.pumpWidget(StartupErrorApp(
         error: 'PlatformException(-25308)', onRetry: () async => attempts++));
-    expect(find.text('Bitewise could not start.'), findsOneWidget);
+    expect(find.text('BiteWise could not start.'), findsOneWidget);
     expect(find.text('Retry'), findsOneWidget);
     expect(find.text('PlatformException(-25308)'), findsOneWidget,
         reason: 'the raw error stays, as a secondary line');

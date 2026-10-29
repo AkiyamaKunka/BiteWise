@@ -2,7 +2,11 @@
 /// connection types, each on its OWN page —
 ///
 ///   API Key · pay per photo        → ApiKeyProviderPage
-///   Subscription · via your server → SubscriptionProviderPage
+///   Your own server                → SubscriptionProviderPage
+///
+/// The second type is worded neutrally — "Your own server", a server icon,
+/// "Claude (server)" — with no plan or price talk (owner decision
+/// R-F5, 2026-10-29); what it does is unchanged.
 ///
 /// This page shows which type is active (checkmark + the concrete choice
 /// as the row value) and hosts the one Test action; everything else lives
@@ -26,6 +30,15 @@ export '../../provider_names.dart';
 
 /// Sentinel value for the model picker's "type it yourself" row.
 const String kCustomModelSentinel = '__custom__';
+
+/// Stands for the localized "free" mark inside a [kKnownModels] label:
+/// 'FREE' in English, 'FREE 免费' in Chinese (owner decision R-F11,
+/// 2026-10-29: no Chinese text in the English UI). See [modelChoiceLabel].
+const String kFreeMarkToken = '{free}';
+
+/// A [kKnownModels] label as the model picker shows it.
+String modelChoiceLabel(AppLocalizations l, String label) =>
+    label.replaceAll(kFreeMarkToken, l.modelFreeMark);
 
 /// Curated vision-capable models per provider (verified 2026-07 research),
 /// with the tradeoff IN the label — users pick, they don't memorize vendor
@@ -67,7 +80,7 @@ const Map<String, List<(String, String)>> kKnownModels = {
     ('~moonshotai/kimi-latest', 'Kimi (latest)'),
     ('meta-llama/llama-4-maverick', 'Llama 4 Maverick'),
     ('mistralai/mistral-small-2603', 'Mistral Small'),
-    ('google/gemma-4-31b-it:free', 'Gemma 4 31B — FREE 免费'),
+    ('google/gemma-4-31b-it:free', 'Gemma 4 31B — {free}'),
   ],
   // Only deepseek-flash accepts photos; deepseek-v4-pro is text-only.
   'deepseek': [
@@ -85,7 +98,7 @@ const Map<String, List<(String, String)>> kKnownModels = {
     ('doubao-seed-2-1-pro-260628', 'seed-2.1 pro — strongest'),
   ],
   'glm': [
-    ('glm-4.6v-flash', 'glm-4.6v-flash — FREE 免费, default'),
+    ('glm-4.6v-flash', 'glm-4.6v-flash — {free}, default'),
     ('glm-4.6v', 'glm-4.6v — stronger, paid'),
     ('glm-5v-turbo', 'glm-5v-turbo — newest flagship'),
   ],
@@ -124,18 +137,24 @@ const List<(String, String, String)> kApiKeyChoices = [
   ('glm', 'GLM 智谱', 'freeDirect'),
 ];
 
-/// Localized text for a [kApiKeyChoices] / [kPlanChoices] note tag.
-String noteLabel(AppLocalizations l, String tag) => switch (tag) {
-      'vpn' => l.noteVpn,
-      'freeVpn' => l.noteFreeTierVpn,
-      'direct' => l.noteDirect,
-      'freeDirect' => l.noteFreeDirect,
-      'many' => l.noteManyModels,
-      'claude' => l.planClaudeNote,
-      'glm' => l.planGlmNote,
-      'doubao' => l.planDoubaoNote,
-      _ => tag,
-    };
+/// Localized text for a [kApiKeyChoices] / [kPlanChoices] note tag; null
+/// (no row value) where the language has no note. English has no
+/// reachability notes: 'VPN in China' / 'direct in China' are empty there
+/// (owner decision R-F11, 2026-10-29); Chinese keeps them.
+String? noteLabel(AppLocalizations l, String tag) {
+  final note = switch (tag) {
+    'vpn' => l.noteVpn,
+    'freeVpn' => l.noteFreeTierVpn,
+    'direct' => l.noteDirect,
+    'freeDirect' => l.noteFreeDirect,
+    'many' => l.noteManyModels,
+    'claude' => l.planClaudeNote,
+    'glm' => l.planGlmNote,
+    'doubao' => l.planDoubaoNote,
+    _ => tag,
+  };
+  return note.isEmpty ? null : note;
+}
 
 /// (backend id, name, note) — all three ride the user's server. Notes
 /// name the VENDOR, never a price: plan pricing changes under vendors'
@@ -228,14 +247,16 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                 if (mounted) setState(() {});
               },
             ),
+            // The user's own server (owner decision R-F5, 2026-10-29): a
+            // server icon, "Your own server", and the bare AI name as the
+            // value — the title already says where it runs.
             GroupedRow(
               key: const Key('subscriptionTypeRow'),
-              icon: Icons.workspace_premium_outlined,
+              icon: Icons.dns_outlined,
               iconColor: scheme.tertiary,
               title: context.l10n.typeSubscription,
               value: planActive
-                  ? providerDisplayLabel(
-                      context.l10n, 'server', settings.serverBackend)
+                  ? serverPlanName(context.l10n, settings.serverBackend)
                   : null,
               trailing: planActive
                   ? Icon(Icons.check, size: 20, color: scheme.primary)

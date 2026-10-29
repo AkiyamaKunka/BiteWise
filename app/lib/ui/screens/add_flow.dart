@@ -595,8 +595,8 @@ class AddTextScreen extends StatefulWidget {
   final NlExecutor executor;
   final MealsDao dao;
 
-  /// For the AI consent before the text (and the recent meals it carries)
-  /// leaves the phone. Required, so a call site cannot drop the question
+  /// For the AI consent before the text leaves the phone (with today's
+  /// date only: describeMeal sends no other meals). Required, so a call site cannot drop the question
   /// silently (a merge keeping another branch's constructor call fails to
   /// compile instead); tests that are about something else pass a
   /// FakeSettings, which allows every recipient.
@@ -631,8 +631,9 @@ class _AddTextScreenState extends State<AddTextScreen> {
   Future<void> _describe() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _sending || _askingConsent) return;
-    // App Store 5.1.2(i): the description and the last 7 days of meals go
-    // to the AI — permission for this recipient first.
+    // App Store 5.1.2(i): the description (and today's date — describeMeal
+    // sends no other meals) goes to the AI — permission for this recipient
+    // first.
     _askingConsent = true;
     final allowed = await ensureAiConsent(context, widget.settings);
     _askingConsent = false;

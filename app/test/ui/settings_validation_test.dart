@@ -12,6 +12,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 import 'package:calorie_tracker/ui/widgets/grouped.dart' show RowBadge;
 
@@ -398,8 +399,11 @@ void main() {
       requestPhotoPermission: () async => true,
     )));
     expect(find.byKey(const Key('firstRunCard')), findsOneWidget);
-    expect(find.textContaining('中国大陆用户'), findsOneWidget,
-        reason: 'the mainland steer is the point of the card');
+    // The mainland steer is the point of the CHINESE card; the English one
+    // is neutral (owner decision R-F11, 2026-10-29).
+    expect(find.textContaining('中国大陆用户'), findsNothing);
+    expect(find.textContaining('VPN'), findsNothing);
+    expect(AppLocalizationsZh().settingsWelcomeBody, contains('中国大陆用户'));
     expect(find.byKey(const Key('quotaPauseBanner')), findsNothing);
     // The card must not still name a button that no longer exists.
     expect(find.textContaining('Validate key'), findsNothing);

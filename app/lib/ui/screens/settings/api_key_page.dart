@@ -18,6 +18,7 @@ import 'provider_page.dart'
         kCustomModelSentinel,
         kKnownModels,
         isCuratedModel,
+        modelChoiceLabel,
         noteLabel,
         providerLabel;
 
@@ -175,7 +176,10 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                     for (final (id, label)
                         in kKnownModels[settings.provider] ??
                             const <(String, String)>[])
-                      DropdownMenuItem(value: id, child: Text(label)),
+                      DropdownMenuItem(
+                          value: id,
+                          child: Text(
+                              modelChoiceLabel(context.l10n, label))),
                     DropdownMenuItem(
                         value: kCustomModelSentinel,
                         child: Text(context.l10n.modelCustomRow)),

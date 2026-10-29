@@ -216,7 +216,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。';
+      'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.';
 
   @override
   String get settingsSectionAi => 'AI';
@@ -280,7 +280,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiConsentBody(String recipient) {
-    return 'Bitewise estimates calories with an AI service. If you allow it, Bitewise sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe or fix a meal, with your meals from the last 7 days\n\nBitewise has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
+    return 'BiteWise estimates calories with an AI service. If you allow it, BiteWise sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nBiteWise has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
   }
 
   @override
@@ -354,7 +354,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiStopSharingBody(String provider) {
-    return 'Bitewise stops sending photos and meal text to $provider, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Bitewise asks again.';
+    return 'BiteWise stops sending photos and meal text to $provider, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, BiteWise asks again.';
   }
 
   @override
@@ -430,7 +430,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backgroundScanStuck =>
-      'Background scan is stuck — opening Bitewise once catches up.';
+      'Background scan is stuck — opening BiteWise once catches up.';
 
   @override
   String get settingsSectionProfile => 'Profile';
@@ -499,13 +499,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectionTypeFooter =>
-      'An API key pays per photo and lives on this phone. A subscription is a flat-rate plan your own cloud server signs into — photos cost nothing extra.';
+      'An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.';
 
   @override
   String get typeApiKey => 'API Key';
 
   @override
-  String get typeSubscription => 'Subscription';
+  String get typeSubscription => 'Your own server';
 
   @override
   String get testProvider => 'Test This Provider';
@@ -522,19 +522,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor. In mainland China choose DeepSeek, Qwen, Doubao or GLM — the others need a VPN. 中国大陆用户请选择国内提供商。';
+      'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.';
 
   @override
-  String get noteVpn => 'VPN in China';
+  String get noteVpn => '';
 
   @override
-  String get noteFreeTierVpn => 'free · VPN in China';
+  String get noteFreeTierVpn => 'free tier';
 
   @override
-  String get noteDirect => 'direct in China';
+  String get noteDirect => '';
 
   @override
-  String get noteFreeDirect => 'free · direct in China';
+  String get noteFreeDirect => 'free model';
 
   @override
   String get apiKeyHeader => 'API key';
@@ -550,7 +550,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiKeyFooterGemini =>
-      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.';
+      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterOpenai =>
@@ -562,11 +562,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiKeyFooterQwen =>
-      'From bailian.console.aliyun.com (Alibaba Cloud 百炼 → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.';
+      'From bailian.console.aliyun.com (Alibaba Cloud Model Studio → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterDoubao =>
-      'From console.volcengine.com/ark (API Key + 开通管理 to activate models). 500k free tokens per model. Stored securely on this device only.';
+      'From console.volcengine.com/ark (create an API key, then activate the models you want to use). 500k free tokens per model. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterGlm =>
@@ -574,7 +574,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiKeyFooterDeepseek =>
-      'From platform.deepseek.com (API keys). Pay as you go; reachable from mainland China. Stored securely on this device only.';
+      'From platform.deepseek.com (API keys). Pay as you go. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterXai =>
@@ -614,6 +614,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get modelFreeMark => 'FREE';
+
+  @override
   String modelHelperDeepseek(String model) {
     return 'Default: $model — the only DeepSeek model that accepts photos.';
   }
@@ -625,20 +628,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiInactiveFooter =>
-      'A subscription is currently active. Pick a provider above to switch to a pay-per-photo API key.';
+      'Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.';
 
   @override
-  String get subPageTitle => 'Subscription';
+  String get subPageTitle => 'Your own server';
 
   @override
-  String get planHeader => 'Plan';
+  String get planHeader => 'AI on your server';
 
   @override
   String get planFooter =>
-      'Flat-rate: your own cloud machine signs in to ONE plan and analyses photos under it — each photo costs nothing extra. Plan credentials stay on that machine.';
+      'Pick the AI your server is signed in to. The sign-in stays on your server, never on this phone.';
 
   @override
-  String get planClaude => 'Claude Plan';
+  String get planClaude => 'Claude';
 
   @override
   String get planClaudeNote => 'Anthropic';
@@ -659,26 +662,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nlCannotUndo => 'This cannot be undone.';
 
   @override
-  String get planGlm => 'GLM Coding Plan';
+  String get planGlm => 'GLM';
 
   @override
-  String get planDoubao => 'Doubao Agent Plan';
+  String get planDoubao => 'Doubao';
 
   @override
-  String get planShortClaude => 'Claude Plan';
+  String get planShortClaude => 'Claude (server)';
 
   @override
-  String get planShortGlm => 'GLM Plan';
+  String get planShortGlm => 'GLM (server)';
 
   @override
-  String get planShortDoubao => 'Doubao Plan';
+  String get planShortDoubao => 'Doubao (server)';
 
   @override
   String get serverHeader => 'Your server';
 
   @override
   String get serverFooter =>
-      'The cloud machine that holds your plan sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that machine.';
+      'The server that holds the AI sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that server.';
 
   @override
   String get serverAddressLabel => 'Server address';
@@ -691,11 +694,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectClaudeFooter =>
-      'Signs this server in to your Anthropic subscription. Needs a VPN in mainland China.';
+      'Signs your server in to your Anthropic account.';
 
   @override
   String get subInactiveFooter =>
-      'An API key is currently active. Pick a plan above to switch to subscription analysis via your server.';
+      'An API key is currently active. Pick an AI above to have your own server analyze photos instead.';
 
   @override
   String get connectDialogTitle => 'Finish connecting Claude';
@@ -718,7 +721,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectDone =>
-      'Claude connected — analyses run on your subscription.';
+      'Claude connected — your server analyzes photos with your Anthropic account.';
 
   @override
   String get profilePageTitle => 'Dietary Profile';
@@ -753,7 +756,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get addFix => 'Fix or delete a meal';
 
   @override
-  String get addFixFooter => '\"meal 2 was roast duck\" · \"删除第一餐\"';
+  String get addFixFooter =>
+      '\"meal 2 was roast duck\" · \"delete the first meal\"';
 
   @override
   String get addPhotosTip =>
@@ -787,7 +791,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportNoMeals => 'No meals logged.';
 
   @override
-  String get reportFooter => 'Logged with Bitewise';
+  String get reportFooter => 'Logged with BiteWise';
 
   @override
   String get historyDayPattern => 'EEEE, MMM dd';
@@ -887,7 +891,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get planTuningFooter =>
-      'Which Claude model analyzes on your server, and how hard it thinks. Default follows the server\'s own setting; only the Claude plan offers this — the other plans choose models themselves.';
+      'Which Claude model your server uses, and how hard it thinks. Default follows the server\'s own setting. Only Claude offers this; GLM and Doubao choose their models themselves.';
 
   @override
   String get planModelRow => 'Model';
@@ -923,7 +927,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get planEffortHighShort => 'High';
 
   @override
-  String get planModelFable => 'Fable — frontier · needs credits on Pro';
+  String get planModelFable => 'Fable — frontier';
 
   @override
   String typicalDayOnly(String typical) {
@@ -964,12 +968,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String coachPartialGoal(String delta) {
-    return '$delta kcal under your goal — any meals not logged yet? Add them in Bitewise.';
+    return '$delta kcal under your goal — any meals not logged yet? Add them in BiteWise.';
   }
 
   @override
   String coachPartialTypical(String delta) {
-    return '$delta kcal below your usual day — any meals not logged yet? Add them in Bitewise.';
+    return '$delta kcal below your usual day — any meals not logged yet? Add them in BiteWise.';
   }
 
   @override
@@ -1056,7 +1060,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagIntro =>
-      'Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.';
+      'Checks your AI setup step by step and names exactly what is broken: configuration, network, key, account credit, reply format, and quota. Running the test spends two small AI calls.';
 
   @override
   String get diagRunning => 'Testing…';
@@ -1155,7 +1159,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixVpn =>
-      'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).';
+      'This provider could not be reached from your network. Check the connection and try again, or switch to another provider.';
 
   @override
   String get diagFixServerUnreachable =>
@@ -1173,7 +1177,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixTopUp =>
-      'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free, no VPN needed in mainland China).';
+      'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free).';
 
   @override
   String get diagRateLimited =>
@@ -1369,7 +1373,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get photoPermissionDenied =>
-      'Bitewise isn\'t allowed to see your photos.';
+      'BiteWise isn\'t allowed to see your photos.';
 
   @override
   String get openSystemSettings => 'Open system settings';
@@ -1424,7 +1428,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get describeHint =>
-      'e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"';
+      'e.g. \"two eggs and toast with butter\"\nor \"a bowl of beef noodle soup with an egg\"';
 
   @override
   String get describeHelp =>
@@ -1513,7 +1517,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errBadModelDoubao =>
-      'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.';
+      'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated in the Volcengine console.';
 
   @override
   String get errBadModelOpenRouter =>
@@ -1590,7 +1594,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fixHint =>
-      'e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"';
+      'e.g. \"the noodles were roast duck rice\"\nor \"delete the coffee I just logged\"';
 
   @override
   String get working => 'Working…';
@@ -1952,7 +1956,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String setupLinkBody(String server, String backend, String keyTail) {
-    return 'Server: $server\nPlan: $backend\nUpload key: ••••$keyTail\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.';
+    return 'Server: $server\nAI: $backend\nUpload key: ••••$keyTail\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.';
   }
 
   @override
@@ -1960,7 +1964,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setupLinkDone =>
-      'Server configured — photos will be analyzed through your plan.';
+      'Server configured — your server will analyze the photos.';
 
   @override
   String get setupLinkInvalid => 'That setup link is not valid.';
@@ -2003,12 +2007,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String errServerModelRefused(String reason) {
-    return 'Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Subscription › Model.';
+    return 'Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Your own server › Model.';
   }
 
   @override
   String nlServerModelRefused(String reason) {
-    return '❌ Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Subscription › Model.';
+    return '❌ Your server cannot use the selected model: $reason — choose another model in Settings › AI Provider › Your own server › Model.';
   }
 
   @override
@@ -2053,7 +2057,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String errRegionBlocked(String provider) {
-    return '$provider is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).';
+    return '$provider is not available from your current network region. Check that the provider serves your region, or choose another provider.';
   }
 
   @override
@@ -2067,7 +2071,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String diagFixVpnRegion(String provider) {
-    return 'Switch the VPN to a node in a region $provider serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.';
+    return 'Use $provider from a region it serves, or choose another provider.';
   }
 
   @override
@@ -2097,7 +2101,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String autoScanPausedRegion(String provider, String time) {
-    return 'Watch Camera Roll is paused: $provider is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: $time).';
+    return 'Watch Camera Roll is paused: $provider is not available from this network region. Photos are kept — once it is reachable again, Test This Provider or add one photo via Log › From recent photos to resume now (next try: $time).';
   }
 
   @override
@@ -2157,17 +2161,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get exportShareSubject => 'Bitewise data export';
+  String get exportShareSubject => 'BiteWise data export';
 
   @override
   String get importErrNotJson => 'That file is not JSON.';
 
   @override
-  String get importErrNotExport => 'That file is not a Bitewise export.';
+  String get importErrNotExport => 'That file is not a BiteWise export.';
 
   @override
   String get importErrWrongFormatTag =>
-      'That file is not a Bitewise export (wrong format tag).';
+      'That file is not a BiteWise export (wrong format tag).';
 
   @override
   String get importErrBadVersion => 'That export has an unusable version tag.';

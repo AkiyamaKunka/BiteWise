@@ -13,7 +13,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Bitewise</string>
+	<string>BiteWise</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -56,7 +56,7 @@
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Bitewise reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings.</string>
+	<string>BiteWise reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

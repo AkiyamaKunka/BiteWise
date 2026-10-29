@@ -576,7 +576,7 @@ void main() {
       expect(zh, contains('Fable 5 requires usage credits'));
       // A credits refusal repeats on every retry: it names the model
       // switch, not 照片覆盖检查.
-      expect(zh, contains('设置 › AI 服务 › 订阅 › 模型'));
+      expect(zh, contains('设置 › AI 服务 › 你自己的服务器 › 模型'));
       expect(zh, isNot(contains('覆盖检查')));
       expect(zh, isNot(contains('自动重试')));
       expect(outcomeSnackbar(AppLocalizationsEn(), notes.single),

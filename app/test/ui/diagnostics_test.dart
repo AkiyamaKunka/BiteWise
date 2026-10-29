@@ -68,15 +68,20 @@ void main() {
     expect(results.single.summary, contains('server address'));
   });
 
-  test('unreachable intl endpoint names the VPN, and stops', () async {
+  test('unreachable intl endpoint gives the reachability fix, and stops',
+      () async {
     final results = await _diag(
       client: MockClient((_) async => throw Exception('network is down')),
     ).run().toList();
     expect(results, hasLength(2));
     expect(results.last.stage, 'Endpoint reachability');
     expect(results.last.status, DiagStatus.fail);
-    expect(results.last.fix, contains('VPN'),
-        reason: 'gemini is unreachable from mainland China without one');
+    // English is neutral (owner decision R-F11, 2026-10-29); the Chinese
+    // fix keeps the VPN hint — gemini is unreachable from mainland China
+    // without one.
+    expect(results.last.fix, AppLocalizationsEn().diagFixVpn);
+    expect(results.last.fix, isNot(contains('VPN')));
+    expect(AppLocalizationsZh().diagFixVpn, contains('VPN'));
   });
 
   test('a passing key probe tells the store the credentials work — the '
@@ -281,7 +286,8 @@ void main() {
       'never by raw id', () async {
     // The owner's 测试 AI 服务 read '服务“qwen”已配置 Key' and 'qwen的接口有
     // 响应' while every other screen says 'Qwen 通义千问'; the server row
-    // read '后端：claude' beside a Settings row that says 'Claude 订阅'.
+    // read '后端：claude' beside a Settings row that says 'Claude 订阅'
+    // (since R-F5, 2026-10-29: 你服务器上的 Claude).
     final zh = AppLocalizationsZh();
     final qwen = FakeSettings()
       ..provider = 'qwen'
@@ -321,7 +327,7 @@ void main() {
       client: MockClient((_) async => http.Response('ok', 404)),
       testImage: _img,
     ).run().take(1).toList();
-    expect(results.single.summary, contains('Claude 订阅'));
+    expect(results.single.summary, contains('你服务器上的 Claude'));
     expect(results.single.summary, isNot(contains('：claude')));
   });
 
@@ -338,19 +344,23 @@ void main() {
     expect(results.last.fix, AppLocalizationsEn().diagFixRecopyKey);
   });
 
-  test('plan row values: English unchanged, Chinese matches the picker',
+  test('own-server row values name the AI and the server, never a plan',
       () {
     final en = AppLocalizationsEn();
     final zh = AppLocalizationsZh();
-    // English widths are pinned by row_fit_layout_test (loop find
-    // 2026-10-08) — these stay byte-identical.
-    expect(providerDisplayLabel(en, 'server', 'claude'), 'Claude Plan');
-    expect(providerDisplayLabel(en, 'server', 'glm'), 'GLM Plan');
-    expect(providerDisplayLabel(en, 'server', 'doubao'), 'Doubao Plan');
-    expect(providerDisplayLabel(zh, 'server', 'claude'), zh.planClaude);
-    expect(providerDisplayLabel(zh, 'server', 'glm'), 'GLM 套餐');
-    expect(providerDisplayLabel(zh, 'server', 'doubao'), '豆包套餐');
+    // Owner decision R-F5 (2026-10-29): no 'Plan' / '订阅'. English widths
+    // are pinned by row_fit_layout_test ('Claude via your server' cut the
+    // root row's 'AI Provider' title at 375 pt).
+    expect(providerDisplayLabel(en, 'server', 'claude'), 'Claude (server)');
+    expect(providerDisplayLabel(en, 'server', 'glm'), 'GLM (server)');
+    expect(providerDisplayLabel(en, 'server', 'doubao'), 'Doubao (server)');
+    expect(providerDisplayLabel(zh, 'server', 'claude'), '你服务器上的 Claude');
+    expect(providerDisplayLabel(zh, 'server', 'glm'), '你服务器上的 GLM');
+    expect(providerDisplayLabel(zh, 'server', 'doubao'), '你服务器上的豆包');
     expect(providerDisplayLabel(zh, 'qwen', 'claude'), 'Qwen 通义千问');
+    // Where the page already says "your own server", the bare AI name.
+    expect(serverPlanName(en, 'claude'), 'Claude');
+    expect(serverPlanName(zh, 'doubao'), '豆包');
   });
 
   test('the welcome card and the VPN fix list DeepSeek as mainland-direct',
@@ -358,12 +368,17 @@ void main() {
     // The API Key page tags DeepSeek 中国直连 and lists it first in its
     // footer; the welcome card one tap earlier still said only Qwen,
     // Doubao or GLM work without a VPN (stale since DeepSeek landed).
-    for (final l in [AppLocalizationsEn(), AppLocalizationsZh()]) {
-      expect(l.settingsWelcomeBody, contains('DeepSeek'));
-      expect(l.diagFixVpn, contains('DeepSeek'));
-      // OpenRouter is not VPN-tagged, so the card must not lump it in.
-      expect(l.settingsWelcomeBody, isNot(contains('其余服务')));
-      expect(l.settingsWelcomeBody, isNot(contains('the other providers')));
+    // Chinese only since the owner's R-F11 decision (2026-10-29): the
+    // English card and fix carry no mainland-China advice at all.
+    final zh = AppLocalizationsZh();
+    expect(zh.settingsWelcomeBody, contains('DeepSeek'));
+    expect(zh.diagFixVpn, contains('DeepSeek'));
+    // OpenRouter is not VPN-tagged, so the card must not lump it in.
+    expect(zh.settingsWelcomeBody, isNot(contains('其余服务')));
+    final en = AppLocalizationsEn();
+    for (final text in [en.settingsWelcomeBody, en.diagFixVpn]) {
+      expect(text, isNot(contains('VPN')));
+      expect(text, isNot(contains('China')));
     }
   });
 
