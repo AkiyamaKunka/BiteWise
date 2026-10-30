@@ -100,4 +100,5 @@ AI plan signed in on it: enter the server's address and upload key there.
 - **Questions and bug reports**: open an issue at
   <https://github.com/AkiyamaKunka/BiteWise/issues>. Issues are public, so
   never post an API key, your photos or personal data there.
-- Email: <SUPPORT EMAIL — owner to choose>
+- **Email**: <junjia.wang.me@gmail.com> for anything you would rather not
+  post publicly.

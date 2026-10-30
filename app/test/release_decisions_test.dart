@@ -5,8 +5,8 @@
 /// - R-F8: App Privacy answer B — Photos or Videos, Health and Other User
 ///   Content, App Functionality only, not linked, no tracking — mirrored in
 ///   the app's privacy manifest; the share extension declares nothing.
-/// - R-F14: docs/SUPPORT.md is the support URL: iPhone-only, no address
-///   the owner has not chosen.
+/// - R-F14: docs/SUPPORT.md is the support URL: iPhone-only, and its one
+///   email address is the one the owner chose (2026-10-29).
 /// - R-F11: the English strings carry no Chinese text and no
 ///   mainland-China / VPN advice.
 /// - R-F9: the English name is BiteWise everywhere; 筷拍 in Chinese.
@@ -325,14 +325,12 @@ void main() {
       }
     });
 
-    test('names no email address: the owner has not chosen one', () {
-      expect(
-        RegExp(
-          r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+',
-        ).hasMatch(support),
-        isFalse,
-      );
-      expect(support, contains('Email: <SUPPORT EMAIL — owner to choose>'));
+    test('names exactly the support address the owner chose', () {
+      final emails = RegExp(
+        r'[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+',
+      ).allMatches(support).map((m) => m.group(0)).toSet();
+      expect(emails, {'junjia.wang.me@gmail.com'});
+      expect(support, isNot(contains('owner to choose')));
       expect(
         support,
         contains('https://github.com/AkiyamaKunka/BiteWise/issues'),

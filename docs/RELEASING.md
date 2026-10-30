@@ -113,10 +113,9 @@ steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
      sentence each), the own-server option, troubleshooting, export /
      delete / stop sharing, GitHub Issues. Both listings' `support_url.txt`
      point at https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/SUPPORT.md
-     (404 until this branch is on `main`, step 3). **Still yours:** the line
-     `Email: <SUPPORT EMAIL — owner to choose>` — put in the public address
-     you choose, or delete the line and keep GitHub Issues only, before you
-     submit.
+     (404 until this branch is on `main`, step 3). Public contact address
+     chosen 2026-10-29: junjia.wang.me@gmail.com (also usable as the App
+     Review contact).
 3. **Merge PR #18, then the release PR, into `main`** (the step 2 fixes
    are part of it; T-TC-5: **main must equal the store build**; the alternative,
    running the Release workflow on the branch with *internal-only*
