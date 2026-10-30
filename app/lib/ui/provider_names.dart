@@ -20,7 +20,20 @@ String providerLabel(String provider) => switch (provider) {
       _ => 'Gemini',
     };
 
+/// The AI behind the user's own server, bare: 'Claude', 'GLM', 'Doubao'
+/// (豆包). For places that already say "your own server" — the AI
+/// provider page's row and the picker one tap further (owner decision
+/// R-F5, 2026-10-29).
+String serverPlanName(AppLocalizations l, String serverBackend) =>
+    switch (serverBackend) {
+      'glm' => l.planGlm,
+      'doubao' => l.planDoubao,
+      _ => l.planClaude,
+    };
+
 /// Row-value display: the concrete plan name, never an opaque 'My server'.
+/// Since R-F5 (2026-10-29) 'Claude (server)' / 你服务器上的 Claude,
+/// never 'Claude Plan' or 'Subscription'.
 /// Short ('Doubao Plan', not 'Doubao Agent Plan'): beside the check and
 /// chevron of the AI provider page's Subscription row the full names cut
 /// the TITLE to 'Subscri…' in English at 375/390 pt (loop find

@@ -1,2 +1,3 @@
 /* 分享面板里显示的名称。 */
 "CFBundleDisplayName" = "筷拍";
+"NSPhotoLibraryUsageDescription" = "筷拍读取你的照片库以找到食物照片：你手动选择的，以及开启「监控相册」后自动发现的新照片。被分析的照片会发送到你在设置中选择的 AI 服务。";

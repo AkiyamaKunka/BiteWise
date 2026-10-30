@@ -13,6 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/ai_consent.dart';
 import '../../core/shared_generated.dart';
 
 /// Narrow seam over the secure-storage plugin so tests can substitute an
@@ -282,6 +283,7 @@ class AppSettings extends ChangeNotifier {
   static const String _kAnalysisBlockedProvider =
       'settings.analysis_blocked_provider';
   static const String _kCredentialRevision = 'settings.credential_revision';
+  static const String _kAiConsentRoutes = 'settings.ai_consent_routes';
   static const String _kOpenaiModel = 'settings.openai_model';
   static const String _kAnthropicModel = 'settings.anthropic_model';
   static const String _kServerBaseUrl = 'settings.server_base_url';
@@ -449,6 +451,7 @@ class AppSettings extends ChangeNotifier {
     s._quotaPauseUntil =
         DateTime.tryParse(p.getString(_kQuotaPauseUntil) ?? '')?.toLocal();
     s._readAnalysisBlock();
+    await s._loadAiConsent();
     return s;
   }
 
@@ -861,6 +864,59 @@ class AppSettings extends ChangeNotifier {
     _summaryEnabled = value;
     await _prefs.setBool(_kSummaryEnabled, value);
     notifyListeners();
+  }
+
+  /// The AI recipients (aiConsentRoute: a provider id, or `server:<plan>`)
+  /// the user allowed meal data to go to — App Store 5.1.2(i) asks for
+  /// explicit permission per third party, before the first send. Not a
+  /// secret; device-local, never exported. Only the UI reads it: every
+  /// automatic path already needs [watcherEnabled], and the switch, a
+  /// provider/plan change while it is on, and a setup link all ask first.
+  Set<String> _aiConsentRoutes = const {};
+
+  /// The route the current provider choice sends to.
+  String get activeAiConsentRoute =>
+      aiConsentRoute(_provider.name, _serverBackend);
+
+  bool hasAiConsent(String route) => _aiConsentRoutes.contains(route);
+
+  /// Allow ([granted]) or stop sending to [route].
+  Future<void> setAiConsent(String route, {required bool granted}) async {
+    final next = {..._aiConsentRoutes};
+    if (granted) {
+      next.add(route);
+    } else {
+      next.remove(route);
+    }
+    _aiConsentRoutes = next;
+    await _prefs.setStringList(_kAiConsentRoutes, next.toList()..sort());
+    notifyListeners();
+  }
+
+  /// Reads the routes, or — the first launch of a build that has them —
+  /// seeds them ONCE: an install that accepted the camera-roll notice or
+  /// runs the watcher already agreed to its current recipient, and keeps
+  /// sending to it without a new prompt. Deliberately NOT gated on a
+  /// configured key: a watcher that is on without a key would otherwise
+  /// start sending, unasked, the moment a key is pasted. Every other
+  /// install starts with none and is asked before its first send. A seed
+  /// is written at once (by whichever engine loads first — both compute
+  /// the same value), so a later provider change never re-derives it. An
+  /// empty one needs no write: in this build the watcher switch and the
+  /// notice flag only turn on together with a saved consent.
+  Future<void> _loadAiConsent() async {
+    final stored = _prefs.getStringList(_kAiConsentRoutes);
+    if (stored != null) {
+      _aiConsentRoutes = stored.toSet();
+      return;
+    }
+    if (!_watcherEnabled && !_watcherDisclosureSeen) {
+      _aiConsentRoutes = const {};
+      return;
+    }
+    _aiConsentRoutes = {activeAiConsentRoute};
+    await _prefs.setStringList(
+        _kAiConsentRoutes, _aiConsentRoutes.toList());
   }
 
   /// Spec §6 auto intake toggle — defaults false until permissions granted.

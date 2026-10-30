@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🥢 Bitewise · 筷拍
+# 🥢 Chopstats · 筷拍
 
 **You eat. It notices.** Take photos the way you already do — the app finds the food ones, an AI model reads them like a nutritionist (labels first, estimates last), and your calorie log writes itself. Even leftovers deduct themselves. **Your data stays on your phone; only the photo being analyzed ever leaves it.**
 

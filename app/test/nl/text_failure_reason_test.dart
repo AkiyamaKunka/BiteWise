@@ -120,8 +120,10 @@ void main() {
         expect(line, contains('开通管理'));
         expect(line, isNot(contains('请重试')));
       }
+      // English names no Chinese console label (owner decision R-F11).
       expect((await en().handleText('x')).single.text,
-          contains('activated (开通管理)'));
+          allOf(contains('must be activated in the Volcengine console'),
+              isNot(contains('开通管理'))));
       analyzer.nextError = 'OpenRouter model not found — use the full slug '
           'from openrouter.ai/models (vendor/model, for example '
           'google/gemini-3.8-flash) and pick one that accepts images.';
@@ -170,12 +172,12 @@ void main() {
       ]) {
         expect(line,
             '❌ 你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
-            '请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。');
+            '请在 设置 › AI 服务 › 你自己的服务器 › 模型 里换一个模型。');
       }
       expect((await en().handleText('x')).single.text,
           '❌ Your server cannot use the selected model: Fable 5 requires '
           'usage credits — choose another model in Settings › AI Provider › '
-          'Subscription › Model.');
+          'Your own server › Model.');
     });
 
     test('retryable and unknown failures keep the spec §4 step 4 wording',

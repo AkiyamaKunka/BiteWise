@@ -7,6 +7,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show ChangeNotifier;
 
+import 'package:calorie_tracker/core/ai_consent.dart' show allAiConsentRoutes;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
@@ -146,6 +147,23 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   @override
   Future<void> credentialsProven({required bool reachedGeneration}) async =>
       credentialsProvenCalls.add(reachedGeneration);
+
+  /// AI consent routes (core/ai_consent.dart). Every recipient is allowed
+  /// by default — an install that agreed before these questions existed —
+  /// so suites about something else see no dialog; the consent suites
+  /// start from an empty set.
+  Set<String> aiConsent = {...allAiConsentRoutes};
+
+  /// Every [setAiConsent] call, in order: (route, granted).
+  final List<(String, bool)> aiConsentWrites = [];
+  @override
+  bool hasAiConsent(String route) => aiConsent.contains(route);
+  @override
+  Future<void> setAiConsent(String route, {required bool granted}) async {
+    aiConsentWrites.add((route, granted));
+    aiConsent = granted ? {...aiConsent, route} : ({...aiConsent}..remove(route));
+    notifyListeners();
+  }
   /// Provider-scoped MODELS too — the real store keeps one per provider,
   /// and a shared field made provider-switch tests pass while production
   /// would have shown Gemini's model under Doubao (review 2026-07-31).

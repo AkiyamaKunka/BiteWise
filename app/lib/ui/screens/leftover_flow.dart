@@ -23,6 +23,7 @@ import '../../core/coerce.dart' show normalizeImageHash, safeNumber;
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart';
 import '../../services/photo/photo_hash.dart' show originalBytesMd5;
+import '../ai_consent.dart';
 import '../format.dart';
 import '../l10n.dart';
 import '../services.dart';
@@ -96,6 +97,13 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     final meal = _selected;
     if (meal == null) return;
     _busy = true;
+    // App Store 5.1.2(i): the photo and this meal go to the AI — permission
+    // for this recipient before the photo's bytes are read.
+    if (!await ensureAiConsent(context, widget.services.settings) ||
+        !mounted) {
+      _busy = false;
+      return;
+    }
     setState(() => _analyzing = true);
     final services = widget.services;
     final l = context.l10n;

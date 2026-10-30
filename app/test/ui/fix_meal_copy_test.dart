@@ -20,7 +20,7 @@ Future<String> _introShown(WidgetTester tester, Locale locale) async {
     locale: locale,
     localizationsDelegates: AppLocalizations.localizationsDelegates,
     supportedLocales: AppLocalizations.supportedLocales,
-    home: FixMealScreen(executor: FakeExecutor()),
+    home: FixMealScreen(executor: FakeExecutor(), settings: FakeSettings()),
   ));
   await tester.pumpAndSettle();
   final l10n = lookupAppLocalizations(locale);

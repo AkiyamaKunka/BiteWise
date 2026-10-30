@@ -1,10 +1,12 @@
-# Releasing BiteWise · 筷拍
+# Releasing Chopstats · 筷拍
 
 How the app gets from a git tag to TestFlight / the App Store and to Google
 Play, and everything the owner has to do once by hand before that works.
 Written 2026-10-10 against Flutter 3.44.2, Xcode 26.2 and the GitHub
-`macos-26` / `ubuntu-24.04` runner images; the store consoles move around, so
-treat exact menu names as "as of this writing".
+`macos-26` / `ubuntu-24.04` runner images; § 1.4, § 1.7, § 4 and the owner
+steps below were brought up to date on 2026-10-25 after an App Review audit
+of the first store build, and on 2026-10-29 with the owner's decisions. The store consoles move around, so treat exact
+menu names as "as of this writing".
 
 | Piece | What it does | Secrets |
 |---|---|---|
@@ -32,10 +34,215 @@ Identifiers that must match everywhere:
 | iOS app bundle id | `dev.calorietracker.calorieTracker` |
 | iOS share-extension bundle id | `dev.calorietracker.calorieTracker.ShareExtension` |
 | App Group (both targets) | `group.dev.calorietracker.calorieTracker` |
-| Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` (a **free** personal team, see § 1.2) |
+| Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` — the paid Apple Developer Program (Individual) since 2026-10-29; the Team ID did not change on enrolment (§ 1.2), so the keychain and the dev build carry over |
 | Android package / application id | `dev.calorietracker.calorie_tracker` (permanent after the first Play upload) |
-| Display name | `Bitewise` (Info.plist `CFBundleDisplayName`); store name `BiteWise · 筷拍` |
+| Display name | `Chopstats` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `Chopstats · 筷拍` (owner decision R-F9, 2026-10-29; formerly BiteWise) |
 | Version | `app/pubspec.yaml` `version: 1.5.0+7` → `CFBundleShortVersionString` / `versionName` = `1.5.0`; the build number is stamped by CI (§ 5) |
+
+---
+
+## First submission — owner steps in order
+
+Status on 2026-10-29: the first App Store build is `main` + PR #18 (HEIC/GPU
+fix) + the release fixes on `release/app-store-1` (per-recipient AI consent,
+share-extension purpose string, the owner's decisions, this document). The
+restaurant assist and the glasses work (PRs #19/#20) are **not** in it. The
+finding ids refer to the 2026-10-25 App Review audit. The owner decided
+steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
+**done in this branch**; the demo key (step 7, R-F6) is still open.
+
+1. **Name** (R-F9) — **DONE 2026-10-29: renamed to Chopstats.** A check on
+   2026-10-29 found 12+ live US App Store apps called Bitewise/BiteWise
+   (most of them calorie trackers, two sellers are companies named
+   Bitewise) and a crowded BITE-/-WISE field at the USPTO, so the English
+   name changed. **Chopstats** (筷 chopsticks → stats) had no same-name US
+   App Store app and no live or pending USPTO mark (one dead filing); the
+   runners-up were Forktally, Pictrition, Platemetry and Gramcracker. This
+   is a practical check, not a lawyer's clearance search (state registers
+   and unregistered use were not searched). The store name is
+   `Chopstats · 筷拍` (14 characters). **Chopstats** is the English display
+   name everywhere: `CFBundleDisplayName` in `Info.plist` and en
+   `InfoPlist.strings` of Runner **and** ShareExtension, the photo purpose
+   string in both, every en UI string (`app_en.arb`, the startup-error
+   screen, the `MaterialApp` title), the OpenRouter `X-OpenRouter-Title`,
+   the Android launcher label, `docs/PRIVACY.md`, `docs/SUPPORT.md`, the
+   README heading and the store metadata. Unchanged on purpose: the zh
+   display name 筷拍, the `bitewise://` URL scheme (the setup links and
+   `scripts/provision_phone.sh` use it), the bundle ids, the App Group, the
+   GitHub repository name, and the certificate/profile labels in § 1.6 and
+   `ExportOptions.plist` (internal names nobody else sees). Pinned by
+   `app/test/release_decisions_test.dart`.
+2. **The open product questions** — **DONE 2026-10-29**:
+   - *Own-server row* (R-F5) — **A, neutral.** The connection type that
+     said "Subscription" is **Your own server** / 你自己的服务器, with a
+     server icon (`Icons.dns_outlined`) instead of the premium badge. Its
+     page lists **Claude**, **GLM** and **Doubao** (豆包) under "AI on your
+     server", with the company as the note. Everywhere else (the Settings
+     root row, *Stop Sharing with …*, the camera-roll notice, the setup-link
+     sheet, diagnostics) the AI reads **Claude (server)** / 你服务器上的
+     Claude: "Claude via your server" cut the root row's *AI Provider* title
+     at 375 pt (`row_fit_layout_test.dart`). Gone: "photos cost nothing
+     extra", "flat-rate", "subscription analysis" and "needs credits on Pro"
+     (the Fable row is "Fable — frontier"). The setup-link sheet says
+     "AI:" instead of "Plan:". Behaviour is unchanged (provider id `server`,
+     consent route `server:<plan>`), so your own Claude setup keeps working
+     with zero taps (`app/test/ui/own_server_row_test.dart`). Accepted with
+     A: the remaining Anthropic/Zhipu terms risk for your own accounts.
+   - *Mainland-China/VPN text in the English UI* (R-F11) — **A.** No en
+     string gives mainland-China or VPN advice or carries Chinese text: the
+     welcome card, the API-key page footer and row notes (empty in English,
+     and an empty note shows no value), the Gemini, DeepSeek, Qwen and
+     Doubao key footers, Connect Claude, the diagnostics fixes, the
+     region-block messages, the Describe/Fix examples, and the model labels
+     (`{free}` is "FREE" in en and "FREE 免费" in zh). zh is unchanged. One
+     deliberate exception: the consent dialog keeps "{company} processes it
+     on servers in mainland China" — that says where the data goes, not how
+     to reach a provider. Provider brand names keep their Chinese name
+     (Qwen 通义千问). Pinned by `release_decisions_test.dart`.
+   - *Privacy policy* (R-F7) — **A.** `docs/PRIVACY.md` has a "Third
+     parties and your consent" / 第三方与你的同意 section and the effective
+     date 2026-10-29: who receives what (the provider you picked, or your
+     own server and the AI plan configured on it; OpenRouter passes it on),
+     what each request carries, asking first, withdrawing with Settings ›
+     *Stop Sharing with …*, and that each provider's own terms and
+     retention apply (no claim that they all protect data equally). On the
+     way, an over-disclosure was fixed: *Describe a meal* sends only the
+     text and today's date (`NlExecutor.describeMeal` builds its prompt with
+     an empty meal list); only *Fix or delete a meal* (`handleText`) sends
+     the last 7 days of meals. The consent dialog (en + zh), the policy,
+     § 1.7, § 4.3 and the `add_flow.dart` comments now say so.
+   - *App Privacy answer* (R-F8) — **B, declare**: Photos or Videos, Health,
+     Other User Content; App Functionality only; not linked; no tracking.
+     `Runner/PrivacyInfo.xcprivacy` declares exactly these three; the
+     ShareExtension's array stays empty (it sends nothing itself). The
+     click-by-click App Store Connect answers are in § 4.3.
+   - *Support URL* (R-F14) — **A.** [`docs/SUPPORT.md`](SUPPORT.md): iPhone
+     only; what the app does, where each provider's key comes from (a
+     sentence each), the own-server option, troubleshooting, export /
+     delete / stop sharing, GitHub Issues. Both listings' `support_url.txt`
+     point at https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/SUPPORT.md
+     (404 until this branch is on `main`, step 3). Public contact address
+     chosen 2026-10-29: junjia.wang.me@gmail.com (also usable as the App
+     Review contact).
+3. **Merge PR #18, then the release PR, into `main`** (the step 2 fixes
+   are part of it; T-TC-5: **main must equal the store build**; the alternative,
+   running the Release workflow on the branch with *internal-only*
+   unticked, leaves `main` behind the App Store).
+4. Enrol, check the Team ID, create the App IDs, the App Group and the app
+   record (§ 1.1–1.4): primary language **English (U.S.)**, zh-Hans as an
+   optional localization; name from step 1. **Enrolment and the Team ID
+   check are DONE (2026-10-29):** the owner enrolled as an Individual with
+   the same Apple ID, Xcode shows the team as a paid Developer Team, and a
+   development build signed afterwards carries team `WLQB3YB22M` with a
+   one-year profile — the Team ID did not change, so the export below is
+   not needed. Kept for reference: **if the Team ID were no longer
+   `WLQB3YB22M`**, iOS will refuse to install the TestFlight build over
+   today's dev build (§ 1.2), and deleting the dev build wipes its meals
+   and settings. So, at step 6:
+   1. Settings › Your Data › *Export Data…* (你的数据 › 导出数据…) and
+      AirDrop the file to the Mac. It holds the meals, the photo ledger
+      (so the scan does not send those photos again) and the body and
+      workout data — not the settings, the dietary profile, the meal
+      thumbnails or the keys, so write down the dietary profile, the
+      lookback (7 days) and the report time.
+   2. Only then delete the dev build and install from TestFlight.
+   3. Open the file on the Mac, copy all of its text, and on the phone use
+      *Import Data…* › *Import from clipboard* (Universal Clipboard).
+   4. Set the provider again (your own server: the setup link from
+      `scripts/provision_phone.sh --qr`; confirming it is the consent),
+      re-enter what you wrote down, and turn on *Watch Camera Roll* again
+      — expect the consent and camera-roll notice once.
+5. API key, certificate, profiles, GitHub secrets (§ 1.5, 1.6, 3) — or the
+   Xcode shortcut (§ 2) for a same-day TestFlight build.
+6. **Tag `v1.5.0` on `main`** (§ 4.1, § 8) → TestFlight → install on your
+   iPhone through TestFlight and check § 4.2. With an unchanged Team ID it
+   installs over the dev build, keeps everything, and shows no consent
+   dialog: an install with the watcher on keeps its current recipient (the
+   one-time seed in `AppSettings._loadAiConsent`). After a Team ID change
+   it is the fresh install from step 4, which asks once.
+7. **Demo key** (R-F6) — **still open** (being discussed with the owner,
+   2026-10-29; the review notes keep the `<key>` placeholder until then).
+   The recommendation so far: **a paid Gemini key in its own Google Cloud
+   project**, with the per-day request quota lowered (that is the hard cap;
+   a budget only sends alerts) plus a budget alert. Gemini is the default
+   provider, so the reviewer's path is shortest. Not a free-tier key: the
+   2-day backfill can exhaust it during review, Google may use the inputs,
+   and it is unavailable in some regions. A prepaid key at another provider
+   (auto-recharge off) also works, but the reviewer must pick that provider.
+   The key goes only into the App Review notes field.
+8. App Store Connect: App Privacy (§ 4.3, answer B click by click), age rating
+   **9+** (§ 4.4), screenshots from an **iPhone 17 Pro Max** simulator you
+   create yourself (§ 4.4), metadata with the support and privacy-policy
+   URLs, Free, **deselect China mainland** (§ 7), review notes (§ 4.4) with
+   the demo key, *Manually release this version*. Submit.
+9. After approval: revoke the demo key; update the README install section
+   for the App Store.
+
+Later, not needed for the first submission: a launch screen that is not
+white in dark mode (T-TC-9), asking for notifications in context instead of
+at first launch (R-F13), an on-device food check before the watcher uploads
+(R-F12, on PR #19's branch), and "Save Image" from the share sheet
+(`NSPhotoLibraryAddUsageDescription`, R-F10 — today iOS simply leaves the
+option out).
+
+**When PR #19 (restaurant assist) is merged on top of this build**, seven
+files conflict (`di.dart`, `add_flow.dart`, `fix_meal_screen.dart`,
+`provider_page.dart`, `settings_screen.dart`, `services.dart`, this
+document); every hunk keeps both sides:
+- `di.dart`: keep `pipeline.bindStream(shareConsent.gate(shareIntake.photos()))`
+  and then #19's `mealAssist.start()`. A resolution that keeps #19's bare
+  `shareIntake.photos()` fails `test/production_wiring_test.dart`.
+- `FixMealScreen` takes both `settings:` and `inUse:` (constructor and the
+  `add_flow.dart` call). `settings` is required, so a one-sided resolution
+  does not compile; #19's `test/ui/meal_in_use_test.dart` call gains
+  `settings: FakeSettings()`.
+- Regenerate l10n afterwards (`flutter gen-l10n` in `app/`).
+
+The owner's decisions of 2026-10-29 (owner steps 1–2) add these; every hunk
+again keeps both sides:
+- `Runner/Info.plist` and `Runner/{en,zh-Hans}.lproj/InfoPlist.strings`:
+  #19 extends `NSPhotoLibraryUsageDescription` with the photo-location
+  sentence. Take #19's text, write **Chopstats** in both of its en
+  sentences, and copy the result to the ShareExtension's `Info.plist` and
+  `InfoPlist.strings` (en and zh-Hans): `share_extension_plist_test.dart`
+  wants them equal to Runner's.
+- `PrivacyInfo.xcprivacy` / `app/test/manifest_gate_test.dart`: #19's test
+  "both privacy manifests declare no collected data types" pins `<array/>`
+  in **both** targets; Runner now declares the three answer-B types. Keep
+  the empty-array check for ShareExtension only (or drop it for
+  `release_decisions_test.dart`), and rewrite #19's § 4.3 paragraph
+  "Restaurant nutrition lookup … stays *Data Not Collected*": the answer
+  stays **B**, and the lookup adds no type (chain and food names go to the
+  same user-chosen recipient as the photos; the photo location goes only to
+  Apple's MapKit, so Location stays No).
+- `app_en.arb` / `app_zh.arb`: #19's own strings write BiteWise — rename them to Chopstats —
+  and carry no VPN text. Its tests pin the old own-server labels — 'Claude
+  Plan' / 'Claude 订阅' through `planShortClaude`
+  (`assistProviderLabel`) in `test/ui/assist_source_card_test.dart`,
+  `test/ui/diagnostics_test.dart` and `test/ui/setup_link_flow_test.dart`:
+  update them to 'Claude (server)' / '你服务器上的 Claude'.
+  `release_decisions_test.dart` and `own_server_row_test.dart` catch any en
+  string that brings back Chinese text, VPN advice or plan talk.
+- `docs/PRIVACY.md`: the effective date conflicts (#19 2026-10-24, this
+  branch 2026-10-29); #19 changes the policy, so give it the merge date.
+  #19's added sentences say "Claude Plan" (the intro's "with Claude Plan,
+  the server you run", the restaurant section's **Claude Plan:** bullet, and
+  the 中文 counterparts): rename them to "your own server" / 你自己的服务器.
+  The "Third parties and your consent" section sits before "Changes and
+  contact", clear of #19's hunks; add a bullet to its "What that recipient
+  receives" list pointing at #19's *Restaurant nutrition lookup* section.
+- `provider_page.dart`: on top of the hunks above, this branch changes the
+  own-server row (icon, `serverPlanName` value), `noteLabel` (now
+  `String?`) and the `{free}` model labels; keep both sides.
+
+The assist's lookups (chain and item names to the user's server,
+Anthropic or OpenRouter/Exa) already have their own per-recipient consent
+(#19's restaurant consent sheet; every lookup checks `consentCovers`), so
+they need no second gate on the AI consent. Before #19 reaches a store
+build, though, *Stop Sharing with …* must also turn the assist off when
+its lookups go to the same company or server: that row says "nothing more
+is sent to …", while the assist keeps its own consent and could go on
+sending lookups (a manual one, or a meal still waiting for one).
 
 ---
 
@@ -43,9 +250,10 @@ Identifiers that must match everywhere:
 
 ### 1.1 Enrol in the Apple Developer Program
 
-The team `WLQB3YB22M` in the project is a free personal team: 7-day
-profiles, no TestFlight, no App Store, no App Store Connect API. Nothing in
-this document works until the same Apple Account is enrolled:
+**Done 2026-10-29** (Individual, same Apple ID; the Team ID stayed
+`WLQB3YB22M`). Before that, the team was a free personal team: 7-day
+profiles, no TestFlight, no App Store, no App Store Connect API. The steps,
+for reference:
 
 1. <https://developer.apple.com/programs/enroll/> → Individual. Needs
    two-factor authentication on the Apple Account and your legal name.
@@ -56,23 +264,37 @@ this document works until the same Apple Account is enrolled:
 ### 1.2 Check the Team ID (keychain continuity)
 
 An individual who upgrades the same Apple Account normally keeps the same
-Team ID. Verify it in <https://developer.apple.com/account> → Membership
-details. **If it changed**, update `teamID` in `app/ios/ExportOptions.plist`
-and `DEVELOPMENT_TEAM` in `app/ios/Runner.xcodeproj/project.pbxproj` (every
-occurrence, Runner and ShareExtension), and expect this on the phone:
-`flutter_secure_storage` items live in the keychain access group
-`<TeamID>.dev.calorietracker.calorieTracker`, so a build from a new team
-cannot read the API/upload keys saved by today's dev build. The TestFlight
-build would start with empty key fields; paste them once. Either way, never
-install a build older than commit `9df6846` on the owner's iPhone again (the
-keychain migration is one-way).
+Team ID: the enrolment converts the personal team. Verify it in
+<https://developer.apple.com/account> → Membership details. **If it
+changed**, update `teamID` in `app/ios/ExportOptions.plist` and
+`DEVELOPMENT_TEAM` in `app/ios/Runner.xcodeproj/project.pbxproj` (every
+occurrence, Runner and ShareExtension), and expect this on the phone (not
+tested on a device; this is how iOS treats a new team prefix):
+
+- iOS refuses to upgrade an installed app whose `application-identifier`
+  (`<TeamID>.dev.calorietracker.calorieTracker`) differs from the new
+  build's (MIInstallerErrorDomain: the upgrade's application-identifier
+  "does not match" the installed one). The TestFlight build cannot replace
+  today's dev build in place.
+- The dev build must be deleted first, and that deletes its sandbox: the
+  meal database and every setting (the watcher switch and the AI consent
+  seed included). The keychain items stay behind in the old team's access
+  group, which the new build cannot read either.
+- So export the data first and import it into the TestFlight build: the
+  sequence is owner step 4. The fresh install asks for the AI consent once,
+  like any new install.
+- If § 1.3 then says an identifier is "not available", the old personal
+  team still holds it; Apple Developer Support can release it.
+
+Either way, never install a build older than commit `9df6846` on the
+owner's iPhone again (the keychain migration is one-way).
 
 ### 1.3 Identifiers: two App IDs and the App Group
 
 <https://developer.apple.com/account/resources/identifiers/list>
 
 1. **App Group**: Identifiers → + → App Groups → identifier
-   `group.dev.calorietracker.calorieTracker`, description "BiteWise".
+   `group.dev.calorietracker.calorieTracker`, description "Chopstats".
 2. **App ID** `dev.calorietracker.calorieTracker` (explicit, type App):
    Capabilities → tick **App Groups** → Configure → select the group above.
    Also tick nothing else; background fetch needs no capability.
@@ -87,10 +309,15 @@ the upload with ITMS-90078 (see § 9).
 
 <https://appstoreconnect.apple.com> → My Apps → + → New App:
 
-- Platform iOS; Name `BiteWise · 筷拍` (30 chars max; the name is global,
-  pick another if taken); Primary language `Chinese (Simplified)` (the
-  owner's audience) or English; Bundle ID `dev.calorietracker.calorieTracker`;
-  SKU `bitewise-ios`; User Access: Full.
+- Platform iOS; Name `Chopstats · 筷拍` (30 chars max; the name is global,
+  pick another if taken — and see owner step 1 about the existing
+  *Bitewise: AI Calorie Tracker*); Primary language **English (U.S.)** (the
+  listing is US-only), with Chinese (Simplified) as an optional
+  localization; Bundle ID `dev.calorietracker.calorieTracker`; SKU
+  `bitewise-ios`; User Access: Full.
+- Name, subtitle and keywords carry no provider marks (Gemini, Claude,
+  OpenAI, …) and no accuracy claims; nothing in the listing mentions
+  Android, the APK or Telegram (guideline 2.3.10).
 - Note the app's numeric **Apple ID** (App Information → General). It is
   only needed for the altool fallback (variable `ASC_APP_APPLE_ID`).
 
@@ -146,67 +373,90 @@ and names the one to renew.
 
 ### 1.7 Code prerequisites before the first upload
 
-Done in this change:
+All done; this is what each one is and where it lives.
 
 - `ITSAppUsesNonExemptEncryption = false` in `app/ios/Runner/Info.plist`
   (the app only uses OS TLS, the keychain and SHA hashing, which are exempt;
   without the key every build sits in "Missing Compliance" until answered).
-- `app/pubspec.yaml` bumped to `1.5.0+7`; the ShareExtension already takes
-  its version from `$(FLUTTER_BUILD_NAME)` / `$(FLUTTER_BUILD_NUMBER)`.
+- `app/pubspec.yaml` is `1.5.0+7`; the ShareExtension takes its version from
+  `$(FLUTTER_BUILD_NAME)` / `$(FLUTTER_BUILD_NUMBER)`.
 
-Still to do in code (each needs an Xcode project edit, i.e. a normal PR):
+1. **Privacy manifests — done.** Both targets ship a
+   `PrivacyInfo.xcprivacy` in their own Resources phase, pinned by
+   `app/test/manifest_gate_test.dart`:
 
-1. **Privacy manifests.** Neither target has a `PrivacyInfo.xcprivacy`;
-   the share extension compiles `receive_sharing_intent`'s
-   `UserDefaults(suiteName:)` call (a required-reason API) into its own
-   executable. In Xcode: File → New → File → *App Privacy* → name
-   `PrivacyInfo.xcprivacy`, target **ShareExtension**; repeat for
-   **Runner**. Content for both (adjust `NSPrivacyCollectedDataTypes` to
-   whatever § 4.3 ends up declaring):
+   | Target | Required-reason APIs declared | `NSPrivacyCollectedDataTypes` |
+   |---|---|---|
+   | Runner | UserDefaults `CA92.1`, `1C8F.1`; FileTimestamp `C617.1` | PhotosorVideos, Health, OtherUserContent — not linked, no tracking, App Functionality (§ 4.3, answer B) |
+   | ShareExtension | UserDefaults `CA92.1`, `1C8F.1` | empty: the extension sends nothing itself (§ 4.3) |
 
-   ```xml
-   <?xml version="1.0" encoding="UTF-8"?>
-   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-   <plist version="1.0">
-   <dict>
-     <key>NSPrivacyTracking</key><false/>
-     <key>NSPrivacyTrackingDomains</key><array/>
-     <key>NSPrivacyCollectedDataTypes</key><array/>
-     <key>NSPrivacyAccessedAPITypes</key>
-     <array>
-       <dict>
-         <key>NSPrivacyAccessedAPIType</key>
-         <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
-         <key>NSPrivacyAccessedAPITypeReasons</key>
-         <array><string>CA92.1</string><string>1C8F.1</string></array>
-       </dict>
-     </array>
-   </dict>
-   </plist>
-   ```
+   The plugins are linked statically through Swift Package Manager
+   (`FlutterGeneratedPluginSwiftPackage` in `project.pbxproj`), so their
+   code compiles into these two executables, and the two manifests above
+   cover the APIs it calls. Their own manifests (as of the locked versions):
 
-   If App Store Connect still emails *ITMS-91053 Missing API declaration*
-   naming `receive_sharing_intent.framework`, the plugin itself needs a
-   manifest: fork it under `app/packages/` with the file added, or wait for
-   upstream. Flutter and the other plugins already ship theirs.
+   | Plugin | Own manifest | Declares |
+   |---|---|---|
+   | app_links 7.2.1, share_plus 13.2.1, sqflite_darwin 2.4.3+1, url_launcher_ios 6.4.1, flutter_secure_storage_darwin 0.3.2 | yes | nothing |
+   | flutter_local_notifications 22.0.1, permission_handler_apple 9.4.10, shared_preferences_foundation 2.5.6, workmanager_apple 0.9.1+2 | yes | UserDefaults |
+   | photo_manager 3.10.0 | yes | FileTimestamp; collected PhotosorVideos (so Xcode's privacy report lists it; App Store Connect does not cross-check it against the label) |
+   | receive_sharing_intent 1.9.0 | **no** | — its `UserDefaults(suiteName:)` call is covered by both targets' UserDefaults entries |
+   | path_provider_foundation 2.6.0 | n/a | no native iOS code (Dart FFI through `objective_c`) |
+   | integration_test (dev dependency) | no | linked into Release by Flutter's generated package; public API only, no XCTest (T-TC-7) |
+
+   The old "fork `receive_sharing_intent`" contingency is dropped: it is
+   compiled into the targets rather than shipped as a framework, and neither
+   it nor `objective_c` is on Apple's list of SDKs that need their own
+   manifest. If ITMS-91053 ever arrives anyway, the email names the API
+   category to add to the target's manifest.
 2. **iPhone only.** Both targets are `TARGETED_DEVICE_FAMILY = 1` (decided
    2026-10-12): the UI is phone-only, so no iPad screenshots are needed and
    App Review tests on an iPhone. iPads can still run it in iPhone
    compatibility mode. Adding iPad later is allowed; removing it after an
    iPad-capable version has shipped is not, so keep it this way unless an
    iPad layout is built.
-3. **Privacy policy URL** (guideline 5.1.1). The policy is
-   `docs/PRIVACY.md` (English + 中文); enter
-   https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md in
-   App Store Connect. That URL goes live once this branch reaches `main`.
-   Keep the file in step with what the code actually sends. Linking it
-   from the in-app Settings screen is a separate task.
-4. **In-app disclosure** (guideline 5.1.2(i), "clearly disclose where
-   personal data will be shared with third parties, including with
-   third-party AI, and obtain explicit permission"). The provider picker +
-   key entry is arguably that consent; a one-time sentence before the first
-   upload ("Photos you log are sent to <provider> for analysis") with an OK
-   button is the safe reading. A fixer task, not release engineering.
+3. **Privacy policy URL** (guideline 5.1.1) — **done.** The policy is
+   `docs/PRIVACY.md` (English + 中文) at
+   https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md (live,
+   HTTP 200), linked in the app at Settings › Your Data › *Privacy Policy*
+   (`privacyPolicyUri` in `settings_screen.dart`). Keep the file in step with
+   what the code sends. The "Third parties and your consent" section
+   (R-F7) is in, effective 2026-10-29.
+4. **Consent before data goes to a third-party AI** (guideline 5.1.2(i)) —
+   **done in this branch** (`app/lib/ui/ai_consent.dart`,
+   `app/lib/core/ai_consent.dart`). Consent is per recipient: the provider
+   id for an API key, `server:<plan>` for the user's own server (the plan is
+   the AI company, so a plan switch asks again; a server address edit does
+   not). The dialog names the company, lists what goes with a photo
+   (dietary profile, a summary of that day's other meals), with *Describe
+   a meal* (the text only) and with *Fix or delete a meal* (the last 7
+   days of meals), and says where DeepSeek, Qwen,
+   Doubao, GLM and the GLM/Doubao plans process data (mainland China). It
+   is asked:
+   - before a picked photo's bytes are read, before Describe/Fix a meal,
+     Leftovers, *Test This Provider* and Photo Coverage *Log all / Retry*;
+   - for a photo shared into the app, which is held until answered (Not
+     now drops it and says so);
+   - when *Watch Camera Roll* is turned on (with the camera-roll notice),
+     and when the provider or plan changes while it is on (Not now keeps the
+     previous choice); with the watcher off the next foreground send asks;
+   - by the setup-link dialog, which now names the plan's company:
+     confirming it is the consent.
+
+   Settings › *Stop Sharing with …* withdraws it and turns *Watch Camera
+   Roll* off. A foreground send without a configured key asks nothing
+   (nothing can leave; it fails with its own "no key" message).
+   Existing installs: on the first launch of this build an install with the
+   watcher on, or that accepted the old camera-roll notice, keeps its
+   current recipient (not gated on a key: a watcher left on without a key
+   must not start sending, unasked, once a key is pasted). The photo
+   pipeline is unchanged: every automatic send already needs the watcher.
+5. **Share extension purpose string** — **done.** The extension links
+   Photos.framework (`receive_sharing_intent`'s `PHAsset` lookup), and the
+   ITMS-90683 scan runs per bundle, so its `Info.plist` and en/zh-Hans
+   `InfoPlist.strings` carry Runner's `NSPhotoLibraryUsageDescription`
+   (pinned by `app/test/share_extension_plist_test.dart`). The extension
+   never asks at runtime.
 
 ---
 
@@ -219,6 +469,13 @@ then Organizer → Distribute App → App Store Connect → Upload with automati
 signing (Xcode creates the certificate and profiles for the paid team by
 itself). Everything in § 1.3–1.4 must exist first. The CI lane is for every
 build after that.
+
+SDK note (T-TC-6): the Mac builds with Xcode 27.1 (iOS 27.1 SDK); CI pins
+`XCODE_VERSION: "26.2"` (iOS 26.2 SDK). App Store Connect accepts both (the
+current rule is Xcode 26+ with the iOS 26 SDK, since 2026-04-28), but they
+are different binaries: ship store builds through one lane and test that
+exact build through TestFlight (§ 4.2). A build made with the 27.1 SDK also
+brings in the iPhone Duo screenshot requirement from April 2027 (§ 4.4).
 
 ---
 
@@ -279,8 +536,10 @@ step. No value is ever echoed; GitHub additionally masks them.
 
 ### 4.1 Run it
 
-Actions → **Release** → Run workflow → branch `main` → lane `testflight` →
-leave *internal-only* ticked → Run. Watch the `ios` job:
+Only after PR #18 (the HEIC/GPU background fix) and the release PR are on
+`main` — a run before that would build without them. Actions → **Release**
+→ Run workflow → branch `main` → lane `testflight` → leave *internal-only*
+ticked → Run. Watch the `ios` job:
 
 - "installed profile '…' for WLQB3YB22M.dev.calorietracker.calorieTracker"
   twice, "Release configs now sign manually with team …".
@@ -294,7 +553,10 @@ The build shows under TestFlight → iOS builds with a *Internal Testing Only*
 badge; it cannot be sent to external testers or App Review (that is the
 `testFlightInternalTestingOnly` export option, set for every non-tag run).
 A tag run (`git tag v1.5.0 && git push origin v1.5.0`) produces an
-external-eligible build.
+external-eligible build; the first App Store build is that tag on `main`
+(owner step 6), so `main` equals what is in the store. (Running the
+workflow on another branch with *internal-only* unticked also produces a
+submittable build, but leaves `main` behind the App Store.)
 
 ### 4.2 Internal testers → the owner's iPhone
 
@@ -302,67 +564,198 @@ TestFlight → Internal Testing → + group "Owner" → add your own App Store
 Connect user → tick *Enable automatic distribution*. Install TestFlight on
 the iPhone, accept the invite, install. First things to check on the
 phone (see § 1.2): Settings shows the saved provider keys and the server
-URL (if not, paste them once); the 后台扫描 row keeps advancing with the
-phone locked; the share sheet still offers Bitewise.
+URL (with an unchanged Team ID the build installs over the dev build and
+keeps them; after a Team ID change it is the fresh install of owner
+step 4); the 后台扫描 row keeps advancing with the phone locked; the share
+sheet still offers Chopstats.
 
 ### 4.3 App Privacy (nutrition labels) and the BYO-key model
 
+**Decided 2026-10-29 (R-F8): answer B — declare what leaves the phone.**
+
 App Store Connect → App Privacy. Apple's definition of *collect* is
 "transmitting data off the device in a way that allows you and/or your
-third-party partners to access it for longer than needed to service the
-request". BiteWise has no developer backend: the single photo being
-analysed goes to the AI provider **the user chose with the user's own key**,
-or to a server the user runs. The strictly defensible answer is therefore
-*Data Not Collected*; the conservative answer, which reviewers rarely push
-back on, is to declare what leaves the device:
+third-party partners to access it for a period longer than what is
+necessary to service the transmitted request in real time", where
+*third-party partners* are SDKs and vendors whose code is in the app.
+Chopstats has no developer backend and links no provider SDK: it makes plain
+HTTPS calls to the AI provider **the user chose with the user's own key**,
+or to a server the user runs. What leaves the phone, and to whom:
 
-| Data type | Collected? | Linked to the user | Used for tracking | Purpose |
+- **every photo** (picked, shared or found by *Watch Camera Roll*) goes to
+  the AI provider with the dietary profile and a short summary of the other
+  meals logged that day (up to five);
+- ***Fix or delete a meal*** sends the typed text with the last 7 days of
+  meals; ***Describe a meal*** sends only the text and today's date; a
+  leftover photo goes with the meal it belongs to;
+- **through the user's own server** the same data goes to the server,
+  which passes it to the AI company of its plan (Anthropic, Zhipu or
+  Volcengine).
+
+So health data goes to the API provider with every photo and every Fix
+request, not only through a self-hosted server. Two answers were
+defensible:
+
+- A — *Data Not Collected*: true under Apple's literal definition (no
+  developer backend, no provider SDK).
+- **B — declare what leaves the phone (chosen)**: it matches what the
+  consent dialog tells users, App Review does not object to
+  over-declaring, and the store page shows only *Data Not Linked to You*.
+
+| Data type (answer B) | Collected? | Linked to the user | Tracking | Purpose |
 |---|---|---|---|---|
-| Photos or Videos | Yes (sent to the user-selected AI provider for analysis; not retained by the developer) | No | No | App Functionality |
-| Health & Fitness → Health, Fitness (calories, weight, meal logs) | Yes (only when the user points the app at a server they run) | No | No | App Functionality |
+| Photos or Videos | Yes — sent to the user-selected AI provider for analysis; not retained by the developer | No | No | App Functionality |
+| Health & Fitness → **Health** (meal calories and macros, and the dietary profile, which the app attaches itself) | Yes — with every photo and every Fix request, to the same provider | No | No | App Functionality |
+| User Content → **Other User Content** (what the user types into *Describe a meal* and *Fix or delete a meal*: meal descriptions and corrections, and also a weight or a workout typed into Fix, such as "I weigh 72 kg" or "burned 450 calories on my 5 km run", which the app then logs as a weight or an activity) | Yes — to the same provider | No | No | App Functionality |
+| Health & Fitness → Fitness | **No** — the app attaches no stored workout, step or weight record to any request (a photo carries that day's meals, Fix the last 7 days of meals); a workout the user types goes only as that typed text, declared above as Other User Content; the Garmin fetch from the user's own server sends only a date | | | |
 | Everything else (contacts, location, identifiers, diagnostics, usage) | No | | | |
 
-Pick one answer and keep the privacy policy (§ 1.7.3) and the
-`NSPrivacyCollectedDataTypes` arrays consistent with it.
+The rule behind the rows: what the app attaches by itself is declared as
+what it is (meals and the dietary profile → Health); what the user types
+is declared as Other User Content, whatever it is about, as for any
+free-text field. So a typed weight is not why Health is ticked, and a
+typed workout does not tick Fitness. Declaring typed text by its subject
+instead would add *Health & Fitness* → Fitness, a stricter reading the
+owner can still choose: the product page's summary card would not change
+(it already shows *Health & Fitness*), only its details would list
+Fitness, and the Runner manifest would need
+`NSPrivacyCollectedDataTypeFitness` to match.
+
+**The answers, click by click** (App Store Connect as of 2026-10; the
+console moves things around, so match the wording, not the position):
+
+1. App Store Connect → **Apps** → *Chopstats · 筷拍* → sidebar → **App
+   Privacy**.
+2. **Privacy Policy** → *Edit* → Privacy Policy URL
+   `https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md`;
+   leave *User Privacy Choices URL* empty → **Save**.
+3. **Data Collection** → *Get Started* → "Do you or your third-party
+   partners collect data from this app?" → **Yes, we collect data from this
+   app** → *Next*.
+4. Tick exactly these three data types and nothing else → **Save**:
+   - *Health & Fitness* → **Health**
+   - *User Content* → **Photos or Videos**
+   - *User Content* → **Other User Content**
+
+   In particular leave *Health & Fitness* → Fitness, *Location*,
+   *Identifiers*, *Usage Data* and *Diagnostics* unticked.
+5. Back on the App Privacy page, each of the three has a *Set Up* button.
+   For **Health**, then **Photos or Videos**, then **Other User Content**:
+   1. "Indicate all purposes for which … are collected" → tick **App
+      Functionality** only → *Next*.
+   2. "Are the … collected from this app linked to the user's identity?" →
+      **No, … are not linked to the user's identity** → *Next*.
+   3. "Do you or your third-party partners use … for tracking purposes?" →
+      **No, we do not use … for tracking purposes** → **Save**.
+6. Check the preview on the App Privacy page: a single **Data Not Linked
+   to You** card listing *Health & Fitness* and *User Content*; no *Data
+   Used to Track You* and no *Data Linked to You*.
+7. **Publish** (top right). Unpublished answers block *Add for Review*.
+
+The manifests mirror the answer, pinned by
+`app/test/release_decisions_test.dart` (it parses both plists):
+
+- `Runner/PrivacyInfo.xcprivacy` → `NSPrivacyCollectedDataTypes` holds three
+  dicts, `NSPrivacyCollectedDataTypePhotosorVideos`,
+  `NSPrivacyCollectedDataTypeHealth` and
+  `NSPrivacyCollectedDataTypeOtherUserContent`, each with
+  `NSPrivacyCollectedDataTypeLinked` false,
+  `NSPrivacyCollectedDataTypeTracking` false and purposes
+  `NSPrivacyCollectedDataTypePurposeAppFunctionality`.
+- `ShareExtension/PrivacyInfo.xcprivacy` keeps an empty array on purpose:
+  the extension sends nothing itself. It copies the shared photo into the
+  App Group container and opens the app (`RSIShareViewController`); the app
+  asks for consent and does the sending, and the app's manifest covers
+  that data.
+
+App Store Connect does not cross-check the label against the manifests;
+photo_manager's bundled manifest already declares PhotosorVideos, so
+Xcode's privacy report lists it either way. If what the app sends ever
+changes, change these answers, both manifests and `docs/PRIVACY.md`
+(§ 1.7.3) together.
 
 ### 4.4 Review submission checklist
 
 - **Metadata**: name, subtitle (30), promotional text, description,
-  keywords (100), support URL (the GitHub repo is fine), marketing URL
-  (optional), **privacy policy URL** (required), category Health & Fitness,
-  copyright, contact information for the reviewer.
+  keywords (100), **support URL**
+  https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/SUPPORT.md (R-F14:
+  `docs/SUPPORT.md`, iPhone only, with GitHub Issues and the email line the
+  owner still fills in — guideline 1.5 wants an easy way to reach you, and
+  the README talks about Android and the APK), marketing URL (optional),
+  **privacy policy URL** (required,
+  § 1.7.3), category Health & Fitness, copyright, contact information for
+  the reviewer. No provider marks in the name, subtitle or keywords; no
+  Android, APK or Telegram mentions; no accuracy claims about the calorie
+  numbers.
 - **Screenshots**: App Store Connect → Screenshot specifications has the
-  current list. As of this writing: iPhone 6.9-inch (1320×2868 or 1290×2796
-  portrait) is required; 6.5-inch (1284×2778 or 1242×2688) optional; no
-  iPad screenshots (the app is iPhone-only, § 1.7.2). Take them from the iPhone 17 Pro simulator (`xcrun simctl io booted
-  screenshot`), both languages if you localise the listing.
+  current list (checked 2026-10-25). For an app that runs on iPhone the
+  **large** set is required: iPhone 6.9-inch (1320×2868, 1290×2796 or
+  1260×2736 portrait), or 6.5-inch (1284×2778 or 1242×2688) when no 6.9-inch
+  set is given; the medium Dynamic Island class (1206×2622 / 1179×2556) is
+  optional and scaled from the large set. Take them on an **iPhone 17 Pro
+  Max** simulator you create yourself (1320×2868; never another agent's
+  device), PNG or JPEG without alpha; the iPhone 17 Pro simulator gives
+  1206×2622, which does not fit the required slot. No iPad screenshots (the
+  app is iPhone-only, § 1.7.2). Both languages if you localise the listing.
+  From April 2027, builds made with the iOS 27.1 SDK or later also need
+  iPhone Duo screenshots (§ 2 SDK note).
 - **App icon**: the 1024×1024 asset is already in `Runner/Assets.xcassets`
   (`flutter_launcher_icons`, alpha removed).
-- **Age rating**: fill the questionnaire; nothing applies → 4+.
+- **Age rating** (since 2026-01-31 the new questionnaire lives in App
+  Information): **Health or Wellness Topics = Yes** (*Frequent* if a
+  frequency is asked — Apple's definition names calorie tracking);
+  everything else None/No (no web view, no user-generated content, chat or
+  ads); do not tick *Made for Kids*. Expected result: **9+**, not 4+.
 - **Export compliance**: answered by `ITSAppUsesNonExemptEncryption=false`;
   the version page asks nothing. (Apple notes exempt apps may still owe a
   yearly self-classification report to the US government; see Apple's
   "Complying with Encryption Export Regulations".)
 - **Content rights**: no third-party content.
 - **App Review Information → Sign-in**: not required. **Notes** (draft,
-  edit to taste):
+  mirrored in `app/ios/store/metadata/en-US/review_notes.txt`; re-check every
+  label against the build actually submitted; the own-server paragraph
+  follows the R-F5 decision):
 
-  > BiteWise is a bring-your-own-key calorie tracker. It has no accounts and
-  > no backend of ours. The user pastes an API key for the AI provider they
-  > already pay for (Google Gemini, OpenAI, Anthropic, DeepSeek, xAI,
-  > OpenRouter, Alibaba Qwen, ByteDance Doubao, Zhipu GLM), or points the app
-  > at a server they run themselves; that provider receives the single photo
-  > being analysed and returns a nutrition estimate. Everything else stays
-  > on the phone in a local database.
+  > Chopstats is a bring-your-own-key calorie tracker. It has no accounts and
+  > no backend of ours. The user pastes an API key for an AI provider they
+  > already pay for (Google Gemini, OpenAI, Anthropic, xAI, OpenRouter,
+  > DeepSeek, Alibaba Qwen, ByteDance Doubao, Zhipu GLM); that provider
+  > receives each photo being analyzed (with the user's dietary profile and
+  > a short summary of the day's meals) and returns a nutrition estimate.
+  > Before anything is sent to a provider for the first time, the app asks
+  > for permission in a dialog that names the company and what is sent;
+  > Settings › "Stop Sharing with …" withdraws it. Everything else stays on
+  > the phone in a local database.
   >
-  > To test: Settings → AI provider → Gemini → paste the key below → back
-  > to Today → the + button → choose a food photo (or share one from Photos
-  > into Bitewise). "Watch camera roll" asks for Photos access and then logs
-  > new food photos by itself; it can take up to a minute for a meal to
-  > appear. Demo key (Gemini, low quota, revoked after review): <key>
+  > To test: a fresh install opens on Settings. Tap AI Provider › API Key;
+  > Google Gemini is already selected — paste the key below into "Gemini
+  > API key". Go to Today › "+ Log" › "From recent photos", allow Photos
+  > access, pick a food photo and tap Allow in the consent dialog; the
+  > estimate appears after a few seconds. Without food photos on the test
+  > device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
+  > soup"), or share a food image from Safari or Photos into Chopstats via
+  > the share sheet. There is no in-app camera: photos come from the system
+  > Camera app.
+  >
+  > Settings › Watch Camera Roll (optional) shows the same consent with a
+  > notice, needs full Photos access (limited access only shows a hint),
+  > and as soon as it is on it sends the photos from the last 2 days, then
+  > each new photo, to the selected provider; it uses Background App
+  > Refresh to check for new photos while the app is closed.
+  >
+  > AI Provider › Your own server is for people who run their own server
+  > (the open-source server in the same repository) with an AI plan signed in
+  > on it; it cannot be tested without such a server, and choosing an AI
+  > there switches the app away from the Gemini key. Nothing is sold in the
+  > app: there are no in-app purchases, and this option unlocks nothing. The
+  > bitewise://setup link fills in that server's address and key after a
+  > confirmation dialog.
+  >
+  > Demo key (Gemini, capped, revoked after review): <key>
 
-  Create a dedicated low-quota key for this, paste it **only** into that
-  field, revoke it after approval.
+  The demo key (owner step 7, still open): a paid Gemini key in its own Google Cloud
+  project with a lowered per-day request quota and a budget alert, pasted
+  **only** into that field, revoked after approval.
 - **Pricing and Availability**: Free; availability → deselect *China
   mainland* unless you hold an ICP filing (§ 7).
 - **Version release**: *Manually release this version* for the first one.
@@ -404,7 +797,7 @@ Pick one answer and keep the privacy policy (§ 1.7.3) and the
 identity verification; a personal account created after 13 Nov 2023 must
 run a closed test with ≥12 testers opted in for 14 continuous days before
 Production is unlocked — the **internal** track, which the friends would use,
-has no such rule). Create app → name `BiteWise · 筷拍`, default language,
+has no such rule). Create app → name `Chopstats · 筷拍`, default language,
 App/Free → the package name is taken from the first upload and is permanent:
 `dev.calorietracker.calorie_tracker`.
 
@@ -483,7 +876,7 @@ roll out.
 2. IAM & Admin → Service Accounts → Create (`play-publisher`), grant it
    **no** project roles → Keys → Add key → JSON → the file downloads once.
 3. Play Console → Users and permissions → Invite new users → the service
-   account's email → App permissions → BiteWise → **Release apps to testing
+   account's email → App permissions → Chopstats → **Release apps to testing
    tracks** (add *Release to production, exclude devices, and use Play App
    Signing* later, once § 6.1's closed-test rule is satisfied) → Invite.
    Permissions can take a while to propagate; a `403 The caller does not
@@ -505,8 +898,9 @@ every upload; § 9 says why and how to change that.
 - **Ads**: no. **Content rating**: questionnaire → Utility/Health. **Target
   audience**: 18 and over is the simplest truthful answer (keeps the app out
   of the Families policy); **News app**: no; **Government app**: no.
-- **Data safety**: mirror § 4.3 — photos and health data are *shared* with
-  the AI provider the user selects (purpose App functionality, processed
+- **Data safety**: mirror § 4.3 — photos, typed meal text and health data
+  (meal summaries, dietary profile) are *shared* with the AI provider the
+  user selects (purpose App functionality, processed
   ephemerally, not stored by the developer); nothing is collected by the
   developer; data is encrypted in transit; users can delete everything by
   uninstalling (no account). Declare the local database as on-device only.
@@ -598,6 +992,10 @@ enabling it. Fix the App ID, regenerate the profile. (The workflow's
 upload.)
 
 **ITMS-91053 "Missing API declaration"** — § 1.7.1.
+
+**ITMS-90683 "Missing purpose string in Info.plist"** — every bundle that
+links Photos needs `NSPhotoLibraryUsageDescription`; Runner and the share
+extension both carry it (§ 1.7.5). The email names the bundle and the key.
 
 **"Missing Compliance" in TestFlight** — `ITSAppUsesNonExemptEncryption` is
 gone from `Runner/Info.plist`.

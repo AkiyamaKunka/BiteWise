@@ -194,7 +194,7 @@
   "cancel": "Cancel",
   "delete": "Delete",
   "settingsWelcomeTitle": "Welcome — one step to start logging",
-  "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM's default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。",
+  "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.",
   "settingsSectionAi": "AI",
   "settingsAiFooterPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.",
   "providerQuotaPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.",
@@ -207,7 +207,7 @@
       }
     }
   },
-  "settingsAiFooter": "Photos are analysed by the provider you pick — its key never leaves this phone.",
+  "settingsAiFooter": "Photos are analyzed by the provider you pick. Its key is stored only on this phone and sent only to that provider.",
   "settingsRowAiProvider": "AI Provider",
   "settingsSectionPhotos": "Photos",
   "settingsPhotosFooter": "The watcher logs new food photos automatically; the lookback window decides how far back catch-up scans reach. While Watch Camera Roll is on, new photos — and, when you turn it on, the photos from the last {days, plural, =1{day} other{{days} days}} — are sent to the AI service you chose.",
@@ -223,7 +223,7 @@
   "watcherDisclosureTitle": "Photos will be sent to your AI service",
   "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app's developer. You can turn this off any time.",
   "@watcherDisclosureBody": {
-    "description": "One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan. {days} is the lookback window the enable sweeps right away.",
+    "description": "One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.",
     "placeholders": {
       "provider": {
         "type": "String"
@@ -234,6 +234,105 @@
     }
   },
   "watcherDisclosureContinue": "Continue",
+  "aiConsentTitle": "Allow AI analysis?",
+  "@aiConsentTitle": {
+    "description": "Consent dialog (App Store 5.1.2(i)) shown before meal data first goes to an AI recipient from a foreground action: picking a photo, a photo shared into the app, Describe or Fix a meal, Leftovers, Test This Provider, Photo Coverage. Asked again for each new recipient."
+  },
+  "aiConsentBody": "Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company's own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.",
+  "@aiConsentBody": {
+    "description": "Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow).",
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentCompany": "{provider, select, gemini{Google (Gemini)} openai{OpenAI} anthropic{Anthropic (Claude)} xai{xAI (Grok)} openrouter{OpenRouter} deepseek{DeepSeek} qwen{Alibaba Cloud (Qwen)} doubao{ByteDance Volcengine (Doubao)} glm{Zhipu AI (GLM)} other{your AI provider}}",
+  "@aiConsentCompany": {
+    "description": "The company that receives the data for an API-key provider id.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentPlanCompany": "{backend, select, glm{Zhipu AI (GLM)} doubao{ByteDance Volcengine (Doubao)} other{Anthropic (Claude)}}",
+  "@aiConsentPlanCompany": {
+    "description": "The company the user's own server passes the data to, by plan id (claude, glm, doubao).",
+    "placeholders": {
+      "backend": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentRelayRecipient": "OpenRouter, which passes it on to the maker of the model you picked",
+  "aiConsentServerRecipient": "your own server ({host}), which passes it to {company}",
+  "@aiConsentServerRecipient": {
+    "description": "{host} is the server address the user entered; {company} is aiConsentPlanCompany.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      },
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentServerRecipientNoHost": "your own server, which passes it to {company}",
+  "@aiConsentServerRecipientNoHost": {
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentChinaNote": "{company} processes it on servers in mainland China.",
+  "@aiConsentChinaNote": {
+    "description": "Added to the consent dialog for DeepSeek, Qwen, Doubao, GLM and the GLM/Doubao server plans, whose endpoints are in mainland China.",
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "aiConsentAllow": "Allow",
+  "aiConsentNotNow": "Not now",
+  "aiConsentDeclined": "Nothing was sent.",
+  "shareConsentDeclined": "The shared photo was not analyzed — nothing was sent.",
+  "aiStopSharingRow": "Stop Sharing with {provider}",
+  "@aiStopSharingRow": {
+    "description": "Settings > AI row that withdraws the AI consent for the current recipient and turns Watch Camera Roll off. {provider} is the provider's short display name.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStopSharingTitle": "Stop sharing with {provider}?",
+  "@aiStopSharingTitle": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStopSharingBody": "Chopstats stops sending photos and meal text to {provider}, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Chopstats asks again.",
+  "@aiStopSharingBody": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "aiStopSharingConfirm": "Stop Sharing",
+  "aiStopSharingDone": "Stopped — nothing more is sent to {provider}.",
+  "@aiStopSharingDone": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
   "settingsRowLookback": "Backfill Lookback",
   "lookbackDays": "{count, plural, =1{1 day} other{{count} days}}",
   "@lookbackDays": {
@@ -278,7 +377,7 @@
   "backgroundScanDisabled": "Off",
   "backgroundScanRestricted": "Restricted",
   "backgroundScanIosHint": "iOS decides when the background scan runs (usually a few times a day). Swiping the app away in the app switcher stops it until the app is opened again; photos taken meanwhile are caught up then.",
-  "backgroundScanStuck": "Background scan is stuck — opening Bitewise once catches up.",
+  "backgroundScanStuck": "Background scan is stuck — opening Chopstats once catches up.",
   "@backgroundScanStuck": {
     "description": "Photos footer line in Settings when the recorded background runs keep starting but log nothing."
   },
@@ -314,18 +413,24 @@
   },
   "providerPageTitle": "AI Provider",
   "connectionTypeHeader": "Connection type",
-  "connectionTypeFooter": "An API key pays per photo and lives on this phone. A subscription is a flat-rate plan your own cloud server signs into — photos cost nothing extra.",
+  "connectionTypeFooter": "An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.",
   "typeApiKey": "API Key",
-  "typeSubscription": "Subscription",
+  "typeSubscription": "Your own server",
+  "@typeSubscription": {
+    "description": "The connection type for a server the user runs (provider \"server\"). Neutral wording, no \"Subscription\" or plan upsell (owner decision R-F5, 2026-10-29)."
+  },
   "testProvider": "Test This Provider",
   "testProviderFooter": "The test names exactly what is broken: configuration, network, key, account credit, reply format, or quota.",
   "apiPageTitle": "API Key",
   "apiProviderHeader": "Provider",
-  "apiProviderFooter": "Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor. In mainland China choose DeepSeek, Qwen, Doubao or GLM — the others need a VPN. 中国大陆用户请选择国内提供商。",
-  "noteVpn": "VPN in China",
-  "noteFreeTierVpn": "free · VPN in China",
-  "noteDirect": "direct in China",
-  "noteFreeDirect": "free · direct in China",
+  "apiProviderFooter": "Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.",
+  "noteVpn": "",
+  "noteFreeTierVpn": "free tier",
+  "noteDirect": "",
+  "noteFreeDirect": "free model",
+  "@noteFreeDirect": {
+    "description": "Row notes on the API key page. English has no reachability notes (owner decision R-F11, 2026-10-29): noteVpn and noteDirect are empty there, and an empty note shows no value. The Chinese notes keep the VPN / direct-in-China hint."
+  },
   "apiKeyHeader": "API key",
   "apiKeyLabel": "{provider} API key",
   "@apiKeyLabel": {
@@ -336,13 +441,13 @@
     }
   },
   "apiKeyFooterDefault": "The key saves as you type. Stored securely on this device only.",
-  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.",
+  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.",
   "apiKeyFooterOpenai": "From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.",
   "apiKeyFooterAnthropic": "From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.",
-  "apiKeyFooterQwen": "From bailian.console.aliyun.com (Alibaba Cloud 百炼 → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.",
-  "apiKeyFooterDoubao": "From console.volcengine.com/ark (API Key + 开通管理 to activate models). 500k free tokens per model. Stored securely on this device only.",
+  "apiKeyFooterQwen": "From bailian.console.aliyun.com (Alibaba Cloud Model Studio → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.",
+  "apiKeyFooterDoubao": "From console.volcengine.com/ark (create an API key, then activate the models you want to use). 500k free tokens per model. Stored securely on this device only.",
   "apiKeyFooterGlm": "From open.bigmodel.cn (real-name verification required). The default flash model is free. Stored securely on this device only.",
-  "apiKeyFooterDeepseek": "From platform.deepseek.com (API keys). Pay as you go; reachable from mainland China. Stored securely on this device only.",
+  "apiKeyFooterDeepseek": "From platform.deepseek.com (API keys). Pay as you go. Stored securely on this device only.",
   "apiKeyFooterXai": "From console.x.ai (API keys). Pay as you go. Stored securely on this device only.",
   "apiKeyFooterOpenrouter": "From openrouter.ai/keys. One key reaches GPT, Claude, Gemini, Grok, DeepSeek and more; a few models are free. Stored securely on this device only.",
   "modelHeader": "Model",
@@ -373,6 +478,10 @@
     }
   },
   "modelHelperGlm": "Default: {model} (free tier). glm-4.6v is the stronger paid model.",
+  "modelFreeMark": "FREE",
+  "@modelFreeMark": {
+    "description": "Replaces {free} in the model picker's curated labels (provider_page.dart kKnownModels), e.g. \"glm-4.6v-flash — FREE, default\". English carries no Chinese text (owner decision R-F11, 2026-10-29)."
+  },
   "@modelHelperGlm": {
     "placeholders": {
       "model": {
@@ -396,36 +505,39 @@
       }
     }
   },
-  "apiInactiveFooter": "A subscription is currently active. Pick a provider above to switch to a pay-per-photo API key.",
-  "subPageTitle": "Subscription",
-  "planHeader": "Plan",
-  "planFooter": "Flat-rate: your own cloud machine signs in to ONE plan and analyses photos under it — each photo costs nothing extra. Plan credentials stay on that machine.",
-  "planClaude": "Claude Plan",
+  "apiInactiveFooter": "Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.",
+  "subPageTitle": "Your own server",
+  "planHeader": "AI on your server",
+  "planFooter": "Pick the AI your server is signed in to. The sign-in stays on your server, never on this phone.",
+  "planClaude": "Claude",
   "planClaudeNote": "Anthropic",
   "planGlmNote": "Zhipu",
   "planDoubaoNote": "Volcengine",
   "noteManyModels": "many models",
   "nlDeleteTitle": "Delete meals?",
   "nlCannotUndo": "This cannot be undone.",
-  "planGlm": "GLM Coding Plan",
-  "planDoubao": "Doubao Agent Plan",
-  "planShortClaude": "Claude Plan",
-  "planShortGlm": "GLM Plan",
-  "planShortDoubao": "Doubao Plan",
+  "planGlm": "GLM",
+  "planDoubao": "Doubao",
+  "planShortClaude": "Claude (server)",
+  "@planShortClaude": {
+    "description": "The user's own server as a provider name outside the AI provider page (Settings root row, Stop Sharing, setup link, diagnostics). Must fit beside 'AI Provider' at 375 pt (row_fit_layout_test): 'Claude via your server' does not, so '(server)' (owner decision R-F5, 2026-10-29)."
+  },
+  "planShortGlm": "GLM (server)",
+  "planShortDoubao": "Doubao (server)",
   "serverHeader": "Your server",
-  "serverFooter": "The cloud machine that holds your plan sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that machine.",
+  "serverFooter": "The server that holds the AI sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that server.",
   "serverAddressLabel": "Server address",
   "serverUploadKeyLabel": "Server upload key",
   "connectClaude": "Connect Claude",
-  "connectClaudeFooter": "Signs this server in to your Anthropic subscription. Needs a VPN in mainland China.",
-  "subInactiveFooter": "An API key is currently active. Pick a plan above to switch to subscription analysis via your server.",
+  "connectClaudeFooter": "Signs your server in to your Anthropic account.",
+  "subInactiveFooter": "An API key is currently active. Pick an AI above to have your own server analyze photos instead.",
   "connectDialogTitle": "Finish connecting Claude",
   "connectDialogBody": "Sign in on the Anthropic page that just opened. It will show you a code — paste it here.",
   "connectCodeLabel": "Authorization code",
   "connect": "Connect",
   "connectStartFailed": "Could not start the sign-in.",
   "connectBrowserFailed": "Could not open the browser.",
-  "connectDone": "Claude connected — analyses run on your subscription.",
+  "connectDone": "Claude connected — your server analyzes photos with your Anthropic account.",
   "profilePageTitle": "Dietary Profile",
   "profileFooter": "Preferences and cultural context the AI reads alongside every photo — e.g. \"vegetarian\", \"Cantonese home cooking, light oil\", \"cutting, high protein\". Saves as you type.",
   "profileHint": "Nothing yet — the AI assumes no special preferences.",
@@ -436,7 +548,7 @@
   "addManual": "Enter manually",
   "addManualNote": "no AI",
   "addFix": "Fix or delete a meal",
-  "addFixFooter": "\"meal 2 was roast duck\" · \"删除第一餐\"",
+  "addFixFooter": "\"meal 2 was roast duck\" · \"delete the first meal\"",
   "addPhotosTip": "Tip: chopsticks or a hand in the shot helps the AI judge portion sizes.",
   "addNoPhotos": "No recent photos found.",
   "addPhotosLimited": "Only the photos you allowed are shown — photos you take later won't appear here. Allow access to all photos in system settings.",
@@ -451,7 +563,7 @@
     }
   },
   "reportNoMeals": "No meals logged.",
-  "reportFooter": "Logged with Bitewise",
+  "reportFooter": "Logged with Chopstats",
   "historyDayPattern": "EEEE, MMM dd",
   "@historyDayPattern": {
     "description": "intl DateFormat PATTERN for dated history-day labels, not display text. en: \"Tuesday, Jul 15\"; zh: \"7月15日 星期二\"."
@@ -530,7 +642,7 @@
   "leftoverFailed": "Couldn't estimate the leftovers from that photo.",
   "leftoverNoMeals": "No meals from today or yesterday to deduct from.",
   "planTuningHeader": "Model & thinking",
-  "planTuningFooter": "Which Claude model analyzes on your server, and how hard it thinks. Default follows the server's own setting; only the Claude plan offers this — the other plans choose models themselves.",
+  "planTuningFooter": "Which Claude model your server uses, and how hard it thinks. Default follows the server's own setting. Only Claude offers this; GLM and Doubao choose their models themselves.",
   "planModelRow": "Model",
   "planEffortRow": "Thinking effort",
   "planChoiceDefault": "Server default",
@@ -542,7 +654,7 @@
   "planEffortHigh": "High — most thorough",
   "planEffortLowShort": "Low",
   "planEffortHighShort": "High",
-  "planModelFable": "Fable — frontier · needs credits on Pro",
+  "planModelFable": "Fable — frontier",
   "typicalDayOnly": "Typical day: ~{typical} kcal",
   "@typicalDayOnly": {
     "placeholders": {
@@ -587,7 +699,7 @@
       }
     }
   },
-  "coachPartialGoal": "{delta} kcal under your goal — any meals not logged yet? Add them in Bitewise.",
+  "coachPartialGoal": "{delta} kcal under your goal — any meals not logged yet? Add them in Chopstats.",
   "@coachPartialGoal": {
     "description": "Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.",
     "placeholders": {
@@ -596,7 +708,7 @@
       }
     }
   },
-  "coachPartialTypical": "{delta} kcal below your usual day — any meals not logged yet? Add them in Bitewise.",
+  "coachPartialTypical": "{delta} kcal below your usual day — any meals not logged yet? Add them in Chopstats.",
   "@coachPartialTypical": {
     "description": "Coach line for a day logged far below the usual day: more likely missing meals than a real cut.",
     "placeholders": {
@@ -653,7 +765,7 @@
   "editorGramsSuffix": "g",
   "editorKcalSuffix": "kcal",
   "diagTitle": "Test AI provider",
-  "diagIntro": "Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.",
+  "diagIntro": "Checks your AI setup step by step and names exactly what is broken: configuration, network, key, account credit, reply format, and quota. Running the test spends two small AI calls.",
   "diagRunning": "Testing…",
   "diagRunAgain": "Run again",
   "diagRunChecks": "Run the checks",
@@ -717,12 +829,12 @@
       }
     }
   },
-  "diagFixVpn": "This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).",
+  "diagFixVpn": "This provider could not be reached from your network. Check the connection and try again, or switch to another provider.",
   "diagFixServerUnreachable": "Check the server address, that the server is running, and your network.",
   "diagFixNetwork": "Check your network connection and try again.",
   "diagKeyAccepted": "The provider accepted your key.",
   "diagOutOfCredit": "The key works, but the account cannot pay right now.",
-  "diagFixTopUp": "Top up the provider account, or switch to a free tier (Zhipu GLM's default vision model is free, no VPN needed in mainland China).",
+  "diagFixTopUp": "Top up the provider account, or switch to a free tier (Zhipu GLM's default vision model is free).",
   "diagRateLimited": "The key works, but the provider is rate-limiting right now.",
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
@@ -860,7 +972,7 @@
       }
     }
   },
-  "photoPermissionDenied": "Bitewise isn't allowed to see your photos.",
+  "photoPermissionDenied": "Chopstats isn't allowed to see your photos.",
   "openSystemSettings": "Open system settings",
   "outcomeSaved": "Meal logged",
   "outcomeSkipped": "No food detected",
@@ -877,7 +989,7 @@
   "logManually": "Log manually",
   "describeTitle": "Describe a meal",
   "describeLabel": "What did you eat?",
-  "describeHint": "e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"",
+  "describeHint": "e.g. \"two eggs and toast with butter\"\nor \"a bowl of beef noodle soup with an egg\"",
   "describeHelp": "Any language works. You will see the estimate and can fix it before it is saved.",
   "describeEstimating": "Estimating…",
   "describeEstimate": "Estimate this meal",
@@ -945,7 +1057,7 @@
   "errQuotaPaused": "Analysis is paused: the daily quota was hit. The photo is kept and retried later.",
   "errNetwork": "Could not reach the provider (network or service issue). The photo is kept and retried later.",
   "errBadModel": "The provider rejected the model — check the model name in Settings.",
-  "errBadModelDoubao": "Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.",
+  "errBadModelDoubao": "Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated in the Volcengine console.",
   "errBadModelOpenRouter": "OpenRouter cannot find this model — use the full slug from openrouter.ai/models (vendor/model) and pick a model that accepts images.",
   "errBilling": "The provider account is out of balance or credits — top it up in the provider's console. After topping up you can analyze this photo again.",
   "errBillingText": "The provider account is out of balance or credits — top it up in the provider's console.",
@@ -956,7 +1068,7 @@
   "mealCardLeftoverTitle": "🍽️ Leftovers deducted",
   "notificationChannelName": "Reports & meals",
   "@notificationChannelName": {
-    "description": "Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
+    "description": "Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post."
   },
   "notificationChannelDescription": "Daily calorie reports and auto-logged meal cards",
   "@notificationChannelDescription": {
@@ -989,7 +1101,7 @@
   "fixIntro": "Say what to change or delete — describe the meal however you like (\"the noodles\", \"breakfast\", \"the 600 kcal one\"), in any language. To move a meal to another day or time, tap it on Today or in History and change its date or time.",
   "fixNamingTip": "Naming the food is safest — meal numbers count across the last 7 days, not just today.",
   "fixLabel": "What should change?",
-  "fixHint": "e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"",
+  "fixHint": "e.g. \"the noodles were roast duck rice\"\nor \"delete the coffee I just logged\"",
   "working": "Working…",
   "fixApply": "Apply the fix",
   "fixAppliedHeader": "Applied this session",
@@ -1371,7 +1483,7 @@
   },
   "macroNoBreakdown": "No macro breakdown recorded.",
   "setupLinkTitle": "Set up server from this link?",
-  "setupLinkBody": "Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.",
+  "setupLinkBody": "Server: {server}\nAI: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.",
   "@setupLinkBody": {
     "placeholders": {
       "server": {
@@ -1386,8 +1498,17 @@
     }
   },
   "setupLinkConfirm": "Use this server",
-  "setupLinkDone": "Server configured — photos will be analyzed through your plan.",
+  "setupLinkDone": "Server configured — your server will analyze the photos.",
   "setupLinkInvalid": "That setup link is not valid.",
+  "setupLinkSharing": "The server passes your photos, dietary profile, meal descriptions and recent meals to {company}. Confirming allows that; you can stop it in Settings.",
+  "@setupLinkSharing": {
+    "description": "Second paragraph of the setup-link dialog: confirming counts as the AI consent for this plan (App Store 5.1.2(i)). {company} is aiConsentPlanCompany.",
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
   "serverLoginRow": "Server Claude sign-in",
   "serverLoginOk": "Signed in ✓",
   "serverLoginMissing": "Not signed in",
@@ -1404,7 +1525,7 @@
     }
   },
   "serverReasonNoResult": "the AI's answer was unusable",
-  "errServerModelRefused": "Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.",
+  "errServerModelRefused": "Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Your own server › Model.",
   "@errServerModelRefused": {
     "placeholders": {
       "reason": {
@@ -1412,7 +1533,7 @@
       }
     }
   },
-  "nlServerModelRefused": "❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.",
+  "nlServerModelRefused": "❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Your own server › Model.",
   "@nlServerModelRefused": {
     "placeholders": {
       "reason": {
@@ -1452,7 +1573,7 @@
   "reasonServerFailed": "your server could not analyze it",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
-  "errRegionBlocked": "{provider} is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).",
+  "errRegionBlocked": "{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.",
   "@errRegionBlocked": {
     "placeholders": {
       "provider": {
@@ -1469,7 +1590,7 @@
       }
     }
   },
-  "diagFixVpnRegion": "Switch the VPN to a node in a region {provider} serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.",
+  "diagFixVpnRegion": "Use {provider} from a region it serves, or choose another provider.",
   "@diagFixVpnRegion": {
     "placeholders": {
       "provider": {
@@ -1497,7 +1618,7 @@
       }
     }
   },
-  "autoScanPausedRegion": "Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).",
+  "autoScanPausedRegion": "Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — once it is reachable again, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).",
   "@autoScanPausedRegion": {
     "placeholders": {
       "provider": {
@@ -1556,10 +1677,10 @@
       }
     }
   },
-  "exportShareSubject": "Bitewise data export",
+  "exportShareSubject": "Chopstats data export",
   "importErrNotJson": "That file is not JSON.",
-  "importErrNotExport": "That file is not a Bitewise export.",
-  "importErrWrongFormatTag": "That file is not a Bitewise export (wrong format tag).",
+  "importErrNotExport": "That file is not a Chopstats export.",
+  "importErrWrongFormatTag": "That file is not a Chopstats export (wrong format tag).",
   "importErrBadVersion": "That export has an unusable version tag.",
   "importErrNoTables": "That export has no tables section.",
   "importFromClipboard": "Import from clipboard",

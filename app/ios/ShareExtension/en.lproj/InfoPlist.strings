@@ -1,1 +1,2 @@
-"CFBundleDisplayName" = "Bitewise";
+"CFBundleDisplayName" = "Chopstats";
+"NSPhotoLibraryUsageDescription" = "Chopstats reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings.";

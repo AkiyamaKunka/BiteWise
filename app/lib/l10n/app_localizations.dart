@@ -429,7 +429,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWelcomeBody.
   ///
   /// In en, this message translates to:
-  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.\nIn mainland China choose DeepSeek 深度求索, Qwen 通义千问, Doubao 豆包 or GLM 智谱 (GLM\'s default model is free) — Gemini, OpenAI, Claude and Grok need a VPN. 中国大陆用户请选择国内提供商。'**
+  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.'**
   String get settingsWelcomeBody;
 
   /// No description provided for @settingsSectionAi.
@@ -459,7 +459,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAiFooter.
   ///
   /// In en, this message translates to:
-  /// **'Photos are analysed by the provider you pick — its key never leaves this phone.'**
+  /// **'Photos are analyzed by the provider you pick. Its key is stored only on this phone and sent only to that provider.'**
   String get settingsAiFooter;
 
   /// No description provided for @settingsRowAiProvider.
@@ -492,7 +492,7 @@ abstract class AppLocalizations {
   /// **'Photos will be sent to your AI service'**
   String get watcherDisclosureTitle;
 
-  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude Plan. {days} is the lookback window the enable sweeps right away.
+  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.
   ///
   /// In en, this message translates to:
   /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
@@ -503,6 +503,108 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Continue'**
   String get watcherDisclosureContinue;
+
+  /// Consent dialog (App Store 5.1.2(i)) shown before meal data first goes to an AI recipient from a foreground action: picking a photo, a photo shared into the app, Describe or Fix a meal, Leftovers, Test This Provider, Photo Coverage. Asked again for each new recipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow AI analysis?'**
+  String get aiConsentTitle;
+
+  /// Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow).
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.'**
+  String aiConsentBody(String recipient);
+
+  /// The company that receives the data for an API-key provider id.
+  ///
+  /// In en, this message translates to:
+  /// **'{provider, select, gemini{Google (Gemini)} openai{OpenAI} anthropic{Anthropic (Claude)} xai{xAI (Grok)} openrouter{OpenRouter} deepseek{DeepSeek} qwen{Alibaba Cloud (Qwen)} doubao{ByteDance Volcengine (Doubao)} glm{Zhipu AI (GLM)} other{your AI provider}}'**
+  String aiConsentCompany(String provider);
+
+  /// The company the user's own server passes the data to, by plan id (claude, glm, doubao).
+  ///
+  /// In en, this message translates to:
+  /// **'{backend, select, glm{Zhipu AI (GLM)} doubao{ByteDance Volcengine (Doubao)} other{Anthropic (Claude)}}'**
+  String aiConsentPlanCompany(String backend);
+
+  /// No description provided for @aiConsentRelayRecipient.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenRouter, which passes it on to the maker of the model you picked'**
+  String get aiConsentRelayRecipient;
+
+  /// {host} is the server address the user entered; {company} is aiConsentPlanCompany.
+  ///
+  /// In en, this message translates to:
+  /// **'your own server ({host}), which passes it to {company}'**
+  String aiConsentServerRecipient(String host, String company);
+
+  /// No description provided for @aiConsentServerRecipientNoHost.
+  ///
+  /// In en, this message translates to:
+  /// **'your own server, which passes it to {company}'**
+  String aiConsentServerRecipientNoHost(String company);
+
+  /// Added to the consent dialog for DeepSeek, Qwen, Doubao, GLM and the GLM/Doubao server plans, whose endpoints are in mainland China.
+  ///
+  /// In en, this message translates to:
+  /// **'{company} processes it on servers in mainland China.'**
+  String aiConsentChinaNote(String company);
+
+  /// No description provided for @aiConsentAllow.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get aiConsentAllow;
+
+  /// No description provided for @aiConsentNotNow.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get aiConsentNotNow;
+
+  /// No description provided for @aiConsentDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing was sent.'**
+  String get aiConsentDeclined;
+
+  /// No description provided for @shareConsentDeclined.
+  ///
+  /// In en, this message translates to:
+  /// **'The shared photo was not analyzed — nothing was sent.'**
+  String get shareConsentDeclined;
+
+  /// Settings > AI row that withdraws the AI consent for the current recipient and turns Watch Camera Roll off. {provider} is the provider's short display name.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Sharing with {provider}'**
+  String aiStopSharingRow(String provider);
+
+  /// No description provided for @aiStopSharingTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop sharing with {provider}?'**
+  String aiStopSharingTitle(String provider);
+
+  /// No description provided for @aiStopSharingBody.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats stops sending photos and meal text to {provider}, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Chopstats asks again.'**
+  String aiStopSharingBody(String provider);
+
+  /// No description provided for @aiStopSharingConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Sharing'**
+  String get aiStopSharingConfirm;
+
+  /// No description provided for @aiStopSharingDone.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped — nothing more is sent to {provider}.'**
+  String aiStopSharingDone(String provider);
 
   /// No description provided for @settingsRowLookback.
   ///
@@ -603,7 +705,7 @@ abstract class AppLocalizations {
   /// Photos footer line in Settings when the recorded background runs keep starting but log nothing.
   ///
   /// In en, this message translates to:
-  /// **'Background scan is stuck — opening Bitewise once catches up.'**
+  /// **'Background scan is stuck — opening Chopstats once catches up.'**
   String get backgroundScanStuck;
 
   /// No description provided for @settingsSectionProfile.
@@ -717,7 +819,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectionTypeFooter.
   ///
   /// In en, this message translates to:
-  /// **'An API key pays per photo and lives on this phone. A subscription is a flat-rate plan your own cloud server signs into — photos cost nothing extra.'**
+  /// **'An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.'**
   String get connectionTypeFooter;
 
   /// No description provided for @typeApiKey.
@@ -726,10 +828,10 @@ abstract class AppLocalizations {
   /// **'API Key'**
   String get typeApiKey;
 
-  /// No description provided for @typeSubscription.
+  /// The connection type for a server the user runs (provider "server"). Neutral wording, no "Subscription" or plan upsell (owner decision R-F5, 2026-10-29).
   ///
   /// In en, this message translates to:
-  /// **'Subscription'**
+  /// **'Your own server'**
   String get typeSubscription;
 
   /// No description provided for @testProvider.
@@ -759,31 +861,31 @@ abstract class AppLocalizations {
   /// No description provided for @apiProviderFooter.
   ///
   /// In en, this message translates to:
-  /// **'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor. In mainland China choose DeepSeek, Qwen, Doubao or GLM — the others need a VPN. 中国大陆用户请选择国内提供商。'**
+  /// **'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.'**
   String get apiProviderFooter;
 
   /// No description provided for @noteVpn.
   ///
   /// In en, this message translates to:
-  /// **'VPN in China'**
+  /// **''**
   String get noteVpn;
 
   /// No description provided for @noteFreeTierVpn.
   ///
   /// In en, this message translates to:
-  /// **'free · VPN in China'**
+  /// **'free tier'**
   String get noteFreeTierVpn;
 
   /// No description provided for @noteDirect.
   ///
   /// In en, this message translates to:
-  /// **'direct in China'**
+  /// **''**
   String get noteDirect;
 
-  /// No description provided for @noteFreeDirect.
+  /// Row notes on the API key page. English has no reachability notes (owner decision R-F11, 2026-10-29): noteVpn and noteDirect are empty there, and an empty note shows no value. The Chinese notes keep the VPN / direct-in-China hint.
   ///
   /// In en, this message translates to:
-  /// **'free · direct in China'**
+  /// **'free model'**
   String get noteFreeDirect;
 
   /// No description provided for @apiKeyHeader.
@@ -807,7 +909,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiKeyFooterGemini.
   ///
   /// In en, this message translates to:
-  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier; needs a VPN in mainland China. Stored securely on this device only.'**
+  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.'**
   String get apiKeyFooterGemini;
 
   /// No description provided for @apiKeyFooterOpenai.
@@ -825,13 +927,13 @@ abstract class AppLocalizations {
   /// No description provided for @apiKeyFooterQwen.
   ///
   /// In en, this message translates to:
-  /// **'From bailian.console.aliyun.com (Alibaba Cloud 百炼 → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.'**
+  /// **'From bailian.console.aliyun.com (Alibaba Cloud Model Studio → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.'**
   String get apiKeyFooterQwen;
 
   /// No description provided for @apiKeyFooterDoubao.
   ///
   /// In en, this message translates to:
-  /// **'From console.volcengine.com/ark (API Key + 开通管理 to activate models). 500k free tokens per model. Stored securely on this device only.'**
+  /// **'From console.volcengine.com/ark (create an API key, then activate the models you want to use). 500k free tokens per model. Stored securely on this device only.'**
   String get apiKeyFooterDoubao;
 
   /// No description provided for @apiKeyFooterGlm.
@@ -843,7 +945,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiKeyFooterDeepseek.
   ///
   /// In en, this message translates to:
-  /// **'From platform.deepseek.com (API keys). Pay as you go; reachable from mainland China. Stored securely on this device only.'**
+  /// **'From platform.deepseek.com (API keys). Pay as you go. Stored securely on this device only.'**
   String get apiKeyFooterDeepseek;
 
   /// No description provided for @apiKeyFooterXai.
@@ -900,6 +1002,12 @@ abstract class AppLocalizations {
   /// **'Default: {model} (free tier). glm-4.6v is the stronger paid model.'**
   String modelHelperGlm(String model);
 
+  /// Replaces {free} in the model picker's curated labels (provider_page.dart kKnownModels), e.g. "glm-4.6v-flash — FREE, default". English carries no Chinese text (owner decision R-F11, 2026-10-29).
+  ///
+  /// In en, this message translates to:
+  /// **'FREE'**
+  String get modelFreeMark;
+
   /// No description provided for @modelHelperDeepseek.
   ///
   /// In en, this message translates to:
@@ -915,31 +1023,31 @@ abstract class AppLocalizations {
   /// No description provided for @apiInactiveFooter.
   ///
   /// In en, this message translates to:
-  /// **'A subscription is currently active. Pick a provider above to switch to a pay-per-photo API key.'**
+  /// **'Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.'**
   String get apiInactiveFooter;
 
   /// No description provided for @subPageTitle.
   ///
   /// In en, this message translates to:
-  /// **'Subscription'**
+  /// **'Your own server'**
   String get subPageTitle;
 
   /// No description provided for @planHeader.
   ///
   /// In en, this message translates to:
-  /// **'Plan'**
+  /// **'AI on your server'**
   String get planHeader;
 
   /// No description provided for @planFooter.
   ///
   /// In en, this message translates to:
-  /// **'Flat-rate: your own cloud machine signs in to ONE plan and analyses photos under it — each photo costs nothing extra. Plan credentials stay on that machine.'**
+  /// **'Pick the AI your server is signed in to. The sign-in stays on your server, never on this phone.'**
   String get planFooter;
 
   /// No description provided for @planClaude.
   ///
   /// In en, this message translates to:
-  /// **'Claude Plan'**
+  /// **'Claude'**
   String get planClaude;
 
   /// No description provided for @planClaudeNote.
@@ -981,31 +1089,31 @@ abstract class AppLocalizations {
   /// No description provided for @planGlm.
   ///
   /// In en, this message translates to:
-  /// **'GLM Coding Plan'**
+  /// **'GLM'**
   String get planGlm;
 
   /// No description provided for @planDoubao.
   ///
   /// In en, this message translates to:
-  /// **'Doubao Agent Plan'**
+  /// **'Doubao'**
   String get planDoubao;
 
-  /// No description provided for @planShortClaude.
+  /// The user's own server as a provider name outside the AI provider page (Settings root row, Stop Sharing, setup link, diagnostics). Must fit beside 'AI Provider' at 375 pt (row_fit_layout_test): 'Claude via your server' does not, so '(server)' (owner decision R-F5, 2026-10-29).
   ///
   /// In en, this message translates to:
-  /// **'Claude Plan'**
+  /// **'Claude (server)'**
   String get planShortClaude;
 
   /// No description provided for @planShortGlm.
   ///
   /// In en, this message translates to:
-  /// **'GLM Plan'**
+  /// **'GLM (server)'**
   String get planShortGlm;
 
   /// No description provided for @planShortDoubao.
   ///
   /// In en, this message translates to:
-  /// **'Doubao Plan'**
+  /// **'Doubao (server)'**
   String get planShortDoubao;
 
   /// No description provided for @serverHeader.
@@ -1017,7 +1125,7 @@ abstract class AppLocalizations {
   /// No description provided for @serverFooter.
   ///
   /// In en, this message translates to:
-  /// **'The cloud machine that holds your plan sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that machine.'**
+  /// **'The server that holds the AI sign-in and runs the analysis — not this phone. This phone keeps only the upload key it uses to talk to that server.'**
   String get serverFooter;
 
   /// No description provided for @serverAddressLabel.
@@ -1041,13 +1149,13 @@ abstract class AppLocalizations {
   /// No description provided for @connectClaudeFooter.
   ///
   /// In en, this message translates to:
-  /// **'Signs this server in to your Anthropic subscription. Needs a VPN in mainland China.'**
+  /// **'Signs your server in to your Anthropic account.'**
   String get connectClaudeFooter;
 
   /// No description provided for @subInactiveFooter.
   ///
   /// In en, this message translates to:
-  /// **'An API key is currently active. Pick a plan above to switch to subscription analysis via your server.'**
+  /// **'An API key is currently active. Pick an AI above to have your own server analyze photos instead.'**
   String get subInactiveFooter;
 
   /// No description provided for @connectDialogTitle.
@@ -1089,7 +1197,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectDone.
   ///
   /// In en, this message translates to:
-  /// **'Claude connected — analyses run on your subscription.'**
+  /// **'Claude connected — your server analyzes photos with your Anthropic account.'**
   String get connectDone;
 
   /// No description provided for @profilePageTitle.
@@ -1155,7 +1263,7 @@ abstract class AppLocalizations {
   /// No description provided for @addFixFooter.
   ///
   /// In en, this message translates to:
-  /// **'\"meal 2 was roast duck\" · \"删除第一餐\"'**
+  /// **'\"meal 2 was roast duck\" · \"delete the first meal\"'**
   String get addFixFooter;
 
   /// No description provided for @addPhotosTip.
@@ -1203,7 +1311,7 @@ abstract class AppLocalizations {
   /// No description provided for @reportFooter.
   ///
   /// In en, this message translates to:
-  /// **'Logged with Bitewise'**
+  /// **'Logged with Chopstats'**
   String get reportFooter;
 
   /// intl DateFormat PATTERN for dated history-day labels, not display text. en: "Tuesday, Jul 15"; zh: "7月15日 星期二".
@@ -1371,7 +1479,7 @@ abstract class AppLocalizations {
   /// No description provided for @planTuningFooter.
   ///
   /// In en, this message translates to:
-  /// **'Which Claude model analyzes on your server, and how hard it thinks. Default follows the server\'s own setting; only the Claude plan offers this — the other plans choose models themselves.'**
+  /// **'Which Claude model your server uses, and how hard it thinks. Default follows the server\'s own setting. Only Claude offers this; GLM and Doubao choose their models themselves.'**
   String get planTuningFooter;
 
   /// No description provided for @planModelRow.
@@ -1443,7 +1551,7 @@ abstract class AppLocalizations {
   /// No description provided for @planModelFable.
   ///
   /// In en, this message translates to:
-  /// **'Fable — frontier · needs credits on Pro'**
+  /// **'Fable — frontier'**
   String get planModelFable;
 
   /// No description provided for @typicalDayOnly.
@@ -1497,13 +1605,13 @@ abstract class AppLocalizations {
   /// Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in Bitewise.'**
+  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in Chopstats.'**
   String coachPartialGoal(String delta);
 
   /// Coach line for a day logged far below the usual day: more likely missing meals than a real cut.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in Bitewise.'**
+  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in Chopstats.'**
   String coachPartialTypical(String delta);
 
   /// No description provided for @coachOnTarget.
@@ -1653,7 +1761,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagIntro.
   ///
   /// In en, this message translates to:
-  /// **'Checks your AI setup step by step and names exactly what is broken: configuration, network (VPN), key, account credit, reply format, and quota. Running the test spends two small AI calls.'**
+  /// **'Checks your AI setup step by step and names exactly what is broken: configuration, network, key, account credit, reply format, and quota. Running the test spends two small AI calls.'**
   String get diagIntro;
 
   /// No description provided for @diagRunning.
@@ -1809,7 +1917,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixVpn.
   ///
   /// In en, this message translates to:
-  /// **'This provider is blocked in mainland China without a VPN. Turn the VPN on, or switch to DeepSeek/Qwen/Doubao/GLM (no VPN needed).'**
+  /// **'This provider could not be reached from your network. Check the connection and try again, or switch to another provider.'**
   String get diagFixVpn;
 
   /// No description provided for @diagFixServerUnreachable.
@@ -1839,7 +1947,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixTopUp.
   ///
   /// In en, this message translates to:
-  /// **'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free, no VPN needed in mainland China).'**
+  /// **'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free).'**
   String get diagFixTopUp;
 
   /// No description provided for @diagRateLimited.
@@ -2145,7 +2253,7 @@ abstract class AppLocalizations {
   /// No description provided for @photoPermissionDenied.
   ///
   /// In en, this message translates to:
-  /// **'Bitewise isn\'t allowed to see your photos.'**
+  /// **'Chopstats isn\'t allowed to see your photos.'**
   String get photoPermissionDenied;
 
   /// No description provided for @openSystemSettings.
@@ -2247,7 +2355,7 @@ abstract class AppLocalizations {
   /// No description provided for @describeHint.
   ///
   /// In en, this message translates to:
-  /// **'e.g. \"two eggs and toast with butter\"\nor \"一碗牛肉面加一个鸡蛋\"'**
+  /// **'e.g. \"two eggs and toast with butter\"\nor \"a bowl of beef noodle soup with an egg\"'**
   String get describeHint;
 
   /// No description provided for @describeHelp.
@@ -2379,7 +2487,7 @@ abstract class AppLocalizations {
   /// No description provided for @errBadModelDoubao.
   ///
   /// In en, this message translates to:
-  /// **'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated (开通管理) in the Volcengine console.'**
+  /// **'Doubao cannot find this model — Ark needs the exact versioned ID from its model list, and the model must be activated in the Volcengine console.'**
   String get errBadModelDoubao;
 
   /// No description provided for @errBadModelOpenRouter.
@@ -2430,7 +2538,7 @@ abstract class AppLocalizations {
   /// **'🍽️ Leftovers deducted'**
   String get mealCardLeftoverTitle;
 
-  /// Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
+  /// Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
   ///
   /// In en, this message translates to:
   /// **'Reports & meals'**
@@ -2505,7 +2613,7 @@ abstract class AppLocalizations {
   /// No description provided for @fixHint.
   ///
   /// In en, this message translates to:
-  /// **'e.g. \"the noodles were roast duck rice\"\nor \"删除刚才那杯咖啡\"'**
+  /// **'e.g. \"the noodles were roast duck rice\"\nor \"delete the coffee I just logged\"'**
   String get fixHint;
 
   /// No description provided for @working.
@@ -2997,7 +3105,7 @@ abstract class AppLocalizations {
   /// No description provided for @setupLinkBody.
   ///
   /// In en, this message translates to:
-  /// **'Server: {server}\nPlan: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.'**
+  /// **'Server: {server}\nAI: {backend}\nUpload key: ••••{keyTail}\n\nYour meal photos will be sent to this server for analysis. Confirm only if it is yours.'**
   String setupLinkBody(String server, String backend, String keyTail);
 
   /// No description provided for @setupLinkConfirm.
@@ -3009,7 +3117,7 @@ abstract class AppLocalizations {
   /// No description provided for @setupLinkDone.
   ///
   /// In en, this message translates to:
-  /// **'Server configured — photos will be analyzed through your plan.'**
+  /// **'Server configured — your server will analyze the photos.'**
   String get setupLinkDone;
 
   /// No description provided for @setupLinkInvalid.
@@ -3017,6 +3125,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'That setup link is not valid.'**
   String get setupLinkInvalid;
+
+  /// Second paragraph of the setup-link dialog: confirming counts as the AI consent for this plan (App Store 5.1.2(i)). {company} is aiConsentPlanCompany.
+  ///
+  /// In en, this message translates to:
+  /// **'The server passes your photos, dietary profile, meal descriptions and recent meals to {company}. Confirming allows that; you can stop it in Settings.'**
+  String setupLinkSharing(String company);
 
   /// No description provided for @serverLoginRow.
   ///
@@ -3075,13 +3189,13 @@ abstract class AppLocalizations {
   /// No description provided for @errServerModelRefused.
   ///
   /// In en, this message translates to:
-  /// **'Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.'**
+  /// **'Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Your own server › Model.'**
   String errServerModelRefused(String reason);
 
   /// No description provided for @nlServerModelRefused.
   ///
   /// In en, this message translates to:
-  /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Subscription › Model.'**
+  /// **'❌ Your server cannot use the selected model: {reason} — choose another model in Settings › AI Provider › Your own server › Model.'**
   String nlServerModelRefused(String reason);
 
   /// No description provided for @outcomeRetryLaterMsg.
@@ -3153,7 +3267,7 @@ abstract class AppLocalizations {
   /// No description provided for @errRegionBlocked.
   ///
   /// In en, this message translates to:
-  /// **'{provider} is not available from your current network region — check the VPN node (Hong Kong and some other regions are not supported).'**
+  /// **'{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.'**
   String errRegionBlocked(String provider);
 
   /// No description provided for @errContentBlocked.
@@ -3171,7 +3285,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixVpnRegion.
   ///
   /// In en, this message translates to:
-  /// **'Switch the VPN to a node in a region {provider} serves (e.g. US, Japan, Singapore — not Hong Kong), or use DeepSeek / Qwen / Doubao / GLM, which need no VPN.'**
+  /// **'Use {provider} from a region it serves, or choose another provider.'**
   String diagFixVpnRegion(String provider);
 
   /// No description provided for @regionProviderFallback.
@@ -3213,7 +3327,7 @@ abstract class AppLocalizations {
   /// No description provided for @autoScanPausedRegion.
   ///
   /// In en, this message translates to:
-  /// **'Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — after switching the VPN node, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).'**
+  /// **'Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — once it is reachable again, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).'**
   String autoScanPausedRegion(String provider, String time);
 
   /// No description provided for @autoScanPausedTitle.
@@ -3285,7 +3399,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportShareSubject.
   ///
   /// In en, this message translates to:
-  /// **'Bitewise data export'**
+  /// **'Chopstats data export'**
   String get exportShareSubject;
 
   /// No description provided for @importErrNotJson.
@@ -3297,13 +3411,13 @@ abstract class AppLocalizations {
   /// No description provided for @importErrNotExport.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a Bitewise export.'**
+  /// **'That file is not a Chopstats export.'**
   String get importErrNotExport;
 
   /// No description provided for @importErrWrongFormatTag.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a Bitewise export (wrong format tag).'**
+  /// **'That file is not a Chopstats export (wrong format tag).'**
   String get importErrWrongFormatTag;
 
   /// No description provided for @importErrBadVersion.

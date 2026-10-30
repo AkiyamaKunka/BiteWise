@@ -17,6 +17,7 @@ import '../../core/contracts.dart';
 import '../../services/analyzer/platform_decode.dart';
 import '../../services/photo/coverage.dart';
 import '../../services/photo/photo_library.dart';
+import '../ai_consent.dart';
 import '../photo_pipeline.dart';
 import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
 import '../services.dart';
@@ -270,10 +271,17 @@ class _SettingsScreenState extends State<SettingsScreen>
     final l10n = context.l10n;
     if (enable) {
       // App Store 5.1.2(i): say where the photos go BEFORE the first one
-      // leaves. Once per install, only from this switch — a watcher that
-      // is already on, and every headless/background path, never asks.
-      if (!widget.settings.watcherDisclosureSeen) {
+      // leaves, and get the user's permission for THIS recipient. Asked
+      // when the recipient is not allowed yet, or the camera-roll notice
+      // was never shown (an earlier Allow from a picked photo did not say
+      // that non-food photos and the lookback window go too). A watcher
+      // that is already on, and every headless/background path, never
+      // asks: a recipient change while it is on asks at the change.
+      final route = currentAiConsentRoute(widget.settings);
+      if (!widget.settings.hasAiConsent(route) ||
+          !widget.settings.watcherDisclosureSeen) {
         if (!await _confirmWatcherDisclosure()) return; // switch stays off
+        await widget.settings.setAiConsent(route, granted: true);
         await widget.settings.update(watcherDisclosureSeen: true);
         if (!mounted) return;
       }
@@ -342,30 +350,57 @@ class _SettingsScreenState extends State<SettingsScreen>
     await widget.settings.update(watcherEnabled: enable);
   }
 
-  /// The one-time 照片会发送给 AI 服务 notice; true = Continue.
-  Future<bool> _confirmWatcherDisclosure() async {
-    final provider = providerDisplayLabel(context.l10n,
-        widget.settings.provider, widget.settings.serverBackend);
-    final go = await showDialog<bool>(
+  /// The 照片会发送给 AI 服务 notice: the AI consent for the current
+  /// recipient, then what the camera roll adds; true = Continue.
+  Future<bool> _confirmWatcherDisclosure() {
+    final l = context.l10n;
+    final s = widget.settings;
+    final provider = providerDisplayLabel(l, s.provider, s.serverBackend);
+    return showAiConsentDialog(context,
+        provider: s.provider,
+        serverBackend: s.serverBackend,
+        serverBaseUrl: s.serverBaseUrl,
+        title: l.watcherDisclosureTitle,
+        appendix: l.watcherDisclosureBody(provider, _lookbackDays),
+        allowLabel: l.watcherDisclosureContinue,
+        cancelLabel: l.cancel,
+        dialogKey: const Key('watcherDisclosureDialog'),
+        cancelKey: const Key('watcherDisclosureCancel'),
+        allowKey: const Key('watcherDisclosureContinue'));
+  }
+
+  /// Settings' Stop sharing row: withdraws the AI consent for the current
+  /// recipient and turns Watch Camera Roll off through the same path as
+  /// its switch, so nothing more is sent until the user allows it again
+  /// (App Store 5.1.1(ii): consent can be withdrawn).
+  Future<void> _stopSharing() async {
+    final l = context.l10n;
+    final s = widget.settings;
+    final provider = providerDisplayLabel(l, s.provider, s.serverBackend);
+    final stop = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        key: const Key('watcherDisclosureDialog'),
-        title: Text(ctx.l10n.watcherDisclosureTitle),
-        content: SingleChildScrollView(
-            child: Text(ctx.l10n.watcherDisclosureBody(provider, _lookbackDays))),
+        key: const Key('aiStopSharingDialog'),
+        title: Text(ctx.l10n.aiStopSharingTitle(provider)),
+        content: Text(ctx.l10n.aiStopSharingBody(provider)),
         actions: [
           TextButton(
-              key: const Key('watcherDisclosureCancel'),
               onPressed: () => Navigator.pop(ctx, false),
               child: Text(ctx.l10n.cancel)),
           FilledButton(
-              key: const Key('watcherDisclosureContinue'),
+              key: const Key('aiStopSharingConfirm'),
               onPressed: () => Navigator.pop(ctx, true),
-              child: Text(ctx.l10n.watcherDisclosureContinue)),
+              child: Text(ctx.l10n.aiStopSharingConfirm)),
         ],
       ),
     );
-    return go == true;
+    if (stop != true || !mounted) return;
+    await s.setAiConsent(currentAiConsentRoute(s), granted: false);
+    if (_watcherEnabled || s.watcherEnabled) await _toggleWatcher(false);
+    if (!mounted) return;
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(l.aiStopSharingDone(provider))));
   }
 
   Future<void> _pickReportTime() async {
@@ -477,6 +512,21 @@ class _SettingsScreenState extends State<SettingsScreen>
                 if (mounted) setState(() {}); // provider label refresh
               },
             ),
+            // Only while the current recipient is allowed: withdrawing a
+            // consent that was never given would be a dead row.
+            if (widget.settings
+                .hasAiConsent(currentAiConsentRoute(widget.settings)))
+              GroupedRow(
+                key: const Key('aiStopSharingRow'),
+                icon: Icons.block,
+                iconColor: theme.colorScheme.error,
+                title: context.l10n.aiStopSharingRow(providerDisplayLabel(
+                    context.l10n,
+                    widget.settings.provider,
+                    widget.settings.serverBackend)),
+                showChevron: false,
+                onTap: _stopSharing,
+              ),
           ],
         ),
   ];
@@ -595,6 +645,8 @@ class _SettingsScreenState extends State<SettingsScreen>
                     // A closure, not a snapshot: the quota latch can arm
                     // while the coverage screen's bulk run is mid-batch.
                     canAnalyze: () => widget.settings.canAnalyze,
+                    ensureConsent: (ctx) =>
+                        ensureAiConsent(ctx, widget.settings),
                     library: widget.photoLibrary,
                     logManually: (photo) async =>
                         await Navigator.of(context)

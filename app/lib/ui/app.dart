@@ -5,6 +5,7 @@ library;
 import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:io' show File, Platform;
 
+import '../core/ai_consent.dart' show aiConsentRoute;
 import '../core/setup_link.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -16,6 +17,7 @@ import 'package:path_provider/path_provider.dart'
 import 'package:flutter/material.dart';
 
 import '../services/photo/background_time.dart' show appEngineInForeground;
+import 'ai_consent.dart' show aiConsentCompanyName, ensureAiConsent;
 import 'background_glue.dart' show foregroundCatchUp;
 import 'screens/add_flow.dart';
 import 'screens/body_screen.dart';
@@ -113,7 +115,7 @@ class CalorieTrackerApp extends StatelessWidget {
     // app re-locales in place — no restart.
     final shell = HomeShell(services: services);
     Widget appFor(Locale? locale) => MaterialApp(
-          title: 'Bitewise',
+          title: 'Chopstats',
           scaffoldMessengerKey: messengerKey,
           // iOS scroll feel everywhere: bounce, no glow indicator.
           scrollBehavior: const _AppleScrollBehavior(),
@@ -170,6 +172,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // One-click setup: a bitewise://setup link (QR, adb, devicectl) lands
     // here whether the app was warm (stream) or cold (initial link).
     _linkSub = widget.services.setupLinks?.listen(_onSetupLink);
+    // A photo shared into the app waits for the AI consent (5.1.2(i)); the
+    // question needs this navigator, so the gate holds photos until now.
+    widget.services.sharedPhotoConsent?.attach(_askShareConsent);
     final initial = widget.services.initialSetupLink;
     if (initial != null) {
       unawaited(initial().then((uri) {
@@ -214,8 +219,17 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     }
   }
 
+  /// The share gate's question: true = allowed (and saved). Not now says
+  /// that the shared photo was not analyzed.
+  Future<bool> _askShareConsent() async {
+    if (!mounted) return false;
+    return ensureAiConsent(context, widget.services.settings,
+        declined: context.l10n.shareConsentDeclined);
+  }
+
   @override
   void dispose() {
+    widget.services.sharedPhotoConsent?.detach(_askShareConsent);
     _linkSub?.cancel();
     mealsChangedSignal.removeListener(_onMealsChanged);
     WidgetsBinding.instance.removeObserver(this);
@@ -244,10 +258,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         // The plan is named with the same words the Settings row shows
         // after confirming (Claude 订阅 / Claude Plan), not the raw id
         // 'claude' the link carries; the id itself is what gets saved.
-        content: Text(ctx.l10n.setupLinkBody(
-            link.server,
-            providerDisplayLabel(ctx.l10n, 'server', link.backend),
-            link.keyTail)),
+        // Confirming is also the AI consent for this plan (5.1.2(i)), so the
+        // dialog names the company the server passes the data to.
+        content: SingleChildScrollView(
+          child: Text([
+            ctx.l10n.setupLinkBody(
+                link.server,
+                providerDisplayLabel(ctx.l10n, 'server', link.backend),
+                link.keyTail),
+            ctx.l10n.setupLinkSharing(aiConsentCompanyName(ctx.l10n,
+                provider: 'server', serverBackend: link.backend)),
+          ].join('\n\n')),
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.of(ctx).pop(false),
@@ -261,6 +283,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     );
     if (ok != true || !mounted) return;
     final s = widget.services.settings;
+    // The confirmation named the plan's AI company: it is the consent for
+    // that recipient, saved before anything can be sent to it.
+    await s.setAiConsent(aiConsentRoute('server', link.backend),
+        granted: true);
     // Provider FIRST: the store routes apiKey to the active provider's slot.
     await s.update(
         provider: 'server',
@@ -483,7 +509,7 @@ class _StartupErrorAppState extends State<StartupErrorApp>
     final zh =
         WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh';
     return MaterialApp(
-      title: 'Bitewise',
+      title: 'Chopstats',
       home: Scaffold(
         body: Center(
           child: Padding(
@@ -493,7 +519,7 @@ class _StartupErrorAppState extends State<StartupErrorApp>
               children: [
                 const Icon(Icons.error_outline, size: 48),
                 const SizedBox(height: 12),
-                Text(zh ? '筷拍无法启动。' : 'Bitewise could not start.'),
+                Text(zh ? '筷拍无法启动。' : 'Chopstats could not start.'),
                 const SizedBox(height: 8),
                 Text(widget.error,
                     textAlign: TextAlign.center,
