@@ -98,9 +98,9 @@ where they now live (your files, your backup, or that provider's policy).
 
 ### Third parties and your consent
 
-BiteWise does not sell your data or share it with anyone, and its
-developer receives none of it. The only third party that receives
-anything is the one you set up under Settings › AI Provider:
+BiteWise does not sell your data. It shares it only with the AI
+recipient you set up under Settings › AI Provider, and its developer
+receives none of it. That recipient is:
 
 - **With an API key:** that AI provider — Google (Gemini), OpenAI,
   Anthropic (Claude), xAI (Grok), OpenRouter (which passes the request on
@@ -201,7 +201,7 @@ date. Questions: open an issue at
 
 ### 第三方与你的同意
 
-筷拍不会出售你的数据，也不会与任何人分享，开发者也收不到其中任何内容。唯一会收到内容的第三方，是你在 设置 › AI 服务 里设置的那一个：
+筷拍不会出售你的数据，只会把它发送给你在 设置 › AI 服务 里设置的那个 AI 接收方，开发者也收不到其中任何内容。这个接收方是：
 
 - **使用 API Key 时：**该 AI 服务商——Google（Gemini）、OpenAI、Anthropic（Claude）、xAI（Grok）、OpenRouter（它会把请求转交给你所选模型背后的公司）、DeepSeek 深度求索、阿里云（Qwen 通义千问）、火山引擎 / 字节跳动（Doubao 豆包）或智谱（GLM）。
 - **使用「你自己的服务器」时：**你自己运行的服务器，以及你在它上面配置的 AI 套餐（Anthropic、智谱或火山引擎），由服务器把数据转交给它。

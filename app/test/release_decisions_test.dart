@@ -265,6 +265,46 @@ void main() {
         expect(section, contains(label));
       }
     });
+
+    // One rule for every row: what the app attaches by itself is declared
+    // as what it is; what the user types is Other User Content, whatever it
+    // is about. Fix's prompt turns a typed weight or workout into an entry
+    // (log_weight / log_activity), so the rows must not say "nothing sends
+    // workouts" or lean on a typed weight for Health (review 2026-10-29).
+    test('§ 4.3 counts typed weights and workouts as Other User Content', () {
+      final releasing = _readRepo('docs/RELEASING.md');
+      final section = releasing.substring(
+        releasing.indexOf('### 4.3 App Privacy'),
+        releasing.indexOf('### 4.4 Review submission checklist'),
+      );
+      String row(String start) {
+        final rows = section
+            .split('\n')
+            .where((l) => l.startsWith('| $start'))
+            .toList();
+        expect(rows, hasLength(1), reason: 'one § 4.3 row for $start');
+        return rows.single;
+      }
+
+      final prompt = _readRepo('shared/prompts/text_handler_prompt.txt');
+      expect(prompt, contains('"log_weight"'));
+      expect(prompt, contains('"log_activity"'));
+
+      final health = row('Health & Fitness → **Health**');
+      expect(health, isNot(contains('typed')));
+      final fitness = row('Health & Fitness → Fitness');
+      expect(fitness, contains('**No**'));
+      expect(fitness, isNot(contains('nothing sends')));
+      expect(fitness, contains('Other User Content'));
+      final other = row('User Content → **Other User Content**');
+      expect(other, contains('weight'));
+      expect(other, contains('workout'));
+      // The manifest follows the table: Fitness stays undeclared.
+      expect(
+        _read('ios/Runner/PrivacyInfo.xcprivacy'),
+        isNot(contains('NSPrivacyCollectedDataTypeFitness')),
+      );
+    });
   });
 
   group('R-F14: the support page', () {
@@ -443,6 +483,35 @@ void main() {
       for (final claim in ['equal protection', 'same protection', '同等保护']) {
         expect(policy, isNot(contains(claim)));
       }
+    });
+
+    // The section names the recipient, so it must not open by saying the
+    // data is shared with no one (review 2026-10-29).
+    test('says who it shares with, never "with anyone"', () {
+      final flat = policy.replaceAll(RegExp(r'\s+'), ' ');
+      for (final claim in [
+        'share it with anyone',
+        'shared with anyone',
+        'with no one',
+        '不会与任何人分享',
+        '不与任何人分享',
+      ]) {
+        expect(flat, isNot(contains(claim)));
+      }
+      expect(
+        flat,
+        contains(
+          'BiteWise does not sell your data. It shares it only with the AI '
+          'recipient you set up under Settings › AI Provider',
+        ),
+      );
+      expect(
+        policy,
+        contains(
+          '筷拍不会出售你的数据，'
+          '只会把它发送给你在 设置 › AI 服务 里设置的那个 AI 接收方',
+        ),
+      );
     });
 
     test('Describe sends no meals; Fix sends the last 7 days', () {

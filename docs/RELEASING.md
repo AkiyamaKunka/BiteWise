@@ -592,10 +592,21 @@ defensible:
 | Data type (answer B) | Collected? | Linked to the user | Tracking | Purpose |
 |---|---|---|---|---|
 | Photos or Videos | Yes — sent to the user-selected AI provider for analysis; not retained by the developer | No | No | App Functionality |
-| Health & Fitness → **Health** (meal calories and macros, the dietary profile, a weight typed into a request) | Yes — with every photo and every Fix request, to the same provider | No | No | App Functionality |
-| User Content → **Other User Content** (typed meal descriptions and corrections) | Yes — to the same provider | No | No | App Functionality |
-| Health & Fitness → Fitness | **No** — nothing sends workouts; the Garmin fetch from the user's own server sends only a date | | | |
+| Health & Fitness → **Health** (meal calories and macros, and the dietary profile, which the app attaches itself) | Yes — with every photo and every Fix request, to the same provider | No | No | App Functionality |
+| User Content → **Other User Content** (what the user types into *Describe a meal* and *Fix or delete a meal*: meal descriptions and corrections, and also a weight or a workout typed into Fix, such as "I weigh 72 kg" or "burned 450 calories on my 5 km run", which the app then logs as a weight or an activity) | Yes — to the same provider | No | No | App Functionality |
+| Health & Fitness → Fitness | **No** — the app attaches no stored workout, step or weight record to any request (a photo carries that day's meals, Fix the last 7 days of meals); a workout the user types goes only as that typed text, declared above as Other User Content; the Garmin fetch from the user's own server sends only a date | | | |
 | Everything else (contacts, location, identifiers, diagnostics, usage) | No | | | |
+
+The rule behind the rows: what the app attaches by itself is declared as
+what it is (meals and the dietary profile → Health); what the user types
+is declared as Other User Content, whatever it is about, as for any
+free-text field. So a typed weight is not why Health is ticked, and a
+typed workout does not tick Fitness. Declaring typed text by its subject
+instead would add *Health & Fitness* → Fitness, a stricter reading the
+owner can still choose: the product page's summary card would not change
+(it already shows *Health & Fitness*), only its details would list
+Fitness, and the Runner manifest would need
+`NSPrivacyCollectedDataTypeFitness` to match.
 
 **The answers, click by click** (App Store Connect as of 2026-10; the
 console moves things around, so match the wording, not the position):
