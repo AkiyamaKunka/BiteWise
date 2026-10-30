@@ -54,8 +54,8 @@ Where each provider's key comes from:
   real-name verification); the default flash model is free.
 
 **Your own server** (Settings › AI Provider › Your own server) is for
-people who run the open-source server from the Chopstats repository with an
-AI plan signed in on it: enter the server's address and upload key there.
+people who run the open-source server from the app's GitHub repository
+(<https://github.com/AkiyamaKunka/BiteWise>) with an AI plan signed in on it: enter the server's address and upload key there.
 
 ## Troubleshooting
 

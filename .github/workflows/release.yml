@@ -740,7 +740,7 @@ jobs:
           [ -n "$apk" ] || { echo "::error::arm64 APK missing from the android artifact"; exit 1; }
           # From the build name, not $TAG: a v1.5.0+7 tag has a '+', which is
           # not a legal release-asset character (GitHub rewrites it).
-          asset="BiteWise-v${BUILD_NAME}-b${BUILD_NUMBER}-arm64-v8a.apk"
+          asset="Chopstats-v${BUILD_NAME}-b${BUILD_NUMBER}-arm64-v8a.apk"
           cp "$apk" "$asset"
           cat > notes.md <<EOF
           **Android (sideload):** install \`$asset\` (arm64, every phone since ~2017). Builds before v1.5.0 were signed with a debug key, so Android refuses to upgrade over them: uninstall the old BiteWise once (export your log first: Settings → Export), then install this one. Installed from Google Play? Update there, not with this file: the Play build and this APK can carry different signatures, and switching between them needs an uninstall (export your log first).
@@ -751,5 +751,5 @@ jobs:
             gh release upload "$TAG" "$asset" --clobber --repo "$GITHUB_REPOSITORY"
           else
             gh release create "$TAG" "$asset" --repo "$GITHUB_REPOSITORY" --verify-tag \
-              --title "BiteWise $TAG" --notes-file notes.md --generate-notes
+              --title "Chopstats $TAG" --notes-file notes.md --generate-notes
           fi
