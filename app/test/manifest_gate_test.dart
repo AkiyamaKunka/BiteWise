@@ -695,30 +695,40 @@ void main() {
     expect(zh, contains('在本机记住你在那里确认或排除的餐厅'));
   });
 
-  // App Store Connect's App Privacy answer is "Data Not Collected" with the
-  // rationale in docs/RELEASING.md § 4.3 (design "Store disclosures"): the
-  // developer collects nothing; data goes from the user's phone to the
-  // user's own server or provider account, and Apple Maps' queries are
-  // Apple's. Both manifests must say the same — no collected data types.
-  test('both privacy manifests declare no collected data types', () {
+  // App Store Connect's App Privacy answer is B (docs/RELEASING.md § 4.3,
+  // owner decision R-F8): the Runner manifest declares what leaves the
+  // phone (photos, health, other user content; release_decisions_test.dart
+  // pins the three entries). The restaurant lookup adds no data type: its
+  // chain and food names go to the same user-chosen recipient as the
+  // photos, and the photo location goes only to Apple's MapKit — so no
+  // location type, in either manifest. The share extension sends nothing
+  // itself and keeps an empty array.
+  test('the restaurant lookup adds no collected data type to either manifest',
+      () {
     final ios = '${_appRoot().path}/ios';
     for (final target in const ['Runner', 'ShareExtension']) {
       final plist =
           File('$ios/$target/PrivacyInfo.xcprivacy').readAsStringSync();
-      expect(
-          RegExp(r'<key>NSPrivacyCollectedDataTypes</key>\s*<array\s*/>')
-              .hasMatch(plist),
-          isTrue,
-          reason: '$target/PrivacyInfo.xcprivacy must keep '
-              'NSPrivacyCollectedDataTypes an empty array (RELEASING.md § 4.3)');
+      expect(plist, isNot(contains('NSPrivacyCollectedDataTypePreciseLocation')),
+          reason: target);
+      expect(plist, isNot(contains('NSPrivacyCollectedDataTypeCoarseLocation')),
+          reason: target);
       expect(
           RegExp(r'<key>NSPrivacyTracking</key>\s*<false\s*/>').hasMatch(plist),
           isTrue,
           reason: target);
     }
+    final share = File('$ios/ShareExtension/PrivacyInfo.xcprivacy')
+        .readAsStringSync();
+    expect(
+        RegExp(r'<key>NSPrivacyCollectedDataTypes</key>\s*<array\s*/>')
+            .hasMatch(share),
+        isTrue,
+        reason: 'ShareExtension/PrivacyInfo.xcprivacy must keep '
+            'NSPrivacyCollectedDataTypes an empty array (RELEASING.md § 4.3)');
     final releasing = File('${_appRoot().parent.path}/docs/RELEASING.md')
         .readAsStringSync();
     expect(releasing, contains('NSPrivacyCollectedDataTypes'));
-    expect(releasing, contains('Data Not Collected'));
+    expect(releasing, contains('the lookup adds no data type'));
   });
 }

@@ -8,19 +8,28 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
+import '../ai_consent.dart';
 import '../meal_in_use.dart';
 import '../nl_presenter.dart';
 import '../l10n.dart';
+import '../services.dart' show SettingsStore;
 import '../widgets/small_spinner.dart';
 
 class FixMealScreen extends StatefulWidget {
   final NlExecutor executor;
 
+  /// For the AI consent before the request (and the last 7 days of meals
+  /// it carries) leaves the phone. Required, so a call site cannot drop
+  /// the question silently; tests that are about something else pass a
+  /// FakeSettings, which allows every recipient.
+  final SettingsStore settings;
+
   /// Every meal is held while a request is pending (design R6a): the model
   /// picks which meal a sentence fixes, so the restaurant assist waits
   /// until the correction has landed. Null: nothing to tell.
   final MealInUseRegistry? inUse;
-  const FixMealScreen({super.key, required this.executor, this.inUse});
+  const FixMealScreen(
+      {super.key, required this.executor, required this.settings, this.inUse});
 
   @override
   State<FixMealScreen> createState() => _FixMealScreenState();
@@ -29,6 +38,7 @@ class FixMealScreen extends StatefulWidget {
 class _FixMealScreenState extends State<FixMealScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _sending = false;
+  bool _askingConsent = false;
   final List<String> _log = []; // requests that changed something, newest last
 
   @override
@@ -39,7 +49,12 @@ class _FixMealScreenState extends State<FixMealScreen> {
 
   Future<void> _send() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _sending || _askingConsent) return;
+    // App Store 5.1.2(i): permission for this AI recipient first.
+    _askingConsent = true;
+    final allowed = await ensureAiConsent(context, widget.settings);
+    _askingConsent = false;
+    if (!allowed || !mounted || _sending) return;
     setState(() => _sending = true);
     // Held until the executor returns: its write is done by then (a staged
     // delete only lands after the modal, through confirmPendingDelete).

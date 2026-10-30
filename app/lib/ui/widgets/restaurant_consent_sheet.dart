@@ -5,7 +5,7 @@
 /// The sheet names the recipient chain — the user's own server (Claude web
 /// search), Anthropic, or OpenRouter and Exa — and says exactly what leaves
 /// the phone: on iPhone, the photo's location goes only to Apple Maps on
-/// the phone; the recipient gets the name of a chain from BiteWise's own
+/// the phone; the recipient gets the name of a chain from the app's own
 /// table and the food names and amounts, never the photo, its location,
 /// the city, the street or the distance. On Claude Plan it also says the
 /// https rule and that lookups there are suggestions only (amendment to
@@ -13,7 +13,7 @@
 ///
 /// It is shown when the mode is first turned on, when the recipient
 /// changes (the assist is paused until it is answered), and before a
-/// manual lookup without consent. A recipient BiteWise has no copy for can
+/// manual lookup without consent. A recipient the app has no copy for can
 /// never be consented to: its lookups stay off.
 library;
 
@@ -34,7 +34,7 @@ enum RestaurantConsentKind { enable, recipientChanged, manual }
 /// The user's answer. Not now / Cancel / a dismissed sheet is null.
 enum RestaurantConsentChoice { useLocation, brandOnly }
 
-/// The recipient's wording, or null when BiteWise has none for it (an
+/// The recipient's wording, or null when the app has none for it (an
 /// unsupported provider, or one built but not yet signed off): such a
 /// recipient can never be consented to.
 ({String name, String footnote})? restaurantRecipientCopy(

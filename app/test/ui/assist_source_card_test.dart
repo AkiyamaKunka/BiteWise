@@ -1,7 +1,7 @@
 /// The restaurant assist on screen (design R7b): the meal card's chip and
 /// dot, the editor's source card in its applied, suggested, stale and
 /// context-only states (en and zh), what can never be a link, and the
-/// 'Which restaurant?' search over BiteWise's own chain table only.
+/// 'Which restaurant?' search over the app's own chain table only.
 library;
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -239,8 +239,8 @@ void main() {
     });
 
     test('provider labels as Settings names them', () {
-      expect(assistProviderLabel(_en, 'claude_plan'), 'Claude Plan');
-      expect(assistProviderLabel(_zh, 'claude_plan'), 'Claude 订阅');
+      expect(assistProviderLabel(_en, 'claude_plan'), 'Claude (server)');
+      expect(assistProviderLabel(_zh, 'claude_plan'), '你服务器上的 Claude');
       expect(assistProviderLabel(_en, 'anthropic'), 'Claude');
       expect(assistProviderLabel(_en, 'openrouter'), 'OpenRouter');
       expect(assistProviderLabel(_en, 'gemini'), '');
@@ -321,9 +321,9 @@ void main() {
           'en',
           'Use published numbers',
           'Not confirmed on the source page',
-          'via Claude Plan · 2026-10-24',
+          'via Claude (server) · 2026-10-24',
         ),
-        ('zh', '采用公布数值', '未在来源页面确认', '通过 Claude 订阅 · 2026-10-24'),
+        ('zh', '采用公布数值', '未在来源页面确认', '通过 你服务器上的 Claude · 2026-10-24'),
       ]) {
         await tester.pumpWidget(
           _app(

@@ -1,0 +1,6 @@
+The first App Store release of Chopstats · 筷拍.
+
+• Log a meal from a photo, from a description in any language, or by typing the numbers yourself
+• Watch Camera Roll: new food photos are logged automatically
+• Today, 30-day history, weight and body measurements
+• Bring your own AI key: no account, and your log stays on your phone

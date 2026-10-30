@@ -23,7 +23,7 @@
 /// the meal database, an export, a backup or a log (the cells' toString
 /// says nothing). Reads never throw and come back empty on a missing,
 /// corrupt or other-version document; entries past their TTL, with an
-/// unreadable cell or a chain key outside BiteWise's table are dropped.
+/// unreadable cell or a chain key outside the app's table are dropped.
 /// Writes never throw either and say whether they landed. The app engine
 /// is the only writer (MealAssist and the editor's feedback actions);
 /// writes through one instance run one at a time.

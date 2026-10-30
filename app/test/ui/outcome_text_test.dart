@@ -219,11 +219,11 @@ void main() {
       final credits = o('Fable 5 requires usage credits', retryable: false);
       expect(outcomeBody(zh, credits),
           '你的服务器无法使用所选模型：Fable 5 requires usage credits —— '
-          '请在 设置 › AI 服务 › 订阅 › 模型 里换一个模型。');
+          '请在 设置 › AI 服务 › 你自己的服务器 › 模型 里换一个模型。');
       expect(outcomeBody(zh, credits), isNot(contains('重试')));
       expect(outcomeBody(zh, credits), isNot(contains('❌')));
       expect(outcomeBody(en, credits),
-          contains('Settings › AI Provider › Subscription › Model'));
+          contains('Settings › AI Provider › Your own server › Model'));
       final empty = o('the analysis ran but produced no usable result',
           retryable: false);
       expect(outcomeBody(zh, empty), contains('AI 的回答无法使用'));

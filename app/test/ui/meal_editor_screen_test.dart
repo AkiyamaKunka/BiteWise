@@ -696,7 +696,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(assist.acts.single.action, AssistUserAction.correct);
       expect(
-        find.text("Thanks. BiteWise will remember McDonald's here."),
+        find.text("Thanks. Chopstats will remember McDonald's here."),
         findsOneWidget,
       );
 
@@ -723,7 +723,7 @@ void main() {
       expect(assist.acts.single.action, AssistUserAction.acceptSuggestion);
       expect(dao.meals.first.analysis['total_calories'], 590);
       expect(
-        find.text("Thanks. BiteWise will remember McDonald's here."),
+        find.text("Thanks. Chopstats will remember McDonald's here."),
         findsOneWidget,
       );
     });
@@ -998,7 +998,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(
         find.text(
-          'No restaurant chain BiteWise knows was found for this meal.',
+          'No restaurant chain Chopstats knows was found for this meal.',
         ),
         findsOneWidget,
       );

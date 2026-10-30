@@ -46,6 +46,7 @@ import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
+import 'ai_consent.dart' show SharedPhotoConsentGate;
 import 'background_glue.dart';
 import 'migrations.dart';
 import 'outcome_text.dart' show assistAppliedSnackbar, outcomeSnackbar;
@@ -336,15 +337,19 @@ class AppServices {
     // cheap end of the friend cohort. PhotoManager.requestPermissionExtend
     // handles every version and reports limited vs full.
     Future<bool> requestPhotos() => photoLibrary.requestPermission();
+    final store = _AppSettingsStore(settings, notifier,
+        // iOS: a slot edit must re-arm the OS card for the new time.
+        onReportTimeChanged: osSchedulesSummary ? armOsSummary : null);
+    // A shared photo waits for the AI consent (App Store 5.1.2(i)) until
+    // the app shell can ask; an allowed recipient passes straight through.
+    final shareConsent = SharedPhotoConsentGate(store);
     final ui = UiServices(
       dao: dao,
       analyzer: analyzer,
       executor: executor,
       photoIntake: photoIntake,
       reports: reports,
-      settings: _AppSettingsStore(settings, notifier,
-          // iOS: a slot edit must re-arm the OS card for the new time.
-          onReportTimeChanged: osSchedulesSummary ? armOsSummary : null),
+      settings: store,
       settingsChanges: settings,
       refreshDailyNotification: osSchedulesSummary ? armOsSummary : null,
       garminDaily: makeGarminDailyFetch(settings),
@@ -362,6 +367,7 @@ class AppServices {
       // enqueue() chains onto the tail; process() would race it.
       processPhoto: pipeline.enqueue,
       announceOutcome: announce,
+      sharedPhotoConsent: shareConsent,
       photoLibrary: photoLibrary,
       startClaudeAuth: serverAnalyzer.startClaudeAuth,
       completeClaudeAuth: serverAnalyzer.completeClaudeAuth,
@@ -395,7 +401,9 @@ class AppServices {
       restaurantAssist: restaurantAssist,
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
-    pipeline.bindStream(shareIntake.photos()); // share sheet (deliberate)
+    // Share sheet (deliberate), each photo held until its AI recipient is
+    // allowed.
+    pipeline.bindStream(shareConsent.gate(shareIntake.photos()));
     mealAssist.start();
     var catchingUp = false;
     if (settings.watcherEnabled) {
@@ -487,6 +495,11 @@ class _AppSettingsStore implements SettingsStore {
   @override
   Future<void> credentialsProven({required bool reachedGeneration}) =>
       _s.credentialsProven(reachedGeneration: reachedGeneration);
+  @override
+  bool hasAiConsent(String route) => _s.hasAiConsent(route);
+  @override
+  Future<void> setAiConsent(String route, {required bool granted}) =>
+      _s.setAiConsent(route, granted: granted);
   @override
   String get provider => _s.provider.name;
   @override

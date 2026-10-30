@@ -1,4 +1,4 @@
-/// core/chain_match.dart: BiteWise's own US chain table and the matcher
+/// core/chain_match.dart: the app's own US chain table and the matcher
 /// that maps a place or a printed brand onto it (restaurant assist, R2a).
 ///
 /// Only a chain's canonical name from this table ever reaches an AI

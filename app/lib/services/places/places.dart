@@ -7,7 +7,7 @@
 /// The coordinates go to Apple only, as when using Maps; no location
 /// permission is involved. The places come back nearest first and stay in
 /// memory for one chain match (R2c): their names are compared with
-/// BiteWise's own US chain table, and only that table's canonical name can
+/// the app's own US chain table, and only that table's canonical name can
 /// ever reach an AI recipient. Each place's ISO country, when Apple lists
 /// one, only tells the assist whether the photo was taken in the US
 /// (core/meal_country.dart). Nothing returned here is stored, exported,

@@ -305,7 +305,7 @@ void main() {
     await pumpDenied(tester, openSystemSettings: () async => opened++);
     expect(find.byKey(const Key('leftoverPhotoPermissionDenied')),
         findsOneWidget);
-    expect(find.text("Bitewise isn't allowed to see your photos."),
+    expect(find.text("Chopstats isn't allowed to see your photos."),
         findsOneWidget);
     expect(find.text('No recent photos found.'), findsNothing,
         reason: 'a denial is not an empty camera roll');

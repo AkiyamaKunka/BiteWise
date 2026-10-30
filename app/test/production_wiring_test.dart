@@ -315,6 +315,40 @@ void main() {
     });
   });
 
+  // App Store 5.1.2(i), review run 7: a shared photo waits for the AI
+  // consent through this gate. PR #19 rewrites the same line, and a merge
+  // that keeps its side would send shared photos unasked with every
+  // behavioural test still green (they drive the gate directly).
+  group('lib/ui/di.dart (the AI consent for shared photos)', () {
+    String init() => _body(
+      _source('lib/ui/di.dart'),
+      'static Future<AppServices> init(',
+      indent: '  ',
+    );
+
+    test('a shared photo goes through the gate, built on the app\'s own '
+        'store and handed to the app shell', () {
+      expect(
+        init(),
+        _wired(
+          r'pipeline\.bindStream\(shareConsent\.gate\('
+          r'shareIntake\.photos\(\)\)\);',
+        ),
+      );
+      expect(
+        init(),
+        isNot(_wired(r'bindStream\(shareIntake\.photos\(\)\)')),
+        reason: 'no second, ungated subscription to the share sheet',
+      );
+      expect(
+        init(),
+        _wired(r'final shareConsent = SharedPhotoConsentGate\(store\);'),
+      );
+      expect(init(), _wired(r'\n\s*settings: store,'));
+      expect(init(), _wired(r'\n\s*sharedPhotoConsent: shareConsent,'));
+    });
+  });
+
   group('lib/ui/background_glue.dart (the headless run)', () {
     String glue() => _source('lib/ui/background_glue.dart');
     String launch() => _body(glue(), 'Future<bool> runHeadlessBackfill({');

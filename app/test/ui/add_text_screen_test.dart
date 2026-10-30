@@ -18,7 +18,8 @@ void main() {
   });
 
   Widget host() =>
-      MaterialApp(home: AddTextScreen(executor: executor, dao: dao));
+      MaterialApp(home: AddTextScreen(
+          executor: executor, dao: dao, settings: FakeSettings()));
 
   testWidgets('estimate opens the editor prefilled; save inserts the meal',
       (tester) async {
