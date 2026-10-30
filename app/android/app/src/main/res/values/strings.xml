@@ -2,5 +2,5 @@
 <resources>
     <!-- Launcher label. The Chinese name 筷拍 (chopsticks + snap) lives in
          values-zh; the label follows the SYSTEM language. -->
-    <string name="app_name">BiteWise</string>
+    <string name="app_name">Chopstats</string>
 </resources>

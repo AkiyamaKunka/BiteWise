@@ -1,4 +1,4 @@
-BiteWise · 筷拍 turns your food photos into calorie and macro estimates using the AI service you choose, with your own API key. There is no account to create and no server of ours in between.
+Chopstats · 筷拍 turns your food photos into calorie and macro estimates using the AI service you choose, with your own API key. There is no account to create and no server of ours in between.
 
 HOW IT WORKS
 • Take meal photos the way you already do. Pick one from your recent photos, share it from the Photos app, or turn on Watch Camera Roll and new food photos are logged for you.
@@ -23,7 +23,7 @@ BRING YOUR OWN AI
 Paste an API key from Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao or Zhipu GLM. You pay the provider directly for what you use, and some offer a free tier. A one-tap test tells you whether your key, network and quota work. Advanced users can route analysis through a server they run themselves.
 
 YOUR DATA STAYS ON YOUR PHONE
-• No sign-up and no account. BiteWise has no backend, and the developer receives none of your data.
+• No sign-up and no account. Chopstats has no backend, and the developer receives none of your data.
 • Your meals, weight and settings are stored on your phone. API keys are kept in the iOS Keychain.
 • Data leaves your phone only to reach the AI service you chose (or your own server, if you set one up): the photo or text being analyzed, plus the context it needs, such as your dietary profile or recent meal names when you ask for a fix. The copy of a photo that is sent has its embedded metadata, such as location, removed. The privacy policy lists exactly what is sent.
 • With Watch Camera Roll on, every new photo, including ones that are not food, is sent to that AI service so it can tell whether it is a meal. iOS decides when background scans run (usually a few times a day), and opening the app catches up. You can turn it off at any time.
@@ -33,4 +33,4 @@ YOUR DATA STAYS ON YOUR PHONE
 Available in English and Simplified Chinese.
 
 PLEASE NOTE
-Calories and nutrients are AI estimates from photos and descriptions, and they can be wrong. Check them and correct them. BiteWise is not a medical device and does not give medical or nutrition advice. Talk to a doctor or registered dietitian before you make health decisions.
+Calories and nutrients are AI estimates from photos and descriptions, and they can be wrong. Check them and correct them. Chopstats is not a medical device and does not give medical or nutrition advice. Talk to a doctor or registered dietitian before you make health decisions.

@@ -1,6 +1,6 @@
-# BiteWise · 筷拍 — Support
+# Chopstats · 筷拍 — Support
 
-BiteWise is an iPhone app (iOS 15 or later) that turns your food photos
+Chopstats is an iPhone app (iOS 15 or later) that turns your food photos
 into calorie and macro estimates using the AI service you choose, with
 your own API key. There is no account, and no server of ours in between:
 your meal log stays on your phone. Privacy details are in the
@@ -9,7 +9,7 @@ your meal log stays on your phone. Privacy details are in the
 ## What it does
 
 - **Log a meal** from a photo (Today › **+ Log** › *From recent photos*,
-  or share a photo into BiteWise from Photos or Safari), by describing it
+  or share a photo into Chopstats from Photos or Safari), by describing it
   (*Describe a meal*), or by typing the numbers yourself.
 - **Watch Camera Roll** (Settings, optional): new food photos are logged
   for you. Every new photo, including ones that are not food, is sent to
@@ -21,7 +21,7 @@ your meal log stays on your phone. Privacy details are in the
 - Today, a 30-day history, weight and body measurements, and an optional
   daily summary notification.
 
-Calories and nutrients are AI estimates and can be wrong. BiteWise is not
+Calories and nutrients are AI estimates and can be wrong. Chopstats is not
 a medical device and does not give medical or nutrition advice.
 
 ## Getting started: bring your own key
@@ -30,7 +30,7 @@ a medical device and does not give medical or nutrition advice.
 2. Paste its API key (it saves as you type; it is kept in the iOS
    Keychain on this phone).
 3. Tap **Test This Provider**. The first time anything is sent to a
-   provider, BiteWise asks for your permission; tap **Allow**.
+   provider, Chopstats asks for your permission; tap **Allow**.
 
 Where each provider's key comes from:
 
@@ -54,7 +54,7 @@ Where each provider's key comes from:
   real-name verification); the default flash model is free.
 
 **Your own server** (Settings › AI Provider › Your own server) is for
-people who run the open-source server from the BiteWise repository with an
+people who run the open-source server from the Chopstats repository with an
 AI plan signed in on it: enter the server's address and upload key there.
 
 ## Troubleshooting
@@ -72,9 +72,9 @@ AI plan signed in on it: enter the server's address and upload key there.
   in the provider's console, or wait for a free tier's daily limit to
   reset. Photos are kept and can be analyzed again.
 - **Watch Camera Roll misses photos.** It needs full photo access (iOS
-  Settings › Privacy & Security › Photos › BiteWise › *Full Access*) and
+  Settings › Privacy & Security › Photos › Chopstats › *Full Access*) and
   Background App Refresh (iOS Settings › General › Background App
-  Refresh). iOS decides when background scans run; opening BiteWise
+  Refresh). iOS decides when background scans run; opening Chopstats
   catches up. Settings › **Photo Coverage** shows which recent photos were
   logged and can retry the rest.
 - **A number looks wrong.** Open the meal and edit it, or use *Fix or
@@ -88,7 +88,7 @@ AI plan signed in on it: enter the server's address and upload key there.
   included).
   **Import Data…** restores it, from a file or from the clipboard.
 - **Delete a meal**: open it and tap the delete button.
-- **Delete everything**: uninstall BiteWise; that removes everything it
+- **Delete everything**: uninstall Chopstats; that removes everything it
   stored on the phone. Your iCloud or computer backups and exported files
   may still hold a copy.
 - **Stop sharing with a provider**: Settings › **Stop Sharing with …**

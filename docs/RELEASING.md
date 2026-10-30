@@ -1,4 +1,4 @@
-# Releasing BiteWise · 筷拍
+# Releasing Chopstats · 筷拍
 
 How the app gets from a git tag to TestFlight / the App Store and to Google
 Play, and everything the owner has to do once by hand before that works.
@@ -34,9 +34,9 @@ Identifiers that must match everywhere:
 | iOS app bundle id | `dev.calorietracker.calorieTracker` |
 | iOS share-extension bundle id | `dev.calorietracker.calorieTracker.ShareExtension` |
 | App Group (both targets) | `group.dev.calorietracker.calorieTracker` |
-| Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` (a **free** personal team, see § 1.2) |
+| Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` — the paid Apple Developer Program (Individual) since 2026-10-29; the Team ID did not change on enrolment (§ 1.2), so the keychain and the dev build carry over |
 | Android package / application id | `dev.calorietracker.calorie_tracker` (permanent after the first Play upload) |
-| Display name | `BiteWise` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `BiteWise · 筷拍` (owner decision R-F9, 2026-10-29) |
+| Display name | `Chopstats` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `Chopstats · 筷拍` (owner decision R-F9, 2026-10-29; formerly BiteWise) |
 | Version | `app/pubspec.yaml` `version: 1.5.0+7` → `CFBundleShortVersionString` / `versionName` = `1.5.0`; the build number is stamped by CI (§ 5) |
 
 ---
@@ -51,19 +51,27 @@ finding ids refer to the 2026-10-25 App Review audit. The owner decided
 steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
 **done in this branch**; the demo key (step 7, R-F6) is still open.
 
-1. **Name** (R-F9) — **DONE 2026-10-29: keep the name; the English casing
-   is BiteWise.** The store name stays `BiteWise · 筷拍`. **BiteWise** is now
-   the English display name everywhere: `CFBundleDisplayName` in
-   `Info.plist` and en `InfoPlist.strings` of Runner **and** ShareExtension,
-   the photo purpose string in both, every en UI string (`app_en.arb`, the
-   startup-error screen, the `MaterialApp` title), the Android launcher
-   label, `docs/PRIVACY.md`, `docs/SUPPORT.md`, the README heading and the
-   store metadata. The zh display name stays 筷拍; the `bitewise://` URL
-   scheme is unchanged. Pinned by `app/test/release_decisions_test.dart`.
-   Background, still worth a look before the upload: a live US app is
-   called *Bitewise: AI Calorie Tracker* (Finn Pauls, Health & Fitness, last
-   updated 2023-09); a USPTO registration for BITEWISE in classes 9/42/44
-   would mean renaming the English part.
+1. **Name** (R-F9) — **DONE 2026-10-29: renamed to Chopstats.** A check on
+   2026-10-29 found 12+ live US App Store apps called Bitewise/BiteWise
+   (most of them calorie trackers, two sellers are companies named
+   Bitewise) and a crowded BITE-/-WISE field at the USPTO, so the English
+   name changed. **Chopstats** (筷 chopsticks → stats) had no same-name US
+   App Store app and no live or pending USPTO mark (one dead filing); the
+   runners-up were Forktally, Pictrition, Platemetry and Gramcracker. This
+   is a practical check, not a lawyer's clearance search (state registers
+   and unregistered use were not searched). The store name is
+   `Chopstats · 筷拍` (14 characters). **Chopstats** is the English display
+   name everywhere: `CFBundleDisplayName` in `Info.plist` and en
+   `InfoPlist.strings` of Runner **and** ShareExtension, the photo purpose
+   string in both, every en UI string (`app_en.arb`, the startup-error
+   screen, the `MaterialApp` title), the OpenRouter `X-OpenRouter-Title`,
+   the Android launcher label, `docs/PRIVACY.md`, `docs/SUPPORT.md`, the
+   README heading and the store metadata. Unchanged on purpose: the zh
+   display name 筷拍, the `bitewise://` URL scheme (the setup links and
+   `scripts/provision_phone.sh` use it), the bundle ids, the App Group, the
+   GitHub repository name, and the certificate/profile labels in § 1.6 and
+   `ExportOptions.plist` (internal names nobody else sees). Pinned by
+   `app/test/release_decisions_test.dart`.
 2. **The open product questions** — **DONE 2026-10-29**:
    - *Own-server row* (R-F5) — **A, neutral.** The connection type that
      said "Subscription" is **Your own server** / 你自己的服务器, with a
@@ -122,7 +130,12 @@ steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
    unticked, leaves `main` behind the App Store).
 4. Enrol, check the Team ID, create the App IDs, the App Group and the app
    record (§ 1.1–1.4): primary language **English (U.S.)**, zh-Hans as an
-   optional localization; name from step 1. **If the Team ID is no longer
+   optional localization; name from step 1. **Enrolment and the Team ID
+   check are DONE (2026-10-29):** the owner enrolled as an Individual with
+   the same Apple ID, Xcode shows the team as a paid Developer Team, and a
+   development build signed afterwards carries team `WLQB3YB22M` with a
+   one-year profile — the Team ID did not change, so the export below is
+   not needed. Kept for reference: **if the Team ID were no longer
    `WLQB3YB22M`**, iOS will refuse to install the TestFlight build over
    today's dev build (§ 1.2), and deleting the dev build wipes its meals
    and settings. So, at step 6:
@@ -189,7 +202,7 @@ The owner's decisions of 2026-10-29 (owner steps 1–2) add these; every hunk
 again keeps both sides:
 - `Runner/Info.plist` and `Runner/{en,zh-Hans}.lproj/InfoPlist.strings`:
   #19 extends `NSPhotoLibraryUsageDescription` with the photo-location
-  sentence. Take #19's text, write **BiteWise** in both of its en
+  sentence. Take #19's text, write **Chopstats** in both of its en
   sentences, and copy the result to the ShareExtension's `Info.plist` and
   `InfoPlist.strings` (en and zh-Hans): `share_extension_plist_test.dart`
   wants them equal to Runner's.
@@ -202,7 +215,7 @@ again keeps both sides:
   stays **B**, and the lookup adds no type (chain and food names go to the
   same user-chosen recipient as the photos; the photo location goes only to
   Apple's MapKit, so Location stays No).
-- `app_en.arb` / `app_zh.arb`: #19's own strings already write BiteWise
+- `app_en.arb` / `app_zh.arb`: #19's own strings write BiteWise — rename them to Chopstats —
   and carry no VPN text. Its tests pin the old own-server labels — 'Claude
   Plan' / 'Claude 订阅' through `planShortClaude`
   (`assistProviderLabel`) in `test/ui/assist_source_card_test.dart`,
@@ -237,9 +250,10 @@ sending lookups (a manual one, or a meal still waiting for one).
 
 ### 1.1 Enrol in the Apple Developer Program
 
-The team `WLQB3YB22M` in the project is a free personal team: 7-day
-profiles, no TestFlight, no App Store, no App Store Connect API. Nothing in
-this document works until the same Apple Account is enrolled:
+**Done 2026-10-29** (Individual, same Apple ID; the Team ID stayed
+`WLQB3YB22M`). Before that, the team was a free personal team: 7-day
+profiles, no TestFlight, no App Store, no App Store Connect API. The steps,
+for reference:
 
 1. <https://developer.apple.com/programs/enroll/> → Individual. Needs
    two-factor authentication on the Apple Account and your legal name.
@@ -280,7 +294,7 @@ owner's iPhone again (the keychain migration is one-way).
 <https://developer.apple.com/account/resources/identifiers/list>
 
 1. **App Group**: Identifiers → + → App Groups → identifier
-   `group.dev.calorietracker.calorieTracker`, description "BiteWise".
+   `group.dev.calorietracker.calorieTracker`, description "Chopstats".
 2. **App ID** `dev.calorietracker.calorieTracker` (explicit, type App):
    Capabilities → tick **App Groups** → Configure → select the group above.
    Also tick nothing else; background fetch needs no capability.
@@ -295,7 +309,7 @@ the upload with ITMS-90078 (see § 9).
 
 <https://appstoreconnect.apple.com> → My Apps → + → New App:
 
-- Platform iOS; Name `BiteWise · 筷拍` (30 chars max; the name is global,
+- Platform iOS; Name `Chopstats · 筷拍` (30 chars max; the name is global,
   pick another if taken — and see owner step 1 about the existing
   *Bitewise: AI Calorie Tracker*); Primary language **English (U.S.)** (the
   listing is US-only), with Chinese (Simplified) as an optional
@@ -553,7 +567,7 @@ phone (see § 1.2): Settings shows the saved provider keys and the server
 URL (with an unchanged Team ID the build installs over the dev build and
 keeps them; after a Team ID change it is the fresh install of owner
 step 4); the 后台扫描 row keeps advancing with the phone locked; the share
-sheet still offers BiteWise.
+sheet still offers Chopstats.
 
 ### 4.3 App Privacy (nutrition labels) and the BYO-key model
 
@@ -564,7 +578,7 @@ App Store Connect → App Privacy. Apple's definition of *collect* is
 third-party partners to access it for a period longer than what is
 necessary to service the transmitted request in real time", where
 *third-party partners* are SDKs and vendors whose code is in the app.
-BiteWise has no developer backend and links no provider SDK: it makes plain
+Chopstats has no developer backend and links no provider SDK: it makes plain
 HTTPS calls to the AI provider **the user chose with the user's own key**,
 or to a server the user runs. What leaves the phone, and to whom:
 
@@ -610,7 +624,7 @@ Fitness, and the Runner manifest would need
 **The answers, click by click** (App Store Connect as of 2026-10; the
 console moves things around, so match the wording, not the position):
 
-1. App Store Connect → **Apps** → *BiteWise · 筷拍* → sidebar → **App
+1. App Store Connect → **Apps** → *Chopstats · 筷拍* → sidebar → **App
    Privacy**.
 2. **Privacy Policy** → *Edit* → Privacy Policy URL
    `https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md`;
@@ -702,7 +716,7 @@ changes, change these answers, both manifests and `docs/PRIVACY.md`
   label against the build actually submitted; the own-server paragraph
   follows the R-F5 decision):
 
-  > BiteWise is a bring-your-own-key calorie tracker. It has no accounts and
+  > Chopstats is a bring-your-own-key calorie tracker. It has no accounts and
   > no backend of ours. The user pastes an API key for an AI provider they
   > already pay for (Google Gemini, OpenAI, Anthropic, xAI, OpenRouter,
   > DeepSeek, Alibaba Qwen, ByteDance Doubao, Zhipu GLM); that provider
@@ -719,7 +733,7 @@ changes, change these answers, both manifests and `docs/PRIVACY.md`
   > access, pick a food photo and tap Allow in the consent dialog; the
   > estimate appears after a few seconds. Without food photos on the test
   > device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
-  > soup"), or share a food image from Safari or Photos into BiteWise via
+  > soup"), or share a food image from Safari or Photos into Chopstats via
   > the share sheet. There is no in-app camera: photos come from the system
   > Camera app.
   >
@@ -783,7 +797,7 @@ changes, change these answers, both manifests and `docs/PRIVACY.md`
 identity verification; a personal account created after 13 Nov 2023 must
 run a closed test with ≥12 testers opted in for 14 continuous days before
 Production is unlocked — the **internal** track, which the friends would use,
-has no such rule). Create app → name `BiteWise · 筷拍`, default language,
+has no such rule). Create app → name `Chopstats · 筷拍`, default language,
 App/Free → the package name is taken from the first upload and is permanent:
 `dev.calorietracker.calorie_tracker`.
 
@@ -862,7 +876,7 @@ roll out.
 2. IAM & Admin → Service Accounts → Create (`play-publisher`), grant it
    **no** project roles → Keys → Add key → JSON → the file downloads once.
 3. Play Console → Users and permissions → Invite new users → the service
-   account's email → App permissions → BiteWise → **Release apps to testing
+   account's email → App permissions → Chopstats → **Release apps to testing
    tracks** (add *Release to production, exclude devices, and use Play App
    Signing* later, once § 6.1's closed-test rule is satisfied) → Invite.
    Permissions can take a while to propagate; a `403 The caller does not

@@ -115,7 +115,7 @@ class CalorieTrackerApp extends StatelessWidget {
     // app re-locales in place — no restart.
     final shell = HomeShell(services: services);
     Widget appFor(Locale? locale) => MaterialApp(
-          title: 'BiteWise',
+          title: 'Chopstats',
           scaffoldMessengerKey: messengerKey,
           // iOS scroll feel everywhere: bounce, no glow indicator.
           scrollBehavior: const _AppleScrollBehavior(),
@@ -509,7 +509,7 @@ class _StartupErrorAppState extends State<StartupErrorApp>
     final zh =
         WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh';
     return MaterialApp(
-      title: 'BiteWise',
+      title: 'Chopstats',
       home: Scaffold(
         body: Center(
           child: Padding(
@@ -519,7 +519,7 @@ class _StartupErrorAppState extends State<StartupErrorApp>
               children: [
                 const Icon(Icons.error_outline, size: 48),
                 const SizedBox(height: 12),
-                Text(zh ? '筷拍无法启动。' : 'BiteWise could not start.'),
+                Text(zh ? '筷拍无法启动。' : 'Chopstats could not start.'),
                 const SizedBox(height: 8),
                 Text(widget.error,
                     textAlign: TextAlign.center,

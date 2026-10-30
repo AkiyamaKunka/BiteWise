@@ -280,7 +280,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiConsentBody(String recipient) {
-    return 'BiteWise estimates calories with an AI service. If you allow it, BiteWise sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nBiteWise has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
+    return 'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
   }
 
   @override
@@ -354,7 +354,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiStopSharingBody(String provider) {
-    return 'BiteWise stops sending photos and meal text to $provider, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, BiteWise asks again.';
+    return 'Chopstats stops sending photos and meal text to $provider, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Chopstats asks again.';
   }
 
   @override
@@ -430,7 +430,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backgroundScanStuck =>
-      'Background scan is stuck — opening BiteWise once catches up.';
+      'Background scan is stuck — opening Chopstats once catches up.';
 
   @override
   String get settingsSectionProfile => 'Profile';
@@ -791,7 +791,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportNoMeals => 'No meals logged.';
 
   @override
-  String get reportFooter => 'Logged with BiteWise';
+  String get reportFooter => 'Logged with Chopstats';
 
   @override
   String get historyDayPattern => 'EEEE, MMM dd';
@@ -968,12 +968,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String coachPartialGoal(String delta) {
-    return '$delta kcal under your goal — any meals not logged yet? Add them in BiteWise.';
+    return '$delta kcal under your goal — any meals not logged yet? Add them in Chopstats.';
   }
 
   @override
   String coachPartialTypical(String delta) {
-    return '$delta kcal below your usual day — any meals not logged yet? Add them in BiteWise.';
+    return '$delta kcal below your usual day — any meals not logged yet? Add them in Chopstats.';
   }
 
   @override
@@ -1373,7 +1373,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get photoPermissionDenied =>
-      'BiteWise isn\'t allowed to see your photos.';
+      'Chopstats isn\'t allowed to see your photos.';
 
   @override
   String get openSystemSettings => 'Open system settings';
@@ -2161,17 +2161,17 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get exportShareSubject => 'BiteWise data export';
+  String get exportShareSubject => 'Chopstats data export';
 
   @override
   String get importErrNotJson => 'That file is not JSON.';
 
   @override
-  String get importErrNotExport => 'That file is not a BiteWise export.';
+  String get importErrNotExport => 'That file is not a Chopstats export.';
 
   @override
   String get importErrWrongFormatTag =>
-      'That file is not a BiteWise export (wrong format tag).';
+      'That file is not a Chopstats export (wrong format tag).';
 
   @override
   String get importErrBadVersion => 'That export has an unusable version tag.';

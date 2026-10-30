@@ -73,7 +73,7 @@ void main() {
     expect(eaten.value, '940');
     expect(find.text('−940'), findsNothing);
     expect(find.text('-940'), findsNothing);
-    expect(find.text('Logged with BiteWise'), findsOneWidget);
+    expect(find.text('Logged with Chopstats'), findsOneWidget);
   });
 
   testWidgets('without a typical day the eaten row is the same plain figure',

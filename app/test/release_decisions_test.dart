@@ -9,7 +9,8 @@
 ///   email address is the one the owner chose (2026-10-29).
 /// - R-F11: the English strings carry no Chinese text and no
 ///   mainland-China / VPN advice.
-/// - R-F9: the English name is BiteWise everywhere; 筷拍 in Chinese.
+/// - R-F9: the English name is Chopstats everywhere (renamed from BiteWise
+///   2026-10-29); 筷拍 in Chinese.
 /// - R-F7: the privacy policy's third-party and consent section.
 library;
 
@@ -417,7 +418,17 @@ void main() {
     });
   });
 
-  group('R-F9: BiteWise', () {
+  group('R-F9: Chopstats', () {
+    // 2026-10-29: "BiteWise" is shared by a dozen live US App Store apps,
+    // so the English name became Chopstats (no same-name US app, no live
+    // USPTO mark); 筷拍 stays. The repository URL keeps its old name.
+    const repoUrl = 'github.com/AkiyamaKunka/BiteWise';
+    void expectNoOldName(String text, {String? reason}) {
+      final rest = text.replaceAll(repoUrl, '');
+      expect(rest, isNot(contains('BiteWise')), reason: reason);
+      expect(rest, isNot(contains('Bitewise')), reason: reason);
+    }
+
     String? plistString(String plist, String key) => RegExp(
       '<key>${RegExp.escape(key)}</key>\\s*<string>([^<]*)</string>',
     ).firstMatch(plist)?.group(1);
@@ -426,40 +437,43 @@ void main() {
     ).firstMatch(strings)?.group(1);
 
     for (final target in ['Runner', 'ShareExtension']) {
-      test('$target: BiteWise in English, 筷拍 in Chinese', () {
+      test('$target: Chopstats in English, 筷拍 in Chinese', () {
         final plist = _read('ios/$target/Info.plist');
         final en = _read('ios/$target/en.lproj/InfoPlist.strings');
         final zh = _read('ios/$target/zh-Hans.lproj/InfoPlist.strings');
-        expect(plistString(plist, 'CFBundleDisplayName'), 'BiteWise');
-        expect(stringsValue(en, 'CFBundleDisplayName'), 'BiteWise');
+        expect(plistString(plist, 'CFBundleDisplayName'), 'Chopstats');
+        expect(stringsValue(en, 'CFBundleDisplayName'), 'Chopstats');
         expect(stringsValue(zh, 'CFBundleDisplayName'), '筷拍');
         for (final text in [plist, en]) {
-          expect(text, isNot(contains('Bitewise')));
+          expectNoOldName(text);
         }
         expect(
           plistString(plist, 'NSPhotoLibraryUsageDescription'),
-          startsWith('BiteWise reads your photo library'),
+          startsWith('Chopstats reads your photo library'),
         );
         expect(
           stringsValue(en, 'NSPhotoLibraryUsageDescription'),
-          startsWith('BiteWise reads your photo library'),
+          startsWith('Chopstats reads your photo library'),
         );
       });
     }
 
     test('the English strings, the policy and the listing', () {
       final arb = _read('lib/l10n/app_en.arb');
-      expect(arb, isNot(contains('Bitewise')));
-      expect(arb, contains('BiteWise'));
-      expect(_readRepo('docs/PRIVACY.md'), isNot(contains('Bitewise')));
-      expect(_readRepo('docs/SUPPORT.md'), isNot(contains('Bitewise')));
+      expectNoOldName(arb);
+      expect(arb, contains('Chopstats'));
+      expectNoOldName(_readRepo('docs/PRIVACY.md'));
+      expectNoOldName(_readRepo('docs/SUPPORT.md'));
+      expectNoOldName(_read('lib/ui/app.dart'));
       for (final file in Directory(
         '${_appRoot().path}/ios/store/metadata',
       ).listSync(recursive: true).whereType<File>()) {
+        expectNoOldName(file.readAsStringSync(), reason: file.path);
+      }
+      for (final locale in ['en-US', 'zh-Hans']) {
         expect(
-          file.readAsStringSync(),
-          isNot(contains('Bitewise')),
-          reason: file.path,
+          _read('ios/store/metadata/$locale/name.txt').trim(),
+          'Chopstats · 筷拍',
         );
       }
     });
@@ -499,7 +513,7 @@ void main() {
       expect(
         flat,
         contains(
-          'BiteWise does not sell your data. It shares it only with the AI '
+          'Chopstats does not sell your data. It shares it only with the AI '
           'recipient you set up under Settings › AI Provider',
         ),
       );

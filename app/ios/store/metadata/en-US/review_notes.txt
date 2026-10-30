@@ -1,4 +1,4 @@
-BiteWise is a bring-your-own-key calorie tracker. It has no accounts and
+Chopstats is a bring-your-own-key calorie tracker. It has no accounts and
 no backend of ours. The user pastes an API key for an AI provider they
 already pay for (Google Gemini, OpenAI, Anthropic, xAI, OpenRouter,
 DeepSeek, Alibaba Qwen, ByteDance Doubao, Zhipu GLM); that provider
@@ -15,7 +15,7 @@ API key". Go to Today › "+ Log" › "From recent photos", allow Photos
 access, pick a food photo and tap Allow in the consent dialog; the
 estimate appears after a few seconds. Without food photos on the test
 device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
-soup"), or share a food image from Safari or Photos into BiteWise via
+soup"), or share a food image from Safari or Photos into Chopstats via
 the share sheet. There is no in-app camera: photos come from the system
 Camera app.
 

@@ -1,4 +1,4 @@
-# BiteWise · 筷拍 — Privacy Policy
+# Chopstats · 筷拍 — Privacy Policy
 
 Effective date: 2026-10-29
 
@@ -6,7 +6,7 @@ Effective date: 2026-10-29
 
 ## English
 
-BiteWise is a calorie tracker that estimates meals from food photos and
+Chopstats is a calorie tracker that estimates meals from food photos and
 short text descriptions using an AI service **you** choose. It is an
 open-source project. The developer runs **no backend server, has no user
 accounts, and receives none of your data.**
@@ -98,7 +98,7 @@ where they now live (your files, your backup, or that provider's policy).
 
 ### Third parties and your consent
 
-BiteWise does not sell your data. It shares it only with the AI
+Chopstats does not sell your data. It shares it only with the AI
 recipient you set up under Settings › AI Provider, and its developer
 receives none of it. That recipient is:
 
@@ -140,7 +140,7 @@ server).
 own privacy policy, terms and data-retention rules — for example how long
 it keeps requests and whether it may use them to improve its models.
 These differ from provider to provider, and sometimes between a
-provider's free and paid plans; BiteWise cannot change them. Read the
+provider's free and paid plans; Chopstats cannot change them. Read the
 policy of the provider you choose. DeepSeek, Alibaba Cloud, Volcano Engine
 and Zhipu process data in mainland China, as the consent dialog says.
 

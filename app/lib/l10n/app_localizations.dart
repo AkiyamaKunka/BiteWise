@@ -513,7 +513,7 @@ abstract class AppLocalizations {
   /// Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow).
   ///
   /// In en, this message translates to:
-  /// **'BiteWise estimates calories with an AI service. If you allow it, BiteWise sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nBiteWise has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.'**
+  /// **'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.'**
   String aiConsentBody(String recipient);
 
   /// The company that receives the data for an API-key provider id.
@@ -591,7 +591,7 @@ abstract class AppLocalizations {
   /// No description provided for @aiStopSharingBody.
   ///
   /// In en, this message translates to:
-  /// **'BiteWise stops sending photos and meal text to {provider}, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, BiteWise asks again.'**
+  /// **'Chopstats stops sending photos and meal text to {provider}, and Watch Camera Roll turns off. Meals already logged stay on this phone. The next time you use AI analysis, Chopstats asks again.'**
   String aiStopSharingBody(String provider);
 
   /// No description provided for @aiStopSharingConfirm.
@@ -705,7 +705,7 @@ abstract class AppLocalizations {
   /// Photos footer line in Settings when the recorded background runs keep starting but log nothing.
   ///
   /// In en, this message translates to:
-  /// **'Background scan is stuck — opening BiteWise once catches up.'**
+  /// **'Background scan is stuck — opening Chopstats once catches up.'**
   String get backgroundScanStuck;
 
   /// No description provided for @settingsSectionProfile.
@@ -1311,7 +1311,7 @@ abstract class AppLocalizations {
   /// No description provided for @reportFooter.
   ///
   /// In en, this message translates to:
-  /// **'Logged with BiteWise'**
+  /// **'Logged with Chopstats'**
   String get reportFooter;
 
   /// intl DateFormat PATTERN for dated history-day labels, not display text. en: "Tuesday, Jul 15"; zh: "7月15日 星期二".
@@ -1605,13 +1605,13 @@ abstract class AppLocalizations {
   /// Coach line for a day logged far below the goal: more likely missing meals than a real cut, so it invites them instead of praising a deficit.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in BiteWise.'**
+  /// **'{delta} kcal under your goal — any meals not logged yet? Add them in Chopstats.'**
   String coachPartialGoal(String delta);
 
   /// Coach line for a day logged far below the usual day: more likely missing meals than a real cut.
   ///
   /// In en, this message translates to:
-  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in BiteWise.'**
+  /// **'{delta} kcal below your usual day — any meals not logged yet? Add them in Chopstats.'**
   String coachPartialTypical(String delta);
 
   /// No description provided for @coachOnTarget.
@@ -2253,7 +2253,7 @@ abstract class AppLocalizations {
   /// No description provided for @photoPermissionDenied.
   ///
   /// In en, this message translates to:
-  /// **'BiteWise isn\'t allowed to see your photos.'**
+  /// **'Chopstats isn\'t allowed to see your photos.'**
   String get photoPermissionDenied;
 
   /// No description provided for @openSystemSettings.
@@ -2538,7 +2538,7 @@ abstract class AppLocalizations {
   /// **'🍽️ Leftovers deducted'**
   String get mealCardLeftoverTitle;
 
-  /// Android notification channel name: shown under Settings › Apps › BiteWise › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
+  /// Android notification channel name: shown under Settings › Apps › Chopstats › Notifications and in a card's long-press menu. Android never translates it, so it is re-sent in the app language on every post.
   ///
   /// In en, this message translates to:
   /// **'Reports & meals'**
@@ -3399,7 +3399,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportShareSubject.
   ///
   /// In en, this message translates to:
-  /// **'BiteWise data export'**
+  /// **'Chopstats data export'**
   String get exportShareSubject;
 
   /// No description provided for @importErrNotJson.
@@ -3411,13 +3411,13 @@ abstract class AppLocalizations {
   /// No description provided for @importErrNotExport.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a BiteWise export.'**
+  /// **'That file is not a Chopstats export.'**
   String get importErrNotExport;
 
   /// No description provided for @importErrWrongFormatTag.
   ///
   /// In en, this message translates to:
-  /// **'That file is not a BiteWise export (wrong format tag).'**
+  /// **'That file is not a Chopstats export (wrong format tag).'**
   String get importErrWrongFormatTag;
 
   /// No description provided for @importErrBadVersion.

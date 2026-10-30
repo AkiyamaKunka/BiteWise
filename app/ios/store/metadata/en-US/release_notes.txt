@@ -1,4 +1,4 @@
-The first App Store release of BiteWise · 筷拍.
+The first App Store release of Chopstats · 筷拍.
 
 • Log a meal from a photo, from a description in any language, or by typing the numbers yourself
 • Watch Camera Roll: new food photos are logged automatically
