@@ -12,7 +12,7 @@
 /// else is never a link), 'via {provider} · {date}', whether the number
 /// was found on the source page, and the lookup's notes as plain text
 /// (at most 200 characters, never links). Everything shown is the chain's
-/// name from BiteWise's own table and what the lookup returned — nothing
+/// name from the app's own table and what the lookup returned — nothing
 /// from Apple Maps exists to show. A lookup that found nothing names no
 /// restaurant.
 ///

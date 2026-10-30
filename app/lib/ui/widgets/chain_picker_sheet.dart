@@ -1,5 +1,5 @@
 /// 'Which restaurant?' (design R7b, decision "Feedback actions"): after
-/// 'Wrong restaurant' the user names the chain themselves, from BiteWise's
+/// 'Wrong restaurant' the user names the chain themselves, from the app's
 /// own US chain table only (shared/chains/us_chains.json). Nothing here
 /// comes from Apple Maps — the design rejected listing nearby place names,
 /// which would store and show Map Data (Apple's developer license

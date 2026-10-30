@@ -13,7 +13,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Bitewise</string>
+	<string>Chopstats</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -87,11 +87,11 @@
 		<string>$(DEVELOPMENT_TEAM)</string>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>
-	<string>Bitewise connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.</string>
+	<string>Chopstats connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.</string>
 	<key>NSBluetoothPeripheralUsageDescription</key>
-	<string>Bitewise connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.</string>
+	<string>Chopstats connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>Bitewise reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings. If you turn on restaurant lookup with photo location, Bitewise also reads where a restaurant or takeout meal photo was taken, only to check on this phone whether it was taken in the US, to ask Apple Maps which restaurants are nearby and to remember, on this phone, the restaurants you confirm or rule out there.</string>
+	<string>Chopstats reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings. If you turn on restaurant lookup with photo location, Chopstats also reads where a restaurant or takeout meal photo was taken, only to check on this phone whether it was taken in the US, to ask Apple Maps which restaurants are nearby and to remember, on this phone, the restaurants you confirm or rule out there.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>

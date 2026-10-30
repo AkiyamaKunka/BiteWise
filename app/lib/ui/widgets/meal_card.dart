@@ -5,7 +5,7 @@
 /// The restaurant assist's chip (design R7b) shows only while its stamps
 /// hold: '{brand} numbers used for {n} item(s)' for applied published
 /// numbers, '{brand} publishes {kcal} kcal — tap to review' for a
-/// suggestion; {brand} is the chain's name from BiteWise's own table. A dot
+/// suggestion; {brand} is the chain's name from the app's own table. A dot
 /// beside it marks an automatic change the user has not opened yet.
 library;
 

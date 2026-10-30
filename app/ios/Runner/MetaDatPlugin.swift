@@ -21,7 +21,7 @@ import UIKit
 /// plugin is registered for the app's own engine only, never for the
 /// headless background engine: that engine never shows the screen, so it
 /// has no use for a session. (When a session ends is the screen's call
-/// and DAT's: Bitewise keeps one through a phone lock for a while, and
+/// and DAT's: Chopstats keeps one through a phone lock for a while, and
 /// DAT stops it on a fold. Whether DAT also stops it while the phone is
 /// locked is open question 4 in docs/META_DAT.md.)
 ///
@@ -247,7 +247,7 @@ enum MetaDatWire {
 
   /// Meta's version-dependencies guide: handle each DeviceSessionError on
   /// its own, they are not equally recoverable. Only
-  /// insufficientSDKVersion needs a new Bitewise build; only
+  /// insufficientSDKVersion needs a new Chopstats build; only
   /// dwaOutOfStuRange lets the session go on; datAppOnTheGlassesUpdateRequired
   /// is fixed in the Meta AI app (openDATGlassesAppUpdate); dwaUnavailable
   /// means the toolkit's app on the glasses did not come up (not installed:

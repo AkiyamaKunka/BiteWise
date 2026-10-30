@@ -112,7 +112,7 @@ void main() {
     final (req, body) = await send(createOpenRouterAnalyzer, s);
     expect(req.url.toString(), 'https://openrouter.ai/api/v1/chat/completions');
     expect(req.headers['Authorization'], 'Bearer sk-or');
-    expect(req.headers['X-OpenRouter-Title'], 'BiteWise');
+    expect(req.headers['X-OpenRouter-Title'], 'Chopstats');
     expect(req.headers['HTTP-Referer'], contains('BiteWise'));
     expect(body['model'], 'x-ai/grok-4.7');
     expect(body.containsKey('response_format'), isFalse,

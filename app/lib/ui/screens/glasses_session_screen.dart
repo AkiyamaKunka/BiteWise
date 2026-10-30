@@ -1,5 +1,5 @@
 /// Meta glasses session (feat/meta-dat prototype, docs/META_DAT.md):
-/// connect Bitewise in the Meta AI app, start a session, and every photo
+/// connect Chopstats in the Meta AI app, start a session, and every photo
 /// the glasses take while this screen is open goes through the app's ONE
 /// photo pipeline as deliberate intake (MealSource.appGlasses).
 ///
@@ -63,7 +63,7 @@ class GlassesSessionScreen extends StatefulWidget {
   final Duration shutterWindow;
 
   /// How long a session may sit behind a locked phone or another app
-  /// before Bitewise ends it itself. Long enough to lock the phone through
+  /// before Chopstats ends it itself. Long enough to lock the phone through
   /// a meal's first photos, and to measure whether DAT keeps the session
   /// meanwhile; short enough that one forgotten in a pocket does not hold
   /// the glasses all evening. (Folding them ends it at once anyway.)
@@ -333,7 +333,7 @@ class _GlassesSessionScreenState extends State<GlassesSessionScreen>
   /// A locked phone or another app in front does NOT end the session at
   /// once: Meta's lifecycle guide lists folding, other experiences, another
   /// app's session and a lost Meta AI link as what ends one, not the app
-  /// leaving the foreground, so Bitewise lets DAT decide for
+  /// leaving the foreground, so Chopstats lets DAT decide for
   /// [GlassesSessionScreen.backgroundGrace] and then ends it itself. The
   /// process going away ends it at once.
   @override

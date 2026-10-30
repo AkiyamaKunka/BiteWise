@@ -28,7 +28,7 @@
 ///   3. The places within the query radius, clamp(2 × accuracy, 40, 150) m,
 ///      are scored categoryWeight × exp(−d² / 2σ²), σ = max(accuracy,
 ///      20 m). A place is a chain only when chain_match maps its name (and
-///      website host) onto BiteWise's own table.
+///      website host) onto the app's own table.
 ///   4. Dense: 3+ places within σ, or 2+ different chains within σ — a food
 ///      court, a mall, Times Square. Distance cannot tell those apart.
 ///   5. Candidates: the table's chains among the places, minus those the

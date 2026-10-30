@@ -549,7 +549,7 @@ void main() {
           reason: 'the location setting decides once consent covers');
     });
 
-    testWidgets('a recipient BiteWise has no copy for cannot be consented to',
+    testWidgets('a recipient the app has no copy for cannot be consented to',
         (tester) async {
       final settings = FakeSettings()..provider = 'gemini';
       final c = _Controls(const LookupSupport.unsupported('needs_l1'));

@@ -6,7 +6,7 @@
 /// the source address is shown and launched only in its normalized https,
 /// ASCII form (restaurant_assist_logic.dart normalizeSourceUrl) — a
 /// `javascript:`, `http:` or IDN address is never a link. What is shown:
-/// the chain's name from BiteWise's own table (the Chinese name in the
+/// the chain's name from the app's own table (the Chinese name in the
 /// Chinese UI), the menu items, options, servings and published numbers
 /// the lookup returned, the source host, who looked it up and when, and
 /// the notes as plain text. Nothing from Apple Maps exists in a block to
@@ -160,7 +160,7 @@ final class AssistView {
 
   final AssistViewKind kind;
 
-  /// A key of BiteWise's chain table, or null.
+  /// A key of the app's chain table, or null.
   final String? chainKey;
 
   /// The chain's canonical name from the table, else the block's cleaned

@@ -29,12 +29,12 @@ class GlassesSessionStrings {
       _t('This build has no Meta glasses support.', '此版本不支持 Meta 眼镜。');
   String get statusHeader => _t('Glasses', '眼镜');
 
-  /// [minutes]: how long Bitewise keeps a session behind a locked phone or
+  /// [minutes]: how long Chopstats keeps a session behind a locked phone or
   /// another app (GlassesSessionScreen.backgroundGrace).
   String keepOpen(int minutes) => _t(
     'Keep this screen open while you take photos. Going back or folding '
         'the glasses ends the session. With the phone locked or another app '
-        'in front, Bitewise ends it after $minutes minutes, and the glasses '
+        'in front, Chopstats ends it after $minutes minutes, and the glasses '
         'may end it sooner. Each photo is analyzed like a photo you pick, '
         'and logged as a meal.',
     '拍照时请停留在此页面。返回上一页或合上眼镜会结束拍摄模式。'
@@ -42,9 +42,9 @@ class GlassesSessionStrings {
         '眼镜也可能更早结束。每张照片都会像手动选择的照片一样分析并记录为一餐。',
   );
 
-  /// The session Bitewise ended itself after [minutes] in the background.
+  /// The session Chopstats ended itself after [minutes] in the background.
   String endedInBackground(int minutes) => _t(
-    'The session ended: Bitewise was in the background for $minutes '
+    'The session ended: Chopstats was in the background for $minutes '
         'minutes. Start it again when you are ready.',
     '拍摄模式已结束：筷拍在后台停留了 $minutes 分钟。准备好后请重新开始。',
   );
@@ -52,7 +52,7 @@ class GlassesSessionStrings {
   String get registrationLabel => _t('Meta AI app', 'Meta AI 应用');
   String get glassesLabel => _t('Glasses', '眼镜');
   String get sessionLabel => _t('Session', '拍摄模式');
-  String get connect => _t('Link Bitewise in Meta AI', '在 Meta AI 中关联筷拍');
+  String get connect => _t('Link Chopstats in Meta AI', '在 Meta AI 中关联筷拍');
   String get start => _t('Start session', '开始拍摄模式');
   String get stop => _t('End session', '结束拍摄模式');
   String get takePhoto => _t('Take a photo now', '立即拍照');
@@ -66,7 +66,7 @@ class GlassesSessionStrings {
     '已按下眼镜拍照键，照片传输中。',
   );
   String get permissionDenied => _t(
-    'Bitewise may not use the glasses camera. Allow it in the Meta AI app.',
+    'Chopstats may not use the glasses camera. Allow it in the Meta AI app.',
     '筷拍没有使用眼镜相机的权限，请在 Meta AI 应用中允许。',
   );
   String get notReady =>
@@ -118,28 +118,28 @@ class GlassesSessionStrings {
     ),
     // Meta's version guide, one remedy per DeviceSessionError.
     'session_update_glasses_app' => _t(
-      'The glasses need an update before Bitewise can use them. Tap '
+      'The glasses need an update before Chopstats can use them. Tap '
           '"$updateGlassesApp" (or open Meta AI → App connections), then '
           'start the session again.',
       '眼镜需要更新后才能配合筷拍使用。请点按“$updateGlassesApp”'
           '（或打开 Meta AI → 应用连接），然后重新开始拍摄模式。',
     ),
     'session_sdk_too_old' => _t(
-      'This Bitewise build is too old for the software on your glasses. '
-          'Only a newer Bitewise build fixes this; updating the glasses will '
+      'This Chopstats build is too old for the software on your glasses. '
+          'Only a newer Chopstats build fixes this; updating the glasses will '
           'not.',
       '此版本的筷拍对眼镜上的软件来说太旧。只有更新版本的筷拍才能解决，'
           '更新眼镜无济于事。',
     ),
     metaDatVersionWarning => _t(
-      'The session is running, but Bitewise and the glasses software are '
+      'The session is running, but Chopstats and the glasses software are '
           'on versions Meta does not recommend together, so something may '
           'misbehave. Update Meta AI and the glasses when you can.',
       '拍摄模式仍在进行，但筷拍与眼镜软件的版本搭配不在 Meta 建议范围内，'
           '可能出现异常。方便时请更新 Meta AI 和眼镜。',
     ),
     'session_glasses_app_unavailable' => _t(
-      'The glasses did not open their side of the Bitewise connection. In '
+      'The glasses did not open their side of the Chopstats connection. In '
           'the Meta AI app, check that the glasses are set up and charged '
           'above 10% (the glasses part installs only then), then try again.',
       '眼镜端的筷拍连接没有启动。请在 Meta AI 应用中确认眼镜已设置好、'
@@ -164,7 +164,7 @@ class GlassesSessionStrings {
       'No photo arrived from the glasses. Try again.',
       '没有收到眼镜的照片，请重试。',
     ),
-    // Only after Bitewise retried the camera's startup once itself.
+    // Only after Chopstats retried the camera's startup once itself.
     'photo_setup_failed' || 'camera' => _t(
       'The glasses camera did not start, even on a second try. Turn the '
           'glasses off and on, then start the session again.',

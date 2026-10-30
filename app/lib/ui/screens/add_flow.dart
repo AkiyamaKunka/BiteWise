@@ -16,6 +16,7 @@ import '../../core/leftover_logic.dart' show revertedLeftover;
 import '../../core/outcome_kind.dart';
 import '../../services/analyzer/platform_decode.dart';
 import '../../services/glasses/meta_dat_flags.dart';
+import '../ai_consent.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
@@ -150,7 +151,9 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   } else if (choice == 'text') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => AddTextScreen(
-            executor: services.executor, dao: services.dao)));
+            executor: services.executor,
+            dao: services.dao,
+            settings: services.settings)));
   } else if (choice == 'manual') {
     // Defaults to today/now inside the editor (MealDraft.blank).
     await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -158,7 +161,9 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   } else if (choice == 'fix') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => FixMealScreen(
-            executor: services.executor, inUse: services.mealInUse)));
+            executor: services.executor,
+            settings: services.settings,
+            inUse: services.mealInUse)));
   } else {
     return;
   }
@@ -270,12 +275,23 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   Future<Uint8List?> _thumbFor(String assetId) => _thumbs.putIfAbsent(
       assetId, () => widget.services.picker.thumbnail(assetId));
 
+  /// Set while the AI consent dialog is up: a second tap in the same frame
+  /// must not open a second one (the same race [_analyzing] guards).
+  bool _askingConsent = false;
+
   Future<void> _pick(RecentAsset asset) async {
     // Guard BEFORE the async gap: onTap reads _analyzing from the last
     // BUILD, so two taps in the same frame both pass that check and run
     // two analyses — two model calls, two ledger reservations, for one
     // meal (review 2026-07-31).
-    if (_analyzing) return;
+    if (_analyzing || _askingConsent) return;
+    // App Store 5.1.2(i): permission for this AI recipient before the
+    // photo's bytes are even read. Without the spinner: an animating
+    // overlay behind a dialog never settles.
+    _askingConsent = true;
+    final allowed = await ensureAiConsent(context, widget.services.settings);
+    _askingConsent = false;
+    if (!allowed || !mounted || _analyzing) return;
     setState(() => _analyzing = true);
     // ORIGINAL bytes for THIS photo only — md5 identity (§6.2) needs the
     // original, but only the chosen one.
@@ -605,8 +621,18 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
 class AddTextScreen extends StatefulWidget {
   final NlExecutor executor;
   final MealsDao dao;
+
+  /// For the AI consent before the text leaves the phone (with today's
+  /// date only: describeMeal sends no other meals). Required, so a call site cannot drop the question
+  /// silently (a merge keeping another branch's constructor call fails to
+  /// compile instead); tests that are about something else pass a
+  /// FakeSettings, which allows every recipient.
+  final SettingsStore settings;
   const AddTextScreen(
-      {super.key, required this.executor, required this.dao});
+      {super.key,
+      required this.executor,
+      required this.dao,
+      required this.settings});
 
   @override
   State<AddTextScreen> createState() => _AddTextScreenState();
@@ -615,6 +641,7 @@ class AddTextScreen extends StatefulWidget {
 class _AddTextScreenState extends State<AddTextScreen> {
   final TextEditingController _controller = TextEditingController();
   bool _sending = false;
+  bool _askingConsent = false;
   String? _error;
 
   @override
@@ -630,7 +657,14 @@ class _AddTextScreenState extends State<AddTextScreen> {
   /// validation).
   Future<void> _describe() async {
     final text = _controller.text.trim();
-    if (text.isEmpty || _sending) return;
+    if (text.isEmpty || _sending || _askingConsent) return;
+    // App Store 5.1.2(i): the description (and today's date — describeMeal
+    // sends no other meals) goes to the AI — permission for this recipient
+    // first.
+    _askingConsent = true;
+    final allowed = await ensureAiConsent(context, widget.settings);
+    _askingConsent = false;
+    if (!allowed || !mounted || _sending) return;
     setState(() {
       _sending = true;
       _error = null;

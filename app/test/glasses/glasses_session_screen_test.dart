@@ -300,7 +300,7 @@ void main() {
 
   // A locked phone fires `paused` like any trip to the background. Meta's
   // lifecycle guide does not list the app leaving the foreground among
-  // what ends a session, so Bitewise lets DAT decide for the grace period
+  // what ends a session, so Chopstats lets DAT decide for the grace period
   // (open question 4 in META_DAT.md needs exactly that), then ends it.
   void background(WidgetTester tester) {
     // Whatever a test asserts, the next one starts in the foreground.
@@ -320,7 +320,7 @@ void main() {
   int stops() => h.native.methods.where((m) => m == 'stopSession').length;
 
   testWidgets(
-      'a locked phone keeps the session; Bitewise ends it after the grace',
+      'a locked phone keeps the session; Chopstats ends it after the grace',
       (tester) async {
     h.native.registration = 'registered';
     await h.open(tester);
@@ -340,7 +340,7 @@ void main() {
     foreground(tester);
     await tester.pump();
     expect(
-        find.text('The session ended: Bitewise was in the background for 15 '
+        find.text('The session ended: Chopstats was in the background for 15 '
             'minutes. Start it again when you are ready.'),
         findsOneWidget);
   });
@@ -401,10 +401,10 @@ void main() {
   group('session errors, one remedy each (Meta version guide)', () {
     const words = {
       'session_update_glasses_app':
-          'The glasses need an update before Bitewise can use them.',
-      'session_sdk_too_old': 'This Bitewise build is too old',
+          'The glasses need an update before Chopstats can use them.',
+      'session_sdk_too_old': 'This Chopstats build is too old',
       'session_glasses_app_unavailable':
-          'The glasses did not open their side of the Bitewise connection.',
+          'The glasses did not open their side of the Chopstats connection.',
       'session_thermal': 'The glasses are too hot',
       'session_battery': 'The glasses battery is too low',
       'photo_setup_failed':

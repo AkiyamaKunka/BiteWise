@@ -14,6 +14,10 @@ import 'fakes.dart';
 
 Future<String> testHash(List<int> bytes) async => 'h${bytes.first}';
 
+/// The AI consent is test/ui/ai_consent_test.dart's subject; here every
+/// bulk action is allowed.
+Future<bool> _allowed(BuildContext _) async => true;
+
 void main() {
   late FakePhotoLibrary library;
   late FakeDao dao;
@@ -42,6 +46,7 @@ void main() {
           },
           requestPhotoPermission: () async => true,
           initialLookbackDays: 2,
+          ensureConsent: _allowed,
           library: library,
         ),
       );
@@ -93,6 +98,7 @@ void main() {
         },
         requestPhotoPermission: () async => true,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
         canAnalyze: () => false, // quota latch armed / no key
         library: library,
       ),
@@ -142,6 +148,7 @@ void main() {
         },
         requestPhotoPermission: () async => true,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
         canAnalyze: () => !paused, // LIVE read, true at confirm time
         library: library,
       ),
@@ -188,6 +195,7 @@ void main() {
         },
         requestPhotoPermission: () async => true,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
         library: library,
       ),
     ));
@@ -221,6 +229,7 @@ void main() {
         },
         requestPhotoPermission: () async => true,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
         library: library,
       ),
     ));
@@ -280,6 +289,7 @@ void main() {
             const PhotoOutcome(PhotoOutcomeKind.saved, 'ok'),
         requestPhotoPermission: () async => false,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
       ),
     ));
     await tester.tap(find.byKey(const Key('runCoverageCheck')));
@@ -377,6 +387,7 @@ void main() {
             const PhotoOutcome(PhotoOutcomeKind.saved, 'ok'),
         requestPhotoPermission: () async => true,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
         library: library,
       ),
     ));
@@ -461,6 +472,7 @@ void main() {
         },
         requestPhotoPermission: () async => true,
         initialLookbackDays: 2,
+        ensureConsent: _allowed,
         library: library,
         logManually: (photo) async {
           manual.add(photo);

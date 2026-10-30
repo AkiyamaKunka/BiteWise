@@ -207,7 +207,8 @@ void main() {
       final registry = MealInUseRegistry();
       final executor = _GatedExecutor();
       await tester.pumpWidget(MaterialApp(
-          home: FixMealScreen(executor: executor, inUse: registry)));
+          home: FixMealScreen(
+              executor: executor, settings: FakeSettings(), inUse: registry)));
       await tester.enterText(
           find.byKey(const Key('fixMealField')), 'the soup was 300');
       await tester.tap(find.byKey(const Key('fixMealSend')));

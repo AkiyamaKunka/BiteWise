@@ -396,7 +396,7 @@ class MetaDatChannel {
   Future<MetaDatStatus> configure() async =>
       MetaDatStatus.fromWire(await _invoke<Object?>('configure'));
 
-  /// Hands over to the Meta AI app to approve Bitewise; the answer comes
+  /// Hands over to the Meta AI app to approve Chopstats; the answer comes
   /// back as a [metaDatCallbackScheme] link for [handleCallback].
   Future<void> register() => _invoke<void>('register');
 

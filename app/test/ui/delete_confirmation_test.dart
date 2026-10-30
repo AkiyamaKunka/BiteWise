@@ -17,7 +17,7 @@ import 'fakes.dart';
 Future<void> _pumpTodayAndSend(
     WidgetTester tester, FakeExecutor executor, String text) async {
   await tester.pumpWidget(MaterialApp(
-    home: FixMealScreen(executor: executor),
+    home: FixMealScreen(executor: executor, settings: FakeSettings()),
   ));
   await tester.pumpAndSettle();
   await tester.enterText(find.byKey(const Key('fixMealField')), text);
@@ -173,7 +173,7 @@ void main() {
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: FixMealScreen(executor: executor),
+        home: FixMealScreen(executor: executor, settings: FakeSettings()),
       ));
       await tester.pumpAndSettle();
       await tester.enterText(
@@ -271,7 +271,7 @@ void main() {
         locale: const Locale('zh'),
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: FixMealScreen(executor: executor),
+        home: FixMealScreen(executor: executor, settings: FakeSettings()),
       ));
       await tester.pumpAndSettle();
       await tester.enterText(

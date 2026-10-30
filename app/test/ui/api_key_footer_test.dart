@@ -54,13 +54,14 @@ void main() {
     });
   }
 
-  testWidgets('Gemini says it has a free tier and needs a VPN in mainland '
-      'China', (tester) async {
+  // English is neutral (owner decision R-F11, 2026-10-29): the free tier,
+  // no VPN note. The Chinese footer keeps its mainland-China hint.
+  testWidgets('Gemini says it has a free tier; only Chinese adds the VPN '
+      'hint', (tester) async {
     await _pump(tester, const Locale('en'), 'gemini');
     expect(
         find.text('From aistudio.google.com/apikey (Google AI Studio). Has a '
-            'free tier; needs a VPN in mainland China. Stored securely on '
-            'this device only.'),
+            'free tier. Stored securely on this device only.'),
         findsOneWidget);
     await _pump(tester, const Locale('zh'), 'gemini');
     expect(

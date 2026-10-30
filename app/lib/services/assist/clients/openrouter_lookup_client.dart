@@ -86,7 +86,7 @@ class OpenRouterLookupClient extends HttpLookupClient {
 
   Map<String, String> _headers(String key) => {
         'HTTP-Referer': 'https://github.com/AkiyamaKunka/BiteWise',
-        'X-OpenRouter-Title': 'BiteWise',
+        'X-OpenRouter-Title': 'Chopstats',
         'Authorization': 'Bearer $key',
       };
 

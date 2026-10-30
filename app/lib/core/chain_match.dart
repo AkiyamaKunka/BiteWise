@@ -1,5 +1,5 @@
 /// Matches a place or brand name, and optionally a web host, against
-/// BiteWise's own table of US chains (shared/chains/us_chains.json, emitted
+/// the app's own table of US chains (shared/chains/us_chains.json, emitted
 /// as [sharedUsChains]). Stage R2a of the restaurant assist.
 ///
 /// The restaurant assist only ever sends a chain's canonical name from this
