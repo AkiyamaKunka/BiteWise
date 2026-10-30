@@ -14,8 +14,14 @@ import 'dart:typed_data';
 import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 
+import '../core/coerce.dart'
+    show EstimateConfidence, isFoodTruthy, mealContextFields;
 import '../core/contracts.dart';
 import '../l10n/app_localizations.dart';
+import '../services/assist/assist_local_state.dart' show AssistDecisionEntry;
+import '../services/photo/glasses_check.dart';
+import 'assist_view.dart' show assistProviderLabel;
+import 'format.dart' show formatKcal;
 import 'provider_names.dart';
 import 'services.dart';
 
@@ -263,4 +269,120 @@ String localStamp(DateTime t) {
   String two(int n) => n.toString().padLeft(2, '0');
   return '${l.year}-${two(l.month)}-${two(l.day)} '
       '${two(l.hour)}:${two(l.minute)}';
+}
+
+/// A span of [seconds] as the Glasses check card says it: '<1 min',
+/// '32 min', '2 h 5 min', '3 d'; a negative one with a leading '-'.
+String diagDuration(AppLocalizations l, int seconds) {
+  final sign = seconds < 0 ? '-' : '';
+  final s = seconds.abs();
+  if (s < 60) return '$sign${l.diagDurationUnderMinute}';
+  final minutes = s ~/ 60;
+  if (minutes < 60) return '$sign${l.diagDurationMinutes(minutes)}';
+  final hours = minutes ~/ 60;
+  if (hours < 48) return '$sign${l.diagDurationHours(hours, minutes % 60)}';
+  return '$sign${l.diagDurationDays(hours ~/ 24)}';
+}
+
+/// [seconds] as a signed clock difference: '+0:20', '-12:05', '+1:02:03'.
+String signedClock(int seconds) {
+  final sign = seconds < 0 ? '-' : '+';
+  final s = seconds.abs();
+  String two(int n) => n.toString().padLeft(2, '0');
+  final h = s ~/ 3600, m = (s % 3600) ~/ 60, sec = s % 60;
+  return h > 0 ? '$sign$h:${two(m)}:${two(sec)}' : '$sign$m:${two(sec)}';
+}
+
+/// How a glasses photo was recognized, in the app language.
+String glassesSignalLabel(AppLocalizations l, String? signal) =>
+    switch (signal) {
+      'filename' => l.diagGlassesSignalFilename,
+      'album' => l.diagGlassesSignalAlbum,
+      'exif' => l.diagGlassesSignalExif,
+      _ => '—',
+    };
+
+/// A [GlassesCheckOutcome] in the app language.
+String glassesOutcomeLabel(AppLocalizations l, String outcome) =>
+    switch (outcome) {
+      GlassesCheckOutcome.logged => l.diagGlassesOutcomeLogged,
+      GlassesCheckOutcome.notFood => l.diagGlassesOutcomeNotFood,
+      GlassesCheckOutcome.notFoodAi => l.diagGlassesOutcomeNotFoodAi,
+      GlassesCheckOutcome.duplicate => l.diagGlassesOutcomeDuplicate,
+      GlassesCheckOutcome.previewWait => l.diagGlassesOutcomePreviewWait,
+      GlassesCheckOutcome.excluded => l.diagGlassesOutcomeExcluded,
+      GlassesCheckOutcome.appWait => l.diagGlassesOutcomeAppWait,
+      GlassesCheckOutcome.queued => l.diagGlassesOutcomeQueued,
+      GlassesCheckOutcome.retry => l.diagGlassesOutcomeRetry,
+      _ => l.diagGlassesOutcomeFailed,
+    };
+
+/// One Glasses check row, as three lines: when and what happened; how it
+/// was recognized and the camera's Make / Model; the import lag, GPS
+/// (yes or no, and the fix's difference from the shutter) and the food
+/// score. No coordinate exists to show.
+({String title, String device, String details}) glassesCheckLines(
+    AppLocalizations l, GlassesCheckEntry e) {
+  final lag = e.lagSeconds;
+  final fix = e.gpsFixDeltaSeconds;
+  final food = e.foodScore;
+  return (
+    title: '${localStamp(e.at)} · ${glassesOutcomeLabel(l, e.outcome)}',
+    device: '${l.diagGlassesSignal(glassesSignalLabel(l, e.signal))} · '
+        '${e.make ?? '—'} / ${e.model ?? '—'}',
+    details: [
+      lag == null
+          ? l.diagGlassesLagUnknown
+          : l.diagGlassesLag(diagDuration(l, lag)),
+      e.hasGps ? l.diagGlassesGpsYes : l.diagGlassesGpsNo,
+      if (fix != null) l.diagGlassesGpsTime(signedClock(fix)),
+      food == null
+          ? l.diagGlassesFoodNone
+          : l.diagGlassesFood(food.toStringAsFixed(2)),
+    ].join(' · '),
+  );
+}
+
+/// The window of Diagnostics' AI-confidence counts (design R7b).
+const int diagConfidenceDays = 14;
+
+/// How sure the AI said it was (analysis.estimate_confidence, stage R1)
+/// about each photo meal among [meals]: food meals from the camera roll or
+/// a picked photo; a meal whose reply did not say (an older server or
+/// model) counts as unknown. Counts only — no meal is named.
+({int low, int medium, int high, int unknown}) confidenceCounts(
+    Iterable<Meal> meals) {
+  var low = 0, medium = 0, high = 0, unknown = 0;
+  for (final m in meals) {
+    if (m.source != MealSource.appWatch && m.source != MealSource.appPhoto) {
+      continue;
+    }
+    if (!isFoodTruthy(m.analysis['is_food'])) continue;
+    switch (mealContextFields(m.analysis).estimateConfidence) {
+      case EstimateConfidence.low:
+        low++;
+      case EstimateConfidence.medium:
+        medium++;
+      case EstimateConfidence.high:
+        high++;
+      case null:
+        unknown++;
+    }
+  }
+  return (low: low, medium: medium, high: high, unknown: unknown);
+}
+
+/// One restaurant decision as Diagnostics lists it: when, the reason code,
+/// the covered items' kcal before → after, and who answered. The entry
+/// holds nothing else — no chain, item, place or meal (design R7b).
+String restaurantDecisionLine(AppLocalizations l, AssistDecisionEntry e) {
+  final before = e.oldKcal, after = e.newKcal;
+  final provider = assistProviderLabel(l, e.provider);
+  return [
+    localStamp(e.at),
+    e.code,
+    if (before != null && after != null)
+      '${formatKcal(before)} → ${l.kcalAmount(formatKcal(after))}',
+    if (provider.isNotEmpty) provider,
+  ].join(' · ');
 }

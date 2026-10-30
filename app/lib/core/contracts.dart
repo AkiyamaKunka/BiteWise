@@ -122,6 +122,18 @@ class ReservationLost implements Exception {
 /// ITS [id] — nothing from this save was written to the meals table.
 typedef MealSaveResult = ({int id, bool inserted});
 
+/// One meal row exactly as stored, for a compare-and-set writer (design
+/// R6a, "Write safety"): [meal] decoded as every reader sees it, and
+/// [rawAnalysis] — the analysis column's TEXT, byte for byte. A writer
+/// hands [rawAnalysis] back as `expectedRaw`, and the write lands only
+/// while the column still holds exactly that text: whatever changed the
+/// meal in between (an editor save, a leftover deduction, a chat fix, a
+/// restaurant lookup) wins, and the stale writer is told so. The raw text,
+/// never a re-encoding of [meal]: a row an import or the server wrote with
+/// other spacing or key order would never compare equal to Dart's
+/// jsonEncode, and its writers would fail forever.
+typedef MealSnapshot = ({Meal meal, String rawAnalysis, bool corrected});
+
 /// Persistence seam (spec §2, §5 read shapes).
 abstract class MealsDao {
   /// [ownerStamp]: the [PhotoReservationResult.stamp] this save settles —
@@ -144,6 +156,36 @@ abstract class MealsDao {
   /// corrected=1 like [updateMealAnalysis].
   Future<void> updateMealFields(int mealId,
       {Map<String, dynamic>? analysis, String? date, String? time});
+
+  /// The meal [mealId] as stored ([MealSnapshot]), or null when no such
+  /// meal exists. Read-only.
+  Future<MealSnapshot?> mealSnapshot(int mealId);
+
+  /// The restaurant assist's write (design R6a/R6b): [analysis] lands only
+  /// while the meal is still uncorrected (corrected=0) and its analysis
+  /// column still holds exactly [expectedRaw] — one conditional UPDATE, so
+  /// nothing can slip between the check and the write. NEVER sets
+  /// corrected: published numbers are not the user's own edit, and an
+  /// Undo goes through here too. False — nothing written — when the meal
+  /// is gone, was corrected, or changed since [expectedRaw] was read.
+  Future<bool> applyAssist(int mealId,
+      {required String expectedRaw, required Map<String, dynamic> analysis});
+
+  /// [updateMealAnalysis] as a compare-and-set: sets corrected=1 and writes
+  /// [analysis] only while the analysis column still holds exactly
+  /// [expectedRaw]. False — nothing written — when the meal is gone or
+  /// changed since.
+  Future<bool> updateMealAnalysisIfUnchanged(int mealId,
+      {required String expectedRaw, required Map<String, dynamic> analysis});
+
+  /// [updateMealFields] as a compare-and-set against [expectedRaw] (the
+  /// editor's save): false — nothing written — when the meal is gone or
+  /// its analysis changed since the editor loaded it.
+  Future<bool> updateMealFieldsIfUnchanged(int mealId,
+      {required String expectedRaw,
+      Map<String, dynamic>? analysis,
+      String? date,
+      String? time});
   Future<void> deleteMeal(int mealId); // tombstones the ledger row (spec §2)
   Future<List<Meal>> mealsBetween(String startDate, String endDate);
   Future<List<Meal>> recentMeals({int days = 7}); // food-only, oldest-first
@@ -165,9 +207,16 @@ abstract class MealsDao {
   /// deduction written to meal [mealId] (as [updateMealAnalysis]). Two
   /// separate writes lost the deduction silently when the app was killed,
   /// or the update threw, between them. [ReservationLost] as [markPhotoHash].
-  Future<void> applyLeftoverVerdict(
+  ///
+  /// [expectedRaw] (design R6a): the deduction lands only while meal
+  /// [mealId]'s analysis column still holds exactly that text, checked in
+  /// the same transaction after the [ownerStamp] check. False — nothing
+  /// written, the photo still held — when it no longer does (or the meal
+  /// is gone); the caller re-reads, re-bases and tries once more. True
+  /// otherwise, including every call without [expectedRaw].
+  Future<bool> applyLeftoverVerdict(
       String imageHash, int mealId, Map<String, dynamic> analysis,
-      {String? ownerStamp});
+      {String? ownerStamp, String? expectedRaw});
   Future<void> reclaimStaleProcessing(); // launch-time sweep (spec §2 delta)
 
   /// Forget every verdict from [source] that did not become a meal
@@ -183,6 +232,20 @@ abstract class MealsDao {
   /// through intake.
   Future<({IngestionStatus status, int? mealId})?> photoStatus(
       String imageHash);
+
+  /// Those of [assetIds] a meal row already names as its photo
+  /// (meals.file_id): logged, so the late-import pass (design G1b) need not
+  /// read their bytes to find out. Read-only; empty ids never match.
+  Future<Set<String>> loggedAssetIds(List<String> assetIds);
+
+  /// The meals dated [fromDate]..[toDate] (YYYY-MM-DD, both inclusive)
+  /// whose analysis.capture.shutter_key is [key] — another file of the same
+  /// shutter press is already a meal (design G2b, the duplicate-capture
+  /// guard). A cheap text prefilter, then the stored JSON itself decides;
+  /// a [key] that is not 16 lowercase hex characters matches nothing.
+  /// Ascending ids. Read-only.
+  Future<List<int>> mealIdsWithShutterKey(
+      String key, String fromDate, String toDate);
 
   /// Tiny per-meal JPEG (spec §9 app-only): written by the pipeline at
   /// save time, deleted with the meal, shown beside the analysis so the
@@ -455,8 +518,180 @@ class IntakePhoto {
   final String fileName;
   final DateTime? capturedAt;
   final bool deliberate; // user-picked/shared (reclaims failed/skipped rows)
+
+  /// How the photo was taken, read from the bytes the intake already holds
+  /// (design G2a, services/photo/glasses.dart captureMetaFor). Null when
+  /// the intake did not look (older call sites, tests): nothing is stored
+  /// for it then.
+  final CaptureMeta? capture;
+
+  /// The automatic scan's allowance of Meta glasses photos for the model
+  /// (design G3): every photo one scan delivers shares it. Null: no limit
+  /// (deliberate adds, older call sites, tests).
+  final GlassesQuota? glassesQuota;
   const IntakePhoto(this.bytes, this.assetId, this.fileName,
-      {this.capturedAt, this.deliberate = false});
+      {this.capturedAt,
+      this.deliberate = false,
+      this.capture,
+      this.glassesQuota});
+}
+
+/// Meta glasses photos one automatic scan sends on to the model at most
+/// (design G3).
+const int glassesPerScanLimit = 15;
+
+/// One automatic scan's allowance of Meta glasses photos for the model
+/// (design G3). Folding the glasses can import 20–40 photos at once, and
+/// each one the model sees is an upload, plan usage and up to a minute of
+/// a pipeline that also serves the camera. The watcher makes one per scan
+/// (services/photo/watcher.dart); the pipeline takes a slot for each
+/// glasses photo that gets as far as the model — past the duplicate,
+/// preview and on-device food checks, so a burst of casual non-food photos
+/// costs none. A photo turned away is released, and the watcher leaves it
+/// as if unread: the late-import carry keeps it, the frontier waits in
+/// front of it, and the next scan offers it.
+class GlassesQuota {
+  GlassesQuota({this.limit = glassesPerScanLimit});
+
+  final int limit;
+  int _taken = 0;
+  final Set<String> _turnedAway = {};
+
+  /// Slots taken so far.
+  int get taken => _taken;
+
+  /// A slot for [assetId]; false — and [assetId] remembered as turned
+  /// away — once every slot is taken.
+  bool take(String assetId) {
+    if (_taken >= limit) {
+      _turnedAway.add(assetId);
+      return false;
+    }
+    _taken++;
+    return true;
+  }
+
+  /// Whether this scan turned [assetId] away for want of a slot.
+  bool turnedAway(String assetId) => _turnedAway.contains(assetId);
+}
+
+/// The capture facts a photo's own EXIF holds, as exifCapture
+/// (services/photo/filename_dates.dart) reads them (design G2a). There is
+/// deliberately NO latitude or longitude here, nor any way to carry one:
+/// whether a position exists, how precise it was and when it was fixed are
+/// all any later step needs to judge it, and a coordinate kept in memory
+/// is one a later change can leak (the upload bytes are stripped of GPS,
+/// exif_strip_test).
+class ExifCapture {
+  const ExifCapture(
+      {this.make,
+      this.model,
+      this.dateTimeOriginal,
+      this.subSec,
+      this.offsetTimeOriginal,
+      this.gpsPresent = false,
+      this.gpsAccuracyM,
+      this.gpsFixUtc,
+      this.pixelW,
+      this.pixelH});
+
+  /// TIFF Make / Model, trimmed, at most 64 characters each.
+  final String? make;
+  final String? model;
+
+  /// DateTimeOriginal: the camera's wall clock at the shutter (local
+  /// components, no zone).
+  final DateTime? dateTimeOriginal;
+
+  /// SubSecTimeOriginal: its fraction of a second, digits only.
+  final String? subSec;
+
+  /// OffsetTimeOriginal: the zone [dateTimeOriginal] was in.
+  final Duration? offsetTimeOriginal;
+
+  /// The GPS block names a position (latitude and longitude tags both
+  /// present). The position itself is never read.
+  final bool gpsPresent;
+
+  /// GPSHPositioningError (tag 0x1F), in metres.
+  final double? gpsAccuracyM;
+
+  /// When the position was fixed: GPSDateStamp + GPSTimeStamp, in UTC.
+  final DateTime? gpsFixUtc;
+
+  /// The full image's size in pixels (EXIF PixelX/YDimension, else the
+  /// JPEG frame header or the HEIF image extents).
+  final int? pixelW;
+  final int? pixelH;
+}
+
+/// The device a photo came from, as far as the phone can tell.
+enum CaptureDevice {
+  /// Ray-Ban / Oakley Meta glasses, imported by the Meta AI app.
+  metaGlasses,
+  unknown,
+}
+
+/// How much the evidence for [CaptureDevice] is worth. The filename and
+/// the album are set by the Meta AI app itself; EXIF Make/Model can be
+/// written onto any photo by a converter, so it is only ever [medium].
+enum CaptureStrength { strong, medium, none }
+
+/// Which evidence decided [CaptureDevice]. The names are stored
+/// (analysis.capture.signal).
+enum CaptureSignal { filename, album, exif }
+
+/// What an intake learned about how a photo was taken (design G2a): the
+/// device, the evidence for it, the EXIF facts, and the library's
+/// creation instant the GPS fix is compared with. The pipeline stores a
+/// summary of it as analysis['capture'] (glasses.dart captureAnalysis);
+/// none of it is ever a coordinate.
+class CaptureMeta {
+  const CaptureMeta(
+      {this.device = CaptureDevice.unknown,
+      this.strength = CaptureStrength.none,
+      this.signal,
+      this.exif,
+      this.createDate,
+      this.addedDate,
+      this.importPassAt});
+
+  final CaptureDevice device;
+  final CaptureStrength strength;
+  final CaptureSignal? signal;
+
+  /// Null when the bytes carry no readable EXIF.
+  final ExifCapture? exif;
+
+  /// The library asset's creationDate (an instant); null for a shared file,
+  /// which has no asset.
+  final DateTime? createDate;
+
+  /// When the asset joined the library (PHAsset.addedDate, iOS 26+), as
+  /// the watcher learned it for a glasses photo the dating guard could
+  /// re-date (design G2b, services/photo/capture_dating.dart): evidence that
+  /// [createDate] is only the import time. Null: not asked, or not known.
+  final DateTime? addedDate;
+
+  /// Set when the late-import pass (design G1b) offered the photo: when
+  /// that pass ran — the guard's evidence where [addedDate] is unknown.
+  /// (Not 'lateImportAt': no member here may even read like a position —
+  /// exif_capture_test scans the names.)
+  final DateTime? importPassAt;
+
+  bool get isMetaGlasses => device == CaptureDevice.metaGlasses;
+
+  /// This reading with the import-time evidence an intake found added.
+  CaptureMeta withImportEvidence(
+          {DateTime? addedDate, DateTime? importPassAt}) =>
+      CaptureMeta(
+          device: device,
+          strength: strength,
+          signal: signal,
+          exif: exif,
+          createDate: createDate,
+          addedDate: addedDate ?? this.addedDate,
+          importPassAt: importPassAt ?? this.importPassAt);
 }
 
 abstract class PhotoIntake {
@@ -516,6 +751,19 @@ abstract class PhotoIntake {
       bool Function()? shouldContinue,
       Future<void> Function(DateTime safeFrontier)? onCovered,
       bool newestDayFirst});
+
+  /// Photos other apps added to the library LATE — keeping a capture date
+  /// older than the scans' cutoffs, so neither the live watcher nor a
+  /// watermark scan ever lists them: glasses photos the Meta AI app
+  /// imports, AirDrop, WeChat, iCloud downloads (design G1b; on iOS, the
+  /// library's change history, services/photo/photo_changes.dart). Each one
+  /// goes through the attached sink like any automatic photo, but with a
+  /// null safeFrontier: it never moves a cutoff or a watermark.
+  /// [shouldContinue] as in [backfillScan]. Never throws.
+  ///
+  /// Default: nothing to do — right for an intake with no such history
+  /// (Android's scans filter on the date a photo was ADDED).
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async {}
   Future<void> start();
   Future<void> stop();
 }

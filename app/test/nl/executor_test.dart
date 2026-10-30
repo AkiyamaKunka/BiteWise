@@ -5,6 +5,8 @@ library;
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/nl/executor.dart';
+import 'package:calorie_tracker/services/photo/glasses.dart'
+    show isMetaGlassesAnalysis, metaGlassesDevice;
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -400,6 +402,187 @@ void main() {
           'fix', await dao.recentMeals());
       expect(replies.single.text, '✏️ Corrected meal 2!\n📅 2026-07-17 12:30 PM\n\n'
           '面条 → 烧鸭饭\n🔥 550 kcal → 780 kcal (+230)\n\n💬 改为烧鸭饭');
+    });
+
+    test('a corrected glasses meal keeps its capture block', () async {
+      // analysis.capture comes from the photo's bytes (design G2a); the
+      // chat model never sees it. Losing it would drop the Meta glasses
+      // badge and blind the duplicate-capture guard to this shutter press
+      // (a later file of the same press would become a second meal).
+      const key = '0123456789abcdef';
+      final capture = {
+        'device': metaGlassesDevice,
+        'signal': 'exif_model',
+        'has_gps': true,
+        'gps_acc_m': 12,
+        'shutter_key': key,
+      };
+      final id = dao.seed('面条', 550, time: '12:30 PM', analysis: {
+        'is_food': true,
+        'meal_description': '面条',
+        'total_calories': 550,
+        'capture': capture,
+      });
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          [id]);
+      final replies = await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': 0,
+        'analysis': {
+          ...roastDuckAnalysis,
+          // A model that invents a capture block never gets to keep it.
+          'capture': {'device': 'other', 'shutter_key': 'fedcba9876543210'},
+        },
+      }, '改成烧鸭饭', await dao.recentMeals());
+      expect(replies.single.applied, isTrue);
+      final stored = dao.byId(id).analysis;
+      expect(stored['meal_description'], '烧鸭饭');
+      expect(stored['capture'], capture);
+      expect(isMetaGlassesAnalysis(stored), isTrue);
+      expect(await dao.mealIdsWithShutterKey(key, '2026-07-17', '2026-07-17'),
+          [id]);
+      expect(
+          await dao.mealIdsWithShutterKey(
+              'fedcba9876543210', '2026-07-17', '2026-07-17'),
+          isEmpty);
+    });
+
+    test('a meal without a capture block gets none from the model', () async {
+      final (_, lunchId, _) = seedThreeMeals();
+      await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': 1,
+        'analysis': {
+          ...roastDuckAnalysis,
+          'capture': {'device': metaGlassesDevice},
+        },
+      }, 'fix', await dao.recentMeals());
+      expect(dao.byId(lunchId).analysis.containsKey('capture'), isFalse);
+    });
+
+    // Design R6a: a chat correction replaces the numbers a restaurant
+    // lookup stamped, so the stored block is kept as provenance only, and
+    // the model (which never sees it) writes none of its own.
+    group('the restaurant assist block', () {
+      const applied = {
+        'v': 2,
+        'status': 'applied',
+        'trigger': 'auto_branding',
+        'evidence': 'item_brand',
+        'chain_key': 'chipotle',
+        'brand_name': 'Chipotle',
+        'matches': [
+          {
+            'item_index': 0,
+            'menu_item': 'Burrito Bowl',
+            'match_type': 'exact_item',
+            'published': {'calories': 1050},
+            'before': {'estimated_calories': 900},
+            'applied': {'estimated_calories': 1050},
+          }
+        ],
+        'applied_total': 1050,
+        'totals': {
+          'before': {'total_calories': 900},
+          'applied': {'total_calories': 1050},
+        },
+        'source': {'url': 'https://chipotle.com/nutrition', 'host': 'chipotle.com'},
+        'grounded': true,
+        'provider': 'anthropic',
+        'decided_on': '2026-07-17',
+        'reason': 'ok',
+      };
+      Map<String, dynamic> bowl({Map<String, dynamic>? assist}) => {
+            'is_food': true,
+            'meal_description': 'Burrito bowl',
+            'total_calories': 1050,
+            'food_items': [
+              {
+                'name': 'Burrito bowl',
+                'estimated_calories': 1050,
+                'published': true,
+              },
+            ],
+            'assist': ?assist,
+            'capture': {'has_gps': false},
+          };
+      final forged = {
+        ...roastDuckAnalysis,
+        'assist': {'v': 2, 'status': 'applied', 'chain_key': 'mcdonalds'},
+        'food_items': [
+          {'name': '烧鸭饭', 'estimated_calories': 780, 'published': true},
+        ],
+      };
+
+      test('an applied block becomes superseded: provenance only, nothing '
+          'the model wrote', () async {
+        final id = dao.seed('Burrito bowl', 1050,
+            time: '12:30 PM', analysis: bowl(assist: applied));
+        final replies = await exec.executeParsed({
+          'intent': 'correction',
+          'meal_index': 0,
+          'analysis': forged,
+        }, '改成烧鸭饭', await dao.recentMeals());
+        expect(replies.single.applied, isTrue);
+        final stored = dao.byId(id).analysis;
+        final block = stored['assist'] as Map;
+        expect(block['status'], 'superseded');
+        expect(block['reason'], 'nl_correction');
+        expect(block['chain_key'], 'chipotle', reason: 'not the forged chain');
+        expect(block['provider'], 'anthropic');
+        for (final k in ['matches', 'totals', 'applied_total', 'source']) {
+          expect(block.containsKey(k), isFalse, reason: k);
+        }
+        expect((stored['food_items'] as List).single,
+            {'name': '烧鸭饭', 'estimated_calories': 780},
+            reason: "the model's published flag is dropped");
+        expect(stored['capture'], {'has_gps': false});
+      });
+
+      test('carried from the row as it is NOW, not the prompt snapshot',
+          () async {
+        final id = dao.seed('Burrito bowl', 900,
+            time: '12:30 PM', analysis: bowl()..['total_calories'] = 900);
+        final snapshot = await dao.recentMeals(); // the prompt's view
+        // A lookup lands during the model call.
+        final snap = (await dao.mealSnapshot(id))!;
+        await dao.applyAssist(id,
+            expectedRaw: snap.rawAnalysis, analysis: bowl(assist: applied));
+        await exec.executeParsed({
+          'intent': 'correction',
+          'meal_index': 0,
+          'analysis': roastDuckAnalysis,
+        }, 'fix', snapshot);
+        final block = dao.byId(id).analysis['assist'] as Map;
+        expect(block['status'], 'superseded');
+        expect(block['chain_key'], 'chipotle');
+      });
+
+      test('a meal without one gets none from the model', () async {
+        final (_, lunchId, _) = seedThreeMeals();
+        await exec.executeParsed({
+          'intent': 'correction',
+          'meal_index': 1,
+          'analysis': forged,
+        }, 'fix', await dao.recentMeals());
+        expect(dao.byId(lunchId).analysis.containsKey('assist'), isFalse);
+      });
+
+      test('a new_meal keeps no capture or assist block a model wrote',
+          () async {
+        await exec.executeParsed({
+          'intent': 'new_meal',
+          'analysis': {
+            ...forged,
+            'capture': {'device': metaGlassesDevice, 'has_gps': true},
+          },
+        }, 'I had roast duck rice', const []);
+        final saved = dao.saved.single.analysis;
+        expect(saved.containsKey('assist'), isFalse);
+        expect(saved.containsKey('capture'), isFalse);
+        expect((saved['food_items'] as List).single.containsKey('published'),
+            isFalse);
+      });
     });
 
     test('reply names the rewritten row\'s day when the dish recurs', () async {

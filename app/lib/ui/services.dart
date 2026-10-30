@@ -14,8 +14,10 @@ import '../services/garmin_client.dart';
 import '../services/photo/coverage.dart';
 import '../services/photo/photo_library.dart';
 import 'ai_consent.dart' show SharedPhotoConsentGate;
+import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
 import 'photo_pipeline.dart';
+import 'restaurant_assist_controls.dart';
 
 /// The settings surface the UI needs (spec §8 knobs the user edits).
 /// di.dart adapts the concrete AppSettings onto this; tests use in-memory
@@ -82,6 +84,9 @@ abstract class SettingsStore {
   /// True once the user accepted the one-time 监控相册 disclosure (photos
   /// go to the chosen AI service); only the Settings toggle reads it.
   bool get watcherDisclosureSeen;
+
+  /// The 'Meta glasses photos' switch (AppSettings.watchGlasses, default on).
+  bool get watchGlasses;
   String get dietaryProfile; // spec §1.3 photo-prompt appendix
 
   /// Base URL of the user's own server (AiProvider.server); '' when unset.
@@ -107,6 +112,29 @@ abstract class SettingsStore {
   /// summary then compares against the typical-day median).
   int get calorieGoal;
 
+  /// The restaurant assist (design R7a; AppSettings.restaurantAssist…):
+  /// 'off' | 'auto' ('When unsure') | 'always'.
+  String get restaurantAssist;
+
+  /// 'Use photo location' (false on Android whatever is stored).
+  bool get restaurantAssistLocation;
+
+  /// The consent: when it was given and to which recipient
+  /// (LookupSupport.recipientStamp); both null without one.
+  DateTime? get restaurantAssistConsentAt;
+  String? get restaurantAssistConsentRecipient;
+
+  /// Writes the restaurant assist's settings together (one change signal,
+  /// so the assist never sees a mode without its consent). Null leaves a
+  /// value as it is; [clearConsent] forgets the consent.
+  Future<void> updateRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  });
+
   Future<void> update({
     String? apiKey,
     String? provider,
@@ -116,6 +144,7 @@ abstract class SettingsStore {
     bool? summaryEnabled,
     bool? watcherEnabled,
     bool? watcherDisclosureSeen,
+    bool? watchGlasses,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -241,6 +270,15 @@ class UiServices {
   /// this is the ONLY way back). Null in tests hides the buttons.
   final Future<void> Function()? openSystemSettings;
 
+  /// The meals a screen is working on (design R6a): the editor, a leftover
+  /// selection and a pending fix-meal request hold them, and the
+  /// restaurant assist leaves them alone. Null in tests that do not care.
+  final MealInUseRegistry? mealInUse;
+
+  /// The restaurant assist as Settings and its consent sheets see it
+  /// (design R7a). Null hides the Settings group (most tests).
+  final RestaurantAssistControls? restaurantAssist;
+
   const UiServices({
     required this.dao,
     required this.analyzer,
@@ -270,5 +308,7 @@ class UiServices {
     this.lastBackgroundScan,
     this.backgroundRefreshEnabled,
     this.backgroundScanStuck,
+    this.mealInUse,
+    this.restaurantAssist,
   });
 }

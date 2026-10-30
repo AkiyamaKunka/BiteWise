@@ -14,6 +14,8 @@
 // Whitespace and trailing commas are free; the wiring is not.
 import 'dart:io';
 
+import 'package:calorie_tracker/services/photo/photo_changes.dart'
+    show recordLateImportPass;
 import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -120,6 +122,179 @@ void main() {
     test('the stuck probe reads the runs and the watermark together', () {
       expect(init(), _wired(r'backgroundScanStuck: backgroundScanStuckNow,'));
     });
+
+    // G2b: without it every glasses preview copy is analyzed at once.
+    test('a glasses preview copy waits once for its full-size one', () {
+      expect(init(), _wired(r'previewHold: holdGlassesPreview,'));
+    });
+
+    // G3: without them a switched-off glasses photo is still logged, an
+    // iPhone uploads every casual glasses frame, and the Glasses check
+    // card stays empty.
+    test('glasses photos: the live switch, the iOS food check, the record',
+        () {
+      expect(init(), _wired(r'includeGlasses: \(\) => settings\.watchGlasses,'));
+      expect(
+        init(),
+        _wired(r'foodCheck: Platform\.isIOS \? foodScoreViaImageIO : null,'),
+      );
+      expect(init(), _wired(r'glassesCheckLog: recordGlassesCheckLocally\)'));
+    });
+
+    // G1b: without it every late import is read in full, logged or not.
+    test('late imports skip photos a meal already names, without a read', () {
+      expect(
+        init(),
+        _wired(
+          r'createPhotoIntake\(settings, loggedAssetIds: dao\.loggedAssetIds\)',
+        ),
+      );
+    });
+  });
+
+  // R6b: the restaurant assist lives in the app engine, reads the real
+  // pipeline, analyzer and registry, counts against the app's daily ledger,
+  // and looks once the launch catch-up's photos are in.
+  group('the restaurant assist (MealAssist)', () {
+    String init() => _body(
+      _source('lib/ui/di.dart'),
+      'static Future<AppServices> init(',
+      indent: '  ',
+    );
+
+    test('di.dart builds it from the real pipeline, analyzer and registry',
+        () {
+      expect(
+        init(),
+        _wired(
+          r'final analyzer = MultiProviderAnalyzer\(settings, '
+          r'lookupBudget: assistBudget\);',
+        ),
+      );
+      expect(
+        init(),
+        _wired(
+          r'final assistBudget = AssistDailyBudget\('
+          r'await SharedPreferences\.getInstance\(\)\);',
+        ),
+      );
+      final source = init();
+      final from = source.indexOf('final mealAssist = MealAssist(');
+      expect(from, isNot(-1));
+      final build = source.substring(from, source.indexOf('\n    );\n', from));
+      for (final wire in [
+        r'dao: dao,',
+        r'lookups: analyzer,',
+        r'analyzerBusy: analyzer\.analyzerBusy,',
+        r'pipelineIdle: \(\) => pipeline\.isIdle,',
+        r'inUse: mealInUse\.isInUse,',
+        r'budget: assistBudget,',
+        r'state: AssistLocalState\.platform\(\),',
+        r'mealsChanged: mealsChangedSignal,',
+        r'onMealsChanged: signalMealsChanged,',
+        r'inForeground: appEngineInForeground,',
+        // The region: the locale name's, else the preferred languages'
+        // (review 2026-10-25: a region-less 'zh_Hans' read as not the US).
+        r'country: \(\) => deviceRegion\( Platform\.localeName, '
+            r'PlatformDispatcher\.instance\.locales\.map\(\(l\) => '
+            r'l\.countryCode\) \),',
+        r'repliesInChinese: \(\) => settings\.repliesInChinese,',
+        // R6c: the location path is iOS only; Android is brand-only.
+        r'location: Platform\.isIOS \? PhotoLocationReader\(photoLibrary\) '
+            r': null,',
+        r'places: Platform\.isIOS \? MapKitPlaces\(\) : null,',
+        r'placesStore: AssistPlacesStore\.platform\(\),',
+        // R7a: the mode, 'Use photo location' and the consent, read fresh
+        // from the real settings on every decision.
+        r'settings: \(\) => AssistSettingsView\( '
+            r'mode: AssistMode\.fromWire\(settings\.restaurantAssist\), '
+            r'useLocation: settings\.restaurantAssistLocation, '
+            r'consentAt: settings\.restaurantAssistConsentAt, '
+            r'consentRecipient: settings\.restaurantAssistConsentRecipient, '
+            r'\),',
+      ]) {
+        expect(build, _wired(wire), reason: wire);
+      }
+      // The meal country's time zone is the phone's own (MealAssist's
+      // default, DateTime.now().timeZoneOffset): di passes no other.
+      expect(build, isNot(contains('utcOffset')));
+      expect(build, isNot(contains('AssistSettingsView.off')),
+          reason: 'R7a stores the settings: the assist reads them');
+      // R7a: Settings' Restaurant nutrition group and the consent sheets
+      // see the same analyzer, MealAssist and server; the location only on
+      // iOS; and the shell gets them through UiServices.
+      final controlsAt = source.indexOf(
+          'final restaurantAssist = RestaurantAssistControls(');
+      expect(controlsAt, isNot(-1));
+      final controls = source.substring(
+          controlsAt, source.indexOf('\n    );\n', controlsAt));
+      for (final wire in [
+        r'lookupSupport: analyzer\.lookupSupport,',
+        r'clearLearnedPlaces: mealAssist\.clearLearnedPlaces,',
+        r'consentNeeded: mealAssist\.consentNeeded,',
+        r'serverState: \(\) async => '
+            r'assistServerStateOf\(await serverAnalyzer\.serverFeatures\(\)\),',
+        r'locationSupported: Platform\.isIOS,',
+        // Review (run 6): Settings says why nothing would be looked up.
+        r'whereNow: mealAssist\.whereNow,',
+      ]) {
+        expect(controls, _wired(wire), reason: wire);
+      }
+      expect(init(), _wired(r'restaurantAssist: restaurantAssist,'));
+      expect(init(), _wired(r'mealAssist\.start\(\);'));
+      expect(
+        init(),
+        _wired(
+          r'foregroundCatchUp\(photoIntake, shouldContinue: '
+          r'Platform\.isIOS \? appEngineInForeground : null\) '
+          r'\.whenComplete\(\(\) => unawaited\(mealAssist\.sweep\(\)\)\)',
+        ),
+      );
+      expect(init(), _wired(r'if \(!catchingUp\) unawaited\(mealAssist\.sweep\(\)\);'));
+    });
+
+    test('background_glue.dart never references it, and its PhotoPipeline '
+        'is built as before', () {
+      final glue = _source('lib/ui/background_glue.dart');
+      for (final banned in [
+        'MealAssist',
+        'meal_assist',
+        'assist_local_state',
+        'AssistDailyBudget',
+        'lookupNow',
+        'services/assist/',
+        // R6c: no photo position or places query in the background engine.
+        'PhotoLocationReader',
+        'photo_location',
+        'MapKitPlaces',
+        'PlaceResolver',
+        'services/places/',
+        'AssistPlacesStore',
+        // R7a: no consent sheet, Settings group or their seams either.
+        'RestaurantAssistControls',
+        'restaurant_assist_controls',
+        'restaurant_consent_sheet',
+      ]) {
+        expect(glue, isNot(contains(banned)), reason: banned);
+      }
+      final after = _body(glue, 'Future<bool> _runAfterLaunch({');
+      expect(
+        after,
+        _wired(r'pipeline: \(\) async => inFlight\.pipeline = PhotoPipeline\('),
+      );
+      expect(after, _wired(r'analyzer: createMultiProviderAnalyzer\(settings\),'));
+    });
+
+    test('the pipeline constructor takes nothing from the assist', () {
+      final pipeline = _source('lib/ui/photo_pipeline.dart');
+      final from = pipeline.indexOf('\n  PhotoPipeline(\n');
+      expect(from, isNot(-1));
+      final ctor = pipeline.substring(
+          from, pipeline.indexOf('_clock = clock ?? DateTime.now;', from));
+      expect(ctor, isNot(contains('ssist')));
+      expect(pipeline, isNot(contains('meal_assist')));
+      expect(pipeline, contains('bool get isIdle =>'));
+    });
   });
 
   group('lib/ui/app.dart (the resume catch-up)', () {
@@ -185,7 +360,8 @@ void main() {
         after(),
         _wired(
           r'intake: createPhotoIntake\(settings, onBackfillListed: '
-          r'recorder\.listed, passOver: deferred\.passOver\)',
+          r'recorder\.listed, passOver: deferred\.passOver, '
+          r'loggedAssetIds: inFlight\.loggedAssetIds\)',
         ),
       );
       expect(after(), _wired(r'\n\s*deferred: deferred,'));
@@ -200,6 +376,14 @@ void main() {
     test('iOS: undecodable photos are deferred, the offer budget applies, '
         'and the deadline releases the photo in flight', () {
       expect(after(), _wired(r'deferUndecodable: ios\)'));
+      // G2b: a glasses preview copy waits once there too.
+      expect(after(), _wired(r'previewHold: holdGlassesPreview, '));
+      // G3: the switch as the run loaded it, the food check on iOS (on the
+      // CPU, or deferred to the app), and the Glasses check record.
+      expect(
+          after(), _wired(r'includeGlasses: \(\) => settings\.watchGlasses, '));
+      expect(after(), _wired(r'foodCheck: ios \? foodScoreViaImageIO : null, '));
+      expect(after(), _wired(r'glassesCheckLog: recordGlassesCheckLocally, '));
       expect(after(), _wired(r'budget: ios \? iosBackgroundBudget : null,'));
       expect(
         after(),
@@ -210,6 +394,35 @@ void main() {
         _wired(
           r'return finishWithinGrant\(run, left: startedAt\.add\(iosRunDeadline\)'
           r'\.difference\(clock\(\)\), recorder: recorder, abandon: inFlight\.abandon\);',
+        ),
+      );
+    });
+
+    // G1b: photos other apps imported late, with the budget the scan left.
+    test('the run takes late imports after its scan, under its budget', () {
+      final headless = _body(glue(), 'Future<bool> headlessBackfillWith({');
+      expect(
+        headless,
+        _wired(
+          r'final drain = await drainBackfill\([^;]*\n\s*lateImports: true,',
+        ),
+      );
+      final drain = _body(glue(), 'Future<BackfillDrain> drainBackfill(');
+      expect(
+        drain,
+        _wired(
+          r'scanCompleted = true;[^}]*if \(lateImports && roomLeft\(\)\) \{\s*'
+          r'try \{\s*await intake\.lateImportScan\('
+          r'shouldContinue: timed \? budgetLeft : null\);',
+        ),
+      );
+      final catchUp = _body(glue(), 'Future<DateTime?> foregroundCatchUp(');
+      expect(
+        catchUp,
+        _wired(
+          r'\} finally \{[^}]*if \(shouldContinue\?\.call\(\) \?\? true\) \{\s*'
+          r'try \{\s*await intake\.lateImportScan\('
+          r'shouldContinue: shouldContinue\);',
         ),
       );
     });
@@ -251,6 +464,36 @@ void main() {
               as LibraryPhotoIntake;
       expect(intake.passOver, same(passOver));
       expect(intake.onBackfillListed, same(listed));
+    },
+  );
+
+  test(
+    'createPhotoIntake hands loggedAssetIds over, and reads the change '
+    'history (with its diagnostics record) on iOS only',
+    () async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: _Keys(),
+      );
+      Future<Set<String>> logged(List<String> ids) async => {};
+      final ios =
+          createPhotoIntake(settings, loggedAssetIds: logged, isIOS: true)
+              as LibraryPhotoIntake;
+      expect(ios.loggedAssetIds, same(logged));
+      expect(ios.lateImports, isNotNull);
+      expect(ios.lateImports!.store, isNotNull);
+      expect(ios.onLateImportPass, equals(recordLateImportPass));
+      // G2a/G2b: the album lookup and the added dates ride the same channel.
+      expect(ios.metaAlbumIds, isNotNull);
+      expect(ios.assetAddedDate, isNotNull);
+      final android =
+          createPhotoIntake(settings, loggedAssetIds: logged, isIOS: false)
+              as LibraryPhotoIntake;
+      expect(android.lateImports, isNull);
+      expect(android.onLateImportPass, isNull);
+      expect(android.metaAlbumIds, isNull);
+      expect(android.assetAddedDate, isNull);
     },
   );
 }

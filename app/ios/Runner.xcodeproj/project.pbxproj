@@ -18,6 +18,8 @@
 		471D18A24BDDC47E7FDDA285 /* Pods_Runner.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F294E0FDF0C79180F70B0B24 /* Pods_Runner.framework */; };
 		4C1A7E0C2F3D9A6E00C0FFEE /* ImageIOPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1A7E0B2F3D9A6E00C0FFEE /* ImageIOPlugin.swift */; };
 		4C1A7E0E2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1A7E0D2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift */; };
+		4C1A7E102F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1A7E0F2F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift */; };
+		4C1A7E122F3D9A6E00C0FFEE /* PlacesPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C1A7E112F3D9A6E00C0FFEE /* PlacesPlugin.swift */; };
 		74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74858FAE1ED2DC5600515810 /* AppDelegate.swift */; };
 		74CB771921A0B0074FE2F321 /* receive-sharing-intent in Frameworks */ = {isa = PBXBuildFile; productRef = 8B64E8069FFF55C471247CB2 /* receive-sharing-intent */; };
 		7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */; };
@@ -83,6 +85,8 @@
 		3B3967151E833CAA004F5970 /* AppFrameworkInfo.plist */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.plist.xml; name = AppFrameworkInfo.plist; path = Flutter/AppFrameworkInfo.plist; sourceTree = "<group>"; };
 		4C1A7E0B2F3D9A6E00C0FFEE /* ImageIOPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImageIOPlugin.swift; sourceTree = "<group>"; };
 		4C1A7E0D2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTimePlugin.swift; sourceTree = "<group>"; };
+		4C1A7E0F2F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoChangesPlugin.swift; sourceTree = "<group>"; };
+		4C1A7E112F3D9A6E00C0FFEE /* PlacesPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PlacesPlugin.swift; sourceTree = "<group>"; };
 		51C98434F67C19C48F706FFB /* MainInterface.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; path = MainInterface.storyboard; sourceTree = "<group>"; };
 		5C24B722AFDE51821E294A91 /* en */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = en; path = en.lproj/InfoPlist.strings; sourceTree = "<group>"; };
 		69802DC2FF95A267C020244C /* zh-Hans */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.strings; name = "zh-Hans"; path = "zh-Hans.lproj/InfoPlist.strings"; sourceTree = "<group>"; };
@@ -245,6 +249,8 @@
 				7884E8672EC3CC0400C636F2 /* SceneDelegate.swift */,
 				4C1A7E0B2F3D9A6E00C0FFEE /* ImageIOPlugin.swift */,
 				4C1A7E0D2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift */,
+				4C1A7E0F2F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift */,
+				4C1A7E112F3D9A6E00C0FFEE /* PlacesPlugin.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				4377BC1A20341ED1CFBB3347 /* InfoPlist.strings */,
 				30F109BF9CA2B6004D7C6CC4 /* PrivacyInfo.xcprivacy */,
@@ -519,6 +525,8 @@
 				7884E8682EC3CC0700C636F2 /* SceneDelegate.swift in Sources */,
 				4C1A7E0C2F3D9A6E00C0FFEE /* ImageIOPlugin.swift in Sources */,
 				4C1A7E0E2F3D9A6E00C0FFEE /* BackgroundTimePlugin.swift in Sources */,
+				4C1A7E102F3D9A6E00C0FFEE /* PhotoChangesPlugin.swift in Sources */,
+				4C1A7E122F3D9A6E00C0FFEE /* PlacesPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

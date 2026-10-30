@@ -1,0 +1,49 @@
+{
+ "id": "msg_01XFDUDYJgAACzvnptvVoYEL",
+ "type": "message",
+ "role": "assistant",
+ "model": "claude-haiku-5-5",
+ "content": [
+  {
+   "type": "text",
+   "text": "{\"status\": \"found\", \"chain_key\": \"mcdonalds\", \"restaurant_name\": \"McDonald's\", \"matches\": [{\"item_index\": 0, \"menu_item\": \"Big Mac\", \"match_type\": \"exact_item\", \"is_drink\": false, \"components\": [], \"options\": [{\"label\": \"Big Mac\", \"serving\": \"1 sandwich (219 g)\", \"unit\": \"sandwich\", \"calories\": "
+  },
+  {
+   "type": "text",
+   "text": "590",
+   "citations": [
+    {
+     "type": "web_search_result_location",
+     "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html",
+     "title": "Big Mac®: McDonald's Iconic Burger | McDonald's",
+     "encrypted_index": "EqgfCioIARgBIiQiAAAAAAAAAAAAAAAAAAAAAAAA",
+     "cited_text": "Big Mac® | 590 Cal. The one and only McDonald's Big Mac® Burger. Mouthwatering perfection starts with two 100% pure all beef patties"
+    }
+   ]
+  },
+  {
+   "type": "text",
+   "text": ", \"calories_range\": null, \"protein_g\": 25, \"carbs_g\": 46, \"fat_g\": 34}]}], \"source_url\": \"https://www.mcdonalds.com/us/en-us/product/big-mac.html\", \"source_title\": \"Big Mac®: McDonald's Iconic Burger | McDonald's\", \"source_type\": \"official_site\", \"source_year\": 2026, \"match_confidence\": 0.95, \"notes\": \"\"}",
+   "citations": [
+    {
+     "type": "web_search_result_location",
+     "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html",
+     "title": "Big Mac®: McDonald's Iconic Burger | McDonald's",
+     "encrypted_index": "EqgfCioIARgBIiQiAAAAAAAAAAAAAAAAAAAAAAAA",
+     "cited_text": "Nutrition: Calories 590, Total Fat 34g, Carbohydrates 46g, Protein 25g. Serving size 1 sandwich (219 g)"
+    }
+   ]
+  }
+ ],
+ "stop_reason": "end_turn",
+ "stop_sequence": null,
+ "usage": {
+  "input_tokens": 8890,
+  "cache_creation_input_tokens": 0,
+  "cache_read_input_tokens": 0,
+  "output_tokens": 380,
+  "server_tool_use": {
+   "web_search_requests": 0
+  }
+ }
+}

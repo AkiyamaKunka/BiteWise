@@ -1,6 +1,8 @@
 import 'dart:async';
 
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:flutter/foundation.dart'
+    show TargetPlatform, debugDefaultTargetPlatformOverride;
 import 'package:flutter/widgets.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +44,8 @@ void main() {
     // arriving — the switch exists so a friend can turn it OFF.
     expect(s.summaryEnabled, isTrue);
     expect(s.watcherEnabled, isFalse);
+    // Design G3: Meta glasses photos are included unless switched off.
+    expect(s.watchGlasses, isTrue);
     expect(s.dietaryProfile, isNull);
     expect(s.quotaPauseUntil, isNull);
     expect(s.isQuotaPaused, isFalse);
@@ -55,6 +59,7 @@ void main() {
     await s.setReportTime('08:05');
     await s.setSummaryEnabled(false);
     await s.setWatcherEnabled(true);
+    await s.setWatchGlasses(false);
     await s.setDietaryProfile('vegetarian, Cantonese cuisine');
     final pause = DateTime(2026, 7, 18, 9, 30);
     await s.setQuotaPauseUntil(pause);
@@ -66,6 +71,9 @@ void main() {
     expect(again.reportTime, '08:05');
     expect(again.summaryEnabled, isFalse, reason: 'off survives a relaunch');
     expect(again.watcherEnabled, isTrue);
+    expect(again.watchGlasses, isFalse);
+    expect(prefs.getBool('settings.watch_glasses'), isFalse,
+        reason: 'the key the design names');
     expect(again.dietaryProfile, 'vegetarian, Cantonese cuisine');
     expect(again.quotaPauseUntil, pause);
   });
@@ -466,6 +474,109 @@ void main() {
       expect(s.isAnalysisBlocked, isTrue);
       expect(s.analysisBlockedKind, 'rejectedKey');
       expect(shown.last, isTrue, reason: 'the last notify says paused');
+    });
+  });
+
+  // Design R7a (data_contracts §9a): the restaurant assist's settings.
+  group('restaurant assist settings', () {
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    test('defaults: Off, no location, no consent', () async {
+      final (s, _, _) = await freshSettings();
+      expect(s.restaurantAssist, 'off');
+      expect(s.restaurantAssistLocation, isFalse);
+      expect(s.restaurantAssistConsentAt, isNull);
+      expect(s.restaurantAssistConsentRecipient, isNull);
+    });
+
+    test('unknown or malformed stored values read as Off / no consent',
+        () async {
+      for (final junk in ['on', 'true', 'ALWAYS', '', 'auto ']) {
+        final (s, _, _) = await freshSettings(initial: {
+          'settings.restaurant_assist': junk,
+        });
+        expect(s.restaurantAssist, 'off', reason: '"$junk"');
+      }
+      final (s, _, _) = await freshSettings(initial: {
+        'settings.restaurant_assist_consent_at': 'yesterday',
+        // A host where the 8 hex characters should be: never a stamp.
+        'settings.restaurant_assist_consent_recipient':
+            'claude_plan:my.server.example',
+      });
+      expect(s.restaurantAssistConsentAt, isNull);
+      expect(s.restaurantAssistConsentRecipient, isNull);
+    });
+
+    test('one write, one notification; a second load sees every value',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      final (s, prefs, keys) = await freshSettings();
+      var notified = 0;
+      s.addListener(() => notified++);
+      final at = DateTime(2026, 10, 24, 12, 30);
+      await s.setRestaurantAssist(
+        mode: 'auto',
+        location: true,
+        consentAt: at,
+        consentRecipient: 'claude_plan:0a1b2c3d',
+      );
+      expect(notified, 1,
+          reason: 'the assist must never see the mode without its consent');
+      expect(s.restaurantAssist, 'auto');
+      expect(s.restaurantAssistLocation, isTrue);
+      expect(s.restaurantAssistConsentAt, at);
+      expect(s.restaurantAssistConsentRecipient, 'claude_plan:0a1b2c3d');
+      // The keys the design names; the instant as UTC.
+      expect(prefs.getString('settings.restaurant_assist'), 'auto');
+      expect(prefs.getBool('settings.restaurant_assist_location'), isTrue);
+      expect(prefs.getString('settings.restaurant_assist_consent_at'),
+          at.toUtc().toIso8601String());
+      expect(prefs.getString('settings.restaurant_assist_consent_recipient'),
+          'claude_plan:0a1b2c3d');
+
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.restaurantAssist, 'auto');
+      expect(again.restaurantAssistLocation, isTrue);
+      expect(again.restaurantAssistConsentAt, at);
+      expect(again.restaurantAssistConsentRecipient, 'claude_plan:0a1b2c3d');
+
+      // Null leaves a value; Always keeps the consent.
+      await again.setRestaurantAssist(mode: 'always');
+      expect(again.restaurantAssist, 'always');
+      expect(again.restaurantAssistConsentAt, at);
+      // clearConsent forgets both halves, on disk too.
+      await again.setRestaurantAssist(mode: 'off', clearConsent: true);
+      expect(again.restaurantAssistConsentAt, isNull);
+      expect(again.restaurantAssistConsentRecipient, isNull);
+      expect(prefs.getString('settings.restaurant_assist_consent_at'), isNull);
+      expect(prefs.getString('settings.restaurant_assist_consent_recipient'),
+          isNull);
+    });
+
+    test('an unknown mode is stored as Off; a malformed recipient stamps no '
+        'consent', () async {
+      final (s, prefs, _) = await freshSettings();
+      await s.setRestaurantAssist(mode: 'sometimes');
+      expect(s.restaurantAssist, 'off');
+      expect(prefs.getString('settings.restaurant_assist'), 'off');
+      await s.setRestaurantAssist(
+          consentAt: DateTime(2026, 10, 24),
+          consentRecipient: 'claude_plan:HOST.example');
+      expect(s.restaurantAssistConsentAt, isNull);
+      expect(s.restaurantAssistConsentRecipient, isNull);
+    });
+
+    test('Use photo location reads false on Android whatever is stored',
+        () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      final (s, prefs, _) = await freshSettings(initial: {
+        'settings.restaurant_assist_location': true,
+      });
+      expect(s.restaurantAssistLocation, isFalse);
+      await s.setRestaurantAssist(location: true);
+      expect(s.restaurantAssistLocation, isFalse,
+          reason: 'Android reads no photo location in v1');
+      expect(prefs.getBool('settings.restaurant_assist_location'), isTrue);
     });
   });
 }

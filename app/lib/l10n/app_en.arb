@@ -220,6 +220,10 @@
     }
   },
   "settingsRowWatch": "Watch Camera Roll",
+  "settingsRowWatchGlasses": "Meta glasses photos",
+  "@settingsRowWatchGlasses": {
+    "description": "Settings > Photos switch under Watch Camera Roll (design G3): whether the automatic scan logs photos taken with Meta glasses (recognized by file name, album or EXIF). Off: they are not offered; photos added on purpose still are. Kept short: the title shares its line with the switch, and 'Include Meta glasses photos' was cut at 390 pt (row_fit_layout_test)."
+  },
   "watcherDisclosureTitle": "Photos will be sent to your AI service",
   "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app's developer. You can turn this off any time.",
   "@watcherDisclosureBody": {
@@ -640,6 +644,7 @@
   },
   "leftoverApplied": "Leftovers deducted.",
   "leftoverFailed": "Couldn't estimate the leftovers from that photo.",
+  "leftoverConflict": "That meal changed while the leftovers were being estimated, so nothing was deducted. Try again.",
   "leftoverNoMeals": "No meals from today or yesterday to deduct from.",
   "planTuningHeader": "Model & thinking",
   "planTuningFooter": "Which Claude model your server uses, and how hard it thinks. Default follows the server's own setting. Only Claude offers this; GLM and Doubao choose their models themselves.",
@@ -947,6 +952,126 @@
     }
   },
   "diagBgRunWatermarkNone": "none",
+  "diagLateImportsTitle": "Late imports (other apps, glasses)",
+  "@diagLateImportsTitle": {
+    "description": "Diagnostics section: photos other apps (the Meta AI app for glasses, AirDrop, WeChat) added to the library after they were taken, which the automatic scan caught through the photo library's change history."
+  },
+  "diagLateImportsSummary": "{n} caught in 7 days · last {time}",
+  "@diagLateImportsSummary": {
+    "description": "{time} is when the app last checked for late imports (yyyy-MM-dd HH:mm), or 'none'.",
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "diagLateImportsRescanning": "History expired — rescanning",
+  "diagLateImportsNeedsIos16": "Needs iOS 16",
+  "diagGlassesTitle": "Glasses check",
+  "@diagGlassesTitle": {
+    "description": "Diagnostics section (design G3): the last Meta glasses photos and what the automatic intake did with each."
+  },
+  "diagGlassesIntro": "The last 20 Meta glasses photos from the past 14 days and what happened to each. Locations are never shown.",
+  "diagGlassesNone": "No Meta glasses photos in the past 14 days.",
+  "diagGlassesSignal": "Signal: {signal}",
+  "@diagGlassesSignal": {
+    "description": "How the photo was recognized as a glasses photo: {signal} is diagGlassesSignalFilename, diagGlassesSignalAlbum or diagGlassesSignalExif.",
+    "placeholders": {
+      "signal": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesSignalFilename": "filename",
+  "diagGlassesSignalAlbum": "album",
+  "diagGlassesSignalExif": "EXIF",
+  "diagGlassesLag": "import lag {lag}",
+  "@diagGlassesLag": {
+    "description": "How long after it was taken the photo joined the photo library. {lag} is a diagDuration* string.",
+    "placeholders": {
+      "lag": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesLagUnknown": "import lag unknown",
+  "diagGlassesGpsYes": "GPS yes",
+  "@diagGlassesGpsYes": {
+    "description": "The photo carries a GPS position (never shown)."
+  },
+  "diagGlassesGpsNo": "GPS no",
+  "diagGlassesGpsTime": "GPS time {delta}",
+  "@diagGlassesGpsTime": {
+    "description": "The GPS fix time minus the capture time, signed, as m:ss or h:mm:ss, e.g. +0:20.",
+    "placeholders": {
+      "delta": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesFood": "food {score}",
+  "@diagGlassesFood": {
+    "description": "The on-device food score, 0.00–1.00, e.g. food 0.63.",
+    "placeholders": {
+      "score": {
+        "type": "String"
+      }
+    }
+  },
+  "diagGlassesFoodNone": "food —",
+  "@diagGlassesFoodNone": {
+    "description": "No on-device food check ran on this photo."
+  },
+  "diagGlassesOutcomeLogged": "logged",
+  "diagGlassesOutcomeNotFood": "not food",
+  "@diagGlassesOutcomeNotFood": {
+    "description": "The on-device check found no food: the photo was never sent to the AI."
+  },
+  "diagGlassesOutcomeNotFoodAi": "not food (AI)",
+  "diagGlassesOutcomeDuplicate": "duplicate",
+  "diagGlassesOutcomePreviewWait": "waiting for full size",
+  "diagGlassesOutcomeExcluded": "excluded",
+  "@diagGlassesOutcomeExcluded": {
+    "description": "The Meta glasses photos switch (Settings > Photos) was off."
+  },
+  "diagGlassesOutcomeAppWait": "waiting for the app to open",
+  "@diagGlassesOutcomeAppWait": {
+    "description": "The on-device food check could not run in the background; the photo waits for the app to be opened."
+  },
+  "diagGlassesOutcomeQueued": "waiting for the next scan",
+  "diagGlassesOutcomeRetry": "will retry",
+  "diagGlassesOutcomeFailed": "failed",
+  "diagDurationUnderMinute": "<1 min",
+  "diagDurationMinutes": "{n} min",
+  "@diagDurationMinutes": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "diagDurationHours": "{h} h {m} min",
+  "@diagDurationHours": {
+    "placeholders": {
+      "h": {
+        "type": "int"
+      },
+      "m": {
+        "type": "int"
+      }
+    }
+  },
+  "diagDurationDays": "{n} d",
+  "@diagDurationDays": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "addPhotosTitle": "Recent photos",
   "addPhotoUnreadable": "That photo could not be read (too large or removed).",
   "addPhotosLoadFailed": "Could not load photos: {error}",
@@ -1089,6 +1214,10 @@
   "@correctedBadge": {
     "description": "Tooltip and screen-reader name of the pencil mark on a meal the user corrected."
   },
+  "captureMetaGlasses": "Meta glasses",
+  "@captureMetaGlasses": {
+    "description": "Badge on a meal (Today card and meal editor) whose photo was taken with Meta smart glasses (Ray-Ban/Oakley Meta) and imported by the Meta AI app. 'Meta' is the brand; keep it untranslated."
+  },
   "fixRequestFailed": "That request failed: {error}",
   "@fixRequestFailed": {
     "placeholders": {
@@ -1105,6 +1234,7 @@
   "working": "Working…",
   "fixApply": "Apply the fix",
   "fixAppliedHeader": "Applied this session",
+  "editorSaveConflict": "This meal was just updated — please review.",
   "editorSaveFailed": "Could not save: {error}",
   "@editorSaveFailed": {
     "placeholders": {
@@ -1571,6 +1701,7 @@
   "reasonNetwork": "network or service issue",
   "reasonServerBusy": "your server is busy with another analysis",
   "reasonServerFailed": "your server could not analyze it",
+  "reasonLeftoverConflict": "the meal it belongs to changed meanwhile",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
   "errRegionBlocked": "{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.",
@@ -1862,5 +1993,512 @@
       }
     }
   },
-  "nlChatFallback": "I'm not sure what you mean. Try describing a meal or correction!"
+  "nlChatFallback": "I'm not sure what you mean. Try describing a meal or correction!",
+  "assistAppliedSnack": "Used {brand} published numbers: {before} → {after} kcal",
+  "@assistAppliedSnack": {
+    "description": "Snackbar after the restaurant assist replaced a meal's numbers with the chain's published ones. brand is the chain's name as an English possessive (McDonald's, Chipotle's); before and after are the meal's total kcal.",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "assistUndo": "Undo",
+  "@assistUndo": {
+    "description": "The action on assistAppliedSnack: puts the AI estimate back."
+  },
+  "settingsSectionRestaurant": "Restaurant nutrition",
+  "@settingsSectionRestaurant": {
+    "description": "Settings group header for the restaurant assist (design R7a)."
+  },
+  "settingsRowRestaurantMode": "Lookups",
+  "@settingsRowRestaurantMode": {
+    "description": "The mode row's title; its value is Off / When unsure / Always. Short in English so the title reads in full beside 'When unsure' on a 375 pt phone ('Nutrition lookup' was cut); the group header already says 'Restaurant nutrition'."
+  },
+  "restaurantModeSheetTitle": "Restaurant nutrition lookup",
+  "@restaurantModeSheetTitle": {
+    "description": "Title of the sheet that picks the restaurant lookup mode."
+  },
+  "restaurantModeOff": "Off",
+  "@restaurantModeOff": {
+    "description": "Restaurant lookup mode: never."
+  },
+  "restaurantModeAuto": "When unsure",
+  "@restaurantModeAuto": {
+    "description": "Restaurant lookup mode: only when the AI says its estimate of a restaurant meal is unsure."
+  },
+  "restaurantModeAlways": "Always",
+  "@restaurantModeAlways": {
+    "description": "Restaurant lookup mode: every restaurant or takeout meal (still never a home meal's location)."
+  },
+  "restaurantModeHelper": "When your AI is unsure about a restaurant meal, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.",
+  "@restaurantModeHelper": {
+    "description": "Footer line under the Restaurant nutrition group."
+  },
+  "settingsRowRestaurantLocation": "Use photo location",
+  "@settingsRowRestaurantLocation": {
+    "description": "Switch: automatic lookups may use where a restaurant meal photo was taken (iOS only)."
+  },
+  "restaurantLocationOffHint": "Brand only: uses brand names printed on cups, bags or receipts.",
+  "@restaurantLocationOffHint": {
+    "description": "Footer line while 'Use photo location' is off."
+  },
+  "restaurantLocationAndroidHint": "On Android, lookups use printed brands only for now.",
+  "@restaurantLocationAndroidHint": {
+    "description": "Footer line on Android, where the photo location is never read."
+  },
+  "restaurantLocationHttpHint": "Nearby-restaurant lookups need https on your server. Brand-only lookups still work.",
+  "@restaurantLocationHttpHint": {
+    "description": "Footer line when the own server's address is http:// — chain names found from the photo location are never sent over plain http."
+  },
+  "restaurantTimeZoneHint": "Your phone's time zone is outside the US, so nothing is looked up now: published nutrition is for US restaurants only.",
+  "@restaurantTimeZoneHint": {
+    "description": "Footer line while the assist is on and the phone's UTC offset is not one the US keeps (UTC-10 to UTC-4): no lookup is made at all (the chain table is US-only)."
+  },
+  "restaurantRegionHint": "Your phone's region is not the US and the photo's location is not used here, so nothing is looked up. Published nutrition is for US restaurants only.",
+  "@restaurantRegionHint": {
+    "description": "Footer line while the assist is on, the phone's region is not the US (or not set) and no photo location can be used (Android, Brand only, an http:// own server): only a photo taken in the US could be looked up, and none can be read."
+  },
+  "restaurantRecipientClaudePlan": "Lookups go to your own server, which uses Claude web search (Anthropic).",
+  "@restaurantRecipientClaudePlan": {
+    "description": "Footer line naming who receives lookups on Claude Plan."
+  },
+  "restaurantRecipientAnthropic": "Lookups go to Anthropic (Claude web search) with your key.",
+  "@restaurantRecipientAnthropic": {
+    "description": "Footer line naming who receives lookups with an Anthropic key."
+  },
+  "restaurantRecipientOpenrouter": "Lookups go to OpenRouter and its search partner Exa.",
+  "@restaurantRecipientOpenrouter": {
+    "description": "Footer line naming who receives lookups with an OpenRouter key."
+  },
+  "restaurantUnsupported": "Not available with {provider} yet.",
+  "@restaurantUnsupported": {
+    "description": "Footer line when the selected AI service has no lookup. provider is its display name.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantNeedsServerAddress": "Add your server address to use this.",
+  "@restaurantNeedsServerAddress": {
+    "description": "Footer line on Claude Plan with no usable server address."
+  },
+  "restaurantSuggestOnly": "With your own server, published numbers are only suggested: you decide whether to use them.",
+  "@restaurantSuggestOnly": {
+    "description": "Footer line on Claude Plan: lookups there never change a meal by themselves (the server's search text is not verbatim page text)."
+  },
+  "restaurantServerOutdated": "Your server needs an update for this feature.",
+  "@restaurantServerOutdated": {
+    "description": "Footer line when the own server predates restaurant lookups."
+  },
+  "restaurantServerDisabled": "Restaurant lookup is turned off on your server.",
+  "@restaurantServerDisabled": {
+    "description": "Footer line when the own server's lookup switch is off."
+  },
+  "settingsRowRestaurantPaused": "Lookups paused",
+  "@settingsRowRestaurantPaused": {
+    "description": "Row shown while lookups wait for consent to a new recipient (another AI service or server)."
+  },
+  "restaurantPausedReview": "Review",
+  "@restaurantPausedReview": {
+    "description": "Value of the paused row; tapping opens the consent sheet."
+  },
+  "restaurantPausedHint": "Lookups are paused until you agree to send them to the new AI service or server.",
+  "@restaurantPausedHint": {
+    "description": "Footer line while paused for a new recipient."
+  },
+  "settingsRowClearLearnedPlaces": "Clear learned places",
+  "@settingsRowClearLearnedPlaces": {
+    "description": "Row: forgets the restaurants and spots the user taught (kept only on this phone)."
+  },
+  "clearPlacesTitle": "Clear learned places?",
+  "@clearPlacesTitle": {
+    "description": "Confirm dialog title."
+  },
+  "clearPlacesBody": "Chopstats forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.",
+  "@clearPlacesBody": {
+    "description": "Confirm dialog body."
+  },
+  "clearPlacesConfirm": "Clear",
+  "@clearPlacesConfirm": {
+    "description": "Confirm dialog action."
+  },
+  "clearPlacesDone": "Learned places cleared.",
+  "@clearPlacesDone": {
+    "description": "Snackbar after clearing."
+  },
+  "restaurantOffTitle": "Turn off restaurant lookup?",
+  "@restaurantOffTitle": {
+    "description": "Dialog when the mode is set to Off."
+  },
+  "restaurantOffBody": "Pending lookups are cancelled.",
+  "@restaurantOffBody": {
+    "description": "Body of the Off dialog."
+  },
+  "restaurantOffClearPlaces": "Also clear learned places",
+  "@restaurantOffClearPlaces": {
+    "description": "Checkbox in the Off dialog."
+  },
+  "restaurantOffConfirm": "Turn off",
+  "@restaurantOffConfirm": {
+    "description": "The Off dialog's action."
+  },
+  "restaurantConsentTitle": "Look up restaurant nutrition?",
+  "@restaurantConsentTitle": {
+    "description": "Consent sheet title."
+  },
+  "restaurantConsentWhat": "When a meal looks like it came from a restaurant, Chopstats can check whether the chain publishes nutrition for it.",
+  "@restaurantConsentWhat": {
+    "description": "Consent sheet bullet: what the feature does."
+  },
+  "restaurantConsentMaps": "On this phone, Chopstats reads where the photo was taken, checks whether it was in the US (lookups cover US restaurants only) and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.",
+  "@restaurantConsentMaps": {
+    "description": "Consent sheet bullet (iPhone): the photo's location is checked on the phone for being in the US (the chain table is US-only) and goes only to Apple Maps."
+  },
+  "restaurantConsentSent": "If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain Chopstats knows (for example, Chipotle), the chain's name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. While your phone's time zone is outside the US, nothing is looked up. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.",
+  "@restaurantConsentSent": {
+    "description": "Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.",
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantConsentSentAndroid": "On Android, Chopstats does not read where the photo was taken: your phone's time zone and region tell whether a meal was eaten in the US. If a brand printed on a cup, bag or receipt is a chain Chopstats knows (for example, Chipotle), the chain's name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain's published nutrition. The photo is never sent for this.",
+  "@restaurantConsentSentAndroid": {
+    "description": "Consent sheet bullet (Android): what leaves the phone, and to whom.",
+    "placeholders": {
+      "recipient": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantConsentBrandOnly": "Brand only skips the location and uses only brand names printed on cups, bags or receipts in the photo.",
+  "@restaurantConsentBrandOnly": {
+    "description": "Consent sheet bullet (iPhone): what the Brand only button means."
+  },
+  "restaurantConsentHttps": "Chain names found from the photo's location go to your server only over https. With an http address, lookups use printed brands only.",
+  "@restaurantConsentHttps": {
+    "description": "Consent sheet bullet (iPhone, Claude Plan): the https rule for the own server."
+  },
+  "restaurantConsentApply": "Chopstats replaces your AI's numbers only when the chain's own website publishes them and the match is clear. Otherwise you get a suggestion. You can undo any change.",
+  "@restaurantConsentApply": {
+    "description": "Consent sheet bullet (Anthropic, OpenRouter): when numbers change by themselves."
+  },
+  "restaurantConsentSuggestOnly": "With your own server, Chopstats only suggests the chain's published numbers. Your AI's numbers change only when you accept a suggestion, and you can undo it.",
+  "@restaurantConsentSuggestOnly": {
+    "description": "Consent sheet bullet (Claude Plan): lookups there are suggestions only."
+  },
+  "restaurantConsentOff": "You can turn this off at any time in Settings.",
+  "@restaurantConsentOff": {
+    "description": "Consent sheet last bullet."
+  },
+  "restaurantRecipientNameClaudePlan": "your own server (it uses Claude web search, by Anthropic)",
+  "@restaurantRecipientNameClaudePlan": {
+    "description": "The recipient inside restaurantConsentSent on Claude Plan."
+  },
+  "restaurantRecipientNameAnthropic": "Anthropic (Claude web search)",
+  "@restaurantRecipientNameAnthropic": {
+    "description": "The recipient inside restaurantConsentSent with an Anthropic key."
+  },
+  "restaurantRecipientNameOpenrouter": "OpenRouter and its search partner Exa",
+  "@restaurantRecipientNameOpenrouter": {
+    "description": "The recipient inside restaurantConsentSent with an OpenRouter key."
+  },
+  "restaurantConsentUseLocation": "Use location",
+  "@restaurantConsentUseLocation": {
+    "description": "Consent button: lookups may use the photo's location (disabled on Android and for an http server)."
+  },
+  "restaurantConsentBrandOnlyButton": "Brand only",
+  "@restaurantConsentBrandOnlyButton": {
+    "description": "Consent button: printed brands only, no location."
+  },
+  "restaurantConsentNotNow": "Not now",
+  "@restaurantConsentNotNow": {
+    "description": "Consent button: nothing is turned on."
+  },
+  "assistChipApplied": "{brand} numbers used for {count} item(s)",
+  "@assistChipApplied": {
+    "description": "Meal card chip while a chain's published numbers stand on the meal (design R7b). brand is the chain's name from the app's table; count is how many items use them.",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "assistChipSuggested": "{brand} publishes {kcal} kcal — tap to review",
+  "@assistChipSuggested": {
+    "description": "Meal card chip for a one-tap suggestion: the chain's published calories for the covered items (a number or a range like 540–620).",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "assistUnseenLabel": "Updated from restaurant numbers",
+  "@assistUnseenLabel": {
+    "description": "Accessibility label of the dot on a meal card that an automatic restaurant lookup changed and the user has not opened since."
+  },
+  "assistCardApplied": "Published numbers in use",
+  "@assistCardApplied": {
+    "description": "Editor source card status line: the chain's published numbers replaced the AI's estimate."
+  },
+  "assistCardSuggested": "Suggestion: your AI's numbers are unchanged",
+  "@assistCardSuggested": {
+    "description": "Editor source card status line: published numbers are only suggested."
+  },
+  "assistSourceHost": "Source: {host}",
+  "@assistSourceHost": {
+    "description": "The web host the published numbers came from (a link that opens the browser), e.g. Source: mcdonalds.com.",
+    "placeholders": {
+      "host": {
+        "type": "String"
+      }
+    }
+  },
+  "assistSourceNotOfficial": "Not the chain's own website",
+  "@assistSourceNotOfficial": {
+    "description": "Under the source link when the page is not on the chain's own website."
+  },
+  "assistVia": "via {provider} · {date}",
+  "@assistVia": {
+    "description": "Who looked the numbers up and when: provider is Claude Plan, Claude or OpenRouter; date is YYYY-MM-DD.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "assistGrounded": "Number found on the source page",
+  "@assistGrounded": {
+    "description": "The calorie number appeared in text taken from the source page."
+  },
+  "assistNotGrounded": "Not confirmed on the source page",
+  "@assistNotGrounded": {
+    "description": "The calorie number was not found in text taken from the source page."
+  },
+  "assistUseEstimate": "Use AI estimate",
+  "@assistUseEstimate": {
+    "description": "Editor button: put the AI's own numbers back."
+  },
+  "assistWrongRestaurant": "Wrong restaurant",
+  "@assistWrongRestaurant": {
+    "description": "Editor button: the chain is wrong; then asks which chain it was."
+  },
+  "assistNotRestaurant": "Not from a restaurant",
+  "@assistNotRestaurant": {
+    "description": "Editor button: this meal did not come from a restaurant."
+  },
+  "assistCorrect": "Correct",
+  "@assistCorrect": {
+    "description": "Editor button: the chain is right (remembered for the place the photo was taken)."
+  },
+  "assistUsePublished": "Use published numbers",
+  "@assistUsePublished": {
+    "description": "Editor button on a suggestion: replace the AI's numbers with the chain's published ones."
+  },
+  "assistLookUp": "Look up restaurant nutrition",
+  "@assistLookUp": {
+    "description": "Editor button: look up the chain's published nutrition for this meal now."
+  },
+  "assistStale": "This meal was changed after the restaurant numbers were used.",
+  "@assistStale": {
+    "description": "Replaces 'Use AI estimate' when the meal no longer shows the numbers the lookup applied."
+  },
+  "assistSuggestionStale": "This meal was changed after this suggestion.",
+  "@assistSuggestionStale": {
+    "description": "Replaces 'Use published numbers' when the meal changed after the suggestion was made."
+  },
+  "assistContextOnly": "No published nutrition found — AI estimate kept",
+  "@assistContextOnly": {
+    "description": "A lookup found nothing usable. Names no restaurant."
+  },
+  "assistPickerTitle": "Which restaurant?",
+  "@assistPickerTitle": {
+    "description": "Title of the chain search after 'Wrong restaurant'. Lists only chains from the app's own table."
+  },
+  "assistPickerSearch": "Search chains",
+  "@assistPickerSearch": {
+    "description": "Hint in the chain search field."
+  },
+  "assistPickerNone": "No chain matches.",
+  "@assistPickerNone": {
+    "description": "The chain search found nothing."
+  },
+  "assistLookingUp": "Looking up restaurant nutrition…",
+  "@assistLookingUp": {
+    "description": "Shown in the editor while a manual lookup runs (up to 2 minutes on your own server)."
+  },
+  "assistLookupStillRunning": "Still looking. Open this meal again in a minute.",
+  "@assistLookupStillRunning": {
+    "description": "The manual lookup is still running on the server after 2 minutes."
+  },
+  "assistLookupNoChain": "No restaurant chain Chopstats knows was found for this meal.",
+  "@assistLookupNoChain": {
+    "description": "A manual lookup had no chain to ask about (no printed brand, no chain nearby)."
+  },
+  "assistLookupOutsideUs": "This meal looks like it was eaten outside the US (going by the photo's location, your phone's time zone or its region). Chopstats looks up published nutrition for US restaurants only, so nothing was looked up.",
+  "@assistLookupOutsideUs": {
+    "description": "A manual lookup was not made: the phone's time zone is outside the US, the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only."
+  },
+  "assistLookupRegionUnknown": "Chopstats can't tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.",
+  "@assistLookupRegionUnknown": {
+    "description": "A manual lookup was not made: no photo location could be used and the phone has no region setting, so it is unknown whether the meal was eaten in the US."
+  },
+  "assistLookupDailyCap": "Today's restaurant lookups are used up. Try again tomorrow.",
+  "@assistLookupDailyCap": {
+    "description": "The daily cap of restaurant lookups is reached."
+  },
+  "assistLookupFailed": "The lookup didn't finish. Try again later.",
+  "@assistLookupFailed": {
+    "description": "A manual lookup failed (network, busy, timeout)."
+  },
+  "assistNotRestaurantDone": "Got it: not from a restaurant.",
+  "@assistNotRestaurantDone": {
+    "description": "Snackbar after 'Not from a restaurant'."
+  },
+  "assistCorrectDone": "Thanks. Chopstats will remember {brand} here.",
+  "@assistCorrectDone": {
+    "description": "Snackbar after 'Correct': the chain is remembered for the spot the photo was taken (kept on this phone only).",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      }
+    }
+  },
+  "assistEditFirst": "Save your changes first to use these buttons.",
+  "@assistEditFirst": {
+    "description": "Shown on the source card while the editor has unsaved changes."
+  },
+  "assistWhyPortion": "The photo looked shared or partly eaten — the published number is one whole serving.",
+  "@assistWhyPortion": {
+    "description": "Source card line under a suggestion that was not applied because the photo showed a shared plate or a partly eaten portion (reason portion_not_whole)."
+  },
+  "assistWhySize": "The photo doesn't show which size. Check the published sizes before using these numbers.",
+  "@assistWhySize": {
+    "description": "Source card line under a suggestion not applied because the size is unclear (reason size_ambiguous); the sizes are listed per item."
+  },
+  "assistWhyCombo": "This looks like a combo or a choice of items — the published number may not match what you had.",
+  "@assistWhyCombo": {
+    "description": "Source card line under a suggestion not applied because the menu entry is a combo or lists alternatives (reason combo)."
+  },
+  "assistWhyClosest": "The closest menu item, not an exact match.",
+  "@assistWhyClosest": {
+    "description": "Source card line under a suggestion not applied because the chain's menu has no exact match (reason closest_item)."
+  },
+  "assistWhyUnits": "The published serving may not match the amount in the photo.",
+  "@assistWhyUnits": {
+    "description": "Source card line under a suggestion not applied because the published unit differs from the photographed amount (reason unit_mismatch)."
+  },
+  "assistWhyDeclined": "You turned these numbers down before, so they were not used by themselves.",
+  "@assistWhyDeclined": {
+    "description": "Source card line under a suggestion not applied because the user undid or rejected the same published numbers for the same items before (reason declined_before)."
+  },
+  "assistSizes": "Published sizes: {sizes}",
+  "@assistSizes": {
+    "description": "Source card line under a suggested item listing every size the chain publishes, e.g. 'Small 230 kcal · Medium 320 kcal'.",
+    "placeholders": {
+      "sizes": {
+        "type": "String"
+      }
+    }
+  },
+  "assistChipSuggestedWhole": "{brand}: {kcal} kcal for a whole serving",
+  "@assistChipSuggestedWhole": {
+    "description": "Meal card chip for a suggestion on a shared or partly eaten meal: the chain's number is for one whole serving, not what was eaten.",
+    "placeholders": {
+      "brand": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "assistAcceptTitle": "Use the published numbers?",
+  "@assistAcceptTitle": {
+    "description": "Confirm dialog before 'Use published numbers' on a suggestion whose numbers may not fit what was eaten (shared plate, combo, unclear size or unit)."
+  },
+  "assistAcceptTotal": "This meal's total will be {kcal} kcal.",
+  "@assistAcceptTotal": {
+    "description": "Second line of the accept confirm dialog: the meal's total after using the published numbers.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "assistLookupPickNeedsHttps": "Looking up a restaurant you pick needs https on your server.",
+  "@assistLookupPickNeedsHttps": {
+    "description": "Snackbar when the user picked a chain after 'Wrong restaurant' but their own server is on http: only printed brands may be sent there, so nothing was sent."
+  },
+  "diagRestaurantTitle": "Restaurant lookups",
+  "@diagRestaurantTitle": {
+    "description": "Diagnostics section (design R7b): today's restaurant lookups and the last decisions."
+  },
+  "diagRestaurantToday": "Today {count}/{cap} · last {code}",
+  "@diagRestaurantToday": {
+    "description": "count lookups sent today of the daily cap; code is the last decision's reason code (or —).",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "cap": {
+        "type": "int"
+      },
+      "code": {
+        "type": "String"
+      }
+    }
+  },
+  "diagRestaurantIntro": "The last 20 decisions: reason code, kcal before → after, provider. No restaurant names or places are kept.",
+  "@diagRestaurantIntro": {
+    "description": "Explains the decision list."
+  },
+  "diagRestaurantNone": "No restaurant decisions yet.",
+  "@diagRestaurantNone": {
+    "description": "The decision list is empty."
+  },
+  "diagConfidenceTitle": "AI confidence (14 days)",
+  "@diagConfidenceTitle": {
+    "description": "Diagnostics: how sure the AI said it was about photo meals in the last 14 days."
+  },
+  "diagConfidenceIntro": "How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.",
+  "@diagConfidenceIntro": {
+    "description": "Explains the confidence counts."
+  },
+  "diagConfidenceLine": "Low {low} · Medium {medium} · High {high} · Not given {unknown}",
+  "@diagConfidenceLine": {
+    "description": "Counts of photo meals by the AI's estimate_confidence; Not given = an older server or model that did not say.",
+    "placeholders": {
+      "low": {
+        "type": "int"
+      },
+      "medium": {
+        "type": "int"
+      },
+      "high": {
+        "type": "int"
+      },
+      "unknown": {
+        "type": "int"
+      }
+    }
+  }
 }

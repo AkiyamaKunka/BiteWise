@@ -486,6 +486,12 @@ abstract class AppLocalizations {
   /// **'Watch Camera Roll'**
   String get settingsRowWatch;
 
+  /// Settings > Photos switch under Watch Camera Roll (design G3): whether the automatic scan logs photos taken with Meta glasses (recognized by file name, album or EXIF). Off: they are not offered; photos added on purpose still are. Kept short: the title shares its line with the switch, and 'Include Meta glasses photos' was cut at 390 pt (row_fit_layout_test).
+  ///
+  /// In en, this message translates to:
+  /// **'Meta glasses photos'**
+  String get settingsRowWatchGlasses;
+
   /// No description provided for @watcherDisclosureTitle.
   ///
   /// In en, this message translates to:
@@ -1464,6 +1470,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t estimate the leftovers from that photo.'**
   String get leftoverFailed;
 
+  /// No description provided for @leftoverConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'That meal changed while the leftovers were being estimated, so nothing was deducted. Try again.'**
+  String get leftoverConflict;
+
   /// No description provided for @leftoverNoMeals.
   ///
   /// In en, this message translates to:
@@ -2226,6 +2238,198 @@ abstract class AppLocalizations {
   /// **'none'**
   String get diagBgRunWatermarkNone;
 
+  /// Diagnostics section: photos other apps (the Meta AI app for glasses, AirDrop, WeChat) added to the library after they were taken, which the automatic scan caught through the photo library's change history.
+  ///
+  /// In en, this message translates to:
+  /// **'Late imports (other apps, glasses)'**
+  String get diagLateImportsTitle;
+
+  /// {time} is when the app last checked for late imports (yyyy-MM-dd HH:mm), or 'none'.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} caught in 7 days · last {time}'**
+  String diagLateImportsSummary(int n, String time);
+
+  /// No description provided for @diagLateImportsRescanning.
+  ///
+  /// In en, this message translates to:
+  /// **'History expired — rescanning'**
+  String get diagLateImportsRescanning;
+
+  /// No description provided for @diagLateImportsNeedsIos16.
+  ///
+  /// In en, this message translates to:
+  /// **'Needs iOS 16'**
+  String get diagLateImportsNeedsIos16;
+
+  /// Diagnostics section (design G3): the last Meta glasses photos and what the automatic intake did with each.
+  ///
+  /// In en, this message translates to:
+  /// **'Glasses check'**
+  String get diagGlassesTitle;
+
+  /// No description provided for @diagGlassesIntro.
+  ///
+  /// In en, this message translates to:
+  /// **'The last 20 Meta glasses photos from the past 14 days and what happened to each. Locations are never shown.'**
+  String get diagGlassesIntro;
+
+  /// No description provided for @diagGlassesNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No Meta glasses photos in the past 14 days.'**
+  String get diagGlassesNone;
+
+  /// How the photo was recognized as a glasses photo: {signal} is diagGlassesSignalFilename, diagGlassesSignalAlbum or diagGlassesSignalExif.
+  ///
+  /// In en, this message translates to:
+  /// **'Signal: {signal}'**
+  String diagGlassesSignal(String signal);
+
+  /// No description provided for @diagGlassesSignalFilename.
+  ///
+  /// In en, this message translates to:
+  /// **'filename'**
+  String get diagGlassesSignalFilename;
+
+  /// No description provided for @diagGlassesSignalAlbum.
+  ///
+  /// In en, this message translates to:
+  /// **'album'**
+  String get diagGlassesSignalAlbum;
+
+  /// No description provided for @diagGlassesSignalExif.
+  ///
+  /// In en, this message translates to:
+  /// **'EXIF'**
+  String get diagGlassesSignalExif;
+
+  /// How long after it was taken the photo joined the photo library. {lag} is a diagDuration* string.
+  ///
+  /// In en, this message translates to:
+  /// **'import lag {lag}'**
+  String diagGlassesLag(String lag);
+
+  /// No description provided for @diagGlassesLagUnknown.
+  ///
+  /// In en, this message translates to:
+  /// **'import lag unknown'**
+  String get diagGlassesLagUnknown;
+
+  /// The photo carries a GPS position (never shown).
+  ///
+  /// In en, this message translates to:
+  /// **'GPS yes'**
+  String get diagGlassesGpsYes;
+
+  /// No description provided for @diagGlassesGpsNo.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS no'**
+  String get diagGlassesGpsNo;
+
+  /// The GPS fix time minus the capture time, signed, as m:ss or h:mm:ss, e.g. +0:20.
+  ///
+  /// In en, this message translates to:
+  /// **'GPS time {delta}'**
+  String diagGlassesGpsTime(String delta);
+
+  /// The on-device food score, 0.00–1.00, e.g. food 0.63.
+  ///
+  /// In en, this message translates to:
+  /// **'food {score}'**
+  String diagGlassesFood(String score);
+
+  /// No on-device food check ran on this photo.
+  ///
+  /// In en, this message translates to:
+  /// **'food —'**
+  String get diagGlassesFoodNone;
+
+  /// No description provided for @diagGlassesOutcomeLogged.
+  ///
+  /// In en, this message translates to:
+  /// **'logged'**
+  String get diagGlassesOutcomeLogged;
+
+  /// The on-device check found no food: the photo was never sent to the AI.
+  ///
+  /// In en, this message translates to:
+  /// **'not food'**
+  String get diagGlassesOutcomeNotFood;
+
+  /// No description provided for @diagGlassesOutcomeNotFoodAi.
+  ///
+  /// In en, this message translates to:
+  /// **'not food (AI)'**
+  String get diagGlassesOutcomeNotFoodAi;
+
+  /// No description provided for @diagGlassesOutcomeDuplicate.
+  ///
+  /// In en, this message translates to:
+  /// **'duplicate'**
+  String get diagGlassesOutcomeDuplicate;
+
+  /// No description provided for @diagGlassesOutcomePreviewWait.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for full size'**
+  String get diagGlassesOutcomePreviewWait;
+
+  /// The Meta glasses photos switch (Settings > Photos) was off.
+  ///
+  /// In en, this message translates to:
+  /// **'excluded'**
+  String get diagGlassesOutcomeExcluded;
+
+  /// The on-device food check could not run in the background; the photo waits for the app to be opened.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for the app to open'**
+  String get diagGlassesOutcomeAppWait;
+
+  /// No description provided for @diagGlassesOutcomeQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'waiting for the next scan'**
+  String get diagGlassesOutcomeQueued;
+
+  /// No description provided for @diagGlassesOutcomeRetry.
+  ///
+  /// In en, this message translates to:
+  /// **'will retry'**
+  String get diagGlassesOutcomeRetry;
+
+  /// No description provided for @diagGlassesOutcomeFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'failed'**
+  String get diagGlassesOutcomeFailed;
+
+  /// No description provided for @diagDurationUnderMinute.
+  ///
+  /// In en, this message translates to:
+  /// **'<1 min'**
+  String get diagDurationUnderMinute;
+
+  /// No description provided for @diagDurationMinutes.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} min'**
+  String diagDurationMinutes(int n);
+
+  /// No description provided for @diagDurationHours.
+  ///
+  /// In en, this message translates to:
+  /// **'{h} h {m} min'**
+  String diagDurationHours(int h, int m);
+
+  /// No description provided for @diagDurationDays.
+  ///
+  /// In en, this message translates to:
+  /// **'{n} d'**
+  String diagDurationDays(int n);
+
   /// No description provided for @addPhotosTitle.
   ///
   /// In en, this message translates to:
@@ -2580,6 +2784,12 @@ abstract class AppLocalizations {
   /// **'Corrected'**
   String get correctedBadge;
 
+  /// Badge on a meal (Today card and meal editor) whose photo was taken with Meta smart glasses (Ray-Ban/Oakley Meta) and imported by the Meta AI app. 'Meta' is the brand; keep it untranslated.
+  ///
+  /// In en, this message translates to:
+  /// **'Meta glasses'**
+  String get captureMetaGlasses;
+
   /// No description provided for @fixRequestFailed.
   ///
   /// In en, this message translates to:
@@ -2633,6 +2843,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Applied this session'**
   String get fixAppliedHeader;
+
+  /// No description provided for @editorSaveConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal was just updated — please review.'**
+  String get editorSaveConflict;
 
   /// No description provided for @editorSaveFailed.
   ///
@@ -3252,6 +3468,12 @@ abstract class AppLocalizations {
   /// **'your server could not analyze it'**
   String get reasonServerFailed;
 
+  /// No description provided for @reasonLeftoverConflict.
+  ///
+  /// In en, this message translates to:
+  /// **'the meal it belongs to changed meanwhile'**
+  String get reasonLeftoverConflict;
+
   /// No description provided for @reasonNoApiKey.
   ///
   /// In en, this message translates to:
@@ -3641,6 +3863,612 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'I\'m not sure what you mean. Try describing a meal or correction!'**
   String get nlChatFallback;
+
+  /// Snackbar after the restaurant assist replaced a meal's numbers with the chain's published ones. brand is the chain's name as an English possessive (McDonald's, Chipotle's); before and after are the meal's total kcal.
+  ///
+  /// In en, this message translates to:
+  /// **'Used {brand} published numbers: {before} → {after} kcal'**
+  String assistAppliedSnack(String brand, String before, String after);
+
+  /// The action on assistAppliedSnack: puts the AI estimate back.
+  ///
+  /// In en, this message translates to:
+  /// **'Undo'**
+  String get assistUndo;
+
+  /// Settings group header for the restaurant assist (design R7a).
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant nutrition'**
+  String get settingsSectionRestaurant;
+
+  /// The mode row's title; its value is Off / When unsure / Always. Short in English so the title reads in full beside 'When unsure' on a 375 pt phone ('Nutrition lookup' was cut); the group header already says 'Restaurant nutrition'.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups'**
+  String get settingsRowRestaurantMode;
+
+  /// Title of the sheet that picks the restaurant lookup mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant nutrition lookup'**
+  String get restaurantModeSheetTitle;
+
+  /// Restaurant lookup mode: never.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get restaurantModeOff;
+
+  /// Restaurant lookup mode: only when the AI says its estimate of a restaurant meal is unsure.
+  ///
+  /// In en, this message translates to:
+  /// **'When unsure'**
+  String get restaurantModeAuto;
+
+  /// Restaurant lookup mode: every restaurant or takeout meal (still never a home meal's location).
+  ///
+  /// In en, this message translates to:
+  /// **'Always'**
+  String get restaurantModeAlways;
+
+  /// Footer line under the Restaurant nutrition group.
+  ///
+  /// In en, this message translates to:
+  /// **'When your AI is unsure about a restaurant meal, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.'**
+  String get restaurantModeHelper;
+
+  /// Switch: automatic lookups may use where a restaurant meal photo was taken (iOS only).
+  ///
+  /// In en, this message translates to:
+  /// **'Use photo location'**
+  String get settingsRowRestaurantLocation;
+
+  /// Footer line while 'Use photo location' is off.
+  ///
+  /// In en, this message translates to:
+  /// **'Brand only: uses brand names printed on cups, bags or receipts.'**
+  String get restaurantLocationOffHint;
+
+  /// Footer line on Android, where the photo location is never read.
+  ///
+  /// In en, this message translates to:
+  /// **'On Android, lookups use printed brands only for now.'**
+  String get restaurantLocationAndroidHint;
+
+  /// Footer line when the own server's address is http:// — chain names found from the photo location are never sent over plain http.
+  ///
+  /// In en, this message translates to:
+  /// **'Nearby-restaurant lookups need https on your server. Brand-only lookups still work.'**
+  String get restaurantLocationHttpHint;
+
+  /// Footer line while the assist is on and the phone's UTC offset is not one the US keeps (UTC-10 to UTC-4): no lookup is made at all (the chain table is US-only).
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone\'s time zone is outside the US, so nothing is looked up now: published nutrition is for US restaurants only.'**
+  String get restaurantTimeZoneHint;
+
+  /// Footer line while the assist is on, the phone's region is not the US (or not set) and no photo location can be used (Android, Brand only, an http:// own server): only a photo taken in the US could be looked up, and none can be read.
+  ///
+  /// In en, this message translates to:
+  /// **'Your phone\'s region is not the US and the photo\'s location is not used here, so nothing is looked up. Published nutrition is for US restaurants only.'**
+  String get restaurantRegionHint;
+
+  /// Footer line naming who receives lookups on Claude Plan.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups go to your own server, which uses Claude web search (Anthropic).'**
+  String get restaurantRecipientClaudePlan;
+
+  /// Footer line naming who receives lookups with an Anthropic key.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups go to Anthropic (Claude web search) with your key.'**
+  String get restaurantRecipientAnthropic;
+
+  /// Footer line naming who receives lookups with an OpenRouter key.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups go to OpenRouter and its search partner Exa.'**
+  String get restaurantRecipientOpenrouter;
+
+  /// Footer line when the selected AI service has no lookup. provider is its display name.
+  ///
+  /// In en, this message translates to:
+  /// **'Not available with {provider} yet.'**
+  String restaurantUnsupported(String provider);
+
+  /// Footer line on Claude Plan with no usable server address.
+  ///
+  /// In en, this message translates to:
+  /// **'Add your server address to use this.'**
+  String get restaurantNeedsServerAddress;
+
+  /// Footer line on Claude Plan: lookups there never change a meal by themselves (the server's search text is not verbatim page text).
+  ///
+  /// In en, this message translates to:
+  /// **'With your own server, published numbers are only suggested: you decide whether to use them.'**
+  String get restaurantSuggestOnly;
+
+  /// Footer line when the own server predates restaurant lookups.
+  ///
+  /// In en, this message translates to:
+  /// **'Your server needs an update for this feature.'**
+  String get restaurantServerOutdated;
+
+  /// Footer line when the own server's lookup switch is off.
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant lookup is turned off on your server.'**
+  String get restaurantServerDisabled;
+
+  /// Row shown while lookups wait for consent to a new recipient (another AI service or server).
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups paused'**
+  String get settingsRowRestaurantPaused;
+
+  /// Value of the paused row; tapping opens the consent sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get restaurantPausedReview;
+
+  /// Footer line while paused for a new recipient.
+  ///
+  /// In en, this message translates to:
+  /// **'Lookups are paused until you agree to send them to the new AI service or server.'**
+  String get restaurantPausedHint;
+
+  /// Row: forgets the restaurants and spots the user taught (kept only on this phone).
+  ///
+  /// In en, this message translates to:
+  /// **'Clear learned places'**
+  String get settingsRowClearLearnedPlaces;
+
+  /// Confirm dialog title.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear learned places?'**
+  String get clearPlacesTitle;
+
+  /// Confirm dialog body.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.'**
+  String get clearPlacesBody;
+
+  /// Confirm dialog action.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get clearPlacesConfirm;
+
+  /// Snackbar after clearing.
+  ///
+  /// In en, this message translates to:
+  /// **'Learned places cleared.'**
+  String get clearPlacesDone;
+
+  /// Dialog when the mode is set to Off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off restaurant lookup?'**
+  String get restaurantOffTitle;
+
+  /// Body of the Off dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending lookups are cancelled.'**
+  String get restaurantOffBody;
+
+  /// Checkbox in the Off dialog.
+  ///
+  /// In en, this message translates to:
+  /// **'Also clear learned places'**
+  String get restaurantOffClearPlaces;
+
+  /// The Off dialog's action.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off'**
+  String get restaurantOffConfirm;
+
+  /// Consent sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Look up restaurant nutrition?'**
+  String get restaurantConsentTitle;
+
+  /// Consent sheet bullet: what the feature does.
+  ///
+  /// In en, this message translates to:
+  /// **'When a meal looks like it came from a restaurant, Chopstats can check whether the chain publishes nutrition for it.'**
+  String get restaurantConsentWhat;
+
+  /// Consent sheet bullet (iPhone): the photo's location is checked on the phone for being in the US (the chain table is US-only) and goes only to Apple Maps.
+  ///
+  /// In en, this message translates to:
+  /// **'On this phone, Chopstats reads where the photo was taken, checks whether it was in the US (lookups cover US restaurants only) and asks Apple Maps which restaurants are nearby. Apple receives that location, as when you use Maps.'**
+  String get restaurantConsentMaps;
+
+  /// Consent sheet bullet (iPhone): exactly what leaves the phone, and to whom. recipient is one of restaurantRecipientName*.
+  ///
+  /// In en, this message translates to:
+  /// **'If a nearby restaurant, or a brand printed on a cup, bag or receipt, is a chain Chopstats knows (for example, Chipotle), the chain\'s name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. While your phone\'s time zone is outside the US, nothing is looked up. A chain found nearby shows you were near it. The photo, its location, the city, the street and the distance are never sent.'**
+  String restaurantConsentSent(String recipient);
+
+  /// Consent sheet bullet (Android): what leaves the phone, and to whom.
+  ///
+  /// In en, this message translates to:
+  /// **'On Android, Chopstats does not read where the photo was taken: your phone\'s time zone and region tell whether a meal was eaten in the US. If a brand printed on a cup, bag or receipt is a chain Chopstats knows (for example, Chipotle), the chain\'s name, the food names and amounts, the country code US (only meals eaten in the US are looked up) and the reply language are sent to {recipient}, which searches the web for the chain\'s published nutrition. The photo is never sent for this.'**
+  String restaurantConsentSentAndroid(String recipient);
+
+  /// Consent sheet bullet (iPhone): what the Brand only button means.
+  ///
+  /// In en, this message translates to:
+  /// **'Brand only skips the location and uses only brand names printed on cups, bags or receipts in the photo.'**
+  String get restaurantConsentBrandOnly;
+
+  /// Consent sheet bullet (iPhone, Claude Plan): the https rule for the own server.
+  ///
+  /// In en, this message translates to:
+  /// **'Chain names found from the photo\'s location go to your server only over https. With an http address, lookups use printed brands only.'**
+  String get restaurantConsentHttps;
+
+  /// Consent sheet bullet (Anthropic, OpenRouter): when numbers change by themselves.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats replaces your AI\'s numbers only when the chain\'s own website publishes them and the match is clear. Otherwise you get a suggestion. You can undo any change.'**
+  String get restaurantConsentApply;
+
+  /// Consent sheet bullet (Claude Plan): lookups there are suggestions only.
+  ///
+  /// In en, this message translates to:
+  /// **'With your own server, Chopstats only suggests the chain\'s published numbers. Your AI\'s numbers change only when you accept a suggestion, and you can undo it.'**
+  String get restaurantConsentSuggestOnly;
+
+  /// Consent sheet last bullet.
+  ///
+  /// In en, this message translates to:
+  /// **'You can turn this off at any time in Settings.'**
+  String get restaurantConsentOff;
+
+  /// The recipient inside restaurantConsentSent on Claude Plan.
+  ///
+  /// In en, this message translates to:
+  /// **'your own server (it uses Claude web search, by Anthropic)'**
+  String get restaurantRecipientNameClaudePlan;
+
+  /// The recipient inside restaurantConsentSent with an Anthropic key.
+  ///
+  /// In en, this message translates to:
+  /// **'Anthropic (Claude web search)'**
+  String get restaurantRecipientNameAnthropic;
+
+  /// The recipient inside restaurantConsentSent with an OpenRouter key.
+  ///
+  /// In en, this message translates to:
+  /// **'OpenRouter and its search partner Exa'**
+  String get restaurantRecipientNameOpenrouter;
+
+  /// Consent button: lookups may use the photo's location (disabled on Android and for an http server).
+  ///
+  /// In en, this message translates to:
+  /// **'Use location'**
+  String get restaurantConsentUseLocation;
+
+  /// Consent button: printed brands only, no location.
+  ///
+  /// In en, this message translates to:
+  /// **'Brand only'**
+  String get restaurantConsentBrandOnlyButton;
+
+  /// Consent button: nothing is turned on.
+  ///
+  /// In en, this message translates to:
+  /// **'Not now'**
+  String get restaurantConsentNotNow;
+
+  /// Meal card chip while a chain's published numbers stand on the meal (design R7b). brand is the chain's name from the app's table; count is how many items use them.
+  ///
+  /// In en, this message translates to:
+  /// **'{brand} numbers used for {count} item(s)'**
+  String assistChipApplied(String brand, int count);
+
+  /// Meal card chip for a one-tap suggestion: the chain's published calories for the covered items (a number or a range like 540–620).
+  ///
+  /// In en, this message translates to:
+  /// **'{brand} publishes {kcal} kcal — tap to review'**
+  String assistChipSuggested(String brand, String kcal);
+
+  /// Accessibility label of the dot on a meal card that an automatic restaurant lookup changed and the user has not opened since.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated from restaurant numbers'**
+  String get assistUnseenLabel;
+
+  /// Editor source card status line: the chain's published numbers replaced the AI's estimate.
+  ///
+  /// In en, this message translates to:
+  /// **'Published numbers in use'**
+  String get assistCardApplied;
+
+  /// Editor source card status line: published numbers are only suggested.
+  ///
+  /// In en, this message translates to:
+  /// **'Suggestion: your AI\'s numbers are unchanged'**
+  String get assistCardSuggested;
+
+  /// The web host the published numbers came from (a link that opens the browser), e.g. Source: mcdonalds.com.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {host}'**
+  String assistSourceHost(String host);
+
+  /// Under the source link when the page is not on the chain's own website.
+  ///
+  /// In en, this message translates to:
+  /// **'Not the chain\'s own website'**
+  String get assistSourceNotOfficial;
+
+  /// Who looked the numbers up and when: provider is Claude Plan, Claude or OpenRouter; date is YYYY-MM-DD.
+  ///
+  /// In en, this message translates to:
+  /// **'via {provider} · {date}'**
+  String assistVia(String provider, String date);
+
+  /// The calorie number appeared in text taken from the source page.
+  ///
+  /// In en, this message translates to:
+  /// **'Number found on the source page'**
+  String get assistGrounded;
+
+  /// The calorie number was not found in text taken from the source page.
+  ///
+  /// In en, this message translates to:
+  /// **'Not confirmed on the source page'**
+  String get assistNotGrounded;
+
+  /// Editor button: put the AI's own numbers back.
+  ///
+  /// In en, this message translates to:
+  /// **'Use AI estimate'**
+  String get assistUseEstimate;
+
+  /// Editor button: the chain is wrong; then asks which chain it was.
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong restaurant'**
+  String get assistWrongRestaurant;
+
+  /// Editor button: this meal did not come from a restaurant.
+  ///
+  /// In en, this message translates to:
+  /// **'Not from a restaurant'**
+  String get assistNotRestaurant;
+
+  /// Editor button: the chain is right (remembered for the place the photo was taken).
+  ///
+  /// In en, this message translates to:
+  /// **'Correct'**
+  String get assistCorrect;
+
+  /// Editor button on a suggestion: replace the AI's numbers with the chain's published ones.
+  ///
+  /// In en, this message translates to:
+  /// **'Use published numbers'**
+  String get assistUsePublished;
+
+  /// Editor button: look up the chain's published nutrition for this meal now.
+  ///
+  /// In en, this message translates to:
+  /// **'Look up restaurant nutrition'**
+  String get assistLookUp;
+
+  /// Replaces 'Use AI estimate' when the meal no longer shows the numbers the lookup applied.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal was changed after the restaurant numbers were used.'**
+  String get assistStale;
+
+  /// Replaces 'Use published numbers' when the meal changed after the suggestion was made.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal was changed after this suggestion.'**
+  String get assistSuggestionStale;
+
+  /// A lookup found nothing usable. Names no restaurant.
+  ///
+  /// In en, this message translates to:
+  /// **'No published nutrition found — AI estimate kept'**
+  String get assistContextOnly;
+
+  /// Title of the chain search after 'Wrong restaurant'. Lists only chains from the app's own table.
+  ///
+  /// In en, this message translates to:
+  /// **'Which restaurant?'**
+  String get assistPickerTitle;
+
+  /// Hint in the chain search field.
+  ///
+  /// In en, this message translates to:
+  /// **'Search chains'**
+  String get assistPickerSearch;
+
+  /// The chain search found nothing.
+  ///
+  /// In en, this message translates to:
+  /// **'No chain matches.'**
+  String get assistPickerNone;
+
+  /// Shown in the editor while a manual lookup runs (up to 2 minutes on your own server).
+  ///
+  /// In en, this message translates to:
+  /// **'Looking up restaurant nutrition…'**
+  String get assistLookingUp;
+
+  /// The manual lookup is still running on the server after 2 minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'Still looking. Open this meal again in a minute.'**
+  String get assistLookupStillRunning;
+
+  /// A manual lookup had no chain to ask about (no printed brand, no chain nearby).
+  ///
+  /// In en, this message translates to:
+  /// **'No restaurant chain Chopstats knows was found for this meal.'**
+  String get assistLookupNoChain;
+
+  /// A manual lookup was not made: the phone's time zone is outside the US, the photo was taken outside the US (or too close to a border to tell), or the phone's region is not the US. The chain table holds US chains and their US-published nutrition only.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal looks like it was eaten outside the US (going by the photo\'s location, your phone\'s time zone or its region). Chopstats looks up published nutrition for US restaurants only, so nothing was looked up.'**
+  String get assistLookupOutsideUs;
+
+  /// A manual lookup was not made: no photo location could be used and the phone has no region setting, so it is unknown whether the meal was eaten in the US.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats can\'t tell whether this meal was eaten in the US, so nothing was looked up. Published nutrition is for US restaurants only.'**
+  String get assistLookupRegionUnknown;
+
+  /// The daily cap of restaurant lookups is reached.
+  ///
+  /// In en, this message translates to:
+  /// **'Today\'s restaurant lookups are used up. Try again tomorrow.'**
+  String get assistLookupDailyCap;
+
+  /// A manual lookup failed (network, busy, timeout).
+  ///
+  /// In en, this message translates to:
+  /// **'The lookup didn\'t finish. Try again later.'**
+  String get assistLookupFailed;
+
+  /// Snackbar after 'Not from a restaurant'.
+  ///
+  /// In en, this message translates to:
+  /// **'Got it: not from a restaurant.'**
+  String get assistNotRestaurantDone;
+
+  /// Snackbar after 'Correct': the chain is remembered for the spot the photo was taken (kept on this phone only).
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks. Chopstats will remember {brand} here.'**
+  String assistCorrectDone(String brand);
+
+  /// Shown on the source card while the editor has unsaved changes.
+  ///
+  /// In en, this message translates to:
+  /// **'Save your changes first to use these buttons.'**
+  String get assistEditFirst;
+
+  /// Source card line under a suggestion that was not applied because the photo showed a shared plate or a partly eaten portion (reason portion_not_whole).
+  ///
+  /// In en, this message translates to:
+  /// **'The photo looked shared or partly eaten — the published number is one whole serving.'**
+  String get assistWhyPortion;
+
+  /// Source card line under a suggestion not applied because the size is unclear (reason size_ambiguous); the sizes are listed per item.
+  ///
+  /// In en, this message translates to:
+  /// **'The photo doesn\'t show which size. Check the published sizes before using these numbers.'**
+  String get assistWhySize;
+
+  /// Source card line under a suggestion not applied because the menu entry is a combo or lists alternatives (reason combo).
+  ///
+  /// In en, this message translates to:
+  /// **'This looks like a combo or a choice of items — the published number may not match what you had.'**
+  String get assistWhyCombo;
+
+  /// Source card line under a suggestion not applied because the chain's menu has no exact match (reason closest_item).
+  ///
+  /// In en, this message translates to:
+  /// **'The closest menu item, not an exact match.'**
+  String get assistWhyClosest;
+
+  /// Source card line under a suggestion not applied because the published unit differs from the photographed amount (reason unit_mismatch).
+  ///
+  /// In en, this message translates to:
+  /// **'The published serving may not match the amount in the photo.'**
+  String get assistWhyUnits;
+
+  /// Source card line under a suggestion not applied because the user undid or rejected the same published numbers for the same items before (reason declined_before).
+  ///
+  /// In en, this message translates to:
+  /// **'You turned these numbers down before, so they were not used by themselves.'**
+  String get assistWhyDeclined;
+
+  /// Source card line under a suggested item listing every size the chain publishes, e.g. 'Small 230 kcal · Medium 320 kcal'.
+  ///
+  /// In en, this message translates to:
+  /// **'Published sizes: {sizes}'**
+  String assistSizes(String sizes);
+
+  /// Meal card chip for a suggestion on a shared or partly eaten meal: the chain's number is for one whole serving, not what was eaten.
+  ///
+  /// In en, this message translates to:
+  /// **'{brand}: {kcal} kcal for a whole serving'**
+  String assistChipSuggestedWhole(String brand, String kcal);
+
+  /// Confirm dialog before 'Use published numbers' on a suggestion whose numbers may not fit what was eaten (shared plate, combo, unclear size or unit).
+  ///
+  /// In en, this message translates to:
+  /// **'Use the published numbers?'**
+  String get assistAcceptTitle;
+
+  /// Second line of the accept confirm dialog: the meal's total after using the published numbers.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal\'s total will be {kcal} kcal.'**
+  String assistAcceptTotal(String kcal);
+
+  /// Snackbar when the user picked a chain after 'Wrong restaurant' but their own server is on http: only printed brands may be sent there, so nothing was sent.
+  ///
+  /// In en, this message translates to:
+  /// **'Looking up a restaurant you pick needs https on your server.'**
+  String get assistLookupPickNeedsHttps;
+
+  /// Diagnostics section (design R7b): today's restaurant lookups and the last decisions.
+  ///
+  /// In en, this message translates to:
+  /// **'Restaurant lookups'**
+  String get diagRestaurantTitle;
+
+  /// count lookups sent today of the daily cap; code is the last decision's reason code (or —).
+  ///
+  /// In en, this message translates to:
+  /// **'Today {count}/{cap} · last {code}'**
+  String diagRestaurantToday(int count, int cap, String code);
+
+  /// Explains the decision list.
+  ///
+  /// In en, this message translates to:
+  /// **'The last 20 decisions: reason code, kcal before → after, provider. No restaurant names or places are kept.'**
+  String get diagRestaurantIntro;
+
+  /// The decision list is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'No restaurant decisions yet.'**
+  String get diagRestaurantNone;
+
+  /// Diagnostics: how sure the AI said it was about photo meals in the last 14 days.
+  ///
+  /// In en, this message translates to:
+  /// **'AI confidence (14 days)'**
+  String get diagConfidenceTitle;
+
+  /// Explains the confidence counts.
+  ///
+  /// In en, this message translates to:
+  /// **'How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.'**
+  String get diagConfidenceIntro;
+
+  /// Counts of photo meals by the AI's estimate_confidence; Not given = an older server or model that did not say.
+  ///
+  /// In en, this message translates to:
+  /// **'Low {low} · Medium {medium} · High {high} · Not given {unknown}'**
+  String diagConfidenceLine(int low, int medium, int high, int unknown);
 }
 
 class _AppLocalizationsDelegate

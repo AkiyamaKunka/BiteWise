@@ -483,7 +483,8 @@ void main() {
     final policy = _readRepo('docs/PRIVACY.md');
 
     test('in English and 中文, with the new effective date', () {
-      expect(policy, contains('Effective date: 2026-10-29'));
+      // The merge of PR #19 (restaurant lookup) changed the policy again.
+      expect(policy, contains('Effective date: 2026-10-30'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));

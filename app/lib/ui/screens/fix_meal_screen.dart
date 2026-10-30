@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../ai_consent.dart';
+import '../meal_in_use.dart';
 import '../nl_presenter.dart';
 import '../l10n.dart';
 import '../services.dart' show SettingsStore;
@@ -22,8 +23,13 @@ class FixMealScreen extends StatefulWidget {
   /// the question silently; tests that are about something else pass a
   /// FakeSettings, which allows every recipient.
   final SettingsStore settings;
+
+  /// Every meal is held while a request is pending (design R6a): the model
+  /// picks which meal a sentence fixes, so the restaurant assist waits
+  /// until the correction has landed. Null: nothing to tell.
+  final MealInUseRegistry? inUse;
   const FixMealScreen(
-      {super.key, required this.executor, required this.settings});
+      {super.key, required this.executor, required this.settings, this.inUse});
 
   @override
   State<FixMealScreen> createState() => _FixMealScreenState();
@@ -50,8 +56,16 @@ class _FixMealScreenState extends State<FixMealScreen> {
     _askingConsent = false;
     if (!allowed || !mounted || _sending) return;
     setState(() => _sending = true);
+    // Held until the executor returns: its write is done by then (a staged
+    // delete only lands after the modal, through confirmPendingDelete).
+    final hold = widget.inUse?.acquireAll();
     try {
-      final replies = await widget.executor.handleText(text);
+      final List<NlReply> replies;
+      try {
+        replies = await widget.executor.handleText(text);
+      } finally {
+        hold?.release();
+      }
       if (!mounted) return;
       // Sending ends when the executor returns; presentation (incl. the
       // blocking delete-confirmation modal) is not "sending".

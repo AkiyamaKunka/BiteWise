@@ -13,6 +13,9 @@ import workmanager_apple
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
+    // The backup-excluded local store (lib/services/local_store.dart):
+    // made and flagged at every launch, before either engine can write.
+    AppDelegate.prepareLocalStore()
     // The background run gets its own Flutter engine; it needs the same
     // plugins (photo library, database, notifications, HTTP) registered.
     // workmanager calls this right after it creates and starts that engine,
@@ -62,16 +65,58 @@ import workmanager_apple
     defaults.set(format.string(from: now), forKey: backgroundLaunchDefaultsKey)
   }
 
+  /// MUST equal localStoreDirName (lib/services/local_store.dart).
+  static let localStoreDirectoryName = "bitewise_local"
+
+  /// Creates Application Support/bitewise_local and excludes it from iCloud
+  /// and computer backups (design F1, 2026-10-23). The flag on the
+  /// directory covers every document Dart writes inside it, so state that
+  /// hints at location or is only valid on this device (the photo library's
+  /// change token) is never restored onto another phone. Dart never creates
+  /// the directory on iOS — one it made would be backed up until a launch
+  /// flagged it — so this runs first thing at every launch: idempotent, and
+  /// it re-applies the flag whatever a restore or an earlier failed launch
+  /// left. Never throws; nil when the directory could not be prepared, and
+  /// Dart's store then reads {} and refuses writes.
+  @discardableResult
+  static func prepareLocalStore(
+    in support: URL? = FileManager.default.urls(
+      for: .applicationSupportDirectory, in: .userDomainMask
+    ).first
+  ) -> URL? {
+    guard let support = support else { return nil }
+    var directory = support.appendingPathComponent(
+      localStoreDirectoryName, isDirectory: true)
+    do {
+      try FileManager.default.createDirectory(
+        at: directory, withIntermediateDirectories: true)
+      var values = URLResourceValues()
+      values.isExcludedFromBackup = true
+      try directory.setResourceValues(values)
+      return directory
+    } catch {
+      return nil
+    }
+  }
+
   /// The plugins that live in this target (ImageIOPlugin.swift,
-  /// BackgroundTimePlugin.swift), for every engine: the app's own and
-  /// workmanager's headless background engine. Only the app's engine calls
-  /// the background-time channel; registering it in both keeps one path.
+  /// BackgroundTimePlugin.swift, PhotoChangesPlugin.swift,
+  /// PlacesPlugin.swift), for every engine: the app's own and workmanager's
+  /// headless background engine. Only the app's engine calls the
+  /// background-time and places channels; registering them in both keeps
+  /// one path. The photo change history is read by both.
   static func registerAppPlugins(with registry: FlutterPluginRegistry) {
     if let registrar = registry.registrar(forPlugin: "ImageIOPlugin") {
       ImageIOPlugin.register(with: registrar)
     }
     if let registrar = registry.registrar(forPlugin: "BackgroundTimePlugin") {
       BackgroundTimePlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "PhotoChangesPlugin") {
+      PhotoChangesPlugin.register(with: registrar)
+    }
+    if let registrar = registry.registrar(forPlugin: "PlacesPlugin") {
+      PlacesPlugin.register(with: registrar)
     }
   }
 }

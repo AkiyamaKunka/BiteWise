@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 12+ (android:dataExtractionRules). The backup-excluded local
+     store (lib/services/local_store.dart, getApplicationSupportDirectory()
+     = files/) holds state that hints at location or is only valid on this
+     device, so it never goes to a cloud backup or to a new phone.
+     Exclude-only on purpose: with no <include>, everything else is backed
+     up and transferred exactly as before. backup_rules.xml says the same
+     for Android 11 and lower. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="bitewise_local/"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="bitewise_local/"/>
+    </device-transfer>
+</data-extraction-rules>

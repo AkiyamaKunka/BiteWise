@@ -12,6 +12,13 @@
 /// that duplicate in the same breath as applying the deduction; if the
 /// watcher hasn't seen it yet, the hash is marked 'skipped' so it never
 /// will.
+///
+/// Write safety (design R6a): the selected meal is held in the
+/// [MealInUseRegistry] from the moment it is picked, so the restaurant
+/// assist leaves it alone; and the deduction is re-based on the meal as
+/// stored when the user confirms (the same model fractions) and written
+/// compare-and-set, so it always cuts from the meal as it is — a deduction
+/// planned on numbers that changed meanwhile is never written over them.
 library;
 
 import 'dart:typed_data';
@@ -26,6 +33,7 @@ import '../../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../ai_consent.dart';
 import '../format.dart';
 import '../l10n.dart';
+import '../meal_in_use.dart';
 import '../services.dart';
 import '../widgets/grouped.dart';
 
@@ -46,10 +54,20 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   Future<List<RecentAsset>>? _assets;
   final Map<String, Future<Uint8List?>> _thumbs = {};
 
+  /// The selected meal's hold (design R6a), from the pick until the user
+  /// changes the meal or leaves.
+  MealInUseHold? _hold;
+
   @override
   void initState() {
     super.initState();
     _load();
+  }
+
+  @override
+  void dispose() {
+    _hold?.release();
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -80,10 +98,18 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       assetId, () => widget.services.picker.thumbnail(assetId));
 
   void _selectMeal(Meal m) {
+    _hold?.release();
+    _hold = widget.services.mealInUse?.acquire(m.id);
     setState(() {
       _selected = m;
       _assets ??= _loadAssets();
     });
+  }
+
+  void _clearSelection() {
+    _hold?.release();
+    _hold = null;
+    setState(() => _selected = null);
   }
 
   /// Synchronous re-entry guard: [_analyzing] drives the SPINNER and is
@@ -123,9 +149,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         return;
       }
       final hash = normalizeImageHash(originalBytesMd5(photo.bytes));
+      final appliedAt = DateTime.now().toIso8601String();
       final result = applyLeftover(meal.analysis, reply,
-          leftoverPhotoMd5: hash,
-          appliedAtIso: DateTime.now().toIso8601String());
+          leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
       if (!mounted) return;
       if (result == null) {
         _snack(l.leftoverFailed);
@@ -153,15 +179,16 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         );
         if (useAnyway != true || !mounted) return;
       }
-      await _confirmAndApply(meal, hash, result);
+      await _confirmAndApply(meal, hash, result,
+          reply: reply, appliedAt: appliedAt);
     } finally {
       _busy = false;
       if (mounted) setState(() => _analyzing = false);
     }
   }
 
-  Future<void> _confirmAndApply(
-      Meal meal, String hash, LeftoverResult result) async {
+  Future<void> _confirmAndApply(Meal meal, String hash, LeftoverResult result,
+      {required Map<String, dynamic> reply, required String appliedAt}) async {
     final services = widget.services;
     // The watcher-collision check: did this leftover photo already become
     // a meal of its own?
@@ -245,17 +272,17 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
 
     // The meal may have been deleted during the model round-trip: a
     // no-op UPDATE reported success and still burned the photo hash
-    // (pressure-test find).
-    final stillThere = (await services.dao
-            .mealsBetween(meal.date, meal.date))
-        .any((m) => m.id == meal.id);
-    if (!mounted) return;
-    if (!stillThere) {
-      _snack(context.l10n.leftoverFailed);
+    // (pressure-test find). Nothing else is touched unless the deduction
+    // itself landed.
+    final written = await _writeDeduction(meal.id, reply,
+        hash: hash, appliedAt: appliedAt);
+    if (written != _Deduction.written) {
+      if (!mounted) return;
+      _snack(written == _Deduction.changed
+          ? context.l10n.leftoverConflict
+          : context.l10n.leftoverFailed);
       return;
     }
-
-    await services.dao.updateMealAnalysis(meal.id, result.adjusted);
     if (duplicateId != null) {
       // Removes the double-count AND tombstones the photo's ledger row so
       // the backfill scan can never resurrect it (deleteMeal contract).
@@ -272,6 +299,30 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     _snack(context.l10n.leftoverApplied);
     // pop THIS route by name, never 'whatever is topmost'.
     Navigator.of(context).pop(true);
+  }
+
+  /// The deduction, compare-and-set (design R6a): the model's fractions
+  /// applied to the meal as stored NOW, written only while it still holds
+  /// exactly that text. A meal that changes between the read and the write
+  /// gets one more re-based try; [_Deduction.changed] after a second miss,
+  /// [_Deduction.gone] for a meal deleted meanwhile (or one the reply no
+  /// longer fits).
+  Future<_Deduction> _writeDeduction(int mealId, Map<String, dynamic> reply,
+      {required String hash, required String appliedAt}) async {
+    final dao = widget.services.dao;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      final snap = await dao.mealSnapshot(mealId);
+      if (snap == null) return _Deduction.gone;
+      final rebased = applyLeftover(snap.meal.analysis, reply,
+          leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
+      if (rebased == null) return _Deduction.gone;
+      // corrected=1, as every deduction (spec §2.4).
+      if (await dao.updateMealAnalysisIfUnchanged(mealId,
+          expectedRaw: snap.rawAnalysis, analysis: rebased.adjusted)) {
+        return _Deduction.written;
+      }
+    }
+    return _Deduction.changed;
   }
 
   void _snack(String text) {
@@ -377,7 +428,7 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
               value: '~${l.kcalAmount(formatKcal(safeCal(meal)))}',
               trailing: TextButton(
                 key: const Key('leftoverChangeMeal'),
-                onPressed: () => setState(() => _selected = null),
+                onPressed: _clearSelection,
                 child: Text(l.leftoverChangeMeal),
               ),
               showChevron: false,
@@ -477,6 +528,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     ]);
   }
 }
+
+/// How [_LeftoverScreenState._writeDeduction] ended.
+enum _Deduction { written, gone, changed }
 
 /// One meal-picker row: the description on its own line(s) at the FULL
 /// cell width, day · clock · calories on a quiet line below. Same cell

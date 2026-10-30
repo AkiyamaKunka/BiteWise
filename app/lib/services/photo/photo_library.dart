@@ -6,6 +6,7 @@
 /// implementation.
 library;
 
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:flutter/services.dart' show MethodCall;
@@ -51,9 +52,29 @@ abstract class PhotoLibrary {
   /// Most-recent images, newest first (in-app picker grid source).
   Future<List<LibraryAsset>> recentImages(int limit);
 
+  /// The library's answer for each of [ids] (design G1b, the late-import
+  /// pass): the image asset; null when the library says it is no longer
+  /// there to read — deleted, hidden, or not an image; NO entry when the
+  /// lookup itself failed, so the caller cannot tell and keeps the id for
+  /// later. Never throws.
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids);
+
   /// Change-notify subscription while the app is alive (spec §6.1 watcher).
   Future<void> startChangeNotify(void Function() onChange);
   Future<void> stopChangeNotify();
+}
+
+/// Where the photo library says an asset was taken (design R4, restaurant
+/// assist): PHAsset.location on iOS, the position the Photos app shows. A
+/// location the user changed there is the one read, and one removed there
+/// ('No Location') reads as none. Read from the library's record of the
+/// asset, never from its bytes: no original, file or thumbnail is opened.
+/// [PhotoLocationReader] (photo_location.dart) is the only caller; it
+/// checks the numbers and catches anything thrown.
+abstract class AssetLocationSource {
+  /// [assetId]'s coordinates, or null when it has none, is gone or is not
+  /// an image.
+  Future<({double latitude, double longitude})?> assetLatLng(String assetId);
 }
 
 class _PhotoManagerAsset implements LibraryAsset {
@@ -86,7 +107,7 @@ Future<bool?> photoLibraryAccess() async {
   }
 }
 
-class PhotoManagerLibrary implements PhotoLibrary {
+class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
   /// Ask Android for images only. The manifest declares READ_MEDIA_IMAGES
   /// (+ VISUAL_USER_SELECTED) and no video permission; photo_manager's
   /// default option asks for image|video, and its Android 14+ delegate folds
@@ -122,6 +143,22 @@ class PhotoManagerLibrary implements PhotoLibrary {
     } catch (_) {
       return null;
     }
+  }
+
+  /// iOS only: there, photo_manager answers from the PHAsset it fetches
+  /// fresh by identifier (never its cache), with no extra permission.
+  /// Android: null, always, without asking. A photo's location there comes
+  /// from the file's EXIF and needs ACCESS_MEDIA_LOCATION, which v1 never
+  /// declares or requests.
+  @override
+  Future<({double latitude, double longitude})?> assetLatLng(
+      String assetId) async {
+    if (!Platform.isIOS || assetId.isEmpty) return null;
+    final entity = await AssetEntity.fromId(assetId);
+    if (entity == null || entity.type != AssetType.image) return null;
+    final at = await entity.latlngAsync();
+    if (at == null) return null;
+    return (latitude: at.latitude, longitude: at.longitude);
   }
 
   @override
@@ -176,6 +213,29 @@ class PhotoManagerLibrary implements PhotoLibrary {
       orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
     );
     return _query(filter, limit);
+  }
+
+  /// One fetch per id (AssetEntity.fromId; at most a pass's worth of
+  /// ids). photo_manager fetches by identifier with default fetch options,
+  /// which leave hidden assets out, so a photo hidden since the history
+  /// reported it (the native side drops hidden ones then) comes back null
+  /// like a deleted one — unless photo_manager still has it cached, in
+  /// which case it is read once more and the ledger has the last word.
+  @override
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids) async {
+    final found = <String, LibraryAsset?>{};
+    for (final id in ids) {
+      if (id.isEmpty) continue;
+      try {
+        final entity = await AssetEntity.fromId(id);
+        found[id] = entity == null || entity.type != AssetType.image
+            ? null
+            : _PhotoManagerAsset(entity);
+      } catch (_) {
+        // A failed lookup says nothing about the photo: no entry.
+      }
+    }
+    return found;
   }
 
   @override

@@ -90,6 +90,138 @@ void main() {
         'Cafeteria tray 1');
   });
 
+  // Write safety (design R6a): the candidate list is as old as the model
+  // call; the deduction is re-based on the meal as stored at write time and
+  // written compare-and-set.
+  group('a meal that changed during the analysis', () {
+    /// A restaurant lookup lands: published pork, totals moved with it.
+    Future<void> landLookup(int id) async {
+      final snap = (await dao.mealSnapshot(id))!;
+      final a = snap.meal.analysis;
+      final items = [
+        for (final it in a['food_items'] as List) Map<String, dynamic>.from(it),
+      ];
+      items[1]['estimated_calories'] = 865;
+      items[1]['published'] = true;
+      expect(
+          await dao.applyAssist(id, expectedRaw: snap.rawAnalysis, analysis: {
+            ...a,
+            'food_items': items,
+            'total_calories': 1165,
+          }),
+          isTrue);
+    }
+
+    /// Rewrites meal [id] directly, as some other writer would.
+    void rewrite(int id, Object marker) {
+      final i = dao.meals.indexWhere((m) => m.id == id);
+      final m = dao.meals[i];
+      dao.meals[i] = Meal(
+          id: m.id,
+          date: m.date,
+          time: m.time,
+          timestamp: m.timestamp,
+          source: m.source,
+          imageHash: m.imageHash,
+          analysis: {...m.analysis, 'rewritten': marker});
+    }
+
+    test('the deduction is re-based on it, same fractions', () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _leftoverReply(), isFood: true, wall: Duration.zero)
+        ..onAnalyze = () => landLookup(1);
+      final out = await pipeline.process(photo());
+      expect(out.kind, PhotoOutcomeKind.leftoverApplied);
+      final m = dao.byId(1);
+      expect(m.analysis['total_calories'], 865,
+          reason: 'rice left, the published pork eaten');
+      expect(m.analysis['leftover']['original']['total_calories'], 1165);
+      expect(out.previousAnalysis!['total_calories'], 1165,
+          reason: 'the undo restores the meal as this deduction found it');
+      expect(out.kcal, '865');
+      expect(out.deductedKcal, 300);
+      expect(dao.ledger['leftover-hash-1'], IngestionStatus.skipped);
+    });
+
+    test('a write between the re-read and the write gets one re-based retry',
+        () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+      var landed = false;
+      dao.beforeCompareAndSet = (id) async {
+        if (landed) return;
+        landed = true;
+        await landLookup(id);
+      };
+      final out = await pipeline.process(photo());
+      expect(out.kind, PhotoOutcomeKind.leftoverApplied);
+      expect(dao.compareMisses, 1);
+      expect(dao.byId(1).analysis['total_calories'], 865);
+    });
+
+    test('a second miss releases the photo: nothing deducted, no meal '
+        'logged, nothing announced', () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+      var n = 0;
+      dao.beforeCompareAndSet = (id) async => rewrite(id, ++n);
+      final out = await pipeline.process(photo());
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.retryable, isTrue,
+          reason: 'the next scan asks again, against the day as it is then');
+      expect(out.reason, leftoverConflictReason);
+      expect(dao.compareMisses, 2);
+      expect(dao.meals, hasLength(1), reason: 'never logged as its own meal');
+      expect(dao.byId(1).analysis.containsKey('leftover'), isFalse);
+      expect(dao.byId(1).analysis['total_calories'], 965);
+      expect(dao.ledger.containsKey('leftover-hash-1'), isFalse,
+          reason: 'released, not tombstoned');
+      expect(notifications, isEmpty);
+    });
+
+    test('a meal deleted meanwhile: released, and the leftovers are not '
+        'logged as a meal', () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer
+        ..nextPhotoOutcome = AnalysisOutcome(
+            analysis: _leftoverReply(), isFood: true, wall: Duration.zero)
+        ..onAnalyze = () => dao.deleteMeal(1);
+      final out = await pipeline.process(photo());
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.reason, leftoverConflictReason);
+      expect(dao.meals, isEmpty);
+      expect(dao.ledger.containsKey('leftover-hash-1'), isFalse);
+    });
+
+    test('the add flow says why, in en and zh, and a backed-out pick keeps '
+        'the reason', () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+      var n = 0;
+      dao.beforeCompareAndSet = (id) async => rewrite(id, ++n);
+      final out = await pipeline.process(
+          IntakePhoto(Uint8List.fromList([7]), 'w1', 'IMG_7.jpg',
+              deliberate: true));
+      expect(out.reason, leftoverConflictReason);
+      final en = AppLocalizationsEn(), zh = AppLocalizationsZh();
+      expect(outcomeBody(en, out, deliberate: true),
+          'That meal changed while the leftovers were being estimated, so '
+          'nothing was deducted. Try again.');
+      expect(outcomeBody(zh, out, deliberate: true),
+          '估算剩菜期间那一餐被修改了，所以没有扣除。请重试。');
+      final picked = unannouncedOutcome(out, picked: true)!;
+      expect(picked.reason, leftoverConflictReason);
+      expect(outcomeSnackbar(zh, picked), contains('它所属的那一餐刚被修改'));
+      expect(outcomeSnackbar(en, picked),
+          contains('the meal it belongs to changed meanwhile'));
+    });
+  });
+
   test('low confidence falls through to a NORMAL new meal', () async {
     dao.put(_meal(1, '01:34 PM', 965));
     analyzer.nextPhotoOutcome = AnalysisOutcome(

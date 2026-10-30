@@ -29,6 +29,7 @@ import 'screens/settings_screen.dart';
 import 'screens/today_screen.dart';
 import 'refresh_signal.dart';
 import 'services.dart';
+import 'widgets/restaurant_consent_sheet.dart';
 
 class _AppleScrollBehavior extends MaterialScrollBehavior {
   const _AppleScrollBehavior();
@@ -164,11 +165,19 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   StreamSubscription<Uri>? _linkSub;
 
+  /// Recipients whose consent sheet the user answered 'Not now' to in this
+  /// session: the shell does not raise it again for them (Settings' paused
+  /// row still does).
+  final Set<String> _consentDeclined = {};
+  bool _consentAsking = false;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     mealsChangedSignal.addListener(_onMealsChanged);
+    widget.services.restaurantAssist?.consentNeeded
+        ?.addListener(_onConsentNeeded);
     // One-click setup: a bitewise://setup link (QR, adb, devicectl) lands
     // here whether the app was warm (stream) or cold (initial link).
     _linkSub = widget.services.setupLinks?.listen(_onSetupLink);
@@ -232,9 +241,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     widget.services.sharedPhotoConsent?.detach(_askShareConsent);
     _linkSub?.cancel();
     mealsChangedSignal.removeListener(_onMealsChanged);
+    widget.services.restaurantAssist?.consentNeeded
+        ?.removeListener(_onConsentNeeded);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  /// The last setup link handled, and when: app_links' stream also
+  /// carries the link that cold-started the app, which the initial-link
+  /// read already delivered — one link, one confirmation.
+  ({String uri, DateTime at})? _lastSetupLink;
 
   /// A setup link arrived. Never applied silently: a crafted link could
   /// point every future photo upload at a stranger's server, so the user
@@ -244,6 +260,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // bounce on iOS, which app_links also forwards — is ignored silently.
     // Only a malformed bitewise:// link earns the "not valid" message.
     if (!isSetupLinkScheme(uri)) return;
+    final now = DateTime.now();
+    final text = uri.toString();
+    final last = _lastSetupLink;
+    if (last != null &&
+        last.uri == text &&
+        now.difference(last.at) < setupLinkRepeatWindow) {
+      return;
+    }
+    _lastSetupLink = (uri: text, at: now);
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {
@@ -297,6 +322,43 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     setState(() => _index = 3); // land on Settings, where the result shows
     ScaffoldMessenger.of(context)
         .showSnackBar(SnackBar(content: Text(l.setupLinkDone)));
+  }
+
+  /// The restaurant assist paused for a consent that does not name the
+  /// recipient a lookup would reach now (another provider or server, design
+  /// R7a): the consent sheet, once per recipient per session, and only over
+  /// the shell itself — never on top of the editor or another screen (the
+  /// assist asks again on its next sweep).
+  void _onConsentNeeded() {
+    final controls = widget.services.restaurantAssist;
+    final support = controls?.consentNeeded?.value;
+    if (controls == null || support == null || !mounted) return;
+    final settings = widget.services.settings;
+    if (settings.restaurantAssist == 'off') return;
+    if (_consentAsking || _consentDeclined.contains(support.recipientStamp)) {
+      return;
+    }
+    if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+    _consentAsking = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        if (!mounted || !(ModalRoute.of(context)?.isCurrent ?? true)) return;
+        // Answered meanwhile (in Settings, say), or turned off: nothing to ask.
+        if (settings.restaurantAssist == 'off' ||
+            restaurantConsentCovers(settings, controls.lookupSupport())) {
+          return;
+        }
+        final choice = await askRestaurantConsent(context,
+            settings: settings,
+            controls: controls,
+            kind: RestaurantConsentKind.recipientChanged);
+        if (choice == null) _consentDeclined.add(support.recipientStamp);
+      } finally {
+        _consentAsking = false;
+      }
+    });
+    // A post-frame callback alone waits for SOME frame; ask for one.
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// A meal was saved somewhere in the app (watcher, catch-up, coverage
@@ -378,8 +440,17 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               dao: s.dao,
               executor: s.executor,
               thumbs: s.thumbs,
-              garminDaily: s.garminDaily),
-          HistoryScreen(key: _historyKey, dao: s.dao, thumbs: s.thumbs),
+              garminDaily: s.garminDaily,
+              mealInUse: s.mealInUse,
+              restaurantAssist: s.restaurantAssist,
+              settings: s.settings),
+          HistoryScreen(
+              key: _historyKey,
+              dao: s.dao,
+              thumbs: s.thumbs,
+              mealInUse: s.mealInUse,
+              restaurantAssist: s.restaurantAssist,
+              settings: s.settings),
           BodyScreen(key: _bodyKey, dao: s.dao, settings: s.settings),
           SettingsScreen(
             settings: s.settings,
@@ -400,6 +471,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             backgroundRefreshEnabled: s.backgroundRefreshEnabled,
             backgroundScanStuck: s.backgroundScanStuck,
             changes: s.settingsChanges,
+            restaurantAssist: s.restaurantAssist,
           ),
         ],
       ),

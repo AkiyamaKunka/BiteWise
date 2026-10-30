@@ -16,11 +16,19 @@ import '../core/coerce.dart';
 import '../core/contracts.dart';
 import '../core/outcome_kind.dart';
 import '../core/leftover_logic.dart';
+import '../core/restaurant_assist_logic.dart' show dropAssistClaims;
 import '../services/analyzer/platform_decode.dart';
 import '../services/photo/background_time.dart';
+import '../services/photo/capture_dating.dart' show glassesCapturedAt;
 import '../services/photo/filename_dates.dart'
     show captureWallClock, exifCapturedAt, exifWallAndOffset,
         validateCapturedAt;
+import '../services/photo/food_prefilter.dart'
+    show FoodCheck, FoodVerdict, foodVerdict;
+import '../services/photo/glasses.dart'
+    show captureAnalysis, isGlassesPreview, shutterKey;
+import '../services/photo/glasses_check.dart'
+    show GlassesCheckEntry, GlassesCheckOutcome;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
 
@@ -94,6 +102,13 @@ class PhotoOutcome {
   /// closed before the verdict came back (unannouncedOutcome): the
   /// snackbar asks the user to pick it again.
   final bool picked;
+
+  /// Why the automatic intake skipped or held a photo back without asking
+  /// the model, machine-readable ([duplicateCaptureReason],
+  /// [glassesPreviewReason]); null for every other verdict. Never shown:
+  /// those guards act on automatic photos only, whose skips and releases
+  /// nobody announces.
+  final String? reason;
   const PhotoOutcome(this.kind, this.message,
       {this.analysis,
       this.retryable = false,
@@ -106,8 +121,65 @@ class PhotoOutcome {
       this.mealDate,
       this.previousAnalysis,
       this.shared = false,
-      this.picked = false});
+      this.picked = false,
+      this.reason});
 }
+
+/// [PhotoOutcome.reason] of an automatic glasses photo skipped because
+/// another file of the same shutter press is already a meal (design G2b).
+const String duplicateCaptureReason = 'duplicate_capture';
+
+/// [PhotoOutcome.reason] of an automatic glasses preview copy held back
+/// for its full-size version (design G2b, deferred_assets.dart).
+const String glassesPreviewReason = 'glasses_preview';
+
+/// [PhotoOutcome.reason] of an automatic glasses photo the on-device food
+/// check (design G3, food_prefilter.dart) found no food in.
+const String notFoodLocalReason = 'not_food_local';
+
+/// [PhotoOutcome.reason] of an automatic glasses photo the food check could
+/// not run on in the background: released for the foreground.
+const String foodCheckDeferredReason = 'food_check_deferred';
+
+/// [PhotoOutcome.reason] of an automatic glasses photo while the user has
+/// Meta glasses photos switched off (design G3, settings.watch_glasses).
+const String glassesExcludedReason = 'glasses_off';
+
+/// [PhotoOutcome.reason] of an automatic glasses photo its scan had no
+/// slot left for (design G3, GlassesQuota): released for the next scan.
+const String glassesCappedReason = 'glasses_capped';
+
+/// [PhotoOutcome.reason] of a leftover verdict whose meal changed (twice)
+/// or was deleted before the deduction could be written (design R6a):
+/// released, nothing deducted; a later scan or a retry asks again.
+const String leftoverConflictReason = 'leftover_conflict';
+
+/// The Glasses check card's outcome (glasses_check.dart) for [o], or null
+/// for a verdict that is not this photo's own: already logged, being
+/// analyzed by another run, a deliberate duplicate of minutes ago.
+String? glassesCheckOutcome(PhotoOutcome o) => switch (o.kind) {
+      PhotoOutcomeKind.saved ||
+      PhotoOutcomeKind.leftoverApplied =>
+        GlassesCheckOutcome.logged,
+      PhotoOutcomeKind.skipped => switch (o.reason) {
+          notFoodLocalReason => GlassesCheckOutcome.notFood,
+          duplicateCaptureReason => GlassesCheckOutcome.duplicate,
+          glassesExcludedReason => GlassesCheckOutcome.excluded,
+          _ => GlassesCheckOutcome.notFoodAi,
+        },
+      PhotoOutcomeKind.failed => switch (o.reason) {
+          glassesPreviewReason => GlassesCheckOutcome.previewWait,
+          foodCheckDeferredReason => GlassesCheckOutcome.appWait,
+          glassesCappedReason => GlassesCheckOutcome.queued,
+          _ => o.retryable
+              ? GlassesCheckOutcome.retry
+              : GlassesCheckOutcome.failed,
+        },
+      PhotoOutcomeKind.duplicate ||
+      PhotoOutcomeKind.alreadyTracked ||
+      PhotoOutcomeKind.inFlight =>
+        null,
+    };
 
 /// What to announce for a verdict NOBODY is awaiting — a shared photo
 /// (bindStream), or a picked one whose add-flow screen was closed
@@ -129,6 +201,7 @@ PhotoOutcome? unannouncedOutcome(PhotoOutcome o,
           retryable: true,
           errorKind: o.errorKind,
           detail: o.detail,
+          reason: o.reason,
           shared: shared,
           picked: picked),
       PhotoOutcomeKind.saved ||
@@ -232,6 +305,35 @@ class PhotoPipeline {
   /// app settled it (deferred_assets.dart). A throw is contained.
   final void Function(IntakePhoto photo, PhotoOutcome outcome)? onOutcome;
 
+  /// Asked for an AUTOMATIC Meta glasses photo below 2 MP (design G2b,
+  /// glasses.dart isGlassesPreview): true holds it back — released,
+  /// retryable, untouched — so its full-size version can arrive first.
+  /// Production: deferred_assets.dart holdGlassesPreview (once, for 10
+  /// minutes). Null (tests, the add flow's fallback instance): never held.
+  /// A throw counts as false.
+  final Future<bool> Function(String assetId)? previewHold;
+
+  /// Whether AUTOMATIC Meta glasses photos are logged at all (design G3,
+  /// AppSettings.watchGlasses). False: such a photo is let go before it is
+  /// hashed — no ledger row, no model — with a terminal verdict, so the
+  /// late-import carry drops it and the frontier passes it. Null (tests,
+  /// the add flow's fallback instance), or a throw: included.
+  final bool Function()? includeGlasses;
+
+  /// The on-device food check for an AUTOMATIC Meta glasses photo (design
+  /// G3, food_prefilter.dart): iOS only (di.dart, background_glue.dart:
+  /// foodScoreViaImageIO). Null: never checked — camera photos and
+  /// deliberate adds never are either.
+  final Future<FoodCheck> Function(Uint8List bytes)? foodCheck;
+
+  /// Hears each Meta glasses photo's verdict for the Glasses check card
+  /// (glasses_check.dart recordGlassesCheck). Awaited, at most
+  /// [glassesCheckLimit]; a throw changes nothing. Null: not recorded.
+  final Future<void> Function(GlassesCheckEntry entry)? glassesCheckLog;
+
+  /// The food check that ran on the photo in flight, for its record.
+  FoodCheck? _foodChecked;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
   /// The 'processing' reservation the photo in flight holds right now, and
@@ -247,6 +349,27 @@ class PhotoPipeline {
   // process() never throws (contract), so the chain cannot break.
   Future<void> _tail = Future.value();
 
+  /// Photos chained onto [_tail] whose turn has not ended yet, and
+  /// process() calls running (a direct call bypasses the tail) — what
+  /// [isIdle] reads.
+  int _queued = 0;
+  int _running = 0;
+
+  /// No photo is queued or in flight and no reservation is held (design
+  /// R6b): the restaurant assist starts a lookup only then, so a lookup
+  /// never competes with a photo for the analyzer, the network or the
+  /// iOS background time.
+  bool get isIdle => _queued == 0 && _running == 0 && _held == null;
+
+  /// Chains [photo] onto the global FIFO tail, counted for [isIdle] until
+  /// its turn ends.
+  Future<PhotoOutcome> _chain(IntakePhoto photo) {
+    _queued++;
+    final slot = _tail.then((_) => process(photo));
+    slot.whenComplete(() => _queued--).ignore();
+    return slot;
+  }
+
   PhotoPipeline(
       {required this.dao,
       required this.analyzer,
@@ -257,6 +380,10 @@ class PhotoPipeline {
       this.backgroundTime,
       this.backgrounded,
       this.onOutcome,
+      this.previewHold,
+      this.includeGlasses,
+      this.foodCheck,
+      this.glassesCheckLog,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
@@ -285,6 +412,16 @@ class PhotoPipeline {
   /// photo's starts — the memory the serialized pipeline exists to save.
   static const thumbnailTimeout = Duration(seconds: 8);
 
+  /// How long the pipeline waits on [foodCheck] (the native check gives up
+  /// at 1.5 s and its Dart side at 3 s): past it the photo goes on
+  /// unchecked.
+  static const foodCheckLimit = Duration(seconds: 4);
+
+  /// How long a glasses photo's record ([glassesCheckLog]) may hold its
+  /// verdict: a small local file write, but the background run's grant is
+  /// short.
+  static const glassesCheckLimit = Duration(seconds: 2);
+
   /// Injectable for the rejected-key notice throttle below.
   final DateTime Function() _clock;
 
@@ -306,7 +443,7 @@ class PhotoPipeline {
   /// are re-offered by later scans.
   void bind(PhotoIntake intake) {
     intake.attachSink((p, _) {
-      final slot = _tail.then((_) => process(p));
+      final slot = _chain(p);
       _tail = slot.then((_) {});
       return slot.then((o) => !o.retryable);
     });
@@ -318,7 +455,7 @@ class PhotoPipeline {
   /// directly would run a second analyzer call concurrently (free-tier RPM
   /// 429s) and hold two originals in memory.
   Future<PhotoOutcome> enqueue(IntakePhoto photo) {
-    final slot = _tail.then((_) => process(photo));
+    final slot = _chain(photo);
     _tail = slot.then((_) {});
     return slot;
   }
@@ -337,7 +474,7 @@ class PhotoPipeline {
   /// watcher's bind() stays quiet about them.
   void bindStream(Stream<IntakePhoto> photos) {
     _subs.add(photos.listen((p) {
-      final slot = _tail.then((_) => process(p));
+      final slot = _chain(p);
       _tail = slot.then((o) {
         // A transient failure was released, and the share copy is already
         // gone: nothing will ever re-offer it, so silence read as "it
@@ -402,6 +539,137 @@ class PhotoPipeline {
     }
   }
 
+  /// The clock [photo]'s meal is dated by. validateCapturedAt is NOT
+  /// optional: EXIF is attacker- and junk-controlled (a 2015 stock photo, a
+  /// camera with a dead clock, a forward-set date), and an unvalidated
+  /// value writes a meal into a random month of the user's log.
+  /// A capturedAt is re-expressed in the zone the photo was TAKEN in when
+  /// the EXIF shutter stamp names that zone and the same instant
+  /// (captureWallClock): iOS's createDateTime is an instant shown in the
+  /// CURRENT zone, so a photo first scanned after a flight was dated by the
+  /// destination's clock. Not re-validated against local now — the instant
+  /// already was, and a westbound wall clock can sit "ahead".
+  /// First, design G2b: a Meta glasses photo whose creation date is only
+  /// the time it was imported is dated by its EXIF shutter clock
+  /// (capture_dating.dart glassesCapturedAt, with the evidence the watcher
+  /// found). Every other photo is dated exactly as before.
+  static DateTime _mealClock(IntakePhoto photo) {
+    final now = DateTime.now();
+    final redated = glassesCapturedAt(photo.capture, now: now);
+    if (redated != null) return redated;
+    final captured = photo.capturedAt;
+    return (captured == null
+            ? null
+            : captureWallClock(captured, exifWallAndOffset(photo.bytes))) ??
+        validateCapturedAt(exifCapturedAt(photo.bytes), now: now) ??
+        now;
+  }
+
+  /// How many days either side of a photo's own day the duplicate-capture
+  /// guard looks for a meal of the same shutter press: the two files may
+  /// have been dated differently (one by its import time).
+  static const int sameShotWindowDays = 2;
+
+  /// [photo]'s shutter key when the duplicate-capture guard (design G2b)
+  /// looks at it — an AUTOMATIC Meta glasses photo whose EXIF names its
+  /// shutter press — else null.
+  static String? _guardedShutterKey(IntakePhoto photo) {
+    if (photo.deliberate) return null;
+    final capture = photo.capture;
+    if (capture == null || !capture.isMetaGlasses) return null;
+    return shutterKey(capture.exif);
+  }
+
+  /// Whether a meal dated within [sameShotWindowDays] of [clock]'s day
+  /// already holds [key]. A store that cannot say lets the photo through:
+  /// the guard must never cost a photo.
+  Future<bool> _sameShotLogged(String key, DateTime clock) async {
+    try {
+      final from = isoDate(
+          DateTime(clock.year, clock.month, clock.day - sameShotWindowDays));
+      final to = isoDate(
+          DateTime(clock.year, clock.month, clock.day + sameShotWindowDays));
+      final ids = await dao.mealIdsWithShutterKey(key, from, to);
+      return ids.isNotEmpty;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether [previewHold] holds the AUTOMATIC glasses preview [photo]
+  /// back now. A throwing hold lets it through.
+  Future<bool> _holdsPreview(IntakePhoto photo) async {
+    final hold = previewHold;
+    if (hold == null || photo.deliberate || photo.assetId.isEmpty) {
+      return false;
+    }
+    if (!isGlassesPreview(photo.capture)) return false;
+    try {
+      return await hold(photo.assetId);
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Whether [photo] is an automatic Meta glasses photo the user has
+  /// switched off ([includeGlasses]). A throwing switch includes it.
+  bool _excludesGlasses(IntakePhoto photo) {
+    final include = includeGlasses;
+    if (include == null || photo.deliberate) return false;
+    if (!(photo.capture?.isMetaGlasses ?? false)) return false;
+    try {
+      return !include();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// The on-device food check's verdict for [photo] (design G3), or null
+  /// when it does not apply: no [foodCheck], a deliberate add, a photo that
+  /// is not from Meta glasses. A check that throws or outlasts
+  /// [foodCheckLimit] is unchecked: the photo goes on as before.
+  Future<FoodVerdict?> _checkFood(IntakePhoto photo) async {
+    final check = foodCheck;
+    if (check == null || photo.deliberate) return null;
+    if (!(photo.capture?.isMetaGlasses ?? false)) return null;
+    FoodCheck result;
+    try {
+      result = await check(photo.bytes)
+          .then<FoodCheck>((r) => r)
+          .timeout(foodCheckLimit, onTimeout: () => FoodCheck.error);
+    } catch (_) {
+      result = FoodCheck.error;
+    }
+    _foodChecked = result;
+    return foodVerdict(result);
+  }
+
+  /// Whether [photo], an automatic Meta glasses photo, finds its scan's
+  /// [GlassesQuota] used up (taking a slot when one is left).
+  static bool _overGlassesQuota(IntakePhoto photo) {
+    final quota = photo.glassesQuota;
+    if (quota == null || photo.deliberate) return false;
+    if (!(photo.capture?.isMetaGlasses ?? false)) return false;
+    return !quota.take(photo.assetId);
+  }
+
+  /// Adds a Meta glasses photo's verdict to the Glasses check record —
+  /// unless the run was abandoned: its engine is about to go, and a write
+  /// then would only race the teardown. Never throws.
+  Future<void> _recordGlasses(IntakePhoto photo, PhotoOutcome outcome,
+      FoodCheck? check) async {
+    final log = glassesCheckLog;
+    if (log == null || _abandoned) return;
+    if (!(photo.capture?.isMetaGlasses ?? false)) return;
+    try {
+      final code = glassesCheckOutcome(outcome);
+      if (code == null) return;
+      await log(GlassesCheckEntry.of(photo,
+              outcome: code, check: check, at: _clock()))
+          .timeout(glassesCheckLimit);
+    } catch (_) {}
+  }
+
   /// The photo's verdict once [abandon] ran: retryable, so the intake
   /// releases it and the frontier halts in front of it. Releases the
   /// reservation itself when [abandon] could not (it was taken after).
@@ -423,18 +691,27 @@ class PhotoPipeline {
   /// exactly one task per photo. A lost reservation's second settle
   /// ([_afterLost]) stays inside the same task.
   Future<PhotoOutcome> process(IntakePhoto photo) async {
-    final time = backgroundTime;
-    final outcome = !photo.deliberate && _inBackground()
-        ? _waitsForForeground
-        : await (time == null
-            ? _process(photo)
-            : time.guard('photo', () => _process(photo)));
-    // Settled or released by now: no reservation is held past process().
-    _held = null;
+    _running++;
     try {
-      onOutcome?.call(photo, outcome);
-    } catch (_) {}
-    return outcome;
+      _foodChecked = null;
+      final time = backgroundTime;
+      final outcome = !photo.deliberate && _inBackground()
+          ? _waitsForForeground
+          : await (time == null
+              ? _process(photo)
+              : time.guard('photo', () => _process(photo)));
+      // Settled or released by now: no reservation is held past process().
+      _held = null;
+      final checked = _foodChecked;
+      _foodChecked = null;
+      try {
+        onOutcome?.call(photo, outcome);
+      } catch (_) {}
+      await _recordGlasses(photo, outcome, checked);
+      return outcome;
+    } finally {
+      _running--;
+    }
   }
 
   /// [held]: a verdict this photo ALREADY got, with the meal snapshot its
@@ -463,6 +740,11 @@ class PhotoPipeline {
     _HeldVerdict? verdict;
     try {
       if (_abandoned) return _outOfTime;
+      // Design G3: Meta glasses photos are switched off. An automatic one
+      // is not this app's to log — let go before it is hashed: no ledger
+      // row, no model, and a terminal verdict (the late-import carry drops
+      // it, the frontier passes it). A deliberate add is the user's call.
+      if (_excludesGlasses(photo)) return _glassesExcluded;
       // The automatic-analysis latch is armed: release the photo before
       // even hashing it — no ledger row, no analyzer call, no upload. It
       // stays eligible (retryable), so the scan after the fix picks it up.
@@ -480,6 +762,21 @@ class PhotoPipeline {
         return PhotoOutcome(PhotoOutcomeKind.failed, _latchedMessage,
             retryable: true, errorKind: latched, detail: _latchedMessage);
       }
+      // Design G2b, AUTOMATIC Meta glasses photos only — a deliberate add
+      // is the user's call. Another file of the same shutter press (a
+      // preview and its full-size copy) already being a meal is decided
+      // HERE, before the reservation and without the model; the photo is
+      // tombstoned 'skipped' below once its reservation is ours. The meal
+      // clock it needs is read now only for such a photo: the EXIF scan
+      // behind it is not repeated for the already-logged photos every
+      // catch-up re-offers.
+      final shotKey = _guardedShutterKey(photo);
+      final shotClock = shotKey == null ? null : _mealClock(photo);
+      final sameShot =
+          shotKey != null && await _sameShotLogged(shotKey, shotClock!);
+      // A glasses preview copy (< 2 MP) waits once for its full-size
+      // version: released untouched, before it is even hashed.
+      if (!sameShot && await _holdsPreview(photo)) return _previewHeld;
       hash = normalizeImageHash(await _hash(photo.bytes));
       // Pre-reservation 5-minute duplicate window — deliberate (user-facing)
       // path only, matching the server's chat-only check (spec §2.3).
@@ -513,24 +810,49 @@ class PhotoPipeline {
           }
       }
       if (_abandoned) return await _whenAbandoned();
+      if (sameShot) {
+        // Settled as a verdict, so no scan offers it again; a deliberate
+        // add still reclaims it (spec §2.3).
+        await dao.markPhotoHash(hash, IngestionStatus.skipped,
+            ownerStamp: stamp);
+        _held = null;
+        return _duplicateCapture;
+      }
+      // Design G3: an automatic Meta glasses photo on iOS is shown to the
+      // on-device classifier first; nothing leaves the phone for it. Here,
+      // with the reservation ours, so only a photo no run has settled pays
+      // for the check — never one a catch-up re-offers already logged.
+      final food = await _checkFood(photo);
+      if (_abandoned) return await _whenAbandoned();
+      switch (food) {
+        case FoodVerdict.notFood:
+          // A verdict like the model's 'not food': tombstoned, so no scan
+          // offers it again; a deliberate add still reclaims it.
+          await dao.markPhotoHash(hash, IngestionStatus.skipped,
+              ownerStamp: stamp);
+          _held = null;
+          return _notFoodLocal;
+        case FoodVerdict.deferred:
+          // The classifier needs the GPU and the app is in the background:
+          // released for the foreground, like a decode this engine cannot
+          // do (the background run counts it with those, deferred_assets).
+          await dao.releasePhotoHash(hash, ownerStamp: stamp);
+          _held = null;
+          return _foodCheckDeferred;
+        case FoodVerdict.food || FoodVerdict.unchecked || null:
+          break; // on to the model, as before the check existed
+      }
+      // Design G3: this scan's allowance of glasses photos for the model
+      // (GlassesQuota). Past it, released untouched for the next scan —
+      // the watcher keeps it as if unread.
+      if (_overGlassesQuota(photo)) {
+        await dao.releasePhotoHash(hash, ownerStamp: stamp);
+        _held = null;
+        return _glassesCapped;
+      }
 
-      // The day this photo belongs to. validateCapturedAt is NOT optional:
-      // EXIF is attacker- and junk-controlled (a 2015 stock photo, a camera
-      // with a dead clock, a forward-set date), and an unvalidated value
-      // writes a meal into a random month of the user's log.
-      // A capturedAt is re-expressed in the zone the photo was TAKEN in
-      // when the EXIF shutter stamp names that zone and the same instant
-      // (captureWallClock): iOS's createDateTime is an instant shown in the
-      // CURRENT zone, so a photo first scanned after a flight was dated by
-      // the destination's clock. Not re-validated against local now — the
-      // instant already was, and a westbound wall clock can sit "ahead".
-      final captured = photo.capturedAt;
-      final when = (captured == null
-              ? null
-              : captureWallClock(captured, exifWallAndOffset(photo.bytes))) ??
-          validateCapturedAt(exifCapturedAt(photo.bytes),
-              now: DateTime.now()) ??
-          DateTime.now();
+      // The day this photo belongs to ([_mealClock]).
+      final when = shotClock ?? _mealClock(photo);
       // AUTOMATIC leftover check (2026-08-05): the meals of the day the
       // photo was TAKEN ride along as compacts; the model may answer
       // leftover_of instead of a new meal. The SNAPSHOT is captured here —
@@ -654,17 +976,45 @@ class PhotoPipeline {
       final autoIdx =
           autoLeftoverIndex(analysis, candidateCount: recent.length);
       if (autoIdx != null) {
-        final original = recent[autoIdx];
-        final applied = applyLeftover(original.analysis, analysis,
-            leftoverPhotoMd5: hash,
-            appliedAtIso: DateTime.now().toIso8601String());
-        if (applied != null) {
+        final candidate = recent[autoIdx];
+        // Design R6a: [recent] is as old as the model call (10–60 s). The
+        // deduction is re-based on the meal as stored NOW — same model
+        // fractions — and written only while the meal still holds exactly
+        // that text (compare-and-set). A meal changed between that read
+        // and the write (a restaurant lookup, an edit) gets one more
+        // re-based try; a second miss, or a meal deleted meanwhile,
+        // releases the photo for the next scan rather than cutting numbers
+        // that no longer exist, or logging the leftovers as a meal.
+        final appliedAt = DateTime.now().toIso8601String();
+        ({Meal meal, LeftoverResult applied})? cut;
+        var unusable = false;
+        for (var attempt = 0; attempt < 2 && cut == null; attempt++) {
+          final snap = await dao.mealSnapshot(candidate.id);
+          if (snap == null) break;
+          final applied = applyLeftover(snap.meal.analysis, analysis,
+              leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
+          if (applied == null) {
+            unusable = true;
+            break;
+          }
           // Tombstone and deduction in ONE owner-checked transaction: a run
           // that lost the photo (to another run, or to the user's own
           // 手动记录) must not cut the earlier meal, and a kill or a failed
           // update can no longer tombstone the photo without the deduction.
-          await dao.applyLeftoverVerdict(hash, original.id, applied.adjusted,
-              ownerStamp: stamp);
+          if (await dao.applyLeftoverVerdict(
+              hash, candidate.id, applied.adjusted,
+              ownerStamp: stamp, expectedRaw: snap.rawAnalysis)) {
+            cut = (meal: snap.meal, applied: applied);
+          }
+        }
+        if (cut == null && !unusable) {
+          await dao.releasePhotoHash(hash, ownerStamp: stamp);
+          _held = null;
+          return _leftoverConflict;
+        }
+        if (cut != null) {
+          final original = cut.meal;
+          final applied = cut.applied;
           final newKcal =
               safeNumber(applied.adjusted['total_calories']).round();
           final name = mealDescription(original.analysis);
@@ -696,6 +1046,17 @@ class PhotoPipeline {
         // (spec §3.5).
         analysis['food_items'] = safeFoodItems(analysis);
       }
+
+      // How the photo was taken (design G2a): the intake's reading of its
+      // own bytes, never the model's — a reply carrying a 'capture' key is
+      // not evidence of a camera. No coordinates, no timestamps. Nor is an
+      // assist block or a `published` flag in the reply evidence that a
+      // chain published anything (design R6a): only a verified lookup,
+      // later, writes those.
+      analysis.remove('capture');
+      dropAssistClaims(analysis);
+      final capture = photo.capture;
+      if (capture != null) analysis['capture'] = captureAnalysis(capture);
 
       // Backdating: a valid capturedAt (validated by the intake module,
       // spec §6.3) sets date/time; timestamp stays now (spec §2.2).
@@ -844,6 +1205,68 @@ class PhotoPipeline {
       retryable: true,
       errorKind: AnalysisErrorKind.unknown,
       detail: 'in the background');
+
+  /// An automatic glasses photo another file of whose shutter press is
+  /// already a meal (design G2b): tombstoned, no model call.
+  static const _duplicateCapture = PhotoOutcome(PhotoOutcomeKind.skipped,
+      'Another copy of this shot is already logged.',
+      reason: duplicateCaptureReason);
+
+  /// An automatic Meta glasses photo while the user has them switched off
+  /// (design G3): let go without a ledger row or a model call.
+  static const _glassesExcluded = PhotoOutcome(PhotoOutcomeKind.skipped,
+      'Meta glasses photos are switched off.',
+      reason: glassesExcludedReason);
+
+  /// An automatic Meta glasses photo the on-device check found no food in
+  /// (design G3): tombstoned, never uploaded.
+  static const _notFoodLocal = PhotoOutcome(
+      PhotoOutcomeKind.skipped, 'No food detected in this photo.',
+      reason: notFoodLocalReason);
+
+  /// An automatic Meta glasses photo the food check could not run on in
+  /// the background (design G3): released, offered again by a later scan.
+  /// [AnalysisErrorKind.badPhoto], so the background run counts it with
+  /// the decodes it cannot do and passes it over after a few runs instead
+  /// of halting its watermark (deferred_assets.dart).
+  static const _foodCheckDeferred = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The on-phone food check needs the app open: this photo waits for it.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.badPhoto,
+      detail: 'food check deferred',
+      reason: foodCheckDeferredReason);
+
+  /// An automatic Meta glasses photo its scan had no slot left for (design
+  /// G3, GlassesQuota): released untouched; the next scan offers it.
+  static const _glassesCapped = PhotoOutcome(PhotoOutcomeKind.failed,
+      'This scan has sent its share of glasses photos: this one waits for '
+      'the next.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'glasses quota',
+      reason: glassesCappedReason);
+
+  /// An automatic glasses preview held back for its full-size version
+  /// (design G2b): released untouched, offered again by a later scan. Not
+  /// [AnalysisErrorKind.badPhoto], so the background run never counts it
+  /// as a photo it cannot decode (deferred_assets.dart).
+  static const _previewHeld = PhotoOutcome(PhotoOutcomeKind.failed,
+      'A preview copy of a glasses photo: it waits for the full-size one.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'glasses preview',
+      reason: glassesPreviewReason);
+
+  /// An automatic leftover verdict whose meal changed twice between the
+  /// re-read and the write, or was deleted meanwhile (design R6a):
+  /// released, so the next scan asks again against the day as it is then.
+  static const _leftoverConflict = PhotoOutcome(PhotoOutcomeKind.failed,
+      'The meal these leftovers belong to changed while the photo was '
+      'analyzed: nothing was deducted.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'leftover conflict',
+      reason: leftoverConflictReason);
 
   /// [abandon]'s verdict: released, offered again by a later scan.
   static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,
