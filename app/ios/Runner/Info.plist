@@ -48,6 +48,16 @@
 				<string>bitewise</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>dev.calorietracker.metadat</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>bitewise-glasses</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
@@ -55,11 +65,39 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>MWDAT</key>
+	<dict>
+		<key>Analytics</key>
+		<dict>
+			<key>OptOut</key>
+			<true/>
+		</dict>
+		<key>AppLinkURLScheme</key>
+		<string>bitewise-glasses://</string>
+		<key>ClientToken</key>
+		<string>$(META_CLIENT_TOKEN)</string>
+		<key>CrashReporting</key>
+		<dict>
+			<key>OptOut</key>
+			<true/>
+		</dict>
+		<key>MetaAppID</key>
+		<string>$(META_APP_ID)</string>
+		<key>TeamID</key>
+		<string>$(DEVELOPMENT_TEAM)</string>
+	</dict>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Chopstats connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Chopstats connects to your Meta glasses over Bluetooth during a glasses session, to receive the food photos you take with them.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Chopstats reads your photo library to find food photos — the ones you pick and, if you turn on Watch Camera Roll, new photos automatically. Photos it analyzes are sent to the AI service you choose in Settings. If you turn on restaurant lookup with photo location, Chopstats also reads where a restaurant or takeout meal photo was taken, only to check on this phone whether it was taken in the US, to ask Apple Maps which restaurants are nearby and to remember, on this phone, the restaurants you confirm or rule out there.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
+		<string>bluetooth-central</string>
+		<string>bluetooth-peripheral</string>
+		<string>external-accessory</string>
 	</array>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
@@ -88,6 +126,10 @@
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
 	<string>Main</string>
+	<key>UISupportedExternalAccessoryProtocols</key>
+	<array>
+		<string>com.meta.ar.wearable</string>
+	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

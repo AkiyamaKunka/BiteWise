@@ -37,6 +37,12 @@ abstract final class MealSource {
   /// screen's "log it yourself" path): a photo exists and its md5 is
   /// ledgered, but every number came from the user.
   static const String appManualPhoto = 'app_manual_photo';
+
+  /// A photo taken during a Meta glasses session and handed over by the
+  /// Device Access Toolkit (feat/meta-dat prototype). Deliberate intake —
+  /// the wearer pressed the shutter for it — so it reclaims like
+  /// [appPhoto], but the meal records where it came from.
+  static const String appGlasses = 'app_glasses';
 }
 
 /// A logged meal row (spec §2: meals table).
@@ -534,6 +540,10 @@ class IntakePhoto {
       this.deliberate = false,
       this.capture,
       this.glassesQuota});
+
+  /// The [MealSource] its ledger row and meal are written with. An intake
+  /// with its own wire value (the glasses session) overrides this.
+  String get source => deliberate ? MealSource.appPhoto : MealSource.appWatch;
 }
 
 /// Meta glasses photos one automatic scan sends on to the model at most
