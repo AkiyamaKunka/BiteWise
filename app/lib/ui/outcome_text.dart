@@ -224,15 +224,21 @@ String badModelText(AppLocalizations l, String? message) {
   return l.errBadModel;
 }
 
+/// Calendar days from [from]'s date to [to]'s date (1 = the next day),
+/// counted on UTC midnights: two LOCAL midnights are 23 h apart across a
+/// spring-forward change, and `inDays` truncated that to 0 ("Today" for
+/// tomorrow).
+int calendarDayDiff(DateTime from, DateTime to) =>
+    DateTime.utc(to.year, to.month, to.day)
+        .difference(DateTime.utc(from.year, from.month, from.day))
+        .inDays;
+
 /// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
 /// [now] is a test seam.
 String dayTimeLabel(AppLocalizations l, DateTime when, {DateTime? now}) {
   final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
       '${when.minute.toString().padLeft(2, '0')}';
-  final n = now ?? DateTime.now();
-  final today = DateTime(n.year, n.month, n.day);
-  final day = DateTime(when.year, when.month, when.day);
-  final diff = day.difference(today).inDays;
+  final diff = calendarDayDiff(now ?? DateTime.now(), when);
   if (diff == 0) return l.timeToday(hhmm);
   if (diff == 1) return l.timeTomorrow(hhmm);
   if (diff == -1) return l.timeYesterday(hhmm);
