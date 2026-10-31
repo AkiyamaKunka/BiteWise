@@ -10,6 +10,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 class _Asset implements LibraryAsset {
   _Asset(this.id, this.createDateTime, this._name, {this.fails = false});
+
+  /// Members this picker never calls (the interface keeps growing).
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
   @override
   final String id;
   @override
@@ -33,6 +38,11 @@ class _Library implements PhotoLibrary {
   _Library(this.assets);
   final List<_Asset> assets;
   final originReads = <String>[];
+
+  /// Members this picker never calls (the interface keeps growing: PR #19
+  /// adds imagesByIds).
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 
   @override
   Future<bool> requestPermission() async => true;
