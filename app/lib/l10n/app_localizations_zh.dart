@@ -670,7 +670,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectClaudeFooter => '让服务器登录你的 Anthropic 账户。中国大陆需要 VPN。';
 
   @override
-  String get subInactiveFooter => '当前使用的是 API Key。在上方选择一项即可改由你自己的服务器分析照片。';
+  String get subInactiveFooter =>
+      '当前使用的是 API Key。这一项适合自己运行筷拍服务器的人：在上方选择服务器使用的 AI，即可改由它分析照片。没有自己的服务器？请返回使用 API Key。';
 
   @override
   String get connectDialogTitle => '完成 Claude 连接';
@@ -1785,6 +1786,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covStoppedLast(String label, int attempted, int total, String reason) {
+    return '$label在第 $attempted/$total 张后停止：$reason';
+  }
+
+  @override
+  String covSummaryFailed(int scanned, int failed) {
+    return '已检查 $scanned 张 —— $failed 张失败：可以重试，或在下方手动录入。';
+  }
+
+  @override
   String covMoreNotFood(int count) {
     return '…还有 $count 张。';
   }
@@ -2062,6 +2073,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importFromClipboard => '从剪贴板导入';
+
+  @override
+  String get importFieldHint => '或在这里粘贴较小的导出内容';
 
   @override
   String importClipboardRead(String size) {

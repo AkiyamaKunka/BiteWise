@@ -1179,7 +1179,7 @@ abstract class AppLocalizations {
   /// No description provided for @subInactiveFooter.
   ///
   /// In en, this message translates to:
-  /// **'An API key is currently active. Pick an AI above to have your own server analyze photos instead.'**
+  /// **'An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.'**
   String get subInactiveFooter;
 
   /// No description provided for @connectDialogTitle.
@@ -3054,6 +3054,18 @@ abstract class AppLocalizations {
     int remaining,
   );
 
+  /// Bulk-action snackbar when the run stopped on its LAST photo, so nothing remains to run again (covStoppedBecause says how many remain).
+  ///
+  /// In en, this message translates to:
+  /// **'{label} stopped after {attempted} of {total}: {reason}'**
+  String covStoppedLast(String label, int attempted, int total, String reason);
+
+  /// Coverage summary when nothing is missing but some photos failed: not the all-accounted-for success state.
+  ///
+  /// In en, this message translates to:
+  /// **'{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {failed, plural, =1{1 failed} other{{failed} failed}}: retry, or enter it yourself below.'**
+  String covSummaryFailed(int scanned, int failed);
+
   /// No description provided for @covMoreNotFood.
   ///
   /// In en, this message translates to:
@@ -3485,6 +3497,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import from clipboard'**
   String get importFromClipboard;
+
+  /// No description provided for @importFieldHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Or paste a small export here'**
+  String get importFieldHint;
 
   /// No description provided for @importClipboardRead.
   ///

@@ -553,7 +553,7 @@
   "serverUploadKeyLabel": "Server upload key",
   "connectClaude": "Connect Claude",
   "connectClaudeFooter": "Signs your server in to your Anthropic account.",
-  "subInactiveFooter": "An API key is currently active. Pick an AI above to have your own server analyze photos instead.",
+  "subInactiveFooter": "An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.",
   "connectDialogTitle": "Finish connecting Claude",
   "connectDialogBody": "Sign in on the Anthropic page that just opened. It will show you a code — paste it here.",
   "connectCodeLabel": "Authorization code",
@@ -1415,6 +1415,36 @@
       }
     }
   },
+  "covStoppedLast": "{label} stopped after {attempted} of {total}: {reason}",
+  "@covStoppedLast": {
+    "description": "Bulk-action snackbar when the run stopped on its LAST photo, so nothing remains to run again (covStoppedBecause says how many remain).",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "covSummaryFailed": "{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {failed, plural, =1{1 failed} other{{failed} failed}}: retry, or enter it yourself below.",
+  "@covSummaryFailed": {
+    "description": "Coverage summary when nothing is missing but some photos failed: not the all-accounted-for success state.",
+    "placeholders": {
+      "scanned": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "covMoreNotFood": "…and {count} more.",
   "@covMoreNotFood": {
     "placeholders": {
@@ -1728,6 +1758,7 @@
   "importErrBadVersion": "That export has an unusable version tag.",
   "importErrNoTables": "That export has no tables section.",
   "importFromClipboard": "Import from clipboard",
+  "importFieldHint": "Or paste a small export here",
   "importClipboardRead": "Read {size} from the clipboard",
   "@importClipboardRead": {
     "placeholders": {

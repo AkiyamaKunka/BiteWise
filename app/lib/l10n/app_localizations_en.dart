@@ -714,7 +714,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get subInactiveFooter =>
-      'An API key is currently active. Pick an AI above to have your own server analyze photos instead.';
+      'An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.';
 
   @override
   String get connectDialogTitle => 'Finish connecting Claude';
@@ -1913,6 +1913,28 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covStoppedLast(String label, int attempted, int total, String reason) {
+    return '$label stopped after $attempted of $total: $reason';
+  }
+
+  @override
+  String covSummaryFailed(int scanned, int failed) {
+    String _temp0 = intl.Intl.pluralLogic(
+      scanned,
+      locale: localeName,
+      other: '$scanned photos checked',
+      one: '1 photo checked',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failed,
+      locale: localeName,
+      other: '$failed failed',
+      one: '1 failed',
+    );
+    return '$_temp0 — $_temp1: retry, or enter it yourself below.';
+  }
+
+  @override
   String covMoreNotFood(int count) {
     return '…and $count more.';
   }
@@ -2212,6 +2234,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importFromClipboard => 'Import from clipboard';
+
+  @override
+  String get importFieldHint => 'Or paste a small export here';
 
   @override
   String importClipboardRead(String size) {

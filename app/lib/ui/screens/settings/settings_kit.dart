@@ -40,25 +40,25 @@ Future<String?> showChoiceSheet(
   required String current,
   required List<(String, String)> options,
   String Function(String value)? keyOf,
-}) =>
-    showGroupedSheet<String>(
-      context,
-      title: title,
-      builder: (ctx) => GroupedSection(
-        separatorInset: AppSpace.separatorInset,
-        children: [
-          for (final (value, label) in options)
-            GroupedRow.custom(
-              key: Key('$keyPrefix-${keyOf?.call(value) ?? value}'),
-              selected: current == value,
-              showChevron: false,
-              onTap: () => Navigator.pop(ctx, value),
-              child: Text(label,
-                  style: Theme.of(ctx)
-                      .textTheme
-                      .bodyLarge
-                      ?.copyWith(color: ctx.colors.label)),
-            ),
-        ],
-      ),
-    );
+}) => showGroupedSheet<String>(
+  context,
+  title: title,
+  builder: (ctx) => GroupedSection(
+    separatorInset: AppSpace.separatorInset,
+    children: [
+      for (final (value, label) in options)
+        GroupedRow.custom(
+          key: Key('$keyPrefix-${keyOf?.call(value) ?? value}'),
+          selected: current == value,
+          showChevron: false,
+          onTap: () => Navigator.pop(ctx, value),
+          child: Text(
+            label,
+            style: Theme.of(
+              ctx,
+            ).textTheme.bodyLarge?.copyWith(color: ctx.colors.label),
+          ),
+        ),
+    ],
+  ),
+);
