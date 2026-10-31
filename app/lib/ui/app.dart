@@ -384,6 +384,26 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
   }
 
+  /// The tab widgets as last placed in the IndexedStack.
+  List<Widget>? _tabs;
+
+  /// Only the SELECTED tab gets this build's widget; the hidden ones keep
+  /// their last one, which Flutter then skips. A tab tap used to rebuild
+  /// all four screens, the hidden Body one re-deriving its whole history
+  /// each time. The selected tab still rebuilds in the tap frame, so what
+  /// it reads while building (the units preference, Settings' Today /
+  /// Tomorrow labels) is current the moment it shows; hidden tabs still
+  /// follow their own theme, locale and text-size dependencies.
+  List<Widget> _onlySelectedRebuilds(List<Widget> fresh) {
+    final kept = _tabs;
+    return _tabs = [
+      for (var i = 0; i < fresh.length; i++)
+        i == _index || kept == null || kept.length != fresh.length
+            ? fresh[i]
+            : kept[i],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.services;
@@ -392,7 +412,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       // that collapses as it scrolls (SliverAppBar.large).
       body: IndexedStack(
         index: _index,
-        children: [
+        children: _onlySelectedRebuilds([
           TodayScreen(
               key: _todayKey,
               dao: s.dao,
@@ -421,7 +441,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             backgroundScanStuck: s.backgroundScanStuck,
             changes: s.settingsChanges,
           ),
-        ],
+        ]),
       ),
       // The + 记录 button is a REAL Scaffold FAB (Today tab only — Body has
       // its own), so Material lifts it above this messenger's snackbars.
