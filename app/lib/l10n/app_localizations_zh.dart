@@ -825,6 +825,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get leftoverFailed => '无法从这张照片估算剩菜。';
 
   @override
+  String get leftoverQuotaPaused => '分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。';
+
+  @override
   String get leftoverNoMeals => '今天和昨天没有可扣除的餐。';
 
   @override

@@ -1464,6 +1464,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t estimate the leftovers from that photo.'**
   String get leftoverFailed;
 
+  /// No description provided for @leftoverQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.'**
+  String get leftoverQuotaPaused;
+
   /// No description provided for @leftoverNoMeals.
   ///
   /// In en, this message translates to:

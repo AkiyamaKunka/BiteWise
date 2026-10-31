@@ -883,6 +883,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Couldn\'t estimate the leftovers from that photo.';
 
   @override
+  String get leftoverQuotaPaused =>
+      'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.';
+
+  @override
   String get leftoverNoMeals =>
       'No meals from today or yesterday to deduct from.';
 

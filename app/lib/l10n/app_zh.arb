@@ -248,6 +248,7 @@
   "leftoverDupRemoved": "这张照片还被误记成了一餐（{kcal} 千卡）— 该重复记录将一并删除。",
   "leftoverApplied": "已扣除剩菜。",
   "leftoverFailed": "无法从这张照片估算剩菜。",
+  "leftoverQuotaPaused": "分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。",
   "leftoverNoMeals": "今天和昨天没有可扣除的餐。",
   "planTuningHeader": "模型与思考",
   "planTuningFooter": "服务器用哪个 Claude 模型分析、思考多少。默认跟随服务器自身设置；仅 Claude 提供此选项 — GLM 和豆包由服务商决定模型。",

@@ -640,6 +640,7 @@
   },
   "leftoverApplied": "Leftovers deducted.",
   "leftoverFailed": "Couldn't estimate the leftovers from that photo.",
+  "leftoverQuotaPaused": "Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.",
   "leftoverNoMeals": "No meals from today or yesterday to deduct from.",
   "planTuningHeader": "Model & thinking",
   "planTuningFooter": "Which Claude model your server uses, and how hard it thinks. Default follows the server's own setting. Only Claude offers this; GLM and Doubao choose their models themselves.",

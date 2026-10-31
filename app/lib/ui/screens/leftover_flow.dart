@@ -96,6 +96,19 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     if (_busy) return;
     final meal = _selected;
     if (meal == null) return;
+    // No key, or the quota pause: nothing can be estimated, and "couldn't
+    // estimate the leftovers from that photo" sent the user trying other
+    // photos. Say which, before any photo is read (run 7, B7).
+    final settings = widget.services.settings;
+    if (!settings.canAnalyze) {
+      final l = context.l10n;
+      _snack(settings.isQuotaPaused
+          ? l.leftoverQuotaPaused
+          : settings.provider == 'server'
+              ? l.errNoServerKey
+              : l.errNoApiKey);
+      return;
+    }
     _busy = true;
     // App Store 5.1.2(i): the photo and this meal go to the AI — permission
     // for this recipient before the photo's bytes are read.
