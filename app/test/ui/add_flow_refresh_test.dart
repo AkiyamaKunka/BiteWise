@@ -408,6 +408,33 @@ void main() {
       handle.dispose();
     });
 
+    for (final (name, screen, field, label) in [
+      (
+        'Describe',
+        AddTextScreen(
+            executor: FakeExecutor(), dao: FakeDao(), settings: FakeSettings()),
+        'addTextField',
+        _l(_zh).describeLabel,
+      ),
+      (
+        'Fix',
+        FixMealScreen(executor: FakeExecutor(), settings: FakeSettings()),
+        'fixMealField',
+        _l(_zh).fixLabel,
+      ),
+    ]) {
+      testWidgets('$name at AX5 (zh): the floating label is not clipped '
+          'under the app bar', (tester) async {
+        await pumpApp(tester, screen,
+            size: const Size(375, 667), scale: 53 / 17, locale: _zh);
+        await tester.enterText(find.byKey(Key(field)), '两个肉包');
+        await tester.pumpAndSettle();
+        final top = tester.getRect(find.text(label)).top;
+        final bar = tester.getRect(find.byType(AppBar));
+        expect(top, greaterThanOrEqualTo(bar.bottom - 0.5));
+      });
+    }
+
     test('leadsWithGlyph knows status pictographs from text', () {
       for (final s in ['❌ x', '⏸️ x', '🚫 x', '⚠️ x', '  ✅ ok']) {
         expect(ReplyNote.leadsWithGlyph(s), isTrue, reason: s);

@@ -18,6 +18,7 @@ import '../ai_consent.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
+import '../large_text.dart';
 import '../theme/app_dialog.dart';
 import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
@@ -512,11 +513,18 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                   child: Row(
                     key: const Key('scaleReferenceTip'),
+                    // Top-aligned: at large text the tip wraps to several
+                    // lines and a centred icon floated beside the middle.
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.straighten,
-                          size: 16,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpace.s2),
+                        child: Icon(Icons.straighten,
+                            size: 16,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -591,6 +599,13 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     );
   }
 }
+
+/// Top padding for the Describe and Fix pages: a field's floating label
+/// sits on its top border, half above the field, and at the largest text
+/// sizes that half (about 20 pt at AX5) is more than the usual 16-pt
+/// padding, so the scroll view clipped the label's top.
+double _topInset(BuildContext context) =>
+    isLargeText(context) ? AppSpace.s24 : AppSpace.gutter;
 
 /// Describe-a-meal entry: free text (any language) → describeMeal's
 /// new-meal-only estimate → the meal editor as a PREVIEW → insert with
@@ -701,7 +716,8 @@ class _AddTextScreenState extends State<AddTextScreen> {
       // off-screen, where it is not even hit-testable (measured at 390x844
       // and smaller by the review probes).
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpace.gutter),
+        padding: EdgeInsets.fromLTRB(AppSpace.gutter, _topInset(context),
+            AppSpace.gutter, AppSpace.gutter),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

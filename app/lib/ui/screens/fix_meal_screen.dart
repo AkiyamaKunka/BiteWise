@@ -12,6 +12,7 @@ import '../ai_consent.dart';
 import '../nl_presenter.dart';
 import '../l10n.dart';
 import '../services.dart' show SettingsStore;
+import '../large_text.dart';
 import '../theme/tokens.dart';
 import '../widgets/reply_note.dart';
 import '../widgets/small_spinner.dart';
@@ -122,7 +123,13 @@ class _FixMealScreenState extends State<FixMealScreen> {
       // keyboard + multi-line refusal messages must never push the send
       // button off-screen.
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpace.gutter),
+        // More room on top at large text: the field's floating label rises
+        // about 20 pt above it at AX5, past the 16-pt padding.
+        padding: EdgeInsets.fromLTRB(
+            AppSpace.gutter,
+            isLargeText(context) ? AppSpace.s24 : AppSpace.gutter,
+            AppSpace.gutter,
+            AppSpace.gutter),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
