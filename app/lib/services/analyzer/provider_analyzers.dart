@@ -119,6 +119,11 @@ abstract class _HttpVisionAnalyzer
       List<Map<String, dynamic>> recentMeals = const []});
   String extractText(Map<String, dynamic> body);
 
+  /// [extractText] for the reply to [req] — the hook a provider overrides
+  /// when the reply must be checked against what that request carried.
+  String extractTextFor(http.BaseRequest req, Map<String, dynamic> body) =>
+      extractText(body);
+
   /// One POST. Returns the reply text; throws [_ProviderException] with a
   /// transient/permanent classification otherwise. [extract] false skips
   /// text extraction entirely (validateKey: an HTTP 200 proves the key
@@ -328,7 +333,7 @@ abstract class _HttpVisionAnalyzer
     }
     if (!extract) return '';
     try {
-      return extractText(decoded as Map<String, dynamic>);
+      return extractTextFor(req, decoded as Map<String, dynamic>);
     } on _ProviderException {
       rethrow; // extractText may classify precisely — keep its message
     } catch (_) {

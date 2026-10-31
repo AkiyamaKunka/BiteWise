@@ -1150,4 +1150,112 @@ void main() {
       expect(bodies.single, isNot(contains('recent_meals')));
     });
   });
+
+  // The receipt was compared with the LIVE setting: switching the plan
+  // during a 20-60 s photo run threw away the correct reply (paid for on
+  // the plan the request named) and failed the photo for good with
+  // "update the server" (run 7, B3). A pre-upgrade server's wrong payer
+  // is still refused (the test above).
+  group('a plan switched mid-request', () {
+    String reply(String by, {bool text = false}) => jsonEncode({
+          'ok': true,
+          if (!text) 'analysis': {'is_food': true, 'total_calories': 520},
+          if (text) 'result': {'intent': 'chat'},
+          'leftover': {'eaten_fraction': 0.5},
+          'analyzed_by': by,
+        });
+    String sentBackendOf(http.Request req) =>
+        (jsonDecode(req.body) as Map)['backend'] as String;
+
+    test('the photo reply is checked against the backend it asked for',
+        () async {
+      final s = await serverSettings();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        client: MockClient((req) async {
+          final sent = sentBackendOf(req);
+          await s.setServerBackend('glm'); // the user switches meanwhile
+          return http.Response(reply(sent), 200);
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(out.error, isNull);
+      expect(out.isFood, isTrue);
+      expect(out.analysis!['total_calories'], 520);
+    });
+
+    test('the same for a leftover estimate', () async {
+      final s = await serverSettings();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        client: MockClient((req) async {
+          final sent = sentBackendOf(req);
+          await s.setServerBackend('doubao');
+          return http.Response(reply(sent), 200);
+        }),
+      );
+      expect(await analyzer.leftoverIntent(jpeg(), '{}'),
+          {'eaten_fraction': 0.5});
+      // And a wrong payer for the backend it DID ask for is still refused.
+      final drifted = ServerAnalyzer(s,
+          normalizer: (b) async => b,
+          client: MockClient((_) async => http.Response(reply('claude'), 200)));
+      expect(await drifted.leftoverIntent(jpeg(), '{}'), isNull);
+    });
+
+    test('overlapping calls each keep their own receipt', () async {
+      final s = await serverSettings();
+      final photoArrived = Completer<void>();
+      final release = Completer<void>();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        client: MockClient((req) async {
+          final sent = sentBackendOf(req);
+          if (req.url.path == '/api/analyze_photo') {
+            photoArrived.complete();
+            await release.future;
+          }
+          return http.Response(
+              reply(sent, text: req.url.path == '/api/text_intent'), 200);
+        }),
+      );
+      final photo = analyzer.analyzePhoto(jpeg());
+      await photoArrived.future;
+      await s.setServerBackend('glm');
+      final text = await analyzer.textIntentOutcome('hi');
+      expect(text.error, isNull);
+      expect(text.json, {'intent': 'chat'});
+      release.complete();
+      final out = await photo;
+      expect(out.error, isNull, reason: 'sent on claude, answered by claude');
+      expect(out.isFood, isTrue);
+    });
+
+    test('pipeline: the photo is saved, not failed', () async {
+      final s = await serverSettings();
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: ServerAnalyzer(s,
+              normalizer: (b) async => b,
+              client: MockClient((req) async {
+                final sent = sentBackendOf(req);
+                await s.setServerBackend('glm');
+                return http.Response(reply(sent), 200);
+              })),
+          notify: notes.add);
+      final out = await pipeline
+          .process(IntakePhoto(jpeg(), 'a1', 'IMG_1.HEIC'));
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger.values, [IngestionStatus.saved]);
+      expect(dao.meals, hasLength(1));
+      for (final n in notes) {
+        expect(n.message, isNot(contains('update the server')));
+      }
+    });
+  });
 }
