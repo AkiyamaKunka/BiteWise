@@ -17,6 +17,8 @@ import 'package:calorie_tracker/ui/meal_thumbs.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart';
+import 'package:calorie_tracker/ui/widgets/macro_chart.dart'
+    show MacroBreakdownBar;
 import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:calorie_tracker/ui/widgets/states.dart';
 import 'package:flutter/material.dart';
@@ -382,6 +384,24 @@ void main() {
       expect(find.text('Edit meal'), findsOneWidget);
       handle.dispose();
     });
+  });
+
+  // Integration (run 7): the History lane made the bar's default 10 pt
+  // while Day detail's per-meal bars passed 12, which inverted the
+  // hierarchy — each meal's bar was heavier than the day total's.
+  testWidgets('Day detail: the day total\'s macro bar is the heaviest',
+      (tester) async {
+    final dao = FakeDao()
+      ..seed(_meal(1, 0, 450, title: 'Tomato egg rice'))
+      ..seed(_meal(2, 0, 300, title: 'Noodle soup', time: '06:10 PM'));
+    await pumpApp(tester, DayDetailScreen(dao: dao, date: _daysAgo(0)));
+    final bars = tester
+        .widgetList<MacroBreakdownBar>(find.byType(MacroBreakdownBar))
+        .toList();
+    expect(bars, hasLength(3), reason: 'the day total plus one per meal');
+    for (final meal in bars.skip(1)) {
+      expect(meal.height, lessThan(bars.first.height));
+    }
   });
 
   group('the ring arc', () {

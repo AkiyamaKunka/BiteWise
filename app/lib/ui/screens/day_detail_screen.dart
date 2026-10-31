@@ -256,7 +256,9 @@ class _MealRow extends StatelessWidget {
               proteinG: safeMacro(a, 'total_protein_g'),
               carbsG: safeMacro(a, 'total_carbs_g'),
               fatG: safeMacro(a, 'total_fat_g'),
-              height: 12,
+              // Thinner than the day total's bar above (the 10-pt default),
+              // so the header keeps the heavier weight.
+              height: 8,
             ),
           ],
         ],
