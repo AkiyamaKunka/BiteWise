@@ -1132,20 +1132,20 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get diagTextOk => '模型返回了 JSON —— 对话纠正和“描述一餐”都可用。';
+  String get diagTextOk => '模型返回了 JSON —— “文字描述一餐”和“修改或删除某餐”都可用。';
 
   @override
   String get diagTextBad => '文字请求没有成功（服务器忙、限流或额度窗口未开、超时，或模型没有返回 JSON）。';
 
   @override
-  String get diagTextBadDetail => '对话纠正和“描述一餐”可能失败；照片分析仍然可以正常工作。';
+  String get diagTextBadDetail => '“文字描述一餐”和“修改或删除某餐”可能失败；照片分析仍然可以正常工作。';
 
   @override
   String get diagFixPickModel => '如果一直这样，在设置里换一个模型。';
 
   @override
   String get diagTextBadPhotoAlsoFailed =>
-      '对话纠正和“描述一餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
+      '“文字描述一餐”和“修改或删除某餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
 
   @override
   String get diagFixTextPickModel => '如果照片分析正常而这里一直失败，再在设置里换一个模型。';
