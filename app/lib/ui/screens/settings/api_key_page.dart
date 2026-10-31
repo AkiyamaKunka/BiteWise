@@ -10,7 +10,9 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import '../../ai_consent.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/grouped.dart';
+import 'settings_kit.dart';
 import 'provider_page.dart'
     show
         defaultModelFor,
@@ -34,6 +36,9 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
   late final TextEditingController _keyController;
   late final TextEditingController _modelController;
   late bool _customModel;
+
+  /// Show the key while checking a paste (U5); hidden by default.
+  bool _keyVisible = false;
 
   bool get _apiActive => widget.settings.provider != 'server';
 
@@ -112,7 +117,6 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final settings = widget.settings;
     return GroupedPage(
       title: context.l10n.apiPageTitle,
@@ -128,7 +132,8 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                 value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: settings.provider == id
-                    ? Icon(Icons.check, size: 20, color: scheme.primary)
+                    ? Icon(Icons.check_rounded,
+                        size: 20, color: context.colors.accent)
                     : const SizedBox(width: 20),
                 onTap: () => _selectProvider(id),
               ),
@@ -142,7 +147,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
               _cellField(TextField(
                 key: const Key('apiKeyField'),
                 controller: _keyController,
-                obscureText: true,
+                obscureText: !_keyVisible,
                 autocorrect: false,
                 // Saves as you type — a paste-then-switch-tab can never
                 // lose the key.
@@ -150,10 +155,21 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                 onSubmitted: (v) => settings.update(apiKey: v.trim()),
                 onTapOutside: (_) =>
                     settings.update(apiKey: _keyController.text.trim()),
-                decoration: InputDecoration(
+                decoration: cellFieldDecoration(
                   labelText: context.l10n
                       .apiKeyLabel(providerLabel(settings.provider)),
-                  border: InputBorder.none,
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    key: const Key('apiKeyVisibility'),
+                    tooltip: _keyVisible
+                        ? context.l10n.apiKeyHide
+                        : context.l10n.apiKeyShow,
+                    icon: Icon(_keyVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: () =>
+                        setState(() => _keyVisible = !_keyVisible),
+                  ),
                 ),
               )),
             ],
@@ -170,8 +186,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                   initialValue: _customModel
                       ? kCustomModelSentinel
                       : settings.model,
-                  decoration:
-                      const InputDecoration(border: InputBorder.none),
+                  decoration: cellFieldDecoration(),
                   items: [
                     for (final (id, label)
                         in kKnownModels[settings.provider] ??
@@ -207,9 +222,8 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                   onSubmitted: (v) => settings.update(model: v.trim()),
                   onTapOutside: (_) => settings.update(
                       model: _modelController.text.trim()),
-                  decoration: InputDecoration(
+                  decoration: cellFieldDecoration(
                     labelText: context.l10n.modelCustomLabel,
-                    border: InputBorder.none,
                   ),
                 )),
             ],
@@ -217,7 +231,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
         ] else
           GroupedSection(
             footer: context.l10n.apiInactiveFooter,
-            children: const [SizedBox(height: 1)],
+            children: const [],
           ),
       ],
     );

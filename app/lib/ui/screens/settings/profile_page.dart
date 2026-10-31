@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../widgets/grouped.dart';
+import 'settings_kit.dart';
 
 class ProfileSettingsPage extends StatefulWidget {
   const ProfileSettingsPage({super.key, required this.settings});
@@ -49,9 +50,8 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 maxLines: 5,
                 onChanged: (v) =>
                     widget.settings.update(dietaryProfile: v),
-                decoration: InputDecoration(
+                decoration: cellFieldDecoration(
                   hintText: context.l10n.profileHint,
-                  border: InputBorder.none,
                 ),
               ),
             ),

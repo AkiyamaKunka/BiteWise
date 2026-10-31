@@ -435,7 +435,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWelcomeTitle.
   ///
   /// In en, this message translates to:
-  /// **'Welcome — one step to start logging'**
+  /// **'Set up AI to start logging'**
   String get settingsWelcomeTitle;
 
   /// No description provided for @settingsWelcomeBody.
@@ -453,19 +453,19 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAiFooterPaused.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.'**
+  /// **'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider on the AI Provider page.'**
   String get settingsAiFooterPaused;
 
   /// No description provided for @providerQuotaPaused.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  /// **'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.'**
   String get providerQuotaPaused;
 
   /// Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  /// **'Analyses are paused until {time} — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.'**
   String providerQuotaPausedUntil(String time);
 
   /// No description provided for @settingsAiFooter.
@@ -507,7 +507,7 @@ abstract class AppLocalizations {
   /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.
   ///
   /// In en, this message translates to:
-  /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
+  /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. Each photo is one AI request, so a free tier\'s daily limit can run out during this first catch-up, and on some free tiers (Gemini\'s, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.'**
   String watcherDisclosureBody(String provider, int days);
 
   /// No description provided for @watcherDisclosureContinue.
@@ -912,6 +912,18 @@ abstract class AppLocalizations {
   /// **'{provider} API key'**
   String apiKeyLabel(String provider);
 
+  /// No description provided for @apiKeyShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show key'**
+  String get apiKeyShow;
+
+  /// No description provided for @apiKeyHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide key'**
+  String get apiKeyHide;
+
   /// No description provided for @apiKeyFooterDefault.
   ///
   /// In en, this message translates to:
@@ -921,7 +933,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiKeyFooterGemini.
   ///
   /// In en, this message translates to:
-  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.'**
+  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier, but it allows only a limited number of photos a day, and on it Google may use what you send to improve its AI and let people review it. Turning on billing in AI Studio lifts the limit and avoids this — worth doing before photos are logged automatically. Stored securely on this device only.'**
   String get apiKeyFooterGemini;
 
   /// No description provided for @apiKeyFooterOpenai.
@@ -1692,6 +1704,12 @@ abstract class AppLocalizations {
   /// **'kcal per day'**
   String get goalFieldLabel;
 
+  /// Under the daily-goal field when Save is tapped with something that is not a whole number in range; the dialog stays open. max is already formatted (20,000).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number from 1 to {max}.'**
+  String goalInvalid(String max);
+
   /// No description provided for @goalClear.
   ///
   /// In en, this message translates to:
@@ -1959,7 +1977,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixTopUp.
   ///
   /// In en, this message translates to:
-  /// **'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free).'**
+  /// **'Add credit or turn on billing at the provider. On a free tier, wait for the daily limit to reset.'**
   String get diagFixTopUp;
 
   /// No description provided for @diagRateLimited.
@@ -3365,6 +3383,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
   String get watcherLimitedAccess;
+
+  /// First line of the Settings Photos footer while Watch Camera Roll is on and Photos access is 'selected photos' only.
+  ///
+  /// In en, this message translates to:
+  /// **'Photo access is limited to the photos you selected, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  String get watcherLimitedFooter;
 
   /// No description provided for @fixAction.
   ///
