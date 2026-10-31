@@ -28,6 +28,7 @@ import '../services/photo/deferred_assets.dart' show clearDeferredAsset;
 import '../services/photo/coverage.dart';
 import '../services/photo/filename_dates.dart' show deriveCapturedAt;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
+import '../services/photo/origin_cache.dart' show pruneOriginCacheAtLaunch;
 import '../services/photo/photo_library.dart';
 import '../services/photo/share_intake.dart';
 import '../services/photo/watcher.dart';
@@ -71,6 +72,9 @@ class AppServices {
       // This engine's GPU goes off whenever the app is in the background:
       // no dart:ui decode may start there (platform_decode.dart).
       isEngineBackgrounded = appEngineBackgrounded;
+      // photo_manager keeps a full-size copy of every original it reads;
+      // drop the ones no automatic scan can reach (origin_cache.dart).
+      unawaited(pruneOriginCacheAtLaunch(settings.lookbackDays));
       try {
         // iPhone photos are HEIC; earlier builds showed them to the model
         // unreadable. Forget those verdicts once (migrations.dart).
