@@ -1324,10 +1324,25 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outcomeFailed => '分析失败';
 
   @override
+  String get outcomeNotSetUp => '还没有设置 AI';
+
+  @override
   String get outcomeLeftoverApplied => '已扣除剩菜';
 
   @override
   String get outcomeLogManuallyHint => '如果这确实是食物，可以手动记录 —— 照片会附在这一餐上。';
+
+  @override
+  String get outcomeLogManuallyFailedHint => '也可以先手动记录这一餐 —— 照片会附在这一餐上。';
+
+  @override
+  String outcomeQuotaPausedPickMsg(String time) {
+    return '分析已暂停 —— 今天的额度已用完（$time 恢复），这张照片没有发送。可以先手动记录这一餐，或到时再选这张照片。想提前恢复：为 Key 开通付费或提高额度后点「测试当前服务」，或换一个 Key 或服务（设置 › AI 服务）。';
+  }
+
+  @override
+  String get outcomeQuotaPausedPickMsgNoTime =>
+      '分析已暂停 —— 今天的额度已用完，这张照片没有发送。可以先手动记录这一餐，或稍后再选这张照片。想提前恢复：为 Key 开通付费或提高额度后点「测试当前服务」，或换一个 Key 或服务（设置 › AI 服务）。';
 
   @override
   String get outcomeUndoLeftover => '不是剩菜，记为新的一餐';

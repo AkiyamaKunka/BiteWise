@@ -26,6 +26,8 @@ import '../large_text.dart';
 import '../meal_edit_logic.dart';
 import '../widgets/macro_chart.dart';
 import '../widgets/small_spinner.dart';
+import '../theme/app_theme.dart' show AppButtonStyles;
+import '../widgets/pickers.dart';
 
 class MealEditorScreen extends StatefulWidget {
   const MealEditorScreen({
@@ -345,6 +347,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.l10n.editorDeleteTitle),
         content: Text(ctx.l10n.editorDeleteBody),
         actions: [
@@ -353,6 +356,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('confirmDeleteMeal'),
+              style: AppButtonStyles.destructive(ctx),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: Text(ctx.l10n.delete)),
         ],
@@ -375,7 +379,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   Future<void> _pickDate() async {
     final current = DateTime.tryParse(_draft.dateIso) ?? (widget.now ?? DateTime.now)();
-    final picked = await showDatePicker(
+    final picked = await showAppDatePicker(
       context: context,
       initialDate: current,
       firstDate: DateTime(2020),
@@ -387,7 +391,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   Future<void> _pickTime() async {
     final parsed = parseClock(_draft.time);
-    final picked = await showTimePicker(
+    final picked = await showAppTimePicker(
       context: context,
       initialTime: TimeOfDay(
           hour: parsed?.hour ?? 12, minute: parsed?.minute ?? 0),
