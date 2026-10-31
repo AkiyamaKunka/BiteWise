@@ -80,7 +80,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get todayEmptyHint =>
-      'Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.';
+      'Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.';
 
   @override
   String get fabLog => 'Log';
@@ -449,7 +449,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDataFooter =>
-      'Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.';
+      'Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.';
 
   @override
   String get settingsRowExport => 'Export Data…';
@@ -522,7 +522,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.';
+      'The key stays on this phone. Some providers have a free tier; others charge for each request.';
 
   @override
   String get noteVpn => '';
@@ -757,7 +757,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addFixFooter =>
-      '\"meal 2 was roast duck\" · \"delete the first meal\"';
+      '\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"';
 
   @override
   String get addPhotosTip =>
@@ -851,7 +851,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get leftoverPickPhoto =>
-      'Pick the photo of what\'s LEFT — the meal\'s calories shrink to what you ate.';
+      'Pick the photo of what\'s left over — the meal\'s calories shrink to what you ate.';
 
   @override
   String get leftoverChangeMeal => 'Change';
@@ -1198,7 +1198,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixRecopyKey =>
-      'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).';
+      'Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).';
 
   @override
   String diagModelNotFound(String model) {
@@ -1246,11 +1246,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagPhotoTempFail =>
-      'Photo analysis failed with a TEMPORARY problem.';
+      'Photo analysis failed with a temporary problem.';
 
   @override
   String get diagPhotoPermFail =>
-      'Photo analysis failed and a retry will NOT fix it.';
+      'Photo analysis failed, and retrying will not fix it.';
 
   @override
   String get diagFixPhotoTemp =>
@@ -1262,7 +1262,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagQuotaPaused =>
-      'Analyses are PAUSED — the daily quota was hit.';
+      'Analyses are paused — the daily quota was hit.';
 
   @override
   String diagQuotaPausedUntil(String until) {
@@ -1861,7 +1861,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get covLimitedAccess =>
-      'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.';
+      'Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.';
 
   @override
   String get covTruncated =>
@@ -2319,7 +2319,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get nlNoActions =>
-      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
+      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.';
 
   @override
   String get nlRequestFailed => '❌ That request failed. Please try again.';

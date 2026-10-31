@@ -77,7 +77,7 @@
     "description": "Snackbar action when the privacy policy could not be opened: copies its address to the clipboard."
   },
   "todayEmptyTitle": "No meals logged yet today.",
-  "todayEmptyHint": "Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.",
+  "todayEmptyHint": "Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.",
   "fabLog": "Log",
   "shareDayTooltip": "Share today as an image",
   "shareDayFailed": "Could not build the image: {error}",
@@ -386,7 +386,7 @@
   "profileSet": "Set",
   "profileNotSet": "Not set",
   "settingsSectionData": "Your Data",
-  "settingsDataFooter": "Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
+  "settingsDataFooter": "Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
   "settingsRowExport": "Export Data…",
   "settingsRowImport": "Import Data…",
   "settingsRowPrivacy": "Privacy Policy",
@@ -423,7 +423,7 @@
   "testProviderFooter": "The test names exactly what is broken: configuration, network, key, account credit, reply format, or quota.",
   "apiPageTitle": "API Key",
   "apiProviderHeader": "Provider",
-  "apiProviderFooter": "Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.",
+  "apiProviderFooter": "The key stays on this phone. Some providers have a free tier; others charge for each request.",
   "noteVpn": "",
   "noteFreeTierVpn": "free tier",
   "noteDirect": "",
@@ -548,7 +548,7 @@
   "addManual": "Enter manually",
   "addManualNote": "no AI",
   "addFix": "Fix or delete a meal",
-  "addFixFooter": "\"meal 2 was roast duck\" · \"delete the first meal\"",
+  "addFixFooter": "\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"",
   "addPhotosTip": "Tip: chopsticks or a hand in the shot helps the AI judge portion sizes.",
   "addNoPhotos": "No recent photos found.",
   "addPhotosLimited": "Only the photos you allowed are shown — photos you take later won't appear here. Allow access to all photos in system settings.",
@@ -611,7 +611,7 @@
   "addLeftoverNote": "deduct what's left",
   "leftoverTitle": "Leftovers",
   "leftoverPickMeal": "Which meal was this?",
-  "leftoverPickPhoto": "Pick the photo of what's LEFT — the meal's calories shrink to what you ate.",
+  "leftoverPickPhoto": "Pick the photo of what's left over — the meal's calories shrink to what you ate.",
   "leftoverChangeMeal": "Change",
   "leftoverNotSame": "This doesn't look like the same meal",
   "leftoverUseAnyway": "Use anyway",
@@ -838,7 +838,7 @@
   "diagRateLimited": "The key works, but the provider is rate-limiting right now.",
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
-  "diagFixRecopyKey": "Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).",
+  "diagFixRecopyKey": "Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).",
   "diagModelNotFound": "The key works, but the model \"{model}\" was not found.",
   "@diagModelNotFound": {
     "placeholders": {
@@ -857,11 +857,11 @@
   "diagPhotoOk": "The model analyzed a test image and answered the meal format.",
   "diagPhotoThoughtFood": "It even thought the test disc was food.",
   "diagPhotoNotFood": "Verdict \"not food\" — correct for the test image.",
-  "diagPhotoTempFail": "Photo analysis failed with a TEMPORARY problem.",
-  "diagPhotoPermFail": "Photo analysis failed and a retry will NOT fix it.",
+  "diagPhotoTempFail": "Photo analysis failed with a temporary problem.",
+  "diagPhotoPermFail": "Photo analysis failed, and retrying will not fix it.",
   "diagFixPhotoTemp": "Usually a rate limit or a busy server — photos are kept and retried automatically.",
   "diagFixPhotoPerm": "Read the message above — it names the broken piece (model, format, or account).",
-  "diagQuotaPaused": "Analyses are PAUSED — the daily quota was hit.",
+  "diagQuotaPaused": "Analyses are paused — the daily quota was hit.",
   "diagQuotaPausedUntil": "Paused until {until}.",
   "@diagQuotaPausedUntil": {
     "placeholders": {
@@ -1331,7 +1331,7 @@
       }
     }
   },
-  "covLimitedAccess": "Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.",
+  "covLimitedAccess": "Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.",
   "covTruncated": "Note: over 2000 photos in this window — older ones were not checked. Shorten the window for a complete answer.",
   "covVerbLog": "Log",
   "covVerbRetry": "Retry",
@@ -1856,7 +1856,7 @@
       }
     }
   },
-  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
+  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.",
   "nlRequestFailed": "❌ That request failed. Please try again.",
   "nlAllActionsFailed": "❌ All {count} requested actions failed. Please try again.",
   "@nlAllActionsFailed": {
