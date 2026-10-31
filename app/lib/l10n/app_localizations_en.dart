@@ -1577,6 +1577,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This photo could not be processed (it could not be decoded).';
 
   @override
+  String get errLeftoverUnsure =>
+      'It looks like the leftovers of an earlier meal, but the AI wasn\'t sure which one, so nothing was logged or deducted. Use Leftovers to deduct them.';
+
+  @override
   String get errServerBusy =>
       'Your server is busy with another analysis — the photo is kept and retried later.';
 

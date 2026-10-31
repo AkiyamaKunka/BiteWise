@@ -187,9 +187,14 @@ class BaseFakeDao implements MealsDao {
   @override
   Future<bool> isDuplicatePhoto(String imageHash) async => duplicatePhoto;
 
+  /// Decides by hash alone: the asset rule (an edited copy of a logged
+  /// photo) is the SQLite DAO's, tested against it.
   @override
   Future<PhotoReservationResult> reservePhotoHash(String imageHash,
-      {required String source, bool reclaimDeliberate = false}) async {
+      {required String source,
+      bool reclaimDeliberate = false,
+      String assetId = '',
+      DateTime? capturedAt}) async {
     if (imageHash.isEmpty) {
       return (kind: PhotoReservation.reserved, stamp: null);
     }

@@ -25,6 +25,13 @@ enum AnalysisErrorKind {
   serverBusy,
   serverError,
   serverRejected,
+
+  /// Not an analyzer error: the model answered that the photo shows the
+  /// leftovers of an earlier meal, but nothing could be applied (it was
+  /// unsure, or named a meal not in the list) and the reply carries no meal
+  /// of its own. Set by the photo pipeline only — never by
+  /// [classifyAnalysisError].
+  leftoverUnsure,
   unknown,
 }
 

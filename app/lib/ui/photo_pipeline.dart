@@ -492,8 +492,13 @@ class PhotoPipeline {
       // automated watch intake is strict (spec §2.3 caller policies).
       final source =
           photo.deliberate ? MealSource.appPhoto : MealSource.appWatch;
+      // Automatic intake also names the photo's asset: an edited copy of a
+      // logged photo (new bytes, new hash) is that meal's, not a new one.
       final reservation = await dao.reservePhotoHash(hash,
-          source: source, reclaimDeliberate: photo.deliberate);
+          source: source,
+          reclaimDeliberate: photo.deliberate,
+          assetId: photo.deliberate ? '' : photo.assetId,
+          capturedAt: photo.deliberate ? null : photo.capturedAt);
       switch (reservation.kind) {
         case PhotoReservation.claimed:
           return _alreadyTracked;
@@ -538,9 +543,16 @@ class PhotoPipeline {
       // snapshot rule). The photo's own day, never "today": a backfilled or
       // re-scanned photo from last week used to be matched against today's
       // meals and could deduct from the wrong one (loop find 2026-10-07).
+      // Remains shot just after midnight belong to the late dinner before
+      // it: a photo taken before 04:00 also sees the previous day's meals
+      // (the manual flow offers yesterday too). The cap below keeps the
+      // latest five, so a daytime photo's candidates are unchanged.
       final today = isoDate(when);
+      final from = when.hour < 4
+          ? isoDate(DateTime(when.year, when.month, when.day - 1))
+          : today;
       final candidates = byMealClock(
-              (await dao.mealsBetween(today, today)).where(isFoodMeal))
+              (await dao.mealsBetween(from, today)).where(isFoodMeal))
           .toList();
       // A held verdict resolves against the snapshot ITS model call saw.
       final recent = held?.recent ??
@@ -689,6 +701,23 @@ class PhotoPipeline {
           } catch (_) {}
           return leftover;
         }
+      }
+      // A leftover-shaped reply nothing was applied from (unsure, a meal
+      // not in the list, fractions applyLeftover cannot use) carries no
+      // meal of its own: saving it logged a nameless "~? kcal" meal and
+      // ledgered the photo as done. Kept as failed instead, nothing
+      // deducted; the Leftovers flow (or a retry) is the repair. A reply
+      // that also carries a full meal still saves as one below.
+      if (analysis['leftover_of'] != null &&
+          displayTotalCalories(analysis) == '?' &&
+          safeFoodItems(analysis).isEmpty) {
+        await dao.markPhotoHash(hash, IngestionStatus.failed,
+            ownerStamp: stamp);
+        _held = null;
+        try {
+          notify?.call(_leftoverUnsure);
+        } catch (_) {}
+        return _leftoverUnsure;
       }
 
       if (analysis.containsKey('food_items')) {
@@ -855,6 +884,18 @@ class PhotoPipeline {
   static const _latchedMessage =
       'Automatic analysis is paused: the AI service refused the last '
       'photo for a reason every photo shares (API key or network region).';
+
+  /// A leftover-shaped reply nothing could be applied from: kept as failed
+  /// (no scan offers it again; a retry or the Leftovers flow can). English
+  /// word for word errLeftoverUnsure.
+  static const _leftoverUnsureMessage =
+      "It looks like the leftovers of an earlier meal, but the AI wasn't "
+      'sure which one, so nothing was logged or deducted. Use Leftovers to '
+      'deduct them.';
+  static const _leftoverUnsure = PhotoOutcome(
+      PhotoOutcomeKind.failed, _leftoverUnsureMessage,
+      errorKind: AnalysisErrorKind.leftoverUnsure,
+      detail: _leftoverUnsureMessage);
 }
 
 /// A verdict a run already holds, and the meals its leftover indexes

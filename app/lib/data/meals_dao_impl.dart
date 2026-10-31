@@ -167,6 +167,16 @@ class SqfliteMealsDao implements MealsDao {
           whereArgs: [localChatId, hash],
         );
       }
+      // App-only: the hashes an EDITED copy of this meal's photo was
+      // ledgered under (reservePhotoHash's asset rule) name the meal too.
+      // Left 'saved', they would point at a meal that is gone, and refuse
+      // a deliberate re-add of that copy as already logged.
+      await txn.update(
+        'photo_ingestions',
+        {'status': IngestionStatus.deleted.name, 'meal_id': null},
+        where: 'chat_id = ? AND status = ? AND meal_id = ?',
+        whereArgs: [localChatId, IngestionStatus.saved.name, mealId],
+      );
     });
   }
 
@@ -220,7 +230,10 @@ class SqfliteMealsDao implements MealsDao {
 
   @override
   Future<PhotoReservationResult> reservePhotoHash(String imageHash,
-      {required String source, bool reclaimDeliberate = false}) {
+      {required String source,
+      bool reclaimDeliberate = false,
+      String assetId = '',
+      DateTime? capturedAt}) {
     final hash = normalizeImageHash(imageHash);
     // Spec §2.3 step 1: empty hash → nothing to reserve.
     if (hash.isEmpty) {
@@ -257,6 +270,22 @@ class SqfliteMealsDao implements MealsDao {
         reclaimDeliberate: reclaimDeliberate,
         now: now,
       );
+      // App-only asset rule (see the contract): automatic intake about to
+      // take a NEW hash first asks whether the photo's asset already is a
+      // meal. Editing a logged photo in Photos changes its bytes, and the
+      // next launch's catch-up offered it as a new photo: a second meal,
+      // or a leftover cut of the first. Ledgering the new hash for that
+      // meal keeps the coverage check counting it as logged.
+      if (!reclaimDeliberate &&
+          (decision == ReserveDecision.insert ||
+              decision == ReserveDecision.reclaim)) {
+        final mealId = await _mealOfAsset(txn, assetId, capturedAt);
+        if (mealId != null) {
+          await _upsertLedger(txn, hash, IngestionStatus.saved,
+              mealId: mealId, source: source);
+          return (kind: PhotoReservation.claimed, stamp: null);
+        }
+      }
       switch (decision) {
         case ReserveDecision.allowNoop:
           return (kind: PhotoReservation.reserved, stamp: null);
@@ -293,6 +322,30 @@ class SqfliteMealsDao implements MealsDao {
           return (kind: PhotoReservation.reserved, stamp: stamp);
       }
     });
+  }
+
+  /// The meal [assetId] already became, dated within a day of [capturedAt]
+  /// (the meal's date is the capture day in the zone the photo was taken
+  /// in, which can sit a day off the device's); null when there is none.
+  /// idx_chat_date keeps it one small range read.
+  Future<int?> _mealOfAsset(
+      DatabaseExecutor executor, String assetId, DateTime? capturedAt) async {
+    if (assetId.isEmpty || capturedAt == null) return null;
+    final c = capturedAt;
+    final rows = await executor.query(
+      'meals',
+      columns: const ['id'],
+      where: 'chat_id = ? AND date >= ? AND date <= ? AND file_id = ?',
+      whereArgs: [
+        localChatId,
+        isoDate(DateTime(c.year, c.month, c.day - 1)),
+        isoDate(DateTime(c.year, c.month, c.day + 1)),
+        assetId,
+      ],
+      orderBy: 'id ASC',
+      limit: 1,
+    );
+    return rows.isEmpty ? null : (rows.first['id'] as num).toInt();
   }
 
   @override
