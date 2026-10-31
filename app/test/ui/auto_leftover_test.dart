@@ -329,4 +329,60 @@ void main() {
             before: out.previousAnalysis!)!['total_calories'],
         965);
   });
+
+  // B14 (run 7): remains shot just after midnight were only ever compared
+  // with the NEW day's meals, so the late dinner they came from was never
+  // offered and the remains were logged as a meal of their own.
+  Meal lateDinner() => const Meal(
+        id: 21,
+        date: '2026-10-29',
+        time: '11:20 PM',
+        timestamp: '2026-10-29T23:21:00',
+        source: 'app_watch',
+        imageHash: 'orig-21',
+        analysis: {
+          'is_food': true,
+          'meal_description': 'Hotpot',
+          'total_calories': 1200,
+          'food_items': [
+            {'name': 'Rice (~200 g)', 'estimated_calories': 300},
+            {'name': 'Pork (~150 g)', 'estimated_calories': 900},
+          ],
+        },
+      );
+
+  test('remains shot at 00:10 are checked against the 23:20 dinner the '
+      'night before', () async {
+    dao.put(lateDinner());
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    final out = await pipeline.process(IntakePhoto(
+        Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
+        capturedAt: DateTime(2026, 10, 30, 0, 10)));
+    expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
+        ['Hotpot']);
+    expect(out.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(out.mealId, 21);
+    expect(out.mealDate, '2026-10-29');
+    expect(dao.meals, hasLength(1), reason: 'no meal of their own');
+    // The rice was left: 1200 − 300.
+    expect(dao.byId(21).analysis['total_calories'], 900);
+  });
+
+  test("a daytime photo still sees only its own day's meals", () async {
+    dao.put(lateDinner());
+    analyzer.nextPhotoOutcome =
+        const AnalysisOutcome(analysis: {'is_food': false}, wall: Duration.zero);
+    await pipeline.process(IntakePhoto(
+        Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
+        capturedAt: DateTime(2026, 10, 30, 13, 0)));
+    expect(analyzer.lastRecentMeals, isEmpty,
+        reason: "yesterday's dinner is not offered at 1 PM");
+    // 04:00 is already morning: the previous night is not offered either.
+    await PhotoPipeline(
+            dao: dao, analyzer: analyzer, hasher: (_) async => 'other-hash')
+        .process(IntakePhoto(Uint8List.fromList([8]), 'w4', 'IMG_10.jpg',
+            capturedAt: DateTime(2026, 10, 30, 4, 0)));
+    expect(analyzer.lastRecentMeals, isEmpty);
+  });
 }

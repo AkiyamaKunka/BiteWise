@@ -538,9 +538,16 @@ class PhotoPipeline {
       // snapshot rule). The photo's own day, never "today": a backfilled or
       // re-scanned photo from last week used to be matched against today's
       // meals and could deduct from the wrong one (loop find 2026-10-07).
+      // Remains shot just after midnight belong to the late dinner before
+      // it: a photo taken before 04:00 also sees the previous day's meals
+      // (the manual flow offers yesterday too). The cap below keeps the
+      // latest five, so a daytime photo's candidates are unchanged.
       final today = isoDate(when);
+      final from = when.hour < 4
+          ? isoDate(DateTime(when.year, when.month, when.day - 1))
+          : today;
       final candidates = byMealClock(
-              (await dao.mealsBetween(today, today)).where(isFoodMeal))
+              (await dao.mealsBetween(from, today)).where(isFoodMeal))
           .toList();
       // A held verdict resolves against the snapshot ITS model call saw.
       final recent = held?.recent ??
