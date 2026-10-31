@@ -12,6 +12,13 @@ library;
 
 const Set<String> kSetupBackends = {'claude', 'glm', 'doubao'};
 
+/// The same link arriving again this soon is the same arrival: app_links'
+/// link stream also carries the link that cold-started the app, which the
+/// initial-link read already delivered (seen with `simctl openurl` on a
+/// cold start: two confirmations for one link). A link opened again later
+/// asks again.
+const Duration setupLinkRepeatWindow = Duration(seconds: 5);
+
 class SetupLink {
   const SetupLink(
       {required this.server, required this.key, required this.backend});
