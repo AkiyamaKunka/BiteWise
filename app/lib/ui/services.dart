@@ -70,6 +70,11 @@ abstract class SettingsStore {
   /// Settings' Stop sharing row withdraws it.
   bool hasAiConsent(String route);
   Future<void> setAiConsent(String route, {required bool granted});
+
+  /// Whether a meal was ever saved in the app (AppSettings.mealLogged): a
+  /// key-less install that logs by hand opens on Today, not on Settings.
+  bool get mealLogged;
+  Future<void> markMealLogged();
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time

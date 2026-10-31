@@ -181,8 +181,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         if (uri != null && mounted) _onSetupLink(uri);
       }, onError: (Object _) {}));
     }
-    // Onboarding: with no API key yet, land on Settings first.
-    _index = widget.services.settings.apiKey.trim().isEmpty ? 3 : 0;
+    // Onboarding: with no API key yet, land on Settings first — unless this
+    // install already logs meals by hand (no AI needed), where Settings on
+    // every launch only cost a tap before + Log.
+    final settings = widget.services.settings;
+    _index =
+        settings.apiKey.trim().isEmpty && !settings.mealLogged ? 3 : 0;
     // Debug-only: headless simulator screenshot runs force a tab by
     // dropping a one-byte file into the app's Documents dir (simctl has no
     // tap injection; env forwarding and HOME-derived paths both proved
@@ -325,6 +329,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (!mounted) return;
     _todayKey.currentState?.reload();
     _historyKey.currentState?.reload();
+    final settings = widget.services.settings;
+    if (!settings.mealLogged) {
+      unawaited(settings.markMealLogged().then((_) {}, onError: (Object _) {}));
+    }
     // iOS: a meal just landed (pipeline / share sheet) — the pending OS card
     // must carry it even if the user stays in the app through the slot.
     final rearm = widget.services.refreshDailyNotification;

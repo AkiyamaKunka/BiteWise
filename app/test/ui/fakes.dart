@@ -164,6 +164,15 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     aiConsent = granted ? {...aiConsent, route} : ({...aiConsent}..remove(route));
     notifyListeners();
   }
+
+  @override
+  bool mealLogged = false;
+  int markMealLoggedCalls = 0;
+  @override
+  Future<void> markMealLogged() async {
+    markMealLoggedCalls++;
+    mealLogged = true;
+  }
   /// Provider-scoped MODELS too — the real store keeps one per provider,
   /// and a shared field made provider-switch tests pass while production
   /// would have shown Gemini's model under Doubao (review 2026-07-31).
