@@ -20,6 +20,7 @@ import 'package:calorie_tracker/ui/widgets/states.dart';
 import 'package:flutter/cupertino.dart' show CupertinoActivityIndicator;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/app_theme_harness.dart';
@@ -345,6 +346,60 @@ void main() {
     expect(tester.getRect(collapsed).top, greaterThanOrEqualTo(59),
         reason: 'a bare collapsedHeight of 44 put it under the status bar');
     expect(background(), AppColors.light.chrome);
+  });
+
+  // The expanded bar holds one title line. A wrapping title pushed its
+  // first line up under the bar's clip: 'Your own server' at xxxLarge on a
+  // 375-402 pt iPhone showed 'Your own' with its top half cut off.
+  group('appLargeTitleBar: a long title stays whole on one line', () {
+    setUpAll(loadIphoneFonts);
+    for (final (title, locale) in [
+      ('Your own server', const Locale('en')),
+      ('Dietary Profile', const Locale('en')),
+      ('你自己的服务器', const Locale('zh')),
+    ]) {
+      for (final (width, scale) in [(375.0, 1.24), (375.0, 1.35), (402.0, 3.1)]) {
+        testWidgets('"$title" at ${width.toInt()} pt, ${scale}x',
+            (tester) async {
+          await pumpApp(
+              tester,
+              GroupedPage(
+                  title: title, children: const [SizedBox(height: 2000)]),
+              size: Size(width, 667),
+              locale: locale,
+              scale: scale,
+              padding: const EdgeInsets.only(top: 59));
+          final expanded = find
+              .text(title)
+              .evaluate()
+              .where((e) =>
+                  e.findAncestorWidgetOfExactType<NavigationToolbar>() ==
+                  null)
+              .single;
+          // The bar hands the SAME title widget to the toolbar and the
+          // flexible space, so it is told apart by its element.
+          final paragraph = expanded.renderObject! as RenderParagraph;
+          RenderObject? clip = paragraph.parent;
+          while (clip != null && clip is! RenderClipRect) {
+            clip = clip.parent;
+          }
+          expect(clip, isNotNull);
+          final clipBox = clip! as RenderClipRect;
+          final clipRect = clipBox.localToGlobal(Offset.zero) & clipBox.size;
+          final textRect = MatrixUtils.transformRect(
+              paragraph.getTransformTo(null), Offset.zero & paragraph.size);
+          expect(textRect.top, greaterThanOrEqualTo(clipRect.top - 0.01),
+              reason: 'the top of the title is not clipped');
+          expect(textRect.bottom, lessThanOrEqualTo(clipRect.bottom + 0.01));
+          expect(textRect.left, greaterThanOrEqualTo(0));
+          expect(textRect.right, lessThanOrEqualTo(width));
+          final boxes = paragraph.getBoxesForSelection(
+              TextSelection(baseOffset: 0, extentOffset: title.length));
+          expect(boxes.map((b) => b.top).toSet(), hasLength(1),
+              reason: 'one line, never wrapped');
+        });
+      }
+    }
   });
 
   testWidgets('a grouped sheet: dark cells #2C2C2E on the #1C1C1E sheet, '

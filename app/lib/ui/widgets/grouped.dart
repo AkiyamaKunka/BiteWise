@@ -534,7 +534,10 @@ class GroupedPage extends StatelessWidget {
 /// collapsedHeight is null, so the inset is added here by hand — a bare 44
 /// put the collapsed bar under the status bar. The expanded height follows
 /// the title's own (clamped, 1.34x) text scale: 113 pt at the default size
-/// (Material's default was 152).
+/// (Material's default was 152). That height holds ONE title line, so the
+/// title never wraps: a title too wide for the screen shrinks to fit, as a
+/// wrapped second line pushed the first up under the clip ("Your own
+/// server" on a 375-402 pt iPhone at large text lost half its first line).
 Widget appLargeTitleBar(
   BuildContext context, {
   Key? key,
@@ -548,7 +551,9 @@ Widget appLargeTitleBar(
       (MediaQuery.textScalerOf(context).scale(34) / 34).clamp(1.0, 1.34);
   return SliverAppBar.large(
     key: key,
-    title: Text(title),
+    title: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(title, maxLines: 1, softWrap: false)),
     leading: leading,
     actions: actions,
     toolbarHeight: AppSpace.toolbarHeight,
