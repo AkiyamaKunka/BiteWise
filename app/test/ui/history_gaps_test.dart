@@ -157,11 +157,15 @@ void main() {
     final now = DateTime.now();
     final old = now.subtract(const Duration(days: 28));
     await pump(tester, [_meal(_iso(old))]);
-    final tiles = tester
-        .widgetList<ListTile>(find.byType(ListTile))
-        .length;
-    expect(tiles, 29,
-        reason: '28 days ago .. today inclusive = 29 unique rows');
+    final rows = tester
+        .widgetList(find.byWidgetPredicate((w) =>
+            w.key is ValueKey<String> &&
+            (w.key! as ValueKey<String>).value.startsWith('historyDay')))
+        .map((w) => (w.key! as ValueKey<String>).value)
+        .toList();
+    expect(rows.length, 29,
+        reason: '28 days ago .. today inclusive = 29 rows');
+    expect(rows.toSet().length, 29, reason: 'each date exactly once');
   });
 
   testWidgets('the trend chart keeps a slot per CALENDAR day — gaps stay '
