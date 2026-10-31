@@ -18,13 +18,16 @@ import 'package:share_plus/share_plus.dart';
 import '../l10n.dart';
 import '../widgets/calorie_ring.dart';
 import '../widgets/day_report.dart';
-import '../widgets/grouped.dart' show GroupedCard;
+import '../widgets/grouped.dart' show GroupedCard, appLargeTitleBar;
 import '../widgets/macro_chart.dart' show MacroPalette;
 import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
 import '../widgets/meal_card.dart';
 import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
+import '../large_text.dart';
+import '../theme/tokens.dart';
+import '../widgets/states.dart';
 
 class TodayScreen extends StatefulWidget {
   final MealsDao dao;
@@ -131,8 +134,9 @@ class TodayScreenState extends State<TodayScreen> {
           ? const AlwaysScrollableScrollPhysics()
           : const NeverScrollableScrollPhysics(),
       slivers: [
-        SliverAppBar.large(
-          title: Text(context.l10n.tabToday),
+        appLargeTitleBar(
+          context,
+          title: context.l10n.tabToday,
           actions: [
             // Report-to-my-coach (user request 2026-08-02): the whole day
             // as ONE tall image, straight into the share sheet.
@@ -200,8 +204,7 @@ class TodayScreenState extends State<TodayScreen> {
   Widget _body(BuildContext context) {
     if (_loading) {
       return _withTitle(context,
-          [const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator()))],
+          [const SliverFillRemaining(child: LoadingState())],
           scrollable: false);
     }
     if (_error != null) {
@@ -210,21 +213,25 @@ class TodayScreenState extends State<TodayScreen> {
     return _loadedBody(context);
   }
 
+  /// The raw failure as last logged, so a rebuild does not log it again.
+  String? _loggedError;
+
   Widget _errorBody(BuildContext context) {
+    // The user reads one translated sentence; the exception text (English,
+    // technical) is for the debug log only (L4).
+    final raw = _error!;
+    if (raw != _loggedError) {
+      _loggedError = raw;
+      debugPrint(raw);
+    }
     return _withTitle(context, [
-      SliverFillRemaining(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(_error!, textAlign: TextAlign.center),
-                const SizedBox(height: 12),
-                FilledButton(onPressed: reload, child: Text(context.l10n.retry)),
-              ],
-            ),
-          ),
+      // InlineError's own 16-pt padding lines it up with the title.
+      SliverToBoxAdapter(
+        child: InlineError(
+          key: const Key('todayLoadError'),
+          message: context.l10n.todayLoadFailed,
+          onRetry: reload,
+          retryKey: const Key('todayRetry'),
         ),
       ),
     ]);
@@ -237,30 +244,18 @@ class TodayScreenState extends State<TodayScreen> {
       child: _withTitle(context, [
         // Room under the last meal for the shell's + 记录 button.
         SliverPadding(
-          padding: const EdgeInsets.only(bottom: 96),
+          padding: const EdgeInsets.only(bottom: AppSpace.fabClearance),
           sliver: SliverList.list(children: [
           _totalsHeader(context, foodMeals),
           if (foodMeals.isEmpty)
-            Padding(
-              padding: const EdgeInsets.all(32),
-              child: Center(
-                child: Column(
-                  children: [
-                    // Empty copy per spec §5.1; the hint below is app-only
-                    // (§9) — the bare sentence was a dead-ish end for a
-                    // user who just finished setup.
-                    Text(context.l10n.todayEmptyTitle),
-                    const SizedBox(height: 8),
-                    Text(
-                      context.l10n.todayEmptyHint,
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
-                    ),
-                  ],
-                ),
-              ),
+            // Empty copy per spec §5.1; the hint below is app-only (§9) —
+            // the bare sentence was a dead-ish end for a user who just
+            // finished setup.
+            EmptyState(
+              key: const Key('todayEmpty'),
+              icon: Icons.restaurant_rounded,
+              title: context.l10n.todayEmptyTitle,
+              message: context.l10n.todayEmptyHint,
             )
           else
             for (final meal in foodMeals)
@@ -279,7 +274,9 @@ class TodayScreenState extends State<TodayScreen> {
   Widget _totalsHeader(BuildContext context, List<Meal> foodMeals) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final colors = AppColors.of(context);
     final palette = MacroPalette.of(context);
+    final l = context.l10n;
     final totals = todayTotals(foodMeals); // Σ safeNumber, spec §5.1
     final typical = typicalDayKcal(_priorDayTotals);
     final burn = _garmin?.activeCalories ?? 0;
@@ -289,105 +286,110 @@ class TodayScreenState extends State<TodayScreen> {
       // "· ~N kcal headroom / above typical" tail went with the rest of
       // the remaining framing (owner decision 2026-08-06) — this screen
       // reports intake, it does not run a countdown.
-      typicalLine = context.l10n.typicalDayOnly(formatKcal(typical));
+      typicalLine = l.typicalDayOnly(formatKcal(typical));
     }
+    final footnote = theme.textTheme.bodySmall
+        ?.copyWith(color: colors.secondaryLabel);
+    // The ring's centre is the ONE hero number (U15): the eaten total used
+    // to be printed three times (centre, a 'N kcal' title, the Eaten row).
+    // The title line is now the meal count; the Eaten row stays as the
+    // result of the arithmetic.
+    final summary = Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(l.mealsToday(totals.meals),
+            key: const Key('todayMealCount'),
+            style: theme.textTheme.titleMedium?.copyWith(color: colors.label)),
+        // MFP's transparent arithmetic — and it RECONCILES: typical + burn
+        // frame the arc, eaten IS the ring's centre number. With no
+        // typical day yet there is nothing to reconcile, and an Eaten row
+        // would only repeat the centre ('0 kcal today' / 'Eaten 0').
+        if (typical != null) ...[
+          const SizedBox(height: AppSpace.s8),
+          ArithmeticRow(
+              label: l.rowTypical,
+              value: '~${formatKcal(typical)}',
+              dot: colors.tertiaryLabel),
+          if (burn > 0)
+            ArithmeticRow(
+                label: l.rowBurn,
+                value: '+${formatKcal(burn)}',
+                dot: scheme.tertiary),
+          // The eaten row is the EMPHASIZED one: it is what the ring's
+          // center restates. No remaining row — the owner tracks intake,
+          // not a countdown (2026-08-06).
+          ArithmeticRow(
+              key: const Key('arithmeticResultRow'),
+              label: l.rowEaten,
+              value: formatKcal(totals.cal.round()),
+              dot: colors.accent,
+              emphasized: true),
+        ],
+      ],
+    );
+    final ring = CalorieRing(
+        eatenKcal: totals.cal, typicalKcal: typical, burnKcal: burn);
     // Hero layout (research: MFP arithmetic × Apple ring — see
     // uiux_direction.md): ring answers "how am I doing", the rows beside it
-    // show the arithmetic that produced the answer, macro trio beneath.
+    // show the arithmetic that produced the answer, macro trio beneath. At
+    // accessibility sizes the rows beside the ring got a third of the card
+    // and broke a number per line (zh stress shot 18): the ring centres on
+    // top and the rows take the full width under it.
+    final hero = isLargeText(context)
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Center(child: ring),
+              const SizedBox(height: AppSpace.s16),
+              summary,
+            ],
+          )
+        : Row(
+            children: [
+              ring,
+              const SizedBox(width: AppSpace.s16),
+              Expanded(child: summary),
+            ],
+          );
     return GroupedCard(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                CalorieRing(
-                    eatenKcal: totals.cal,
-                    typicalKcal: typical,
-                    burnKcal: burn),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Demoted from headline (review: one hero numeral per
-                      // card — the ring's center). Key + string format stay.
-                      Text(context.l10n.kcalAmount(formatKcal(totals.cal)),
-                          key: const Key('todayTotalKcal'),
-                          style: theme.textTheme.titleMedium),
-                      Text(context.l10n.mealsToday(totals.meals),
-                          style: theme.textTheme.bodySmall?.copyWith(
-                              color: scheme.onSurfaceVariant)),
-                      const SizedBox(height: 8),
-                      // MFP's transparent arithmetic — and it RECONCILES:
-                      // typical + burn − eaten IS the ring's center number.
-                      if (typical != null) ...[
-                        ArithmeticRow(
-                            label: context.l10n.rowTypical,
-                            value: '~${formatKcal(typical)}',
-                            dot: scheme.outlineVariant),
-                        if (burn > 0)
-                          ArithmeticRow(
-                              label: context.l10n.rowBurn,
-                              value: '+${formatKcal(burn)}',
-                              dot: scheme.tertiary),
-                        // The eaten row is the EMPHASIZED one now: it is
-                        // what the ring's center restates. No remaining
-                        // row — the owner tracks intake, not a countdown
-                        // (2026-08-06).
-                        ArithmeticRow(
-                            key: const Key('arithmeticResultRow'),
-                            label: context.l10n.rowEaten,
-                            value: formatKcal(totals.cal.round()),
-                            dot: scheme.primary,
-                            emphasized: true),
-                      ] else
-                        ArithmeticRow(
-                            label: context.l10n.rowEaten,
-                            value: formatKcal(totals.cal.round()),
-                            dot: scheme.primary),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            MacroTrio(
-              proteinG: totals.protein,
-              carbsG: totals.carbs,
-              fatG: totals.fat,
-              proteinColor: palette.protein,
-              carbsColor: palette.carbs,
-              fatColor: palette.fat,
-            ),
-            if (typicalLine != null) ...[
-              const SizedBox(height: 10),
-              Text(typicalLine,
-                  key: const Key('typicalDayLine'),
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: scheme.onSurfaceVariant)),
-            ],
-            if (_garmin != null && _garmin!.activeCalories <= 0) ...[
-              const SizedBox(height: 4),
-              Text(
-                context.l10n.garminIdleLine,
-                key: const Key('garminIdleLine'),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
-            if (_garmin != null && _garmin!.activeCalories > 0) ...[
-              const SizedBox(height: 4),
-              Text(
-                _garminLine(context, totals.cal, _garmin!.activeCalories),
-                key: const Key('garminBurnLine'),
-                style: theme.textTheme.bodySmall
-                    ?.copyWith(color: scheme.onSurfaceVariant),
-              ),
-            ],
+      key: const Key('todayHero'),
+      padding: const EdgeInsets.all(AppSpace.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          hero,
+          const SizedBox(height: AppSpace.s16),
+          MacroTrio(
+            proteinG: totals.protein,
+            carbsG: totals.carbs,
+            fatG: totals.fat,
+            proteinColor: palette.protein,
+            carbsColor: palette.carbs,
+            fatColor: palette.fat,
+          ),
+          if (typicalLine != null) ...[
+            const SizedBox(height: AppSpace.cardGap),
+            Text(typicalLine,
+                key: const Key('typicalDayLine'), style: footnote),
           ],
-        ),
+          if (_garmin != null && _garmin!.activeCalories <= 0) ...[
+            const SizedBox(height: AppSpace.s4),
+            Text(
+              l.garminIdleLine,
+              key: const Key('garminIdleLine'),
+              style: footnote,
+            ),
+          ],
+          if (_garmin != null && _garmin!.activeCalories > 0) ...[
+            const SizedBox(height: AppSpace.s4),
+            Text(
+              _garminLine(context, totals.cal, _garmin!.activeCalories),
+              key: const Key('garminBurnLine'),
+              style: footnote,
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -398,8 +400,8 @@ class TodayScreenState extends State<TodayScreen> {
   /// negative ("净摄入 ~-897 千卡", testing loop 2026-10-07): that is not a
   /// net intake, it is a countdown in disguise, and this screen reports
   /// intake, not a countdown (owner decision 2026-08-06). The line then
-  /// states the burn alone — the eaten figure is already the hero above,
-  /// three times over. Both terms are rounded first so the net reconciles
+  /// states the burn alone — the eaten figure is already the hero above.
+  /// Both terms are rounded first so the net reconciles
   /// with the rows as printed; a net of exactly 0 is dropped with the
   /// negatives (no "~0 kcal" noise, same rule as the idle line).
   String _garminLine(BuildContext context, num eaten, double burn) {
