@@ -294,6 +294,7 @@ class AppSettings extends ChangeNotifier {
   static const String _kDeepseekModel = 'settings.deepseek_model';
   static const String _kXaiModel = 'settings.xai_model';
   static const String _kOpenrouterModel = 'settings.openrouter_model';
+  static const String _kMealLogged = 'settings.meal_logged';
 
   /// Spec §8: Gemini model default (config.py:26), from shared/.
   static const String defaultModel = SharedConstants.geminiModelDefault;
@@ -371,6 +372,7 @@ class AppSettings extends ChangeNotifier {
   DateTime? _quotaPauseUntil;
   DateTime? _analysisBlockedUntil;
   String? _analysisBlockedKind;
+  bool _mealLogged = false;
 
   static Future<AppSettings> load(
       {SharedPreferences? prefs, SecureKeyStore? keyStore}) async {
@@ -444,6 +446,7 @@ class AppSettings extends ChangeNotifier {
     s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
+    s._mealLogged = p.getBool(_kMealLogged) ?? false;
     // Written as UTC, read back local: a zone-less string would re-parse
     // in the zone the phone is in NOW, so a pause armed in Shanghai lasted
     // 13 hours longer after landing in Chicago. A pre-fix zone-less value
@@ -788,6 +791,18 @@ class AppSettings extends ChangeNotifier {
     _calorieGoal = v;
     await _prefs.setInt(_kCalorieGoal, v);
     notifyListeners();
+  }
+
+  /// Whether a meal was ever saved in the app on this install. A key-less
+  /// install that logs by hand then opens on Today instead of the Settings
+  /// onboarding. A one-way preferences flag; nothing on screen listens, so
+  /// it notifies no one.
+  bool get mealLogged => _mealLogged;
+
+  Future<void> markMealLogged() async {
+    if (_mealLogged) return;
+    _mealLogged = true;
+    await _prefs.setBool(_kMealLogged, true);
   }
 
   /// Watermark: the last date whose summary was already posted, so the

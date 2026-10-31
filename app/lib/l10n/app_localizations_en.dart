@@ -85,7 +85,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get todayEmptyHint =>
-      'Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.';
+      'Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.';
 
   @override
   String get fabLog => 'Log';
@@ -459,7 +459,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDataFooter =>
-      'Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.';
+      'Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.';
 
   @override
   String get settingsRowExport => 'Export Data…';
@@ -532,7 +532,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.';
+      'The key stays on this phone. Some providers have a free tier; others charge for each request.';
 
   @override
   String get noteVpn => '';
@@ -773,7 +773,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addFixFooter =>
-      '\"meal 2 was roast duck\" · \"delete the first meal\"';
+      '\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"';
 
   @override
   String get addPhotosTip =>
@@ -867,7 +867,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get leftoverPickPhoto =>
-      'Pick the photo of what\'s LEFT — the meal\'s calories shrink to what you ate.';
+      'Pick the photo of what\'s left over — the meal\'s calories shrink to what you ate.';
 
   @override
   String get leftoverChangeMeal => 'Change';
@@ -1019,8 +1019,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Logged and counted. A few more days and I can tell you how this compares to your usual.';
 
   @override
-  String coachDetail(String meals, String protein) {
-    return '$meals meals · $protein g protein';
+  String coachDetail(int meals, String protein) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return '$_temp0 · $protein g protein';
   }
 
   @override
@@ -1217,7 +1223,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixRecopyKey =>
-      'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).';
+      'Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).';
 
   @override
   String diagModelNotFound(String model) {
@@ -1265,11 +1271,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagPhotoTempFail =>
-      'Photo analysis failed with a TEMPORARY problem.';
+      'Photo analysis failed with a temporary problem.';
 
   @override
   String get diagPhotoPermFail =>
-      'Photo analysis failed and a retry will NOT fix it.';
+      'Photo analysis failed, and retrying will not fix it.';
 
   @override
   String get diagFixPhotoTemp =>
@@ -1281,7 +1287,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagQuotaPaused =>
-      'Analyses are PAUSED — the daily quota was hit.';
+      'Analyses are paused — the daily quota was hit.';
 
   @override
   String diagQuotaPausedUntil(String until) {
@@ -1828,7 +1834,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covIntro(int days) {
-    return 'Checks every photo of the last $days day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'Checks every photo of the last $_temp0 against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
   }
 
   @override
@@ -1881,17 +1893,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covAllAccounted(int count) {
-    return 'All $count photos are accounted for.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'All $count photos are accounted for.',
+      one: 'The 1 photo is accounted for.',
+      zero: 'No photos to check in this window.',
+    );
+    return '$_temp0';
   }
 
   @override
   String covSummary(int scanned, int missing) {
-    return '$scanned photos checked — $missing never scanned.';
+    String _temp0 = intl.Intl.pluralLogic(
+      scanned,
+      locale: localeName,
+      other: '$scanned photos checked',
+      one: '1 photo checked',
+    );
+    return '$_temp0 — $missing never scanned.';
   }
 
   @override
   String get covLimitedAccess =>
-      'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.';
+      'Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.';
 
   @override
   String get covTruncated =>
@@ -2342,8 +2367,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nlUnnamedMeal => 'Unnamed meal';
 
   @override
+  String nlResultItem(String name, String kcal) {
+    return '  • $name: ~$kcal';
+  }
+
+  @override
+  String nlThisMeal(String kcal) {
+    return '📊 This meal: ~$kcal';
+  }
+
+  @override
+  String nlMacroAmount(String label, String grams) {
+    return '$label: ${grams}g';
+  }
+
+  @override
+  String nlItemSumMismatch(String itemSum, String total) {
+    return '⚠️ Item calories sum to ~$itemSum but the meal total is ~$total — if this looks wrong, open the meal on Today to fix it.';
+  }
+
+  @override
+  String nlQuotaPaused(String until, String remaining) {
+    return '⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until $until (about $remaining remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.';
+  }
+
+  @override
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(unit, {
+      'seconds': '${seconds}s',
+      'minutes': '${minutes}m',
+      'other': '${hours}h${minutes}m',
+    });
+    return '$_temp0';
+  }
+
+  @override
   String get nlNoActions =>
-      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
+      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.';
 
   @override
   String get nlRequestFailed => '❌ That request failed. Please try again.';

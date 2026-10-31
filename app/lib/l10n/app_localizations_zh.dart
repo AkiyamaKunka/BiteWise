@@ -79,7 +79,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get todayEmptyHint =>
-      '点击下方\"记录\"，用照片或文字添加一餐；也可以在设置里打开\"监控相册\"，新的食物照片会自动记录。';
+      '点击下方「记录」，用照片、文字或手动输入添加一餐；也可以在设置里打开「监控相册」，新的食物照片会自动记录。';
 
   @override
   String get fabLog => '记录';
@@ -495,7 +495,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      '按张计费：Key 保存在这台手机上，每张照片都是一次由服务商计费的 API 调用。中国大陆请选择 DeepSeek、Qwen、Doubao 或 GLM — 其余需要 VPN。';
+      'Key 保存在这台手机上。有的服务商提供免费额度，有的按次计费。中国大陆请选择 DeepSeek、Qwen、Doubao 或 GLM — 其余需要 VPN。';
 
   @override
   String get noteVpn => '需要 VPN';
@@ -726,7 +726,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addFix => '修改或删除某餐';
 
   @override
-  String get addFixFooter => '\"第二餐是烤鸭\" · \"删除第一餐\"';
+  String get addFixFooter => '「那碗面其实是烧鸭饭」 · 「删除刚才那杯咖啡」';
 
   @override
   String get addPhotosTip => '小提示：照片里带上筷子或手，AI 估算分量更准。';
@@ -952,7 +952,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coachNoReference => '已记录。再积累几天，我就能告诉你和平时比如何了。';
 
   @override
-  String coachDetail(String meals, String protein) {
+  String coachDetail(int meals, String protein) {
     return '$meals 餐 · 蛋白质 $protein 克';
   }
 
@@ -1754,7 +1754,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String covAllAccounted(int count) {
-    return '全部 $count 张照片都已记录。';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '全部 $count 张照片都已记录。',
+      zero: '这段时间内没有需要检查的照片。',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -2175,7 +2181,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nlUnnamedMeal => '未命名的一餐';
 
   @override
-  String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';
+  String nlResultItem(String name, String kcal) {
+    return '  • $name：~$kcal';
+  }
+
+  @override
+  String nlThisMeal(String kcal) {
+    return '📊 这一餐：~$kcal';
+  }
+
+  @override
+  String nlMacroAmount(String label, String grams) {
+    return '$label ${grams}g';
+  }
+
+  @override
+  String nlItemSumMismatch(String itemSum, String total) {
+    return '⚠️ 各项食物合计约 $itemSum，但这一餐总计约 $total —— 如果不对，请在「今天」里点开这一餐修改。';
+  }
+
+  @override
+  String nlQuotaPaused(String until, String remaining) {
+    return '⏸️ Gemini 暂停中。\n\nGemini 今天的免费额度已用完，暂停到 $until（还剩约 $remaining）。\n\n文字修正和文字记录也需要 Gemini，所以这次没有发送请求。';
+  }
+
+  @override
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(unit, {
+      'seconds': '$seconds 秒',
+      'minutes': '$minutes 分钟',
+      'other': '$hours 小时 $minutes 分',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把那碗面改成烧鸭饭」。';
 
   @override
   String get nlRequestFailed => '❌ 这个请求失败了，请重试。';

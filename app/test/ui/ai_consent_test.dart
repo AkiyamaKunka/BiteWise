@@ -672,10 +672,58 @@ void main() {
         findsOneWidget);
     expect(find.textContaining('meal descriptions and recent meals'),
         findsOneWidget);
+    // This confirmation is the consent: it says where the plan's company
+    // processes the data, as the consent dialog does (PRIVACY.md).
+    expect(find.textContaining('mainland China'), findsOneWidget);
     await tester.tap(find.byKey(const Key('setupLinkConfirm')));
     await tester.pumpAndSettle();
     expect(settings.aiConsentWrites, [('server:doubao', true)]);
     expect(settings.provider, 'server');
+    await links.close();
+  });
+
+  Future<(FakeSettings, StreamController<Uri>)> pumpSetupLink(
+      WidgetTester tester, String backend,
+      {Locale? locale}) async {
+    final settings = _unasked();
+    final links = StreamController<Uri>.broadcast();
+    final services = UiServices(
+      dao: FakeDao(),
+      analyzer: FakeAnalyzer(),
+      executor: FakeExecutor(),
+      settings: settings,
+      picker: FakePicker(),
+      requestPhotoPermission: () async => true,
+      reports: FakeReports(),
+      setupLinks: links.stream,
+    );
+    await tester
+        .pumpWidget(_app(HomeShell(services: services), locale: locale));
+    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+        '&key=k1234567890abcdef&backend=$backend'));
+    await tester.pumpAndSettle();
+    return (settings, links);
+  }
+
+  testWidgets('a GLM-plan setup link says, in Chinese, that the data is '
+      'processed in mainland China', (tester) async {
+    final (settings, links) =
+        await pumpSetupLink(tester, 'glm', locale: const Locale('zh'));
+    expect(find.textContaining('中国大陆'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+    await tester.pumpAndSettle();
+    expect(settings.aiConsentWrites, [('server:glm', true)]);
+    await links.close();
+  });
+
+  testWidgets('a Claude-plan setup link has no mainland-China note',
+      (tester) async {
+    final (settings, links) = await pumpSetupLink(tester, 'claude');
+    expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
+    expect(find.textContaining('mainland China'), findsNothing);
+    await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+    await tester.pumpAndSettle();
+    expect(settings.aiConsentWrites, [('server:claude', true)]);
     await links.close();
   });
 }

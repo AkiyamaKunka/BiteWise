@@ -5,7 +5,7 @@ library;
 import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:io' show File, Platform;
 
-import '../core/ai_consent.dart' show aiConsentRoute;
+import '../core/ai_consent.dart' show aiConsentRoute, aiRoutesInMainlandChina;
 import '../core/setup_link.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -137,8 +137,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         if (uri != null && mounted) _onSetupLink(uri);
       }, onError: (Object _) {}));
     }
-    // Onboarding: with no API key yet, land on Settings first.
-    _index = widget.services.settings.apiKey.trim().isEmpty ? 3 : 0;
+    // Onboarding: with no API key yet, land on Settings first — unless this
+    // install already logs meals by hand (no AI needed), where Settings on
+    // every launch only cost a tap before + Log.
+    final settings = widget.services.settings;
+    _index =
+        settings.apiKey.trim().isEmpty && !settings.mealLogged ? 3 : 0;
     // Debug-only: headless simulator screenshot runs force a tab by
     // dropping a one-byte file into the app's Documents dir (simctl has no
     // tap injection; env forwarding and HOME-derived paths both proved
@@ -192,6 +196,11 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     super.dispose();
   }
 
+  /// The last setup link handled, and when: app_links' stream also
+  /// carries the link that cold-started the app, which the initial-link
+  /// read already delivered — one link, one confirmation.
+  ({String uri, DateTime at})? _lastSetupLink;
+
   /// A setup link arrived. Never applied silently: a crafted link could
   /// point every future photo upload at a stranger's server, so the user
   /// sees exactly what it names and confirms with one tap.
@@ -200,6 +209,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // bounce on iOS, which app_links also forwards — is ignored silently.
     // Only a malformed bitewise:// link earns the "not valid" message.
     if (!isSetupLinkScheme(uri)) return;
+    final now = DateTime.now();
+    final text = uri.toString();
+    final last = _lastSetupLink;
+    if (last != null &&
+        last.uri == text &&
+        now.difference(last.at) < setupLinkRepeatWindow) {
+      return;
+    }
+    _lastSetupLink = (uri: text, at: now);
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {
@@ -225,6 +243,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 link.keyTail),
             ctx.l10n.setupLinkSharing(aiConsentCompanyName(ctx.l10n,
                 provider: 'server', serverBackend: link.backend)),
+            // The same mainland-China note the consent dialog adds: this
+            // confirmation IS the consent for the plan (GLM, Doubao).
+            if (aiRoutesInMainlandChina
+                .contains(aiConsentRoute('server', link.backend)))
+              ctx.l10n.aiConsentChinaNote(aiConsentCompanyName(ctx.l10n,
+                  provider: 'server', serverBackend: link.backend)),
           ].join('\n\n')),
         ),
         actions: [
@@ -262,6 +286,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (!mounted) return;
     _todayKey.currentState?.reload();
     _historyKey.currentState?.reload();
+    final settings = widget.services.settings;
+    if (!settings.mealLogged) {
+      unawaited(settings.markMealLogged().then((_) {}, onError: (Object _) {}));
+    }
     // iOS: a meal just landed (pipeline / share sheet) — the pending OS card
     // must carry it even if the user stays in the app through the slot.
     final rearm = widget.services.refreshDailyNotification;
@@ -321,6 +349,26 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     });
   }
 
+  /// The tab widgets as last placed in the IndexedStack.
+  List<Widget>? _tabs;
+
+  /// Only the SELECTED tab gets this build's widget; the hidden ones keep
+  /// their last one, which Flutter then skips. A tab tap used to rebuild
+  /// all four screens, the hidden Body one re-deriving its whole history
+  /// each time. The selected tab still rebuilds in the tap frame, so what
+  /// it reads while building (the units preference, Settings' Today /
+  /// Tomorrow labels) is current the moment it shows; hidden tabs still
+  /// follow their own theme, locale and text-size dependencies.
+  List<Widget> _onlySelectedRebuilds(List<Widget> fresh) {
+    final kept = _tabs;
+    return _tabs = [
+      for (var i = 0; i < fresh.length; i++)
+        i == _index || kept == null || kept.length != fresh.length
+            ? fresh[i]
+            : kept[i],
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.services;
@@ -329,7 +377,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       // that collapses as it scrolls (SliverAppBar.large).
       body: IndexedStack(
         index: _index,
-        children: [
+        children: _onlySelectedRebuilds([
           TodayScreen(
               key: _todayKey,
               dao: s.dao,
@@ -358,7 +406,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             backgroundScanStuck: s.backgroundScanStuck,
             changes: s.settingsChanges,
           ),
-        ],
+        ]),
       ),
       // The + 记录 button is a REAL Scaffold FAB (Today tab only — Body has
       // its own), so Material lifts it above this messenger's snackbars.

@@ -381,6 +381,10 @@ class _AppSettingsStore implements SettingsStore {
   Future<void> setAiConsent(String route, {required bool granted}) =>
       _s.setAiConsent(route, granted: granted);
   @override
+  bool get mealLogged => _s.mealLogged;
+  @override
+  Future<void> markMealLogged() => _s.markMealLogged();
+  @override
   String get provider => _s.provider.name;
   @override
   bool get isQuotaPaused => _s.isQuotaPaused;

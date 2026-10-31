@@ -89,7 +89,7 @@
     "description": "Snackbar action when the privacy policy could not be opened: copies its address to the clipboard."
   },
   "todayEmptyTitle": "No meals logged yet today.",
-  "todayEmptyHint": "Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.",
+  "todayEmptyHint": "Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.",
   "fabLog": "Log",
   "shareDayTooltip": "Share today as an image",
   "shareDayFailed": "Could not build the image: {error}",
@@ -407,7 +407,7 @@
   "profileSet": "Set",
   "profileNotSet": "Not set",
   "settingsSectionData": "Your Data",
-  "settingsDataFooter": "Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
+  "settingsDataFooter": "Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
   "settingsRowExport": "Export Data…",
   "settingsRowImport": "Import Data…",
   "settingsRowPrivacy": "Privacy Policy",
@@ -444,7 +444,7 @@
   "testProviderFooter": "The test names exactly what is broken: configuration, network, key, account credit, reply format, or quota.",
   "apiPageTitle": "API Key",
   "apiProviderHeader": "Provider",
-  "apiProviderFooter": "Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.",
+  "apiProviderFooter": "The key stays on this phone. Some providers have a free tier; others charge for each request.",
   "noteVpn": "",
   "noteFreeTierVpn": "free tier",
   "noteDirect": "",
@@ -571,7 +571,7 @@
   "addManual": "Enter manually",
   "addManualNote": "no AI",
   "addFix": "Fix or delete a meal",
-  "addFixFooter": "\"meal 2 was roast duck\" · \"delete the first meal\"",
+  "addFixFooter": "\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"",
   "addPhotosTip": "Tip: chopsticks or a hand in the shot helps the AI judge portion sizes.",
   "addNoPhotos": "No recent photos found.",
   "addPhotosLimited": "Only the photos you allowed are shown — photos you take later won't appear here. Allow access to all photos in system settings.",
@@ -634,7 +634,7 @@
   "addLeftoverNote": "deduct what's left",
   "leftoverTitle": "Leftovers",
   "leftoverPickMeal": "Which meal was this?",
-  "leftoverPickPhoto": "Pick the photo of what's LEFT — the meal's calories shrink to what you ate.",
+  "leftoverPickPhoto": "Pick the photo of what's left over — the meal's calories shrink to what you ate.",
   "leftoverChangeMeal": "Change",
   "leftoverNotSame": "This doesn't look like the same meal",
   "leftoverUseAnyway": "Use anyway",
@@ -760,11 +760,11 @@
     }
   },
   "coachNoReference": "Logged and counted. A few more days and I can tell you how this compares to your usual.",
-  "coachDetail": "{meals} meals · {protein} g protein",
+  "coachDetail": "{meals, plural, =1{1 meal} other{{meals} meals}} · {protein} g protein",
   "@coachDetail": {
     "placeholders": {
       "meals": {
-        "type": "String"
+        "type": "int"
       },
       "protein": {
         "type": "String"
@@ -871,7 +871,7 @@
   "diagRateLimited": "The key works, but the provider is rate-limiting right now.",
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
-  "diagFixRecopyKey": "Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).",
+  "diagFixRecopyKey": "Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).",
   "diagModelNotFound": "The key works, but the model \"{model}\" was not found.",
   "@diagModelNotFound": {
     "placeholders": {
@@ -890,11 +890,11 @@
   "diagPhotoOk": "The model analyzed a test image and answered the meal format.",
   "diagPhotoThoughtFood": "It even thought the test disc was food.",
   "diagPhotoNotFood": "Verdict \"not food\" — correct for the test image.",
-  "diagPhotoTempFail": "Photo analysis failed with a TEMPORARY problem.",
-  "diagPhotoPermFail": "Photo analysis failed and a retry will NOT fix it.",
+  "diagPhotoTempFail": "Photo analysis failed with a temporary problem.",
+  "diagPhotoPermFail": "Photo analysis failed, and retrying will not fix it.",
   "diagFixPhotoTemp": "Usually a rate limit or a busy server — photos are kept and retried automatically.",
   "diagFixPhotoPerm": "Read the message above — it names the broken piece (model, format, or account).",
-  "diagQuotaPaused": "Analyses are PAUSED — the daily quota was hit.",
+  "diagQuotaPaused": "Analyses are paused — the daily quota was hit.",
   "diagQuotaPausedUntil": "Paused until {until}.",
   "@diagQuotaPausedUntil": {
     "placeholders": {
@@ -1321,7 +1321,7 @@
   },
   "covPhotoUnreadable": "That photo is no longer readable.",
   "covTitle": "Photo coverage",
-  "covIntro": "Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
+  "covIntro": "Checks every photo of the last {days, plural, =1{day} other{{days} days}} against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
   "@covIntro": {
     "placeholders": {
       "days": {
@@ -1376,7 +1376,7 @@
       }
     }
   },
-  "covAllAccounted": "All {count} photos are accounted for.",
+  "covAllAccounted": "{count, plural, =0{No photos to check in this window.} =1{The 1 photo is accounted for.} other{All {count} photos are accounted for.}}",
   "@covAllAccounted": {
     "placeholders": {
       "count": {
@@ -1384,7 +1384,7 @@
       }
     }
   },
-  "covSummary": "{scanned} photos checked — {missing} never scanned.",
+  "covSummary": "{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {missing} never scanned.",
   "@covSummary": {
     "placeholders": {
       "scanned": {
@@ -1395,7 +1395,7 @@
       }
     }
   },
-  "covLimitedAccess": "Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.",
+  "covLimitedAccess": "Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.",
   "covTruncated": "Note: over 2000 photos in this window — older ones were not checked. Shorten the window for a complete answer.",
   "covVerbLog": "Log",
   "covVerbRetry": "Retry",
@@ -1891,7 +1891,82 @@
   "@nlUnnamedMeal": {
     "description": "Stands in for meal_description in chat replies (delete labels, the correction line, the added-meal card) when the stored analysis has no name."
   },
-  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
+  "nlResultItem": "  • {name}: ~{kcal}",
+  "@nlResultItem": {
+    "description": "One food item on the added-meal card. kcal is already kcalAmount-formatted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "nlThisMeal": "📊 This meal: ~{kcal}",
+  "@nlThisMeal": {
+    "description": "Total line of the added-meal card (Fix a meal → new meal). kcal is already kcalAmount-formatted.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "nlMacroAmount": "{label}: {grams}g",
+  "@nlMacroAmount": {
+    "description": "One macro on the added-meal card, e.g. 'P: 25g'. label is macroProteinShort / macroCarbsShort / macroFatShort.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "grams": {
+        "type": "String"
+      }
+    }
+  },
+  "nlItemSumMismatch": "⚠️ Item calories sum to ~{itemSum} but the meal total is ~{total} — if this looks wrong, open the meal on Today to fix it.",
+  "@nlItemSumMismatch": {
+    "description": "Added-meal card warning when the items do not add up to the total. Both values are already kcalAmount-formatted. No 'reply' wording: there is no chat to reply in.",
+    "placeholders": {
+      "itemSum": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "nlQuotaPaused": "⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until {until} (about {remaining} remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.",
+  "@nlQuotaPaused": {
+    "description": "Describe / Fix a meal refusal during the daily-quota pause; no model call is made. until is a local 'yyyy-MM-dd HH:mm' stamp; remaining is nlPauseRemaining.",
+    "placeholders": {
+      "until": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "nlPauseRemaining": "{unit, select, seconds{{seconds}s} minutes{{minutes}m} other{{hours}h{minutes}m}}",
+  "@nlPauseRemaining": {
+    "description": "Time left in the quota pause. unit is 'seconds', 'minutes' or 'hours'; in the hours form minutes is zero-padded ('3h05m').",
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      },
+      "hours": {
+        "type": "String"
+      },
+      "minutes": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.",
   "nlRequestFailed": "❌ That request failed. Please try again.",
   "nlAllActionsFailed": "❌ All {count} requested actions failed. Please try again.",
   "@nlAllActionsFailed": {

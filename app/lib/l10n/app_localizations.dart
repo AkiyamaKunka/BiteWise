@@ -207,7 +207,7 @@ abstract class AppLocalizations {
   /// No description provided for @todayEmptyHint.
   ///
   /// In en, this message translates to:
-  /// **'Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.'**
+  /// **'Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.'**
   String get todayEmptyHint;
 
   /// No description provided for @fabLog.
@@ -753,7 +753,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDataFooter.
   ///
   /// In en, this message translates to:
-  /// **'Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.'**
+  /// **'Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.'**
   String get settingsDataFooter;
 
   /// No description provided for @settingsRowExport.
@@ -873,7 +873,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiProviderFooter.
   ///
   /// In en, this message translates to:
-  /// **'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.'**
+  /// **'The key stays on this phone. Some providers have a free tier; others charge for each request.'**
   String get apiProviderFooter;
 
   /// No description provided for @noteVpn.
@@ -1287,7 +1287,7 @@ abstract class AppLocalizations {
   /// No description provided for @addFixFooter.
   ///
   /// In en, this message translates to:
-  /// **'\"meal 2 was roast duck\" · \"delete the first meal\"'**
+  /// **'\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"'**
   String get addFixFooter;
 
   /// No description provided for @addPhotosTip.
@@ -1437,7 +1437,7 @@ abstract class AppLocalizations {
   /// No description provided for @leftoverPickPhoto.
   ///
   /// In en, this message translates to:
-  /// **'Pick the photo of what\'s LEFT — the meal\'s calories shrink to what you ate.'**
+  /// **'Pick the photo of what\'s left over — the meal\'s calories shrink to what you ate.'**
   String get leftoverPickPhoto;
 
   /// No description provided for @leftoverChangeMeal.
@@ -1677,8 +1677,8 @@ abstract class AppLocalizations {
   /// No description provided for @coachDetail.
   ///
   /// In en, this message translates to:
-  /// **'{meals} meals · {protein} g protein'**
-  String coachDetail(String meals, String protein);
+  /// **'{meals, plural, =1{1 meal} other{{meals} meals}} · {protein} g protein'**
+  String coachDetail(int meals, String protein);
 
   /// No description provided for @settingsRowGoal.
   ///
@@ -2007,7 +2007,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixRecopyKey.
   ///
   /// In en, this message translates to:
-  /// **'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).'**
+  /// **'Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).'**
   String get diagFixRecopyKey;
 
   /// No description provided for @diagModelNotFound.
@@ -2079,13 +2079,13 @@ abstract class AppLocalizations {
   /// No description provided for @diagPhotoTempFail.
   ///
   /// In en, this message translates to:
-  /// **'Photo analysis failed with a TEMPORARY problem.'**
+  /// **'Photo analysis failed with a temporary problem.'**
   String get diagPhotoTempFail;
 
   /// No description provided for @diagPhotoPermFail.
   ///
   /// In en, this message translates to:
-  /// **'Photo analysis failed and a retry will NOT fix it.'**
+  /// **'Photo analysis failed, and retrying will not fix it.'**
   String get diagPhotoPermFail;
 
   /// No description provided for @diagFixPhotoTemp.
@@ -2103,7 +2103,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagQuotaPaused.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are PAUSED — the daily quota was hit.'**
+  /// **'Analyses are paused — the daily quota was hit.'**
   String get diagQuotaPaused;
 
   /// No description provided for @diagQuotaPausedUntil.
@@ -2949,7 +2949,7 @@ abstract class AppLocalizations {
   /// No description provided for @covIntro.
   ///
   /// In en, this message translates to:
-  /// **'Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
+  /// **'Checks every photo of the last {days, plural, =1{day} other{{days} days}} against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
   String covIntro(int days);
 
   /// No description provided for @covChecking.
@@ -3027,19 +3027,19 @@ abstract class AppLocalizations {
   /// No description provided for @covAllAccounted.
   ///
   /// In en, this message translates to:
-  /// **'All {count} photos are accounted for.'**
+  /// **'{count, plural, =0{No photos to check in this window.} =1{The 1 photo is accounted for.} other{All {count} photos are accounted for.}}'**
   String covAllAccounted(int count);
 
   /// No description provided for @covSummary.
   ///
   /// In en, this message translates to:
-  /// **'{scanned} photos checked — {missing} never scanned.'**
+  /// **'{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {missing} never scanned.'**
   String covSummary(int scanned, int missing);
 
   /// No description provided for @covLimitedAccess.
   ///
   /// In en, this message translates to:
-  /// **'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.'**
+  /// **'Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.'**
   String get covLimitedAccess;
 
   /// No description provided for @covTruncated.
@@ -3654,10 +3654,51 @@ abstract class AppLocalizations {
   /// **'Unnamed meal'**
   String get nlUnnamedMeal;
 
+  /// One food item on the added-meal card. kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'  • {name}: ~{kcal}'**
+  String nlResultItem(String name, String kcal);
+
+  /// Total line of the added-meal card (Fix a meal → new meal). kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'📊 This meal: ~{kcal}'**
+  String nlThisMeal(String kcal);
+
+  /// One macro on the added-meal card, e.g. 'P: 25g'. label is macroProteinShort / macroCarbsShort / macroFatShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: {grams}g'**
+  String nlMacroAmount(String label, String grams);
+
+  /// Added-meal card warning when the items do not add up to the total. Both values are already kcalAmount-formatted. No 'reply' wording: there is no chat to reply in.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ Item calories sum to ~{itemSum} but the meal total is ~{total} — if this looks wrong, open the meal on Today to fix it.'**
+  String nlItemSumMismatch(String itemSum, String total);
+
+  /// Describe / Fix a meal refusal during the daily-quota pause; no model call is made. until is a local 'yyyy-MM-dd HH:mm' stamp; remaining is nlPauseRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until {until} (about {remaining} remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.'**
+  String nlQuotaPaused(String until, String remaining);
+
+  /// Time left in the quota pause. unit is 'seconds', 'minutes' or 'hours'; in the hours form minutes is zero-padded ('3h05m').
+  ///
+  /// In en, this message translates to:
+  /// **'{unit, select, seconds{{seconds}s} minutes{{minutes}m} other{{hours}h{minutes}m}}'**
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  );
+
   /// No description provided for @nlNoActions.
   ///
   /// In en, this message translates to:
-  /// **'❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.'**
+  /// **'❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.'**
   String get nlNoActions;
 
   /// No description provided for @nlRequestFailed.
