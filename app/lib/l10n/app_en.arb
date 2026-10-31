@@ -1001,8 +1001,26 @@
   "outcomeAlreadyTracked": "Already logged",
   "outcomeInFlight": "Still analyzing",
   "outcomeFailed": "Analysis failed",
+  "outcomeNotSetUp": "AI isn't set up yet",
+  "@outcomeNotSetUp": {
+    "description": "Title of the picked-photo result dialog when no API key (or no server address/upload key) is set, instead of outcomeFailed: nothing was analyzed, so nothing failed. The body (errNoApiKey / errNoServerKey) says where to add it."
+  },
   "outcomeLeftoverApplied": "Leftovers deducted",
   "outcomeLogManuallyHint": "If this IS food, log it yourself — the photo stays attached to the meal.",
+  "outcomeLogManuallyFailedHint": "You can still log this meal yourself — the photo stays attached to it.",
+  "@outcomeLogManuallyFailedHint": {
+    "description": "Added under a FAILED analysis in the picked-photo dialog (no key, rejected key, network, rate limit…). outcomeLogManuallyHint is for a 'not food' verdict only: a failed photo had no verdict."
+  },
+  "outcomeQuotaPausedPickMsg": "Analysis is paused — the daily quota is used up (until {time}), so this photo was not sent. Log this meal yourself now, or pick the photo again after that. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).",
+  "@outcomeQuotaPausedPickMsg": {
+    "description": "Picked-photo dialog body while the daily-quota pause is armed: nothing was sent and Retry would fail the same way, so no Retry is offered. {time} is when the pause lifts (dayTimeLabel, e.g. 'Tomorrow 07:00').",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeQuotaPausedPickMsgNoTime": "Analysis is paused — the daily quota is used up, so this photo was not sent. Log this meal yourself now, or pick the photo again later. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).",
   "outcomeUndoLeftover": "Not leftovers, log as a new meal",
   "outcomeUndoLeftoverDone": "Deduction undone — the earlier meal is back as it was.",
   "outcomeUndoLeftoverStale": "That meal was changed or deleted since, so it was left as it is.",

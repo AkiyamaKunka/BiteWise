@@ -2310,6 +2310,12 @@ abstract class AppLocalizations {
   /// **'Analysis failed'**
   String get outcomeFailed;
 
+  /// Title of the picked-photo result dialog when no API key (or no server address/upload key) is set, instead of outcomeFailed: nothing was analyzed, so nothing failed. The body (errNoApiKey / errNoServerKey) says where to add it.
+  ///
+  /// In en, this message translates to:
+  /// **'AI isn\'t set up yet'**
+  String get outcomeNotSetUp;
+
   /// No description provided for @outcomeLeftoverApplied.
   ///
   /// In en, this message translates to:
@@ -2321,6 +2327,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this IS food, log it yourself — the photo stays attached to the meal.'**
   String get outcomeLogManuallyHint;
+
+  /// Added under a FAILED analysis in the picked-photo dialog (no key, rejected key, network, rate limit…). outcomeLogManuallyHint is for a 'not food' verdict only: a failed photo had no verdict.
+  ///
+  /// In en, this message translates to:
+  /// **'You can still log this meal yourself — the photo stays attached to it.'**
+  String get outcomeLogManuallyFailedHint;
+
+  /// Picked-photo dialog body while the daily-quota pause is armed: nothing was sent and Retry would fail the same way, so no Retry is offered. {time} is when the pause lifts (dayTimeLabel, e.g. 'Tomorrow 07:00').
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused — the daily quota is used up (until {time}), so this photo was not sent. Log this meal yourself now, or pick the photo again after that. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).'**
+  String outcomeQuotaPausedPickMsg(String time);
+
+  /// No description provided for @outcomeQuotaPausedPickMsgNoTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused — the daily quota is used up, so this photo was not sent. Log this meal yourself now, or pick the photo again later. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).'**
+  String get outcomeQuotaPausedPickMsgNoTime;
 
   /// No description provided for @outcomeUndoLeftover.
   ///

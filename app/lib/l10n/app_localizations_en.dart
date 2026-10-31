@@ -1407,11 +1407,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get outcomeFailed => 'Analysis failed';
 
   @override
+  String get outcomeNotSetUp => 'AI isn\'t set up yet';
+
+  @override
   String get outcomeLeftoverApplied => 'Leftovers deducted';
 
   @override
   String get outcomeLogManuallyHint =>
       'If this IS food, log it yourself — the photo stays attached to the meal.';
+
+  @override
+  String get outcomeLogManuallyFailedHint =>
+      'You can still log this meal yourself — the photo stays attached to it.';
+
+  @override
+  String outcomeQuotaPausedPickMsg(String time) {
+    return 'Analysis is paused — the daily quota is used up (until $time), so this photo was not sent. Log this meal yourself now, or pick the photo again after that. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).';
+  }
+
+  @override
+  String get outcomeQuotaPausedPickMsgNoTime =>
+      'Analysis is paused — the daily quota is used up, so this photo was not sent. Log this meal yourself now, or pick the photo again later. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).';
 
   @override
   String get outcomeUndoLeftover => 'Not leftovers, log as a new meal';
