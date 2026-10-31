@@ -742,6 +742,51 @@ void main() {
     });
   });
 
+  testWidgets('dark: the clipboard button stands off the dialog surface', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      Scaffold(
+        body: ListView(
+          children: [DataSection(dao: FakeDao(), onOpenPrivacyPolicy: () {})],
+        ),
+      ),
+      brightness: Brightness.dark,
+    );
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pumpAndSettle();
+    final style = tester
+        .widget<ButtonStyleButton>(find.byKey(const Key('importFromClipboard')))
+        .style;
+    expect(
+      style?.backgroundColor?.resolve({}),
+      AppColors.dark.highlight,
+      reason: 'the tonal default is the dialog colour itself in dark',
+    );
+  });
+
+  testWidgets('the closed model picker ellipsises a long label', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      ApiKeyProviderPage(settings: FakeSettings()),
+      size: const Size(320, 1600),
+    );
+    final shown = find.descendant(
+      of: find.byKey(const Key('modelPicker')),
+      matching: find.textContaining('gemini-3.8-flash'),
+    );
+    expect(shown, findsWidgets);
+    for (final e in shown.evaluate()) {
+      final t = e.widget as Text;
+      expect(t.maxLines, 1);
+      expect(t.overflow, TextOverflow.ellipsis);
+    }
+    expect(tester.takeException(), isNull);
+  });
+
   group('own server, not set up (U3)', () {
     for (final lang in const ['en', 'zh']) {
       testWidgets('$lang: the inactive page says who it is for', (

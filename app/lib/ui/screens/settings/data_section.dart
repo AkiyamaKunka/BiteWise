@@ -16,6 +16,7 @@ import '../../../core/contracts.dart';
 import '../../format.dart' show isoDate;
 import '../../l10n.dart';
 import '../../theme/app_dialog.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/grouped.dart';
 import '../../widgets/small_spinner.dart';
 
@@ -99,6 +100,13 @@ class _DataSectionState extends State<DataSection> {
             // itself, so people pasted MBs into it (U20).
             FilledButton.tonalIcon(
                 key: const Key('importFromClipboard'),
+                // The tonal fill is the elevated dialog's own colour in
+                // dark mode (#2C2C2E): one step up, or the button has no
+                // edge at all.
+                style: Theme.of(ctx).brightness == Brightness.dark
+                    ? FilledButton.styleFrom(
+                        backgroundColor: ctx.colors.highlight)
+                    : null,
                 icon: const Icon(Icons.content_paste_rounded),
                 label: Text(l10n.importFromClipboard),
                 onPressed: () async {

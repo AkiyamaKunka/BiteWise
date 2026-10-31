@@ -207,6 +207,17 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                         value: kCustomModelSentinel,
                         child: Text(context.l10n.modelCustomRow)),
                   ],
+                  // The closed picker shows the choice on one line,
+                  // ellipsised; the open menu keeps every label whole.
+                  selectedItemBuilder: (context) => [
+                    for (final (_, label)
+                        in kKnownModels[settings.provider] ??
+                            const <(String, String)>[])
+                      Text(modelChoiceLabel(context.l10n, label),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(context.l10n.modelCustomRow,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
+                  ],
                   onChanged: (v) async {
                     if (v == null) return;
                     if (v == kCustomModelSentinel) {
