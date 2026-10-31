@@ -1995,7 +1995,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextOk.
   ///
   /// In en, this message translates to:
-  /// **'The model answered JSON — chat fixes and \"describe a meal\" work.'**
+  /// **'The model answered JSON — \"Describe a meal\" and \"Fix or delete a meal\" work.'**
   String get diagTextOk;
 
   /// No description provided for @diagTextBad.
@@ -2007,7 +2007,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextBadDetail.
   ///
   /// In en, this message translates to:
-  /// **'Chat fixes and \"describe a meal\" may fail; photo analysis can still work.'**
+  /// **'\"Describe a meal\" and \"Fix or delete a meal\" may fail; photo analysis can still work.'**
   String get diagTextBadDetail;
 
   /// No description provided for @diagFixPickModel.
@@ -2019,7 +2019,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextBadPhotoAlsoFailed.
   ///
   /// In en, this message translates to:
-  /// **'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.'**
+  /// **'\"Describe a meal\" and \"Fix or delete a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.'**
   String get diagTextBadPhotoAlsoFailed;
 
   /// No description provided for @diagFixTextPickModel.

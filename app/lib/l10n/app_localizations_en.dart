@@ -1211,7 +1211,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextOk =>
-      'The model answered JSON — chat fixes and \"describe a meal\" work.';
+      'The model answered JSON — \"Describe a meal\" and \"Fix or delete a meal\" work.';
 
   @override
   String get diagTextBad =>
@@ -1219,7 +1219,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextBadDetail =>
-      'Chat fixes and \"describe a meal\" may fail; photo analysis can still work.';
+      '\"Describe a meal\" and \"Fix or delete a meal\" may fail; photo analysis can still work.';
 
   @override
   String get diagFixPickModel =>
@@ -1227,7 +1227,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextBadPhotoAlsoFailed =>
-      'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.';
+      '\"Describe a meal\" and \"Fix or delete a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.';
 
   @override
   String get diagFixTextPickModel =>
