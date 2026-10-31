@@ -15,6 +15,10 @@ import '../meal_thumbs.dart';
 import '../widgets/macro_chart.dart';
 import '../widgets/meal_thumb.dart';
 import 'meal_editor_screen.dart';
+import '../theme/tokens.dart';
+import '../widgets/grouped.dart' show GroupedCard;
+import '../widgets/meal_parts.dart';
+import '../widgets/states.dart';
 
 class DayDetailScreen extends StatefulWidget {
   const DayDetailScreen({
@@ -120,34 +124,48 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
                     onRefresh: _load,
                     child: ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+                      padding: const EdgeInsets.fromLTRB(
+                          AppSpace.gutter,
+                          AppSpace.s12,
+                          AppSpace.gutter,
+                          AppSpace.fabClearance),
                       children: [
-                        Text('~${context.l10n.kcalAmount(formatKcal(totals.cal))}',
-                            key: const Key('dayTotalKcal'),
-                            style: theme.textTheme.headlineSmall),
-                        Text(
-                            context.l10n.reportMeals(totals.meals),
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant)),
-                        const SizedBox(height: 12),
-                        MacroBreakdownBar(
-                          proteinG: totals.protein,
-                          carbsG: totals.carbs,
-                          fatG: totals.fat,
-                        ),
-                        const SizedBox(height: 8),
-                        const Divider(height: 32),
-                        if (_meals.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 24),
-                            child: Text(
-                              context.l10n.dayEmpty,
-                              key: const Key('dayEmpty'),
-                              textAlign: TextAlign.center,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  color: theme.colorScheme.onSurfaceVariant),
-                            ),
+                        // The day's total, its meal count and what it was
+                        // made of, as one card (the bare headline over a
+                        // divider read as loose text on the page).
+                        GroupedCard(
+                          margin: EdgeInsets.zero,
+                          padding: const EdgeInsets.all(AppSpace.cardPadding),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                  '~${context.l10n.kcalAmount(formatKcal(totals.cal))}',
+                                  key: const Key('dayTotalKcal'),
+                                  style: AppNumerals.of(context).large.copyWith(
+                                      color: AppColors.of(context).label)),
+                              Text(context.l10n.reportMeals(totals.meals),
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                      color: AppColors.of(context)
+                                          .secondaryLabel)),
+                              const SizedBox(height: AppSpace.s12),
+                              MacroBreakdownBar(
+                                proteinG: totals.protein,
+                                carbsG: totals.carbs,
+                                fatG: totals.fat,
+                              ),
+                            ],
                           ),
+                        ),
+                        if (_meals.isEmpty)
+                          EmptyState(
+                            key: const Key('dayEmpty'),
+                            icon: Icons.no_meals_rounded,
+                            title: context.l10n.dayEmpty,
+                          )
+                        else
+                          const SizedBox(
+                              height: AppSpace.groupGap - AppSpace.cardGap),
                         for (final m in _meals)
                           _MealRow(
                             // Identity key: element state must follow the
@@ -187,77 +205,61 @@ class _MealRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = AppColors.of(context);
     final a = meal.analysis;
     final food = isFoodMeal(meal);
-    final title = Text(
-        mealDescription(a, fallback: context.l10n.nlUnnamedMeal),
-        key: const Key('mealRowTitle'), style: theme.textTheme.titleSmall);
-    final time = Text(context.clock(meal.time),
-        key: const Key('mealRowTime'),
-        style: theme.textTheme.bodySmall
-            ?.copyWith(color: theme.colorScheme.onSurfaceVariant));
     // At large text the clock beside the title took a fixed slice of the
     // row and squeezed a Chinese title to ~2 glyphs a line; it moves under
     // the title so the title gets the whole width next to the thumbnail.
     final clockBelow = isLargeText(context);
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      child: InkWell(
+    // A GroupedCard, like Today's meal cards: its press highlight clips to
+    // the 18-pt corners (the old InkWell's radius-12 ink ran past them)
+    // and VoiceOver announces the row as a button (A11).
+    return GroupedCard(
+      margin: const EdgeInsets.only(top: AppSpace.cardGap),
+      padding: const EdgeInsets.all(AppSpace.cardPadding),
+      onTap: onTap,
+      child: Column(
         key: Key('mealRow${meal.id}'),
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          MealHeader(
+            leading: MealThumbView(
+                thumb: thumb, isPhotoMeal: meal.imageHash.isNotEmpty),
+            title: mealDescription(a, fallback: context.l10n.nlUnnamedMeal),
+            titleKey: const Key('mealRowTitle'),
+            time: context.clock(meal.time),
+            timeKey: const Key('mealRowTime'),
+            stacked: clockBelow,
+            showChevron: true,
+          ),
+          const SizedBox(height: AppSpace.s8),
+          Wrap(
+            spacing: AppSpace.s8,
+            runSpacing: AppSpace.s4,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              Row(
-                children: [
-                  MealThumbView(
-                      thumb: thumb, isPhotoMeal: meal.imageHash.isNotEmpty),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: clockBelow
-                        ? Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [title, const SizedBox(height: 2), time],
-                          )
-                        : title,
-                  ),
-                  if (!clockBelow) ...[const SizedBox(width: 8), time],
-                ],
-              ),
-              const SizedBox(height: 6),
-              Row(
-                children: [
-                  Text('~${context.l10n.kcalAmount(displayTotalCalories(a))}',
-                      style: theme.textTheme.bodyMedium),
-                  if (meal.corrected) ...[
-                    const SizedBox(width: 8),
-                    Icon(Icons.edit_outlined,
-                        semanticLabel: context.l10n.correctedBadge,
-                        size: 13, color: theme.colorScheme.onSurfaceVariant),
-                  ],
-                  if (!food) ...[
-                    const SizedBox(width: 8),
-                    Text(context.l10n.notFoodTag,
-                        style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant)),
-                  ],
-                ],
-              ),
-              if (food) ...[
-                const SizedBox(height: 10),
-                MacroBreakdownBar(
-                  proteinG: safeMacro(a, 'total_protein_g'),
-                  carbsG: safeMacro(a, 'total_carbs_g'),
-                  fatG: safeMacro(a, 'total_fat_g'),
-                  height: 12,
-                ),
-              ],
+              MealChip(
+                  label:
+                      '~${context.l10n.kcalAmount(displayTotalCalories(a))}',
+                  emphasized: true),
+              if (meal.corrected) const CorrectedMark(),
+              if (!food)
+                Text(context.l10n.notFoodTag,
+                    style: theme.textTheme.bodySmall
+                        ?.copyWith(color: colors.secondaryLabel)),
             ],
           ),
-        ),
+          if (food) ...[
+            const SizedBox(height: AppSpace.s12),
+            MacroBreakdownBar(
+              proteinG: safeMacro(a, 'total_protein_g'),
+              carbsG: safeMacro(a, 'total_carbs_g'),
+              fatG: safeMacro(a, 'total_fat_g'),
+              height: 12,
+            ),
+          ],
+        ],
       ),
     );
   }
