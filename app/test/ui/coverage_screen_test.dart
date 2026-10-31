@@ -485,7 +485,7 @@ void main() {
     await tester.tap(find.byKey(const Key('runCoverageCheck')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('retryAllFailed')), findsOneWidget);
-    expect(find.text('"全部重试" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。'),
+    expect(find.text('「全部重试」会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。'),
         findsOneWidget);
     final tile = find.ancestor(
         of: find.text('IMG_3.jpg'), matching: find.byType(ListTile));

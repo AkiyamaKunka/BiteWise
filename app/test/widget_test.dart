@@ -36,8 +36,11 @@ void main() {
     await tester.pumpAndSettle();
     final fab = tester.getRect(find.byKey(const Key('addMealFab')));
     final bar = tester.getRect(find.byType(SnackBar));
-    expect(fab.bottom, lessThanOrEqualTo(bar.top),
-        reason: 'the FAB must sit entirely above the snackbar');
+    // Snackbars float (theme, run 7): Material stacks a floating bar
+    // ABOVE the FAB instead of lifting the FAB over a docked one. Either
+    // way neither may cover the other.
+    expect(fab.overlaps(bar), isFalse,
+        reason: 'the snackbar must never cover the FAB');
     messenger.currentState!.removeCurrentSnackBar();
     await tester.pumpAndSettle();
 

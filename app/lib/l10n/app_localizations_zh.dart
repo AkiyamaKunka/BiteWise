@@ -26,6 +26,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String mealItemLine(String name, String kcal) {
+    return '$name：~$kcal';
+  }
+
+  @override
   String mealsToday(int count) {
     return '今天 $count 餐';
   }
@@ -118,6 +123,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String bodyAsOf(String date) {
+    return '截至 $date';
+  }
+
+  @override
   String get bodyNoChange => '无变化';
 
   @override
@@ -142,8 +152,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bodyEmptyTitle => '还没有身体数据。';
 
   @override
-  String get bodyEmptyHint =>
-      '点击\"记录\"来记体重或腰围、胸围、臀围。通过对话记录的体重（\"我今天 81.6 公斤\"）也会显示在这里。';
+  String get bodyEmptyHint => '点击「记录」来记体重或腰围、胸围、臀围。';
 
   @override
   String bodySheetLogTitle(String date) {
@@ -169,7 +178,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String bodyErrNotNumber(String label, String raw) {
-    return '$label：\"$raw\" 不是数字。';
+    return '$label：「$raw」不是数字。';
   }
 
   @override
@@ -210,7 +219,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      '点击下方\"AI 服务\"，选择一家并粘贴它的 API Key（输入即保存），然后\"测试当前服务\"。\n之后打开\"监控相册\"，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
+      '点击下方「AI 服务」，选择一家并粘贴它的 API Key（输入即保存），然后「测试当前服务」。\n之后打开「监控相册」，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
 
   @override
   String get settingsSectionAi => 'AI';
@@ -683,7 +692,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileFooter =>
-      'AI 分析每张照片时都会参考的偏好和背景 — 例如\"素食\"、\"广式家常菜，少油\"、\"减脂期，高蛋白\"。输入即保存。';
+      'AI 分析每张照片时都会参考的偏好和背景 — 例如「素食」、「广式家常菜，少油」、「减脂期，高蛋白」。输入即保存。';
 
   @override
   String get profileHint => '还没有内容 — AI 将按无特殊偏好处理。';
@@ -773,8 +782,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unitsFooter => '身体体重与围度的显示和输入单位。食物始终使用克与千卡。';
 
   @override
-  String get bodyEmptyHintImperial =>
-      '点击\"记录\"来记体重或腰围、胸围、臀围。通过对话记录的体重（\"我今天 81.6 公斤\"）也会显示在这里。';
+  String get bodyEmptyHintImperial => '点击「记录」来记体重或腰围、胸围、臀围。';
 
   @override
   String bodySince(String date) {
@@ -1332,7 +1340,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get describeHint =>
-      '例如：\"一碗牛肉面加一个鸡蛋\"\n或 \"two eggs and toast with butter\"';
+      '例如：「一碗牛肉面加一个鸡蛋」\n或「two eggs and toast with butter」';
 
   @override
   String get describeHelp => '任何语言都可以。保存前你会看到估算结果，并且可以修改。';
@@ -1446,6 +1454,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String dayLoadFailed(String error) {
     return '无法加载这一天：$error';
   }
+
+  @override
+  String get todayLoadFailed => '无法加载今天的记录。';
+
+  @override
+  String get historyLoadFailed => '无法加载历史记录。';
 
   @override
   String get dayEmpty => '这一天还没有记录。点 + 添加一餐。';
@@ -1670,12 +1684,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String covMoreLogAll(int count) {
-    return '…还有 $count 张 —— \"全部记录\" 会覆盖全部。';
+    return '…还有 $count 张 ——「全部记录」会覆盖全部。';
   }
 
   @override
   String covJudgedNotFood(int count) {
-    return '判定为\"非食物\"（$count）';
+    return '判定为「非食物」（$count）';
   }
 
   @override
@@ -1683,7 +1697,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get covNotFoodHelp =>
-      '饮品、订单截图和少见的菜会落在这里。\"重新分析\" 会再问一次 AI（规则改进后很有用）；点某一行可以手动录入。';
+      '饮品、订单截图和少见的菜会落在这里。「重新分析」会再问一次 AI（规则改进后很有用）；点某一行可以手动录入。';
 
   @override
   String covFailedEarlier(int count) {
@@ -1694,11 +1708,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get covRetryAll => '全部重试';
 
   @override
-  String get covFailedHelp => '\"全部重试\" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。';
+  String get covFailedHelp => '「全部重试」会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。';
 
   @override
   String covMoreRetryAll(int count) {
-    return '…还有 $count 张 —— \"全部重试\" 会覆盖全部。';
+    return '…还有 $count 张 ——「全部重试」会覆盖全部。';
   }
 
   @override
