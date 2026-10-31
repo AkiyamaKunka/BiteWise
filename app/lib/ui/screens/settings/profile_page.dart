@@ -51,6 +51,7 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
                 onChanged: (v) =>
                     widget.settings.update(dietaryProfile: v),
                 decoration: cellFieldDecoration(
+                  context,
                   hintText: context.l10n.profileHint,
                 ),
               ),

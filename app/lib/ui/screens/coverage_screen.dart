@@ -17,6 +17,7 @@ import '../../services/photo/photo_library.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
+import '../large_text.dart';
 import '../theme/app_dialog.dart';
 import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
@@ -662,7 +663,9 @@ class _PhotoTile extends StatelessWidget {
       title: Text(
           item.fileName.isEmpty ? context.l10n.covUnnamedPhoto : item.fileName,
           style: theme.textTheme.bodyLarge?.copyWith(color: colors.label),
-          overflow: TextOverflow.ellipsis),
+          // One line normally; at the accessibility sizes a name of a
+          // dozen characters was 'demo_p…', so it wraps there instead.
+          overflow: isLargeText(context) ? null : TextOverflow.ellipsis),
       subtitle: Text(
           '${item.createDate.year}-'
           '${item.createDate.month.toString().padLeft(2, '0')}-'

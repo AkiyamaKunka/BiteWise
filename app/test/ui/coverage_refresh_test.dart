@@ -20,6 +20,7 @@ import 'package:calorie_tracker/services/photo/coverage.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/screens/coverage_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../photo/watcher_test.dart' show FakeAsset, FakePhotoLibrary, bytesOf;
@@ -296,6 +297,20 @@ void main() {
           );
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull, reason: key);
+        }
+        // File names wrap at AX5 instead of 'IMG_00…'.
+        // Bottom (failed) to top (never scanned).
+        for (final name in const ['IMG_0003.jpg', 'IMG_0001.jpg']) {
+          final text = find.text(name);
+          await tester.scrollUntilVisible(
+            text,
+            -200,
+            scrollable: find.byType(Scrollable).first,
+          );
+          final p = tester.renderObject<RenderParagraph>(
+            find.descendant(of: text, matching: find.byType(RichText)),
+          );
+          expect(p.didExceedMaxLines, isFalse, reason: name);
         }
         final scaffold = tester.widget<Scaffold>(find.byType(Scaffold));
         expect(

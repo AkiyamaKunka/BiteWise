@@ -787,6 +787,54 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  group('cell fields at AX5 on an SE', () {
+    for (final lang in const ['en', 'zh']) {
+      testWidgets('$lang: the field names wrap instead of "Gemini …"', (
+        tester,
+      ) async {
+        final l = lookupAppLocalizations(Locale(lang));
+        await pumpApp(
+          tester,
+          ApiKeyProviderPage(settings: FakeSettings()),
+          size: const Size(375, 667),
+          scale: _ax5,
+          locale: Locale(lang),
+        );
+        final field = find.byKey(const Key('apiKeyField'));
+        await _scrollTo(tester, field);
+        expect(
+          find.descendant(
+            of: field,
+            matching: find.text(l.apiKeyLabel('Gemini')),
+          ),
+          findsOneWidget,
+        );
+        expect(_ellipsised(tester, field), isEmpty);
+        expect(tester.takeException(), isNull);
+
+        final s = FakeSettings()
+          ..provider = 'server'
+          ..serverBackend = 'claude';
+        await pumpApp(
+          tester,
+          SubscriptionProviderPage(settings: s),
+          size: const Size(375, 667),
+          scale: _ax5,
+          locale: Locale(lang),
+        );
+        for (final key in const ['serverUrlField', 'serverUploadKeyField']) {
+          await _scrollTo(tester, find.byKey(Key(key)));
+          expect(
+            _ellipsised(tester, find.byKey(Key(key))),
+            isEmpty,
+            reason: key,
+          );
+        }
+        expect(tester.takeException(), isNull);
+      });
+    }
+  });
+
   group('own server, not set up (U3)', () {
     for (final lang in const ['en', 'zh']) {
       testWidgets('$lang: the inactive page says who it is for', (

@@ -281,6 +281,7 @@ class _SubscriptionProviderPageState
                 autocorrect: false,
                 keyboardType: TextInputType.url,
                 decoration: cellFieldDecoration(
+                  context,
                   labelText: context.l10n.serverAddressLabel,
                   hintText: 'http://your.server.ip',
                 ),
@@ -299,6 +300,7 @@ class _SubscriptionProviderPageState
                 onTapOutside: (_) =>
                     settings.update(apiKey: _keyController.text.trim()),
                 decoration: cellFieldDecoration(
+                  context,
                   labelText: context.l10n.serverUploadKeyLabel,
                 ),
               )),

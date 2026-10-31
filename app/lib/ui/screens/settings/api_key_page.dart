@@ -157,6 +157,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                 onTapOutside: (_) =>
                     settings.update(apiKey: _keyController.text.trim()),
                 decoration: cellFieldDecoration(
+                  context,
                   labelText: context.l10n
                       .apiKeyLabel(providerLabel(settings.provider)),
                 ).copyWith(
@@ -194,7 +195,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                   initialValue: _customModel
                       ? kCustomModelSentinel
                       : settings.model,
-                  decoration: cellFieldDecoration(),
+                  decoration: cellFieldDecoration(context),
                   items: [
                     for (final (id, label)
                         in kKnownModels[settings.provider] ??
@@ -242,6 +243,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                   onTapOutside: (_) => settings.update(
                       model: _modelController.text.trim()),
                   decoration: cellFieldDecoration(
+                    context,
                     labelText: context.l10n.modelCustomLabel,
                   ),
                 )),
