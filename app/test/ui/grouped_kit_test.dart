@@ -576,6 +576,65 @@ void main() {
     });
   });
 
+  // Dark: the dial, the unselected hour/minute box and the selected AM/PM
+  // segment were the dialog's own #2C2C2E, so they disappeared (run-7
+  // review ui-shell-2).
+  for (final b in Brightness.values) {
+    testWidgets('time picker ($b): the dial and the hour/minute and AM/PM '
+        'boxes stand off the dialog', (tester) async {
+      await pumpApp(
+          tester,
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                  key: const Key('open'),
+                  onPressed: () => showAppTimePicker(
+                      context: context,
+                      initialTime: const TimeOfDay(hour: 9, minute: 30)),
+                  child: const Text('open')),
+            ),
+          ),
+          brightness: b);
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+      final c = b == Brightness.dark ? AppColors.dark : AppColors.light;
+      final dialog = tester
+          .widget<Material>(find
+              .descendant(
+                  of: find.byType(Dialog), matching: find.byType(Material))
+              .first)
+          .color;
+      expect(dialog, c.elevated);
+      final context = tester.element(find.byType(Dialog));
+      final picker = TimePickerTheme.of(context);
+      const selected = {WidgetState.selected};
+      expect(picker.dialBackgroundColor, isNot(dialog));
+      expect(WidgetStateProperty.resolveAs(picker.hourMinuteColor, const {}),
+          isNot(dialog));
+      expect(WidgetStateProperty.resolveAs(picker.hourMinuteColor, selected),
+          isNot(dialog));
+      expect(
+          WidgetStateProperty.resolveAs(picker.dayPeriodColor, selected),
+          isNot(dialog));
+      expect(
+          WidgetStateProperty.resolveAs(picker.dayPeriodTextColor, selected),
+          c.onAccentSoft,
+          reason: 'never info on elevated (4.05:1 in dark)');
+      // The dial the picker PAINTS carries the themed colour.
+      final dialPaint = tester
+          .widgetList<CustomPaint>(find.descendant(
+              of: find.byType(Dialog), matching: find.byType(CustomPaint)))
+          .map((p) => p.painter)
+          .where((p) => p.runtimeType.toString() == '_DialPainter')
+          .single;
+      expect((dialPaint as dynamic).backgroundColor, picker.dialBackgroundColor);
+      if (b == Brightness.light) {
+        expect(picker.dialBackgroundColor, c.fill,
+            reason: 'light keeps its #EEEEF0 dial');
+      }
+    });
+  }
+
   group('pickers clamp the text scale at 1.6x (A6)', () {
     Widget launcher(Future<void> Function(BuildContext) open) => Scaffold(
           body: Builder(

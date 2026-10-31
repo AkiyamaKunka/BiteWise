@@ -257,8 +257,27 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.xl)),
       ),
+      // The dial, the hour/minute boxes and the AM/PM segment default to
+      // surfaceContainerHighest / tertiaryContainer — the dialog's own
+      // #2C2C2E in dark, so the clock face and the unselected box vanished
+      // and AM/PM showed only as info text on elevated (4.05:1). One step
+      // off the dialog in dark (track), unchanged in light (fill); the
+      // selected AM/PM matches the selected hour/minute (accentSoft).
       timePickerTheme: TimePickerThemeData(
         backgroundColor: c.elevated,
+        dialBackgroundColor: c.isDark ? c.track : c.fill,
+        hourMinuteColor: WidgetStateColor.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? c.accentSoft
+                : (c.isDark ? c.track : c.fill)),
+        dayPeriodColor: WidgetStateColor.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? c.accentSoft
+                : Colors.transparent),
+        dayPeriodTextColor: WidgetStateColor.resolveWith((s) =>
+            s.contains(WidgetState.selected)
+                ? c.onAccentSoft
+                : c.secondaryLabel),
         elevation: 0,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.xl)),
