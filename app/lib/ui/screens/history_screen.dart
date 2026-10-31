@@ -132,6 +132,30 @@ class HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
+  /// '~1,585 kcal'. Stacked (large text) it may need two lines: the
+  /// break then falls between the number and the unit only — as one Text,
+  /// zh broke INSIDE the unit at AX5 ('~1,751 千' / '卡').
+  Widget _kcalValue(BuildContext context, num kcal, {required bool stacked}) {
+    final style = context.nums.value.copyWith(color: context.colors.label);
+    final number = formatKcal(kcal);
+    final full = '~${context.l10n.kcalAmount(number)}';
+    final at = full.indexOf(number);
+    if (!stacked || at < 0) return Text(full, style: style);
+    final head = full.substring(0, at + number.length).trim();
+    final unit = full.substring(at + number.length).trim();
+    return Semantics(
+      label: full,
+      excludeSemantics: true,
+      child: Wrap(
+        spacing: MediaQuery.textScalerOf(context).scale(4),
+        children: [
+          Text(head, style: style),
+          if (unit.isNotEmpty) Text(unit, style: style),
+        ],
+      ),
+    );
+  }
+
   /// One day: value + a thin magnitude track beneath it (research: a
   /// number-only list hides the week's shape; MacroFactor/Cronometer put a
   /// visual scale in every row). Gap days stay dimmed text-only.
@@ -151,8 +175,7 @@ class HistoryScreenState extends State<HistoryScreen> {
         : (kcal! / _maxDayKcal).clamp(0.0, 1.0).toDouble();
     final stacked = isLargeText(context);
     final Widget value = has
-        ? Text('~${l.kcalAmount(formatKcal(kcal!))}',
-            style: context.nums.value.copyWith(color: colors.label))
+        ? _kcalValue(context, kcal!, stacked: stacked)
         : Text(l.historyNoMeals,
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: colors.secondaryLabel));

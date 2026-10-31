@@ -413,6 +413,30 @@ void main() {
       }, skip: !haveIphoneFonts);
     }
 
+    testWidgets('zh at 3.1x: a two-line value breaks between the number '
+        'and 千卡, never inside the unit', (tester) async {
+      final handle = tester.ensureSemantics();
+      await pumpApp(
+          tester, Scaffold(body: HistoryScreen(dao: _dao({0: 1751}))),
+          size: const Size(375, 1400),
+          locale: const Locale('zh'),
+          scale: 3.1);
+      final row = find.byKey(Key('historyDay${_daysAgo(0)}'));
+      final unit = find.descendant(of: row, matching: find.text('千卡'));
+      expect(unit, findsOneWidget, reason: 'the unit is one unbreakable run');
+      expect(find.descendant(of: row, matching: find.text('~1,751')),
+          findsOneWidget);
+      final para = tester.renderObject<RenderParagraph>(find.descendant(
+          of: unit, matching: find.byType(RichText)));
+      final oneLine = para.getMaxIntrinsicHeight(double.infinity);
+      expect(para.size.height, moreOrLessEquals(oneLine, epsilon: 0.5));
+      // VoiceOver still hears one value.
+      final label = tester.getSemantics(row).getSemanticsData().label;
+      expect(label, contains('~1,751 千卡'));
+      expect(RegExp('1,751').allMatches(label), hasLength(1));
+      handle.dispose();
+    }, skip: !haveIphoneFonts);
+
     testWidgets('at the default size the value stays trailing, beside the '
         'date', (tester) async {
       await pumpApp(tester, Scaffold(body: HistoryScreen(dao: _dao({0: 2140}))));
