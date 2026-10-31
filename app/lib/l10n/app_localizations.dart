@@ -2454,6 +2454,12 @@ abstract class AppLocalizations {
   /// **'No server address or upload key is set — add them in Settings.'**
   String get errNoServerKey;
 
+  /// No description provided for @errBadServerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'The server address in Settings is not a valid web address — check it for typos.'**
+  String get errBadServerAddress;
+
   /// No description provided for @errRejectedKey.
   ///
   /// In en, this message translates to:
@@ -3263,6 +3269,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'no server address or upload key is set'**
   String get reasonNoServerKey;
+
+  /// No description provided for @reasonBadServerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'the server address in Settings is not a valid web address'**
+  String get reasonBadServerAddress;
 
   /// No description provided for @errRegionBlocked.
   ///

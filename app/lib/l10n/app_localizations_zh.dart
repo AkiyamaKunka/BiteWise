@@ -1393,6 +1393,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errNoServerKey => '还没有设置服务器地址或上传密钥 —— 请在设置里添加。';
 
   @override
+  String get errBadServerAddress => '设置里的服务器地址不是有效的网址 —— 请检查有没有输错。';
+
+  @override
   String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
 
   @override
@@ -1925,6 +1928,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reasonNoServerKey => '还没有设置服务器地址或上传密钥';
+
+  @override
+  String get reasonBadServerAddress => '设置里的服务器地址不是有效的网址';
 
   @override
   String errRegionBlocked(String provider) {

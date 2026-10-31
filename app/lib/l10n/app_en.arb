@@ -1052,6 +1052,7 @@
   "outcomeInFlightMsg": "This photo is still being analyzed — check back in a moment.",
   "errNoApiKey": "No API key is set for this provider — add one in Settings.",
   "errNoServerKey": "No server address or upload key is set — add them in Settings.",
+  "errBadServerAddress": "The server address in Settings is not a valid web address — check it for typos.",
   "errRejectedKey": "The provider rejected the API key. Check the key in Settings.",
   "errRateLimited": "The provider is rate-limiting right now — the photo is kept and retried later.",
   "errQuotaPaused": "Analysis is paused: the daily quota was hit. The photo is kept and retried later.",
@@ -1573,6 +1574,7 @@
   "reasonServerFailed": "your server could not analyze it",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
+  "reasonBadServerAddress": "the server address in Settings is not a valid web address",
   "errRegionBlocked": "{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.",
   "@errRegionBlocked": {
     "placeholders": {

@@ -1496,6 +1496,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'No server address or upload key is set — add them in Settings.';
 
   @override
+  String get errBadServerAddress =>
+      'The server address in Settings is not a valid web address — check it for typos.';
+
+  @override
   String get errRejectedKey =>
       'The provider rejected the API key. Check the key in Settings.';
 
@@ -2054,6 +2058,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reasonNoServerKey => 'no server address or upload key is set';
+
+  @override
+  String get reasonBadServerAddress =>
+      'the server address in Settings is not a valid web address';
 
   @override
   String errRegionBlocked(String provider) {

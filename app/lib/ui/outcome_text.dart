@@ -70,7 +70,9 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
     case PhotoOutcomeKind.failed:
       return switch (o.errorKind) {
         AnalysisErrorKind.noApiKey => l.errNoApiKey,
-        AnalysisErrorKind.noServerKey => l.errNoServerKey,
+        AnalysisErrorKind.noServerKey => _badServerAddress(o.message)
+            ? l.errBadServerAddress
+            : l.errNoServerKey,
         AnalysisErrorKind.rejectedKey => l.errRejectedKey,
         AnalysisErrorKind.regionBlocked =>
           l.errRegionBlocked(regionProvider(l, o.message)),
@@ -136,11 +138,19 @@ String? retryReason(AppLocalizations l, PhotoOutcome o) =>
       AnalysisErrorKind.serverBusy => l.reasonServerBusy,
       AnalysisErrorKind.serverError => l.reasonServerFailed,
       AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
-      AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
+      AnalysisErrorKind.noServerKey => _badServerAddress(o.message)
+          ? l.reasonBadServerAddress
+          : l.reasonNoServerKey,
       AnalysisErrorKind.regionBlocked =>
         l.reasonRegionBlocked(regionProvider(l, o.message)),
       _ => null,
     };
+
+/// ServerAnalyzer's "Check your server address … not a valid web address":
+/// the address IS set, so "no server address or upload key is set" would
+/// send the user looking for a missing field (run 7, B2).
+bool _badServerAddress(String message) =>
+    message.contains('not a valid web address');
 
 /// Who refused the network region, out of the analyzers' "`Provider` is
 /// not available from your current network region …" (Gemini's region

@@ -106,6 +106,39 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
 
   Uri _uri(String path) => Uri.parse('${settings.serverBaseUrl}$path');
 
+  /// What an address that cannot become a URL says ('http://host:5OOO' —
+  /// a letter O in the port — throws FormatException in [_uri]). It names
+  /// the 'server address', so classifyAnalysisError reads it as
+  /// noServerKey: user state, the photo kept (run 7, B2).
+  static const String _badAddressMessage =
+      'Check your server address in Settings — it is not a valid web '
+      'address.';
+
+  /// Whether the saved address parses (an empty one is reported on its
+  /// own, by [buildRequest]).
+  bool get _addressParses {
+    try {
+      _uri('/api/auth_check');
+      return true;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// An address that cannot become a URL used to throw out of analyzePhoto
+  /// (the pipeline then burned every automatic photo to 'failed'). Checked
+  /// before the photo is decoded: until the address is fixed, each scan
+  /// would otherwise decode every window photo only to fail on the URL.
+  @override
+  Future<AnalysisOutcome> analyzePhoto(Uint8List originalBytes,
+      {List<Map<String, dynamic>>? recentMeals}) async {
+    if (settings.serverBaseUrl.isNotEmpty && !_addressParses) {
+      return const AnalysisOutcome(
+          error: _badAddressMessage, retryable: true, wall: Duration.zero);
+    }
+    return super.analyzePhoto(originalBytes, recentMeals: recentMeals);
+  }
+
   /// The `backend` each request carried. The analyzed_by receipt is
   /// checked against THAT, not the live setting: a plan switched while a
   /// 20-60 s photo run was in flight discarded the correct (already paid)
@@ -209,9 +242,17 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           verbatimMessage: true);
     }
     final isPhoto = jpegBytes != null;
+    final Uri url;
+    try {
+      url = _uri(isPhoto ? '/api/analyze_photo' : '/api/text_intent');
+    } on FormatException {
+      // Outside _post's transport try: anything but a _ProviderException
+      // here escaped the analyzer's "never throws" contract.
+      throw const _ProviderException(_badAddressMessage,
+          transient: true, retryInPlace: false, verbatimMessage: true);
+    }
     final backend = settings.serverBackend;
-    final req = http.Request(
-        'POST', _uri(isPhoto ? '/api/analyze_photo' : '/api/text_intent'))
+    final req = http.Request('POST', url)
       ..headers['content-type'] = 'application/json'
       ..headers['X-API-Key'] = key
       ..headers['X-Client-Platform'] = 'app'
@@ -403,7 +444,13 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     if (base.isEmpty) return 'Add your server address first.';
     final key = apiKey.trim();
     if (key.isEmpty) return 'Enter your server upload key.';
-    final req = http.Request('POST', _uri('/api/auth_check'))
+    final Uri url;
+    try {
+      url = _uri('/api/auth_check');
+    } on FormatException {
+      return _badAddressMessage; // used to throw out of validateKey
+    }
+    final req = http.Request('POST', url)
       ..headers['content-type'] = 'application/json'
       ..headers['X-API-Key'] = key
       ..headers['X-Client-Platform'] = 'app'

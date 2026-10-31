@@ -1258,4 +1258,103 @@ void main() {
       }
     });
   });
+
+  // A letter O typed for a zero in the port ('http://…:5OOO') made Uri.parse
+  // throw OUTSIDE _post's try: analyzePhoto broke its never-throws contract
+  // and the pipeline burned every automatic photo to 'failed', unannounced
+  // (run 7, B2). Now it is user state, like a missing address.
+  group('an address that is not a URL', () {
+    const badPort = 'http://10.0.0.5:5OOO';
+
+    test('a photo: kept, never sent, never decoded, never a throw', () async {
+      final s = await serverSettings(url: badPort);
+      var calls = 0, decodes = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async {
+          decodes++;
+          return b;
+        },
+        client: MockClient((_) async {
+          calls++;
+          return http.Response('{}', 200);
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(out.analysis, isNull);
+      expect(out.retryable, isTrue);
+      expect(out.error, contains('server address'));
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.noServerKey);
+      expect(calls, 0);
+      expect(decodes, 0, reason: 'each scan would decode every photo again');
+      // Through the multi-provider front door too.
+      final multi = MultiProviderAnalyzer(s,
+          client: MockClient((_) async => http.Response('{}', 200)));
+      expect((await multi.analyzePhoto(jpeg())).retryable, isTrue);
+    });
+
+    test('a text intent and the key check say so, never throw', () async {
+      final s = await serverSettings(url: 'http://[::1');
+      var calls = 0;
+      final analyzer = ServerAnalyzer(s,
+          normalizer: (b) async => b,
+          client: MockClient((_) async {
+            calls++;
+            return http.Response('{}', 200);
+          }));
+      final text = await analyzer.textIntentOutcome('lunch 500 kcal');
+      expect(text.json, isNull);
+      expect(text.error, contains('server address'));
+      expect(await analyzer.validateKey('upload-key'),
+          contains('not a valid web address'));
+      expect((await analyzer.probeKey('upload-key')).message,
+          contains('not a valid web address'));
+      expect(await analyzer.leftoverIntent(jpeg(), '{}'), isNull);
+      expect(calls, 0);
+    });
+
+    test('pipeline: automatic photos are released, not burned', () async {
+      final s = await serverSettings(url: badPort);
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: ServerAnalyzer(s,
+              normalizer: (b) async => b,
+              client: MockClient((_) async => http.Response('{}', 200))),
+          notify: notes.add);
+      for (var i = 0; i < 3; i++) {
+        final out = await pipeline.process(IntakePhoto(
+            Uint8List.fromList([i, 1, 2]), 'a$i', 'IMG_$i.HEIC'));
+        expect(out.retryable, isTrue);
+        expect(out.errorKind, AnalysisErrorKind.noServerKey);
+      }
+      expect(dao.ledger.values, isNot(contains(IngestionStatus.failed)));
+      expect(notes, isEmpty);
+    });
+
+    test('the user is told the address is wrong, not missing', () async {
+      final s = await serverSettings(url: badPort);
+      final out = await ServerAnalyzer(s, normalizer: (b) async => b)
+          .analyzePhoto(jpeg());
+      final o = PhotoOutcome(PhotoOutcomeKind.failed, out.error!,
+          retryable: true,
+          errorKind: classifyAnalysisError(out.error),
+          detail: out.error);
+      final zh = AppLocalizationsZh(), en = AppLocalizationsEn();
+      expect(outcomeBody(zh, o, deliberate: true), zh.errBadServerAddress);
+      expect(outcomeBody(en, o), en.errBadServerAddress);
+      expect(retryReason(zh, o), zh.reasonBadServerAddress);
+      // A missing address keeps its own words.
+      final unset = await ServerAnalyzer(await serverSettings(url: null),
+              normalizer: (b) async => b)
+          .analyzePhoto(jpeg());
+      final o2 = PhotoOutcome(PhotoOutcomeKind.failed, unset.error!,
+          retryable: true,
+          errorKind: classifyAnalysisError(unset.error),
+          detail: unset.error);
+      expect(outcomeBody(zh, o2), zh.errNoServerKey);
+      expect(retryReason(zh, o2), zh.reasonNoServerKey);
+    });
+  });
 }
