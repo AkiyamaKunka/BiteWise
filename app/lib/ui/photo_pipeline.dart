@@ -492,8 +492,13 @@ class PhotoPipeline {
       // automated watch intake is strict (spec §2.3 caller policies).
       final source =
           photo.deliberate ? MealSource.appPhoto : MealSource.appWatch;
+      // Automatic intake also names the photo's asset: an edited copy of a
+      // logged photo (new bytes, new hash) is that meal's, not a new one.
       final reservation = await dao.reservePhotoHash(hash,
-          source: source, reclaimDeliberate: photo.deliberate);
+          source: source,
+          reclaimDeliberate: photo.deliberate,
+          assetId: photo.deliberate ? '' : photo.assetId,
+          capturedAt: photo.deliberate ? null : photo.capturedAt);
       switch (reservation.kind) {
         case PhotoReservation.claimed:
           return _alreadyTracked;
