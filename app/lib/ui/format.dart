@@ -55,9 +55,14 @@ const kStoredMealPlaceholder = 'Meal';
 /// not unknown"), and the day header sums that same 0 via [todayTotals].
 /// Treating it as unknown here put "~? kcal" on the card under a header
 /// reading "~0 kcal" for the same day (found 2026-10-08).
+///
+/// Finite numbers go through [formatKcal] like every header and total
+/// ('1,480', not '1480' beside a '2,720' header, L3); strings and
+/// non-finite values still render raw.
 String displayTotalCalories(Map<String, dynamic> analysis) {
   final v = analysis['total_calories'];
   if (v is num && v == 0) return '0';
+  if (v is num && v.isFinite) return formatKcal(v);
   return isFoodTruthy(v) ? '$v' : '?';
 }
 
