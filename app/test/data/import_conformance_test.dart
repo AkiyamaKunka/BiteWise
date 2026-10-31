@@ -15,6 +15,7 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/data/db.dart';
 import 'package:calorie_tracker/data/meals_dao_impl.dart';
 import 'package:calorie_tracker/data/meals_logic.dart';
+import 'package:calorie_tracker/ui/meal_edit_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -252,6 +253,61 @@ void main() {
         analysis: {'is_food': true, 'total_calories': 450}));
     final summary = await daoB.importJson(await daoA.exportJson());
     expect(summary.added['meals'], 2);
+  });
+
+  group('the SAME hand-typed meal logged twice (run 7, B15)', () {
+    // `time` is minute-precise and user-editable, and a hand-typed meal's
+    // analysis is built deterministically from the draft, so two 'Coffee
+    // 5 kcal' saves are byte-identical in date+time+analysis. Only the
+    // ingestion timestamp tells them apart; import used to ignore it and
+    // kept one of the two.
+    final at = DateTime(2026, 10, 30, 8, 15);
+    Future<void> coffee(SqfliteMealsDao dao, String ts, {String? time}) {
+      final draft = MealDraft.blank(at)
+        ..description = 'Coffee'
+        ..calories = '5';
+      return dao.saveMeal(Meal(
+          id: 0,
+          date: draft.dateIso,
+          time: time ?? draft.time,
+          timestamp: ts,
+          source: MealSource.appManual,
+          analysis: draft.toAnalysis()));
+    }
+
+    test('two saves in the same minute both survive the move', () async {
+      await coffee(daoA, '2026-10-30T08:15:03.120000');
+      await coffee(daoA, '2026-10-30T08:15:41.990000');
+      final summary = await daoB.importJson(await daoA.exportJson());
+      expect(summary.added['meals'], 2);
+      expect(summary.skipped['meals'], 0);
+      expect(await daoB.mealsBetween('2026-10-30', '2026-10-30'),
+          hasLength(2));
+    });
+
+    test('two entries backdated to the same clock time both survive',
+        () async {
+      await coffee(daoA, '2026-10-30T09:20:00.000000', time: '08:15 AM');
+      await coffee(daoA, '2026-10-30T10:21:00.000000', time: '08:15 AM');
+      final summary = await daoB.importJson(await daoA.exportJson());
+      expect(summary.added['meals'], 2);
+    });
+
+    test('re-importing the same file, or importing it back, adds nothing',
+        () async {
+      await coffee(daoA, '2026-10-30T08:15:03.120000');
+      await coffee(daoA, '2026-10-30T08:15:41.990000');
+      final payload = await daoA.exportJson();
+      await daoB.importJson(payload);
+      final again = await daoB.importJson(payload);
+      expect(again.added['meals'], 0,
+          reason: 're-import must never double the owner\'s calories');
+      expect(again.skipped['meals'], 2);
+      final back = await daoA.importJson(await daoB.exportJson());
+      expect(back.added['meals'], 0);
+      expect(await daoA.mealsBetween('2026-10-30', '2026-10-30'),
+          hasLength(2));
+    });
   });
 
   test('two activities on the SAME DAY both survive an import', () async {
