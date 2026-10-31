@@ -1647,8 +1647,8 @@ abstract class AppLocalizations {
   /// No description provided for @coachDetail.
   ///
   /// In en, this message translates to:
-  /// **'{meals} meals · {protein} g protein'**
-  String coachDetail(String meals, String protein);
+  /// **'{meals, plural, =1{1 meal} other{{meals} meals}} · {protein} g protein'**
+  String coachDetail(int meals, String protein);
 
   /// No description provided for @settingsRowGoal.
   ///
@@ -2865,7 +2865,7 @@ abstract class AppLocalizations {
   /// No description provided for @covIntro.
   ///
   /// In en, this message translates to:
-  /// **'Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
+  /// **'Checks every photo of the last {days, plural, =1{day} other{{days} days}} against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
   String covIntro(int days);
 
   /// No description provided for @covChecking.
@@ -2943,13 +2943,13 @@ abstract class AppLocalizations {
   /// No description provided for @covAllAccounted.
   ///
   /// In en, this message translates to:
-  /// **'All {count} photos are accounted for.'**
+  /// **'{count, plural, =0{No photos to check in this window.} =1{The 1 photo is accounted for.} other{All {count} photos are accounted for.}}'**
   String covAllAccounted(int count);
 
   /// No description provided for @covSummary.
   ///
   /// In en, this message translates to:
-  /// **'{scanned} photos checked — {missing} never scanned.'**
+  /// **'{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {missing} never scanned.'**
   String covSummary(int scanned, int missing);
 
   /// No description provided for @covLimitedAccess.

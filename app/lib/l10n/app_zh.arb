@@ -493,7 +493,7 @@
   "covRetryAll": "全部重试",
   "covFailedHelp": "\"全部重试\" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。",
   "covMoreRetryAll": "…还有 {count} 张 —— \"全部重试\" 会覆盖全部。",
-  "covAllAccounted": "全部 {count} 张照片都已记录。",
+  "covAllAccounted": "{count, plural, =0{这段时间内没有需要检查的照片。} other{全部 {count} 张照片都已记录。}}",
   "covSummary": "已检查 {scanned} 张 —— {missing} 张从未扫描。",
   "covLimitedAccess": "注意：应用只有部分照片权限 —— 只能检查被选中的照片。在系统设置里授予完全访问才能得到完整结果。",
   "covTruncated": "注意：这个窗口内超过 2000 张照片 —— 更早的没有检查。缩短窗口可得到完整结果。",

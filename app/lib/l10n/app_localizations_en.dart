@@ -999,8 +999,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Logged and counted. A few more days and I can tell you how this compares to your usual.';
 
   @override
-  String coachDetail(String meals, String protein) {
-    return '$meals meals · $protein g protein';
+  String coachDetail(int meals, String protein) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return '$_temp0 · $protein g protein';
   }
 
   @override
@@ -1773,7 +1779,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covIntro(int days) {
-    return 'Checks every photo of the last $days day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'Checks every photo of the last $_temp0 against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
   }
 
   @override
@@ -1826,12 +1838,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covAllAccounted(int count) {
-    return 'All $count photos are accounted for.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'All $count photos are accounted for.',
+      one: 'The 1 photo is accounted for.',
+      zero: 'No photos to check in this window.',
+    );
+    return '$_temp0';
   }
 
   @override
   String covSummary(int scanned, int missing) {
-    return '$scanned photos checked — $missing never scanned.';
+    String _temp0 = intl.Intl.pluralLogic(
+      scanned,
+      locale: localeName,
+      other: '$scanned photos checked',
+      one: '1 photo checked',
+    );
+    return '$_temp0 — $missing never scanned.';
   }
 
   @override

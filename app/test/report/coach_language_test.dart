@@ -145,6 +145,13 @@ void main() {
     }
   });
 
+  // Run 7 (L6): a one-meal day's lock-screen card read '1 meals'.
+  test('the meal count is singular for one meal in English', () {
+    expect(summaryIn('en', meals: 1).body, endsWith('1 meal · 100 g protein'));
+    expect(summaryIn('en', meals: 2).body, endsWith('2 meals · 100 g protein'));
+    expect(summaryIn('zh', meals: 1).body, endsWith('1 餐 · 蛋白质 100 克'));
+  });
+
   test('the Android channel name follows the app language too', () {
     // 设置 › 应用 › 筷拍 › 通知 showed "Reports & meals" under a Chinese app.
     final zh = notificationChannelFor('zh');

@@ -736,11 +736,11 @@
     }
   },
   "coachNoReference": "Logged and counted. A few more days and I can tell you how this compares to your usual.",
-  "coachDetail": "{meals} meals · {protein} g protein",
+  "coachDetail": "{meals, plural, =1{1 meal} other{{meals} meals}} · {protein} g protein",
   "@coachDetail": {
     "placeholders": {
       "meals": {
-        "type": "String"
+        "type": "int"
       },
       "protein": {
         "type": "String"
@@ -1257,7 +1257,7 @@
   },
   "covPhotoUnreadable": "That photo is no longer readable.",
   "covTitle": "Photo coverage",
-  "covIntro": "Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
+  "covIntro": "Checks every photo of the last {days, plural, =1{day} other{{days} days}} against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
   "@covIntro": {
     "placeholders": {
       "days": {
@@ -1312,7 +1312,7 @@
       }
     }
   },
-  "covAllAccounted": "All {count} photos are accounted for.",
+  "covAllAccounted": "{count, plural, =0{No photos to check in this window.} =1{The 1 photo is accounted for.} other{All {count} photos are accounted for.}}",
   "@covAllAccounted": {
     "placeholders": {
       "count": {
@@ -1320,7 +1320,7 @@
       }
     }
   },
-  "covSummary": "{scanned} photos checked — {missing} never scanned.",
+  "covSummary": "{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {missing} never scanned.",
   "@covSummary": {
     "placeholders": {
       "scanned": {

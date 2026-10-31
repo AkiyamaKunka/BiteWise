@@ -934,7 +934,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coachNoReference => '已记录。再积累几天，我就能告诉你和平时比如何了。';
 
   @override
-  String coachDetail(String meals, String protein) {
+  String coachDetail(int meals, String protein) {
     return '$meals 餐 · 蛋白质 $protein 克';
   }
 
@@ -1703,7 +1703,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String covAllAccounted(int count) {
-    return '全部 $count 张照片都已记录。';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '全部 $count 张照片都已记录。',
+      zero: '这段时间内没有需要检查的照片。',
+    );
+    return '$_temp0';
   }
 
   @override
