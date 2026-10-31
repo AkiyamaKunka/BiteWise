@@ -112,12 +112,17 @@ class MealHeader extends StatelessWidget {
         if (showChevron) ...[
           const SizedBox(width: AppSpace.s4),
           Icon(Icons.chevron_right_rounded,
-              size: 20, color: colors.tertiaryLabel),
+              size: scaledGlyph(context, 20), color: colors.tertiaryLabel),
         ],
       ],
     );
   }
 }
+
+/// [base] pt scaled with the text, up to 1.5x: SF Symbols beside text grow
+/// with Dynamic Type, and a 15-pt pencil beside a 3x clock all but vanished.
+double scaledGlyph(BuildContext context, double base) =>
+    MediaQuery.textScalerOf(context).scale(base).clamp(base, base * 1.5);
 
 /// The ✏️ corrected-by-hand mark (spec §2.2 / §5.2). With [tooltip] its
 /// name is a tooltip (long-press shows it); otherwise the icon's own
@@ -135,7 +140,7 @@ class CorrectedMark extends StatelessWidget {
     final icon = Icon(
       Icons.edit_rounded,
       key: iconKey,
-      size: 15,
+      size: scaledGlyph(context, 15),
       color: AppColors.of(context).secondaryLabel,
       semanticLabel: tooltip ? null : name,
     );

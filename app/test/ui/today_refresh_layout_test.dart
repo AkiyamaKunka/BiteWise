@@ -146,6 +146,7 @@ void main() {
               greaterThanOrEqualTo(tester.getRect(title).right));
           expect(tester.getRect(time).top,
               lessThan(tester.getRect(title).bottom));
+          expect(tester.widget<Icon>(_inMeal(1, 'correctedBadge')).size, 15);
         }, skip: !haveIphoneFonts);
 
         testWidgets('$tag, 3.1x: the ring is above the rows, each macro has '
@@ -209,6 +210,8 @@ void main() {
                   .top,
               greaterThanOrEqualTo(titleRect.bottom - 0.5),
               reason: 'the corrected mark goes with the clock');
+          expect(tester.widget<Icon>(_inMeal(1, 'correctedBadge')).size, 22.5,
+              reason: 'the mark grows with the text, up to 1.5x');
           final card = tester.getRect(find.byKey(const ValueKey('meal1')));
           expect(titleRect.width, greaterThanOrEqualTo(card.width / 2));
           _expectOneLine(_paragraph(tester, time));
