@@ -314,11 +314,7 @@ class GroupedRow extends StatelessWidget {
 
     final Widget body;
     if (custom != null) {
-      body = Expanded(
-        child: semanticsLabel == null
-            ? custom
-            : ExcludeSemantics(child: custom),
-      );
+      body = semanticsLabel == null ? custom : ExcludeSemantics(child: custom);
     } else {
       final titleColor = destructive
           ? colors.danger
@@ -340,20 +336,18 @@ class GroupedRow extends StatelessWidget {
               ),
             );
       if (stacked) {
-        body = Expanded(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(title, style: titleStyle),
-              ?sub,
-              if (value != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 2),
-                  child: Text(value!, style: valueStyle),
-                ),
-            ],
-          ),
+        body = Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: titleStyle),
+            ?sub,
+            if (value != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(value!, style: valueStyle),
+              ),
+          ],
         );
       } else {
         final titleText = Text(
@@ -362,37 +356,35 @@ class GroupedRow extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         );
-        body = Expanded(
-          child: Row(
-            children: [
-              Expanded(
-                child: sub == null
-                    ? titleText
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [titleText, sub],
-                      ),
-              ),
-              if (value != null) ...[
-                const SizedBox(width: 12),
-                // NOT Flexible: a flex value would split the row 50/50
-                // with the title and truncate "Backfill Lookback" beside
-                // a five-character value. The cap keeps a runaway value
-                // from crushing the title instead.
-                ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 170),
-                  child: Text(
-                    value!,
-                    style: valueStyle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    textAlign: TextAlign.end,
-                  ),
+        body = Row(
+          children: [
+            Expanded(
+              child: sub == null
+                  ? titleText
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [titleText, sub],
+                    ),
+            ),
+            if (value != null) ...[
+              const SizedBox(width: 12),
+              // NOT Flexible: a flex value would split the row 50/50
+              // with the title and truncate "Backfill Lookback" beside
+              // a five-character value. The cap keeps a runaway value
+              // from crushing the title instead.
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 170),
+                child: Text(
+                  value!,
+                  style: valueStyle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
                 ),
-              ],
+              ),
             ],
-          ),
+          ],
         );
       }
     }
@@ -416,16 +408,25 @@ class GroupedRow extends StatelessWidget {
           constraints:
               const BoxConstraints(minHeight: AppSpace.rowMinHeight),
           child: Padding(
-            padding: EdgeInsets.symmetric(
-                horizontal: AppSpace.rowH,
-                vertical: stacked ? AppSpace.rowVStacked : AppSpace.rowV),
+            padding: const EdgeInsets.symmetric(horizontal: AppSpace.rowH),
             child: Row(
               children: [
                 if (icon != null) ...[
                   RowBadge(icon: icon!, color: iconColor ?? theme.colorScheme.primary),
                   const SizedBox(width: AppSpace.badgeGap),
                 ],
-                body,
+                // The vertical margins belong to the TEXT, as in UIKit's
+                // list cells: 22 + 2 x 11 = 44 pt, and the 29-pt badge or a
+                // switch sits centred in that height instead of adding its
+                // own margins (badge rows would grow to 51 pt).
+                Expanded(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(
+                        vertical:
+                            stacked ? AppSpace.rowVStacked : AppSpace.rowV),
+                    child: body,
+                  ),
+                ),
                 if (trailing != null) ...[
                   const SizedBox(width: 8),
                   trailing!,

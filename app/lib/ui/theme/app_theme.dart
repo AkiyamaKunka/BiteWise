@@ -158,7 +158,14 @@ abstract final class AppTheme {
       cardColor: c.cell,
       dividerColor: c.separator,
       splashFactory: splash,
-      highlightColor: ios ? c.highlight : base.highlightColor,
+      // The pressed highlight as a TRANSLUCENT wash: over a cell it lands
+      // on the highlight token (#D1D1D1 on white, #3A3A3C on #1C1C1E), and
+      // over a coloured surface (the FAB: RawMaterialButton has no theme
+      // highlight of its own) it dims or lifts instead of covering the
+      // accent with opaque grey.
+      highlightColor: ios
+          ? (c.isDark ? const Color(0x22FFFFFF) : const Color(0x2E000000))
+          : base.highlightColor,
       // iOS push transition + swipe-back on BOTH platforms (scope back to
       // per-platform if the Android edge-swipe double-pop, #83087, bites).
       pageTransitionsTheme: const PageTransitionsTheme(builders: {

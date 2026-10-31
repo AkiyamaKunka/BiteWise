@@ -213,7 +213,59 @@ void main() {
           ?.color, AppColors.light.secondaryLabel);
     });
 
-    testWidgets('.custom: a selected button with the accent checkmark',
+    group('row heights: the margins belong to the text (UIKit cells)', () {
+    tearDown(() => debugDefaultTargetPlatformOverride = null);
+
+    testWidgets('a badge row stays 44 pt; a switch adds no margins',
+        (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+      await pumpApp(
+          tester,
+          _page([
+            GroupedSection(children: [
+              GroupedRow(
+                  key: const Key('badge'),
+                  icon: Icons.photo_library,
+                  title: 'Photos',
+                  value: 'On',
+                  onTap: () {}),
+              GroupedToggleRow(
+                  key: const Key('toggle'),
+                  icon: Icons.notifications,
+                  title: 'Daily Summary',
+                  value: true,
+                  onChanged: (_) {}),
+            ]),
+          ]));
+      expect(tester.getSize(find.byKey(const Key('badge'))).height, 44,
+          reason: '2 x 11 around the 29-pt badge made it 51 pt');
+      // The switch keeps Material's 48-pt tap target, and no margins go
+      // around it (it was 48 + 2 x 6 = 60 pt).
+      expect(tester.getSize(find.byKey(const Key('toggle'))).height,
+          lessThanOrEqualTo(48));
+      debugDefaultTargetPlatformOverride = null;
+    });
+
+    testWidgets('large text: the title wraps with 12-pt margins',
+        (tester) async {
+      await pumpApp(
+          tester,
+          _page([
+            const GroupedSection(children: [
+              GroupedRow(
+                  key: Key('row'),
+                  title: 'Watch Camera Roll',
+                  value: 'Off'),
+            ]),
+          ]),
+          scale: 2.0);
+      final row = tester.getRect(find.byKey(const Key('row')));
+      final title = tester.getRect(find.text('Watch Camera Roll'));
+      expect(title.top - row.top, closeTo(12, 0.01));
+    });
+  });
+
+  testWidgets('.custom: a selected button with the accent checkmark',
         (tester) async {
       final handle = tester.ensureSemantics();
       var picked = '';

@@ -269,7 +269,23 @@ void main() {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       final t = AppTheme.build(Brightness.light);
       expect(t.splashFactory, NoSplash.splashFactory);
-      expect(t.highlightColor, AppColors.light.highlight);
+      // A translucent wash that lands on the highlight token over a cell,
+      // and only dims a coloured surface (the FAB) instead of covering it.
+      for (final (b, c) in [
+        (Brightness.light, AppColors.light),
+        (Brightness.dark, AppColors.dark),
+      ]) {
+        final h = AppTheme.build(b).highlightColor;
+        expect(h.a, lessThan(0.25));
+        final over = Color.alphaBlend(h, c.cell);
+        for (final (got, want) in [
+          (over.r, c.highlight.r),
+          (over.g, c.highlight.g),
+          (over.b, c.highlight.b),
+        ]) {
+          expect(got, closeTo(want, 0.03), reason: '$b');
+        }
+      }
       final fg = t.textButtonTheme.style!.foregroundColor!;
       expect(fg.resolve({}), AppColors.light.accent);
       expect(fg.resolve({WidgetState.pressed}),
