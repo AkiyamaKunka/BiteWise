@@ -1631,6 +1631,17 @@
       }
     }
   },
+  "autoScanPausedBilling": "Watch Camera Roll is paused: the {provider} account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: {time}).",
+  "@autoScanPausedBilling": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "autoScanPausedTitle": "Photos are not being logged automatically",
   "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
   "fixAction": "Fix",

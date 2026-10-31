@@ -3342,6 +3342,12 @@ abstract class AppLocalizations {
   /// **'Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — once it is reachable again, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).'**
   String autoScanPausedRegion(String provider, String time);
 
+  /// No description provided for @autoScanPausedBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch Camera Roll is paused: the {provider} account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: {time}).'**
+  String autoScanPausedBilling(String provider, String time);
+
   /// No description provided for @autoScanPausedTitle.
   ///
   /// In en, this message translates to:

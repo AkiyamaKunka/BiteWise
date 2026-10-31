@@ -270,5 +270,8 @@ String? autoScanPausedLine(AppLocalizations l,
       'regionBlocked' => l.autoScanPausedRegion(
           providerDisplayLabel(l, provider, serverBackend),
           dayTimeLabel(l, until, now: now)),
+      'billing' => l.autoScanPausedBilling(
+          providerDisplayLabel(l, provider, serverBackend),
+          dayTimeLabel(l, until, now: now)),
       _ => null,
     };

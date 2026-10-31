@@ -2113,6 +2113,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String autoScanPausedBilling(String provider, String time) {
+    return 'Watch Camera Roll is paused: the $provider account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: $time).';
+  }
+
+  @override
   String get autoScanPausedTitle => 'Photos are not being logged automatically';
 
   @override

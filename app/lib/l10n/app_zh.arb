@@ -646,6 +646,17 @@
       }
     }
   },
+  "autoScanPausedBilling": "监控相册已暂停：{provider} 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
+  "@autoScanPausedBilling": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "autoScanPausedTitle": "照片暂时不会自动记录",
   "watcherLimitedAccess": "目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。",
   "fixAction": "去修复",

@@ -263,8 +263,33 @@ void main() {
           now: now.subtract(const Duration(hours: 2, minutes: 1)));
       expect(s.isAnalysisBlocked, isFalse);
 
-      await s.blockAutomaticAnalysis('billing');
-      expect(s.isAnalysisBlocked, isFalse, reason: 'only the two kinds');
+      // An empty balance (run 7, B6): 2 h, like a region — a top-up at the
+      // provider's console edits nothing here.
+      await s.blockAutomaticAnalysis('billing',
+          now: now.subtract(const Duration(hours: 1, minutes: 50)));
+      expect(s.analysisBlockedKind, 'billing');
+      await s.blockAutomaticAnalysis('billing',
+          now: now.subtract(const Duration(hours: 2, minutes: 1)));
+      expect(s.isAnalysisBlocked, isFalse);
+
+      await s.blockAutomaticAnalysis('quotaPaused');
+      expect(s.isAnalysisBlocked, isFalse, reason: 'only the known kinds');
+    });
+
+    test('a billing pause survives a reload and is lifted by a passing '
+        'probe', () async {
+      final (s, prefs, keys) = await freshSettings();
+      await s.setDeepseekApiKey('k');
+      await s.setProvider(AiProvider.deepseek);
+      await s.blockAutomaticAnalysis('billing',
+          revision: s.credentialRevision);
+      expect(s.analysisBlockedKind, 'billing',
+          reason: 'the trailing re-read must not erase the arm');
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      expect(again.analysisBlockedKind, 'billing');
+      expect(again.canAutoAnalyze, isFalse);
+      await again.credentialsProven(reachedGeneration: false);
+      expect(again.analysisBlockedKind, isNull);
     });
 
     test('an end further out than the TTL (clock set back) is no pause',

@@ -50,8 +50,9 @@ abstract class SettingsStore {
   /// coverage screen included — keep [canAnalyze].
   bool get canAutoAnalyze;
 
-  /// 'rejectedKey' | 'regionBlocked' while that latch is armed, else null;
-  /// with [autoScanBlockedUntil] it tells Settings why nothing is scanned.
+  /// 'rejectedKey' | 'regionBlocked' | 'billing' while that latch is armed,
+  /// else null; with [autoScanBlockedUntil] it tells Settings why nothing
+  /// is scanned.
   String? get autoScanBlockedKind;
   DateTime? get autoScanBlockedUntil;
 

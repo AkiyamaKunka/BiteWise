@@ -1978,6 +1978,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String autoScanPausedBilling(String provider, String time) {
+    return '监控相册已暂停：$provider 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
+  }
+
+  @override
   String get autoScanPausedTitle => '照片暂时不会自动记录';
 
   @override
