@@ -821,6 +821,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get leftoverUseAnyway => '仍然使用';
 
   @override
+  String get leftoverQuotaPaused => '分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。';
+
+  @override
   String get leftoverResultTitle => '确认扣除剩菜？';
 
   @override
@@ -1428,6 +1431,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errNoServerKey => '还没有设置服务器地址或上传密钥 —— 请在设置里添加。';
 
   @override
+  String get errBadServerAddress => '设置里的服务器地址不是有效的网址 —— 请检查有没有输错。';
+
+  @override
   String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
 
   @override
@@ -2024,6 +2030,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String autoScanPausedRegion(String provider, String time) {
     return '监控相册已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
+  }
+
+  @override
+  String autoScanPausedBilling(String provider, String time) {
+    return '监控相册已暂停：$provider 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
   }
 
   @override

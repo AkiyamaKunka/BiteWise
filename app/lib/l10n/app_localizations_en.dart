@@ -879,6 +879,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get leftoverUseAnyway => 'Use anyway';
 
   @override
+  String get leftoverQuotaPaused =>
+      'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.';
+
+  @override
   String get leftoverResultTitle => 'Deduct leftovers?';
 
   @override
@@ -1533,6 +1537,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'No server address or upload key is set — add them in Settings.';
 
   @override
+  String get errBadServerAddress =>
+      'The server address in Settings is not a valid web address — check it for typos.';
+
+  @override
   String get errRejectedKey =>
       'The provider rejected the API key. Check the key in Settings.';
 
@@ -2171,6 +2179,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String autoScanPausedRegion(String provider, String time) {
     return 'Watch Camera Roll is paused: $provider is not available from this network region. Photos are kept — once it is reachable again, Test This Provider or add one photo via Log › From recent photos to resume now (next try: $time).';
+  }
+
+  @override
+  String autoScanPausedBilling(String provider, String time) {
+    return 'Watch Camera Roll is paused: the $provider account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: $time).';
   }
 
   @override

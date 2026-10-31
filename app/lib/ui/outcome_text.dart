@@ -70,7 +70,9 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
     case PhotoOutcomeKind.failed:
       return switch (o.errorKind) {
         AnalysisErrorKind.noApiKey => l.errNoApiKey,
-        AnalysisErrorKind.noServerKey => l.errNoServerKey,
+        AnalysisErrorKind.noServerKey => _badServerAddress(o.message)
+            ? l.errBadServerAddress
+            : l.errNoServerKey,
         AnalysisErrorKind.rejectedKey => l.errRejectedKey,
         AnalysisErrorKind.regionBlocked =>
           l.errRegionBlocked(regionProvider(l, o.message)),
@@ -142,6 +144,12 @@ String? retryReason(AppLocalizations l, PhotoOutcome o) =>
         l.reasonRegionBlocked(regionProvider(l, o.message)),
       _ => null,
     };
+
+/// ServerAnalyzer's "Check your server address … not a valid web address":
+/// the address IS set, so "no server address or upload key is set" would
+/// send the user looking for a missing field (run 7, B2).
+bool _badServerAddress(String message) =>
+    message.contains('not a valid web address');
 
 /// Who refused the network region, out of the analyzers' "`Provider` is
 /// not available from your current network region …" (Gemini's region
@@ -225,15 +233,21 @@ String badModelText(AppLocalizations l, String? message) {
   return l.errBadModel;
 }
 
+/// Calendar days from [from]'s date to [to]'s date (1 = the next day),
+/// counted on UTC midnights: two LOCAL midnights are 23 h apart across a
+/// spring-forward change, and `inDays` truncated that to 0 ("Today" for
+/// tomorrow).
+int calendarDayDiff(DateTime from, DateTime to) =>
+    DateTime.utc(to.year, to.month, to.day)
+        .difference(DateTime.utc(from.year, from.month, from.day))
+        .inDays;
+
 /// "Today 21:30" / "Tomorrow 07:00" / "Yesterday 14:02" / "09-28 14:02".
 /// [now] is a test seam.
 String dayTimeLabel(AppLocalizations l, DateTime when, {DateTime? now}) {
   final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
       '${when.minute.toString().padLeft(2, '0')}';
-  final n = now ?? DateTime.now();
-  final today = DateTime(n.year, n.month, n.day);
-  final day = DateTime(when.year, when.month, when.day);
-  final diff = day.difference(today).inDays;
+  final diff = calendarDayDiff(now ?? DateTime.now(), when);
   if (diff == 0) return l.timeToday(hhmm);
   if (diff == 1) return l.timeTomorrow(hhmm);
   if (diff == -1) return l.timeYesterday(hhmm);
@@ -253,6 +267,9 @@ String? autoScanPausedLine(AppLocalizations l,
     switch (kind) {
       'rejectedKey' => l.autoScanPausedKey(dayTimeLabel(l, until, now: now)),
       'regionBlocked' => l.autoScanPausedRegion(
+          providerDisplayLabel(l, provider, serverBackend),
+          dayTimeLabel(l, until, now: now)),
+      'billing' => l.autoScanPausedBilling(
           providerDisplayLabel(l, provider, serverBackend),
           dayTimeLabel(l, until, now: now)),
       _ => null,

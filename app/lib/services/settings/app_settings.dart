@@ -1006,12 +1006,18 @@ class AppSettings extends ChangeNotifier {
 
   /// How long a refusal parks the automatic scan. A rejected key stays
   /// rejected until the user edits it (which clears the latch at once);
-  /// a region block lifts with the VPN node, so it is re-tried sooner.
+  /// a region block lifts with the VPN node, and an empty balance with a
+  /// top-up at the provider's console — neither edits anything here, so
+  /// both are re-tried sooner (a passing Test This Provider or a
+  /// deliberate add resumes them at once). Not shorter: each re-arm by a
+  /// background run posts the paused notice again.
   static const Duration rejectedKeyBlockTtl = Duration(hours: 24);
   static const Duration regionBlockTtl = Duration(hours: 2);
+  static const Duration billingBlockTtl = Duration(hours: 2);
 
   /// Automatic-analysis latch (2026-10-12): armed when an AUTOMATIC photo
-  /// came back 'rejectedKey' or 'regionBlocked'. Without it, every scan —
+  /// came back 'rejectedKey', 'regionBlocked' or (run 7) 'billing'.
+  /// Without it, every scan —
   /// Android's 30-minute job, each launch/resume/library change, iOS's
   /// refresh — re-uploaded the whole lookback window against a key or
   /// region that refuses each photo. Stores the KIND and the provider only,
@@ -1035,7 +1041,8 @@ class AppSettings extends ChangeNotifier {
     return owner != null && owner == _provider.name;
   }
 
-  /// 'rejectedKey' | 'regionBlocked' while [isAnalysisBlocked], else null.
+  /// 'rejectedKey' | 'regionBlocked' | 'billing' while [isAnalysisBlocked],
+  /// else null.
   String? get analysisBlockedKind =>
       isAnalysisBlocked ? _analysisBlockedKind : null;
 
@@ -1051,8 +1058,8 @@ class AppSettings extends ChangeNotifier {
   /// derived from a key is ever stored.
   int get credentialRevision => _prefs.getInt(_kCredentialRevision) ?? 0;
 
-  /// Arm the latch for [kind] ('rejectedKey' | 'regionBlocked'; anything
-  /// else is ignored). [revision] stale = dropped: compared against the
+  /// Arm the latch for [kind] ('rejectedKey' | 'regionBlocked' |
+  /// 'billing'; anything else is ignored). [revision] stale = dropped: compared against the
   /// revision ON DISK, before and after the write, because the edit that
   /// made it stale may have happened in the other isolate. [now] is a
   /// test seam.
@@ -1094,6 +1101,7 @@ class AppSettings extends ChangeNotifier {
   static Duration? _analysisBlockTtl(String? kind) => switch (kind) {
         'rejectedKey' => rejectedKeyBlockTtl,
         'regionBlocked' => regionBlockTtl,
+        'billing' => billingBlockTtl,
         _ => null,
       };
 
@@ -1158,7 +1166,9 @@ class AppSettings extends ChangeNotifier {
     final until = DateTime.tryParse(
             _prefs.getString(_kAnalysisBlockedUntil) ?? '')
         ?.toLocal();
-    final known = kind == 'rejectedKey' || kind == 'regionBlocked';
+    // Every kind _analysisBlockTtl knows: an arm of any other kind would
+    // be erased by blockAutomaticAnalysis's own trailing re-read.
+    final known = _analysisBlockTtl(kind) != null;
     _analysisBlockedUntil = known ? until : null;
     _analysisBlockedKind = known && until != null ? kind : null;
   }

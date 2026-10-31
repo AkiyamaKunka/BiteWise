@@ -4,6 +4,7 @@
 // header, the app's dietary-profile prompt travelling with the request, and
 // server 503 ("CLI busy/unavailable") classified RETRYABLE so the photo
 // stays eligible instead of being burned.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -1032,5 +1033,326 @@ void main() {
       expect(out.error, contains('unexpected response shape'), reason: body);
       expect(calls, 1, reason: body);
     }
+  });
+
+  // The compacts used to ride a shared field that every analyzePhoto call
+  // overwrote first thing: the diagnostics test photo (same instance,
+  // outside the pipeline's FIFO) wiped the leftover candidates of the
+  // photo in flight, which was then saved as a new meal (run 7, B18).
+  group('recent_meals belong to their own call', () {
+    const compacts = [
+      {
+        'time': '12:10',
+        'meal_description': 'Beef noodles',
+        'total_calories': 640,
+        'food_items': <Object>[],
+      },
+    ];
+    final big = Uint8List.fromList(List<int>.filled(64, 7));
+    final tiny = Uint8List.fromList([9]);
+    String ok() => jsonEncode({
+          'ok': true,
+          'analysis': {'is_food': true, 'total_calories': 1},
+          'analyzed_by': 'claude',
+        });
+    Map<String, dynamic> sentFor(List<http.Request> reqs, Uint8List bytes) =>
+        jsonDecode(reqs.lastWhere((r) =>
+                (jsonDecode(r.body) as Map)['image_b64'] ==
+                base64Encode(bytes)).body)
+            as Map<String, dynamic>;
+
+    test('a second call during the first one\'s decode', () async {
+      final s = await serverSettings();
+      final requests = <http.Request>[];
+      final hold = Completer<void>();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async {
+          if (b.length == big.length) await hold.future;
+          return b;
+        },
+        client: MockClient((req) async {
+          requests.add(req);
+          return http.Response(ok(), 200);
+        }),
+      );
+      final first = analyzer.analyzePhoto(big, recentMeals: compacts);
+      await analyzer.analyzePhoto(tiny); // the diagnostics test image
+      hold.complete();
+      expect((await first).isFood, isTrue);
+      expect(sentFor(requests, big)['recent_meals'], compacts);
+      expect(sentFor(requests, tiny).containsKey('recent_meals'), isFalse);
+    });
+
+    test('a second call during the first one\'s busy-retry sleep', () async {
+      final s = await serverSettings();
+      final requests = <http.Request>[];
+      final napping = Completer<void>();
+      final wake = Completer<void>();
+      var bigCalls = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        sleep: (_) async {
+          napping.complete();
+          await wake.future;
+        },
+        client: MockClient((req) async {
+          requests.add(req);
+          final isBig = (jsonDecode(req.body) as Map)['image_b64'] ==
+              base64Encode(big);
+          if (isBig && ++bigCalls == 1) {
+            return http.Response(
+                jsonEncode({
+                  'error': 'claude_unavailable',
+                  'reason': 'the analyzer is busy with another request',
+                  'retry': true,
+                }),
+                503);
+          }
+          return http.Response(ok(), 200);
+        }),
+      );
+      final first = analyzer.analyzePhoto(big, recentMeals: compacts);
+      await napping.future;
+      await analyzer.analyzePhoto(tiny);
+      wake.complete();
+      expect((await first).isFood, isTrue);
+      expect(bigCalls, 2);
+      expect(sentFor(requests, big)['recent_meals'], compacts,
+          reason: 'the retried request still carries the compacts');
+    });
+
+    test('a direct provider still puts them in the prompt only', () async {
+      SharedPreferences.setMockInitialValues({});
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await s.setProvider(AiProvider.openai);
+      await s.setOpenaiApiKey('sk-test');
+      final bodies = <String>[];
+      final analyzer = OpenAiAnalyzer(s,
+          normalizer: (b) async => b,
+          client: MockClient((req) async {
+            bodies.add(req.body);
+            return http.Response(
+                jsonEncode({
+                  'choices': [
+                    {
+                      'message': {'content': '{"is_food": false}'}
+                    }
+                  ]
+                }),
+                200);
+          }));
+      await analyzer.analyzePhoto(big, recentMeals: compacts);
+      expect(bodies.single, contains('Beef noodles'));
+      expect(bodies.single, isNot(contains('recent_meals')));
+    });
+  });
+
+  // The receipt was compared with the LIVE setting: switching the plan
+  // during a 20-60 s photo run threw away the correct reply (paid for on
+  // the plan the request named) and failed the photo for good with
+  // "update the server" (run 7, B3). A pre-upgrade server's wrong payer
+  // is still refused (the test above).
+  group('a plan switched mid-request', () {
+    String reply(String by, {bool text = false}) => jsonEncode({
+          'ok': true,
+          if (!text) 'analysis': {'is_food': true, 'total_calories': 520},
+          if (text) 'result': {'intent': 'chat'},
+          'leftover': {'eaten_fraction': 0.5},
+          'analyzed_by': by,
+        });
+    String sentBackendOf(http.Request req) =>
+        (jsonDecode(req.body) as Map)['backend'] as String;
+
+    test('the photo reply is checked against the backend it asked for',
+        () async {
+      final s = await serverSettings();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        client: MockClient((req) async {
+          final sent = sentBackendOf(req);
+          await s.setServerBackend('glm'); // the user switches meanwhile
+          return http.Response(reply(sent), 200);
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(out.error, isNull);
+      expect(out.isFood, isTrue);
+      expect(out.analysis!['total_calories'], 520);
+    });
+
+    test('the same for a leftover estimate', () async {
+      final s = await serverSettings();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        client: MockClient((req) async {
+          final sent = sentBackendOf(req);
+          await s.setServerBackend('doubao');
+          return http.Response(reply(sent), 200);
+        }),
+      );
+      expect(await analyzer.leftoverIntent(jpeg(), '{}'),
+          {'eaten_fraction': 0.5});
+      // And a wrong payer for the backend it DID ask for is still refused.
+      final drifted = ServerAnalyzer(s,
+          normalizer: (b) async => b,
+          client: MockClient((_) async => http.Response(reply('claude'), 200)));
+      expect(await drifted.leftoverIntent(jpeg(), '{}'), isNull);
+    });
+
+    test('overlapping calls each keep their own receipt', () async {
+      final s = await serverSettings();
+      final photoArrived = Completer<void>();
+      final release = Completer<void>();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        client: MockClient((req) async {
+          final sent = sentBackendOf(req);
+          if (req.url.path == '/api/analyze_photo') {
+            photoArrived.complete();
+            await release.future;
+          }
+          return http.Response(
+              reply(sent, text: req.url.path == '/api/text_intent'), 200);
+        }),
+      );
+      final photo = analyzer.analyzePhoto(jpeg());
+      await photoArrived.future;
+      await s.setServerBackend('glm');
+      final text = await analyzer.textIntentOutcome('hi');
+      expect(text.error, isNull);
+      expect(text.json, {'intent': 'chat'});
+      release.complete();
+      final out = await photo;
+      expect(out.error, isNull, reason: 'sent on claude, answered by claude');
+      expect(out.isFood, isTrue);
+    });
+
+    test('pipeline: the photo is saved, not failed', () async {
+      final s = await serverSettings();
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: ServerAnalyzer(s,
+              normalizer: (b) async => b,
+              client: MockClient((req) async {
+                final sent = sentBackendOf(req);
+                await s.setServerBackend('glm');
+                return http.Response(reply(sent), 200);
+              })),
+          notify: notes.add);
+      final out = await pipeline
+          .process(IntakePhoto(jpeg(), 'a1', 'IMG_1.HEIC'));
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger.values, [IngestionStatus.saved]);
+      expect(dao.meals, hasLength(1));
+      for (final n in notes) {
+        expect(n.message, isNot(contains('update the server')));
+      }
+    });
+  });
+
+  // A letter O typed for a zero in the port ('http://…:5OOO') made Uri.parse
+  // throw OUTSIDE _post's try: analyzePhoto broke its never-throws contract
+  // and the pipeline burned every automatic photo to 'failed', unannounced
+  // (run 7, B2). Now it is user state, like a missing address.
+  group('an address that is not a URL', () {
+    const badPort = 'http://10.0.0.5:5OOO';
+
+    test('a photo: kept, never sent, never decoded, never a throw', () async {
+      final s = await serverSettings(url: badPort);
+      var calls = 0, decodes = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async {
+          decodes++;
+          return b;
+        },
+        client: MockClient((_) async {
+          calls++;
+          return http.Response('{}', 200);
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect(out.analysis, isNull);
+      expect(out.retryable, isTrue);
+      expect(out.error, contains('server address'));
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.noServerKey);
+      expect(calls, 0);
+      expect(decodes, 0, reason: 'each scan would decode every photo again');
+      // Through the multi-provider front door too.
+      final multi = MultiProviderAnalyzer(s,
+          client: MockClient((_) async => http.Response('{}', 200)));
+      expect((await multi.analyzePhoto(jpeg())).retryable, isTrue);
+    });
+
+    test('a text intent and the key check say so, never throw', () async {
+      final s = await serverSettings(url: 'http://[::1');
+      var calls = 0;
+      final analyzer = ServerAnalyzer(s,
+          normalizer: (b) async => b,
+          client: MockClient((_) async {
+            calls++;
+            return http.Response('{}', 200);
+          }));
+      final text = await analyzer.textIntentOutcome('lunch 500 kcal');
+      expect(text.json, isNull);
+      expect(text.error, contains('server address'));
+      expect(await analyzer.validateKey('upload-key'),
+          contains('not a valid web address'));
+      expect((await analyzer.probeKey('upload-key')).message,
+          contains('not a valid web address'));
+      expect(await analyzer.leftoverIntent(jpeg(), '{}'), isNull);
+      expect(calls, 0);
+    });
+
+    test('pipeline: automatic photos are released, not burned', () async {
+      final s = await serverSettings(url: badPort);
+      final dao = FakeDao();
+      final notes = <PhotoOutcome>[];
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: ServerAnalyzer(s,
+              normalizer: (b) async => b,
+              client: MockClient((_) async => http.Response('{}', 200))),
+          notify: notes.add);
+      for (var i = 0; i < 3; i++) {
+        final out = await pipeline.process(IntakePhoto(
+            Uint8List.fromList([i, 1, 2]), 'a$i', 'IMG_$i.HEIC'));
+        expect(out.retryable, isTrue);
+        expect(out.errorKind, AnalysisErrorKind.noServerKey);
+      }
+      expect(dao.ledger.values, isNot(contains(IngestionStatus.failed)));
+      expect(notes, isEmpty);
+    });
+
+    test('the user is told the address is wrong, not missing', () async {
+      final s = await serverSettings(url: badPort);
+      final out = await ServerAnalyzer(s, normalizer: (b) async => b)
+          .analyzePhoto(jpeg());
+      final o = PhotoOutcome(PhotoOutcomeKind.failed, out.error!,
+          retryable: true,
+          errorKind: classifyAnalysisError(out.error),
+          detail: out.error);
+      final zh = AppLocalizationsZh(), en = AppLocalizationsEn();
+      expect(outcomeBody(zh, o, deliberate: true), zh.errBadServerAddress);
+      expect(outcomeBody(en, o), en.errBadServerAddress);
+      // A missing address keeps its own words.
+      final unset = await ServerAnalyzer(await serverSettings(url: null),
+              normalizer: (b) async => b)
+          .analyzePhoto(jpeg());
+      final o2 = PhotoOutcome(PhotoOutcomeKind.failed, unset.error!,
+          retryable: true,
+          errorKind: classifyAnalysisError(unset.error),
+          detail: unset.error);
+      expect(outcomeBody(zh, o2), zh.errNoServerKey);
+    });
   });
 }

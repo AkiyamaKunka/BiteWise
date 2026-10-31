@@ -159,9 +159,9 @@ class AutoScanLatch {
   /// emulator, 2026-10-12). Null (tests) trusts [blockedKind] as is.
   final Future<void> Function()? refresh;
 
-  /// The armed latch's kind ([AnalysisErrorKind.rejectedKey] or
-  /// [AnalysisErrorKind.regionBlocked]); null while automatic analysis may
-  /// run.
+  /// The armed latch's kind ([AnalysisErrorKind.rejectedKey],
+  /// [AnalysisErrorKind.regionBlocked] or [AnalysisErrorKind.billing]);
+  /// null while automatic analysis may run.
   final AnalysisErrorKind? Function() blockedKind;
 
   /// The credentials revision, read BEFORE an analysis and handed back to
@@ -295,9 +295,14 @@ class PhotoPipeline {
   static const rejectedKeyNoticeInterval = Duration(minutes: 10);
 
   /// The refusals that say nothing about the PHOTO: every automatic photo
-  /// would come back the same way until the user's setup changes.
+  /// would come back the same way until the user's setup changes. An empty
+  /// balance too (402 / insufficient_quota / Arrearage …): released
+  /// silently, it re-uploaded the whole lookback window on every catch-up
+  /// and never said why logging stopped (run 7, B6).
   static bool _refusesEveryPhoto(AnalysisErrorKind k) =>
-      k == AnalysisErrorKind.rejectedKey || k == AnalysisErrorKind.regionBlocked;
+      k == AnalysisErrorKind.rejectedKey ||
+      k == AnalysisErrorKind.regionBlocked ||
+      k == AnalysisErrorKind.billing;
 
   /// Wire the watcher intake with BACKPRESSURE: the intake awaits each
   /// photo's turn through the same global FIFO the share stream uses, so
@@ -883,7 +888,8 @@ class PhotoPipeline {
 
   static const _latchedMessage =
       'Automatic analysis is paused: the AI service refused the last '
-      'photo for a reason every photo shares (API key or network region).';
+      'photo for a reason every photo shares (API key, network region or '
+      'account balance).';
 
   /// A leftover-shaped reply nothing could be applied from: kept as failed
   /// (no scan offers it again; a retry or the Leftovers flow can). English

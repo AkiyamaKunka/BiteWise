@@ -254,6 +254,7 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
       blockedKind: () => switch (settings.analysisBlockedKind) {
         'rejectedKey' => AnalysisErrorKind.rejectedKey,
         'regionBlocked' => AnalysisErrorKind.regionBlocked,
+        'billing' => AnalysisErrorKind.billing,
         _ => null,
       },
       revision: () => settings.credentialRevision,

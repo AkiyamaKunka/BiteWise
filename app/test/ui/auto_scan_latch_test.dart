@@ -3,13 +3,17 @@
 // by nothing but a genuine credential refusal, and anything that proves
 // the credentials work must lift it (second adversarial review of the
 // latch, 2026-10-12).
+import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/background_glue.dart';
+import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -186,6 +190,141 @@ void main() {
       await fg.reloadAnalysisBlock();
       expect(fg.canAutoAnalyze, isTrue);
       expect((await otherIsolate(keys)).canAutoAnalyze, isTrue);
+    });
+  });
+
+  // An empty balance (DeepSeek/OpenRouter 402, OpenAI insufficient_quota,
+  // Qwen Arrearage …) refuses every photo the same way, but it was
+  // released silently: every catch-up re-read, re-decoded and re-uploaded
+  // the whole lookback window, and nothing said why logging had stopped
+  // (run 7, B6). It now parks the automatic scan like a rejected key, for
+  // two hours, and says so once.
+  group('an empty provider balance', () {
+    Future<(AppSettings, OpenAiCompatAnalyzer, List<int>)> setup(
+        {required bool Function() broke}) async {
+      SharedPreferences.setMockInitialValues({});
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(), keyStore: _MemKeys());
+      await s.setProvider(AiProvider.deepseek);
+      await s.setDeepseekApiKey('sk-test');
+      final uploads = <int>[0];
+      final analyzer = OpenAiCompatAnalyzer(s,
+          endpoint: Uri.parse('https://api.deepseek.test/chat/completions'),
+          label: 'DeepSeek',
+          keyOf: (s) => s.deepseekApiKey,
+          modelOf: (s) => s.deepseekModel,
+          normalizer: (b) async => b,
+          sleep: (_) async {},
+          client: MockClient((_) async {
+            uploads[0]++;
+            if (broke()) {
+              return http.Response(
+                  jsonEncode({
+                    'error': {
+                      'message': 'Insufficient Balance',
+                      'type': 'unknown_error'
+                    }
+                  }),
+                  402);
+            }
+            return http.Response(
+                jsonEncode({
+                  'choices': [
+                    {
+                      'message': {
+                        'content': jsonEncode({
+                          'is_food': true,
+                          'total_calories': 420,
+                          'meal_description': 'Fried rice',
+                        })
+                      }
+                    }
+                  ]
+                }),
+                200);
+          }));
+      return (s, analyzer, uploads);
+    }
+
+    test('one upload, one notice, then the scan is parked; photos kept',
+        () async {
+      final (s, analyzer, uploads) = await setup(broke: () => true);
+      final notes = <PhotoOutcome>[];
+      final dao = FakeDao();
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: analyzer,
+          notify: notes.add,
+          latch: autoScanLatchFor(s));
+      for (var scan = 0; scan < 2; scan++) {
+        for (var n = 1; n <= 3; n++) {
+          final out = await pipeline.process(_auto(n));
+          expect(out.kind, PhotoOutcomeKind.failed);
+          expect(out.retryable, isTrue, reason: 'scan $scan photo $n');
+          expect(out.errorKind, AnalysisErrorKind.billing);
+        }
+      }
+      expect(uploads[0], 1, reason: 'was 6: every photo, every scan');
+      expect(dao.ledger, isEmpty, reason: 'released, never burned');
+      expect(notes, hasLength(1));
+      expect(outcomeSnackbar(AppLocalizationsZh(), notes.single),
+          contains(AppLocalizationsZh().errBilling));
+      expect(s.analysisBlockedKind, 'billing');
+      expect(s.canAutoAnalyze, isFalse);
+      expect(s.canAnalyze, isTrue, reason: 'deliberate adds still analyze');
+      await s.reloadAnalysisBlock(); // as the other engine reads it
+      expect(s.analysisBlockedKind, 'billing');
+      final until = s.analysisBlockedUntil!;
+      expect(until.difference(DateTime.now()).inMinutes,
+          inInclusiveRange(115, 120));
+
+      // The Settings footer and the background card name it.
+      final zh = autoScanPausedLine(AppLocalizationsZh(),
+          kind: s.analysisBlockedKind,
+          until: until,
+          provider: s.provider.name,
+          serverBackend: s.serverBackend)!;
+      expect(zh, startsWith('监控相册已暂停：'));
+      expect(zh, contains('DeepSeek'));
+      expect(zh, contains('充值'));
+      final en = autoScanPausedLine(AppLocalizationsEn(),
+          kind: 'billing',
+          until: until,
+          provider: 'deepseek',
+          serverBackend: 'claude')!;
+      expect(en, startsWith('Watch Camera Roll is paused:'));
+      expect(en, contains('Test This Provider'));
+
+      // A deliberate add still goes out (it is how the fix is tested).
+      final picked = await pipeline.process(IntakePhoto(
+          Uint8List.fromList([9, 9, 9]), 'p1', 'IMG_9.jpg',
+          deliberate: true));
+      expect(uploads[0], 2);
+      expect(picked.errorKind, AnalysisErrorKind.billing);
+      expect(notes, hasLength(1), reason: 'the dialog shows that one');
+
+      // A passing Test This Provider after the top-up resumes at once.
+      await s.credentialsProven(reachedGeneration: true);
+      expect(s.analysisBlockedKind, isNull);
+      expect(s.canAutoAnalyze, isTrue);
+    });
+
+    test('a deliberate photo after the top-up lifts it too', () async {
+      var broke = true;
+      final (s, analyzer, uploads) = await setup(broke: () => broke);
+      final dao = FakeDao();
+      final pipeline =
+          PhotoPipeline(dao: dao, analyzer: analyzer, latch: autoScanLatchFor(s));
+      await pipeline.process(_auto(1));
+      expect(s.analysisBlockedKind, 'billing');
+      broke = false; // topped up at the provider's console
+      final out = await pipeline.process(IntakePhoto(
+          Uint8List.fromList([7, 7, 7]), 'p7', 'IMG_7.jpg',
+          deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(s.analysisBlockedKind, isNull);
+      expect((await pipeline.process(_auto(1))).kind, PhotoOutcomeKind.saved);
+      expect(uploads[0], 3);
     });
   });
 }

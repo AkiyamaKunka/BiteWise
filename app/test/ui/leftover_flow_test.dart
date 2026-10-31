@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
@@ -234,5 +235,81 @@ void main() {
     expect(find.text(zh.photoPermissionDenied), findsOneWidget);
     expect(find.text(zh.openSystemSettings), findsOneWidget);
     expect(find.text(zh.addNoPhotos), findsNothing);
+  });
+
+  // With no key (or during the quota pause) every estimate fails, and the
+  // screen said "Couldn't estimate the leftovers from that photo." — the
+  // user went on trying other photos (run 7, B7). It now names the cause
+  // before any photo is read.
+  group('nothing can be analyzed right now', () {
+    Future<void> tapPhoto(WidgetTester tester, FakeSettings settings,
+        {Locale? locale}) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      dao.put(_meal(1, '13:34', 965));
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates:
+              locale == null ? null : AppLocalizations.localizationsDelegates,
+          supportedLocales: locale == null
+              ? const [Locale('en', 'US')]
+              : AppLocalizations.supportedLocales,
+          home: LeftoverScreen(
+              services: makeServices(
+                  dao: dao,
+                  analyzer: analyzer,
+                  picker: picker,
+                  settings: settings))));
+      await tester.pumpAndSettle();
+      await runToConfirm(tester);
+    }
+
+    void expectNothingSent() {
+      expect(picker.loadedOriginals, isEmpty, reason: 'no photo is read');
+      expect(analyzer.lastLeftoverCompact, isNull, reason: 'no AI call');
+      expect(dao.updates, isEmpty);
+      expect(find.byKey(const Key('leftoverResultLine')), findsNothing);
+    }
+
+    testWidgets('no key: says so, reads nothing', (tester) async {
+      final en = AppLocalizationsEn();
+      await tapPhoto(tester, FakeSettings(apiKey: ''));
+      expect(find.text(en.errNoApiKey), findsOneWidget);
+      expect(find.text(en.leftoverFailed), findsNothing);
+      expectNothingSent();
+    });
+
+    testWidgets('own server without address or key names those',
+        (tester) async {
+      final settings = FakeSettings(apiKey: '')..provider = 'server';
+      await tapPhoto(tester, settings);
+      expect(find.text(AppLocalizationsEn().errNoServerKey), findsOneWidget);
+      expectNothingSent();
+    });
+
+    testWidgets('the quota pause: its own line, no "kept and retried"',
+        (tester) async {
+      final en = AppLocalizationsEn();
+      await tapPhoto(tester, FakeSettings()..isQuotaPaused = true);
+      expect(find.text(en.leftoverQuotaPaused), findsOneWidget);
+      expect(en.leftoverQuotaPaused, isNot(contains('retried')));
+      expectNothingSent();
+    });
+
+    testWidgets('zh: in Chinese', (tester) async {
+      final zh = AppLocalizationsZh();
+      await tapPhoto(tester, FakeSettings(apiKey: ''),
+          locale: const Locale('zh'));
+      expect(find.text(zh.errNoApiKey), findsOneWidget);
+      expectNothingSent();
+      expect(zh.leftoverQuotaPaused, isNot(contains('自动重试')));
+    });
+
+    testWidgets('a working key still goes through', (tester) async {
+      await tapPhoto(tester, FakeSettings());
+      expect(picker.loadedOriginals, ['lp1']);
+      expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget);
+    });
   });
 }

@@ -247,6 +247,7 @@
   "leftoverChangeMeal": "更换",
   "leftoverNotSame": "照片看起来不是这一餐",
   "leftoverUseAnyway": "仍然使用",
+  "leftoverQuotaPaused": "分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。",
   "leftoverResultTitle": "确认扣除剩菜？",
   "leftoverResultLine": "吃了约 {pct}% — 扣除 {kcal} 千卡，这餐现在 {now} 千卡。",
   "leftoverDupRemoved": "这张照片还被误记成了一餐（{kcal} 千卡）— 该重复记录将一并删除。",
@@ -421,6 +422,7 @@
   "outcomeInFlightMsg": "这张照片还在分析中，稍等片刻再看。",
   "errNoApiKey": "当前服务还没有设置 API Key —— 请在设置里添加。",
   "errNoServerKey": "还没有设置服务器地址或上传密钥 —— 请在设置里添加。",
+  "errBadServerAddress": "设置里的服务器地址不是有效的网址 —— 请检查有没有输错。",
   "errRejectedKey": "服务拒绝了 API Key，请在设置里检查。",
   "errRateLimited": "服务正在限流 —— 照片已保留，稍后会自动重试。",
   "errQuotaPaused": "分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。",
@@ -649,6 +651,17 @@
   },
   "autoScanPausedRegion": "监控相册已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
   "@autoScanPausedRegion": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "autoScanPausedBilling": "监控相册已暂停：{provider} 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
+  "@autoScanPausedBilling": {
     "placeholders": {
       "provider": {
         "type": "String"
