@@ -157,6 +157,23 @@ void main() {
     }
   });
 
+  testWidgets('at normal text sizes the empty page does not scroll',
+      (tester) async {
+    await pumpApp(tester, BodyScreen(dao: FakeDao(), clock: () => clock),
+        size: se, padding: seTop);
+    final position = tester
+        .state<ScrollableState>(find.byType(Scrollable).first)
+        .position;
+    expect(position.maxScrollExtent, 0);
+    final hint = find
+        .descendant(
+            of: find.byKey(const Key('bodyEmpty')),
+            matching: find.byType(Text))
+        .last;
+    expect(tester.getRect(hint).bottom,
+        lessThan(tester.getRect(find.byKey(const Key('logBodyButton'))).top));
+  });
+
   group('Log body sheet', () {
     Future<void> openSheet(WidgetTester tester, String lang, double scale,
         {FakeSettings? settings}) async {

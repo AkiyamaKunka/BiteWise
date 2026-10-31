@@ -192,11 +192,14 @@ class BodyScreenState extends State<BodyScreen> {
               hasScrollBody: false, child: LoadingState())
         else if (empty)
           // EmptyState.sliver keeps growing to the hint's height, so at
-          // the largest text sizes it scrolls instead of overflowing; the
-          // bottom padding lets the hint's last line scroll clear of the
-          // Log button (at AX5 it ended underneath it).
+          // the largest text sizes it scrolls instead of overflowing. At
+          // those sizes the bottom padding lets the hint's last line scroll
+          // clear of the Log button (at AX5 it ended underneath it); at
+          // normal sizes the centred block never reaches the button, and
+          // the padding would only make an empty page scroll.
           SliverPadding(
-            padding: const EdgeInsets.only(bottom: AppSpace.fabClearance),
+            padding: EdgeInsets.only(
+                bottom: isLargeText(context) ? AppSpace.fabClearance : 0),
             sliver: EmptyState.sliver(
               key: const Key('bodyEmpty'),
               icon: Icons.monitor_weight_rounded,
