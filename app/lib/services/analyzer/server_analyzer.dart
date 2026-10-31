@@ -185,7 +185,10 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
 
   @override
   http.Request buildRequest(String key,
-      {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
+      {required String prompt,
+      Uint8List? jpegBytes,
+      required int maxTokens,
+      List<Map<String, dynamic>> recentMeals = const []}) {
     if (settings.serverBaseUrl.isEmpty) {
       // Retryable at the OUTCOME level (the user may add the address later)
       // but nothing to retry in place.
@@ -215,8 +218,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
               // 'glm' (coding plan) or 'doubao' (agent plan). The plan
               // keys live in the SERVER's .env — never on the phone.
               'backend': settings.serverBackend,
-              if (recentMealsForRequest.isNotEmpty)
-                'recent_meals': recentMealsForRequest,
+              if (recentMeals.isNotEmpty) 'recent_meals': recentMeals,
               ..._planChoice(),
               ..._replyLanguage(),
             }

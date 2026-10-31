@@ -4,6 +4,7 @@
 // header, the app's dietary-profile prompt travelling with the request, and
 // server 503 ("CLI busy/unavailable") classified RETRYABLE so the photo
 // stays eligible instead of being burned.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -1032,5 +1033,121 @@ void main() {
       expect(out.error, contains('unexpected response shape'), reason: body);
       expect(calls, 1, reason: body);
     }
+  });
+
+  // The compacts used to ride a shared field that every analyzePhoto call
+  // overwrote first thing: the diagnostics test photo (same instance,
+  // outside the pipeline's FIFO) wiped the leftover candidates of the
+  // photo in flight, which was then saved as a new meal (run 7, B18).
+  group('recent_meals belong to their own call', () {
+    const compacts = [
+      {
+        'time': '12:10',
+        'meal_description': 'Beef noodles',
+        'total_calories': 640,
+        'food_items': <Object>[],
+      },
+    ];
+    final big = Uint8List.fromList(List<int>.filled(64, 7));
+    final tiny = Uint8List.fromList([9]);
+    String ok() => jsonEncode({
+          'ok': true,
+          'analysis': {'is_food': true, 'total_calories': 1},
+          'analyzed_by': 'claude',
+        });
+    Map<String, dynamic> sentFor(List<http.Request> reqs, Uint8List bytes) =>
+        jsonDecode(reqs.lastWhere((r) =>
+                (jsonDecode(r.body) as Map)['image_b64'] ==
+                base64Encode(bytes)).body)
+            as Map<String, dynamic>;
+
+    test('a second call during the first one\'s decode', () async {
+      final s = await serverSettings();
+      final requests = <http.Request>[];
+      final hold = Completer<void>();
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async {
+          if (b.length == big.length) await hold.future;
+          return b;
+        },
+        client: MockClient((req) async {
+          requests.add(req);
+          return http.Response(ok(), 200);
+        }),
+      );
+      final first = analyzer.analyzePhoto(big, recentMeals: compacts);
+      await analyzer.analyzePhoto(tiny); // the diagnostics test image
+      hold.complete();
+      expect((await first).isFood, isTrue);
+      expect(sentFor(requests, big)['recent_meals'], compacts);
+      expect(sentFor(requests, tiny).containsKey('recent_meals'), isFalse);
+    });
+
+    test('a second call during the first one\'s busy-retry sleep', () async {
+      final s = await serverSettings();
+      final requests = <http.Request>[];
+      final napping = Completer<void>();
+      final wake = Completer<void>();
+      var bigCalls = 0;
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async => b,
+        sleep: (_) async {
+          napping.complete();
+          await wake.future;
+        },
+        client: MockClient((req) async {
+          requests.add(req);
+          final isBig = (jsonDecode(req.body) as Map)['image_b64'] ==
+              base64Encode(big);
+          if (isBig && ++bigCalls == 1) {
+            return http.Response(
+                jsonEncode({
+                  'error': 'claude_unavailable',
+                  'reason': 'the analyzer is busy with another request',
+                  'retry': true,
+                }),
+                503);
+          }
+          return http.Response(ok(), 200);
+        }),
+      );
+      final first = analyzer.analyzePhoto(big, recentMeals: compacts);
+      await napping.future;
+      await analyzer.analyzePhoto(tiny);
+      wake.complete();
+      expect((await first).isFood, isTrue);
+      expect(bigCalls, 2);
+      expect(sentFor(requests, big)['recent_meals'], compacts,
+          reason: 'the retried request still carries the compacts');
+    });
+
+    test('a direct provider still puts them in the prompt only', () async {
+      SharedPreferences.setMockInitialValues({});
+      final s = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await s.setProvider(AiProvider.openai);
+      await s.setOpenaiApiKey('sk-test');
+      final bodies = <String>[];
+      final analyzer = OpenAiAnalyzer(s,
+          normalizer: (b) async => b,
+          client: MockClient((req) async {
+            bodies.add(req.body);
+            return http.Response(
+                jsonEncode({
+                  'choices': [
+                    {
+                      'message': {'content': '{"is_food": false}'}
+                    }
+                  ]
+                }),
+                200);
+          }));
+      await analyzer.analyzePhoto(big, recentMeals: compacts);
+      expect(bodies.single, contains('Beef noodles'));
+      expect(bodies.single, isNot(contains('recent_meals')));
+    });
   });
 }

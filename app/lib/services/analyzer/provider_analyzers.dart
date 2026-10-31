@@ -66,9 +66,6 @@ abstract class _HttpVisionAnalyzer
   Duration get deadline => httpDeadline;
   static const int maxOriginalFallbackBytes = 5 * 1024 * 1024; // spec §3.1
 
-  /// See [analyzePhoto] — the current call's recent-meal compacts.
-  List<Map<String, dynamic>> recentMealsForRequest = const [];
-
   /// Provider hooks.
   String? get apiKey;
   String get model;
@@ -109,8 +106,17 @@ abstract class _HttpVisionAnalyzer
       ? withReplyLanguage(prompt, chinese: settings.repliesInChinese)
       : prompt;
 
+  /// [recentMeals]: the photo's same-day meal compacts, for a provider
+  /// that ships them as DATA (ServerAnalyzer); the others carry them in
+  /// [prompt] already and ignore it. A parameter, not a field: the
+  /// diagnostics test photo calls analyzePhoto on the same instance outside
+  /// the pipeline's FIFO, and a shared field let it wipe the compacts of
+  /// the photo in flight between its retries (run 7, B18).
   http.Request buildRequest(String key,
-      {required String prompt, Uint8List? jpegBytes, required int maxTokens});
+      {required String prompt,
+      Uint8List? jpegBytes,
+      required int maxTokens,
+      List<Map<String, dynamic>> recentMeals = const []});
   String extractText(Map<String, dynamic> body);
 
   /// One POST. Returns the reply text; throws [_ProviderException] with a
@@ -124,7 +130,8 @@ abstract class _HttpVisionAnalyzer
       Uint8List? jpegBytes,
       String? apiKeyOverride,
       int maxTokens = 2048,
-      bool extract = true}) async {
+      bool extract = true,
+      List<Map<String, dynamic>> recentMeals = const []}) async {
     final key = (apiKeyOverride ?? apiKey ?? '').trim();
     if (key.isEmpty) {
       // User state, not a photo defect: the photo stays eligible
@@ -136,7 +143,10 @@ abstract class _HttpVisionAnalyzer
           verbatimMessage: true);
     }
     final req = buildRequest(key,
-        prompt: prompt, jpegBytes: jpegBytes, maxTokens: maxTokens);
+        prompt: prompt,
+        jpegBytes: jpegBytes,
+        maxTokens: maxTokens,
+        recentMeals: recentMeals);
     // The BODY read must sit inside the same timeout and the same catch as
     // the send: a connection dropped after headers throws a raw
     // ClientException that every caller's `on _ProviderException` clause
@@ -331,10 +341,7 @@ abstract class _HttpVisionAnalyzer
   Future<AnalysisOutcome> analyzePhoto(Uint8List originalBytes,
       {List<Map<String, dynamic>>? recentMeals}) async {
     final sw = Stopwatch()..start();
-    // Stashed for ServerAnalyzer.buildRequest (which sends DATA, not
-    // prompt text). Safe as a field: the app's photo pipeline is
-    // strictly serialized, so no two analyzePhoto calls overlap.
-    recentMealsForRequest = recentMeals ?? const [];
+    final recent = recentMeals ?? const <Map<String, dynamic>>[];
     if (settings.isQuotaPaused) {
       return AnalysisOutcome(
           error: 'Analysis paused (quota) — retrying later.',
@@ -363,11 +370,12 @@ abstract class _HttpVisionAnalyzer
     // the server's order (telegram_bot.py analyze_photo).
     final prompt = _withReplyLanguage(
         withDietaryProfile(foodDetectionPrompt, settings.dietaryProfile) +
-            formatRecentMealsBlock(recentMeals ?? const []));
+            formatRecentMealsBlock(recent));
     for (var attempt = 1;; attempt++) {
       String text;
       try {
-        text = await _post(prompt: prompt, jpegBytes: sendBytes);
+        text = await _post(
+            prompt: prompt, jpegBytes: sendBytes, recentMeals: recent);
       } on _ProviderException catch (e) {
         if (attempt < maxAttempts &&
             e.transient &&
