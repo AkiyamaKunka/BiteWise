@@ -701,7 +701,8 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           // The row's own id must NOT be reused: this DB has its own
           // autoincrement sequence, and a colliding id would either fail
           // or overwrite a real meal. meal_id references are dropped for
-          // the same reason (the ledger row still records the status).
+          // the same reason (the ledger row still records the status);
+          // the links are rebuilt from chat_id + image_hash below.
           row.remove('id');
           if (table == 'photo_ingestions') row['meal_id'] = null;
           if (await _importRowExists(txn, table, row)) {
@@ -730,6 +731,22 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
         added[table] = a;
         skipped[table] = s;
       }
+      // Re-link every 'saved' ledger row that has no meal to the LOCAL
+      // meal for the same photo. Without it an imported photo read as
+      // (saved, null): the Leftovers flow could not see that a leftover
+      // photo had already become its own meal and kept the double count,
+      // and the coverage audit lost its meal link (run 7, B16). Old ids
+      // are still never trusted; the link is this DB's own id. A row
+      // with no matching meal keeps NULL (the subquery finds nothing).
+      await txn.rawUpdate(
+          'UPDATE photo_ingestions SET meal_id = ('
+          'SELECT m.id FROM meals m '
+          'WHERE m.chat_id = photo_ingestions.chat_id '
+          'AND m.image_hash = photo_ingestions.image_hash '
+          'ORDER BY m.id LIMIT 1) '
+          'WHERE status = ? AND meal_id IS NULL '
+          "AND IFNULL(image_hash, '') != ''",
+          [IngestionStatus.saved.name]);
     });
     return ImportSummary(added, skipped, exportedAt: envelope.exportedAt);
   }

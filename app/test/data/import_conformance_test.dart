@@ -134,12 +134,70 @@ void main() {
   });
 
   test('a photo-ingestion row never points at a foreign meal id', () async {
+    // Burn ids on B so A's meal id (1) would name a DIFFERENT row here.
+    await seed(daoB, date: '2026-07-31', cal: 111, hash: 'local1');
+    await seed(daoB, date: '2026-07-31', cal: 222, hash: 'local2');
     await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
     await daoB.importJson(await daoA.exportJson());
-    final rows = await dbB.query('photo_ingestions');
-    expect(rows.single['meal_id'], isNull,
-        reason: 'the old id means nothing here; status is what matters');
+    final rows = await dbB
+        .query('photo_ingestions', where: 'image_hash = ?', whereArgs: ['h1']);
+    final local = await dbB
+        .query('meals', where: 'image_hash = ?', whereArgs: ['h1']);
+    expect(rows.single['meal_id'], local.single['id'],
+        reason: 'the old id means nothing here; the link is the LOCAL id');
+    expect(rows.single['meal_id'], isNot(1));
     expect(rows.single['status'], 'saved');
+  });
+
+  group('imported saved ledger rows name their local meal (run 7, B16)', () {
+    // importJson drops every meal_id (old ids are foreign) and used to
+    // leave them NULL. The Leftovers flow spots "this leftover photo
+    // already became its own meal" only through (saved, mealId), so an
+    // imported phone kept both the leftover meal and the deduction.
+    test('photoStatus on the new phone returns the imported meal', () async {
+      await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
+      await seed(daoA, date: '2026-07-30', cal: 720, hash: 'h2');
+      await daoB.importJson(await daoA.exportJson());
+      for (final hash in ['h1', 'h2']) {
+        final meal = await dbB
+            .query('meals', where: 'image_hash = ?', whereArgs: [hash]);
+        final status = await daoB.photoStatus(hash);
+        expect(status?.status, IngestionStatus.saved);
+        expect(status?.mealId, meal.single['id'], reason: hash);
+      }
+    });
+
+    test('only saved rows without a link are touched', () async {
+      final localId =
+          await seed(daoB, date: '2026-07-31', cal: 200, hash: 'local');
+      await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
+      // A deleted photo on A: tombstoned ledger row, no meal.
+      final gone = await seed(daoA, date: '2026-07-29', cal: 300, hash: 'h3');
+      await daoA.deleteMeal(gone);
+      // A saved row whose meal never made it (no meals row anywhere).
+      await daoA.markPhotoHash('orphan', IngestionStatus.saved);
+      await daoB.importJson(await daoA.exportJson());
+
+      expect((await daoB.photoStatus('local'))?.mealId, localId,
+          reason: 'an existing link is left alone');
+      final deleted = await daoB.photoStatus('h3');
+      expect(deleted?.status, IngestionStatus.deleted);
+      expect(deleted?.mealId, isNull, reason: 'a tombstone stays unlinked');
+      final orphan = await daoB.photoStatus('orphan');
+      expect(orphan?.status, IngestionStatus.saved);
+      expect(orphan?.mealId, isNull,
+          reason: 'no local meal for the photo: nothing to link to');
+    });
+
+    test('a second import of the same file changes nothing', () async {
+      await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');
+      final payload = await daoA.exportJson();
+      await daoB.importJson(payload);
+      final before = await dbB.query('photo_ingestions');
+      final again = await daoB.importJson(payload);
+      expect(again.totalAdded, 0);
+      expect(await dbB.query('photo_ingestions'), before);
+    });
   });
 
   test('an EDITED meal does not re-import as a duplicate of its backup',
