@@ -615,6 +615,7 @@
   "leftoverChangeMeal": "Change",
   "leftoverNotSame": "This doesn't look like the same meal",
   "leftoverUseAnyway": "Use anyway",
+  "leftoverQuotaPaused": "Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.",
   "leftoverResultTitle": "Deduct leftovers?",
   "leftoverResultLine": "Eaten ~{pct}% — deducting {kcal} kcal, this meal is now {now} kcal.",
   "@leftoverResultLine": {
@@ -640,7 +641,6 @@
   },
   "leftoverApplied": "Leftovers deducted.",
   "leftoverFailed": "Couldn't estimate the leftovers from that photo.",
-  "leftoverQuotaPaused": "Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.",
   "leftoverNoMeals": "No meals from today or yesterday to deduct from.",
   "planTuningHeader": "Model & thinking",
   "planTuningFooter": "Which Claude model your server uses, and how hard it thinks. Default follows the server's own setting. Only Claude offers this; GLM and Doubao choose their models themselves.",
@@ -1575,7 +1575,6 @@
   "reasonServerFailed": "your server could not analyze it",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
-  "reasonBadServerAddress": "the server address in Settings is not a valid web address",
   "errRegionBlocked": "{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.",
   "@errRegionBlocked": {
     "placeholders": {

@@ -1434,6 +1434,12 @@ abstract class AppLocalizations {
   /// **'Use anyway'**
   String get leftoverUseAnyway;
 
+  /// No description provided for @leftoverQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.'**
+  String get leftoverQuotaPaused;
+
   /// No description provided for @leftoverResultTitle.
   ///
   /// In en, this message translates to:
@@ -1463,12 +1469,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t estimate the leftovers from that photo.'**
   String get leftoverFailed;
-
-  /// No description provided for @leftoverQuotaPaused.
-  ///
-  /// In en, this message translates to:
-  /// **'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.'**
-  String get leftoverQuotaPaused;
 
   /// No description provided for @leftoverNoMeals.
   ///
@@ -3275,12 +3275,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'no server address or upload key is set'**
   String get reasonNoServerKey;
-
-  /// No description provided for @reasonBadServerAddress.
-  ///
-  /// In en, this message translates to:
-  /// **'the server address in Settings is not a valid web address'**
-  String get reasonBadServerAddress;
 
   /// No description provided for @errRegionBlocked.
   ///

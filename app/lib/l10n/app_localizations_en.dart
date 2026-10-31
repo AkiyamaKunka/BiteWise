@@ -863,6 +863,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get leftoverUseAnyway => 'Use anyway';
 
   @override
+  String get leftoverQuotaPaused =>
+      'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.';
+
+  @override
   String get leftoverResultTitle => 'Deduct leftovers?';
 
   @override
@@ -881,10 +885,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get leftoverFailed =>
       'Couldn\'t estimate the leftovers from that photo.';
-
-  @override
-  String get leftoverQuotaPaused =>
-      'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.';
 
   @override
   String get leftoverNoMeals =>
@@ -2062,10 +2062,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reasonNoServerKey => 'no server address or upload key is set';
-
-  @override
-  String get reasonBadServerAddress =>
-      'the server address in Settings is not a valid web address';
 
   @override
   String errRegionBlocked(String provider) {

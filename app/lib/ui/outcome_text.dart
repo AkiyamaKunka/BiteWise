@@ -138,9 +138,7 @@ String? retryReason(AppLocalizations l, PhotoOutcome o) =>
       AnalysisErrorKind.serverBusy => l.reasonServerBusy,
       AnalysisErrorKind.serverError => l.reasonServerFailed,
       AnalysisErrorKind.noApiKey => l.reasonNoApiKey,
-      AnalysisErrorKind.noServerKey => _badServerAddress(o.message)
-          ? l.reasonBadServerAddress
-          : l.reasonNoServerKey,
+      AnalysisErrorKind.noServerKey => l.reasonNoServerKey,
       AnalysisErrorKind.regionBlocked =>
         l.reasonRegionBlocked(regionProvider(l, o.message)),
       _ => null,

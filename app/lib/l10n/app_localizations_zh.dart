@@ -806,6 +806,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get leftoverUseAnyway => '仍然使用';
 
   @override
+  String get leftoverQuotaPaused => '分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。';
+
+  @override
   String get leftoverResultTitle => '确认扣除剩菜？';
 
   @override
@@ -823,9 +826,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get leftoverFailed => '无法从这张照片估算剩菜。';
-
-  @override
-  String get leftoverQuotaPaused => '分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。';
 
   @override
   String get leftoverNoMeals => '今天和昨天没有可扣除的餐。';
@@ -1931,9 +1931,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reasonNoServerKey => '还没有设置服务器地址或上传密钥';
-
-  @override
-  String get reasonBadServerAddress => '设置里的服务器地址不是有效的网址';
 
   @override
   String errRegionBlocked(String provider) {

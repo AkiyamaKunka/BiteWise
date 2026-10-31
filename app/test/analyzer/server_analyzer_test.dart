@@ -1344,7 +1344,6 @@ void main() {
       final zh = AppLocalizationsZh(), en = AppLocalizationsEn();
       expect(outcomeBody(zh, o, deliberate: true), zh.errBadServerAddress);
       expect(outcomeBody(en, o), en.errBadServerAddress);
-      expect(retryReason(zh, o), zh.reasonBadServerAddress);
       // A missing address keeps its own words.
       final unset = await ServerAnalyzer(await serverSettings(url: null),
               normalizer: (b) async => b)
@@ -1354,7 +1353,6 @@ void main() {
           errorKind: classifyAnalysisError(unset.error),
           detail: unset.error);
       expect(outcomeBody(zh, o2), zh.errNoServerKey);
-      expect(retryReason(zh, o2), zh.reasonNoServerKey);
     });
   });
 }
