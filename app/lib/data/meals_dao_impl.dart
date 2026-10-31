@@ -754,7 +754,8 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           // The row's own id must NOT be reused: this DB has its own
           // autoincrement sequence, and a colliding id would either fail
           // or overwrite a real meal. meal_id references are dropped for
-          // the same reason (the ledger row still records the status).
+          // the same reason (the ledger row still records the status);
+          // the links are rebuilt from chat_id + image_hash below.
           row.remove('id');
           if (table == 'photo_ingestions') row['meal_id'] = null;
           if (await _importRowExists(txn, table, row)) {
@@ -783,6 +784,22 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
         added[table] = a;
         skipped[table] = s;
       }
+      // Re-link every 'saved' ledger row that has no meal to the LOCAL
+      // meal for the same photo. Without it an imported photo read as
+      // (saved, null): the Leftovers flow could not see that a leftover
+      // photo had already become its own meal and kept the double count,
+      // and the coverage audit lost its meal link (run 7, B16). Old ids
+      // are still never trusted; the link is this DB's own id. A row
+      // with no matching meal keeps NULL (the subquery finds nothing).
+      await txn.rawUpdate(
+          'UPDATE photo_ingestions SET meal_id = ('
+          'SELECT m.id FROM meals m '
+          'WHERE m.chat_id = photo_ingestions.chat_id '
+          'AND m.image_hash = photo_ingestions.image_hash '
+          'ORDER BY m.id LIMIT 1) '
+          'WHERE status = ? AND meal_id IS NULL '
+          "AND IFNULL(image_hash, '') != ''",
+          [IngestionStatus.saved.name]);
     });
     return ImportSummary(added, skipped, exportedAt: envelope.exportedAt);
   }
@@ -801,10 +818,8 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     // corrected copy, so importing backups oldest-first (pre-edit copy
     // lands, then the edited export arrives corrected=1 with new analysis
     // text) still doubled the lunch (2026-10-07). Either side corrected is
-    // enough. Two uncorrected same-timestamp text meals never take this
-    // branch, so the analysis-based identity below still keeps a coffee
-    // and a sandwich logged in the same second distinct (app timestamps
-    // are microsecond ISO strings; the collapse is theoretical).
+    // enough. Two uncorrected text meals never take this branch: the
+    // identity below decides them.
     if (table == 'meals' &&
         !(((row['image_hash'] as String?)?.isNotEmpty ?? false)) &&
         row['timestamp'] != null) {
@@ -824,8 +839,14 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
       // A PHOTO meal's identity is its photo (chat+hash): editing its
       // numbers must NOT make an older backup re-import it as a second
       // meal. A PHOTOLESS meal has no such anchor, so it falls back to
-      // date+time+analysis — which is also what keeps two different
-      // same-minute text meals distinct.
+      // date+time+analysis — which keeps two different same-minute text
+      // meals distinct — plus the ingestion timestamp: `time` is only
+      // minute-precise and user-editable, so the same hand-typed coffee
+      // logged twice in one minute (or two backdated to the same clock
+      // time) collapsed into one on import (run 7, B15). The timestamp is
+      // written once on insert, never edited, and copied verbatim by
+      // import, so re-importing the same file still dedupes. Bound as
+      // '' when absent: a NULL bind never matches and would double meals.
       'meals' => ((row['image_hash'] as String?)?.isNotEmpty ?? false)
           ? (
               'chat_id = ? AND image_hash = ?',
@@ -833,8 +854,15 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
             )
           : (
               'chat_id = ? AND date = ? AND time = ? AND '
-                  'IFNULL(image_hash, \'\') = \'\' AND analysis = ?',
-              [row['chat_id'], row['date'], row['time'], row['analysis']]
+                  'IFNULL(image_hash, \'\') = \'\' AND analysis = ? AND '
+                  'IFNULL(timestamp, \'\') = ?',
+              [
+                row['chat_id'],
+                row['date'],
+                row['time'],
+                row['analysis'],
+                row['timestamp'] ?? '',
+              ]
             ),
       'photo_ingestions' => (
           'chat_id = ? AND image_hash = ?',
