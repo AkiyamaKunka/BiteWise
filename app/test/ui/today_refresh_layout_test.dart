@@ -17,6 +17,7 @@ import 'package:calorie_tracker/ui/meal_thumbs.dart';
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/calorie_ring.dart';
+import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:calorie_tracker/ui/widgets/states.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -316,6 +317,38 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('todayLoadError')), findsNothing);
         expect(find.byType(CalorieRing), findsOneWidget);
+      });
+    }
+  });
+
+  group('L7: item lines', () {
+    for (final (lang, line) in const [
+      ('en', '• Rice (~150 g): ~200 kcal'),
+      ('zh', '• Rice (~150 g)：~200 千卡'),
+    ]) {
+      testWidgets('$lang: "$line"', (tester) async {
+        final meal = _meal(1, 0, 450);
+        await pumpApp(
+            tester,
+            Scaffold(
+              body: MealCard(
+                meal: Meal(
+                  id: meal.id,
+                  date: meal.date,
+                  time: meal.time,
+                  timestamp: meal.timestamp,
+                  source: meal.source,
+                  analysis: {
+                    ...meal.analysis,
+                    'food_items': [
+                      {'name': 'Rice (~150 g)', 'estimated_calories': 200},
+                    ],
+                  },
+                ),
+              ),
+            ),
+            locale: Locale(lang));
+        expect(find.text(line), findsOneWidget);
       });
     }
   });

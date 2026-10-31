@@ -91,8 +91,12 @@ class MealCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     // Item line per §5.4; name stringified, missing → '?'.
-                    '• ${item['name'] ?? '?'}: '
-                    '~${context.l10n.kcalAmount(displayItemCalories(item['estimated_calories']))}',
+                    // A template, so zh gets its full-width colon (L7).
+                    '• ${context.l10n.mealItemLine(
+                      '${item['name'] ?? '?'}',
+                      context.l10n.kcalAmount(
+                          displayItemCalories(item['estimated_calories'])),
+                    )}',
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
