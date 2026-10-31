@@ -1063,6 +1063,10 @@
   "errBillingText": "The provider account is out of balance or credits — top it up in the provider's console.",
   "errBadResponse": "The AI answered in a form the app could not use.",
   "errBadPhoto": "This photo could not be processed (it could not be decoded).",
+  "errLeftoverUnsure": "It looks like the leftovers of an earlier meal, but the AI wasn't sure which one, so nothing was logged or deducted. Use Leftovers to deduct them.",
+  "@errLeftoverUnsure": {
+    "description": "Why a photo was not logged: the AI answered that it shows the leftovers of an earlier meal, but the app could not apply that answer (the AI was unsure, or named a meal that was not in the list). Shown after outcomeFailedKeptMsg. 'Leftovers' is the Add screen's tile (addLeftover)."
+  },
   "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
   "mealCardAutoTitle": "🍽️ Meal logged automatically",
   "mealCardLeftoverTitle": "🍽️ Leftovers deducted",

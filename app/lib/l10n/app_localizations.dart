@@ -2520,6 +2520,12 @@ abstract class AppLocalizations {
   /// **'This photo could not be processed (it could not be decoded).'**
   String get errBadPhoto;
 
+  /// Why a photo was not logged: the AI answered that it shows the leftovers of an earlier meal, but the app could not apply that answer (the AI was unsure, or named a meal that was not in the list). Shown after outcomeFailedKeptMsg. 'Leftovers' is the Add screen's tile (addLeftover).
+  ///
+  /// In en, this message translates to:
+  /// **'It looks like the leftovers of an earlier meal, but the AI wasn\'t sure which one, so nothing was logged or deducted. Use Leftovers to deduct them.'**
+  String get errLeftoverUnsure;
+
   /// No description provided for @errServerBusy.
   ///
   /// In en, this message translates to:

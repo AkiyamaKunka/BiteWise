@@ -697,6 +697,23 @@ class PhotoPipeline {
           return leftover;
         }
       }
+      // A leftover-shaped reply nothing was applied from (unsure, a meal
+      // not in the list, fractions applyLeftover cannot use) carries no
+      // meal of its own: saving it logged a nameless "~? kcal" meal and
+      // ledgered the photo as done. Kept as failed instead, nothing
+      // deducted; the Leftovers flow (or a retry) is the repair. A reply
+      // that also carries a full meal still saves as one below.
+      if (analysis['leftover_of'] != null &&
+          displayTotalCalories(analysis) == '?' &&
+          safeFoodItems(analysis).isEmpty) {
+        await dao.markPhotoHash(hash, IngestionStatus.failed,
+            ownerStamp: stamp);
+        _held = null;
+        try {
+          notify?.call(_leftoverUnsure);
+        } catch (_) {}
+        return _leftoverUnsure;
+      }
 
       if (analysis.containsKey('food_items')) {
         // Sanitize before persisting — a hostile shape is never stored
@@ -862,6 +879,18 @@ class PhotoPipeline {
   static const _latchedMessage =
       'Automatic analysis is paused: the AI service refused the last '
       'photo for a reason every photo shares (API key or network region).';
+
+  /// A leftover-shaped reply nothing could be applied from: kept as failed
+  /// (no scan offers it again; a retry or the Leftovers flow can). English
+  /// word for word errLeftoverUnsure.
+  static const _leftoverUnsureMessage =
+      "It looks like the leftovers of an earlier meal, but the AI wasn't "
+      'sure which one, so nothing was logged or deducted. Use Leftovers to '
+      'deduct them.';
+  static const _leftoverUnsure = PhotoOutcome(
+      PhotoOutcomeKind.failed, _leftoverUnsureMessage,
+      errorKind: AnalysisErrorKind.leftoverUnsure,
+      detail: _leftoverUnsureMessage);
 }
 
 /// A verdict a run already holds, and the meals its leftover indexes

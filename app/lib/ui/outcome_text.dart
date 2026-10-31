@@ -91,6 +91,7 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
             : _serverFinal(l, o.message),
         AnalysisErrorKind.serverRejected =>
           l.errServerRejected(rejectionCode(o.message)),
+        AnalysisErrorKind.leftoverUnsure => l.errLeftoverUnsure,
         AnalysisErrorKind.none || AnalysisErrorKind.unknown => o.message,
       };
   }

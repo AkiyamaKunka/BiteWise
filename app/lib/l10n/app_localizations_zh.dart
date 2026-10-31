@@ -1428,6 +1428,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errBadPhoto => '无法处理这张照片（解码失败）。';
 
   @override
+  String get errLeftoverUnsure =>
+      '这张像是之前某一餐的剩菜，但 AI 不确定是哪一餐，所以没有记录，也没有扣除。可以用“记录剩菜”来扣除。';
+
+  @override
   String get errServerBusy => '你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。';
 
   @override
