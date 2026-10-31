@@ -23,6 +23,8 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 class _Asset implements LibraryAsset {
   _Asset(this.id, this.createDateTime, this.bytes);
   @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+  @override
   final String id;
   @override
   final DateTime createDateTime;
@@ -37,6 +39,11 @@ class _Asset implements LibraryAsset {
 
 class _Library implements PhotoLibrary {
   final List<_Asset> assets = [];
+
+  /// Members this scan never calls (the interface keeps growing).
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+
   @override
   Future<Uint8List?> thumbnailByAssetId(String assetId,
           {int size = 160}) async =>
