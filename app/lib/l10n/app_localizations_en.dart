@@ -26,6 +26,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String mealItemLine(String name, String kcal) {
+    return '$name: ~$kcal';
+  }
+
+  @override
   String mealsToday(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -124,6 +129,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String bodyAsOf(String date) {
+    return 'as of $date';
+  }
+
+  @override
   String get bodyNoChange => 'no change';
 
   @override
@@ -149,7 +159,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyEmptyHint =>
-      'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.';
+      'Tap Log to record your weight or your waist, chest and hip measurements.';
 
   @override
   String bodySheetLogTitle(String date) {
@@ -830,7 +840,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyEmptyHintImperial =>
-      'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 180 lb\") lands here too.';
+      'Tap Log to record your weight or your waist, chest and hip measurements.';
 
   @override
   String bodySince(String date) {
@@ -1560,6 +1570,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String dayLoadFailed(String error) {
     return 'Could not load this day: $error';
   }
+
+  @override
+  String get todayLoadFailed => 'Couldn\'t load today\'s meals.';
+
+  @override
+  String get historyLoadFailed => 'Couldn\'t load your history.';
 
   @override
   String get dayEmpty => 'Nothing logged on this day yet. Tap + to add a meal.';

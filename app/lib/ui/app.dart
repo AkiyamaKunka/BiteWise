@@ -7,7 +7,6 @@ import 'dart:io' show File, Platform;
 
 import '../core/ai_consent.dart' show aiConsentRoute;
 import '../core/setup_link.dart';
-import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'package:flutter/foundation.dart' show kDebugMode;
@@ -22,7 +21,7 @@ import 'background_glue.dart' show foregroundCatchUp;
 import 'screens/add_flow.dart';
 import 'screens/body_screen.dart';
 import 'l10n.dart';
-import 'widgets/grouped.dart' show cellBackground, groupedBackground;
+import 'theme/app_theme.dart';
 import 'screens/history_screen.dart';
 import 'screens/settings/provider_page.dart';
 import 'screens/settings_screen.dart';
@@ -48,79 +47,34 @@ class CalorieTrackerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Warm clay seed (Anthropic-family terracotta, user-picked over the
-    // original green 0xFF3E7D4F): M3 derives warm ivory surfaces and a
-    // clay primary from it — appetizing tones for a food app, restraint
-    // per the Apple lesson. Macro identity hues are unaffected (contract).
-    const seed = Color(0xFFCC785C);
-    // Design pass 2026-08-02 (10-app research, scratchpad/uiux_direction.md):
-    // number-forward typography (heavy tabular numerals — the data IS the
-    // interface), quiet tonal cards with a 16 radius, zero elevation. The
-    // restraint is deliberate: the researched redesign backlashes (MFP 3.2→1.5
-    // stars, Yazio "app for children") all came from decoration and added
-    // friction, never from calm.
-    ThemeData themed(Brightness brightness) {
-      final scheme =
-          ColorScheme.fromSeed(seedColor: seed, brightness: brightness);
-      final base = ThemeData(colorScheme: scheme);
-      final text = base.textTheme;
-      TextStyle? nums(TextStyle? t, {FontWeight w = FontWeight.w700}) =>
-          t?.copyWith(
-              fontWeight: w,
-              fontFeatures: const [FontFeature.tabularFigures()]);
-      return base.copyWith(
-        // Apple's grouped inversion (the tell that a screen "reads iOS"):
-        // the PAGE is the deeper tone, cells float on it — never
-        // white-on-white or gray-on-gray.
-        scaffoldBackgroundColor: groupedBackground(scheme),
-        textTheme: text.copyWith(
-          displaySmall: nums(text.displaySmall),
-          headlineMedium: nums(text.headlineMedium),
-          headlineSmall: nums(text.headlineSmall),
-          titleLarge: text.titleLarge?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        // iOS push transition + swipe-back on BOTH platforms; scoped back
-        // to per-platform if the Android edge-swipe double-pop (#83087)
-        // ever bites the APK crowd.
-        pageTransitionsTheme: const PageTransitionsTheme(builders: {
-          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
-          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
-        }),
-        appBarTheme: AppBarTheme(
-          backgroundColor: groupedBackground(scheme),
-          scrolledUnderElevation: 0,
-        ),
-        cardTheme: base.cardTheme.copyWith(
-          elevation: 0,
-          color: cellBackground(scheme),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18)),
-        ),
-        floatingActionButtonTheme: FloatingActionButtonThemeData(
-          elevation: 1,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18)),
-        ),
-        navigationBarTheme: NavigationBarThemeData(
-          // Neutral cell surface (the scheme-derived tint kept the bar
-          // pink after the surfaces went Apple-neutral); clay survives
-          // only as the soft selection pill.
-          backgroundColor: cellBackground(scheme),
-          indicatorColor: scheme.primary.withValues(alpha: 0.14),
-        ),
-      );
-    }
+    // Design (run 7, theme/app_theme.dart): Apple's system neutrals for
+    // every surface, the terracotta accent (#A64B2A light / #F2A07B dark),
+    // iOS type sizes on the system fonts, depth from the page/cell tone
+    // inversion instead of elevation. The restraint is deliberate: the
+    // researched redesign backlashes (MFP 3.2→1.5 stars, Yazio "app for
+    // children") all came from decoration and added friction, never from
+    // calm. Macro identity hues are unaffected (contract).
 
     // ListenableBuilder: the language row writes settings, and the whole
     // app re-locales in place — no restart.
     final shell = HomeShell(services: services);
-    Widget appFor(Locale? locale) => MaterialApp(
+    Widget appFor(Locale? locale) {
+      // Chinese text takes no Latin tracking (every letterSpacing 0).
+      final cjk = (locale ?? WidgetsBinding.instance.platformDispatcher.locale)
+              .languageCode ==
+          'zh';
+      return MaterialApp(
           title: 'Chopstats',
           scaffoldMessengerKey: messengerKey,
           // iOS scroll feel everywhere: bounce, no glow indicator.
           scrollBehavior: const _AppleScrollBehavior(),
-          theme: themed(Brightness.light),
-          darkTheme: themed(Brightness.dark),
+          theme: AppTheme.build(Brightness.light, cjk: cjk),
+          darkTheme: AppTheme.build(Brightness.dark, cjk: cjk),
+          // iOS Increase Contrast: darker accent, labels and separators.
+          highContrastTheme:
+              AppTheme.build(Brightness.light, cjk: cjk, highContrast: true),
+          highContrastDarkTheme:
+              AppTheme.build(Brightness.dark, cjk: cjk, highContrast: true),
           themeMode: ThemeMode.system,
           locale: locale,
           localizationsDelegates: const [
@@ -132,6 +86,8 @@ class CalorieTrackerApp extends StatelessWidget {
           supportedLocales: const [Locale('en'), Locale('zh')],
           home: shell,
         );
+    }
+
     final changes = services.settingsChanges;
     if (changes == null) {
       return appFor(localeForSetting(services.settings.appLanguage));
@@ -254,6 +210,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
+        scrollable: true,
         title: Text(ctx.l10n.setupLinkTitle),
         // The plan is named with the same words the Settings row shows
         // after confirming (Claude 订阅 / Claude Plan), not the raw id
@@ -421,7 +378,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               label: Text(context.l10n.fabLog),
             )
           : null,
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: _TopHairline(child: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) {
           setState(() => _index = i);
@@ -453,9 +410,29 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               selectedIcon: const Icon(Icons.settings),
               label: context.l10n.tabSettings),
         ],
-      ),
+      )),
     );
   }
+}
+
+/// The tab bar's top edge: one physical-pixel separator line, painted
+/// OVER the bar (the bar's own Material would cover a background line).
+class _TopHairline extends StatelessWidget {
+  const _TopHairline({required this.child});
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        position: DecorationPosition.foreground,
+        decoration: BoxDecoration(
+          border: Border(
+            top: BorderSide(
+                color: context.colors.separator,
+                width: 1 / MediaQuery.devicePixelRatioOf(context)),
+          ),
+        ),
+        child: child,
+      );
 }
 
 /// Shown when async startup (settings → dao → services) throws.
@@ -510,33 +487,45 @@ class _StartupErrorAppState extends State<StartupErrorApp>
         WidgetsBinding.instance.platformDispatcher.locale.languageCode == 'zh';
     return MaterialApp(
       title: 'Chopstats',
-      home: Scaffold(
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.error_outline, size: 48),
-                const SizedBox(height: 12),
-                Text(zh ? '筷拍无法启动。' : 'Chopstats could not start.'),
-                const SizedBox(height: 8),
-                Text(widget.error,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 12)),
-                if (widget.onRetry != null) ...[
-                  const SizedBox(height: 16),
-                  TextButton(
-                    key: const Key('startupRetry'),
-                    onPressed: _retry,
-                    child: Text(zh ? '重试' : 'Retry'),
+      theme: AppTheme.build(Brightness.light, cjk: zh),
+      darkTheme: AppTheme.build(Brightness.dark, cjk: zh),
+      themeMode: ThemeMode.system,
+      home: Builder(builder: (context) {
+        final text = Theme.of(context).textTheme;
+        final colors = context.colors;
+        return Scaffold(
+          body: Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ExcludeSemantics(
+                    child: Icon(Icons.error_outline_rounded,
+                        size: 44, color: colors.secondaryLabel),
                   ),
+                  const SizedBox(height: 12),
+                  Text(zh ? '筷拍无法启动。' : 'Chopstats could not start.',
+                      textAlign: TextAlign.center, style: text.titleMedium),
+                  const SizedBox(height: 8),
+                  Text(widget.error,
+                      textAlign: TextAlign.center,
+                      style: text.bodySmall
+                          ?.copyWith(color: colors.secondaryLabel)),
+                  if (widget.onRetry != null) ...[
+                    const SizedBox(height: 20),
+                    FilledButton(
+                      key: const Key('startupRetry'),
+                      onPressed: _retry,
+                      child: Text(zh ? '重试' : 'Retry'),
+                    ),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
-        ),
-      ),
+        );
+      }),
     );
   }
 }

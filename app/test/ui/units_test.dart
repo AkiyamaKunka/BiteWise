@@ -103,10 +103,12 @@ void main() {
     expect(dao.weightsByDate['2026-08-02']!.kg, 30.0);
   });
 
-  testWidgets('the imperial empty state teaches an lb chat example',
-      (tester) async {
+  testWidgets('the imperial empty state names no chat (the chat bar '
+      'went 2026-07-31) and no kg example', (tester) async {
     await pump(tester);
-    expect(find.textContaining('180 lb'), findsOneWidget);
+    expect(find.textContaining('Tap Log to record your weight'),
+        findsOneWidget);
+    expect(find.textContaining('chat'), findsNothing);
     expect(find.textContaining('81.6 kg'), findsNothing);
   });
 

@@ -12,6 +12,18 @@
       }
     }
   },
+  "mealItemLine": "{name}: ~{kcal}",
+  "@mealItemLine": {
+    "description": "One food item under a meal card, after a bullet: the item name, then its calories already formatted by kcalAmount. zh uses a full-width colon.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
   "mealsToday": "{count, plural, =1{1 meal today} other{{count} meals today}}",
   "@mealsToday": {
     "placeholders": {
@@ -117,6 +129,15 @@
       }
     }
   },
+  "bodyAsOf": "as of {date}",
+  "@bodyAsOf": {
+    "description": "One shared footnote under the Body measurements when every row was measured on the same day; {date} is a short localized date such as 'Oct 28'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "bodyNoChange": "no change",
   "bodyWaist": "Waist",
   "bodyChest": "Chest",
@@ -125,7 +146,7 @@
   "bodyChestShort": "C",
   "bodyHipShort": "H",
   "bodyEmptyTitle": "No body data yet.",
-  "bodyEmptyHint": "Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.",
+  "bodyEmptyHint": "Tap Log to record your weight or your waist, chest and hip measurements.",
   "bodySheetLogTitle": "Log body · {date}",
   "@bodySheetLogTitle": {
     "placeholders": {
@@ -595,7 +616,7 @@
   "unitsImperialDetail": "Imperial — lb · in",
   "unitsSheetTitle": "Units",
   "unitsFooter": "How body weight and measurements are shown and entered. Food stays in grams and kcal either way.",
-  "bodyEmptyHintImperial": "Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 180 lb\") lands here too.",
+  "bodyEmptyHintImperial": "Tap Log to record your weight or your waist, chest and hip measurements.",
   "@bodyEmptyHintImperial": {
     "description": "bodyEmptyHint for imperial units (en-only surface; zh never renders imperial)."
   },
@@ -1081,6 +1102,14 @@
         "type": "String"
       }
     }
+  },
+  "todayLoadFailed": "Couldn't load today's meals.",
+  "@todayLoadFailed": {
+    "description": "Today tab error state when the meals query fails; shown with a Retry button (the raw error goes to the debug log only)."
+  },
+  "historyLoadFailed": "Couldn't load your history.",
+  "@historyLoadFailed": {
+    "description": "History tab error state when the query fails; shown with a Retry button."
   },
   "dayEmpty": "Nothing logged on this day yet. Tap + to add a meal.",
   "dayAddMealTooltip": "Add a meal to this day",

@@ -128,6 +128,12 @@ abstract class AppLocalizations {
   /// **'{kcal} kcal'**
   String kcalAmount(String kcal);
 
+  /// One food item under a meal card, after a bullet: the item name, then its calories already formatted by kcalAmount. zh uses a full-width colon.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: ~{kcal}'**
+  String mealItemLine(String name, String kcal);
+
   /// No description provided for @mealsToday.
   ///
   /// In en, this message translates to:
@@ -270,6 +276,12 @@ abstract class AppLocalizations {
   /// **'on {date}'**
   String bodyOnDate(String date);
 
+  /// One shared footnote under the Body measurements when every row was measured on the same day; {date} is a short localized date such as 'Oct 28'.
+  ///
+  /// In en, this message translates to:
+  /// **'as of {date}'**
+  String bodyAsOf(String date);
+
   /// No description provided for @bodyNoChange.
   ///
   /// In en, this message translates to:
@@ -321,7 +333,7 @@ abstract class AppLocalizations {
   /// No description provided for @bodyEmptyHint.
   ///
   /// In en, this message translates to:
-  /// **'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.'**
+  /// **'Tap Log to record your weight or your waist, chest and hip measurements.'**
   String get bodyEmptyHint;
 
   /// No description provided for @bodySheetLogTitle.
@@ -1377,7 +1389,7 @@ abstract class AppLocalizations {
   /// bodyEmptyHint for imperial units (en-only surface; zh never renders imperial).
   ///
   /// In en, this message translates to:
-  /// **'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 180 lb\") lands here too.'**
+  /// **'Tap Log to record your weight or your waist, chest and hip measurements.'**
   String get bodyEmptyHintImperial;
 
   /// No description provided for @bodySince.
@@ -2555,6 +2567,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load this day: {error}'**
   String dayLoadFailed(String error);
+
+  /// Today tab error state when the meals query fails; shown with a Retry button (the raw error goes to the debug log only).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load today\'s meals.'**
+  String get todayLoadFailed;
+
+  /// History tab error state when the query fails; shown with a Retry button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your history.'**
+  String get historyLoadFailed;
 
   /// No description provided for @dayEmpty.
   ///
