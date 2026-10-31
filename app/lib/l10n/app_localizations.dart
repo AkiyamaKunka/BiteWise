@@ -3540,6 +3540,47 @@ abstract class AppLocalizations {
   /// **'Unnamed meal'**
   String get nlUnnamedMeal;
 
+  /// One food item on the added-meal card. kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'  • {name}: ~{kcal}'**
+  String nlResultItem(String name, String kcal);
+
+  /// Total line of the added-meal card (Fix a meal → new meal). kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'📊 This meal: ~{kcal}'**
+  String nlThisMeal(String kcal);
+
+  /// One macro on the added-meal card, e.g. 'P: 25g'. label is macroProteinShort / macroCarbsShort / macroFatShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: {grams}g'**
+  String nlMacroAmount(String label, String grams);
+
+  /// Added-meal card warning when the items do not add up to the total. Both values are already kcalAmount-formatted. No 'reply' wording: there is no chat to reply in.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ Item calories sum to ~{itemSum} but the meal total is ~{total} — if this looks wrong, open the meal on Today to fix it.'**
+  String nlItemSumMismatch(String itemSum, String total);
+
+  /// Describe / Fix a meal refusal during the daily-quota pause; no model call is made. until is a local 'yyyy-MM-dd HH:mm' stamp; remaining is nlPauseRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until {until} (about {remaining} remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.'**
+  String nlQuotaPaused(String until, String remaining);
+
+  /// Time left in the quota pause. unit is 'seconds', 'minutes' or 'hours'; in the hours form minutes is zero-padded ('3h05m').
+  ///
+  /// In en, this message translates to:
+  /// **'{unit, select, seconds{{seconds}s} minutes{{minutes}m} other{{hours}h{minutes}m}}'**
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  );
+
   /// No description provided for @nlNoActions.
   ///
   /// In en, this message translates to:

@@ -2253,6 +2253,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nlUnnamedMeal => 'Unnamed meal';
 
   @override
+  String nlResultItem(String name, String kcal) {
+    return '  • $name: ~$kcal';
+  }
+
+  @override
+  String nlThisMeal(String kcal) {
+    return '📊 This meal: ~$kcal';
+  }
+
+  @override
+  String nlMacroAmount(String label, String grams) {
+    return '$label: ${grams}g';
+  }
+
+  @override
+  String nlItemSumMismatch(String itemSum, String total) {
+    return '⚠️ Item calories sum to ~$itemSum but the meal total is ~$total — if this looks wrong, open the meal on Today to fix it.';
+  }
+
+  @override
+  String nlQuotaPaused(String until, String remaining) {
+    return '⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until $until (about $remaining remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.';
+  }
+
+  @override
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(unit, {
+      'seconds': '${seconds}s',
+      'minutes': '${minutes}m',
+      'other': '${hours}h${minutes}m',
+    });
+    return '$_temp0';
+  }
+
+  @override
   String get nlNoActions =>
       '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
 

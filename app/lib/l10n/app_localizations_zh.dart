@@ -2102,6 +2102,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nlUnnamedMeal => '未命名的一餐';
 
   @override
+  String nlResultItem(String name, String kcal) {
+    return '  • $name：~$kcal';
+  }
+
+  @override
+  String nlThisMeal(String kcal) {
+    return '📊 这一餐：~$kcal';
+  }
+
+  @override
+  String nlMacroAmount(String label, String grams) {
+    return '$label ${grams}g';
+  }
+
+  @override
+  String nlItemSumMismatch(String itemSum, String total) {
+    return '⚠️ 各项食物合计约 $itemSum，但这一餐总计约 $total —— 如果不对，请在「今天」里点开这一餐修改。';
+  }
+
+  @override
+  String nlQuotaPaused(String until, String remaining) {
+    return '⏸️ Gemini 暂停中。\n\nGemini 今天的免费额度已用完，暂停到 $until（还剩约 $remaining）。\n\n文字修正和文字记录也需要 Gemini，所以这次没有发送请求。';
+  }
+
+  @override
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(unit, {
+      'seconds': '$seconds 秒',
+      'minutes': '$minutes 分钟',
+      'other': '$hours 小时 $minutes 分',
+    });
+    return '$_temp0';
+  }
+
+  @override
   String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';
 
   @override
