@@ -3396,10 +3396,10 @@ abstract class AppLocalizations {
   /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
   String get watcherLimitedAccess;
 
-  /// First line of the Settings Photos footer while Watch Camera Roll is on and Photos access is 'selected photos' only.
+  /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn).
   ///
   /// In en, this message translates to:
-  /// **'Photo access is limited to the photos you selected, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
   String get watcherLimitedFooter;
 
   /// No description provided for @fixAction.

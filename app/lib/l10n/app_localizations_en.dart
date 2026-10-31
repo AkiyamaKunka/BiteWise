@@ -2162,7 +2162,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watcherLimitedFooter =>
-      'Photo access is limited to the photos you selected, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
 
   @override
   String get fixAction => 'Fix';

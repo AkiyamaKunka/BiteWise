@@ -252,6 +252,7 @@ class _SubscriptionProviderPageState
         GroupedSection(
           header: context.l10n.planHeader,
           footer: context.l10n.planFooter,
+          separatorInset: AppSpace.separatorInset,
           children: [
             for (final (backend, _, note) in kPlanChoices)
               GroupedRow(
@@ -272,6 +273,7 @@ class _SubscriptionProviderPageState
           GroupedSection(
             header: context.l10n.serverHeader,
             footer: context.l10n.serverFooter,
+            separatorInset: AppSpace.separatorInset,
             children: [
               _cellField(TextField(
                 key: const Key('serverUrlField'),

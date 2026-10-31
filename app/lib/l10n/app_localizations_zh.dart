@@ -2016,7 +2016,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watcherLimitedFooter =>
-      '照片权限只限于你选中的照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
+      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
 
   @override
   String get fixAction => '去修复';

@@ -124,6 +124,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
         GroupedSection(
           header: context.l10n.apiProviderHeader,
           footer: context.l10n.apiProviderFooter,
+          separatorInset: AppSpace.separatorInset,
           children: [
             for (final (id, name, note) in kApiKeyChoices)
               GroupedRow(
@@ -177,12 +178,19 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
           GroupedSection(
             header: context.l10n.modelHeader,
             footer: _customModel ? _modelHelperText(context) : null,
+            separatorInset: AppSpace.separatorInset,
             children: [
               _cellField(KeyedSubtree(
                 key: ValueKey('modelPicker-${settings.provider}'),
                 child: DropdownButtonFormField<String>(
                   key: const Key('modelPicker'),
                   isExpanded: true,
+                  // Body text like every row: Material's titleMedium made
+                  // the model read as a heading and cut its label short.
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(color: context.colors.label),
                   initialValue: _customModel
                       ? kCustomModelSentinel
                       : settings.model,

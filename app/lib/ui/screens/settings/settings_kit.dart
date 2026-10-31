@@ -7,6 +7,8 @@
 ///   not enough under the app theme: InputDecoration.applyDefaults fills a
 ///   null enabledBorder / focusedBorder from inputDecorationTheme, which
 ///   outlines every field, so these cells showed a box inside the box.
+///   The cell's own 16-pt inset is the field's: no theme content padding
+///   on top, so the label lines up with the rows and headers.
 /// - [showChoiceSheet]: a grouped sheet with one checkmark row per option
 ///   (Language, Units, the own server's Model and Thinking effort).
 library;
@@ -26,6 +28,7 @@ InputDecoration cellFieldDecoration({String? labelText, String? hintText}) =>
       focusedBorder: InputBorder.none,
       disabledBorder: InputBorder.none,
       filled: false,
+      contentPadding: const EdgeInsets.symmetric(vertical: 6),
     );
 
 /// A grouped sheet titled [title] listing (value, label) [options], the

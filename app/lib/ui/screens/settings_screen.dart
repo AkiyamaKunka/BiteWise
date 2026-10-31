@@ -256,9 +256,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (mounted) setState(() {});
   }
 
-  /// True when Photos access is "selected photos only" (U7). The watcher
-  /// can see only that selection, so a meal shot later is never logged —
-  /// and after the one warning snackbar Settings used to say nothing.
+  /// True when Photos access is not full (U7): "selected photos only", or
+  /// withdrawn in system settings. The watcher then sees at most that
+  /// selection, so a meal shot later is never logged — and after the one
+  /// warning snackbar Settings used to say nothing.
   bool _photosLimited = false;
 
   /// Reads the permission STATE only (hasFullAccess shows no prompt and
@@ -647,8 +648,8 @@ class _SettingsScreenState extends State<SettingsScreen>
             widget.lastBackgroundScan != null
         ? l10n.backgroundScanStuck
         : null;
-    // Selected-photos access: the switch is on, but photos taken from now
-    // on are outside the selection, so they are never logged.
+    // Not full access: the switch is on, but photos taken from now on are
+    // outside what the app may read, so they are never logged.
     final limited =
         _watcherEnabled && _photosLimited ? l10n.watcherLimitedFooter : null;
     return [?limited, ?paused, ?stuck, footer].join('\n');
