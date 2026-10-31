@@ -215,7 +215,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get delete => '删除';
 
   @override
-  String get settingsWelcomeTitle => '欢迎 — 一步开始记录';
+  String get settingsWelcomeTitle => '设置 AI 服务，开始记录';
 
   @override
   String get settingsWelcomeBody =>
@@ -226,15 +226,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsAiFooterPaused =>
-      '分析已暂停 — 已达当日额度。新照片会保留并自动重试；在 AI 服务页更换 Key 或服务后立即恢复。';
+      '分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或在 AI 服务页更换 Key 或服务。';
 
   @override
   String get providerQuotaPaused =>
-      '分析已暂停 — 已达当日额度。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+      '分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或更换 Key 或服务。';
 
   @override
   String providerQuotaPausedUntil(String time) {
-    return '分析已暂停 — 已达当日额度（$time 恢复）。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+    return '分析已暂停到 $time — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或更换 Key 或服务。';
   }
 
   @override
@@ -259,7 +259,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String watcherDisclosureBody(String provider, int days) {
-    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。不会发送给本应用的开发者。你可以随时关闭。';
+    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。不会发送给本应用的开发者。每张照片都是一次 AI 请求，免费额度的每日上限可能在这第一次补扫中就用完；部分服务商的免费额度（例如 Gemini）可能会把这些照片用于改进其 AI 并由人工查看，请查看其条款或开通付费。你可以随时关闭。';
   }
 
   @override
@@ -518,11 +518,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get apiKeyShow => '显示 Key';
+
+  @override
+  String get apiKeyHide => '隐藏 Key';
+
+  @override
   String get apiKeyFooterDefault => '输入即保存。仅安全存储在本机。';
 
   @override
   String get apiKeyFooterGemini =>
-      '从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。仅安全存储在本机。';
+      '从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。免费额度每天只能处理有限的照片，而且 Google 可能用你发送的内容改进其 AI，并可能由人工查看；在 AI Studio 开通付费可解除限制并避免这些 —— 自动记录照片前值得开通。仅安全存储在本机。';
 
   @override
   String get apiKeyFooterOpenai =>
@@ -664,7 +670,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectClaudeFooter => '让服务器登录你的 Anthropic 账户。中国大陆需要 VPN。';
 
   @override
-  String get subInactiveFooter => '当前使用的是 API Key。在上方选择一项即可改由你自己的服务器分析照片。';
+  String get subInactiveFooter =>
+      '当前使用的是 API Key。这一项适合自己运行筷拍服务器的人：在上方选择服务器使用的 AI，即可改由它分析照片。没有自己的服务器？请返回使用 API Key。';
 
   @override
   String get connectDialogTitle => '完成 Claude 连接';
@@ -960,6 +967,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get goalFieldLabel => '千卡 / 天';
+
+  @override
+  String goalInvalid(String max) {
+    return '请输入 1 到 $max 之间的整数。';
+  }
 
   @override
   String get goalClear => '清除目标';
@@ -1774,6 +1786,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String covStoppedLast(String label, int attempted, int total, String reason) {
+    return '$label在第 $attempted/$total 张后停止：$reason';
+  }
+
+  @override
+  String covSummaryFailed(int scanned, int failed) {
+    return '已检查 $scanned 张 —— $failed 张失败：可以重试，或在下方手动录入。';
+  }
+
+  @override
   String covMoreNotFood(int count) {
     return '…还有 $count 张。';
   }
@@ -1993,6 +2015,10 @@ class AppLocalizationsZh extends AppLocalizations {
       '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
 
   @override
+  String get watcherLimitedFooter =>
+      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
+
+  @override
   String get fixAction => '去修复';
 
   @override
@@ -2047,6 +2073,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importFromClipboard => '从剪贴板导入';
+
+  @override
+  String get importFieldHint => '或在这里粘贴较小的导出内容';
 
   @override
   String importClipboardRead(String size) {

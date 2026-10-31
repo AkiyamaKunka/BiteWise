@@ -15,8 +15,19 @@ import 'package:share_plus/share_plus.dart';
 import '../../../core/contracts.dart';
 import '../../format.dart' show isoDate;
 import '../../l10n.dart';
+import '../../theme/app_dialog.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/grouped.dart';
 import '../../widgets/small_spinner.dart';
+
+/// The shared export's file name: 'chopstats-2026-10-31.json' (it was
+/// still 'calorietracker-…' after the Chopstats rename).
+String exportFileName(DateTime now) => 'chopstats-${isoDate(now)}.json';
+
+/// Whether [name] is an export this app wrote: today's name or the one
+/// from before the rename (the sweep before each export removes both).
+bool isExportFileName(String name) =>
+    name.startsWith('chopstats-') || name.startsWith('calorietracker-');
 
 class DataSection extends StatefulWidget {
   const DataSection({
@@ -72,68 +83,75 @@ class _DataSectionState extends State<DataSection> {
     final go = await showDialog<bool>(
       context: context,
       builder: (_) => StatefulBuilder(
-          builder: (ctx, setDialog) => AlertDialog(
+          builder: (ctx, setDialog) => appAlertDialog(
         title: Text(l10n.importDialogTitle),
-        // Scrollable + bounded: an AlertDialog's content is laid out
-        // against the available height, and an unbounded Column here
-        // overflowed by ~97000 px on a tall viewport.
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(l10n.importDialogBody),
-              const SizedBox(height: 12),
-              if (clipboardPayload == null)
-                TextField(
-                  key: const Key('importField'),
-                  controller: _importController,
-                  maxLines: 4,
-                  autofocus: true,
-                  decoration: const InputDecoration(
-                    hintText: '{"format":"calorie_tracker_export",…',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              if (clipboardNote != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(clipboardNote!,
-                      key: const Key('importClipboardSize')),
-                ),
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: TextButton.icon(
-                  key: const Key('importFromClipboard'),
-                  icon: const Icon(Icons.content_paste),
-                  label: Text(l10n.importFromClipboard),
-                  onPressed: () async {
-                    String? text;
-                    Object? error;
-                    try {
-                      text = (await Clipboard.getData(Clipboard.kTextPlain))
-                          ?.text;
-                    } catch (e) {
-                      error = e;
+        // The dialog scrolls title and content together (A1): an
+        // AlertDialog's content is laid out against the available height,
+        // and an unbounded Column here once overflowed by ~97000 px.
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(l10n.importDialogBody),
+            const SizedBox(height: 12),
+            // The clipboard is THE path for a real export (MB of
+            // text): first, and a real button. Below the field it sat
+            // under the keyboard on an SE, and the field took focus by
+            // itself, so people pasted MBs into it (U20).
+            FilledButton.tonalIcon(
+                key: const Key('importFromClipboard'),
+                // The tonal fill is the elevated dialog's own colour in
+                // dark mode (#2C2C2E): one step up, or the button has no
+                // edge at all.
+                style: Theme.of(ctx).brightness == Brightness.dark
+                    ? FilledButton.styleFrom(
+                        backgroundColor: ctx.colors.highlight)
+                    : null,
+                icon: const Icon(Icons.content_paste_rounded),
+                label: Text(l10n.importFromClipboard),
+                onPressed: () async {
+                  String? text;
+                  Object? error;
+                  try {
+                    text = (await Clipboard.getData(Clipboard.kTextPlain))
+                        ?.text;
+                  } catch (e) {
+                    error = e;
+                  }
+                  if (!ctx.mounted) return;
+                  setDialog(() {
+                    if (error != null) {
+                      clipboardPayload = null;
+                      clipboardNote = l10n.importFailed('$error');
+                    } else if (text == null || text.trim().isEmpty) {
+                      clipboardPayload = null;
+                      clipboardNote = l10n.importClipboardEmpty;
+                    } else {
+                      clipboardPayload = text;
+                      clipboardNote =
+                          l10n.importClipboardRead(_sizeLabel(text));
                     }
-                    if (!ctx.mounted) return;
-                    setDialog(() {
-                      if (error != null) {
-                        clipboardPayload = null;
-                        clipboardNote = l10n.importFailed('$error');
-                      } else if (text == null || text.trim().isEmpty) {
-                        clipboardPayload = null;
-                        clipboardNote = l10n.importClipboardEmpty;
-                      } else {
-                        clipboardPayload = text;
-                        clipboardNote =
-                            l10n.importClipboardRead(_sizeLabel(text));
-                      }
-                    });
-                  },
+                  });
+                },
+              ),
+            if (clipboardNote != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(clipboardNote!,
+                    key: const Key('importClipboardSize')),
+              ),
+            if (clipboardPayload == null) ...[
+              const SizedBox(height: 12),
+              TextField(
+                key: const Key('importField'),
+                controller: _importController,
+                maxLines: 4,
+                decoration: InputDecoration(
+                  hintText: l10n.importFieldHint,
                 ),
               ),
             ],
-          ),
+          ],
         ),
         actions: [
           TextButton(
@@ -213,14 +231,12 @@ class _DataSectionState extends State<DataSection> {
       // — keeping a year of them there is a privacy cost with no upside.
       try {
         for (final f in dir.listSync()) {
-          if (f is File &&
-              f.path.split('/').last.startsWith('calorietracker-')) {
+          if (f is File && isExportFileName(f.path.split('/').last)) {
             f.deleteSync();
           }
         }
       } catch (_) {}
-      final stamp = isoDate(DateTime.now());
-      final file = File('${dir.path}/calorietracker-$stamp.json');
+      final file = File('${dir.path}/${exportFileName(DateTime.now())}');
       await file.writeAsString(json, flush: true);
       await SharePlus.instance.share(ShareParams(
           files: [XFile(file.path)], subject: l10n.exportShareSubject));

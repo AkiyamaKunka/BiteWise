@@ -214,12 +214,12 @@
   "bodyDeleteBoth": "weight and measurements",
   "cancel": "Cancel",
   "delete": "Delete",
-  "settingsWelcomeTitle": "Welcome — one step to start logging",
+  "settingsWelcomeTitle": "Set up AI to start logging",
   "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.",
   "settingsSectionAi": "AI",
-  "settingsAiFooterPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.",
-  "providerQuotaPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.",
-  "providerQuotaPausedUntil": "Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.",
+  "settingsAiFooterPaused": "Analyses are paused — Gemini's daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider on the AI Provider page.",
+  "providerQuotaPaused": "Analyses are paused — Gemini's daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.",
+  "providerQuotaPausedUntil": "Analyses are paused until {time} — Gemini's daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.",
   "@providerQuotaPausedUntil": {
     "description": "Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.",
     "placeholders": {
@@ -242,7 +242,7 @@
   },
   "settingsRowWatch": "Watch Camera Roll",
   "watcherDisclosureTitle": "Photos will be sent to your AI service",
-  "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app's developer. You can turn this off any time.",
+  "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app's developer. Each photo is one AI request, so a free tier's daily limit can run out during this first catch-up, and on some free tiers (Gemini's, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.",
   "@watcherDisclosureBody": {
     "description": "One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.",
     "placeholders": {
@@ -454,6 +454,8 @@
   },
   "apiKeyHeader": "API key",
   "apiKeyLabel": "{provider} API key",
+  "apiKeyShow": "Show key",
+  "apiKeyHide": "Hide key",
   "@apiKeyLabel": {
     "placeholders": {
       "provider": {
@@ -462,7 +464,7 @@
     }
   },
   "apiKeyFooterDefault": "The key saves as you type. Stored securely on this device only.",
-  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.",
+  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier, but it allows only a limited number of photos a day, and on it Google may use what you send to improve its AI and let people review it. Turning on billing in AI Studio lifts the limit and avoids this — worth doing before photos are logged automatically. Stored securely on this device only.",
   "apiKeyFooterOpenai": "From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.",
   "apiKeyFooterAnthropic": "From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.",
   "apiKeyFooterQwen": "From bailian.console.aliyun.com (Alibaba Cloud Model Studio → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.",
@@ -551,7 +553,7 @@
   "serverUploadKeyLabel": "Server upload key",
   "connectClaude": "Connect Claude",
   "connectClaudeFooter": "Signs your server in to your Anthropic account.",
-  "subInactiveFooter": "An API key is currently active. Pick an AI above to have your own server analyze photos instead.",
+  "subInactiveFooter": "An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.",
   "connectDialogTitle": "Finish connecting Claude",
   "connectDialogBody": "Sign in on the Anthropic page that just opened. It will show you a code — paste it here.",
   "connectCodeLabel": "Authorization code",
@@ -773,6 +775,15 @@
   "goalNotSet": "Not set",
   "goalFooter": "The daily summary measures against this. Leave it empty and it compares against your typical day instead.",
   "goalFieldLabel": "kcal per day",
+  "goalInvalid": "Enter a whole number from 1 to {max}.",
+  "@goalInvalid": {
+    "description": "Under the daily-goal field when Save is tapped with something that is not a whole number in range; the dialog stays open. max is already formatted (20,000).",
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
   "goalClear": "Clear goal",
   "macroProtein": "Protein",
   "macroCarbs": "Carbs",
@@ -855,7 +866,7 @@
   "diagFixNetwork": "Check your network connection and try again.",
   "diagKeyAccepted": "The provider accepted your key.",
   "diagOutOfCredit": "The key works, but the account cannot pay right now.",
-  "diagFixTopUp": "Top up the provider account, or switch to a free tier (Zhipu GLM's default vision model is free).",
+  "diagFixTopUp": "Add credit or turn on billing at the provider. On a free tier, wait for the daily limit to reset.",
   "diagRateLimited": "The key works, but the provider is rate-limiting right now.",
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
@@ -1404,6 +1415,36 @@
       }
     }
   },
+  "covStoppedLast": "{label} stopped after {attempted} of {total}: {reason}",
+  "@covStoppedLast": {
+    "description": "Bulk-action snackbar when the run stopped on its LAST photo, so nothing remains to run again (covStoppedBecause says how many remain).",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "covSummaryFailed": "{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {failed, plural, =1{1 failed} other{{failed} failed}}: retry, or enter it yourself below.",
+  "@covSummaryFailed": {
+    "description": "Coverage summary when nothing is missing but some photos failed: not the all-accounted-for success state.",
+    "placeholders": {
+      "scanned": {
+        "type": "int"
+      },
+      "failed": {
+        "type": "int"
+      }
+    }
+  },
   "covMoreNotFood": "…and {count} more.",
   "@covMoreNotFood": {
     "placeholders": {
@@ -1660,6 +1701,10 @@
   },
   "autoScanPausedTitle": "Photos are not being logged automatically",
   "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
+  "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
+  "@watcherLimitedFooter": {
+    "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn)."
+  },
   "fixAction": "Fix",
   "importDialogTitle": "Import exported data",
   "importDialogBody": "Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.",
@@ -1713,6 +1758,7 @@
   "importErrBadVersion": "That export has an unusable version tag.",
   "importErrNoTables": "That export has no tables section.",
   "importFromClipboard": "Import from clipboard",
+  "importFieldHint": "Or paste a small export here",
   "importClipboardRead": "Read {size} from the clipboard",
   "@importClipboardRead": {
     "placeholders": {

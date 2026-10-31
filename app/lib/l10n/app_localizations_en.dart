@@ -222,7 +222,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get delete => 'Delete';
 
   @override
-  String get settingsWelcomeTitle => 'Welcome — one step to start logging';
+  String get settingsWelcomeTitle => 'Set up AI to start logging';
 
   @override
   String get settingsWelcomeBody =>
@@ -233,15 +233,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAiFooterPaused =>
-      'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.';
+      'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider on the AI Provider page.';
 
   @override
   String get providerQuotaPaused =>
-      'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.';
+      'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.';
 
   @override
   String providerQuotaPausedUntil(String time) {
-    return 'Analyses are paused — the daily quota was hit (until $time). New photos are kept and retried automatically; changing the key or provider resumes now.';
+    return 'Analyses are paused until $time — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.';
   }
 
   @override
@@ -279,7 +279,7 @@ class AppLocalizationsEn extends AppLocalizations {
       other: '$days days',
       one: 'day',
     );
-    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.';
+    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. Each photo is one AI request, so a free tier\'s daily limit can run out during this first catch-up, and on some free tiers (Gemini\'s, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.';
   }
 
   @override
@@ -555,12 +555,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get apiKeyShow => 'Show key';
+
+  @override
+  String get apiKeyHide => 'Hide key';
+
+  @override
   String get apiKeyFooterDefault =>
       'The key saves as you type. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterGemini =>
-      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.';
+      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier, but it allows only a limited number of photos a day, and on it Google may use what you send to improve its AI and let people review it. Turning on billing in AI Studio lifts the limit and avoids this — worth doing before photos are logged automatically. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterOpenai =>
@@ -708,7 +714,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get subInactiveFooter =>
-      'An API key is currently active. Pick an AI above to have your own server analyze photos instead.';
+      'An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.';
 
   @override
   String get connectDialogTitle => 'Finish connecting Claude';
@@ -1030,6 +1036,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get goalFieldLabel => 'kcal per day';
 
   @override
+  String goalInvalid(String max) {
+    return 'Enter a whole number from 1 to $max.';
+  }
+
+  @override
   String get goalClear => 'Clear goal';
 
   @override
@@ -1187,7 +1198,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixTopUp =>
-      'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free).';
+      'Add credit or turn on billing at the provider. On a free tier, wait for the daily limit to reset.';
 
   @override
   String get diagRateLimited =>
@@ -1902,6 +1913,28 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String covStoppedLast(String label, int attempted, int total, String reason) {
+    return '$label stopped after $attempted of $total: $reason';
+  }
+
+  @override
+  String covSummaryFailed(int scanned, int failed) {
+    String _temp0 = intl.Intl.pluralLogic(
+      scanned,
+      locale: localeName,
+      other: '$scanned photos checked',
+      one: '1 photo checked',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failed,
+      locale: localeName,
+      other: '$failed failed',
+      one: '1 failed',
+    );
+    return '$_temp0 — $_temp1: retry, or enter it yourself below.';
+  }
+
+  @override
   String covMoreNotFood(int count) {
     return '…and $count more.';
   }
@@ -2128,6 +2161,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
 
   @override
+  String get watcherLimitedFooter =>
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
+
+  @override
   String get fixAction => 'Fix';
 
   @override
@@ -2197,6 +2234,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importFromClipboard => 'Import from clipboard';
+
+  @override
+  String get importFieldHint => 'Or paste a small export here';
 
   @override
   String importClipboardRead(String size) {
