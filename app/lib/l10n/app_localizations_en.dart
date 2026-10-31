@@ -290,7 +290,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String aiConsentBody(String recipient) {
-    return 'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
+    return 'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day (for a photo taken before 4 a.m., the day before too)\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
   }
 
   @override

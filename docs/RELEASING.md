@@ -428,7 +428,8 @@ All done; this is what each one is and where it lives.
    id for an API key, `server:<plan>` for the user's own server (the plan is
    the AI company, so a plan switch asks again; a server address edit does
    not). The dialog names the company, lists what goes with a photo
-   (dietary profile, a summary of that day's other meals), with *Describe
+   (dietary profile, a summary of that day's other meals, plus the day
+   before's for a photo taken before 4 a.m.), with *Describe
    a meal* (the text only) and with *Fix or delete a meal* (the last 7
    days of meals), and says where DeepSeek, Qwen,
    Doubao, GLM and the GLM/Doubao plans process data (mainland China). It
@@ -584,7 +585,8 @@ or to a server the user runs. What leaves the phone, and to whom:
 
 - **every photo** (picked, shared or found by *Watch Camera Roll*) goes to
   the AI provider with the dietary profile and a short summary of the other
-  meals logged that day (up to five);
+  meals logged that day, plus the day before's for a photo taken before
+  4 a.m. (up to five);
 - ***Fix or delete a meal*** sends the typed text with the last 7 days of
   meals; ***Describe a meal*** sends only the text and today's date; a
   leftover photo goes with the meal it belongs to;
@@ -607,7 +609,7 @@ defensible:
 | Photos or Videos | Yes — sent to the user-selected AI provider for analysis; not retained by the developer | No | No | App Functionality |
 | Health & Fitness → **Health** (meal calories and macros, and the dietary profile, which the app attaches itself) | Yes — with every photo and every Fix request, to the same provider | No | No | App Functionality |
 | User Content → **Other User Content** (what the user types into *Describe a meal* and *Fix or delete a meal*: meal descriptions and corrections, and also a weight or a workout typed into Fix, such as "I weigh 72 kg" or "burned 450 calories on my 5 km run", which the app then logs as a weight or an activity) | Yes — to the same provider | No | No | App Functionality |
-| Health & Fitness → Fitness | **No** — the app attaches no stored workout, step or weight record to any request (a photo carries that day's meals, Fix the last 7 days of meals); a workout the user types goes only as that typed text, declared above as Other User Content; the Garmin fetch from the user's own server sends only a date | | | |
+| Health & Fitness → Fitness | **No** — the app attaches no stored workout, step or weight record to any request (a photo carries that day's meals, plus the day before's when taken before 4 a.m.; Fix the last 7 days of meals); a workout the user types goes only as that typed text, declared above as Other User Content; the Garmin fetch from the user's own server sends only a date | | | |
 | Everything else (contacts, location, identifiers, diagnostics, usage) | No | | | |
 
 The rule behind the rows: what the app attaches by itself is declared as

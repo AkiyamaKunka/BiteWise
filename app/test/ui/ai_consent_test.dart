@@ -72,7 +72,12 @@ void main() {
           provider: 'gemini', serverBackend: 'claude', serverBaseUrl: '');
       expect(t, contains('Google (Gemini)'));
       expect(t, contains('dietary profile'));
-      expect(t, contains('summary of the other meals logged that day'));
+      // B14: a photo taken before 04:00 also carries the day before's
+      // meals (remains of a late dinner); the dialog must say so.
+      expect(
+          t,
+          contains('summary of the other meals logged that day (for a '
+              'photo taken before 4 a.m., the day before too)'));
       expect(t, contains('last 7 days'));
       expect(t, contains('leftover photos'));
       expect(t, contains('never receives'));
@@ -122,6 +127,7 @@ void main() {
           provider: 'qwen', serverBackend: 'claude', serverBaseUrl: '');
       expect(t, contains('阿里云（通义千问）'));
       expect(t, contains('饮食档案'));
+      expect(t, contains('当天其他已记录餐食的简短摘要（凌晨 4 点前拍的照片还包括前一天的餐食）'));
       expect(t, contains('最近 7 天'));
       expect(t, contains('中国大陆'));
     });

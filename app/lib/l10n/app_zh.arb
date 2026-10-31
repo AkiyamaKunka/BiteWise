@@ -69,7 +69,7 @@
   "watcherDisclosureBody": "开启监控相册后，相册里之后的新照片，以及最近 {days} 天内的照片（包括不是食物的照片），都会发送给 {provider}，由它判断是不是食物。不会发送给本应用的开发者。每张照片都是一次 AI 请求，免费额度的每日上限可能在这第一次补扫中就用完；部分服务商的免费额度（例如 Gemini）可能会把这些照片用于改进其 AI 并由人工查看，请查看其条款或开通付费。你可以随时关闭。",
   "watcherDisclosureContinue": "继续",
   "aiConsentTitle": "允许 AI 分析吗？",
-  "aiConsentBody": "筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 {recipient}：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要\n• 剩菜照片，连同它对应的那一餐\n• 你为描述一餐输入的文字\n• 你为修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。",
+  "aiConsentBody": "筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 {recipient}：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要（凌晨 4 点前拍的照片还包括前一天的餐食）\n• 剩菜照片，连同它对应的那一餐\n• 你为描述一餐输入的文字\n• 你为修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。",
   "aiConsentCompany": "{provider, select, gemini{Google（Gemini）} openai{OpenAI} anthropic{Anthropic（Claude）} xai{xAI（Grok）} openrouter{OpenRouter} deepseek{深度求索（DeepSeek）} qwen{阿里云（通义千问）} doubao{火山引擎（豆包）} glm{智谱 AI（GLM）} other{你的 AI 服务}}",
   "aiConsentPlanCompany": "{backend, select, glm{智谱 AI（GLM）} doubao{火山引擎（豆包）} other{Anthropic（Claude）}}",
   "aiConsentRelayRecipient": "OpenRouter，再由它转交给你所选模型的厂商",
