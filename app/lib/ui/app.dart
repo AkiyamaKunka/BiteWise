@@ -5,7 +5,7 @@ library;
 import 'dart:async' show StreamSubscription, unawaited;
 import 'dart:io' show File, Platform;
 
-import '../core/ai_consent.dart' show aiConsentRoute;
+import '../core/ai_consent.dart' show aiConsentRoute, aiRoutesInMainlandChina;
 import '../core/setup_link.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -268,6 +268,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
                 link.keyTail),
             ctx.l10n.setupLinkSharing(aiConsentCompanyName(ctx.l10n,
                 provider: 'server', serverBackend: link.backend)),
+            // The same mainland-China note the consent dialog adds: this
+            // confirmation IS the consent for the plan (GLM, Doubao).
+            if (aiRoutesInMainlandChina
+                .contains(aiConsentRoute('server', link.backend)))
+              ctx.l10n.aiConsentChinaNote(aiConsentCompanyName(ctx.l10n,
+                  provider: 'server', serverBackend: link.backend)),
           ].join('\n\n')),
         ),
         actions: [
