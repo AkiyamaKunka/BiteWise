@@ -273,12 +273,16 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       // Removes the double-count AND tombstones the photo's ledger row so
       // the backfill scan can never resurrect it (deleteMeal contract).
       await services.dao.deleteMeal(duplicateId);
-    } else if (hash.isNotEmpty && status == null) {
-      // ONLY when the ledger has never seen this photo. Marking an
-      // existing row 'skipped' rewrote the SELECTED meal's own saved row
-      // (severing meal_id) when the user re-picked its before-photo, and
-      // stomped a live 'processing' reservation out from under the
-      // watcher (pressure-test finds).
+    } else if (hash.isNotEmpty &&
+        (status == null || status.status == IngestionStatus.failed)) {
+      // ONLY when the ledger has never seen this photo, or saw it fail.
+      // Marking an existing row 'skipped' rewrote the SELECTED meal's own
+      // saved row (severing meal_id) when the user re-picked its
+      // before-photo, and stomped a live 'processing' reservation out from
+      // under the watcher (pressure-test finds). A 'failed' row has
+      // neither: it is what an unsure automatic leftover verdict leaves
+      // behind, with "Use Leftovers" as the repair — left 'failed', Photo
+      // Coverage kept offering Retry on the photo just deducted.
       await services.dao.markPhotoHash(hash, IngestionStatus.skipped);
     }
     if (!mounted) return;

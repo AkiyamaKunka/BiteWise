@@ -102,6 +102,34 @@ void main() {
         reason: 'the watcher must never log the leftover photo as food');
   });
 
+  // An unsure automatic leftover verdict leaves the photo 'failed' and
+  // tells the user to use Leftovers (B4). Doing so must settle the row,
+  // or Photo Coverage keeps listing it as failed and Retry all sends it
+  // to the AI again (run-7 review ai-2).
+  testWidgets('a photo left failed by an unsure leftover verdict is '
+      'settled by the deduction', (tester) async {
+    dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+    dao.ledger[_photoMd5] = IngestionStatus.failed;
+    await pump(tester);
+    await runToConfirm(tester);
+    await tester.tap(find.byKey(const Key('leftoverConfirm')));
+    await tester.pumpAndSettle();
+    expect(dao.meals.single.analysis['total_calories'], 665);
+    expect(dao.ledger[_photoMd5], IngestionStatus.skipped);
+  });
+
+  testWidgets("a live 'processing' reservation is never stomped",
+      (tester) async {
+    dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+    dao.ledger[_photoMd5] = IngestionStatus.processing;
+    await pump(tester);
+    await runToConfirm(tester);
+    await tester.tap(find.byKey(const Key('leftoverConfirm')));
+    await tester.pumpAndSettle();
+    expect(dao.meals.single.analysis['total_calories'], 665);
+    expect(dao.ledger[_photoMd5], IngestionStatus.processing);
+  });
+
   // The photo picker was a grid of unlabeled 'image's to VoiceOver/
   // TalkBack — the leftover flow could not be finished without sight
   // (a11y find 2026-10-08).
