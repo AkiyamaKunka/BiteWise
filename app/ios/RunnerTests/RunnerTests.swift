@@ -232,6 +232,35 @@ class ImageIODownscaleTests: XCTestCase {
     assertUploadJpeg(out, srcW: 400, srcH: 300, maxPx: 1568)
   }
 
+  // MARK: - PNG (screenshots; since run 7 every iOS photo tries ImageIO first)
+
+  /// A portrait screenshot-sized PNG: capped to the analysis size, aspect
+  /// kept, colours kept (top half red, bottom half blue), a JPEG.
+  func testPngScreenshotBecomesCappedJpeg() throws {
+    let w = 1179, h = 2556
+    let ctx = CGContext(
+      data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpace(name: CGColorSpace.sRGB)!,
+      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
+    ctx.setFillColor(red: 0, green: 0, blue: 1, alpha: 1)
+    ctx.fill(CGRect(x: 0, y: 0, width: w, height: h))
+    ctx.setFillColor(red: 1, green: 0, blue: 0, alpha: 1)
+    ctx.fill(CGRect(x: 0, y: h / 2, width: w, height: h - h / 2))  // top half
+    let png = try encode(ctx.makeImage()!, as: .png, properties: [:])
+    XCTAssertEqual(typeIdentifier(of: png), UTType.png.identifier)
+
+    let out = try XCTUnwrap(imageIODownscaleJpeg(png, maxPx: 1568, quality: 85))
+    XCTAssertEqual(typeIdentifier(of: out), UTType.jpeg.identifier)
+    let (ow, oh) = pixelSize(properties(of: out))
+    XCTAssertEqual(oh, 1568, "long side capped")
+    XCTAssertEqual(Double(ow), 1568.0 * Double(w) / Double(h), accuracy: 1.5, "aspect")
+    XCTAssertTrue(isRed(pixel(of: out, x: ow / 2, y: oh / 8)), "top stays red")
+    XCTAssertTrue(isBlue(pixel(of: out, x: ow / 2, y: oh - 1 - oh / 8)), "bottom stays blue")
+
+    let thumb = try XCTUnwrap(imageIODownscaleJpeg(png, maxPx: 160, quality: 70))
+    XCTAssertEqual(pixelSize(properties(of: thumb)).h, 160, "thumbnail size")
+  }
+
   // MARK: - colour (every iPhone camera HEIC is Display P3)
 
   /// The centre pixel's RAW values — drawn into the image's own colour
