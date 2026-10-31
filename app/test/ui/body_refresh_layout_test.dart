@@ -127,6 +127,36 @@ void main() {
     });
   });
 
+  group('empty state', () {
+    for (final lang in const ['en', 'zh']) {
+      testWidgets('$lang AX5 on an iPhone SE: the hint scrolls clear of the '
+          'Log button', (tester) async {
+        await pumpApp(
+          tester,
+          Scaffold(
+              body: BodyScreen(dao: FakeDao(), clock: () => clock)),
+          size: se,
+          locale: Locale(lang),
+          scale: 3.118,
+          padding: seTop,
+        );
+        expect(tester.takeException(), isNull);
+        await tester.drag(
+            find.byType(CustomScrollView), const Offset(0, -3000));
+        await tester.pumpAndSettle();
+        final hint = find
+            .descendant(
+                of: find.byKey(const Key('bodyEmpty')),
+                matching: find.byType(Text))
+            .last;
+        expect(tester.getRect(hint).bottom,
+            lessThanOrEqualTo(
+                tester.getRect(find.byKey(const Key('logBodyButton'))).top),
+            reason: 'the last line ended under the button');
+      }, skip: !haveIphoneFonts);
+    }
+  });
+
   group('Log body sheet', () {
     Future<void> openSheet(WidgetTester tester, String lang, double scale,
         {FakeSettings? settings}) async {
