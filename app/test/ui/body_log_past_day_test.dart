@@ -307,6 +307,36 @@ void main() {
     expect(field(tester, 'bodyWeightField'), '81.2');
   });
 
+  testWidgets('the date row puts the keyboard away, and it stays away when '
+      'the picker or the switch question is cancelled', (tester) async {
+    // FocusScope.of(context).unfocus() left the sheet route remembering
+    // the field, so closing the dialog re-focused it and the keyboard came
+    // back (seen on the simulator).
+    await pump(tester, weights: {'2026-08-01': 80.9});
+    await openLog(tester);
+    await tester.showKeyboard(find.byKey(const Key('bodyWeightField')));
+    await tester.enterText(find.byKey(const Key('bodyWeightField')), '81.2');
+    bool weightFocused() => tester
+        .widget<EditableText>(find.descendant(
+            of: find.byKey(const Key('bodyWeightField')),
+            matching: find.byType(EditableText)))
+        .focusNode
+        .hasFocus;
+    expect(weightFocused(), isTrue);
+    await openPicker(tester);
+    expect(weightFocused(), isFalse);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(weightFocused(), isFalse, reason: 'picker cancelled');
+
+    await pickDay(tester, '1');
+    await tester.tap(find.text('Cancel')); // the switch question
+    await tester.pumpAndSettle();
+    expect(find.text('Log body · Aug 2'), findsOneWidget);
+    expect(weightFocused(), isFalse, reason: 'switch cancelled');
+    expect(tester.testTextInput.isVisible, isFalse);
+  });
+
   testWidgets('a history day opens on that day, and the Log button still '
       'opens today', (tester) async {
     await pump(tester, weights: {'2026-07-28': 82.4});

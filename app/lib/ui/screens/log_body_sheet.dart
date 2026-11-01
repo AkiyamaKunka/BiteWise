@@ -130,8 +130,11 @@ class _LogBodySheetState extends State<LogBodySheet> {
   }
 
   void _changeDate() {
-    // The keyboard would sit over the date picker.
-    FocusScope.of(context).unfocus();
+    // The keyboard would sit over the date picker. Unfocus the FIELD (its
+    // scope then forgets it): FocusScope.of(context).unfocus() let the
+    // sheet route remember the field and re-focus it, keyboard and all,
+    // when the picker or the switch question closed.
+    FocusManager.instance.primaryFocus?.unfocus();
     widget.onChangeDate!(_typed());
   }
 
