@@ -259,7 +259,7 @@ class SqfliteMealsDao implements MealsDao {
       // The run's ownership stamp: exactly what lands in last_seen_at.
       final stamp = now.toIso8601String();
       final ledger = ledgerRows.isEmpty ? null : ledgerRows.first;
-      final decision = decideReservation(
+      var decision = decideReservation(
         hashEmpty: false,
         mealRowExists: mealRows.isNotEmpty,
         ledgerStatus:
@@ -270,6 +270,22 @@ class SqfliteMealsDao implements MealsDao {
         reclaimDeliberate: reclaimDeliberate,
         now: now,
       );
+      // App-only: a DELIBERATE add reclaims an orphan 'saved' row — one
+      // that names no meal while no meal has the hash. It cannot mean
+      // "already logged". The asset rule's edited-copy rows become exactly
+      // that after an export/import (import drops meal_id and re-links by
+      // hash only, which the edited copy's hash matches nothing by), so
+      // deleting the meal could not free them and a deliberate re-add was
+      // refused as "already logged" for a meal that no longer exists.
+      // Automatic intake stays strict. decideReservation (the server port)
+      // is unchanged.
+      if (reclaimDeliberate &&
+          decision == ReserveDecision.refuse &&
+          mealRows.isEmpty &&
+          ledger?['status'] == IngestionStatus.saved.name &&
+          ledger?['meal_id'] == null) {
+        decision = ReserveDecision.reclaim;
+      }
       // App-only asset rule (see the contract): automatic intake about to
       // take a NEW hash first asks whether the photo's asset already is a
       // meal. Editing a logged photo in Photos changes its bytes, and the

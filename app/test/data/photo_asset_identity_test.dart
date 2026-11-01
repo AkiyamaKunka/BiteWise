@@ -7,6 +7,7 @@
 // catch-up rescans the lookback window with an empty seen-set, so the
 // edited photo was analyzed again: a second meal, or a leftover cut of the
 // first. Automatic intake now also knows a photo by its library asset.
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -226,6 +227,67 @@ void main() {
           capturedAt: asset.createDateTime, deliberate: true));
       expect(out.kind, PhotoOutcomeKind.saved);
       expect(await mealsOf(asset.id), hasLength(1));
+    });
+  });
+
+  // Import drops every meal_id and re-links rows by image_hash only, so
+  // the edited copy's row came back (saved, NULL): deleting the meal could
+  // not free it and a deliberate re-add said "already logged" for a meal
+  // that no longer exists (run-7 review DP2). Two FILE-backed databases:
+  // opening inMemoryDatabasePath twice returns the same one.
+  group('after an export and import to another phone', () {
+    late Directory dir;
+    late Database other;
+    late SqfliteMealsDao otherDao;
+
+    setUp(() async {
+      dir = await Directory.systemTemp.createTemp('dp2_');
+      other = await openAppDatabase(path: '${dir.path}/b.db');
+      otherDao = SqfliteMealsDao(other, clock: () => now);
+    });
+    tearDown(() async {
+      await other.close();
+      await dir.delete(recursive: true);
+    });
+
+    PhotoPipeline otherPipeline() => PhotoPipeline(
+        dao: otherDao,
+        analyzer: analyzer,
+        hasher: (b) async => originalBytesMd5(b),
+        thumbnailer: (_) async => null,
+        clock: () => now);
+
+    Future<_Asset> editedAndMoved() async {
+      final asset = lunch();
+      await launchCatchUp();
+      asset.bytes = _bytes(7);
+      await launchCatchUp();
+      await otherDao.importJson(await dao.exportJson());
+      return asset;
+    }
+
+    test('deleting the meal frees its edited copy for a deliberate re-add',
+        () async {
+      final asset = await editedAndMoved();
+      final meals = await otherDao.mealsBetween('2026-10-01', '2026-10-31');
+      await otherDao.deleteMeal(meals.single.id);
+
+      final out = await otherPipeline().process(IntakePhoto(
+          asset.bytes, asset.id, 'IMG_0042.HEIC',
+          capturedAt: asset.createDateTime, deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.saved,
+          reason: 'not "already logged" for a meal that is gone');
+      expect(await otherDao.mealsBetween('2026-10-01', '2026-10-31'),
+          hasLength(1));
+    });
+
+    test('automatic intake still leaves the edited copy alone', () async {
+      final asset = await editedAndMoved();
+      final out = await otherPipeline().process(IntakePhoto(
+          asset.bytes, asset.id, 'IMG_0042.HEIC',
+          capturedAt: asset.createDateTime));
+      expect(out.kind, PhotoOutcomeKind.alreadyTracked);
+      expect(analyzer.calls, 1);
     });
   });
 
