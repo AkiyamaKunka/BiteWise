@@ -236,6 +236,28 @@ void main() {
       expect(_update, findsOneWidget);
       await links.close();
     });
+
+    testWidgets('the check does not tie the shell to its route: a screen '
+        'pushed and popped after the question rebuilds nothing', (tester) async {
+      await _launch(tester, _oldGrant());
+      await tester.tap(find.byKey(const Key('aiConsentUpdateNotNow')));
+      await tester.pumpAndSettle();
+      var shellBuilds = 0;
+      debugOnRebuildDirtyWidget = (element, _) {
+        if (element.widget is HomeShell) shellBuilds++;
+      };
+      addTearDown(() => debugOnRebuildDirtyWidget = null);
+      final nav = tester.state<NavigatorState>(find.byType(Navigator));
+      unawaited(nav.push(MaterialPageRoute<void>(
+          builder: (_) => const Scaffold(body: Text('a screen')))));
+      await tester.pumpAndSettle();
+      nav.pop();
+      await tester.pumpAndSettle();
+      debugOnRebuildDirtyWidget = null;
+      // ModalRoute.of(context) made it 2: the shell and its selected tab
+      // rebuilt on every push and every pop for the rest of the session.
+      expect(shellBuilds, 0);
+    });
   });
 
   // The real store (AppSettings through the UI adapter), so "records the

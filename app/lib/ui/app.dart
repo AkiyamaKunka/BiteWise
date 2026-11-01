@@ -215,7 +215,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
       if (!mounted || _consentUpdate != null) return;
       final settings = widget.services.settings;
       if (!aiConsentUpdateNeeded(settings)) return;
-      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      // Nothing on top: asked through the navigator, not ModalRoute.of —
+      // that makes the shell depend on its route, and every push and pop
+      // over it then rebuilt the shell and its selected tab.
+      if (Navigator.maybeOf(context)?.canPop() ?? false) return;
       final asked = _consentUpdate = askAiConsentUpdate(context, settings);
       asked.whenComplete(() => _consentUpdate = null).ignore();
     });
