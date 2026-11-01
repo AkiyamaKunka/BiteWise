@@ -261,6 +261,30 @@ class ImageIODownscaleTests: XCTestCase {
     XCTAssertEqual(pixelSize(properties(of: thumb)).h, 160, "thumbnail size")
   }
 
+  /// A Display-P3 PNG with transparency (a subject-lift cut-out, an app's
+  /// UIGraphicsImageRenderer save): its transparent areas come out WHITE,
+  /// as pure Dart and the sRGB path make them. The P3-to-sRGB redraw used
+  /// a zero-filled context, so they came out black (run-7 review DP1).
+  func testDisplayP3PngTransparencyBecomesWhite() throws {
+    let size = 200
+    let ctx = CGContext(
+      data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0,
+      space: CGColorSpace(name: CGColorSpace.displayP3)!,
+      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ctx.clear(CGRect(x: 0, y: 0, width: size, height: size))
+    ctx.setFillColor(red: 0, green: 0, blue: 0, alpha: 1)
+    ctx.fill(CGRect(x: 50, y: 50, width: 100, height: 100))
+    let png = try encode(ctx.makeImage()!, as: .png, properties: [:])
+
+    let out = try XCTUnwrap(imageIODownscaleJpeg(png, maxPx: 1568, quality: 85))
+    let corner = pixel(of: out, x: 10, y: 10)
+    XCTAssertTrue(
+      corner.r > 240 && corner.g > 240 && corner.b > 240, "transparent corner \(corner)")
+    let centre = pixel(of: out, x: size / 2, y: size / 2)
+    XCTAssertTrue(
+      centre.r < 20 && centre.g < 20 && centre.b < 20, "opaque black square \(centre)")
+  }
+
   // MARK: - colour (every iPhone camera HEIC is Display P3)
 
   /// The centre pixel's RAW values — drawn into the image's own colour

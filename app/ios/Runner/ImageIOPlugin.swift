@@ -132,7 +132,10 @@ func imageIODownscaleJpeg(_ data: Data, maxPx: Int, quality: Int) -> Data? {
 /// icc_profile). The engine codec this replaced handed over sRGB pixels;
 /// so does this. A CoreGraphics bitmap context draws on the CPU, so the
 /// GPU-less background engine can run it. Opaque output: a JPEG has no
-/// alpha.
+/// alpha, so transparent pixels are laid over white first, as the JPEG
+/// encoder does for sRGB input and the pure-Dart path does. The fresh
+/// context is zero-filled: without the fill a Display-P3 PNG's transparent
+/// areas came out black.
 func imageIOSRGB(_ image: CGImage) -> CGImage? {
   guard let srgb = CGColorSpace(name: CGColorSpace.sRGB),
     image.colorSpace?.name != CGColorSpace.sRGB,
@@ -142,7 +145,10 @@ func imageIOSRGB(_ image: CGImage) -> CGImage? {
       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
   else { return nil }
   ctx.interpolationQuality = .none  // same size: a copy, colour-matched
-  ctx.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+  let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+  ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+  ctx.fill(bounds)  // opaque images cover it completely
+  ctx.draw(image, in: bounds)
   return ctx.makeImage()
 }
 
