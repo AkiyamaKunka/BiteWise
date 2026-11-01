@@ -1017,6 +1017,10 @@
   "@outcomeNotSetUp": {
     "description": "Title of the picked-photo result dialog when no API key (or no server address/upload key) is set, instead of outcomeFailed: nothing was analyzed, so nothing failed. The body (errNoApiKey / errNoServerKey) says where to add it."
   },
+  "outcomeCheckServer": "Check your server address",
+  "@outcomeCheckServer": {
+    "description": "Title of the picked-photo result dialog when the saved own-server address is not a valid web address (a typo, or no http:// in front), instead of outcomeNotSetUp: the server IS set up. The body (errBadServerAddress) says to check it for typos."
+  },
   "outcomeLeftoverApplied": "Leftovers deducted",
   "outcomeLogManuallyHint": "If this IS food, log it yourself — the photo stays attached to the meal.",
   "outcomeLogManuallyFailedHint": "You can still log this meal yourself — the photo stays attached to it.",

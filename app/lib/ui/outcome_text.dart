@@ -70,7 +70,7 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
     case PhotoOutcomeKind.failed:
       return switch (o.errorKind) {
         AnalysisErrorKind.noApiKey => l.errNoApiKey,
-        AnalysisErrorKind.noServerKey => _badServerAddress(o.message)
+        AnalysisErrorKind.noServerKey => isBadServerAddress(o.message)
             ? l.errBadServerAddress
             : l.errNoServerKey,
         AnalysisErrorKind.rejectedKey => l.errRejectedKey,
@@ -148,7 +148,7 @@ String? retryReason(AppLocalizations l, PhotoOutcome o) =>
 /// ServerAnalyzer's "Check your server address … not a valid web address":
 /// the address IS set, so "no server address or upload key is set" would
 /// send the user looking for a missing field (run 7, B2).
-bool _badServerAddress(String message) =>
+bool isBadServerAddress(String message) =>
     message.contains('not a valid web address');
 
 /// Who refused the network region, out of the analyzers' "`Provider` is

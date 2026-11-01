@@ -2340,6 +2340,12 @@ abstract class AppLocalizations {
   /// **'AI isn\'t set up yet'**
   String get outcomeNotSetUp;
 
+  /// Title of the picked-photo result dialog when the saved own-server address is not a valid web address (a typo, or no http:// in front), instead of outcomeNotSetUp: the server IS set up. The body (errBadServerAddress) says to check it for typos.
+  ///
+  /// In en, this message translates to:
+  /// **'Check your server address'**
+  String get outcomeCheckServer;
+
   /// No description provided for @outcomeLeftoverApplied.
   ///
   /// In en, this message translates to:

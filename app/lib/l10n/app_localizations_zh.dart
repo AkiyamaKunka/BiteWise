@@ -1330,6 +1330,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outcomeNotSetUp => '还没有设置 AI';
 
   @override
+  String get outcomeCheckServer => '请检查服务器地址';
+
+  @override
   String get outcomeLeftoverApplied => '已扣除剩菜';
 
   @override

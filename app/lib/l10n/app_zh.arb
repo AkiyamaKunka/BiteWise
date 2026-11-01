@@ -393,6 +393,7 @@
   "outcomeInFlight": "正在分析",
   "outcomeFailed": "分析失败",
   "outcomeNotSetUp": "还没有设置 AI",
+  "outcomeCheckServer": "请检查服务器地址",
   "outcomeLeftoverApplied": "已扣除剩菜",
   "outcomeLogManuallyHint": "如果这确实是食物，可以手动记录 —— 照片会附在这一餐上。",
   "outcomeLogManuallyFailedHint": "也可以先手动记录这一餐 —— 照片会附在这一餐上。",

@@ -1431,6 +1431,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get outcomeNotSetUp => 'AI isn\'t set up yet';
 
   @override
+  String get outcomeCheckServer => 'Check your server address';
+
+  @override
   String get outcomeLeftoverApplied => 'Leftovers deducted';
 
   @override

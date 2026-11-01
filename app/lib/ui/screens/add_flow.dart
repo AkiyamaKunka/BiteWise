@@ -319,7 +319,15 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // No key (or no server) is setup that is missing, not an analysis that
     // failed: the title said "Analysis failed" for a photo nothing ever
     // looked at (U2). The body names where to add it.
+    // A saved server address that will not parse also reports noServerKey,
+    // but the server IS set up: "AI isn't set up yet" over a body saying
+    // the address has a typo contradicted itself. It is not retryable
+    // either: Retry fails again at once on the same address.
+    final badAddress = failed &&
+        outcome.errorKind == AnalysisErrorKind.noServerKey &&
+        isBadServerAddress(outcome.message);
     final notSetUp = failed &&
+        !badAddress &&
         (outcome.errorKind == AnalysisErrorKind.noApiKey ||
             outcome.errorKind == AnalysisErrorKind.noServerKey);
     // The daily-quota pause sends nothing until it lifts (up to 12 h):
@@ -331,8 +339,11 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // picked photo by itself (the automatic scan is off by default and
     // never looks past its window): the dialog offers the retry instead of
     // promising one. Not for a missing key — Settings is the fix there.
-    final canRetry =
-        failed && outcome.retryable && !notSetUp && !quotaPaused;
+    final canRetry = failed &&
+        outcome.retryable &&
+        !notSetUp &&
+        !quotaPaused &&
+        !badAddress;
     final l = context.l10n;
     final String body;
     if (quotaPaused) {
@@ -363,8 +374,9 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
           PhotoOutcomeKind.duplicate => l.outcomeDuplicate,
           PhotoOutcomeKind.alreadyTracked => l.outcomeAlreadyTracked,
           PhotoOutcomeKind.inFlight => l.outcomeInFlight,
-          PhotoOutcomeKind.failed =>
-            notSetUp ? l.outcomeNotSetUp : l.outcomeFailed,
+          PhotoOutcomeKind.failed => badAddress
+              ? l.outcomeCheckServer
+              : (notSetUp ? l.outcomeNotSetUp : l.outcomeFailed),
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
         content: Text(hint == null ? body : '$body\n\n$hint'),

@@ -285,6 +285,30 @@ void main() {
       });
     }
 
+    // A saved own-server address that will not parse ('http://host:5OOO',
+    // or no http:// in front) reports noServerKey too, but the server IS
+    // set up: the title said "AI isn't set up yet" over a body saying the
+    // address has a typo (run-7 review UIS-1).
+    for (final locale in [_en, _zh]) {
+      final l = _l(locale);
+      testWidgets('a bad server address (${locale.languageCode}): "check '
+          'your server address", no Retry that can only fail', (tester) async {
+        const message = 'Check your server address in Settings — it is not '
+            'a valid web address.';
+        await _pickWith(
+            tester,
+            PhotoOutcome(PhotoOutcomeKind.failed, message,
+                retryable: true, errorKind: classifyAnalysisError(message)),
+            locale: locale);
+
+        expect(find.text(l.outcomeCheckServer), findsOneWidget);
+        expect(find.text(l.outcomeNotSetUp), findsNothing);
+        expect(_dialogText(tester), contains(l.errBadServerAddress));
+        expect(find.byKey(const Key('retryAnalysisButton')), findsNothing);
+        expect(find.byKey(const Key('logManuallyButton')), findsOneWidget);
+      });
+    }
+
     for (final locale in [_en, _zh]) {
       final l = _l(locale);
       testWidgets('a transient failure (${locale.languageCode}) keeps '
