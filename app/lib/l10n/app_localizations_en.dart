@@ -175,6 +175,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bodySheetHint => 'Leave anything you did not measure empty.';
 
   @override
+  String get bodySheetDate => 'Date';
+
+  @override
+  String bodySheetSwitchTitle(String date) {
+    return 'Switch to $date?';
+  }
+
+  @override
+  String get bodySheetSwitchBody =>
+      'That day already has an entry. What you typed here is not saved and will be discarded.';
+
+  @override
+  String get bodySheetDiscard => 'Discard';
+
+  @override
   String get bodyFieldWeight => 'Weight';
 
   @override

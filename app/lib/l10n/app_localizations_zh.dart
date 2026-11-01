@@ -168,6 +168,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bodySheetHint => '没量的项目留空即可。';
 
   @override
+  String get bodySheetDate => '日期';
+
+  @override
+  String bodySheetSwitchTitle(String date) {
+    return '切换到 $date？';
+  }
+
+  @override
+  String get bodySheetSwitchBody => '那天已有记录。你在这里填写的内容尚未保存，切换后不会保留。';
+
+  @override
+  String get bodySheetDiscard => '放弃';
+
+  @override
   String get bodyFieldWeight => '体重';
 
   @override

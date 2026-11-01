@@ -217,6 +217,23 @@ void main() {
           for (final f in fields) {
             expectUncut(tester, find.byKey(Key(f)), f);
           }
+          // U18: the date row tops the sheet inside its gutters and reads
+          // in full, never broken mid-date (it stacks at large sizes).
+          final dateRow = find.byKey(const Key('bodySheetDateRow'));
+          final row = tester.getRect(dateRow);
+          final sheetRect = tester.getRect(find.byType(BottomSheet));
+          expect(row.left, greaterThanOrEqualTo(sheetRect.left + 15.5));
+          expect(row.right, lessThanOrEqualTo(sheetRect.right - 15.5));
+          expect(row.bottom, lessThanOrEqualTo(dys.first));
+          expect(row.height, greaterThanOrEqualTo(44));
+          for (final p in tester.renderObjectList<RenderParagraph>(
+              find.descendant(of: dateRow, matching: find.byType(RichText)))) {
+            final text = p.text.toPlainText();
+            expect(p.didExceedMaxLines, isFalse, reason: '"$text" is cut');
+            expect(p.size.width,
+                greaterThanOrEqualTo(p.getMaxIntrinsicWidth(double.infinity) - 0.5),
+                reason: '"$text" wraps');
+          }
           final save = tester.getRect(find.byKey(const Key('bodySheetSave')));
           final sheet = tester.getRect(find.byType(BottomSheet));
           expect(save.width, closeTo(sheet.width - 32, 0.5),
@@ -250,6 +267,13 @@ void main() {
           tester.widget<TextField>(find.byKey(const Key('bodyWeightField')));
       expect(field.decoration!.fillColor, const Color(0xFF2C2C2E),
           reason: 'sheetCell; the page-cell #1C1C1E is the sheet itself');
+      final dateCell = tester.widget<Material>(find
+          .ancestor(
+              of: find.byKey(const Key('bodySheetDateRow')),
+              matching: find.byType(Material))
+          .first);
+      expect(dateCell.color, const Color(0xFF2C2C2E),
+          reason: 'the date row is an in-sheet cell like the fields');
     });
   });
 }
