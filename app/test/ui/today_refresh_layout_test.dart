@@ -20,6 +20,7 @@ import 'package:calorie_tracker/ui/widgets/calorie_ring.dart';
 import 'package:calorie_tracker/ui/widgets/macro_chart.dart'
     show MacroBreakdownBar;
 import 'package:calorie_tracker/ui/widgets/meal_card.dart';
+import 'package:calorie_tracker/ui/widgets/meal_thumb.dart';
 import 'package:calorie_tracker/ui/widgets/states.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -402,6 +403,115 @@ void main() {
     for (final meal in bars.skip(1)) {
       expect(meal.height, lessThan(bars.first.height));
     }
+  });
+
+  // At large text a meal's thumbnail and the chevron kept their columns,
+  // leaving an AX5 title about 200 pt: English names broke mid-word
+  // ('Pan- / fried du / mplings'). The thumbnail now sits above the title
+  // (run-7 E2E-3).
+  group('a meal title at AX5 keeps its words whole', () {
+    const title = 'Pan-fried dumplings with millet porridge';
+
+    void expectWholeWords(WidgetTester tester, Finder titleFinder) {
+      final p = _paragraph(tester, titleFinder);
+      var start = 0;
+      for (final word in title.split(' ')) {
+        final boxes = p.getBoxesForSelection(TextSelection(
+            baseOffset: start, extentOffset: start + word.length));
+        expect(boxes.map((b) => b.top).toSet(), hasLength(1),
+            reason: '"$word" is broken across lines');
+        start += word.length + 1;
+      }
+    }
+
+    testWidgets('Today card', (tester) async {
+      final d = FakeDao()
+        ..seed(_meal(1, 0, 640, title: title, time: '08:05 AM'));
+      await pumpApp(
+          tester,
+          Scaffold(
+            body: TodayScreen(
+                dao: d,
+                executor: FakeExecutor(),
+                thumbs: MealThumbResolver(dao: d)),
+          ),
+          size: _se,
+          scale: 3.1);
+      final titleFinder = _inMeal(1, 'mealCardTitle');
+      await tester.scrollUntilVisible(_inMeal(1, 'mealCardTime'), 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      final thumb = find.descendant(
+          of: find.byKey(const ValueKey('meal1')),
+          matching: find.byType(MealThumbView));
+      expect(thumb, findsOneWidget);
+      expect(tester.getRect(thumb).bottom,
+          lessThanOrEqualTo(tester.getRect(titleFinder).top),
+          reason: 'the thumbnail sits above the title');
+      expectWholeWords(tester, titleFinder);
+    }, skip: !haveIphoneFonts);
+
+    testWidgets('Day detail row', (tester) async {
+      final d = FakeDao()
+        ..seed(_meal(1, 0, 640, title: title, time: '08:05 AM'));
+      await pumpApp(
+          tester,
+          DayDetailScreen(
+              dao: d, date: _daysAgo(0), thumbs: MealThumbResolver(dao: d)),
+          size: _se,
+          scale: 3.1);
+      final titleFinder = find.descendant(
+          of: find.byKey(const Key('mealRow1')),
+          matching: find.byKey(const Key('mealRowTitle')));
+      await tester.scrollUntilVisible(titleFinder, 200,
+          scrollable: find.byType(Scrollable).first);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Text>(titleFinder).maxLines, isNull,
+          reason: 'the whole name at large text');
+      expectWholeWords(tester, titleFinder);
+    }, skip: !haveIphoneFonts);
+  });
+
+  // Day detail and Today share MealHeader but drew it differently: Day
+  // detail let a long title run to seven lines and kept the grey
+  // placeholder block for text meals, which Today hides because it read
+  // as a failed image load (run-7 E2E-4).
+  testWidgets('Day detail rows: two title lines, no placeholder for a text '
+      'meal, as on Today', (tester) async {
+    final d = FakeDao()
+      ..seed(_meal(1, 0, 640, title: _longTitle('en')))
+      ..seed(Meal(
+        id: 2,
+        date: _daysAgo(0),
+        time: '06:10 PM',
+        timestamp: '${_daysAgo(0)}T18:10:00',
+        source: 'app_manual',
+        imageHash: '',
+        analysis: const {
+          'is_food': true,
+          'meal_description': 'Typed snack',
+          'total_calories': 200,
+        },
+      ));
+    await pumpApp(
+        tester,
+        DayDetailScreen(
+            dao: d, date: _daysAgo(0), thumbs: MealThumbResolver(dao: d)),
+        size: _se);
+    Finder inRow(int id, Finder f) =>
+        find.descendant(of: find.byKey(Key('mealRow$id')), matching: f);
+    expect(
+        tester
+            .widget<Text>(inRow(1, find.byKey(const Key('mealRowTitle'))))
+            .maxLines,
+        2);
+    expect(inRow(1, find.byType(MealThumbView)), findsOneWidget,
+        reason: 'a photo meal keeps its thumbnail');
+    await tester.scrollUntilVisible(
+        inRow(2, find.byKey(const Key('mealRowTitle'))), 200,
+        scrollable: find.byType(Scrollable).first);
+    expect(inRow(2, find.byType(MealThumbView)), findsNothing,
+        reason: 'no grey block for a typed meal');
   });
 
   group('the ring arc', () {

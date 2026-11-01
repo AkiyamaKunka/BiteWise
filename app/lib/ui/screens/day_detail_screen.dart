@@ -224,12 +224,17 @@ class _MealRow extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           MealHeader(
-            leading: MealThumbView(
-                thumb: thumb, isPhotoMeal: meal.imageHash.isNotEmpty),
+            // As on Today's cards: photo meals only (a text meal's grey
+            // placeholder read as a failed image load), and two title
+            // lines at standard sizes (a long dinner took seven).
+            leading: thumb != null && meal.imageHash.isNotEmpty
+                ? MealThumbView(thumb: thumb, isPhotoMeal: true)
+                : null,
             title: mealDescription(a, fallback: context.l10n.nlUnnamedMeal),
             titleKey: const Key('mealRowTitle'),
             time: context.clock(meal.time),
             timeKey: const Key('mealRowTime'),
+            maxTitleLines: 2,
             stacked: clockBelow,
             showChevron: true,
           ),

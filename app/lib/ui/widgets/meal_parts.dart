@@ -15,7 +15,9 @@ import '../theme/tokens.dart';
 /// Above 1.5x (isLargeText) the clock and [marker] move UNDER the title and
 /// the title takes every line it needs. Beside a 3x clock a meal name was
 /// cut to a few glyphs ('拿铁/咖…', 'Ch…') on the main screen (A4); Day
-/// detail already stacked this way.
+/// detail already stacked this way. The thumbnail moves ABOVE the title
+/// then too: beside it, the 60-pt column left an AX5 title about 200 pt
+/// and English names broke mid-word ('Pan- / fried du / mplings').
 class MealHeader extends StatelessWidget {
   const MealHeader({
     super.key,
@@ -77,7 +79,7 @@ class MealHeader extends StatelessWidget {
     final mark = marker;
     return Row(
       children: [
-        if (leading != null) ...[
+        if (leading != null && !below) ...[
           leading!,
           const SizedBox(width: AppSpace.s12),
         ],
@@ -86,6 +88,10 @@ class MealHeader extends StatelessWidget {
               ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (leading != null) ...[
+                      leading!,
+                      const SizedBox(height: AppSpace.s8),
+                    ],
                     titleText,
                     const SizedBox(height: AppSpace.s2),
                     Row(
