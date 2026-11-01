@@ -378,7 +378,13 @@ void main() {
     dao.put(lateDinner());
     analyzer.nextPhotoOutcome = AnalysisOutcome(
         analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
-    final out = await pipeline.process(IntakePhoto(
+    // Allowed under the consent text that says so (aiConsentWordingVersion 2).
+    final out = await PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'leftover-hash-1',
+            previousDayContext: () => true)
+        .process(IntakePhoto(
         Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
         capturedAt: DateTime(2026, 10, 30, 0, 10)));
     expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
@@ -395,17 +401,47 @@ void main() {
     dao.put(lateDinner());
     analyzer.nextPhotoOutcome =
         const AnalysisOutcome(analysis: {'is_food': false}, wall: Duration.zero);
-    await pipeline.process(IntakePhoto(
+    // Even under the updated consent.
+    await PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'leftover-hash-1',
+            previousDayContext: () => true)
+        .process(IntakePhoto(
         Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
         capturedAt: DateTime(2026, 10, 30, 13, 0)));
     expect(analyzer.lastRecentMeals, isEmpty,
         reason: "yesterday's dinner is not offered at 1 PM");
     // 04:00 is already morning: the previous night is not offered either.
     await PhotoPipeline(
-            dao: dao, analyzer: analyzer, hasher: (_) async => 'other-hash')
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'other-hash',
+            previousDayContext: () => true)
         .process(IntakePhoto(Uint8List.fromList([8]), 'w4', 'IMG_10.jpg',
             capturedAt: DateTime(2026, 10, 30, 4, 0)));
     expect(analyzer.lastRecentMeals, isEmpty);
+  });
+
+  // Re-consent (run 7): a grant from before the consent text mentioned the
+  // previous night keeps sending exactly what it agreed to.
+  test('without the updated consent the 00:10 photo sees only its own day',
+      () async {
+    dao.put(lateDinner());
+    for (final pre in <bool Function()?>[null, () => false]) {
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': false}, wall: Duration.zero);
+      await PhotoPipeline(
+              dao: dao,
+              analyzer: analyzer,
+              hasher: (_) async => 'v1-${pre == null}',
+              previousDayContext: pre)
+          .process(IntakePhoto(Uint8List.fromList([9]), 'w5', 'IMG_11.jpg',
+              capturedAt: DateTime(2026, 10, 30, 0, 10)));
+      expect(analyzer.lastRecentMeals, isEmpty,
+          reason: "the day before's dinner is not sent under a v1 grant");
+    }
+    expect(dao.byId(21).analysis['total_calories'], 1200);
   });
 
   // B4 (run 7): a leftover-shaped reply the gate turned down (or that

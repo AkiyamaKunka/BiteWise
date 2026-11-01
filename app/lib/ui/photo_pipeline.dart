@@ -197,6 +197,13 @@ class PhotoPipeline {
   /// automatic photo reaches the analyzer.
   final AutoScanLatch? latch;
 
+  /// Whether a photo taken before 04:00 may also offer the previous day's
+  /// meals to the leftover check (B14): true only once the current
+  /// recipient was allowed under the consent text that says so
+  /// (AppSettings.previousDayLeftoverContext, read per photo). Null (tests,
+  /// the add flow's fallback instance) or false: that day's meals only.
+  final bool Function()? previousDayContext;
+
   /// True in the iOS background engine (runHeadlessBackfill): a photo the
   /// analyzer could not turn into upload bytes is DEFERRED — released,
   /// retryable — instead of burned to 'failed'. That engine lacks a decoder
@@ -253,6 +260,7 @@ class PhotoPipeline {
       this.notify,
       this.onMealSaved,
       this.latch,
+      this.previousDayContext,
       this.deferUndecodable = false,
       this.backgroundTime,
       this.backgrounded,
@@ -551,9 +559,10 @@ class PhotoPipeline {
       // Remains shot just after midnight belong to the late dinner before
       // it: a photo taken before 04:00 also sees the previous day's meals
       // (the manual flow offers yesterday too). The cap below keeps the
-      // latest five, so a daytime photo's candidates are unchanged.
+      // latest five, so a daytime photo's candidates are unchanged. Only
+      // under a consent given for that text ([previousDayContext]).
       final today = isoDate(when);
-      final from = when.hour < 4
+      final from = when.hour < 4 && (previousDayContext?.call() ?? false)
           ? isoDate(DateTime(when.year, when.month, when.day - 1))
           : today;
       final candidates = byMealClock(

@@ -753,6 +753,8 @@ Future<bool> _runAfterLaunch({
           onBackfillListed: recorder.listed, passOver: deferred.passOver),
       pipeline: () async => inFlight.pipeline = PhotoPipeline(
           dao: await createMealsDao(),
+          // B14's previous-night candidates, under the consent that says so.
+          previousDayContext: () => settings.previousDayLeftoverContext,
           analyzer: createMultiProviderAnalyzer(settings),
           latch: autoScanLatchFor(settings),
           // iOS only: there dart:ui cannot decode (platform_decode.dart).

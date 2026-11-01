@@ -72,6 +72,16 @@ abstract class SettingsStore {
   bool hasAiConsent(String route);
   Future<void> setAiConsent(String route, {required bool granted});
 
+  /// The consent text (core/ai_consent.dart aiConsentWordingVersion)
+  /// [route] was allowed under: 0 = not allowed, 1 = allowed before
+  /// versions were recorded. [setAiConsent] records the current one.
+  int aiConsentVersion(String route);
+
+  /// Whether the user answered Not now to allowing [route] again for the
+  /// current text (ui/ai_consent.dart askAiConsentUpdate): asked once.
+  bool aiConsentUpdateDeclined(String route);
+  Future<void> declineAiConsentUpdate(String route);
+
   /// Whether a meal was ever saved in the app (AppSettings.mealLogged): a
   /// key-less install that logs by hand opens on Today, not on Settings.
   bool get mealLogged;

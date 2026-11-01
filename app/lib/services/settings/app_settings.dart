@@ -284,6 +284,11 @@ class AppSettings extends ChangeNotifier {
       'settings.analysis_blocked_provider';
   static const String _kCredentialRevision = 'settings.credential_revision';
   static const String _kAiConsentRoutes = 'settings.ai_consent_routes';
+  // `route=version` entries: the consent text each grant was given under,
+  // and the wording update the user answered Not now to.
+  static const String _kAiConsentVersions = 'settings.ai_consent_versions';
+  static const String _kAiConsentUpdateDeclined =
+      'settings.ai_consent_update_declined';
   static const String _kOpenaiModel = 'settings.openai_model';
   static const String _kAnthropicModel = 'settings.anthropic_model';
   static const String _kServerBaseUrl = 'settings.server_base_url';
@@ -884,9 +889,10 @@ class AppSettings extends ChangeNotifier {
   /// The AI recipients (aiConsentRoute: a provider id, or `server:<plan>`)
   /// the user allowed meal data to go to — App Store 5.1.2(i) asks for
   /// explicit permission per third party, before the first send. Not a
-  /// secret; device-local, never exported. Only the UI reads it: every
+  /// secret; device-local, never exported. Only the UI gates on it: every
   /// automatic path already needs [watcherEnabled], and the switch, a
   /// provider/plan change while it is on, and a setup link all ask first.
+  /// (The pipeline reads only [previousDayLeftoverContext].)
   Set<String> _aiConsentRoutes = const {};
 
   /// The route the current provider choice sends to.
@@ -895,17 +901,83 @@ class AppSettings extends ChangeNotifier {
 
   bool hasAiConsent(String route) => _aiConsentRoutes.contains(route);
 
-  /// Allow ([granted]) or stop sending to [route].
+  /// The consent text ([aiConsentWordingVersion]) each grant was given
+  /// under, and the wording update the user answered Not now to, by route.
+  Map<String, int> _aiConsentVersions = const {};
+  Map<String, int> _aiConsentUpdateDeclined = const {};
+
+  /// The consent text [route] was allowed under: 0 = not allowed; 1 = a
+  /// grant with no version recorded (every grant from before versions
+  /// existed, the one-time seed included — they never saw a later text).
+  int aiConsentVersion(String route) =>
+      hasAiConsent(route) ? (_aiConsentVersions[route] ?? 1) : 0;
+
+  /// Whether the user answered Not now when asked to allow [route] again
+  /// for the current text (ui/ai_consent.dart askAiConsentUpdate): it is
+  /// not asked again, and the older grant stands as it was.
+  bool aiConsentUpdateDeclined(String route) =>
+      (_aiConsentUpdateDeclined[route] ?? 0) >= aiConsentWordingVersion;
+
+  Future<void> declineAiConsentUpdate(String route) async {
+    _aiConsentUpdateDeclined = {
+      ..._aiConsentUpdateDeclined,
+      route: aiConsentWordingVersion,
+    };
+    await _prefs.setStringList(
+        _kAiConsentUpdateDeclined, _versionEntries(_aiConsentUpdateDeclined));
+    notifyListeners();
+  }
+
+  /// Whether a photo taken before 04:00 may also carry the previous day's
+  /// meals (B14): only when the CURRENT recipient was allowed under the
+  /// text that says so. An older grant keeps sending that day's meals
+  /// only, as it agreed to. Read per photo by PhotoPipeline in both
+  /// engines.
+  bool get previousDayLeftoverContext =>
+      aiConsentVersion(activeAiConsentRoute) >= aiConsentPreviousDayVersion;
+
+  /// Allow ([granted]) or stop sending to [route]. Every grant is given
+  /// under the text the dialogs show now, so it records
+  /// [aiConsentWordingVersion]; withdrawing forgets the version and any
+  /// answer to a wording update.
   Future<void> setAiConsent(String route, {required bool granted}) async {
     final next = {..._aiConsentRoutes};
+    final versions = {..._aiConsentVersions};
+    final declined = {..._aiConsentUpdateDeclined};
     if (granted) {
       next.add(route);
+      versions[route] = aiConsentWordingVersion;
     } else {
       next.remove(route);
+      versions.remove(route);
     }
+    declined.remove(route);
     _aiConsentRoutes = next;
+    _aiConsentVersions = versions;
+    _aiConsentUpdateDeclined = declined;
+    // The routes first: a grant interrupted before its version is written
+    // reads as version 1 — the narrower of the two.
     await _prefs.setStringList(_kAiConsentRoutes, next.toList()..sort());
+    await _prefs.setStringList(_kAiConsentVersions, _versionEntries(versions));
+    await _prefs.setStringList(
+        _kAiConsentUpdateDeclined, _versionEntries(declined));
     notifyListeners();
+  }
+
+  static List<String> _versionEntries(Map<String, int> m) =>
+      [for (final e in m.entries) '${e.key}=${e.value}']..sort();
+
+  /// `route=version` entries back into a map; a malformed one is dropped
+  /// (a grant without its version reads as version 1).
+  static Map<String, int> _readVersionEntries(List<String>? stored) {
+    final out = <String, int>{};
+    for (final entry in stored ?? const <String>[]) {
+      final at = entry.lastIndexOf('=');
+      if (at <= 0) continue;
+      final v = int.tryParse(entry.substring(at + 1));
+      if (v != null && v > 0) out[entry.substring(0, at)] = v;
+    }
+    return out;
   }
 
   /// Reads the routes, or — the first launch of a build that has them —
@@ -920,6 +992,11 @@ class AppSettings extends ChangeNotifier {
   /// empty one needs no write: in this build the watcher switch and the
   /// notice flag only turn on together with a saved consent.
   Future<void> _loadAiConsent() async {
+    // A seed below writes no version: it is a version-1 grant.
+    _aiConsentVersions =
+        _readVersionEntries(_prefs.getStringList(_kAiConsentVersions));
+    _aiConsentUpdateDeclined =
+        _readVersionEntries(_prefs.getStringList(_kAiConsentUpdateDeclined));
     final stored = _prefs.getStringList(_kAiConsentRoutes);
     if (stored != null) {
       _aiConsentRoutes = stored.toSet();

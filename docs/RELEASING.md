@@ -452,6 +452,19 @@ All done; this is what each one is and where it lives.
    current recipient (not gated on a key: a watcher left on without a key
    must not start sending, unasked, once a key is pasted). The photo
    pipeline is unchanged: every automatic send already needs the watcher.
+   *Wording updates* (run 7): each grant records the consent text it was
+   given under (`settings.ai_consent_versions`, `aiConsentWordingVersion`
+   in `core/ai_consent.dart`; 2 = the before-4 a.m. previous-day context).
+   A grant from before — the one-time seed included, so your own install
+   too — is version 1: the photo pipeline keeps sending only that day's
+   meals for it, and on a launch or a return to the app the shell asks
+   once, "What Chopstats sends has changed" / 筷拍发送的内容有更新 (the full
+   consent text, the camera-roll notice first while the watcher is on;
+   never over the setup-link or shared-photo question, and a setup link
+   waits for its answer). Allow records version 2 and the previous day is
+   sent from then on; Not now is remembered and changes nothing else (the
+   watcher keeps logging under the old grant). Any new grant (a new
+   recipient, or Allow after *Stop Sharing*) records version 2.
 5. **Share extension purpose string** — **done.** The extension links
    Photos.framework (`receive_sharing_intent`'s `PHAsset` lookup), and the
    ITMS-90683 scan runs per bundle, so its `Info.plist` and en/zh-Hans

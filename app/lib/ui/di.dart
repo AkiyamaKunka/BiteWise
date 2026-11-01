@@ -205,6 +205,8 @@ class AppServices {
         onMealSaved: signalMealsChanged,
         // A rejected key / blocked region parks the automatic scan.
         latch: autoScanLatchFor(settings),
+        // B14's previous-night candidates, under the consent that says so.
+        previousDayContext: () => settings.previousDayLeftoverContext,
         // iOS suspends the app seconds after the user leaves it: each photo
         // asks for the time to finish its upload and save first, and no
         // automatic photo starts once the app is in the background.
@@ -380,6 +382,14 @@ class _AppSettingsStore implements SettingsStore {
   @override
   Future<void> setAiConsent(String route, {required bool granted}) =>
       _s.setAiConsent(route, granted: granted);
+  @override
+  int aiConsentVersion(String route) => _s.aiConsentVersion(route);
+  @override
+  bool aiConsentUpdateDeclined(String route) =>
+      _s.aiConsentUpdateDeclined(route);
+  @override
+  Future<void> declineAiConsentUpdate(String route) =>
+      _s.declineAiConsentUpdate(route);
   @override
   bool get mealLogged => _s.mealLogged;
   @override

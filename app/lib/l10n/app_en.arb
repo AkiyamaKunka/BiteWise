@@ -259,9 +259,13 @@
   "@aiConsentTitle": {
     "description": "Consent dialog (App Store 5.1.2(i)) shown before meal data first goes to an AI recipient from a foreground action: picking a photo, a photo shared into the app, Describe or Fix a meal, Leftovers, Test This Provider, Photo Coverage. Asked again for each new recipient."
   },
+  "aiConsentUpdateTitle": "What Chopstats sends has changed",
+  "@aiConsentUpdateTitle": {
+    "description": "Title of the same consent dialog (aiConsentBody, Not now / Allow), asked ONCE on a launch or return to the app when the current recipient was allowed under an older consent text (core/ai_consent.dart aiConsentWordingVersion): the text now also says a photo taken before 4 a.m. carries the day before's meals, which are sent only after Allow. Not now keeps the older permission as it was."
+  },
   "aiConsentBody": "Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day (for a photo taken before 4 a.m., the day before too)\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company's own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.",
   "@aiConsentBody": {
-    "description": "Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow).",
+    "description": "Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow). A change to WHAT it says is sent also bumps aiConsentWordingVersion (core/ai_consent.dart), so a grant given under the older text is asked again (aiConsentUpdateTitle) before the new data goes.",
     "placeholders": {
       "recipient": {
         "type": "String"

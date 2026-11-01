@@ -11,6 +11,10 @@
 /// - when Watch Camera Roll is turned on (settings_screen.dart), and when
 ///   the recipient changes while it is on ([confirmAiRecipientChange]).
 ///
+/// And once more, by the app shell, when the text changed what is sent
+/// since the current recipient was allowed ([askAiConsentUpdate]); the
+/// newly described data waits for that Allow.
+///
 /// Nothing here touches the photo pipeline: every automatic send already
 /// needs the watcher, and the watcher only runs for a consented recipient.
 library;
@@ -174,6 +178,52 @@ Future<bool> confirmAiRecipientChange(BuildContext context,
   if (!ok) return false;
   await settings.setAiConsent(route, granted: true);
   return true;
+}
+
+/// Whether the app shell should ask once more for the CURRENT recipient:
+/// it is allowed, but under an older consent text than the dialogs show
+/// now (core/ai_consent.dart aiConsentWordingVersion), and the user has not
+/// answered that yet. Never without a key (nothing could be sent) and
+/// never without a grant: the first send's own question covers that.
+bool aiConsentUpdateNeeded(SettingsStore s) {
+  if (s.apiKey.trim().isEmpty) return false;
+  final route = currentAiConsentRoute(s);
+  final version = s.aiConsentVersion(route);
+  return version > 0 &&
+      version < aiConsentWordingVersion &&
+      !s.aiConsentUpdateDeclined(route);
+}
+
+/// The one-time question for [aiConsentUpdateNeeded]: the full consent
+/// text for the current recipient (the camera-roll notice first while
+/// Watch Camera Roll is on, as when it was turned on) under a title saying
+/// it changed. Allow records the current text for that recipient, which
+/// is what sends the newly described data; anything else is remembered as
+/// Not now, and the older grant goes on exactly as before. True = Allow.
+Future<bool> askAiConsentUpdate(
+    BuildContext context, SettingsStore settings) async {
+  final route = currentAiConsentRoute(settings);
+  final l = context.l10n;
+  final ok = await showAiConsentDialog(context,
+      provider: settings.provider,
+      serverBackend: settings.serverBackend,
+      serverBaseUrl: settings.serverBaseUrl,
+      title: l.aiConsentUpdateTitle,
+      appendix: settings.watcherEnabled
+          ? l.watcherDisclosureBody(
+              providerDisplayLabel(l, settings.provider, settings.serverBackend),
+              settings.lookbackDays.clamp(1, 30))
+          : null,
+      leadWithAppendix: true,
+      dialogKey: const Key('aiConsentUpdateDialog'),
+      cancelKey: const Key('aiConsentUpdateNotNow'),
+      allowKey: const Key('aiConsentUpdateAllow'));
+  if (ok) {
+    await settings.setAiConsent(route, granted: true);
+  } else {
+    await settings.declineAiConsentUpdate(route);
+  }
+  return ok;
 }
 
 /// Holds each photo shared into the app until the current recipient is

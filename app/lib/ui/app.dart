@@ -16,7 +16,12 @@ import 'package:path_provider/path_provider.dart'
 import 'package:flutter/material.dart';
 
 import '../services/photo/background_time.dart' show appEngineInForeground;
-import 'ai_consent.dart' show aiConsentCompanyName, ensureAiConsent;
+import 'ai_consent.dart'
+    show
+        aiConsentCompanyName,
+        aiConsentUpdateNeeded,
+        askAiConsentUpdate,
+        ensureAiConsent;
 import 'background_glue.dart' show foregroundCatchUp;
 import 'screens/add_flow.dart';
 import 'screens/body_screen.dart';
@@ -177,6 +182,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         }
       }, onError: (Object _) {}));
     }
+    // The consent text changed what is sent since the current recipient
+    // was allowed: asked once, over the first frame.
+    _askConsentUpdateWhenIdle();
   }
 
   /// The share gate's question: true = allowed (and saved). Not now says
@@ -185,6 +193,42 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (!mounted) return false;
     return ensureAiConsent(context, widget.services.settings,
         declined: context.l10n.shareConsentDeclined);
+  }
+
+  /// The consent-update question while it is open: a setup link that
+  /// lands meanwhile waits for its answer ([_consentUpdateAnswered]).
+  Future<bool>? _consentUpdate;
+
+  /// Set once the app really left the screen (hidden / paused), so the
+  /// inactive → resumed around an iOS system alert is not a return.
+  bool _leftApp = false;
+
+  /// On a launch or a return to the app: asks once more for the current
+  /// recipient when the consent text changed what is sent since it was
+  /// allowed (aiConsentUpdateNeeded — never without a key or a grant).
+  /// One question at a time, and only over the shell itself: never on top
+  /// of the setup-link or shared-photo question, another dialog or a
+  /// screen — a later return asks instead.
+  void _askConsentUpdateWhenIdle() {
+    if (_consentUpdate != null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _consentUpdate != null) return;
+      final settings = widget.services.settings;
+      if (!aiConsentUpdateNeeded(settings)) return;
+      if (!(ModalRoute.of(context)?.isCurrent ?? true)) return;
+      final asked = _consentUpdate = askAiConsentUpdate(context, settings);
+      asked.whenComplete(() => _consentUpdate = null).ignore();
+    });
+    // A post-frame callback alone waits for SOME frame; ask for one.
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  Future<void> _consentUpdateAnswered() async {
+    try {
+      await _consentUpdate;
+    } catch (_) {
+      // A failed question is no answer; the link goes on.
+    }
   }
 
   @override
@@ -225,6 +269,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           .showSnackBar(SnackBar(content: Text(l.setupLinkInvalid)));
       return;
     }
+    // One question at a time: the consent-update one answers first.
+    await _consentUpdateAnswered();
+    if (!mounted) return;
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -308,7 +355,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (rearm != null) {
       unawaited(rearm().then((_) {}, onError: (Object _) {}));
     }
+    if (state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.paused) {
+      _leftApp = true;
+    }
     if (state != AppLifecycleState.resumed) return;
+    if (_leftApp) {
+      _leftApp = false;
+      _askConsentUpdateWhenIdle();
+    }
     // The background job may have logged meals while we were away — the
     // IndexedStack keeps stale screens alive, so refresh them now.
     _todayKey.currentState?.reload();
