@@ -164,6 +164,21 @@
     }
   },
   "bodySheetHint": "Leave anything you did not measure empty.",
+  "bodySheetDate": "Date",
+  "@bodySheetDate": {
+    "description": "Label of the row at the top of the Log body sheet that shows the day being logged; tapping it opens a date picker."
+  },
+  "bodySheetSwitchTitle": "Switch to {date}?",
+  "@bodySheetSwitchTitle": {
+    "description": "Asked when the user picks another day in the Log body sheet after typing values, and that day already has an entry; {date} is a short date such as 'Oct 28'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "bodySheetSwitchBody": "That day already has an entry. What you typed here is not saved and will be discarded.",
+  "bodySheetDiscard": "Discard",
   "bodyFieldWeight": "Weight",
   "save": "Save",
   "saving": "Saving…",

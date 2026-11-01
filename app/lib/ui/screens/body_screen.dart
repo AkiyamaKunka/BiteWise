@@ -19,19 +19,30 @@ import '../../core/contracts.dart';
 import '../app_formats.dart';
 import '../l10n.dart';
 import '../large_text.dart';
+import '../meal_edit_logic.dart' show isRealIsoDate;
 import '../services.dart' show SettingsStore;
 import '../theme/app_dialog.dart';
 import '../theme/app_theme.dart' show AppButtonStyles;
 import '../theme/tokens.dart';
 import '../units.dart';
 import '../widgets/grouped.dart';
+import '../widgets/pickers.dart';
 import '../widgets/states.dart';
 import '../widgets/weight_trend_painter.dart';
 import 'log_body_sheet.dart';
 
-/// Chart + list window. A year keeps the page honest for lapsed loggers
-/// (a 90-day window would silently hide that the last entry is old).
-const int kBodyWindowDays = 365;
+/// How far back the Log sheet's date picker reaches at least (U18); it
+/// reaches further when an older entry exists, so every entry can be
+/// opened. The page therefore loads ALL body data up to today, not a
+/// window: every day the picker can reach must be loaded, so its prefill
+/// guards the full-row measurements upsert, and a back-filled day shows
+/// up in History and the chart. (It was a 365-day window; nothing hides
+/// that the last entry is old either way. One row per day, and P2 keeps
+/// each history row's lookups O(1).)
+const int kBodyBackfillYears = 2;
+
+/// The lower bound that loads everything (ISO dates compare as strings).
+const String _kAllTime = '0000-01-01';
 
 class BodyScreen extends StatefulWidget {
   const BodyScreen({super.key, required this.dao, this.settings, this.clock});
@@ -72,11 +83,9 @@ class BodyScreenState extends State<BodyScreen> {
   /// Re-query both tables. Public: the shell calls this on tab selection,
   /// same as the other data tabs (IndexedStack keeps stale state alive).
   Future<void> reload() async {
-    final now = _now;
-    final start = isoDate(now.subtract(const Duration(days: kBodyWindowDays)));
-    final end = isoDate(now);
-    final weights = await widget.dao.listBodyWeights(start, end);
-    final measurements = await widget.dao.listBodyMeasurements(start, end);
+    final end = isoDate(_now);
+    final weights = await widget.dao.listBodyWeights(_kAllTime, end);
+    final measurements = await widget.dao.listBodyMeasurements(_kAllTime, end);
     if (!mounted) return;
     setState(() {
       _weights = weights;
@@ -100,28 +109,43 @@ class BodyScreenState extends State<BodyScreen> {
   String _short(BuildContext context, String iso) =>
       AppFormats.shortDate(context, iso, now: _now);
 
+  /// The date picker's first day: [kBodyBackfillYears] back, or the
+  /// earliest entry when that is older.
+  DateTime _firstLoggable() {
+    final now = _now;
+    var first = DateTime(now.year - kBodyBackfillYears, now.month, now.day);
+    // _dates is newest first; poison rows (not real dates) are skipped.
+    for (final d in _dates.reversed) {
+      if (!isRealIsoDate(d)) continue;
+      final earliest = DateTime.parse(d.trim());
+      if (earliest.isBefore(first)) first = earliest;
+      break;
+    }
+    return first;
+  }
+
+  /// Opens the Log sheet on [date] (today from the Log button). The sheet's
+  /// date row can move it to another day; the sheet then rebuilds for that
+  /// day (see [_BodySheetHost]).
   Future<void> _openSheet({String? date}) async {
-    final day = date ?? isoDate(_now);
     final imperial = _imperial; // resolved before the sheet detaches
-    final weight = _weightOn(day)?.kg;
-    final measurements = _measurementsOn(day);
-    // 'Edit' only when the day already has data — the Log button on a day
-    // that was logged earlier edits it too, and a day without data is a
-    // new log whichever way it was opened.
-    final hasData =
-        weight != null || (measurements != null && !measurements.isEmpty);
-    final l = context.l10n;
-    final shown = _short(context, day);
-    final saved = await showGroupedSheet<bool>(
-      context,
-      title: hasData ? l.bodySheetEditTitle(shown) : l.bodySheetLogTitle(shown),
-      builder: (_) => LogBodySheet(
+    final now = _now;
+    // showGroupedSheet's title is fixed when the sheet opens, and this one
+    // follows the picked date, so the route builds the same GroupedSheet
+    // itself (with showGroupedSheet's route settings).
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (_) => _BodySheetHost(
         dao: widget.dao,
-        date: day,
-        existingWeight: weight,
-        existing: measurements,
+        initialDate: date ?? isoDate(now),
         imperial: imperial,
-        onDelete: hasData ? () => _confirmDelete(day) : null,
+        now: now,
+        firstDate: _firstLoggable(),
+        weightOn: (day) => _weightOn(day)?.kg,
+        measurementsOn: _measurementsOn,
+        onDelete: _confirmDelete,
       ),
     );
     if (saved == true) await reload();
@@ -268,6 +292,156 @@ class BodyScreenState extends State<BodyScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─── log sheet ──────────────────────────────────────────────────────
+
+/// The Log body sheet and the day it logs (U18). The screen owns the date:
+/// picking another day in the date row builds a NEW [LogBodySheet] for it
+/// (keyed by the date), prefilled with that day's values, and the title
+/// follows — 'Edit Oct 28' for a day with data, 'Log body · Oct 26' for
+/// one without. A sheet never edits a day it was not prefilled for.
+///
+/// What the user typed is not dropped silently: it moves to a day with no
+/// data, and switching to a day WITH data asks first (that day's own values
+/// replace it).
+class _BodySheetHost extends StatefulWidget {
+  const _BodySheetHost({
+    required this.dao,
+    required this.initialDate,
+    required this.imperial,
+    required this.now,
+    required this.firstDate,
+    required this.weightOn,
+    required this.measurementsOn,
+    required this.onDelete,
+  });
+  final MealsDao dao;
+  final String initialDate;
+  final bool imperial;
+  final DateTime now;
+
+  /// The picker's first day; its last is today (no future weigh-ins).
+  final DateTime firstDate;
+
+  /// The screen's loaded values for a day (it loads every day).
+  final double? Function(String date) weightOn;
+  final BodyMeasurements? Function(String date) measurementsOn;
+
+  /// The screen's delete confirm for a day; true when it deleted.
+  final Future<bool> Function(String date) onDelete;
+
+  @override
+  State<_BodySheetHost> createState() => _BodySheetHostState();
+}
+
+class _BodySheetHostState extends State<_BodySheetHost> {
+  late String _day;
+
+  /// [_day]'s stored values, read when the day is chosen — the sheet is
+  /// prefilled from these and its title says Edit when there are any.
+  double? _weight;
+  BodyMeasurements? _measurements;
+
+  /// Typed values carried over from the previous day.
+  BodySheetDraft? _draft;
+
+  @override
+  void initState() {
+    super.initState();
+    _load(widget.initialDate);
+  }
+
+  void _load(String day) {
+    _day = day;
+    _weight = widget.weightOn(day);
+    _measurements = widget.measurementsOn(day);
+  }
+
+  bool get _hasData =>
+      _weight != null || (_measurements != null && !_measurements!.isEmpty);
+
+  bool _dayHasData(String day) {
+    final m = widget.measurementsOn(day);
+    return widget.weightOn(day) != null || (m != null && !m.isEmpty);
+  }
+
+  Future<void> _changeDate(BodySheetDraft typed) async {
+    final today = DateUtils.dateOnly(widget.now);
+    final parsed = isRealIsoDate(_day) ? DateTime.parse(_day.trim()) : null;
+    var initial = parsed ?? today;
+    if (initial.isAfter(today)) initial = today;
+    if (initial.isBefore(widget.firstDate)) initial = widget.firstDate;
+    final picked = await showAppDatePicker(
+      context: context,
+      initialDate: initial,
+      firstDate: widget.firstDate,
+      lastDate: today,
+      currentDate: today,
+    );
+    if (picked == null || !mounted) return;
+    final day = isoDate(picked);
+    if (day == _day) return;
+    final targetHasData = _dayHasData(day);
+    if (targetHasData && !typed.isEmpty && !await _confirmSwitch(day)) return;
+    if (!mounted) return;
+    setState(() {
+      _load(day);
+      _draft = targetHasData || typed.isEmpty ? null : typed;
+    });
+  }
+
+  /// Typed values and a picked day that has its own: ask before they go.
+  Future<bool> _confirmSwitch(String day) async {
+    final l = context.l10n;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (context) => appAlertDialog(
+        title: Text(l.bodySheetSwitchTitle(
+            AppFormats.shortDate(context, day, now: widget.now))),
+        content: Text(l.bodySheetSwitchBody),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: Text(l.cancel)),
+          FilledButton(
+              key: const Key('bodySheetConfirmSwitch'),
+              style: AppButtonStyles.destructive(context),
+              onPressed: () => Navigator.pop(context, true),
+              child: Text(l.bodySheetDiscard)),
+        ],
+      ),
+    );
+    return ok == true;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    final day = _day;
+    final shown = AppFormats.shortDate(context, day, now: widget.now);
+    final hasData = _hasData;
+    return GroupedSheet(
+      // 'Edit' only when the day already has data — the Log button on a
+      // day that was logged earlier edits it too, and a day without data
+      // is a new log whichever way it was opened.
+      title: hasData ? l.bodySheetEditTitle(shown) : l.bodySheetLogTitle(shown),
+      children: [
+        LogBodySheet(
+          key: ValueKey(day),
+          dao: widget.dao,
+          date: day,
+          existingWeight: _weight,
+          existing: _measurements,
+          imperial: widget.imperial,
+          draft: _draft,
+          dateLabel: shown,
+          onChangeDate: _changeDate,
+          onDelete: hasData ? () => widget.onDelete(day) : null,
+        ),
+      ],
     );
   }
 }

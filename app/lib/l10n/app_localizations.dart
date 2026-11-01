@@ -354,6 +354,30 @@ abstract class AppLocalizations {
   /// **'Leave anything you did not measure empty.'**
   String get bodySheetHint;
 
+  /// Label of the row at the top of the Log body sheet that shows the day being logged; tapping it opens a date picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get bodySheetDate;
+
+  /// Asked when the user picks another day in the Log body sheet after typing values, and that day already has an entry; {date} is a short date such as 'Oct 28'.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to {date}?'**
+  String bodySheetSwitchTitle(String date);
+
+  /// No description provided for @bodySheetSwitchBody.
+  ///
+  /// In en, this message translates to:
+  /// **'That day already has an entry. What you typed here is not saved and will be discarded.'**
+  String get bodySheetSwitchBody;
+
+  /// No description provided for @bodySheetDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get bodySheetDiscard;
+
   /// No description provided for @bodyFieldWeight.
   ///
   /// In en, this message translates to:

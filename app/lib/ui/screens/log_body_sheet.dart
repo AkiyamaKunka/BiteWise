@@ -1,9 +1,16 @@
 /// The Body tab's log sheet: logs or edits one day's weight and girth
 /// measurements (waist / chest / hip). Split out of body_screen.dart.
 ///
-/// Shown through showGroupedSheet, which draws the title ('Log body ·
+/// Shown inside a GroupedSheet, which draws the title ('Log body ·
 /// Oct 30' / 'Edit Oct 30'), scrolls, and lifts the content above the
 /// keyboard — this widget adds none of that itself.
+///
+/// The date row at the top does not change the date here (U18): it hands
+/// what the user typed to [LogBodySheet.onChangeDate], and the Body screen
+/// picks the date and builds a NEW sheet for it, prefilled with that day.
+/// One sheet is always one day, so the prefill that guards the full-row
+/// measurements upsert and "cleared means delete" can never belong to
+/// another day.
 library;
 
 import 'package:flutter/material.dart';
@@ -14,12 +21,29 @@ import '../l10n.dart';
 import '../large_text.dart';
 import '../theme/tokens.dart';
 import '../units.dart';
-import '../widgets/grouped.dart' show cellColor;
+import '../widgets/grouped.dart' show GroupedCard, GroupedRow, cellColor;
 
 /// App-only sanity bounds for girth values (cm). Weight uses the shared
 /// parity bounds [SharedConstants.weightMinKg]/[SharedConstants.weightMaxKg].
 const double kGirthMinCm = 20;
 const double kGirthMaxCm = 300;
+
+/// What the user typed and has not saved: each field's text where it
+/// differs from the day's stored value, null where it does not. Carried to
+/// a newly picked day that has no data, so changing the date does not
+/// throw away a weight typed for the wrong day.
+@immutable
+class BodySheetDraft {
+  const BodySheetDraft({this.weight, this.waist, this.chest, this.hip});
+  final String? weight;
+  final String? waist;
+  final String? chest;
+  final String? hip;
+
+  /// Nothing typed: changing the date loses nothing.
+  bool get isEmpty =>
+      weight == null && waist == null && chest == null && hip == null;
+}
 
 /// Sheet body for logging or editing one day. Prefilled with the day's
 /// existing values, so the DAO's full-row upsert preserves what the user
@@ -33,11 +57,25 @@ class LogBodySheet extends StatefulWidget {
     this.existing,
     this.imperial = false,
     this.onDelete,
+    this.draft,
+    this.dateLabel,
+    this.onChangeDate,
   });
   final MealsDao dao;
   final String date;
   final double? existingWeight;
   final BodyMeasurements? existing;
+
+  /// Typed values carried over from another day: a non-null field starts
+  /// with this text instead of the stored value.
+  final BodySheetDraft? draft;
+
+  /// [date] for display ('Oct 30'), shown in the date row.
+  final String? dateLabel;
+
+  /// The date row's tap, with what the user typed. Null (or no
+  /// [dateLabel]) hides the row.
+  final ValueChanged<BodySheetDraft>? onChangeDate;
 
   /// Display/input unit system; values are STORED metric either way.
   final bool imperial;
@@ -59,17 +97,42 @@ class _LogBodySheetState extends State<LogBodySheet> {
   String? _error;
   bool _saving = false;
 
+  /// The stored values as the fields first show them: the baseline that
+  /// tells typed text from an untouched prefill.
+  late final String _storedWeight =
+      _fmt(widget.existingWeight, weightForDisplay);
+  late final String _storedWaist =
+      _fmt(widget.existing?.waistCm, girthForDisplay);
+  late final String _storedChest =
+      _fmt(widget.existing?.chestCm, girthForDisplay);
+  late final String _storedHip = _fmt(widget.existing?.hipCm, girthForDisplay);
+
   @override
   void initState() {
     super.initState();
-    _weight = TextEditingController(
-        text: _fmt(widget.existingWeight, weightForDisplay));
-    _waist = TextEditingController(
-        text: _fmt(widget.existing?.waistCm, girthForDisplay));
-    _chest = TextEditingController(
-        text: _fmt(widget.existing?.chestCm, girthForDisplay));
-    _hip = TextEditingController(
-        text: _fmt(widget.existing?.hipCm, girthForDisplay));
+    final draft = widget.draft;
+    _weight = TextEditingController(text: draft?.weight ?? _storedWeight);
+    _waist = TextEditingController(text: draft?.waist ?? _storedWaist);
+    _chest = TextEditingController(text: draft?.chest ?? _storedChest);
+    _hip = TextEditingController(text: draft?.hip ?? _storedHip);
+  }
+
+  /// The fields whose text is not the day's stored value.
+  BodySheetDraft _typed() {
+    String? typed(TextEditingController c, String stored) =>
+        c.text.trim() == stored ? null : c.text.trim();
+    return BodySheetDraft(
+      weight: typed(_weight, _storedWeight),
+      waist: typed(_waist, _storedWaist),
+      chest: typed(_chest, _storedChest),
+      hip: typed(_hip, _storedHip),
+    );
+  }
+
+  void _changeDate() {
+    // The keyboard would sit over the date picker.
+    FocusScope.of(context).unfocus();
+    widget.onChangeDate!(_typed());
   }
 
   String _fmt(double? metric, double Function(double, bool) toDisplay) =>
@@ -232,6 +295,7 @@ class _LogBodySheetState extends State<LogBodySheet> {
       _field(_hip, 'bodyHipField', l.bodyHip, girthUnit),
     ];
     final onDelete = widget.onDelete;
+    final dateLabel = widget.dateLabel;
     return Padding(
       padding: const EdgeInsets.fromLTRB(
           AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s8),
@@ -239,6 +303,22 @@ class _LogBodySheetState extends State<LogBodySheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (widget.onChangeDate != null && dateLabel != null) ...[
+            // An in-sheet cell like the fields below it. GroupedRow reads
+            // as one button, 'Date, Oct 30', and stacks the date under
+            // the label at accessibility sizes.
+            GroupedCard(
+              margin: EdgeInsets.zero,
+              child: GroupedRow(
+                key: const Key('bodySheetDateRow'),
+                icon: Icons.calendar_today_rounded,
+                title: l.bodySheetDate,
+                value: dateLabel,
+                onTap: _saving ? null : _changeDate,
+              ),
+            ),
+            const SizedBox(height: AppSpace.s12),
+          ],
           Text(
             l.bodySheetHint,
             style: theme.textTheme.bodySmall
