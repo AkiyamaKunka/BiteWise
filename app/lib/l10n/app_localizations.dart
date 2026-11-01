@@ -441,7 +441,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWelcomeBody.
   ///
   /// In en, this message translates to:
-  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.'**
+  /// **'Pick a provider and paste its API key (it saves as you type), then tap Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.'**
   String get settingsWelcomeBody;
 
   /// No description provided for @settingsSectionAi.

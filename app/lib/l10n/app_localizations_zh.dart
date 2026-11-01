@@ -219,7 +219,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      '点击下方「AI 服务」，选择一家并粘贴它的 API Key（输入即保存），然后「测试当前服务」。\n之后打开「监控相册」，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
+      '选择一家 AI 服务并粘贴它的 API Key（输入即保存），然后点「测试当前服务」。\n之后打开「监控相册」，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
 
   @override
   String get settingsSectionAi => 'AI';

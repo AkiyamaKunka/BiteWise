@@ -267,6 +267,19 @@ void main() {
       });
     }
 
+    // The card itself opens the AI Provider page now, so its copy must
+    // not still send the user to a row below it (run-7 E2E-5).
+    testWidgets('the body does not point at a row below the card', (
+      tester,
+    ) async {
+      final en = lookupAppLocalizations(const Locale('en'));
+      final zh = lookupAppLocalizations(const Locale('zh'));
+      expect(en.settingsWelcomeBody, isNot(contains('below')));
+      expect(en.settingsWelcomeBody, contains('Test This Provider'));
+      expect(zh.settingsWelcomeBody, isNot(contains('下方')));
+      expect(zh.settingsWelcomeBody, contains('测试当前服务'));
+    });
+
     testWidgets('the title no longer promises "one step"', (tester) async {
       final en = lookupAppLocalizations(const Locale('en'));
       expect(en.settingsWelcomeTitle, isNot(contains('one step')));

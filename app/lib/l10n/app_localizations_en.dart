@@ -226,7 +226,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsWelcomeBody =>
-      'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.';
+      'Pick a provider and paste its API key (it saves as you type), then tap Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.';
 
   @override
   String get settingsSectionAi => 'AI';

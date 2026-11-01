@@ -55,7 +55,7 @@
   "cancel": "取消",
   "delete": "删除",
   "settingsWelcomeTitle": "设置 AI 服务，开始记录",
-  "settingsWelcomeBody": "点击下方「AI 服务」，选择一家并粘贴它的 API Key（输入即保存），然后「测试当前服务」。\n之后打开「监控相册」，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。",
+  "settingsWelcomeBody": "选择一家 AI 服务并粘贴它的 API Key（输入即保存），然后点「测试当前服务」。\n之后打开「监控相册」，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。",
   "settingsSectionAi": "AI",
   "settingsAiFooterPaused": "分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或在 AI 服务页更换 Key 或服务。",
   "providerQuotaPaused": "分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或更换 Key 或服务。",
