@@ -141,16 +141,21 @@ class WeightTrendPainter extends CustomPainter {
       canvas.drawCircle(at(i), _dotRadius, dot);
     }
 
-    // Selective labels: min, max, latest (dedup indices). The max sits in
-    // the band above the plot, the others in the band below it — never
-    // in the date band.
+    // Selective labels: min, max, latest (dedup indices). The max sits
+    // above its dot, the others under theirs — never in the date band.
+    // A label under its dot that would reach the baseline drops into the
+    // band below it: the half-kilo domain floor lifts the lowest dot
+    // about 10 pt off the baseline, and a label just under it was struck
+    // through by the axis line. The latest is placed first and wins a
+    // collision, as the latest date does below.
     var minI = 0, maxI = 0;
     for (var i = 1; i < values.length; i++) {
       if (values[i] < values[minI]) minI = i;
       if (values[i] > values[maxI]) maxI = i;
     }
     final valueFloor = plot.bottom + band;
-    for (final i in {minI, maxI, values.length - 1}) {
+    final placed = <Rect>[];
+    for (final i in {values.length - 1, maxI, minI}) {
       final tp =
           _text(weightForDisplay(values[i], imperial).toStringAsFixed(1));
       final p = at(i);
@@ -158,10 +163,16 @@ class WeightTrendPainter extends CustomPainter {
       final x =
           (p.dx - tp.width / 2).clamp(0.0, math.max(0.0, size.width - tp.width))
               .toDouble();
-      final y = (above ? p.dy - tp.height - _labelGap : p.dy + _labelGap)
-          .clamp(0.0, math.max(0.0, valueFloor - tp.height))
-          .toDouble();
-      tp.paint(canvas, Offset(x, y));
+      var y = above ? p.dy - tp.height - _labelGap : p.dy + _labelGap;
+      if (!above && y + tp.height > plot.bottom - 1) {
+        y = math.max(y, plot.bottom + _labelGap);
+      }
+      y = y.clamp(0.0, math.max(0.0, valueFloor - tp.height)).toDouble();
+      final rect = Rect.fromLTWH(x, y, tp.width, tp.height);
+      if (!placed.any((r) => r.inflate(_labelGap / 2).overlaps(rect))) {
+        tp.paint(canvas, Offset(x, y));
+        placed.add(rect);
+      }
       tp.dispose();
     }
 

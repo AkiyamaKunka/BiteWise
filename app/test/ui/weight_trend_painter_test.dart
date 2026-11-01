@@ -9,6 +9,23 @@ import 'package:calorie_tracker/ui/widgets/weight_trend_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Records where the painter draws its labels and lines. A label's size is
+/// read when it is drawn: the painter disposes its paragraphs right after.
+class _Recorder implements Canvas {
+  final labels = <Rect>[];
+  final lines = <(Offset, Offset)>[];
+
+  @override
+  void drawParagraph(ui.Paragraph paragraph, Offset offset) =>
+      labels.add(offset & Size(paragraph.longestLine, paragraph.height));
+
+  @override
+  void drawLine(Offset p1, Offset p2, Paint paint) => lines.add((p1, p2));
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => null;
+}
+
 void main() {
   const four = [
     WeightEntry('2026-10-24', 72.0, source: 'manual'),
@@ -132,6 +149,81 @@ void main() {
         p.paint(Canvas(recorder), size);
         recorder.endRecording().dispose();
       }
+    });
+
+    // The half-kilo domain floor lifts the lowest dot about 10 pt off the
+    // baseline, and its label just under the dot was struck through by
+    // the axis line ('71.6' on a typical week; run-7 E2E-1).
+    group('value labels', () {
+      const style = TextStyle(fontSize: 11);
+      ({List<Rect> values, double baseline, double dateTop}) record(
+          List<WeightEntry> entries,
+          {TextScaler scaler = TextScaler.noScaling,
+          double width = 311}) {
+        final size = Size(width, WeightTrendPainter.preferredHeight(style, scaler));
+        final canvas = _Recorder();
+        painter(entries: entries, textScaler: scaler).paint(canvas, size);
+        final dateTop =
+            size.height - WeightTrendPainter.labelBand(style, scaler);
+        return (
+          values: [
+            for (final r in canvas.labels)
+              if (r.top < dateTop) r,
+          ],
+          baseline: canvas.lines.first.$1.dy,
+          dateTop: dateTop,
+        );
+      }
+
+      final week = [
+        for (final (d, kg) in [
+          // A 0.8 kg range: the domain floor pads 0.1 kg under the min,
+          // about 10 pt over the baseline.
+          ('2026-10-24', 72.4), ('2026-10-25', 72.1), ('2026-10-26', 72.2),
+          ('2026-10-27', 71.9), ('2026-10-28', 71.8), ('2026-10-29', 72.0),
+          ('2026-10-30', 71.6),
+        ])
+          WeightEntry(d, kg, source: 'manual'),
+      ];
+
+      for (final scaler in const [
+        TextScaler.noScaling,
+        TextScaler.linear(2),
+      ]) {
+        test('no label crosses the baseline (${scaler.scale(10) / 10}x)', () {
+          for (final entries in [four, week]) {
+            final r = record(entries, scaler: scaler);
+            expect(r.values, hasLength(greaterThanOrEqualTo(2)));
+            for (final label in r.values) {
+              expect(label.top >= r.baseline || label.bottom <= r.baseline,
+                  isTrue,
+                  reason: '$label straddles the baseline at ${r.baseline}');
+              expect(label.bottom, lessThanOrEqualTo(r.dateTop + 0.01),
+                  reason: 'never in the date band');
+            }
+          }
+        });
+      }
+
+      test('labels never overlap; the latest wins', () {
+        // The min (71.0) right before the latest (71.1): their labels
+        // meet in the band under the baseline on a narrow chart.
+        final close = [
+          const WeightEntry('2026-10-24', 72.0, source: 'manual'),
+          const WeightEntry('2026-10-29', 71.0, source: 'manual'),
+          const WeightEntry('2026-10-30', 71.1, source: 'manual'),
+        ];
+        final r = record(close, scaler: const TextScaler.linear(2), width: 160);
+        for (var i = 0; i < r.values.length; i++) {
+          for (var j = i + 1; j < r.values.length; j++) {
+            expect(r.values[i].overlaps(r.values[j]), isFalse,
+                reason: '${r.values[i]} vs ${r.values[j]}');
+          }
+        }
+        expect(r.values.map((l) => l.right).reduce((a, b) => a > b ? a : b),
+            closeTo(160, 0.01),
+            reason: 'the latest, at the right edge, is the one kept');
+      });
     });
 
     test('fewer than two points paint nothing (and do not throw)', () {
