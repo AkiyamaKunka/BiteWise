@@ -151,8 +151,20 @@ abstract class MealsDao {
   /// Reserve the hash before analysis (see [PhotoReservation]). Set
   /// [reclaimDeliberate] on user-initiated adds (reclaims failed/skipped/
   /// deleted rows, the "deliberate re-send" rule).
+  ///
+  /// [assetId] and [capturedAt], automatic intake only: the photo's library
+  /// asset and when it was taken. A photo edited in Photos after its meal
+  /// was logged reads back as new bytes, so a new hash. When no meal and no
+  /// settled ledger row knows [imageHash] but a meal dated within a day of
+  /// [capturedAt] already names [assetId] as its photo (meals.file_id), the
+  /// hash is ledgered 'saved' for THAT meal and the answer is
+  /// [PhotoReservation.claimed]. The day bound keeps a restored backup's
+  /// asset ids (Android's are small integers) from claiming a new photo.
   Future<PhotoReservationResult> reservePhotoHash(String imageHash,
-      {required String source, bool reclaimDeliberate = false});
+      {required String source,
+      bool reclaimDeliberate = false,
+      String assetId = '',
+      DateTime? capturedAt});
 
   /// With [ownerStamp], only a 'processing' row carrying that stamp is
   /// settled, else [ReservationLost] (see [PhotoReservationResult]).

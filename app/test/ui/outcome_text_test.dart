@@ -403,4 +403,36 @@ void main() {
     expect(line(en, 'rejectedKey'), contains('in AI Provider,'));
     expect(line(en, 'regionBlocked'), contains('Log › From recent photos'));
   });
+
+  // dayTimeLabel took the elapsed time between two LOCAL midnights, and the
+  // spring-forward day is 23 h long: in a DST zone it said "Today" for
+  // tomorrow and for yesterday (run 7, B21). Counting calendar dates holds
+  // in every host time zone, so these pass wherever the suite runs.
+  group('dayTimeLabel counts calendar days', () {
+    test('across the spring-forward change', () {
+      expect(calendarDayDiff(DateTime(2027, 3, 14, 22), DateTime(2027, 3, 15, 21)), 1);
+      expect(calendarDayDiff(DateTime(2027, 3, 15, 10), DateTime(2027, 3, 14, 14, 2)), -1);
+      expect(calendarDayDiff(DateTime(2027, 3, 13, 23), DateTime(2027, 3, 15, 1)), 2);
+      expect(calendarDayDiff(DateTime(2027, 3, 16, 0, 30), DateTime(2027, 3, 14, 23)), -2);
+      expect(calendarDayDiff(DateTime(2026, 3, 8, 22), DateTime(2026, 3, 9, 21)), 1);
+      // The fall-back day (25 h) and an ordinary day.
+      expect(calendarDayDiff(DateTime(2026, 11, 1, 22), DateTime(2026, 11, 2, 7)), 1);
+      expect(calendarDayDiff(DateTime(2026, 10, 12, 0, 1), DateTime(2026, 10, 12, 23, 59)), 0);
+      // Month and year boundaries.
+      expect(calendarDayDiff(DateTime(2026, 12, 31, 23), DateTime(2027, 1, 1, 1)), 1);
+    });
+
+    test('the labels on those days', () {
+      expect(dayTimeLabel(en, DateTime(2027, 3, 15, 21), now: DateTime(2027, 3, 14, 22)),
+          en.timeTomorrow('21:00'));
+      expect(dayTimeLabel(zh, DateTime(2027, 3, 15, 21), now: DateTime(2027, 3, 14, 22)),
+          zh.timeTomorrow('21:00'));
+      expect(dayTimeLabel(en, DateTime(2027, 3, 14, 14, 2), now: DateTime(2027, 3, 15, 10)),
+          en.timeYesterday('14:02'));
+      expect(dayTimeLabel(en, DateTime(2027, 3, 15, 1), now: DateTime(2027, 3, 13, 23)),
+          '03-15 01:00');
+      expect(dayTimeLabel(en, DateTime(2027, 3, 14, 9, 5), now: DateTime(2027, 3, 14, 23)),
+          en.timeToday('09:05'));
+    });
+  });
 }

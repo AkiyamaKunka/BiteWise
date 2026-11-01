@@ -12,6 +12,18 @@
       }
     }
   },
+  "mealItemLine": "{name}: ~{kcal}",
+  "@mealItemLine": {
+    "description": "One food item under a meal card, after a bullet: the item name, then its calories already formatted by kcalAmount. zh uses a full-width colon.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
   "mealsToday": "{count, plural, =1{1 meal today} other{{count} meals today}}",
   "@mealsToday": {
     "placeholders": {
@@ -77,7 +89,7 @@
     "description": "Snackbar action when the privacy policy could not be opened: copies its address to the clipboard."
   },
   "todayEmptyTitle": "No meals logged yet today.",
-  "todayEmptyHint": "Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.",
+  "todayEmptyHint": "Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.",
   "fabLog": "Log",
   "shareDayTooltip": "Share today as an image",
   "shareDayFailed": "Could not build the image: {error}",
@@ -117,6 +129,15 @@
       }
     }
   },
+  "bodyAsOf": "as of {date}",
+  "@bodyAsOf": {
+    "description": "One shared footnote under the Body measurements when every row was measured on the same day; {date} is a short localized date such as 'Oct 28'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
   "bodyNoChange": "no change",
   "bodyWaist": "Waist",
   "bodyChest": "Chest",
@@ -125,7 +146,7 @@
   "bodyChestShort": "C",
   "bodyHipShort": "H",
   "bodyEmptyTitle": "No body data yet.",
-  "bodyEmptyHint": "Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.",
+  "bodyEmptyHint": "Tap Log to record your weight or your waist, chest and hip measurements.",
   "bodySheetLogTitle": "Log body · {date}",
   "@bodySheetLogTitle": {
     "placeholders": {
@@ -143,6 +164,21 @@
     }
   },
   "bodySheetHint": "Leave anything you did not measure empty.",
+  "bodySheetDate": "Date",
+  "@bodySheetDate": {
+    "description": "Label of the row at the top of the Log body sheet that shows the day being logged; tapping it opens a date picker."
+  },
+  "bodySheetSwitchTitle": "Switch to {date}?",
+  "@bodySheetSwitchTitle": {
+    "description": "Asked when the user picks another day in the Log body sheet after typing values, and that day already has an entry; {date} is a short date such as 'Oct 28'.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "bodySheetSwitchBody": "That day already has an entry. What you typed here is not saved and will be discarded.",
+  "bodySheetDiscard": "Discard",
   "bodyFieldWeight": "Weight",
   "save": "Save",
   "saving": "Saving…",
@@ -193,12 +229,12 @@
   "bodyDeleteBoth": "weight and measurements",
   "cancel": "Cancel",
   "delete": "Delete",
-  "settingsWelcomeTitle": "Welcome — one step to start logging",
-  "settingsWelcomeBody": "Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.",
+  "settingsWelcomeTitle": "Set up AI to start logging",
+  "settingsWelcomeBody": "Pick a provider and paste its API key (it saves as you type), then tap Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.",
   "settingsSectionAi": "AI",
-  "settingsAiFooterPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.",
-  "providerQuotaPaused": "Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.",
-  "providerQuotaPausedUntil": "Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.",
+  "settingsAiFooterPaused": "Analyses are paused — Gemini's daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider on the AI Provider page.",
+  "providerQuotaPaused": "Analyses are paused — Gemini's daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.",
+  "providerQuotaPausedUntil": "Analyses are paused until {time} — Gemini's daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.",
   "@providerQuotaPausedUntil": {
     "description": "Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.",
     "placeholders": {
@@ -221,9 +257,9 @@
   },
   "settingsRowWatch": "Watch Camera Roll",
   "watcherDisclosureTitle": "Photos will be sent to your AI service",
-  "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app's developer. You can turn this off any time.",
+  "watcherDisclosureBody": "While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Each photo is one AI request, so a free tier's daily limit can run out during this first catch-up, and on some free tiers (Gemini's, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.",
   "@watcherDisclosureBody": {
-    "description": "One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.",
+    "description": "One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)), shown ABOVE aiConsentBody in the same dialog — which already says the developer receives nothing, so this text does not repeat it. {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.",
     "placeholders": {
       "provider": {
         "type": "String"
@@ -238,9 +274,17 @@
   "@aiConsentTitle": {
     "description": "Consent dialog (App Store 5.1.2(i)) shown before meal data first goes to an AI recipient from a foreground action: picking a photo, a photo shared into the app, Describe or Fix a meal, Leftovers, Test This Provider, Photo Coverage. Asked again for each new recipient."
   },
-  "aiConsentBody": "Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company's own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.",
+  "aiConsentUpdateTitle": "What Chopstats sends has changed",
+  "@aiConsentUpdateTitle": {
+    "description": "Title of the same consent dialog (aiConsentBody, Not now / Allow), asked ONCE on a launch or return to the app when the current recipient was allowed under an older consent text (core/ai_consent.dart aiConsentWordingVersion): the text now also says a photo taken before 4 a.m. carries the day before's meals, which are sent only after Allow. Not now keeps the older permission as it was."
+  },
+  "aiConsentUpdateLead": "New: a photo taken before 4 a.m. now also carries a short summary of the day before's meals, so leftovers from a late dinner are recognized. Until you allow it, a photo carries only that day's meals; Not now keeps it that way.",
+  "@aiConsentUpdateLead": {
+    "description": "First paragraph of the aiConsentUpdateTitle dialog, above the camera-roll notice (while Watch Camera Roll is on) and aiConsentBody: names what changed, so the user need not find it in the full text. Must stay true to AppSettings.previousDayLeftoverContext (a version-1 grant sends that day's meals only) and to aiConsentNotNow's label."
+  },
+  "aiConsentBody": "Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day (for a photo taken before 4 a.m., the day before too)\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company's own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.",
   "@aiConsentBody": {
-    "description": "Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow).",
+    "description": "Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow). A change to WHAT it says is sent also bumps aiConsentWordingVersion (core/ai_consent.dart), so a grant given under the older text is asked again (aiConsentUpdateTitle) before the new data goes.",
     "placeholders": {
       "recipient": {
         "type": "String"
@@ -386,7 +430,7 @@
   "profileSet": "Set",
   "profileNotSet": "Not set",
   "settingsSectionData": "Your Data",
-  "settingsDataFooter": "Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
+  "settingsDataFooter": "Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.",
   "settingsRowExport": "Export Data…",
   "settingsRowImport": "Import Data…",
   "settingsRowPrivacy": "Privacy Policy",
@@ -423,7 +467,7 @@
   "testProviderFooter": "The test names exactly what is broken: configuration, network, key, account credit, reply format, or quota.",
   "apiPageTitle": "API Key",
   "apiProviderHeader": "Provider",
-  "apiProviderFooter": "Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.",
+  "apiProviderFooter": "The key stays on this phone. Some providers have a free tier; others charge for each request.",
   "noteVpn": "",
   "noteFreeTierVpn": "free tier",
   "noteDirect": "",
@@ -433,6 +477,8 @@
   },
   "apiKeyHeader": "API key",
   "apiKeyLabel": "{provider} API key",
+  "apiKeyShow": "Show key",
+  "apiKeyHide": "Hide key",
   "@apiKeyLabel": {
     "placeholders": {
       "provider": {
@@ -441,7 +487,7 @@
     }
   },
   "apiKeyFooterDefault": "The key saves as you type. Stored securely on this device only.",
-  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.",
+  "apiKeyFooterGemini": "From aistudio.google.com/apikey (Google AI Studio). Has a free tier, but it allows only a limited number of photos a day, and on it Google may use what you send to improve its AI and let people review it. Turning on billing in AI Studio lifts the limit and avoids this — worth doing before photos are logged automatically. Stored securely on this device only.",
   "apiKeyFooterOpenai": "From platform.openai.com/api-keys. Pay as you go. Stored securely on this device only.",
   "apiKeyFooterAnthropic": "From console.anthropic.com (API keys). Pay as you go. Stored securely on this device only.",
   "apiKeyFooterQwen": "From bailian.console.aliyun.com (Alibaba Cloud Model Studio → API-KEY). New accounts get ~1M free tokens per model. Stored securely on this device only.",
@@ -530,7 +576,11 @@
   "serverUploadKeyLabel": "Server upload key",
   "connectClaude": "Connect Claude",
   "connectClaudeFooter": "Signs your server in to your Anthropic account.",
-  "subInactiveFooter": "An API key is currently active. Pick an AI above to have your own server analyze photos instead.",
+  "connectNeedsServer": "Enter your server address and upload key above first.",
+  "@connectNeedsServer": {
+    "description": "Snackbar when Connect Claude is tapped on the Your own server page while the server address or the upload key is empty: nothing is sent, and the user is pointed at the two fields above the button."
+  },
+  "subInactiveFooter": "An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.",
   "connectDialogTitle": "Finish connecting Claude",
   "connectDialogBody": "Sign in on the Anthropic page that just opened. It will show you a code — paste it here.",
   "connectCodeLabel": "Authorization code",
@@ -548,7 +598,7 @@
   "addManual": "Enter manually",
   "addManualNote": "no AI",
   "addFix": "Fix or delete a meal",
-  "addFixFooter": "\"meal 2 was roast duck\" · \"delete the first meal\"",
+  "addFixFooter": "\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"",
   "addPhotosTip": "Tip: chopsticks or a hand in the shot helps the AI judge portion sizes.",
   "addNoPhotos": "No recent photos found.",
   "addPhotosLimited": "Only the photos you allowed are shown — photos you take later won't appear here. Allow access to all photos in system settings.",
@@ -595,7 +645,7 @@
   "unitsImperialDetail": "Imperial — lb · in",
   "unitsSheetTitle": "Units",
   "unitsFooter": "How body weight and measurements are shown and entered. Food stays in grams and kcal either way.",
-  "bodyEmptyHintImperial": "Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 180 lb\") lands here too.",
+  "bodyEmptyHintImperial": "Tap Log to record your weight or your waist, chest and hip measurements.",
   "@bodyEmptyHintImperial": {
     "description": "bodyEmptyHint for imperial units (en-only surface; zh never renders imperial)."
   },
@@ -611,10 +661,11 @@
   "addLeftoverNote": "deduct what's left",
   "leftoverTitle": "Leftovers",
   "leftoverPickMeal": "Which meal was this?",
-  "leftoverPickPhoto": "Pick the photo of what's LEFT — the meal's calories shrink to what you ate.",
+  "leftoverPickPhoto": "Pick the photo of what's left over — the meal's calories shrink to what you ate.",
   "leftoverChangeMeal": "Change",
   "leftoverNotSame": "This doesn't look like the same meal",
   "leftoverUseAnyway": "Use anyway",
+  "leftoverQuotaPaused": "Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.",
   "leftoverResultTitle": "Deduct leftovers?",
   "leftoverResultLine": "Eaten ~{pct}% — deducting {kcal} kcal, this meal is now {now} kcal.",
   "@leftoverResultLine": {
@@ -736,11 +787,11 @@
     }
   },
   "coachNoReference": "Logged and counted. A few more days and I can tell you how this compares to your usual.",
-  "coachDetail": "{meals} meals · {protein} g protein",
+  "coachDetail": "{meals, plural, =1{1 meal} other{{meals} meals}} · {protein} g protein",
   "@coachDetail": {
     "placeholders": {
       "meals": {
-        "type": "String"
+        "type": "int"
       },
       "protein": {
         "type": "String"
@@ -752,6 +803,15 @@
   "goalNotSet": "Not set",
   "goalFooter": "The daily summary measures against this. Leave it empty and it compares against your typical day instead.",
   "goalFieldLabel": "kcal per day",
+  "goalInvalid": "Enter a whole number from 1 to {max}.",
+  "@goalInvalid": {
+    "description": "Under the daily-goal field when Save is tapped with something that is not a whole number in range; the dialog stays open. max is already formatted (20,000).",
+    "placeholders": {
+      "max": {
+        "type": "String"
+      }
+    }
+  },
   "goalClear": "Clear goal",
   "macroProtein": "Protein",
   "macroCarbs": "Carbs",
@@ -834,11 +894,11 @@
   "diagFixNetwork": "Check your network connection and try again.",
   "diagKeyAccepted": "The provider accepted your key.",
   "diagOutOfCredit": "The key works, but the account cannot pay right now.",
-  "diagFixTopUp": "Top up the provider account, or switch to a free tier (Zhipu GLM's default vision model is free).",
+  "diagFixTopUp": "Add credit or turn on billing at the provider. On a free tier, wait for the daily limit to reset.",
   "diagRateLimited": "The key works, but the provider is rate-limiting right now.",
   "diagFixWaitRateLimit": "Wait a minute and re-run; photos are kept and retried automatically meanwhile.",
   "diagKeyRejected": "The key was not accepted.",
-  "diagFixRecopyKey": "Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).",
+  "diagFixRecopyKey": "Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).",
   "diagModelNotFound": "The key works, but the model \"{model}\" was not found.",
   "@diagModelNotFound": {
     "placeholders": {
@@ -847,21 +907,21 @@
       }
     }
   },
-  "diagTextOk": "The model answered JSON — chat fixes and \"describe a meal\" work.",
+  "diagTextOk": "The model answered JSON — \"Describe a meal\" and \"Fix or delete a meal\" work.",
   "diagTextBad": "The text request did not succeed (busy server, rate limit or closed usage window, timeout, or no JSON from the model).",
-  "diagTextBadDetail": "Chat fixes and \"describe a meal\" may fail; photo analysis can still work.",
+  "diagTextBadDetail": "\"Describe a meal\" and \"Fix or delete a meal\" may fail; photo analysis can still work.",
   "diagFixPickModel": "If this persists, pick a different model in Settings.",
-  "diagTextBadPhotoAlsoFailed": "Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.",
+  "diagTextBadPhotoAlsoFailed": "\"Describe a meal\" and \"Fix or delete a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.",
   "diagFixTextPickModel": "If photo analysis works but this keeps failing, pick a different model in Settings.",
   "diagFixTextFollowPhoto": "Follow the fix on the photo row, then run the test again.",
   "diagPhotoOk": "The model analyzed a test image and answered the meal format.",
   "diagPhotoThoughtFood": "It even thought the test disc was food.",
   "diagPhotoNotFood": "Verdict \"not food\" — correct for the test image.",
-  "diagPhotoTempFail": "Photo analysis failed with a TEMPORARY problem.",
-  "diagPhotoPermFail": "Photo analysis failed and a retry will NOT fix it.",
+  "diagPhotoTempFail": "Photo analysis failed with a temporary problem.",
+  "diagPhotoPermFail": "Photo analysis failed, and retrying will not fix it.",
   "diagFixPhotoTemp": "Usually a rate limit or a busy server — photos are kept and retried automatically.",
   "diagFixPhotoPerm": "Read the message above — it names the broken piece (model, format, or account).",
-  "diagQuotaPaused": "Analyses are PAUSED — the daily quota was hit.",
+  "diagQuotaPaused": "Analyses are paused — the daily quota was hit.",
   "diagQuotaPausedUntil": "Paused until {until}.",
   "@diagQuotaPausedUntil": {
     "placeholders": {
@@ -980,8 +1040,30 @@
   "outcomeAlreadyTracked": "Already logged",
   "outcomeInFlight": "Still analyzing",
   "outcomeFailed": "Analysis failed",
+  "outcomeNotSetUp": "AI isn't set up yet",
+  "@outcomeNotSetUp": {
+    "description": "Title of the picked-photo result dialog when no API key (or no server address/upload key) is set, instead of outcomeFailed: nothing was analyzed, so nothing failed. The body (errNoApiKey / errNoServerKey) says where to add it."
+  },
+  "outcomeCheckServer": "Check your server address",
+  "@outcomeCheckServer": {
+    "description": "Title of the picked-photo result dialog when the saved own-server address is not a valid web address (a typo, or no http:// in front), instead of outcomeNotSetUp: the server IS set up. The body (errBadServerAddress) says to check it for typos."
+  },
   "outcomeLeftoverApplied": "Leftovers deducted",
   "outcomeLogManuallyHint": "If this IS food, log it yourself — the photo stays attached to the meal.",
+  "outcomeLogManuallyFailedHint": "You can still log this meal yourself — the photo stays attached to it.",
+  "@outcomeLogManuallyFailedHint": {
+    "description": "Added under a FAILED analysis in the picked-photo dialog (no key, rejected key, network, rate limit…). outcomeLogManuallyHint is for a 'not food' verdict only: a failed photo had no verdict."
+  },
+  "outcomeQuotaPausedPickMsg": "Analysis is paused — the daily quota is used up (until {time}), so this photo was not sent. Log this meal yourself now, or pick the photo again after that. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).",
+  "@outcomeQuotaPausedPickMsg": {
+    "description": "Picked-photo dialog body while the daily-quota pause is armed: nothing was sent and Retry would fail the same way, so no Retry is offered. {time} is when the pause lifts (dayTimeLabel, e.g. 'Tomorrow 07:00').",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "outcomeQuotaPausedPickMsgNoTime": "Analysis is paused — the daily quota is used up, so this photo was not sent. Log this meal yourself now, or pick the photo again later. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).",
   "outcomeUndoLeftover": "Not leftovers, log as a new meal",
   "outcomeUndoLeftoverDone": "Deduction undone — the earlier meal is back as it was.",
   "outcomeUndoLeftoverStale": "That meal was changed or deleted since, so it was left as it is.",
@@ -1052,6 +1134,7 @@
   "outcomeInFlightMsg": "This photo is still being analyzed — check back in a moment.",
   "errNoApiKey": "No API key is set for this provider — add one in Settings.",
   "errNoServerKey": "No server address or upload key is set — add them in Settings.",
+  "errBadServerAddress": "The server address in Settings is not a valid web address — check it for typos.",
   "errRejectedKey": "The provider rejected the API key. Check the key in Settings.",
   "errRateLimited": "The provider is rate-limiting right now — the photo is kept and retried later.",
   "errQuotaPaused": "Analysis is paused: the daily quota was hit. The photo is kept and retried later.",
@@ -1063,6 +1146,10 @@
   "errBillingText": "The provider account is out of balance or credits — top it up in the provider's console.",
   "errBadResponse": "The AI answered in a form the app could not use.",
   "errBadPhoto": "This photo could not be processed (it could not be decoded).",
+  "errLeftoverUnsure": "It looks like the leftovers of an earlier meal, but the AI wasn't sure which one, so nothing was logged or deducted. Use Leftovers to deduct them.",
+  "@errLeftoverUnsure": {
+    "description": "Why a photo was not logged: the AI answered that it shows the leftovers of an earlier meal, but the app could not apply that answer (the AI was unsure, or named a meal that was not in the list). Shown after outcomeFailedKeptMsg. 'Leftovers' is the Add screen's tile (addLeftover)."
+  },
   "errServerBusy": "Your server is busy with another analysis — the photo is kept and retried later.",
   "mealCardAutoTitle": "🍽️ Meal logged automatically",
   "mealCardLeftoverTitle": "🍽️ Leftovers deducted",
@@ -1081,6 +1168,14 @@
         "type": "String"
       }
     }
+  },
+  "todayLoadFailed": "Couldn't load today's meals.",
+  "@todayLoadFailed": {
+    "description": "Today tab error state when the meals query fails; shown with a Retry button (the raw error goes to the debug log only)."
+  },
+  "historyLoadFailed": "Couldn't load your history.",
+  "@historyLoadFailed": {
+    "description": "History tab error state when the query fails; shown with a Retry button."
   },
   "dayEmpty": "Nothing logged on this day yet. Tap + to add a meal.",
   "dayAddMealTooltip": "Add a meal to this day",
@@ -1257,7 +1352,7 @@
   },
   "covPhotoUnreadable": "That photo is no longer readable.",
   "covTitle": "Photo coverage",
-  "covIntro": "Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
+  "covIntro": "Checks every photo of the last {days, plural, =1{day} other{{days} days}} against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.",
   "@covIntro": {
     "placeholders": {
       "days": {
@@ -1312,7 +1407,7 @@
       }
     }
   },
-  "covAllAccounted": "All {count} photos are accounted for.",
+  "covAllAccounted": "{count, plural, =0{No photos to check in this window.} =1{The 1 photo is accounted for.} other{All {count} photos are accounted for.}}",
   "@covAllAccounted": {
     "placeholders": {
       "count": {
@@ -1320,7 +1415,7 @@
       }
     }
   },
-  "covSummary": "{scanned} photos checked — {missing} never scanned.",
+  "covSummary": "{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {missing} never scanned.",
   "@covSummary": {
     "placeholders": {
       "scanned": {
@@ -1331,7 +1426,7 @@
       }
     }
   },
-  "covLimitedAccess": "Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.",
+  "covLimitedAccess": "Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.",
   "covTruncated": "Note: over 2000 photos in this window — older ones were not checked. Shorten the window for a complete answer.",
   "covVerbLog": "Log",
   "covVerbRetry": "Retry",
@@ -1371,6 +1466,36 @@
         "type": "String"
       },
       "remaining": {
+        "type": "int"
+      }
+    }
+  },
+  "covStoppedLast": "{label} stopped after {attempted} of {total}: {reason}",
+  "@covStoppedLast": {
+    "description": "Bulk-action snackbar when the run stopped on its LAST photo, so nothing remains to run again (covStoppedBecause says how many remain).",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "attempted": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "reason": {
+        "type": "String"
+      }
+    }
+  },
+  "covSummaryFailed": "{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {failed, plural, =1{1 failed} other{{failed} failed}}: retry, or enter it yourself below.",
+  "@covSummaryFailed": {
+    "description": "Coverage summary when nothing is missing but some photos failed: not the all-accounted-for success state.",
+    "placeholders": {
+      "scanned": {
+        "type": "int"
+      },
+      "failed": {
         "type": "int"
       }
     }
@@ -1629,8 +1754,23 @@
       }
     }
   },
+  "autoScanPausedBilling": "Watch Camera Roll is paused: the {provider} account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: {time}).",
+  "@autoScanPausedBilling": {
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
   "autoScanPausedTitle": "Photos are not being logged automatically",
   "watcherLimitedAccess": "Only SELECTED photos are shared, so new food photos won't be seen automatically. Grant access to ALL photos for automatic logging.",
+  "watcherLimitedFooter": "Chopstats can't see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.",
+  "@watcherLimitedFooter": {
+    "description": "First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn)."
+  },
   "fixAction": "Fix",
   "importDialogTitle": "Import exported data",
   "importDialogBody": "Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.",
@@ -1684,6 +1824,7 @@
   "importErrBadVersion": "That export has an unusable version tag.",
   "importErrNoTables": "That export has no tables section.",
   "importFromClipboard": "Import from clipboard",
+  "importFieldHint": "Or paste a small export here",
   "importClipboardRead": "Read {size} from the clipboard",
   "@importClipboardRead": {
     "placeholders": {
@@ -1781,7 +1922,82 @@
   "@nlUnnamedMeal": {
     "description": "Stands in for meal_description in chat replies (delete labels, the correction line, the added-meal card) when the stored analysis has no name."
   },
-  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.",
+  "nlResultItem": "  • {name}: ~{kcal}",
+  "@nlResultItem": {
+    "description": "One food item on the added-meal card. kcal is already kcalAmount-formatted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "nlThisMeal": "📊 This meal: ~{kcal}",
+  "@nlThisMeal": {
+    "description": "Total line of the added-meal card (Fix a meal → new meal). kcal is already kcalAmount-formatted.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "nlMacroAmount": "{label}: {grams}g",
+  "@nlMacroAmount": {
+    "description": "One macro on the added-meal card, e.g. 'P: 25g'. label is macroProteinShort / macroCarbsShort / macroFatShort.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "grams": {
+        "type": "String"
+      }
+    }
+  },
+  "nlItemSumMismatch": "⚠️ Item calories sum to ~{itemSum} but the meal total is ~{total} — if this looks wrong, open the meal on Today to fix it.",
+  "@nlItemSumMismatch": {
+    "description": "Added-meal card warning when the items do not add up to the total. Both values are already kcalAmount-formatted. No 'reply' wording: there is no chat to reply in.",
+    "placeholders": {
+      "itemSum": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "nlQuotaPaused": "⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until {until} (about {remaining} remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.",
+  "@nlQuotaPaused": {
+    "description": "Describe / Fix a meal refusal during the daily-quota pause; no model call is made. until is a local 'yyyy-MM-dd HH:mm' stamp; remaining is nlPauseRemaining.",
+    "placeholders": {
+      "until": {
+        "type": "String"
+      },
+      "remaining": {
+        "type": "String"
+      }
+    }
+  },
+  "nlPauseRemaining": "{unit, select, seconds{{seconds}s} minutes{{minutes}m} other{{hours}h{minutes}m}}",
+  "@nlPauseRemaining": {
+    "description": "Time left in the quota pause. unit is 'seconds', 'minutes' or 'hours'; in the hours form minutes is zero-padded ('3h05m').",
+    "placeholders": {
+      "unit": {
+        "type": "String"
+      },
+      "hours": {
+        "type": "String"
+      },
+      "minutes": {
+        "type": "String"
+      },
+      "seconds": {
+        "type": "String"
+      }
+    }
+  },
+  "nlNoActions": "❌ I couldn't work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.",
   "nlRequestFailed": "❌ That request failed. Please try again.",
   "nlAllActionsFailed": "❌ All {count} requested actions failed. Please try again.",
   "@nlAllActionsFailed": {

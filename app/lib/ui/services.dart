@@ -50,8 +50,9 @@ abstract class SettingsStore {
   /// coverage screen included — keep [canAnalyze].
   bool get canAutoAnalyze;
 
-  /// 'rejectedKey' | 'regionBlocked' while that latch is armed, else null;
-  /// with [autoScanBlockedUntil] it tells Settings why nothing is scanned.
+  /// 'rejectedKey' | 'regionBlocked' | 'billing' while that latch is armed,
+  /// else null; with [autoScanBlockedUntil] it tells Settings why nothing
+  /// is scanned.
   String? get autoScanBlockedKind;
   DateTime? get autoScanBlockedUntil;
 
@@ -70,6 +71,21 @@ abstract class SettingsStore {
   /// Settings' Stop sharing row withdraws it.
   bool hasAiConsent(String route);
   Future<void> setAiConsent(String route, {required bool granted});
+
+  /// The consent text (core/ai_consent.dart aiConsentWordingVersion)
+  /// [route] was allowed under: 0 = not allowed, 1 = allowed before
+  /// versions were recorded. [setAiConsent] records the current one.
+  int aiConsentVersion(String route);
+
+  /// Whether the user answered Not now to allowing [route] again for the
+  /// current text (ui/ai_consent.dart askAiConsentUpdate): asked once.
+  bool aiConsentUpdateDeclined(String route);
+  Future<void> declineAiConsentUpdate(String route);
+
+  /// Whether a meal was ever saved in the app (AppSettings.mealLogged): a
+  /// key-less install that logs by hand opens on Today, not on Settings.
+  bool get mealLogged;
+  Future<void> markMealLogged();
   String get model; // ACTIVE provider's model string
   int get lookbackDays; // backfill window, clamp 1–30 (spec §6.4/§8)
   String get reportTime; // 'HH:mm' local, daily-report notification time

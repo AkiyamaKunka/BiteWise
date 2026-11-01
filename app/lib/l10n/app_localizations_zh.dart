@@ -26,6 +26,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String mealItemLine(String name, String kcal) {
+    return '$name：~$kcal';
+  }
+
+  @override
   String mealsToday(int count) {
     return '今天 $count 餐';
   }
@@ -74,7 +79,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get todayEmptyHint =>
-      '点击下方\"记录\"，用照片或文字添加一餐；也可以在设置里打开\"监控相册\"，新的食物照片会自动记录。';
+      '点击下方「记录」，用照片、文字或手动输入添加一餐；也可以在设置里打开「监控相册」，新的食物照片会自动记录。';
 
   @override
   String get fabLog => '记录';
@@ -118,6 +123,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String bodyAsOf(String date) {
+    return '截至 $date';
+  }
+
+  @override
   String get bodyNoChange => '无变化';
 
   @override
@@ -142,8 +152,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bodyEmptyTitle => '还没有身体数据。';
 
   @override
-  String get bodyEmptyHint =>
-      '点击\"记录\"来记体重或腰围、胸围、臀围。通过对话记录的体重（\"我今天 81.6 公斤\"）也会显示在这里。';
+  String get bodyEmptyHint => '点击「记录」来记体重或腰围、胸围、臀围。';
 
   @override
   String bodySheetLogTitle(String date) {
@@ -159,6 +168,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bodySheetHint => '没量的项目留空即可。';
 
   @override
+  String get bodySheetDate => '日期';
+
+  @override
+  String bodySheetSwitchTitle(String date) {
+    return '切换到 $date？';
+  }
+
+  @override
+  String get bodySheetSwitchBody => '那天已有记录。你在这里填写的内容尚未保存，切换后不会保留。';
+
+  @override
+  String get bodySheetDiscard => '放弃';
+
+  @override
   String get bodyFieldWeight => '体重';
 
   @override
@@ -169,7 +192,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String bodyErrNotNumber(String label, String raw) {
-    return '$label：\"$raw\" 不是数字。';
+    return '$label：「$raw」不是数字。';
   }
 
   @override
@@ -206,26 +229,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get delete => '删除';
 
   @override
-  String get settingsWelcomeTitle => '欢迎 — 一步开始记录';
+  String get settingsWelcomeTitle => '设置 AI 服务，开始记录';
 
   @override
   String get settingsWelcomeBody =>
-      '点击下方\"AI 服务\"，选择一家并粘贴它的 API Key（输入即保存），然后\"测试当前服务\"。\n之后打开\"监控相册\"，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
+      '选择一家 AI 服务并粘贴它的 API Key（输入即保存），然后点「测试当前服务」。\n之后打开「监控相册」，新的食物照片会自动记录。\n中国大陆用户请选择 DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包或 GLM 智谱（GLM 默认模型免费）——Gemini、OpenAI、Claude、Grok 需要 VPN。';
 
   @override
   String get settingsSectionAi => 'AI';
 
   @override
   String get settingsAiFooterPaused =>
-      '分析已暂停 — 已达当日额度。新照片会保留并自动重试；在 AI 服务页更换 Key 或服务后立即恢复。';
+      '分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或在 AI 服务页更换 Key 或服务。';
 
   @override
   String get providerQuotaPaused =>
-      '分析已暂停 — 已达当日额度。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+      '分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或更换 Key 或服务。';
 
   @override
   String providerQuotaPausedUntil(String time) {
-    return '分析已暂停 — 已达当日额度（$time 恢复）。新照片会保留并自动重试；更换 Key 或服务后立即恢复。';
+    return '分析已暂停到 $time — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行「测试当前服务」，或更换 Key 或服务。';
   }
 
   @override
@@ -250,7 +273,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String watcherDisclosureBody(String provider, int days) {
-    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。不会发送给本应用的开发者。你可以随时关闭。';
+    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。每张照片都是一次 AI 请求，免费额度的每日上限可能在这第一次补扫中就用完；部分服务商的免费额度（例如 Gemini）可能会把这些照片用于改进其 AI 并由人工查看，请查看其条款或开通付费。你可以随时关闭。';
   }
 
   @override
@@ -260,8 +283,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get aiConsentTitle => '允许 AI 分析吗？';
 
   @override
+  String get aiConsentUpdateTitle => '筷拍发送的内容有更新';
+
+  @override
+  String get aiConsentUpdateLead =>
+      '新增：凌晨 4 点前拍的照片，现在还会附带前一天餐食的简短摘要，便于识别深夜晚餐的剩菜。你允许之前，照片只附带当天的餐食；选择「暂不」会保持这样。';
+
+  @override
   String aiConsentBody(String recipient) {
-    return '筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 $recipient：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要\n• 剩菜照片，连同它对应的那一餐\n• 你为描述一餐输入的文字\n• 你为修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。';
+    return '筷拍用 AI 服务估算热量。你允许后，筷拍会把以下内容发送给 $recipient：\n• 你记录的每张照片，连同你的饮食档案和当天其他已记录餐食的简短摘要（凌晨 4 点前拍的照片还包括前一天的餐食）\n• 剩菜照片，连同它对应的那一餐\n• 你为描述一餐输入的文字\n• 你为修正餐食输入的文字，连同最近 7 天的餐食\n\n筷拍没有自己的服务器，开发者收不到其中任何内容。AI 公司按它自己的隐私政策和条款处理收到的内容。你允许之前不会发送任何内容，也可以随时在设置里停止。';
   }
 
   @override
@@ -486,7 +516,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      '按张计费：Key 保存在这台手机上，每张照片都是一次由服务商计费的 API 调用。中国大陆请选择 DeepSeek、Qwen、Doubao 或 GLM — 其余需要 VPN。';
+      'Key 保存在这台手机上。有的服务商提供免费额度，有的按次计费。中国大陆请选择 DeepSeek、Qwen、Doubao 或 GLM — 其余需要 VPN。';
 
   @override
   String get noteVpn => '需要 VPN';
@@ -509,11 +539,17 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get apiKeyShow => '显示 Key';
+
+  @override
+  String get apiKeyHide => '隐藏 Key';
+
+  @override
   String get apiKeyFooterDefault => '输入即保存。仅安全存储在本机。';
 
   @override
   String get apiKeyFooterGemini =>
-      '从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。仅安全存储在本机。';
+      '从 aistudio.google.com/apikey 获取（Google AI Studio）。有免费额度，中国大陆需 VPN。免费额度每天只能处理有限的照片，而且 Google 可能用你发送的内容改进其 AI，并可能由人工查看；在 AI Studio 开通付费可解除限制并避免这些 —— 自动记录照片前值得开通。仅安全存储在本机。';
 
   @override
   String get apiKeyFooterOpenai =>
@@ -655,7 +691,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectClaudeFooter => '让服务器登录你的 Anthropic 账户。中国大陆需要 VPN。';
 
   @override
-  String get subInactiveFooter => '当前使用的是 API Key。在上方选择一项即可改由你自己的服务器分析照片。';
+  String get connectNeedsServer => '请先在上方填写服务器地址和上传密钥。';
+
+  @override
+  String get subInactiveFooter =>
+      '当前使用的是 API Key。这一项适合自己运行筷拍服务器的人：在上方选择服务器使用的 AI，即可改由它分析照片。没有自己的服务器？请返回使用 API Key。';
 
   @override
   String get connectDialogTitle => '完成 Claude 连接';
@@ -683,7 +723,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get profileFooter =>
-      'AI 分析每张照片时都会参考的偏好和背景 — 例如\"素食\"、\"广式家常菜，少油\"、\"减脂期，高蛋白\"。输入即保存。';
+      'AI 分析每张照片时都会参考的偏好和背景 — 例如「素食」、「广式家常菜，少油」、「减脂期，高蛋白」。输入即保存。';
 
   @override
   String get profileHint => '还没有内容 — AI 将按无特殊偏好处理。';
@@ -710,7 +750,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get addFix => '修改或删除某餐';
 
   @override
-  String get addFixFooter => '\"第二餐是烤鸭\" · \"删除第一餐\"';
+  String get addFixFooter => '「那碗面其实是烧鸭饭」 · 「删除刚才那杯咖啡」';
 
   @override
   String get addPhotosTip => '小提示：照片里带上筷子或手，AI 估算分量更准。';
@@ -773,8 +813,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unitsFooter => '身体体重与围度的显示和输入单位。食物始终使用克与千卡。';
 
   @override
-  String get bodyEmptyHintImperial =>
-      '点击\"记录\"来记体重或腰围、胸围、臀围。通过对话记录的体重（\"我今天 81.6 公斤\"）也会显示在这里。';
+  String get bodyEmptyHintImperial => '点击「记录」来记体重或腰围、胸围、臀围。';
 
   @override
   String bodySince(String date) {
@@ -804,6 +843,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get leftoverUseAnyway => '仍然使用';
+
+  @override
+  String get leftoverQuotaPaused => '分析已暂停：今天的额度已用完。等额度恢复后再来扣除剩菜。';
 
   @override
   String get leftoverResultTitle => '确认扣除剩菜？';
@@ -934,7 +976,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get coachNoReference => '已记录。再积累几天，我就能告诉你和平时比如何了。';
 
   @override
-  String coachDetail(String meals, String protein) {
+  String coachDetail(int meals, String protein) {
     return '$meals 餐 · 蛋白质 $protein 克';
   }
 
@@ -952,6 +994,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get goalFieldLabel => '千卡 / 天';
+
+  @override
+  String goalInvalid(String max) {
+    return '请输入 1 到 $max 之间的整数。';
+  }
 
   @override
   String get goalClear => '清除目标';
@@ -1124,20 +1171,20 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get diagTextOk => '模型返回了 JSON —— 对话纠正和“描述一餐”都可用。';
+  String get diagTextOk => '模型返回了 JSON —— “文字描述一餐”和“修改或删除某餐”都可用。';
 
   @override
   String get diagTextBad => '文字请求没有成功（服务器忙、限流或额度窗口未开、超时，或模型没有返回 JSON）。';
 
   @override
-  String get diagTextBadDetail => '对话纠正和“描述一餐”可能失败；照片分析仍然可以正常工作。';
+  String get diagTextBadDetail => '“文字描述一餐”和“修改或删除某餐”可能失败；照片分析仍然可以正常工作。';
 
   @override
   String get diagFixPickModel => '如果一直这样，在设置里换一个模型。';
 
   @override
   String get diagTextBadPhotoAlsoFailed =>
-      '对话纠正和“描述一餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
+      '“文字描述一餐”和“修改或删除某餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
 
   @override
   String get diagFixTextPickModel => '如果照片分析正常而这里一直失败，再在设置里换一个模型。';
@@ -1304,10 +1351,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outcomeFailed => '分析失败';
 
   @override
+  String get outcomeNotSetUp => '还没有设置 AI';
+
+  @override
+  String get outcomeCheckServer => '请检查服务器地址';
+
+  @override
   String get outcomeLeftoverApplied => '已扣除剩菜';
 
   @override
   String get outcomeLogManuallyHint => '如果这确实是食物，可以手动记录 —— 照片会附在这一餐上。';
+
+  @override
+  String get outcomeLogManuallyFailedHint => '也可以先手动记录这一餐 —— 照片会附在这一餐上。';
+
+  @override
+  String outcomeQuotaPausedPickMsg(String time) {
+    return '分析已暂停 —— 今天的额度已用完（$time 恢复），这张照片没有发送。可以先手动记录这一餐，或到时再选这张照片。想提前恢复：为 Key 开通付费或提高额度后点「测试当前服务」，或换一个 Key 或服务（设置 › AI 服务）。';
+  }
+
+  @override
+  String get outcomeQuotaPausedPickMsgNoTime =>
+      '分析已暂停 —— 今天的额度已用完，这张照片没有发送。可以先手动记录这一餐，或稍后再选这张照片。想提前恢复：为 Key 开通付费或提高额度后点「测试当前服务」，或换一个 Key 或服务（设置 › AI 服务）。';
 
   @override
   String get outcomeUndoLeftover => '不是剩菜，记为新的一餐';
@@ -1332,7 +1397,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get describeHint =>
-      '例如：\"一碗牛肉面加一个鸡蛋\"\n或 \"two eggs and toast with butter\"';
+      '例如：「一碗牛肉面加一个鸡蛋」\n或「two eggs and toast with butter」';
 
   @override
   String get describeHelp => '任何语言都可以。保存前你会看到估算结果，并且可以修改。';
@@ -1393,6 +1458,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errNoServerKey => '还没有设置服务器地址或上传密钥 —— 请在设置里添加。';
 
   @override
+  String get errBadServerAddress => '设置里的服务器地址不是有效的网址 —— 请检查有没有输错。';
+
+  @override
   String get errRejectedKey => '服务拒绝了 API Key，请在设置里检查。';
 
   @override
@@ -1428,6 +1496,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errBadPhoto => '无法处理这张照片（解码失败）。';
 
   @override
+  String get errLeftoverUnsure =>
+      '这张像是之前某一餐的剩菜，但 AI 不确定是哪一餐，所以没有记录，也没有扣除。可以用“记录剩菜”来扣除。';
+
+  @override
   String get errServerBusy => '你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。';
 
   @override
@@ -1446,6 +1518,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String dayLoadFailed(String error) {
     return '无法加载这一天：$error';
   }
+
+  @override
+  String get todayLoadFailed => '无法加载今天的记录。';
+
+  @override
+  String get historyLoadFailed => '无法加载历史记录。';
 
   @override
   String get dayEmpty => '这一天还没有记录。点 + 添加一餐。';
@@ -1670,12 +1748,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String covMoreLogAll(int count) {
-    return '…还有 $count 张 —— \"全部记录\" 会覆盖全部。';
+    return '…还有 $count 张 ——「全部记录」会覆盖全部。';
   }
 
   @override
   String covJudgedNotFood(int count) {
-    return '判定为\"非食物\"（$count）';
+    return '判定为「非食物」（$count）';
   }
 
   @override
@@ -1683,7 +1761,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get covNotFoodHelp =>
-      '饮品、订单截图和少见的菜会落在这里。\"重新分析\" 会再问一次 AI（规则改进后很有用）；点某一行可以手动录入。';
+      '饮品、订单截图和少见的菜会落在这里。「重新分析」会再问一次 AI（规则改进后很有用）；点某一行可以手动录入。';
 
   @override
   String covFailedEarlier(int count) {
@@ -1694,16 +1772,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get covRetryAll => '全部重试';
 
   @override
-  String get covFailedHelp => '\"全部重试\" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。';
+  String get covFailedHelp => '「全部重试」会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。';
 
   @override
   String covMoreRetryAll(int count) {
-    return '…还有 $count 张 —— \"全部重试\" 会覆盖全部。';
+    return '…还有 $count 张 ——「全部重试」会覆盖全部。';
   }
 
   @override
   String covAllAccounted(int count) {
-    return '全部 $count 张照片都已记录。';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '全部 $count 张照片都已记录。',
+      zero: '这段时间内没有需要检查的照片。',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -1757,6 +1841,16 @@ class AppLocalizationsZh extends AppLocalizations {
       other: '$remaining 张',
     );
     return '$label在第 $attempted/$total 张后停止：$reason剩下的 $_temp0没有处理 —— 稍后再运行一次。';
+  }
+
+  @override
+  String covStoppedLast(String label, int attempted, int total, String reason) {
+    return '$label在第 $attempted/$total 张后停止：$reason';
+  }
+
+  @override
+  String covSummaryFailed(int scanned, int failed) {
+    return '已检查 $scanned 张 —— $failed 张失败：可以重试，或在下方手动录入。';
   }
 
   @override
@@ -1972,11 +2066,20 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String autoScanPausedBilling(String provider, String time) {
+    return '监控相册已暂停：$provider 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
+  }
+
+  @override
   String get autoScanPausedTitle => '照片暂时不会自动记录';
 
   @override
   String get watcherLimitedAccess =>
       '目前只共享了部分选中的照片，新的食物照片不会被自动看到。请授予访问所有照片的权限，才能自动记录。';
+
+  @override
+  String get watcherLimitedFooter =>
+      '筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。';
 
   @override
   String get fixAction => '去修复';
@@ -2033,6 +2136,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get importFromClipboard => '从剪贴板导入';
+
+  @override
+  String get importFieldHint => '或在这里粘贴较小的导出内容';
 
   @override
   String importClipboardRead(String size) {
@@ -2102,7 +2208,47 @@ class AppLocalizationsZh extends AppLocalizations {
   String get nlUnnamedMeal => '未命名的一餐';
 
   @override
-  String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把第 2 顿改成烧鸭饭」。';
+  String nlResultItem(String name, String kcal) {
+    return '  • $name：~$kcal';
+  }
+
+  @override
+  String nlThisMeal(String kcal) {
+    return '📊 这一餐：~$kcal';
+  }
+
+  @override
+  String nlMacroAmount(String label, String grams) {
+    return '$label ${grams}g';
+  }
+
+  @override
+  String nlItemSumMismatch(String itemSum, String total) {
+    return '⚠️ 各项食物合计约 $itemSum，但这一餐总计约 $total —— 如果不对，请在「今天」里点开这一餐修改。';
+  }
+
+  @override
+  String nlQuotaPaused(String until, String remaining) {
+    return '⏸️ Gemini 暂停中。\n\nGemini 今天的免费额度已用完，暂停到 $until（还剩约 $remaining）。\n\n文字修正和文字记录也需要 Gemini，所以这次没有发送请求。';
+  }
+
+  @override
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(unit, {
+      'seconds': '$seconds 秒',
+      'minutes': '$minutes 分钟',
+      'other': '$hours 小时 $minutes 分',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String get nlNoActions => '❌ 我没弄明白该做什么。请一次只说一件事，比如「把那碗面改成烧鸭饭」。';
 
   @override
   String get nlRequestFailed => '❌ 这个请求失败了，请重试。';

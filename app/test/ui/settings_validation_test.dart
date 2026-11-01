@@ -582,6 +582,12 @@ void main() {
 
 // ── Claude OAuth re-connect flow (server provider) ──────────────────
 
+/// The server provider with an address and an upload key: only then does
+/// Connect Claude call the server (U3).
+FakeSettings _configuredServer() => FakeSettings(keys: {'server': 'up'})
+  ..provider = 'server'
+  ..serverBaseUrl = 'https://server.test';
+
 Widget _serverWrap({
   required FakeSettings settings,
   required Future<({String? url, String? error})> Function() start,
@@ -606,7 +612,7 @@ void connectClaudeTests() {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: 'k')..provider = 'server';
+    final settings = _configuredServer();
     final opened = <Uri>[];
     final completed = <String>[];
     await tester.pumpWidget(_serverWrap(
@@ -647,7 +653,7 @@ void connectClaudeTests() {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: 'k')..provider = 'server';
+    final settings = _configuredServer();
     await tester.pumpWidget(_serverWrap(
       settings: settings,
       start: () async => (url: null, error: 'the CLI did not produce a URL'),
@@ -666,7 +672,7 @@ void connectClaudeTests() {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: 'k')..provider = 'server';
+    final settings = _configuredServer();
     var completions = 0;
     await tester.pumpWidget(_serverWrap(
       settings: settings,
@@ -684,6 +690,49 @@ void connectClaudeTests() {
     await tester.tap(find.text('Cancel'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(completions, 0);
+  });
+
+  // U3 (run 7): the button stays (the plan rows are one tap), but with no
+  // address or upload key it calls nothing and says what is missing,
+  // instead of the server analyzer's English 'Set the server address and
+  // key first.'.
+  testWidgets('connect: without the address or upload key nothing is called',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    var starts = 0;
+    for (final (url, key) in const [
+      ('', 'up'),
+      ('https://server.test', ''),
+      ('', ''),
+      ('  ', 'up'),
+    ]) {
+      final settings = FakeSettings(keys: {'server': key})
+        ..provider = 'server'
+        ..serverBaseUrl = url;
+      await tester.pumpWidget(_serverWrap(
+        settings: settings,
+        start: () async {
+          starts++;
+          return (url: 'https://claude.ai/oauth/x', error: null);
+        },
+        complete: (_) async => fail('must not be called'),
+        openUrl: (_) async => fail('must not be called'),
+      ));
+      await openSubscriptionPage(tester);
+      expect(find.byKey(const Key('connectClaudeButton')), findsOneWidget,
+          reason: 'still shown');
+      await tester.tap(find.byKey(const Key('connectClaudeButton')));
+      await tester.pumpAndSettle();
+      expect(starts, 0, reason: 'url "$url", key "$key"');
+      expect(find.text('Enter your server address and upload key above first.'),
+          findsOneWidget);
+      expect(find.text('Finish connecting Claude'), findsNothing);
+      // Off the page, so the next case opens it fresh.
+      await tester.pumpWidget(const SizedBox());
+    }
+    expect(AppLocalizationsZh().connectNeedsServer, '请先在上方填写服务器地址和上传密钥。');
   });
 
   testWidgets('button hidden off the server provider and without wiring',
@@ -1128,7 +1177,7 @@ void planTuningTests() {
       }) =>
           _wrap(SettingsScreen(
             key: UniqueKey(),
-            settings: FakeSettings(apiKey: 'k'),
+            settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
             analyzer: FakeAnalyzer(),
             dao: FakeDao(),
             requestPhotoPermission: () async => true,
@@ -1179,6 +1228,62 @@ void planTuningTests() {
       expect(find.textContaining('iOS decides'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+    // U21 (run 7): the background job records its launches whatever the
+    // watcher is, so a fresh iPhone install showed 'Not run yet', a time
+    // or a red 'Off' for a scan it never asked for.
+    testWidgets('iOS: the row and its footer line wait for Watch Camera Roll',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      final settings = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true);
+      for (final refreshOn in [true, false]) {
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          lastBackgroundScan: () async => yesterday,
+          backgroundRefreshEnabled: () async => refreshOn,
+          openSystemSettings: () async {},
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('backgroundScanRow')), findsNothing,
+            reason: 'refresh ${refreshOn ? 'on' : 'off'}');
+        expect(find.textContaining('app switcher'), findsNothing);
+        expect(find.text('Off'), findsNothing);
+        // The row names and the generic footer stay as they were.
+        expect(find.text('Backfill Lookback'), findsOneWidget);
+        expect(find.textContaining('lookback window'), findsOneWidget);
+      }
+      // Turning the watcher on brings both back.
+      await tester.tap(find.byKey(const Key('watcherToggle')));
+      await tester.pumpAndSettle();
+      expect(settings.watcherEnabled, isTrue);
+      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget, reason: 'refresh is off');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Android keeps the row with the watcher off (its Restricted '
+        'remedy covers the nightly summary too)', (tester) async {
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => false,
+        openSystemSettings: () async {},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
+      expect(find.text('Restricted'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
     testWidgets('Background App Refresh off → the row becomes the remedy',
         (tester) async {
       // iOS refuses every BGTask request while the system switch (or Low
@@ -1187,7 +1292,7 @@ void planTuningTests() {
       var opened = 0;
       await tester.pumpWidget(_wrap(SettingsScreen(
         key: UniqueKey(),
-        settings: FakeSettings(apiKey: 'k'),
+        settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
         analyzer: FakeAnalyzer(),
         dao: FakeDao(),
         requestPhotoPermission: () async => true,

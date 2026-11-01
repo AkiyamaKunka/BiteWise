@@ -56,11 +56,21 @@ void main() {
       }
     });
 
-    test('other values stay raw', () {
+    test('numbers read like every total (thousands separator, whole '
+        'kcal); strings stay raw', () {
       expect(displayTotalCalories({'total_calories': 450}), '450');
-      expect(displayTotalCalories({'total_calories': 450.5}), '450.5');
+      // Rounded like the day header (formatKcal), not '450.5' (L3).
+      expect(displayTotalCalories({'total_calories': 450.5}), '451');
+      expect(displayTotalCalories({'total_calories': 1480}), '1,480',
+          reason: "the chip read '1480' under a '2,720' header");
+      expect(displayTotalCalories({'total_calories': 1480}),
+          formatKcal(1480));
       expect(displayTotalCalories({'total_calories': '0'}), '0');
       expect(displayTotalCalories({'total_calories': 'NaN'}), 'NaN');
+      expect(displayTotalCalories({'total_calories': 'about 500'}),
+          'about 500');
+      expect(displayTotalCalories({'total_calories': double.nan}), 'NaN',
+          reason: 'non-finite stays raw, never a confident 0');
     });
 
     test('card and day total agree for an editor-saved blank-calorie meal', () {

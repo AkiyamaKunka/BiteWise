@@ -21,6 +21,7 @@ import '../../diagnostics.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../provider_names.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/grouped.dart';
 import '../diagnostics_screen.dart';
 import 'api_key_page.dart';
@@ -201,26 +202,34 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
       title: context.l10n.providerPageTitle,
       children: [
         if (settings.isQuotaPaused)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Card(
-              key: const Key('quotaPauseBanner'),
-              color: scheme.errorContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                // Its own key, not settingsAiFooterPaused: that one points
-                // the reader AT this page.
-                child: Text(
-                  settings.quotaPauseUntil != null
-                      ? context.l10n.providerQuotaPausedUntil(
-                          TimeOfDay.fromDateTime(
-                                  settings.quotaPauseUntil!.toLocal())
-                              .format(context))
-                      : context.l10n.providerQuotaPaused,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: scheme.onErrorContainer),
+          GroupedCard(
+            key: const Key('quotaPauseBanner'),
+            margin: const EdgeInsets.fromLTRB(
+                kGroupInset, AppSpace.s16, kGroupInset, 0),
+            padding: const EdgeInsets.all(AppSpace.cardPadding),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ExcludeSemantics(
+                  child: Icon(Icons.pause_circle_outline_rounded,
+                      size: 22, color: context.colors.warning),
                 ),
-              ),
+                const SizedBox(width: AppSpace.s12),
+                Expanded(
+                  // Its own key, not settingsAiFooterPaused: that one
+                  // points the reader AT this page.
+                  child: Text(
+                    settings.quotaPauseUntil != null
+                        ? context.l10n.providerQuotaPausedUntil(
+                            TimeOfDay.fromDateTime(
+                                    settings.quotaPauseUntil!.toLocal())
+                                .format(context))
+                        : context.l10n.providerQuotaPaused,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: context.colors.label),
+                  ),
+                ),
+              ],
             ),
           ),
         GroupedSection(

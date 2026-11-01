@@ -52,6 +52,14 @@ Future<void> _allow(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The one Text a consent dialog's body is.
+String _dialogText(WidgetTester tester, Finder dialog) => tester
+    .widget<Text>(find.descendant(
+        of: find.descendant(
+            of: dialog, matching: find.byType(SingleChildScrollView)),
+        matching: find.byType(Text)))
+    .data!;
+
 Widget _app(Widget home, {Locale? locale}) => MaterialApp(
       locale: locale,
       localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -72,7 +80,12 @@ void main() {
           provider: 'gemini', serverBackend: 'claude', serverBaseUrl: '');
       expect(t, contains('Google (Gemini)'));
       expect(t, contains('dietary profile'));
-      expect(t, contains('summary of the other meals logged that day'));
+      // B14: a photo taken before 04:00 also carries the day before's
+      // meals (remains of a late dinner); the dialog must say so.
+      expect(
+          t,
+          contains('summary of the other meals logged that day (for a '
+              'photo taken before 4 a.m., the day before too)'));
       expect(t, contains('last 7 days'));
       expect(t, contains('leftover photos'));
       expect(t, contains('never receives'));
@@ -122,8 +135,45 @@ void main() {
           provider: 'qwen', serverBackend: 'claude', serverBaseUrl: '');
       expect(t, contains('阿里云（通义千问）'));
       expect(t, contains('饮食档案'));
+      expect(t, contains('当天其他已记录餐食的简短摘要（凌晨 4 点前拍的照片还包括前一天的餐食）'));
       expect(t, contains('最近 7 天'));
       expect(t, contains('中国大陆'));
+    });
+
+    // U26: the camera-roll notice sits above aiConsentBody, which already
+    // says the developer receives nothing.
+    test('the camera-roll notice leaves the developer to the general text',
+        () {
+      expect(en.watcherDisclosureBody('Gemini', 2), isNot(contains('developer')));
+      expect(zh.watcherDisclosureBody('Gemini', 2), isNot(contains('开发者')));
+      expect(en.aiConsentBody('X'), contains('developer never receives'));
+      expect(zh.aiConsentBody('X'), contains('开发者收不到'));
+    });
+
+    testWidgets('an appendix follows the text unless the caller leads with it',
+        (tester) async {
+      Future<void> open({required bool lead}) async {
+        await tester.pumpWidget(_app(Builder(
+            builder: (context) => TextButton(
+                onPressed: () => showAiConsentDialog(context,
+                    provider: 'gemini',
+                    serverBackend: 'claude',
+                    serverBaseUrl: '',
+                    appendix: 'THE NOTICE',
+                    leadWithAppendix: lead),
+                child: const Text('ask')))));
+        await tester.tap(find.text('ask'));
+        await tester.pumpAndSettle();
+      }
+
+      await open(lead: false);
+      expect(_dialogText(tester, _dialog), startsWith('Chopstats estimates'));
+      expect(_dialogText(tester, _dialog), endsWith('\n\nTHE NOTICE'));
+      await _notNow(tester);
+      await open(lead: true);
+      expect(_dialogText(tester, _dialog), startsWith('THE NOTICE\n\n'));
+      expect(_dialogText(tester, _dialog), endsWith('at any time in Settings.'));
+      await _notNow(tester);
     });
   });
 
@@ -465,6 +515,30 @@ void main() {
       expect(intake.started, isTrue);
     });
 
+    // U26 (run 7): the camera-roll notice is the one thing new in this
+    // dialog, and it used to come last, below the fold at large text.
+    testWidgets('the camera-roll notice comes first, then the general '
+        'text, and the developer is named once', (tester) async {
+      final settings = _unasked()..provider = 'qwen';
+      settings.apiKey = 'k';
+      final intake = await pumpSettings(tester, settings);
+      await tester.tap(find.byKey(const Key('watcherToggle')));
+      await tester.pumpAndSettle();
+      final text = _dialogText(
+          tester, find.byKey(const Key('watcherDisclosureDialog')));
+      expect(text, startsWith('While Watch Camera Roll is on'));
+      expect(text.indexOf('Chopstats estimates calories'),
+          greaterThan(text.indexOf('including ones that are not food')));
+      expect(text, contains('its developer never receives any of this'));
+      expect(text, isNot(contains("Nothing is sent to the app's developer")));
+      expect('developer'.allMatches(text), hasLength(1));
+      // Text order only: asked, and Continue saves, exactly as before.
+      await tester.tap(find.byKey(const Key('watcherDisclosureContinue')));
+      await tester.pumpAndSettle();
+      expect(settings.aiConsentWrites, [('qwen', true)]);
+      expect(intake.started, isTrue);
+    });
+
     testWidgets('Stop sharing withdraws the consent and turns the watcher '
         'off; the row leaves with it', (tester) async {
       final settings = FakeSettings(
@@ -512,6 +586,9 @@ void main() {
       expect(find.textContaining('OpenAI'), findsWidgets);
       expect(find.textContaining('Watch Camera Roll'), findsOneWidget,
           reason: 'the automatic scan is why it is asked now');
+      // U26: the notice that explains why leads the dialog.
+      expect(_dialogText(tester, _dialog),
+          startsWith('While Watch Camera Roll is on'));
       await _notNow(tester);
       expect(settings.provider, 'gemini');
 
@@ -672,10 +749,58 @@ void main() {
         findsOneWidget);
     expect(find.textContaining('meal descriptions and recent meals'),
         findsOneWidget);
+    // This confirmation is the consent: it says where the plan's company
+    // processes the data, as the consent dialog does (PRIVACY.md).
+    expect(find.textContaining('mainland China'), findsOneWidget);
     await tester.tap(find.byKey(const Key('setupLinkConfirm')));
     await tester.pumpAndSettle();
     expect(settings.aiConsentWrites, [('server:doubao', true)]);
     expect(settings.provider, 'server');
+    await links.close();
+  });
+
+  Future<(FakeSettings, StreamController<Uri>)> pumpSetupLink(
+      WidgetTester tester, String backend,
+      {Locale? locale}) async {
+    final settings = _unasked();
+    final links = StreamController<Uri>.broadcast();
+    final services = UiServices(
+      dao: FakeDao(),
+      analyzer: FakeAnalyzer(),
+      executor: FakeExecutor(),
+      settings: settings,
+      picker: FakePicker(),
+      requestPhotoPermission: () async => true,
+      reports: FakeReports(),
+      setupLinks: links.stream,
+    );
+    await tester
+        .pumpWidget(_app(HomeShell(services: services), locale: locale));
+    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+        '&key=k1234567890abcdef&backend=$backend'));
+    await tester.pumpAndSettle();
+    return (settings, links);
+  }
+
+  testWidgets('a GLM-plan setup link says, in Chinese, that the data is '
+      'processed in mainland China', (tester) async {
+    final (settings, links) =
+        await pumpSetupLink(tester, 'glm', locale: const Locale('zh'));
+    expect(find.textContaining('中国大陆'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+    await tester.pumpAndSettle();
+    expect(settings.aiConsentWrites, [('server:glm', true)]);
+    await links.close();
+  });
+
+  testWidgets('a Claude-plan setup link has no mainland-China note',
+      (tester) async {
+    final (settings, links) = await pumpSetupLink(tester, 'claude');
+    expect(find.byKey(const Key('setupLinkConfirm')), findsOneWidget);
+    expect(find.textContaining('mainland China'), findsNothing);
+    await tester.tap(find.byKey(const Key('setupLinkConfirm')));
+    await tester.pumpAndSettle();
+    expect(settings.aiConsentWrites, [('server:claude', true)]);
     await links.close();
   });
 }

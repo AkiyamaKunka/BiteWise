@@ -62,8 +62,9 @@ Settings, using **your own API key**:
   (such as previews) are not sent.
 - Your dietary profile text, if you wrote one.
 - For the leftover check: the descriptions, food names, times and calorie
-  estimates of meals you already logged (that day's meals, or the meal you
-  picked as the original).
+  estimates of meals you already logged (that day's meals, plus the day
+  before's for a photo taken before 4 a.m., or the meal you picked as the
+  original).
 
 **What is sent with a text request:**
 
@@ -113,9 +114,12 @@ receives none of it. That recipient is:
 What that recipient receives:
 
 - **Each photo** comes with your dietary profile (if you wrote one) and a
-  short summary of the other meals logged that day — up to five, each with
+  short summary of the other meals logged that day (for a photo taken
+  before 4 a.m., the day before too) — up to five, each with
   its time, description, food names and calorie estimates — so the AI can
-  tell leftovers from a new meal.
+  tell leftovers from a new meal. If you allowed AI analysis before the
+  day before's meals were added, the app asks you once more, and they are
+  included only after you allow it again.
 - **A leftover photo** comes with the meal it belongs to.
 - **Describe a meal** sends what you typed and today's date — no other
   meals.
@@ -181,7 +185,7 @@ date. Questions: open an issue at
 
 - 照片本身（缩小尺寸并重新编码为 JPEG；极少数情况下应用无法解码一张较小的 JPEG，则不经重新编码直接发送该文件）。照片中嵌入的元数据（例如拍摄时间、相机型号，以及相机记录了的话，拍摄地点）会从发送的这份副本中删除，文件里附带的其他图像（例如预览图）也不会被发送。
 - 你的饮食档案文字（如果你填写了）。
-- 用于剩菜判断：已记录餐食的描述、食物名称、时间和热量估算（当天的餐食，或你选作原餐的那一餐）。
+- 用于剩菜判断：已记录餐食的描述、食物名称、时间和热量估算（当天的餐食，凌晨 4 点前拍的照片还包括前一天的餐食；或你选作原餐的那一餐）。
 
 **随文字请求一起发送的内容：**
 
@@ -208,7 +212,7 @@ date. Questions: open an issue at
 
 接收方会收到的内容：
 
-- **每张照片**都会附带你的饮食档案（如果你填写了）和当天其他已记录餐食的简短摘要——最多五餐，每餐包括时间、描述、食物名称和热量估算——便于 AI 区分剩菜和新的一餐。
+- **每张照片**都会附带你的饮食档案（如果你填写了）和当天其他已记录餐食的简短摘要（凌晨 4 点前拍的照片还包括前一天的餐食）——最多五餐，每餐包括时间、描述、食物名称和热量估算——便于 AI 区分剩菜和新的一餐。如果你在加入前一天的餐食之前就已允许 AI 分析，应用会再询问你一次；你再次允许之后才会附带前一天的餐食。
 - **剩菜照片**会附带它对应的那一餐。
 - **文字描述一餐**只发送你输入的文字和今天的日期，不发送其他餐食。
 - **修改或删除某餐**会发送你输入的文字、今天的日期和最近 7 天的餐食。

@@ -26,6 +26,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String mealItemLine(String name, String kcal) {
+    return '$name: ~$kcal';
+  }
+
+  @override
   String mealsToday(int count) {
     String _temp0 = intl.Intl.pluralLogic(
       count,
@@ -80,7 +85,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get todayEmptyHint =>
-      'Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.';
+      'Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.';
 
   @override
   String get fabLog => 'Log';
@@ -124,6 +129,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String bodyAsOf(String date) {
+    return 'as of $date';
+  }
+
+  @override
   String get bodyNoChange => 'no change';
 
   @override
@@ -149,7 +159,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyEmptyHint =>
-      'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.';
+      'Tap Log to record your weight or your waist, chest and hip measurements.';
 
   @override
   String bodySheetLogTitle(String date) {
@@ -163,6 +173,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodySheetHint => 'Leave anything you did not measure empty.';
+
+  @override
+  String get bodySheetDate => 'Date';
+
+  @override
+  String bodySheetSwitchTitle(String date) {
+    return 'Switch to $date?';
+  }
+
+  @override
+  String get bodySheetSwitchBody =>
+      'That day already has an entry. What you typed here is not saved and will be discarded.';
+
+  @override
+  String get bodySheetDiscard => 'Discard';
 
   @override
   String get bodyFieldWeight => 'Weight';
@@ -212,26 +237,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get delete => 'Delete';
 
   @override
-  String get settingsWelcomeTitle => 'Welcome — one step to start logging';
+  String get settingsWelcomeTitle => 'Set up AI to start logging';
 
   @override
   String get settingsWelcomeBody =>
-      'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.';
+      'Pick a provider and paste its API key (it saves as you type), then tap Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.';
 
   @override
   String get settingsSectionAi => 'AI';
 
   @override
   String get settingsAiFooterPaused =>
-      'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.';
+      'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider on the AI Provider page.';
 
   @override
   String get providerQuotaPaused =>
-      'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.';
+      'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.';
 
   @override
   String providerQuotaPausedUntil(String time) {
-    return 'Analyses are paused — the daily quota was hit (until $time). New photos are kept and retried automatically; changing the key or provider resumes now.';
+    return 'Analyses are paused until $time — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.';
   }
 
   @override
@@ -269,7 +294,7 @@ class AppLocalizationsEn extends AppLocalizations {
       other: '$days days',
       one: 'day',
     );
-    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.';
+    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Each photo is one AI request, so a free tier\'s daily limit can run out during this first catch-up, and on some free tiers (Gemini\'s, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.';
   }
 
   @override
@@ -279,8 +304,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aiConsentTitle => 'Allow AI analysis?';
 
   @override
+  String get aiConsentUpdateTitle => 'What Chopstats sends has changed';
+
+  @override
+  String get aiConsentUpdateLead =>
+      'New: a photo taken before 4 a.m. now also carries a short summary of the day before\'s meals, so leftovers from a late dinner are recognized. Until you allow it, a photo carries only that day\'s meals; Not now keeps it that way.';
+
+  @override
   String aiConsentBody(String recipient) {
-    return 'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
+    return 'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to $recipient:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day (for a photo taken before 4 a.m., the day before too)\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.';
   }
 
   @override
@@ -449,7 +481,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDataFooter =>
-      'Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.';
+      'Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.';
 
   @override
   String get settingsRowExport => 'Export Data…';
@@ -522,7 +554,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiProviderFooter =>
-      'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.';
+      'The key stays on this phone. Some providers have a free tier; others charge for each request.';
 
   @override
   String get noteVpn => '';
@@ -545,12 +577,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get apiKeyShow => 'Show key';
+
+  @override
+  String get apiKeyHide => 'Hide key';
+
+  @override
   String get apiKeyFooterDefault =>
       'The key saves as you type. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterGemini =>
-      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.';
+      'From aistudio.google.com/apikey (Google AI Studio). Has a free tier, but it allows only a limited number of photos a day, and on it Google may use what you send to improve its AI and let people review it. Turning on billing in AI Studio lifts the limit and avoids this — worth doing before photos are logged automatically. Stored securely on this device only.';
 
   @override
   String get apiKeyFooterOpenai =>
@@ -697,8 +735,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'Signs your server in to your Anthropic account.';
 
   @override
+  String get connectNeedsServer =>
+      'Enter your server address and upload key above first.';
+
+  @override
   String get subInactiveFooter =>
-      'An API key is currently active. Pick an AI above to have your own server analyze photos instead.';
+      'An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.';
 
   @override
   String get connectDialogTitle => 'Finish connecting Claude';
@@ -757,7 +799,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get addFixFooter =>
-      '\"meal 2 was roast duck\" · \"delete the first meal\"';
+      '\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"';
 
   @override
   String get addPhotosTip =>
@@ -830,7 +872,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyEmptyHintImperial =>
-      'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 180 lb\") lands here too.';
+      'Tap Log to record your weight or your waist, chest and hip measurements.';
 
   @override
   String bodySince(String date) {
@@ -851,7 +893,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get leftoverPickPhoto =>
-      'Pick the photo of what\'s LEFT — the meal\'s calories shrink to what you ate.';
+      'Pick the photo of what\'s left over — the meal\'s calories shrink to what you ate.';
 
   @override
   String get leftoverChangeMeal => 'Change';
@@ -861,6 +903,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get leftoverUseAnyway => 'Use anyway';
+
+  @override
+  String get leftoverQuotaPaused =>
+      'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.';
 
   @override
   String get leftoverResultTitle => 'Deduct leftovers?';
@@ -999,8 +1045,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Logged and counted. A few more days and I can tell you how this compares to your usual.';
 
   @override
-  String coachDetail(String meals, String protein) {
-    return '$meals meals · $protein g protein';
+  String coachDetail(int meals, String protein) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return '$_temp0 · $protein g protein';
   }
 
   @override
@@ -1018,6 +1070,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get goalFieldLabel => 'kcal per day';
+
+  @override
+  String goalInvalid(String max) {
+    return 'Enter a whole number from 1 to $max.';
+  }
 
   @override
   String get goalClear => 'Clear goal';
@@ -1177,7 +1234,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixTopUp =>
-      'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free).';
+      'Add credit or turn on billing at the provider. On a free tier, wait for the daily limit to reset.';
 
   @override
   String get diagRateLimited =>
@@ -1192,7 +1249,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagFixRecopyKey =>
-      'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).';
+      'Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).';
 
   @override
   String diagModelNotFound(String model) {
@@ -1201,7 +1258,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextOk =>
-      'The model answered JSON — chat fixes and \"describe a meal\" work.';
+      'The model answered JSON — \"Describe a meal\" and \"Fix or delete a meal\" work.';
 
   @override
   String get diagTextBad =>
@@ -1209,7 +1266,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextBadDetail =>
-      'Chat fixes and \"describe a meal\" may fail; photo analysis can still work.';
+      '\"Describe a meal\" and \"Fix or delete a meal\" may fail; photo analysis can still work.';
 
   @override
   String get diagFixPickModel =>
@@ -1217,7 +1274,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagTextBadPhotoAlsoFailed =>
-      'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.';
+      '\"Describe a meal\" and \"Fix or delete a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.';
 
   @override
   String get diagFixTextPickModel =>
@@ -1240,11 +1297,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagPhotoTempFail =>
-      'Photo analysis failed with a TEMPORARY problem.';
+      'Photo analysis failed with a temporary problem.';
 
   @override
   String get diagPhotoPermFail =>
-      'Photo analysis failed and a retry will NOT fix it.';
+      'Photo analysis failed, and retrying will not fix it.';
 
   @override
   String get diagFixPhotoTemp =>
@@ -1256,7 +1313,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagQuotaPaused =>
-      'Analyses are PAUSED — the daily quota was hit.';
+      'Analyses are paused — the daily quota was hit.';
 
   @override
   String diagQuotaPausedUntil(String until) {
@@ -1397,11 +1454,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get outcomeFailed => 'Analysis failed';
 
   @override
+  String get outcomeNotSetUp => 'AI isn\'t set up yet';
+
+  @override
+  String get outcomeCheckServer => 'Check your server address';
+
+  @override
   String get outcomeLeftoverApplied => 'Leftovers deducted';
 
   @override
   String get outcomeLogManuallyHint =>
       'If this IS food, log it yourself — the photo stays attached to the meal.';
+
+  @override
+  String get outcomeLogManuallyFailedHint =>
+      'You can still log this meal yourself — the photo stays attached to it.';
+
+  @override
+  String outcomeQuotaPausedPickMsg(String time) {
+    return 'Analysis is paused — the daily quota is used up (until $time), so this photo was not sent. Log this meal yourself now, or pick the photo again after that. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).';
+  }
+
+  @override
+  String get outcomeQuotaPausedPickMsgNoTime =>
+      'Analysis is paused — the daily quota is used up, so this photo was not sent. Log this meal yourself now, or pick the photo again later. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).';
 
   @override
   String get outcomeUndoLeftover => 'Not leftovers, log as a new meal';
@@ -1496,6 +1572,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'No server address or upload key is set — add them in Settings.';
 
   @override
+  String get errBadServerAddress =>
+      'The server address in Settings is not a valid web address — check it for typos.';
+
+  @override
   String get errRejectedKey =>
       'The provider rejected the API key. Check the key in Settings.';
 
@@ -1540,6 +1620,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This photo could not be processed (it could not be decoded).';
 
   @override
+  String get errLeftoverUnsure =>
+      'It looks like the leftovers of an earlier meal, but the AI wasn\'t sure which one, so nothing was logged or deducted. Use Leftovers to deduct them.';
+
+  @override
   String get errServerBusy =>
       'Your server is busy with another analysis — the photo is kept and retried later.';
 
@@ -1560,6 +1644,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String dayLoadFailed(String error) {
     return 'Could not load this day: $error';
   }
+
+  @override
+  String get todayLoadFailed => 'Couldn\'t load today\'s meals.';
+
+  @override
+  String get historyLoadFailed => 'Couldn\'t load your history.';
 
   @override
   String get dayEmpty => 'Nothing logged on this day yet. Tap + to add a meal.';
@@ -1773,7 +1863,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covIntro(int days) {
-    return 'Checks every photo of the last $days day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days',
+      one: 'day',
+    );
+    return 'Checks every photo of the last $_temp0 against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.';
   }
 
   @override
@@ -1826,17 +1922,30 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covAllAccounted(int count) {
-    return 'All $count photos are accounted for.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'All $count photos are accounted for.',
+      one: 'The 1 photo is accounted for.',
+      zero: 'No photos to check in this window.',
+    );
+    return '$_temp0';
   }
 
   @override
   String covSummary(int scanned, int missing) {
-    return '$scanned photos checked — $missing never scanned.';
+    String _temp0 = intl.Intl.pluralLogic(
+      scanned,
+      locale: localeName,
+      other: '$scanned photos checked',
+      one: '1 photo checked',
+    );
+    return '$_temp0 — $missing never scanned.';
   }
 
   @override
   String get covLimitedAccess =>
-      'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.';
+      'Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.';
 
   @override
   String get covTruncated =>
@@ -1883,6 +1992,28 @@ class AppLocalizationsEn extends AppLocalizations {
       one: '1 photo was',
     );
     return '$label stopped after $attempted of $total: $reason The remaining $_temp0 not touched — run this again later.';
+  }
+
+  @override
+  String covStoppedLast(String label, int attempted, int total, String reason) {
+    return '$label stopped after $attempted of $total: $reason';
+  }
+
+  @override
+  String covSummaryFailed(int scanned, int failed) {
+    String _temp0 = intl.Intl.pluralLogic(
+      scanned,
+      locale: localeName,
+      other: '$scanned photos checked',
+      one: '1 photo checked',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      failed,
+      locale: localeName,
+      other: '$failed failed',
+      one: '1 failed',
+    );
+    return '$_temp0 — $_temp1: retry, or enter it yourself below.';
   }
 
   @override
@@ -2105,11 +2236,20 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String autoScanPausedBilling(String provider, String time) {
+    return 'Watch Camera Roll is paused: the $provider account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: $time).';
+  }
+
+  @override
   String get autoScanPausedTitle => 'Photos are not being logged automatically';
 
   @override
   String get watcherLimitedAccess =>
       'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
+
+  @override
+  String get watcherLimitedFooter =>
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
 
   @override
   String get fixAction => 'Fix';
@@ -2183,6 +2323,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get importFromClipboard => 'Import from clipboard';
 
   @override
+  String get importFieldHint => 'Or paste a small export here';
+
+  @override
   String importClipboardRead(String size) {
     return 'Read $size from the clipboard';
   }
@@ -2253,8 +2396,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get nlUnnamedMeal => 'Unnamed meal';
 
   @override
+  String nlResultItem(String name, String kcal) {
+    return '  • $name: ~$kcal';
+  }
+
+  @override
+  String nlThisMeal(String kcal) {
+    return '📊 This meal: ~$kcal';
+  }
+
+  @override
+  String nlMacroAmount(String label, String grams) {
+    return '$label: ${grams}g';
+  }
+
+  @override
+  String nlItemSumMismatch(String itemSum, String total) {
+    return '⚠️ Item calories sum to ~$itemSum but the meal total is ~$total — if this looks wrong, open the meal on Today to fix it.';
+  }
+
+  @override
+  String nlQuotaPaused(String until, String remaining) {
+    return '⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until $until (about $remaining remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.';
+  }
+
+  @override
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  ) {
+    String _temp0 = intl.Intl.selectLogic(unit, {
+      'seconds': '${seconds}s',
+      'minutes': '${minutes}m',
+      'other': '${hours}h${minutes}m',
+    });
+    return '$_temp0';
+  }
+
+  @override
   String get nlNoActions =>
-      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.';
+      '❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.';
 
   @override
   String get nlRequestFailed => '❌ That request failed. Please try again.';

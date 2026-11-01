@@ -9,13 +9,23 @@
 /// JPEG → food, HEIC → not food).
 ///
 /// The chain, in order ([decodeForUpload]):
-///   1. pure Dart in an isolate (unchanged);
-///   2. iOS only: ImageIO over a platform channel
+///   1. iOS only: ImageIO over a platform channel
 ///      (ios/Runner/ImageIOPlugin.swift) — CPU only;
+///   2. pure Dart in an isolate (the only first step on Android);
 ///   3. the engine codec (dart:ui), which decodes whatever the OS can
 ///      (HEIC/HEIF/AVIF on iOS and modern Android), with orientation
 ///      applied, at a reduced target size — never in the iOS background
 ///      engine, and always under [kPlatformDecodeTimeout].
+///
+/// WHY IMAGEIO FIRST ON iOS (run 7, P1): until then pure Dart ran first
+/// everywhere, so on iOS only HEIC (which it cannot read) reached ImageIO,
+/// and every JPEG/PNG (WeChat and Safari saves, screenshots, AirDrop,
+/// "Most Compatible" camera photos) paid a full-resolution pure-Dart
+/// decode — twice per saved photo (upload copy + thumbnail): about 2-4 s
+/// of CPU and a 330 MB peak for a 12 MP JPEG (14 s / 1.2 GB at 48 MP),
+/// against about 0.1 s and 56 MB through ImageIO, which subsamples a
+/// JPEG while decoding. Its output is upright, sRGB, capped, and stripped
+/// by [stripJpegMetadata] like every upload.
 ///
 /// WHY 2 AND THE RULES ON 3 (2026-10-18): the background scan runs in a
 /// headless engine, and on iOS that engine's GPU switch is off for the whole
@@ -225,8 +235,10 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
         longSidePx: kThumbLongSidePx,
         jpegQuality: kThumbJpegQuality);
 
-/// The decode chain (library docs). Null when every allowed step failed —
-/// the caller reports an undecodable photo. Never throws.
+/// The decode chain (library docs): on iOS ImageIO, then pure Dart, then
+/// the engine codec where it can finish; elsewhere pure Dart, then the
+/// engine codec. Null when every allowed step failed — the caller reports
+/// an undecodable photo. Never throws.
 ///
 /// The seams default to production: [isolate] runs [pureDart] (compute),
 /// [native] is [downscaleViaImageIO], [engine] is [decodeViaPlatform];
@@ -262,21 +274,27 @@ Future<Uint8List?> decodeForUpload(
   bool? backgrounded,
   Duration engineTimeout = kPlatformDecodeTimeout,
 }) async {
-  try {
-    final viaDart = await (isolate ?? _inIsolate)(pureDart, original);
-    if (viaDart != null) return viaDart;
-  } catch (_) {
-    // compute() can fail to spawn on a low-memory device: try the others.
-  }
   final onIOS = ios ?? defaultTargetPlatform == TargetPlatform.iOS;
+  final inHeadless = onIOS && (headless ?? isHeadlessEngine);
   if (onIOS) {
-    final inHeadless = headless ?? isHeadlessEngine;
+    // ImageIO first (library docs): a fraction of pure Dart's time and
+    // memory for a JPEG/PNG, and the only CPU decoder for HEIC. Null (no
+    // plugin, >100 MP, a format it cannot read, its deadline) falls
+    // through to pure Dart.
     try {
       final viaImageIO = await orNullAfter(
           native(original, longSidePx: longSidePx, jpegQuality: jpegQuality),
           nativeDecodeTimeoutFor(headless: inHeadless));
       if (viaImageIO != null) return viaImageIO;
     } catch (_) {}
+  }
+  try {
+    final viaDart = await (isolate ?? _inIsolate)(pureDart, original);
+    if (viaDart != null) return viaDart;
+  } catch (_) {
+    // compute() can fail to spawn on a low-memory device: try the others.
+  }
+  if (onIOS) {
     // The iOS background engine, or the app's own while it is in the
     // background: dart:ui would park behind the disabled GPU. Undecodable
     // HERE; the pipeline defers the photo to a run that has a GPU

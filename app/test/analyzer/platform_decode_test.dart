@@ -35,15 +35,20 @@ class _Steps {
   int dartCalls = 0, nativeCalls = 0, engineCalls = 0;
   ({int longSidePx, int jpegQuality})? nativeArgs;
 
+  /// The steps in the order they ran.
+  final order = <String>[];
+
   Future<Uint8List?> isolate(
       Uint8List? Function(Uint8List) callback, Uint8List original) async {
     dartCalls++;
+    order.add('dart');
     return dart;
   }
 
   Future<Uint8List?> native(Uint8List original,
       {required int longSidePx, required int jpegQuality}) async {
     nativeCalls++;
+    order.add('native');
     nativeArgs = (longSidePx: longSidePx, jpegQuality: jpegQuality);
     return nativeOut;
   }
@@ -51,6 +56,7 @@ class _Steps {
   Future<Uint8List?> engine(Uint8List original,
       {required int longSidePx, required int jpegQuality}) {
     engineCalls++;
+    order.add('engine');
     return engineOut ?? Future.value(null);
   }
 
@@ -141,10 +147,25 @@ void main() {
     final jpeg =
         Uint8List.fromList(img.encodeJpg(img.Image(width: 4, height: 4)));
 
-    test('the pure-Dart result wins; nothing else runs', () async {
-      final steps = _Steps(dart: jpeg);
-      expect(await steps.run(ios: true, headless: true), same(jpeg));
-      expect((steps.nativeCalls, steps.engineCalls), (0, 0));
+    test('Android: the pure-Dart result wins; nothing else runs', () async {
+      for (final headless in [false, true]) {
+        final steps = _Steps(dart: jpeg, nativeOut: Uint8List(1));
+        expect(await steps.run(ios: false, headless: headless), same(jpeg));
+        expect((steps.nativeCalls, steps.engineCalls), (0, 0));
+      }
+    });
+
+    // Run 7, P1: pure Dart used to run first on iOS too, so every JPEG/PNG
+    // paid a full-resolution pure-Dart decode (2-4 s and ~330 MB for a
+    // 12 MP JPEG, twice per saved photo) before ImageIO was ever asked.
+    test('iOS: ImageIO runs FIRST and pure Dart is not called when it '
+        'answers, in both engines', () async {
+      for (final headless in [false, true]) {
+        final steps = _Steps(dart: Uint8List(2), nativeOut: jpeg);
+        expect(await steps.run(ios: true, headless: headless), same(jpeg),
+            reason: 'headless: $headless');
+        expect(steps.order, ['native'], reason: 'headless: $headless');
+      }
     });
 
     test('iOS: ImageIO answers what pure Dart cannot (HEIC), at the '
@@ -155,6 +176,29 @@ void main() {
           (longSidePx: kAnalysisLongSidePx, jpegQuality: kAnalysisJpegQuality));
       expect(steps.engineCalls, 0,
           reason: 'no GPU decode when ImageIO did it');
+    });
+
+    test('iOS app engine (foreground): ImageIO null → pure Dart → the '
+        'engine codec', () async {
+      final viaDart = _Steps(dart: jpeg, engineOut: Future.value(Uint8List(3)));
+      expect(await viaDart.run(ios: true, headless: false, backgrounded: false),
+          same(jpeg));
+      expect(viaDart.order, ['native', 'dart']);
+      final viaEngine = _Steps(engineOut: Future.value(jpeg));
+      expect(
+          await viaEngine.run(ios: true, headless: false, backgrounded: false),
+          same(jpeg));
+      expect(viaEngine.order, ['native', 'dart', 'engine']);
+    });
+
+    test('iOS background engine: ImageIO null → pure Dart; dart:ui never',
+        () async {
+      final viaDart = _Steps(dart: jpeg, engineOut: Future.value(Uint8List(3)));
+      expect(await viaDart.run(ios: true, headless: true), same(jpeg));
+      expect(viaDart.order, ['native', 'dart']);
+      final none = _Steps(engineOut: Future.value(jpeg));
+      expect(await none.run(ios: true, headless: true), isNull);
+      expect(none.order, ['native', 'dart']);
     });
 
     test('iOS background engine: dart:ui is NEVER called, even when ImageIO '
@@ -170,7 +214,8 @@ void main() {
         () async {
       final steps = _Steps(engineOut: Future.value(jpeg));
       expect(await steps.run(ios: true, headless: false), same(jpeg));
-      expect((steps.nativeCalls, steps.engineCalls), (1, 1));
+      expect((steps.nativeCalls, steps.dartCalls, steps.engineCalls),
+          (1, 1, 1));
     });
 
     // 2026-10-19: iOS switches the APP engine's GPU off too once the user
@@ -278,6 +323,26 @@ void main() {
         expect(done, isTrue);
         expect(result, isNull);
         expect(engineCalls, 0);
+      });
+
+      testWidgets('iOS background engine: pure Dart still gets its turn '
+          'after the short deadline', (tester) async {
+        final jpeg =
+            Uint8List.fromList(img.encodeJpg(img.Image(width: 4, height: 4)));
+        Uint8List? result;
+        decodeForUpload(Uint8List.fromList([1, 2]),
+            pureDart: normalizeForAnalysis,
+            longSidePx: kAnalysisLongSidePx,
+            jpegQuality: kAnalysisJpegQuality,
+            isolate: (_, _) async => jpeg,
+            native: stalled,
+            ios: true,
+            headless: true).then((r) => result = r);
+        await tester.pump(
+            kHeadlessNativeDecodeTimeout - const Duration(milliseconds: 1));
+        expect(result, isNull);
+        await tester.pump(const Duration(milliseconds: 1));
+        expect(result, same(jpeg));
       });
 
       testWidgets("iOS app engine: the longer deadline, then the engine "

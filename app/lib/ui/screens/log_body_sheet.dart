@@ -1,5 +1,16 @@
 /// The Body tab's log sheet: logs or edits one day's weight and girth
 /// measurements (waist / chest / hip). Split out of body_screen.dart.
+///
+/// Shown inside a GroupedSheet, which draws the title ('Log body ·
+/// Oct 30' / 'Edit Oct 30'), scrolls, and lifts the content above the
+/// keyboard — this widget adds none of that itself.
+///
+/// The date row at the top does not change the date here (U18): it hands
+/// what the user typed to [LogBodySheet.onChangeDate], and the Body screen
+/// picks the date and builds a NEW sheet for it, prefilled with that day.
+/// One sheet is always one day, so the prefill that guards the full-row
+/// measurements upsert and "cleared means delete" can never belong to
+/// another day.
 library;
 
 import 'package:flutter/material.dart';
@@ -7,14 +18,34 @@ import 'package:flutter/material.dart';
 import '../../core/contracts.dart';
 import '../../core/shared_generated.dart';
 import '../l10n.dart';
+import '../large_text.dart';
+import '../theme/tokens.dart';
 import '../units.dart';
+import '../widgets/grouped.dart' show GroupedCard, GroupedRow, cellColor;
 
 /// App-only sanity bounds for girth values (cm). Weight uses the shared
 /// parity bounds [SharedConstants.weightMinKg]/[SharedConstants.weightMaxKg].
 const double kGirthMinCm = 20;
 const double kGirthMaxCm = 300;
 
-/// Bottom sheet for logging or editing one day. Prefilled with the day's
+/// What the user typed and has not saved: each field's text where it
+/// differs from the day's stored value, null where it does not. Carried to
+/// a newly picked day that has no data, so changing the date does not
+/// throw away a weight typed for the wrong day.
+@immutable
+class BodySheetDraft {
+  const BodySheetDraft({this.weight, this.waist, this.chest, this.hip});
+  final String? weight;
+  final String? waist;
+  final String? chest;
+  final String? hip;
+
+  /// Nothing typed: changing the date loses nothing.
+  bool get isEmpty =>
+      weight == null && waist == null && chest == null && hip == null;
+}
+
+/// Sheet body for logging or editing one day. Prefilled with the day's
 /// existing values, so the DAO's full-row upsert preserves what the user
 /// didn't touch — and clearing a field really clears it.
 class LogBodySheet extends StatefulWidget {
@@ -24,20 +55,35 @@ class LogBodySheet extends StatefulWidget {
     required this.date,
     this.existingWeight,
     this.existing,
-    this.latestDate,
     this.imperial = false,
+    this.onDelete,
+    this.draft,
+    this.dateLabel,
+    this.onChangeDate,
   });
   final MealsDao dao;
   final String date;
   final double? existingWeight;
   final BodyMeasurements? existing;
 
-  /// When editing an old day, today's date (for the header hint); null when
-  /// already logging today.
-  final String? latestDate;
+  /// Typed values carried over from another day: a non-null field starts
+  /// with this text instead of the stored value.
+  final BodySheetDraft? draft;
+
+  /// [date] for display ('Oct 30'), shown in the date row.
+  final String? dateLabel;
+
+  /// The date row's tap, with what the user typed. Null (or no
+  /// [dateLabel]) hides the row.
+  final ValueChanged<BodySheetDraft>? onChangeDate;
 
   /// Display/input unit system; values are STORED metric either way.
   final bool imperial;
+
+  /// For a day that already has data: asks, deletes the whole day and
+  /// resolves true when it did (the sheet then closes). Null hides the
+  /// Delete button. It is also the accessible way to delete a day.
+  final Future<bool> Function()? onDelete;
 
   @override
   State<LogBodySheet> createState() => _LogBodySheetState();
@@ -51,17 +97,45 @@ class _LogBodySheetState extends State<LogBodySheet> {
   String? _error;
   bool _saving = false;
 
+  /// The stored values as the fields first show them: the baseline that
+  /// tells typed text from an untouched prefill.
+  late final String _storedWeight =
+      _fmt(widget.existingWeight, weightForDisplay);
+  late final String _storedWaist =
+      _fmt(widget.existing?.waistCm, girthForDisplay);
+  late final String _storedChest =
+      _fmt(widget.existing?.chestCm, girthForDisplay);
+  late final String _storedHip = _fmt(widget.existing?.hipCm, girthForDisplay);
+
   @override
   void initState() {
     super.initState();
-    _weight = TextEditingController(
-        text: _fmt(widget.existingWeight, weightForDisplay));
-    _waist = TextEditingController(
-        text: _fmt(widget.existing?.waistCm, girthForDisplay));
-    _chest = TextEditingController(
-        text: _fmt(widget.existing?.chestCm, girthForDisplay));
-    _hip = TextEditingController(
-        text: _fmt(widget.existing?.hipCm, girthForDisplay));
+    final draft = widget.draft;
+    _weight = TextEditingController(text: draft?.weight ?? _storedWeight);
+    _waist = TextEditingController(text: draft?.waist ?? _storedWaist);
+    _chest = TextEditingController(text: draft?.chest ?? _storedChest);
+    _hip = TextEditingController(text: draft?.hip ?? _storedHip);
+  }
+
+  /// The fields whose text is not the day's stored value.
+  BodySheetDraft _typed() {
+    String? typed(TextEditingController c, String stored) =>
+        c.text.trim() == stored ? null : c.text.trim();
+    return BodySheetDraft(
+      weight: typed(_weight, _storedWeight),
+      waist: typed(_waist, _storedWaist),
+      chest: typed(_chest, _storedChest),
+      hip: typed(_hip, _storedHip),
+    );
+  }
+
+  void _changeDate() {
+    // The keyboard would sit over the date picker. Unfocus the FIELD (its
+    // scope then forgets it): FocusScope.of(context).unfocus() let the
+    // sheet route remember the field and re-focus it, keyboard and all,
+    // when the picker or the switch question closed.
+    FocusManager.instance.primaryFocus?.unfocus();
+    widget.onChangeDate!(_typed());
   }
 
   String _fmt(double? metric, double Function(double, bool) toDisplay) =>
@@ -165,113 +239,130 @@ class _LogBodySheetState extends State<LogBodySheet> {
     if (mounted) Navigator.pop(context, true);
   }
 
+  Future<void> _delete() async {
+    final deleted = await widget.onDelete!();
+    // The page reloaded already; false tells it not to reload again.
+    if (deleted && mounted) Navigator.pop(context, false);
+  }
+
+  Widget _field(
+          TextEditingController controller, String key, String label,
+          String unit) =>
+      TextField(
+        key: Key(key),
+        controller: controller,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: InputDecoration(
+          labelText: label,
+          suffixText: unit,
+          // In-sheet cell colour: the theme's page-cell fill is the dark
+          // sheet's own colour, so a field there showed no fill at all.
+          fillColor: cellColor(context),
+        ),
+      );
+
+  /// [fields] [perRow] to a row with 12-pt gaps both ways.
+  static Widget _grid(List<Widget> fields, int perRow) => Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var r = 0; r < fields.length; r += perRow) ...[
+            if (r > 0) const SizedBox(height: AppSpace.s12),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (var c = 0; c < perRow; c++) ...[
+                  if (c > 0) const SizedBox(width: AppSpace.s12),
+                  Expanded(
+                    child: r + c < fields.length
+                        ? fields[r + c]
+                        : const SizedBox.shrink(),
+                  ),
+                ],
+              ],
+            ),
+          ],
+        ],
+      );
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.colors;
+    final l = context.l10n;
+    final girthUnit = girthUnitLabel(widget.imperial);
+    final fields = [
+      _field(_weight, 'bodyWeightField', l.bodyFieldWeight,
+          weightUnitLabel(widget.imperial)),
+      _field(_waist, 'bodyWaistField', l.bodyWaist, girthUnit),
+      _field(_chest, 'bodyChestField', l.bodyChest, girthUnit),
+      _field(_hip, 'bodyHipField', l.bodyHip, girthUnit),
+    ];
+    final onDelete = widget.onDelete;
+    final dateLabel = widget.dateLabel;
     return Padding(
-      // Keep the sheet above the keyboard.
-      padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.latestDate == null
-                  ? context.l10n.bodySheetLogTitle(widget.date)
-                  : context.l10n.bodySheetEditTitle(widget.date),
-              style: theme.textTheme.titleLarge,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              context.l10n.bodySheetHint,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const Key('bodyWeightField'),
-                    controller: _weight,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: context.l10n.bodyFieldWeight,
-                      suffixText: weightUnitLabel(widget.imperial),
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    key: const Key('bodyWaistField'),
-                    controller: _waist,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: context.l10n.bodyWaist,
-                      suffixText: girthUnitLabel(widget.imperial),
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    key: const Key('bodyChestField'),
-                    controller: _chest,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: context.l10n.bodyChest,
-                      suffixText: girthUnitLabel(widget.imperial),
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    key: const Key('bodyHipField'),
-                    controller: _hip,
-                    keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true),
-                    decoration: InputDecoration(
-                      labelText: context.l10n.bodyHip,
-                      suffixText: girthUnitLabel(widget.imperial),
-                      border: const OutlineInputBorder(),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!,
-                  key: const Key('bodySheetError'),
-                  style: TextStyle(color: theme.colorScheme.error)),
-            ],
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                key: const Key('bodySheetSave'),
-                onPressed: _saving ? null : _save,
-                child: Text(
-                    _saving ? context.l10n.saving : context.l10n.save),
+      padding: const EdgeInsets.fromLTRB(
+          AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (widget.onChangeDate != null && dateLabel != null) ...[
+            // An in-sheet cell like the fields below it. GroupedRow reads
+            // as one button, 'Date, Oct 30', and stacks the date under
+            // the label at accessibility sizes.
+            GroupedCard(
+              margin: EdgeInsets.zero,
+              child: GroupedRow(
+                key: const Key('bodySheetDateRow'),
+                icon: Icons.calendar_today_rounded,
+                title: l.bodySheetDate,
+                value: dateLabel,
+                onTap: _saving ? null : _changeDate,
               ),
             ),
+            const SizedBox(height: AppSpace.s12),
           ],
-        ),
+          Text(
+            l.bodySheetHint,
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: colors.secondaryLabel),
+          ),
+          const SizedBox(height: AppSpace.s16),
+          // Two fields a row; ONE at accessibility sizes, where a half-width
+          // field cut its label to 'We…' and hid the typed weight behind
+          // its unit (A7).
+          _grid(fields, isLargeText(context) ? 1 : 2),
+          if (_error != null) ...[
+            const SizedBox(height: AppSpace.s12),
+            Semantics(
+              liveRegion: true,
+              child: Text(_error!,
+                  key: const Key('bodySheetError'),
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: colors.danger)),
+            ),
+          ],
+          const SizedBox(height: AppSpace.s20),
+          FilledButton(
+            key: const Key('bodySheetSave'),
+            onPressed: _saving ? null : _save,
+            child: Text(_saving ? l.saving : l.save),
+          ),
+          if (onDelete != null) ...[
+            const SizedBox(height: AppSpace.s8),
+            TextButton(
+              key: const Key('bodySheetDelete'),
+              style: ButtonStyle(
+                foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                    states.contains(WidgetState.pressed)
+                        ? colors.danger.withValues(alpha: 0.4)
+                        : colors.danger),
+              ),
+              onPressed: _saving ? null : _delete,
+              child: Text(l.delete),
+            ),
+          ],
+        ],
       ),
     );
   }
