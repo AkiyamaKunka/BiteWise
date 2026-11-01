@@ -28,6 +28,7 @@ import '../widgets/macro_chart.dart';
 import '../widgets/small_spinner.dart';
 import '../theme/app_theme.dart' show AppButtonStyles;
 import '../widgets/pickers.dart';
+import 'package:flutter/services.dart' show FilteringTextInputFormatter;
 
 class MealEditorScreen extends StatefulWidget {
   const MealEditorScreen({
@@ -449,7 +450,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       ),
       body: ListView(
         controller: _scroll,
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
+        // Room for the first field's floated label at large text: it was
+        // clipped under the app bar at AX5.
+        padding: EdgeInsets.fromLTRB(16, _gapAboveField(context, 8), 16, 96),
         children: [
           if (_errors.isNotEmpty)
             Card(
@@ -472,6 +475,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             key: const Key('editorDescription'),
             controller: _desc,
             textCapitalization: TextCapitalization.sentences,
+            // Wraps at large text ('Pan-fried du' at AX5); still one line
+            // of content with a Done key.
+            maxLines: isLargeText(context) ? null : 1,
+            keyboardType: TextInputType.text,
+            textInputAction: TextInputAction.done,
+            inputFormatters: [FilteringTextInputFormatter.singleLineFormatter],
             decoration: InputDecoration(
               labelText: context.l10n.editorDescriptionLabel,
               border: const OutlineInputBorder(),
@@ -501,7 +510,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           ),
           const SizedBox(height: 20),
           Text(context.l10n.editorTotalsHeader, style: theme.textTheme.titleSmall),
-          const SizedBox(height: 8),
+          SizedBox(height: _gapAboveField(context, 8)),
           // Bare name + unit suffix, like the macro fields below: at the
           // largest iOS text size a NEW meal's empty field rested
           // 'Calories (kcal)' at the full 3.1x and cut it to 'Calories (kc…'
@@ -512,7 +521,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             label: context.l10n.editorCaloriesLabel,
             suffixText: context.l10n.editorKcalSuffix,
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: _gapAboveField(context, 8)),
           // At large text each macro field takes the full width, like
           // Calories: a third of the row cut 'Protein (g)' / '蛋白质（克）'
           // to 'Pr…'. At the default size a NEW meal's empty fields rest
@@ -524,6 +533,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           _fieldGrid(
             perRow: isLargeText(context) ? 1 : 3,
             gap: 8,
+            runGap: _gapAboveField(context, 8),
             [
               _NumberField(
                   fieldKey: const Key('editorProtein'),
@@ -619,14 +629,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 }
 
 /// [children] [perRow] to a row, sharing each row's width equally, [gap]
-/// apart both ways. With every child in one row it is exactly the plain
-/// Row of Expanded children the editor used before large-text stacking.
+/// apart across and [runGap] (default [gap]) between rows. With every
+/// child in one row it is exactly the plain Row of Expanded children the
+/// editor used before large-text stacking.
 Widget _fieldGrid(List<Widget> children,
-    {required int perRow, required double gap}) {
+    {required int perRow, required double gap, double? runGap}) {
   final rows = <Widget>[];
   for (var i = 0; i < children.length; i += perRow) {
     final chunk = children.sublist(i, min(i + perRow, children.length));
-    if (rows.isNotEmpty) rows.add(SizedBox(height: gap));
+    if (rows.isNotEmpty) rows.add(SizedBox(height: runGap ?? gap));
     rows.add(Row(children: [
       for (var j = 0; j < chunk.length; j++) ...[
         if (j > 0) SizedBox(width: gap),
@@ -635,6 +646,26 @@ Widget _fieldGrid(List<Widget> children,
     ]));
   }
   return rows.length == 1 ? rows.single : Column(children: rows);
+}
+
+/// The space above an outlined field: [base], or more once enlarged text
+/// makes the field's floated label reach further. InputDecorator draws
+/// that label centred on the top border at 0.75x, so half of it sits
+/// OUTSIDE the field's box; at AX5 (~26 pt) it covered the 8-pt gap and
+/// the header or field above it. Unchanged at the default size.
+double _gapAboveField(BuildContext context, double base) {
+  final scaler = MediaQuery.textScalerOf(context);
+  if (scaler.scale(1) <= 1.0) return base;
+  final tp = TextPainter(
+    text: TextSpan(
+        text: 'Hg', style: Theme.of(context).textTheme.bodyLarge),
+    textDirection: TextDirection.ltr,
+    textScaler: scaler,
+  )..layout();
+  final reach = tp.height * 0.75 / 2;
+  tp.dispose();
+  final needed = reach + 4;
+  return needed > base ? needed : base;
 }
 
 class _NumberField extends StatelessWidget {
@@ -682,7 +713,7 @@ class _ItemRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
+        padding: EdgeInsets.only(top: _gapAboveField(context, 6), bottom: 6),
         child: Column(
           children: [
             Row(
@@ -691,6 +722,13 @@ class _ItemRow extends StatelessWidget {
                   child: TextField(
                     key: Key('itemName$index'),
                     controller: ctrls.name,
+                    // Wraps at large text, as the description does.
+                    maxLines: isLargeText(context) ? null : 1,
+                    keyboardType: TextInputType.text,
+                    textInputAction: TextInputAction.done,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.singleLineFormatter
+                    ],
                     decoration: InputDecoration(
                       labelText: context.l10n.editorItemLabel,
                       border: const OutlineInputBorder(),
@@ -706,12 +744,13 @@ class _ItemRow extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: _gapAboveField(context, 6)),
             // At large text a 2x2 grid: a quarter of the row cut 'kcal'
             // to 'k…'. The labels are short enough for half.
             _fieldGrid(
               perRow: isLargeText(context) ? 2 : 4,
               gap: 6,
+              runGap: _gapAboveField(context, 6),
               [
                 _NumberField(
                     fieldKey: Key('itemCal$index'),
