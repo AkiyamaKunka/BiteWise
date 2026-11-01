@@ -1128,7 +1128,7 @@ void planTuningTests() {
       }) =>
           _wrap(SettingsScreen(
             key: UniqueKey(),
-            settings: FakeSettings(apiKey: 'k'),
+            settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
             analyzer: FakeAnalyzer(),
             dao: FakeDao(),
             requestPhotoPermission: () async => true,
@@ -1179,6 +1179,62 @@ void planTuningTests() {
       expect(find.textContaining('iOS decides'), findsNothing);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
+    // U21 (run 7): the background job records its launches whatever the
+    // watcher is, so a fresh iPhone install showed 'Not run yet', a time
+    // or a red 'Off' for a scan it never asked for.
+    testWidgets('iOS: the row and its footer line wait for Watch Camera Roll',
+        (tester) async {
+      tester.view.physicalSize = const Size(800, 3000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
+      final settings = FakeSettings(apiKey: 'k', watcherDisclosureSeen: true);
+      for (final refreshOn in [true, false]) {
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: settings,
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          lastBackgroundScan: () async => yesterday,
+          backgroundRefreshEnabled: () async => refreshOn,
+          openSystemSettings: () async {},
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('backgroundScanRow')), findsNothing,
+            reason: 'refresh ${refreshOn ? 'on' : 'off'}');
+        expect(find.textContaining('app switcher'), findsNothing);
+        expect(find.text('Off'), findsNothing);
+        // The row names and the generic footer stay as they were.
+        expect(find.text('Backfill Lookback'), findsOneWidget);
+        expect(find.textContaining('lookback window'), findsOneWidget);
+      }
+      // Turning the watcher on brings both back.
+      await tester.tap(find.byKey(const Key('watcherToggle')));
+      await tester.pumpAndSettle();
+      expect(settings.watcherEnabled, isTrue);
+      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
+      expect(find.text('Off'), findsOneWidget, reason: 'refresh is off');
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
+
+    testWidgets('Android keeps the row with the watcher off (its Restricted '
+        'remedy covers the nightly summary too)', (tester) async {
+      await tester.pumpWidget(_wrap(SettingsScreen(
+        key: UniqueKey(),
+        settings: FakeSettings(apiKey: 'k'),
+        analyzer: FakeAnalyzer(),
+        dao: FakeDao(),
+        requestPhotoPermission: () async => true,
+        lastBackgroundScan: () async => null,
+        backgroundRefreshEnabled: () async => false,
+        openSystemSettings: () async {},
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
+      expect(find.text('Restricted'), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
     testWidgets('Background App Refresh off → the row becomes the remedy',
         (tester) async {
       // iOS refuses every BGTask request while the system switch (or Low
@@ -1187,7 +1243,7 @@ void planTuningTests() {
       var opened = 0;
       await tester.pumpWidget(_wrap(SettingsScreen(
         key: UniqueKey(),
-        settings: FakeSettings(apiKey: 'k'),
+        settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
         analyzer: FakeAnalyzer(),
         dao: FakeDao(),
         requestPhotoPermission: () async => true,

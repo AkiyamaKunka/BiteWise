@@ -631,7 +631,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// to do, and not on Android: WorkManager survives a swipe-away there.
   String _photosFooter() {
     final l10n = context.l10n;
-    final explainIos = widget.lastBackgroundScan != null &&
+    final explainIos = _showBackgroundScanRow &&
         !_backgroundRefreshOff &&
         defaultTargetPlatform == TargetPlatform.iOS;
     final footer = explainIos
@@ -657,6 +657,16 @@ class _SettingsScreenState extends State<SettingsScreen>
         _watcherEnabled && _photosLimited ? l10n.watcherLimitedFooter : null;
     return [?limited, ?paused, ?stuck, footer].join('\n');
   }
+
+  /// Whether the 后台扫描 row (and its iOS footer line) shows. On iOS only
+  /// while Watch Camera Roll is on (U21): with it off the background job
+  /// still records its launches, so a fresh install showed 'Not run yet',
+  /// a time, or a red 'Off' for a scan it does not want — each read as a
+  /// fault. Android keeps the row: its Restricted remedy also covers the
+  /// nightly summary, which runs on the same job.
+  bool get _showBackgroundScanRow =>
+      widget.lastBackgroundScan != null &&
+      (_watcherEnabled || defaultTargetPlatform != TargetPlatform.iOS);
 
   /// Why the automatic scan is latched, with its next try; null when not.
   String? _autoScanPausedText() {
@@ -693,7 +703,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             // The OS's last background launch — on iOS the only visible
             // proof that Background App Refresh runs for this app at all.
-            if (widget.lastBackgroundScan != null)
+            if (_showBackgroundScanRow)
               GroupedRow(
                 key: const Key('backgroundScanRow'),
                 icon: Icons.update,
