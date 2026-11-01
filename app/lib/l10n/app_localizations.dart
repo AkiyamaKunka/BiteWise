@@ -552,6 +552,12 @@ abstract class AppLocalizations {
   /// **'What Chopstats sends has changed'**
   String get aiConsentUpdateTitle;
 
+  /// First paragraph of the aiConsentUpdateTitle dialog, above the camera-roll notice (while Watch Camera Roll is on) and aiConsentBody: names what changed, so the user need not find it in the full text. Must stay true to AppSettings.previousDayLeftoverContext (a version-1 grant sends that day's meals only) and to aiConsentNotNow's label.
+  ///
+  /// In en, this message translates to:
+  /// **'New: a photo taken before 4 a.m. now also carries a short summary of the day before\'s meals, so leftovers from a late dinner are recognized. Until you allow it, a photo carries only that day\'s meals; Not now keeps it that way.'**
+  String get aiConsentUpdateLead;
+
   /// Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow). A change to WHAT it says is sent also bumps aiConsentWordingVersion (core/ai_consent.dart), so a grant given under the older text is asked again (aiConsentUpdateTitle) before the new data goes.
   ///
   /// In en, this message translates to:

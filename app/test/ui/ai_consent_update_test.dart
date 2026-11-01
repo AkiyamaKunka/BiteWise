@@ -91,7 +91,13 @@ void main() {
               matching: find.text('What Chopstats sends has changed')),
           findsOneWidget);
       final body = _bodyOf(tester, _update);
-      expect(body, startsWith('Chopstats estimates calories'));
+      // What is new first, then the full text it changed.
+      expect(
+          body,
+          startsWith('New: a photo taken before 4 a.m. now also carries a '
+              "short summary of the day before's meals"));
+      expect(body, contains('Not now keeps it that way.\n\n'
+          'Chopstats estimates calories'));
       expect(body, contains('Google (Gemini)'));
       expect(body, contains('(for a photo taken before 4 a.m., the day before too)'));
       expect(find.text('Not now'), findsOneWidget);
@@ -153,18 +159,24 @@ void main() {
       }
     });
 
-    testWidgets('with Watch Camera Roll on, the camera-roll notice leads',
-        (tester) async {
+    testWidgets('with Watch Camera Roll on, the camera-roll notice follows '
+        'what is new, ahead of the full text', (tester) async {
       await _launch(tester, _oldGrant(watcher: true));
       final body = _bodyOf(tester, _update);
-      expect(body, startsWith('While Watch Camera Roll is on'));
-      expect(body, contains('Chopstats estimates calories'));
+      expect(body, startsWith('New: a photo taken before 4 a.m.'));
+      final notice = body.indexOf('While Watch Camera Roll is on');
+      final text = body.indexOf('Chopstats estimates calories');
+      expect(notice, greaterThan(0));
+      expect(text, greaterThan(notice));
     });
 
     testWidgets('Chinese', (tester) async {
       await _launch(tester, _oldGrant(), locale: const Locale('zh'));
       expect(find.text('筷拍发送的内容有更新'), findsOneWidget);
-      expect(_bodyOf(tester, _update), contains('凌晨 4 点前拍的照片还包括前一天的餐食'));
+      final body = _bodyOf(tester, _update);
+      expect(body, startsWith('新增：凌晨 4 点前拍的照片，现在还会附带前一天餐食的简短摘要'));
+      expect(body, contains('选择「暂不」会保持这样。'));
+      expect(body, contains('凌晨 4 点前拍的照片还包括前一天的餐食'));
       expect(find.text('暂不'), findsOneWidget);
       expect(find.text('允许'), findsOneWidget);
     });

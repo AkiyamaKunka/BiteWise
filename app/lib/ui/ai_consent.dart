@@ -194,12 +194,15 @@ bool aiConsentUpdateNeeded(SettingsStore s) {
       !s.aiConsentUpdateDeclined(route);
 }
 
-/// The one-time question for [aiConsentUpdateNeeded]: the full consent
-/// text for the current recipient (the camera-roll notice first while
-/// Watch Camera Roll is on, as when it was turned on) under a title saying
-/// it changed. Allow records the current text for that recipient, which
-/// is what sends the newly described data; anything else is remembered as
-/// Not now, and the older grant goes on exactly as before. True = Allow.
+/// The one-time question for [aiConsentUpdateNeeded], under a title saying
+/// what is sent has changed: first what is new (aiConsentUpdateLead — the
+/// change sits in a parenthesis of the full text, where nobody would find
+/// it), then the camera-roll notice while Watch Camera Roll is on (the
+/// order it was turned on with), then the full consent text for the
+/// current recipient. Allow records the current text for that recipient,
+/// which is what sends the newly described data; anything else is
+/// remembered as Not now, and the older grant goes on exactly as before.
+/// True = Allow.
 Future<bool> askAiConsentUpdate(
     BuildContext context, SettingsStore settings) async {
   final route = currentAiConsentRoute(settings);
@@ -209,11 +212,13 @@ Future<bool> askAiConsentUpdate(
       serverBackend: settings.serverBackend,
       serverBaseUrl: settings.serverBaseUrl,
       title: l.aiConsentUpdateTitle,
-      appendix: settings.watcherEnabled
-          ? l.watcherDisclosureBody(
+      appendix: [
+        l.aiConsentUpdateLead,
+        if (settings.watcherEnabled)
+          l.watcherDisclosureBody(
               providerDisplayLabel(l, settings.provider, settings.serverBackend),
-              settings.lookbackDays.clamp(1, 30))
-          : null,
+              settings.lookbackDays.clamp(1, 30)),
+      ].join('\n\n'),
       leadWithAppendix: true,
       dialogKey: const Key('aiConsentUpdateDialog'),
       cancelKey: const Key('aiConsentUpdateNotNow'),

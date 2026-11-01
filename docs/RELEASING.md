@@ -159,7 +159,10 @@ steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
    installs over the dev build, keeps everything, and shows no consent
    dialog: an install with the watcher on keeps its current recipient (the
    one-time seed in `AppSettings._loadAiConsent`). After a Team ID change
-   it is the fresh install from step 4, which asks once.
+   it is the fresh install from step 4, which asks once. (A later build
+   that includes run 7 asks your install once more, "What Chopstats sends
+   has changed": the seeded grant is version 1 — § 1.7 item 4, *Wording
+   updates*.)
 7. **Demo key** (R-F6) — **still open** (being discussed with the owner,
    2026-10-29; the review notes keep the `<key>` placeholder until then).
    The recommendation so far: **a paid Gemini key in its own Google Cloud
@@ -458,9 +461,10 @@ All done; this is what each one is and where it lives.
    A grant from before — the one-time seed included, so your own install
    too — is version 1: the photo pipeline keeps sending only that day's
    meals for it, and on a launch or a return to the app the shell asks
-   once, "What Chopstats sends has changed" / 筷拍发送的内容有更新 (the full
-   consent text, the camera-roll notice first while the watcher is on;
-   never over the setup-link or shared-photo question, and a setup link
+   once, "What Chopstats sends has changed" / 筷拍发送的内容有更新 (a line
+   saying what is new, then the camera-roll notice while the watcher is
+   on, then the full consent text; never over the setup-link or
+   shared-photo question or any other dialog or screen, and a setup link
    waits for its answer). Allow records version 2 and the previous day is
    sent from then on; Not now is remembered and changes nothing else (the
    watcher keeps logging under the old grant). Any new grant (a new
