@@ -295,6 +295,11 @@ class _SubscriptionProviderPageState
                   labelText: context.l10n.serverAddressLabel,
                   hintText: 'http://your.server.ip',
                 ),
+                // Saved as typed, like the upload key under it: Done and a
+                // tap outside alone lost the address when the next tap was
+                // the upload key — Flutter does not count a tap into
+                // another text field as outside.
+                onChanged: (v) => settings.update(serverBaseUrl: v.trim()),
                 onSubmitted: (v) =>
                     settings.update(serverBaseUrl: v.trim()),
                 onTapOutside: (_) => settings.update(
