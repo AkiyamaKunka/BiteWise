@@ -673,6 +673,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get connectClaudeFooter => '让服务器登录你的 Anthropic 账户。中国大陆需要 VPN。';
 
   @override
+  String get connectNeedsServer => '请先在上方填写服务器地址和上传密钥。';
+
+  @override
   String get subInactiveFooter =>
       '当前使用的是 API Key。这一项适合自己运行筷拍服务器的人：在上方选择服务器使用的 AI，即可改由它分析照片。没有自己的服务器？请返回使用 API Key。';
 

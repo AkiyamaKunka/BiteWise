@@ -1182,6 +1182,12 @@ abstract class AppLocalizations {
   /// **'Signs your server in to your Anthropic account.'**
   String get connectClaudeFooter;
 
+  /// Snackbar when Connect Claude is tapped on the Your own server page while the server address or the upload key is empty: nothing is sent, and the user is pointed at the two fields above the button.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your server address and upload key above first.'**
+  String get connectNeedsServer;
+
   /// No description provided for @subInactiveFooter.
   ///
   /// In en, this message translates to:

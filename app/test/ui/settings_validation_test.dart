@@ -582,6 +582,12 @@ void main() {
 
 // ── Claude OAuth re-connect flow (server provider) ──────────────────
 
+/// The server provider with an address and an upload key: only then does
+/// Connect Claude call the server (U3).
+FakeSettings _configuredServer() => FakeSettings(keys: {'server': 'up'})
+  ..provider = 'server'
+  ..serverBaseUrl = 'https://server.test';
+
 Widget _serverWrap({
   required FakeSettings settings,
   required Future<({String? url, String? error})> Function() start,
@@ -606,7 +612,7 @@ void connectClaudeTests() {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: 'k')..provider = 'server';
+    final settings = _configuredServer();
     final opened = <Uri>[];
     final completed = <String>[];
     await tester.pumpWidget(_serverWrap(
@@ -647,7 +653,7 @@ void connectClaudeTests() {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: 'k')..provider = 'server';
+    final settings = _configuredServer();
     await tester.pumpWidget(_serverWrap(
       settings: settings,
       start: () async => (url: null, error: 'the CLI did not produce a URL'),
@@ -666,7 +672,7 @@ void connectClaudeTests() {
     tester.view.physicalSize = const Size(800, 2000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
-    final settings = FakeSettings(apiKey: 'k')..provider = 'server';
+    final settings = _configuredServer();
     var completions = 0;
     await tester.pumpWidget(_serverWrap(
       settings: settings,
@@ -684,6 +690,49 @@ void connectClaudeTests() {
     await tester.tap(find.text('Cancel'));
     await tester.pump(const Duration(milliseconds: 300));
     expect(completions, 0);
+  });
+
+  // U3 (run 7): the button stays (the plan rows are one tap), but with no
+  // address or upload key it calls nothing and says what is missing,
+  // instead of the server analyzer's English 'Set the server address and
+  // key first.'.
+  testWidgets('connect: without the address or upload key nothing is called',
+      (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    var starts = 0;
+    for (final (url, key) in const [
+      ('', 'up'),
+      ('https://server.test', ''),
+      ('', ''),
+      ('  ', 'up'),
+    ]) {
+      final settings = FakeSettings(keys: {'server': key})
+        ..provider = 'server'
+        ..serverBaseUrl = url;
+      await tester.pumpWidget(_serverWrap(
+        settings: settings,
+        start: () async {
+          starts++;
+          return (url: 'https://claude.ai/oauth/x', error: null);
+        },
+        complete: (_) async => fail('must not be called'),
+        openUrl: (_) async => fail('must not be called'),
+      ));
+      await openSubscriptionPage(tester);
+      expect(find.byKey(const Key('connectClaudeButton')), findsOneWidget,
+          reason: 'still shown');
+      await tester.tap(find.byKey(const Key('connectClaudeButton')));
+      await tester.pumpAndSettle();
+      expect(starts, 0, reason: 'url "$url", key "$key"');
+      expect(find.text('Enter your server address and upload key above first.'),
+          findsOneWidget);
+      expect(find.text('Finish connecting Claude'), findsNothing);
+      // Off the page, so the next case opens it fresh.
+      await tester.pumpWidget(const SizedBox());
+    }
+    expect(AppLocalizationsZh().connectNeedsServer, '请先在上方填写服务器地址和上传密钥。');
   });
 
   testWidgets('button hidden off the server provider and without wiring',

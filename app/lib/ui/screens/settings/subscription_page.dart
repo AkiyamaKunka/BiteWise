@@ -127,6 +127,16 @@ class _SubscriptionProviderPageState
     final start = widget.startClaudeAuth;
     final complete = widget.completeClaudeAuth;
     if (start == null || complete == null) return;
+    // Nothing to sign in yet: the request needs the server's address and
+    // upload key, and without them it only came back with an English
+    // 'Set the server address and key first.' (U3). Said here instead,
+    // without calling anything.
+    if (widget.settings.serverBaseUrl.trim().isEmpty ||
+        widget.settings.apiKey.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.connectNeedsServer)));
+      return;
+    }
     setState(() => _authBusy = true);
     try {
       final started = await start();

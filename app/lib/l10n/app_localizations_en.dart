@@ -716,6 +716,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Signs your server in to your Anthropic account.';
 
   @override
+  String get connectNeedsServer =>
+      'Enter your server address and upload key above first.';
+
+  @override
   String get subInactiveFooter =>
       'An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.';
 

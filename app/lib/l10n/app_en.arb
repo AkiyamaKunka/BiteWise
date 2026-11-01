@@ -557,6 +557,10 @@
   "serverUploadKeyLabel": "Server upload key",
   "connectClaude": "Connect Claude",
   "connectClaudeFooter": "Signs your server in to your Anthropic account.",
+  "connectNeedsServer": "Enter your server address and upload key above first.",
+  "@connectNeedsServer": {
+    "description": "Snackbar when Connect Claude is tapped on the Your own server page while the server address or the upload key is empty: nothing is sent, and the user is pointed at the two fields above the button."
+  },
   "subInactiveFooter": "An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.",
   "connectDialogTitle": "Finish connecting Claude",
   "connectDialogBody": "Sign in on the Anthropic page that just opened. It will show you a code — paste it here.",
