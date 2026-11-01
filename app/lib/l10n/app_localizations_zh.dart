@@ -259,7 +259,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String watcherDisclosureBody(String provider, int days) {
-    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。不会发送给本应用的开发者。每张照片都是一次 AI 请求，免费额度的每日上限可能在这第一次补扫中就用完；部分服务商的免费额度（例如 Gemini）可能会把这些照片用于改进其 AI 并由人工查看，请查看其条款或开通付费。你可以随时关闭。';
+    return '开启监控相册后，相册里之后的新照片，以及最近 $days 天内的照片（包括不是食物的照片），都会发送给 $provider，由它判断是不是食物。每张照片都是一次 AI 请求，免费额度的每日上限可能在这第一次补扫中就用完；部分服务商的免费额度（例如 Gemini）可能会把这些照片用于改进其 AI 并由人工查看，请查看其条款或开通付费。你可以随时关闭。';
   }
 
   @override

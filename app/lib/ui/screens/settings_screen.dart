@@ -396,7 +396,10 @@ class _SettingsScreenState extends State<SettingsScreen>
         serverBackend: s.serverBackend,
         serverBaseUrl: s.serverBaseUrl,
         title: l.watcherDisclosureTitle,
+        // Shown in the other order (U26): what the camera roll adds leads,
+        // and the general text every other consent shows follows it.
         appendix: l.watcherDisclosureBody(provider, _lookbackDays),
+        leadWithAppendix: true,
         allowLabel: l.watcherDisclosureContinue,
         cancelLabel: l.cancel,
         dialogKey: const Key('watcherDisclosureDialog'),

@@ -279,7 +279,7 @@ class AppLocalizationsEn extends AppLocalizations {
       other: '$days days',
       one: 'day',
     );
-    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. Each photo is one AI request, so a free tier\'s daily limit can run out during this first catch-up, and on some free tiers (Gemini\'s, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.';
+    return 'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last $_temp0, is sent to $provider — including ones that are not food — so it can tell whether it is a meal. Each photo is one AI request, so a free tier\'s daily limit can run out during this first catch-up, and on some free tiers (Gemini\'s, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.';
   }
 
   @override

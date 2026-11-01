@@ -78,7 +78,10 @@ String _hostOf(String url) {
 
 /// The consent dialog; true = Allow. Records nothing — callers do, so the
 /// route they asked about is the one saved. [title], [appendix] and the
-/// keys let the camera-roll switch reuse it with its own notice.
+/// keys let the camera-roll switch reuse it with its own notice;
+/// [leadWithAppendix] puts that notice above the general text, where the
+/// one thing new to the user is read first (the text only moves: what is
+/// asked, and when, is the caller's).
 Future<bool> showAiConsentDialog(
   BuildContext context, {
   required String provider,
@@ -86,6 +89,7 @@ Future<bool> showAiConsentDialog(
   required String serverBaseUrl,
   String? title,
   String? appendix,
+  bool leadWithAppendix = false,
   String? allowLabel,
   String? cancelLabel,
   Key dialogKey = const Key('aiConsentDialog'),
@@ -104,7 +108,11 @@ Future<bool> showAiConsentDialog(
         key: dialogKey,
         title: Text(title ?? l.aiConsentTitle),
         content: SingleChildScrollView(
-            child: Text(appendix == null ? text : '$text\n\n$appendix')),
+            child: Text(appendix == null
+                ? text
+                : leadWithAppendix
+                    ? '$appendix\n\n$text'
+                    : '$text\n\n$appendix')),
         actions: [
           TextButton(
               key: cancelKey,
@@ -158,9 +166,11 @@ Future<bool> confirmAiRecipientChange(BuildContext context,
       provider: provider,
       serverBackend: serverBackend,
       serverBaseUrl: settings.serverBaseUrl,
+      // The camera-roll notice first: it is why this is asked now.
       appendix: l.watcherDisclosureBody(
           providerDisplayLabel(l, provider, serverBackend),
-          settings.lookbackDays.clamp(1, 30)));
+          settings.lookbackDays.clamp(1, 30)),
+      leadWithAppendix: true);
   if (!ok) return false;
   await settings.setAiConsent(route, granted: true);
   return true;
