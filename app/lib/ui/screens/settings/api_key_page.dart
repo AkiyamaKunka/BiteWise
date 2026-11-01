@@ -150,6 +150,12 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                 controller: _keyController,
                 obscureText: !_keyVisible,
                 autocorrect: false,
+                // Show key turns obscuring off, and with it Android's
+                // no-suggestions/password flags: the keyboard offered
+                // suggestions and could learn the secret into its
+                // dictionary. Off for good, shown or not.
+                enableSuggestions: false,
+                enableIMEPersonalizedLearning: false,
                 // Saves as you type — a paste-then-switch-tab can never
                 // lose the key.
                 onChanged: (v) => settings.update(apiKey: v.trim()),

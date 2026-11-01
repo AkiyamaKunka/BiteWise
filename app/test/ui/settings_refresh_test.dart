@@ -206,6 +206,33 @@ void main() {
     }
   });
 
+  // Show key turned obscureText off, and Android only sets its
+  // no-suggestions/password input flags while a field is obscured or has
+  // suggestions off: Gboard offered suggestions and could learn the key
+  // (run-7 review UIS-2).
+  testWidgets('Show key keeps keyboard suggestions and learning off', (
+    tester,
+  ) async {
+    await pumpApp(
+      tester,
+      ApiKeyProviderPage(settings: FakeSettings(apiKey: 'k')),
+      size: const Size(390, 1600),
+    );
+    EditableText field() => tester.widget<EditableText>(
+          find.descendant(
+            of: find.byKey(const Key('apiKeyField')),
+            matching: find.byType(EditableText),
+          ),
+        );
+    expect(field().obscureText, isTrue);
+    await tester.tap(find.byKey(const Key('apiKeyVisibility')));
+    await tester.pump();
+    expect(field().obscureText, isFalse, reason: 'the key is shown');
+    expect(field().enableSuggestions, isFalse);
+    expect(field().enableIMEPersonalizedLearning, isFalse);
+    expect(field().autocorrect, isFalse);
+  });
+
   group('first-run card', () {
     for (final lang in const ['en', 'zh']) {
       testWidgets('$lang: a button that opens the AI Provider page', (
