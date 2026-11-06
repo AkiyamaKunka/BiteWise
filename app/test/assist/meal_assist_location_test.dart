@@ -25,7 +25,9 @@
 ///   * the coordinates leave nothing behind (nothing stored, sent or
 ///     logged holds them; the source keeps them inside _where);
 ///   * a pending job is polled every 10 s for 4 minutes, in the foreground
-///     only; a lost one is resubmitted; neither reads the location again;
+///     only — past the daily cap too, which holds back new lookups only; a
+///     lost one is resubmitted (at the cap: not); neither reads the
+///     location again;
 ///   * busy / rate limited / timeout / 5xx: retried after 5 min, 30 min
 ///     and 2 h, then 'unavailable'; offline and the app leaving the
 ///     foreground are not tries;
@@ -2608,6 +2610,49 @@ void main() {
       expect((await h.state.jobs()).values.single.jobId, 'job_abcdef12');
     });
 
+    // Review 2026-11-06: the day's 20th lookup, submitted as a job, was
+    // left unpolled until after midnight: the cap held the timer's sweep.
+    test('the day\'s last lookup came back as a job: the window still polls '
+        'it by itself past the daily cap, reading nothing again', () async {
+      final timers = <_HeldTimer>[];
+      final zone = _holdingTimers(timers);
+      Future<void> sweep() => zone.run(h.assist.sweep);
+      List<_HeldTimer> armed() => [
+        for (final t in timers)
+          if (t.isActive) t,
+      ];
+
+      final id = h.add(_bigMac());
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      await sweep();
+      expect(h.source.asked, hasLength(1));
+      for (var i = 0; i < assistDailyCap; i++) {
+        h.budget.tryStartLookup(0);
+      }
+      expect(h.budget.capReached, isTrue);
+
+      // The armed poll fires; the sweep it starts is joined.
+      h.lookups.onPoll = (_) async => _pending('job_abcdef12');
+      h.now = _now.add(kAssistPollInterval);
+      armed().single.fire();
+      await sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.assist.lastSkip, AssistSkip.dailyCap);
+      expect(armed(), hasLength(1), reason: 'the next poll');
+
+      h.lookups.onPoll = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      h.now = _now.add(kAssistPollInterval * 2);
+      armed().single.fire();
+      await sweep();
+      expect(h.lookups.polls, hasLength(2));
+      expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+      expect(await h.state.jobs(), isEmpty);
+      expect(h.lookups.submits, hasLength(1), reason: 'polled, not resent');
+      expect(h.source.asked, hasLength(1), reason: 'read once');
+      expect(h.places.radii, hasLength(1));
+    });
+
     test('the editor\'s lookup that came back pending is polled by the '
         'sweep whatever the triggers say, and answered as manual', () async {
       // High confidence: never an automatic trigger.
@@ -3415,9 +3460,9 @@ void main() {
       expect(again.code, AssistSkip.pending);
       expect(h.lookups.polls.last, 'job_pick_0002');
 
-      // The editor is closed; once the sweep may run again (the cap holds
-      // it back, as any lookup), it answers the job with the same pick.
-      await h.prefs.remove(assistDailyPrefsKey);
+      // The editor is closed; the sweep answers the job with the same pick
+      // — past the cap too, which holds back only new lookups.
+      expect(h.budget.capReached, isTrue);
       h.lookups.onPoll = (jobId) async => _done(
         json: _found(chainKey: 'burger_king'),
         provider: LookupRecipient.claudePlan,

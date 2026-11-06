@@ -2132,6 +2132,281 @@ void main() {
     });
   });
 
+  // Review 2026-11-06: a sweep at the daily cap polled nothing, so the day's
+  // 20th lookup, submitted as a job, was answered on the server and
+  // collected only after midnight; the editor's Look up on its meal
+  // answered daily_cap. A poll is no new lookup (the cap does not count
+  // it): the cap holds back only what would send a NEW request — a submit,
+  // or a resubmit of a lost job.
+  group('a job the server already runs is polled past the daily cap '
+      '(review 2026-11-06)', () {
+    setUp(() {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+    });
+
+    LookupOutcome pending() => const LookupOutcome(
+      kind: LookupOutcomeKind.pending,
+      provider: LookupRecipient.claudePlan,
+      jobId: 'job_abcdef12',
+    );
+    // The server no longer knows the job: submit it again.
+    const lost = LookupOutcome(
+      kind: LookupOutcomeKind.pending,
+      provider: LookupRecipient.claudePlan,
+    );
+    LookupOutcome answer() =>
+        _done(provider: LookupRecipient.claudePlan, verbatim: false);
+
+    void reachCap() {
+      for (var i = 0; i < assistDailyCap; i++) {
+        h.budget.tryStartLookup(0);
+      }
+      expect(h.budget.capReached, isTrue);
+    }
+
+    /// A meal whose lookup the server is running as job_abcdef12, submitted
+    /// by the sweep at [_now].
+    Future<int> submitted() async {
+      final id = h.add(_bigMac());
+      h.lookups.onSubmit = (_) async => pending();
+      await h.assist.sweep();
+      expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+      h.lookups.onSubmit = null;
+      return id;
+    }
+
+    test('the daily cap: the job is polled and its answer written; nothing '
+        'new is sent', () async {
+      final id = await submitted();
+      // That was the day's last lookup; another meal is logged.
+      reachCap();
+      final waiting = h.add(_bigMac(), timestamp: '2026-10-24T12:45:00.000');
+
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onPoll = (_) async => pending();
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+
+      h.now = _now.add(kAssistPollInterval * 2);
+      h.lookups.onPoll = (_) async => answer();
+      await h.assist.sweep();
+      expect(h.lookups.polls, hasLength(2));
+      expect(
+        (h.analysisOf(id)['assist'] as Map)['status'],
+        AssistStatus.suggested,
+      );
+      expect(await h.state.jobs(), isEmpty);
+      // Nothing new went out: the other meal waits for tomorrow.
+      expect(h.lookups.submits, hasLength(1));
+      expect(h.analysisOf(waiting).containsKey('assist'), isFalse);
+      expect(h.assist.lastSkip, AssistSkip.dailyCap);
+    });
+
+    test('the daily cap: a job the server lost is not resubmitted, and not '
+        'polled again; the same request goes out once the cap allows '
+        'it', () async {
+      final id = await submitted();
+      reachCap();
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onPoll = (_) async => lost;
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(
+        h.lookups.submits,
+        hasLength(1),
+        reason: 'a resubmit is a new lookup',
+      );
+      expect(h.assist.lastSkip, AssistSkip.dailyCap);
+      // A retry due now, not a job: no tries spent, nothing left to poll.
+      final record = (await h.state.jobs())[id]!;
+      expect((record.jobId, record.attempts), (null, 0));
+      h.now = _now.add(kAssistPollInterval * 2);
+      await h.assist.sweep();
+      expect(h.lookups.polls, hasLength(1));
+      expect(h.lookups.submits, hasLength(1));
+
+      // A new day.
+      await h.prefs.remove(assistDailyPrefsKey);
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(2));
+      expect(h.lookups.submits.last.toJson(), h.lookups.submits.first.toJson());
+      expect(await h.state.jobs(), isEmpty);
+    });
+
+    test('at the cap a meal whose request changed since its job was '
+        'submitted sends nothing, from the sweep or the editor', () async {
+      final id = await submitted();
+      reachCap();
+      h.dao.rewrite(id, (a) {
+        final items = [
+          for (final e in a['food_items'] as List)
+            Map<String, dynamic>.from(e as Map)..['name'] = 'Quarter Pounder',
+        ];
+        return a..['food_items'] = items;
+      });
+      h.now = _now.add(kAssistPollInterval);
+      await h.assist.sweep();
+      expect(h.assist.lastSkip, AssistSkip.dailyCap);
+      expect((await h.assist.lookupNow(id)).code, AssistSkip.dailyCap);
+      expect(
+        h.lookups.polls,
+        isEmpty,
+        reason:
+            'the job answers another '
+            'request',
+      );
+      expect(h.lookups.submits, hasLength(1), reason: 'a new lookup');
+      expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+    });
+
+    test('at the cap a poll still needs everything else: the foreground, the '
+        'mode, the consent (also read again at the send)', () async {
+      final id = await submitted();
+      reachCap();
+      h.now = _now.add(kAssistPollInterval);
+      final consented = h.settings;
+      final reads = h.dao.snapshotReads.length;
+
+      h.foreground = false;
+      await h.assist.sweep();
+      expect(h.assist.lastSkip, AssistSkip.background);
+      h.foreground = true;
+
+      h.settings = AssistSettingsView(
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      await h.assist.sweep();
+      expect(h.assist.lastSkip, AssistSkip.off);
+
+      // Stop Sharing forgot the consent while its notification (the mode
+      // Off) has not landed.
+      h.settings = const AssistSettingsView(mode: AssistMode.auto);
+      await h.assist.sweep();
+      expect(h.assist.lastSkip, AssistSkip.consentNeeded);
+      expect(
+        h.dao.snapshotReads,
+        hasLength(reads),
+        reason: 'stopped at the gate',
+      );
+
+      // The consent is withdrawn right after the gate let the poll through:
+      // read again at the send.
+      h.settings = consented;
+      h.dao.onSnapshot = (_) => h.settings = const AssistSettingsView();
+      await h.assist.sweep();
+      expect(h.dao.snapshotReads, [
+        ...h.dao.snapshotReads.take(reads),
+        id,
+      ], reason: 'the gate let the poll by');
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+
+      expect(h.lookups.polls, isEmpty);
+      expect(h.lookups.submits, hasLength(1));
+      expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+    });
+
+    // A backoff or the recipient's hold still holds polls back: a poll's
+    // own failure can set either (the server failed the job for its own
+    // cap and keeps answering so for 24 h, a rejected key, the server's
+    // lookups off, no network), and polling past them would ask again,
+    // and log one more failure, on every sweep.
+    for (final (name, refused) in [
+      (
+        "the server's own cap failed the job",
+        const LookupOutcome(
+          kind: LookupOutcomeKind.rateLimited,
+          provider: LookupRecipient.claudePlan,
+          jobId: 'job_abcdef12',
+          failure: LookupFailure(LookupFailureCode.dailyCap, transient: true),
+        ),
+      ),
+      (
+        'the key was rejected',
+        const LookupOutcome(
+          kind: LookupOutcomeKind.failed,
+          provider: LookupRecipient.claudePlan,
+          failure: LookupFailure(LookupFailureCode.auth, transient: false),
+        ),
+      ),
+      (
+        "the server's lookups are off",
+        const LookupOutcome(
+          kind: LookupOutcomeKind.disabled,
+          provider: LookupRecipient.claudePlan,
+        ),
+      ),
+      (
+        'no network',
+        const LookupOutcome(
+          kind: LookupOutcomeKind.offline,
+          provider: LookupRecipient.claudePlan,
+          failure: LookupFailure(LookupFailureCode.network, transient: true),
+        ),
+      ),
+    ]) {
+      test('at the cap, a poll refused ($name) is not asked again on every '
+          'sweep', () async {
+        await submitted();
+        reachCap();
+        h.now = _now.add(kAssistPollInterval);
+        h.lookups.onPoll = (_) async => refused;
+        await h.assist.sweep();
+        expect(h.lookups.polls, hasLength(1));
+        for (var i = 1; i <= 3; i++) {
+          h.now = _now.add(kAssistPollInterval + Duration(seconds: 30 * i));
+          await h.assist.sweep();
+        }
+        expect(h.lookups.polls, hasLength(1));
+        expect(await h.state.decisions(), hasLength(1));
+        expect(h.lookups.submits, hasLength(1));
+      });
+    }
+
+    test('the editor\'s Look up at the cap collects the meal\'s automatic job '
+        'and sends nothing new', () async {
+      final id = await submitted();
+      expect((await h.state.jobs())[id]?.manual, isFalse);
+      reachCap();
+      h.inUse.add(id); // the editor holds it
+      h.lookups.onPoll = (_) async => pending();
+      final first = await h.assist.lookupNow(id);
+      expect(first.code, AssistSkip.pending);
+      expect(h.lookups.polls, ['job_abcdef12']);
+
+      h.lookups.onPoll = (_) async => answer();
+      final second = await h.assist.lookupNow(id);
+      expect(second.decision, isNotNull);
+      expect(h.lookups.polls, hasLength(2));
+      expect(
+        (h.analysisOf(id)['assist'] as Map)['status'],
+        AssistStatus.suggested,
+      );
+      expect(h.lookups.submits, hasLength(1));
+      expect(await h.state.jobs(), isEmpty);
+    });
+
+    test('the editor\'s Look up at the cap on an automatic job the server '
+        'lost: nothing resubmitted, daily_cap; the automatic lookup waits as '
+        'a retry', () async {
+      final id = await submitted();
+      reachCap();
+      h.lookups.onPoll = (_) async => lost;
+      final run = await h.assist.lookupNow(id);
+      expect(run.code, AssistSkip.dailyCap);
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.lookups.submits, hasLength(1));
+      final record = (await h.state.jobs())[id]!;
+      expect((record.jobId, record.manual, record.attempts), (null, false, 0));
+    });
+  });
+
   group('failures', () {
     test('a transient failure backs off the next sweeps', () async {
       h.add(_bigMac());

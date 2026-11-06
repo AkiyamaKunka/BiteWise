@@ -23,6 +23,10 @@
 ///   * the consent is stamped with the CURRENT recipient — otherwise the
 ///     assist pauses and [MealAssist.consentNeeded] asks R7a's sheet;
 ///   * today's lookups are under the daily cap (20, [AssistDailyBudget]).
+/// The daily cap holds back NEW lookups only: at the cap, with every other
+/// check passed, the sweep still polls the jobs the server already runs (a
+/// poll is no new lookup, and the cap does not count it) and sends nothing
+/// else — no submit, and no resubmit of a job the server lost.
 /// The consent is read once more at the send itself, for an automatic
 /// lookup and the editor's alike ([MealAssist._maySend]): a poll, a submit
 /// or a resubmit goes out only while it still names the recipient those
@@ -99,10 +103,12 @@
 /// Jobs and retries (R6c): a pending Claude Plan job is polled every 10 s
 /// for 4 minutes while the app is in the foreground ([kAssistPollWindow]:
 /// longer than the server's 180 s limit for one lookup), later on the next
-/// sweep. Busy, rate limited (not the daily cap), a timeout or a 5xx is
-/// tried again after 5 min, 30 min and 2 h; a 4th such failure and the
-/// meal is written 'unavailable'; offline, or a failure because the app left the
-/// foreground, is not a try. What the location path found is kept with the
+/// sweep — past the daily cap too. A job the server lost is submitted
+/// again, except at the cap: then it waits as a retry (the editor's own
+/// lookup ends). Busy, rate limited (not the daily cap), a timeout or a
+/// 5xx is tried again after 5 min, 30 min and 2 h; a 4th such failure and
+/// the meal is written 'unavailable'; offline, or a failure because the
+/// app left the foreground, is not a try. What the location path found is kept with the
 /// job or retry record, so a poll, a resubmit or a retry never reads the
 /// position again.
 ///
@@ -220,9 +226,10 @@ const Duration kAssistPollInterval = Duration(seconds: 10);
 /// closed and its answer only appeared at some later sweep.
 ///
 /// The window only arms the poll timer: a job still pending when it
-/// closes is kept and polled on the next sweep. Polls stay foreground
-/// only: in the background the timer's sweep stops at the gate
-/// ([AssistSkip.background]) and arms nothing.
+/// closes is kept and polled on the next sweep — at the daily cap too,
+/// which holds back new lookups only (a backoff or the recipient's hold
+/// still waits). Polls stay foreground only: in the background the timer's
+/// sweep stops at the gate ([AssistSkip.background]) and arms nothing.
 const Duration kAssistPollWindow = Duration(minutes: 4);
 
 /// After the recipient said it cannot look up at all (an old server, the
@@ -1146,6 +1153,10 @@ class MealAssist {
       _current(gen, manual: manual) && _readSettings().consentCovers(support);
 
   /// The first precondition that fails for an automatic lookup, or null.
+  /// The daily cap comes LAST: [AssistSkip.dailyCap] means every other
+  /// precondition holds, and the sweep then still polls the jobs the
+  /// server already runs (a poll is no new lookup, and the cap does not
+  /// count it) while sending nothing new ([_run]'s capped).
   String? _gate(AssistSettingsView s, LookupSupport support) {
     if (_disposed || s.mode == AssistMode.off) return AssistSkip.off;
     if (!_foreground()) return AssistSkip.background;
@@ -1217,11 +1228,12 @@ class MealAssist {
     }
     var support = _support();
     final gate = _gate(s, support);
-    if (gate != null) {
+    if (gate != null && gate != AssistSkip.dailyCap) {
       _skip(gate, support);
       return;
     }
-    _lastSkip = null;
+    // At the cap this sweep only polls (see the loop).
+    _lastSkip = gate;
     if (_consentNeeded.value != null) _consentNeeded.value = null;
     final consentAt = s.consentAt!;
     final now = _clock();
@@ -1272,12 +1284,19 @@ class MealAssist {
         _schedulePoll(job);
         continue;
       }
-      // Every precondition again, right before each lookup.
+      // Every precondition again, right before each lookup. At the daily
+      // cap (every other precondition holding: [_gate]) only a job the
+      // server already runs is polled, and nothing new is sent.
       support = _support();
       final again = _gate(s, support);
-      if (again != null) {
+      final capped = again == AssistSkip.dailyCap;
+      if (again != null && !capped) {
         _skip(again, support);
         return;
+      }
+      if (capped) {
+        _lastSkip = again;
+        if (job == null || !job.isPending) continue;
       }
       if (_mealInUse(meal.id)) continue;
       final run = await _run(
@@ -1290,6 +1309,7 @@ class MealAssist {
         manual: manualJob,
         useLocation: useLocation,
         pick: manualJob ? job.pick : null,
+        capped: capped,
       );
       if (run.stop) {
         _lastSkip = run.code;
@@ -1329,9 +1349,11 @@ class MealAssist {
 
   /// The editor's manual lookup (R7b). Needs the app in the foreground, a
   /// consent that names the current recipient (else [consentNeeded] asks
-  /// for one) and room under the daily cap; ignores the mode, the
-  /// triggers, the 24 h window, the miss list and a retry's wait — the
-  /// user asked — and the cache: it always asks the provider again.
+  /// for one) and room under the daily cap for anything new it sends (a
+  /// poll of the meal's pending job is not new: see below); ignores the
+  /// mode, the triggers, the 24 h window, the miss list and a retry's
+  /// wait — the user asked — and the cache: it always asks the provider
+  /// again.
   /// [useLocation] is the user's choice ("Use location" / "Brand only"):
   /// with it, a restaurant meal takes the location path under the same
   /// gates as an automatic lookup (locationAllowed, has_gps, restaurant);
@@ -1356,8 +1378,12 @@ class MealAssist {
   /// alone, as a suggestion at most. To the owner's server over http,
   /// where the pick would be stripped with the location-derived chains,
   /// nothing is sent ([AssistSkip.pickNeedsHttps]). Calling again while
-  /// the server still runs this meal's job polls it (no new lookup, so not
-  /// held by the daily cap).
+  /// the server still runs this meal's job — this call's own, or the
+  /// automatic lookup's — polls it: no new lookup, so not held by the daily
+  /// cap. At the cap nothing else is sent: not a lookup that differs from
+  /// the job's, and not a resubmit of a job the server lost
+  /// ([AssistSkip.dailyCap]; an automatic job then waits as a retry, the
+  /// editor's own is dropped).
   Future<AssistRun> lookupNow(
     int mealId, {
     bool useLocation = false,
@@ -1380,8 +1406,12 @@ class MealAssist {
       }
       final jobs = await _state.jobs();
       final job = jobs[mealId];
-      final polling = job != null && job.manual && job.isPending;
-      if (!polling && _budget.capReached) {
+      // A job the server runs for this meal, the editor's own or the
+      // automatic lookup's, is polled past the cap too; anything new this
+      // call would send waits for the cap ([_run]'s capped).
+      final polling = job != null && job.isPending;
+      final capped = _budget.capReached;
+      if (!polling && capped) {
         return const AssistRun(AssistSkip.dailyCap);
       }
       final run = await _run(
@@ -1394,6 +1424,7 @@ class MealAssist {
         manual: true,
         useLocation: chainKey == null && useLocation,
         pick: chainKey,
+        capped: capped,
       );
       return run.public;
     } catch (_) {
@@ -1401,6 +1432,10 @@ class MealAssist {
     }
   }
 
+  /// One meal's lookup. [capped]: the daily cap is reached. Then the only
+  /// request that may go out is a poll of the job the server already runs
+  /// for this very request: no submit, and no resubmit of a job the server
+  /// lost — the run ends as [AssistSkip.dailyCap] instead.
   Future<_Run> _run(
     int mealId,
     AssistTrigger trigger, {
@@ -1411,6 +1446,7 @@ class MealAssist {
     required bool manual,
     required bool useLocation,
     String? pick,
+    bool capped = false,
   }) async {
     if (!_working.add(mealId)) return const _Run(AssistSkip.working);
     try {
@@ -1540,6 +1576,12 @@ class MealAssist {
         );
       }
 
+      // The job the server runs for this very request, if any. At the cap,
+      // only a poll of it may go out.
+      final kept = job?.jobId;
+      final jobId = kept != null && job!.reqHash == prepared.hash ? kept : null;
+      if (capped && jobId == null) return const _Run(AssistSkip.dailyCap);
+
       // The send. Settings are read once more, with no await between this
       // check and the call below: Off, or a consent that no longer names
       // this recipient (Stop Sharing, before its notification lands), and
@@ -1551,10 +1593,34 @@ class MealAssist {
       LookupOutcome outcome;
       var polled = false;
       try {
-        final jobId = job?.jobId;
-        if (jobId != null && job!.reqHash == prepared.hash) {
+        if (jobId != null) {
           polled = true;
           outcome = await _lookups.poll(jobId);
+          if (outcome.needsResubmit && capped) {
+            // The server lost the job, and a resubmit is a new lookup: at
+            // the cap nothing is sent. The record stops being a job, so it
+            // is not polled again: an automatic lookup waits as a retry,
+            // due now (sent once the cap allows, its tries unspent); the
+            // editor's own lookup ends here, as a failed one does.
+            if (!_current(gen, manual: manual)) return _Run.cancelled;
+            final lost = job!;
+            if (lost.manual) {
+              await _state.removeJob(mealId);
+            } else {
+              await _state.putJob(
+                mealId,
+                AssistJob(
+                  reqHash: prepared.hash,
+                  at: lost.at,
+                  nextAt: _clock(),
+                  attempts: lost.attempts,
+                  place: prepared.place,
+                  country: prepared.country,
+                ),
+              );
+            }
+            return const _Run(AssistSkip.dailyCap);
+          }
           if (outcome.needsResubmit) {
             // The server lost the job: the same request again (a request
             // it still holds is the same job, a finished one a cache hit)
