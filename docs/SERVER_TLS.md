@@ -49,6 +49,12 @@ line of its own: `HOST=203.0.113.5`, with your address or name. zsh, the
 Mac's default shell, already has a variable `HOST`, and it holds the
 Mac's own name: without that line the checks would go to the Mac itself.
 
+The blocks on this page carry `#` comment lines. The VM's shell (bash)
+skips them. The Mac's Terminal (zsh) does not until you tell it to, and
+prints `command not found: #` or a pattern error for each one: run
+`setopt interactivecomments` once in that Terminal window before you
+paste a block there.
+
 ## Before you start (on the VM)
 
 Look at what answers on ports 80 and 5000 today. These commands change
@@ -101,8 +107,10 @@ IP=$(gcloud compute instances describe "$VM" --zone "$ZONE" --project "$PROJECT"
   --format='value(networkInterfaces[0].accessConfigs[0].natIP)')
 gcloud compute addresses create caloriebot-ip --addresses="$IP" \
   --region="$REGION" --network-tier=PREMIUM --project "$PROJECT"
-gcloud compute addresses list --project "$PROJECT"   # the new row: your address, IN_USE
+gcloud compute addresses list --project "$PROJECT"
 ```
+
+The list must show a new row with your address and `IN_USE`.
 
 `$REGION` is the zone without its last part (`europe-west1-b` →
 `europe-west1`), and `--network-tier` must be the tier the address

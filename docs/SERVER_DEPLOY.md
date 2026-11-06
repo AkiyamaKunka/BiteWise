@@ -50,6 +50,11 @@ fields in a reply, and endpoints an older app never calls.
 
 ## On the Mac
 
+The blocks below carry `#` comment lines. The Mac's Terminal (zsh) does
+not skip them until you tell it to: run `setopt interactivecomments`
+once in that Terminal window first, or each comment prints
+`command not found: #`.
+
 ```bash
 cd ~/CalorieTracker && git fetch origin
 # one exact commit: the branch of the open pull request, and origin/main once that is merged

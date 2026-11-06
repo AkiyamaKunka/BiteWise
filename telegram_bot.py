@@ -4875,9 +4875,11 @@ def _api_features() -> Dict[str, bool]:
 
 def _api_bind_host() -> str:
     """API_BIND_HOST: where Flask listens. Default 0.0.0.0 (unchanged).
-    127.0.0.1 once a TLS proxy (Caddy, docs/SERVER_TLS.md) fronts the API,
-    so plain-HTTP port 5000 is no longer reachable from the network. Only
-    an IP literal is accepted; anything else keeps the default."""
+    127.0.0.1 only when plain HTTP is closed (docs/SERVER_TLS.md, section
+    6): a TLS proxy (Caddy) is then the only way in, and port 5000 is no
+    longer reachable from the network. While http and https run side by
+    side it stays unset. Only an IP literal is accepted; anything else
+    keeps the default."""
     raw = (os.environ.get("API_BIND_HOST") or "").strip()
     if not raw:
         return "0.0.0.0"

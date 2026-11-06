@@ -16,11 +16,18 @@ OAuth token, the upload key, a plan key or any other environment value.
                 for tests/fixtures/lookup_streams/ (file mode 0600)
   --model NAME  override CLAUDE_LOOKUP_MODEL for this run
 
-Run it from the app directory with the service's venv, while no photo is
-being analyzed (it starts a second CLI process next to the service's):
+Run it from the app directory with the service's venv, as the service's
+user and with the service's PATH (docs/SERVER_DEPLOY.md, "Restaurant
+lookup", step 2), while no photo is being analyzed (it starts a second
+CLI process next to the service's):
 
   cd /home/ubuntu/CalorieTracker && venv/bin/python scripts/lookup_smoke.py --init-only
   cd /home/ubuntu/CalorieTracker && venv/bin/python scripts/lookup_smoke.py
+
+On a small server (1 GB of memory, no swap) run only the --init-only
+line next to the service: a full run is a second whole CLI run, and two
+do not fit. Do the first real lookup through the API instead, where it
+runs inside the service (the same page, step 6).
 
 It needs CLAUDE_ANALYZER_ENABLED=1 (read from .env like the service) but
 NOT CLAUDE_LOOKUP_ENABLED: run it before switching the endpoint on.
