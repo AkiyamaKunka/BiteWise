@@ -76,9 +76,9 @@ straight to Flask before anything that listens on port 80 sees it. Then:
 The first rollout found exactly this: the rule, saved nowhere, and a
 phone on plain http.
 
-So for this whole page: do not reboot, do not run `apt upgrade`, and
-leave whichever port the phone's address uses (80 through the redirect,
-or 5000) untouched until section 6.
+So while you work through this page: do not reboot, do not run
+`apt upgrade`, and leave whichever port the phone's address uses (80
+through the redirect, or 5000) untouched until section 6.
 
 ## 1. An address that does not change
 
@@ -415,6 +415,10 @@ While both run:
   from `127.0.0.1`. Only the VPN evidence for the old Termux watcher and
   iOS Shortcut looks at the client's address, and for a request through
   Caddy it reads "unknown". The app's own `/api/` routes do not use it.
+- **After a reboot, run the test from the Mac again.** An unsaved
+  redirect rule is gone by then, and port 80 should be answered by
+  Caddy's `:80` block. The first rollout checked that block only on the
+  VM itself (`401` from `http://127.0.0.1:80`); it did not reboot.
 
 Move on to section 6 only when every client has used `https://` for
 about a week and, on route A, "Checks later" has shown at least two
