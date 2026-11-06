@@ -2247,6 +2247,68 @@ void main() {
         expect(kept, isNot(contains(chain)), reason: chain);
       }
     });
+
+    // Its twin for a RETRY record (no job on a server: the first try
+    // failed for now). The place it kept is ignored in the same way.
+    test('Always → When unsure with a located RETRY record: the retry '
+        'runs with the printed chain only, and no position is read '
+        'again', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.always,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async =>
+          _failure(LookupOutcomeKind.busy, LookupFailureCode.server);
+      await h.assist.sweep();
+      expect(h.lookups.submits.single.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+      final record = (await h.state.jobs())[id]!;
+      expect((record.jobId, record.attempts), (null, 1));
+      expect(record.place?.chains, ['chipotle', 'qdoba']);
+      expect(
+        h.everythingStored().toLowerCase(),
+        contains('chipotle'),
+        reason: 'kept with the record, until the retry',
+      );
+
+      // The mode row: Always → When unsure (the consent stays).
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      h.now = h.now.add(assistRetryDelays.first);
+      h.lookups.onSubmit = null;
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(2));
+      expect(h.lookups.submits.last.chainKeys, ['mcdonalds']);
+      expect(h.lookups.submits.last.body['chains'] as List, hasLength(1));
+      expect(
+        h.source.asked,
+        hasLength(1),
+        reason: 'the record kept the country',
+      );
+      expect(
+        h.places.radii,
+        hasLength(1),
+        reason: 'Apple Maps not asked again',
+      );
+      final block = h.blockOf(id)!;
+      expect(block['trigger'], 'auto_branding');
+      expect(block['evidence'], 'item_brand');
+      expect(await h.state.jobs(), isEmpty);
+      final kept = h.everythingStored().toLowerCase();
+      for (final chain in nearby) {
+        expect(kept, isNot(contains(chain)), reason: chain);
+      }
+    });
   });
 
   group('privacy', () {
