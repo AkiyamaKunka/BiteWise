@@ -124,9 +124,9 @@ def test_unconfigured_and_bad_model(env, monkeypatch, tmp_path):
     sub = tmp_path / "m"
     sub.mkdir()
     code, out, record = _main(monkeypatch, sub, lines(FOUND),
-                              ["--model", "sonnet", "--init-only"])
-    assert code == 0 and "model             : sonnet" in out
-    assert read_record(record)["argv"][-1] == "sonnet"
+                              ["--model", "haiku", "--init-only"])
+    assert code == 0 and "model             : haiku" in out
+    assert read_record(record)["argv"][-1] == "haiku"
 
 
 def test_sample_request_names_chipotle_from_the_table(monkeypatch):

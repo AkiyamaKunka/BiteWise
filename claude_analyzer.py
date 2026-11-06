@@ -1089,7 +1089,8 @@ LOOKUP_INIT_EXPECT = {
 }
 LOOKUP_KEY_SOURCES_DEFAULT = ("none",)
 LOOKUP_ENV_KEYS = ("PATH", "HOME", "LANG", "CLAUDE_CODE_OAUTH_TOKEN")
-LOOKUP_MODEL_DEFAULT = "haiku"
+LOOKUP_MODEL_DEFAULT = "sonnet"
+LOOKUP_TIMEOUT_SECONDS_DEFAULT = 180  # for CLAUDE_LOOKUP_TIMEOUT_SECONDS
 LOOKUP_INIT_DEADLINE_SECONDS = 10  # default for CLAUDE_LOOKUP_INIT_SECONDS
 LOOKUP_READ_SLICE_SECONDS = 0.25  # how often a blocked read checks cancel
 LOOKUP_EXIT_GRACE_SECONDS = 5
@@ -1106,17 +1107,24 @@ _LINKS_PREFIX = "Links: "
 
 
 def lookup_model() -> str:
-    """CLAUDE_LOOKUP_MODEL (default 'haiku'); anything that is not a
-    plain model name/alias falls back to the default — it becomes argv."""
+    """CLAUDE_LOOKUP_MODEL (default 'sonnet'); anything that is not a
+    plain model name/alias falls back to the default — it becomes argv.
+    'haiku' uses less plan usage but was wrong on build-your-own items
+    in the first live runs (2026-11-05: sonnet 4 of 4 lookups correct,
+    haiku 2 of 4)."""
     raw = (os.environ.get("CLAUDE_LOOKUP_MODEL") or "").strip()
     return raw if raw and _LOOKUP_MODEL_RE.match(raw) else LOOKUP_MODEL_DEFAULT
 
 
 def lookup_timeout_seconds() -> int:
+    """CLAUDE_LOOKUP_TIMEOUT_SECONDS: the wall clock one lookup may take
+    (default 180, clamp 20..300). A lookup took about 25-135 s in the
+    first live runs (2026-11-05)."""
     try:
-        value = int(os.environ.get("CLAUDE_LOOKUP_TIMEOUT_SECONDS", "75"))
+        value = int(os.environ.get("CLAUDE_LOOKUP_TIMEOUT_SECONDS",
+                                   str(LOOKUP_TIMEOUT_SECONDS_DEFAULT)))
     except ValueError:
-        return 75
+        return LOOKUP_TIMEOUT_SECONDS_DEFAULT
     return min(max(value, 20), 300)
 
 

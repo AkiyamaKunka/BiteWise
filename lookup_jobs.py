@@ -1,6 +1,7 @@
 """Async restaurant-lookup jobs on the owner's server (design stage R3b).
 
-A lookup runs the Claude CLI with WebSearch for 20-75 s — far longer
+A lookup runs the Claude CLI with WebSearch for about 25-135 s (the
+first live runs, 2026-11-05; the default limit is 180 s) — far longer
 than a phone keeps a request open, and far too long to hold the single
 CLI ahead of a photo. So /api/restaurant_lookup only ENQUEUES: it answers
 202 with a job id (or 200 straight from the 24 h cache), and the app

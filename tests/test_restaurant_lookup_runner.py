@@ -318,7 +318,7 @@ def test_argv_is_pinned_exactly(monkeypatch, tmp_path):
         "Bash,Read,Write,Edit,Glob,Grep,LS,WebFetch,NotebookEdit,Task,mcp__*",
         "--permission-mode", "dontAsk", "--strict-mcp-config",
         "--no-session-persistence", "--json-schema", SCHEMA,
-        "--model", "haiku",
+        "--model", "sonnet",
     ]
 
 
@@ -329,18 +329,18 @@ def test_extra_flags_and_analyzer_model_never_reach_the_lookup(
     monkeypatch.setenv("CLAUDE_ANALYZER_EXTRA_FLAGS",
                        "--dangerously-skip-permissions --tools default")
     monkeypatch.setenv("CLAUDE_ANALYZER_MODEL", "opus")
-    monkeypatch.setenv("CLAUDE_LOOKUP_MODEL", "sonnet")
+    monkeypatch.setenv("CLAUDE_LOOKUP_MODEL", "haiku")
     claude_analyzer.lookup_restaurant(PROMPT, SCHEMA)
     argv = read_record(record)["argv"]
     assert "--dangerously-skip-permissions" not in argv
     assert argv.count("--tools") == 1
-    assert argv[-2:] == ["--model", "sonnet"]
+    assert argv[-2:] == ["--model", "haiku"]
 
 
 @pytest.mark.parametrize("raw,expected", [
-    (None, "haiku"), ("", "haiku"), ("sonnet", "sonnet"),
+    (None, "sonnet"), ("", "sonnet"), ("haiku", "haiku"),
     ("claude-sonnet-5-5", "claude-sonnet-5-5"),
-    ("opus --dangerously-skip-permissions", "haiku"), ("a" * 80, "haiku"),
+    ("opus --dangerously-skip-permissions", "sonnet"), ("a" * 80, "sonnet"),
 ])
 def test_lookup_model_knob(monkeypatch, raw, expected):
     if raw is None:
@@ -371,13 +371,24 @@ def test_init_deadline_knob_reaches_the_guard(monkeypatch, tmp_path):
 
 
 @pytest.mark.parametrize("raw,expected", [
-    (None, 75), ("bad", 75), ("5", 20), ("9999", 300), ("90", 90)])
+    (None, 180), ("", 180), ("bad", 180), ("5", 20), ("9999", 300),
+    ("90", 90)])
 def test_lookup_timeout_knob(monkeypatch, raw, expected):
     if raw is None:
         monkeypatch.delenv("CLAUDE_LOOKUP_TIMEOUT_SECONDS", raising=False)
     else:
         monkeypatch.setenv("CLAUDE_LOOKUP_TIMEOUT_SECONDS", raw)
     assert claude_analyzer.lookup_timeout_seconds() == expected
+
+
+def test_lookup_timeout_default_is_one_named_constant(monkeypatch):
+    """The unset knob and an unparsable one read the same constant."""
+    assert claude_analyzer.LOOKUP_TIMEOUT_SECONDS_DEFAULT == 180
+    monkeypatch.setattr(claude_analyzer, "LOOKUP_TIMEOUT_SECONDS_DEFAULT", 123)
+    monkeypatch.delenv("CLAUDE_LOOKUP_TIMEOUT_SECONDS", raising=False)
+    assert claude_analyzer.lookup_timeout_seconds() == 123
+    monkeypatch.setenv("CLAUDE_LOOKUP_TIMEOUT_SECONDS", "bad")
+    assert claude_analyzer.lookup_timeout_seconds() == 123
 
 
 SECRET_ENVS = {

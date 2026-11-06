@@ -126,16 +126,17 @@ then runs the Claude CLI on your plan with **WebSearch only** (no
 WebFetch, no MCP, no plugins, `--safe-mode`, a minimal environment
 without the upload key or any plan key). The first event of every run
 is checked and the run is killed if any tool, MCP server, plugin or
-memory path appears that should not. Each lookup takes about 20–75 s of
-plan usage; results are cached for 24 h.
+memory path appears that should not. Each lookup takes about 25–135 s of
+plan usage (measured in the first live runs; the default limit is
+180 s); results are cached for 24 h.
 
 New `.env` knobs (all optional):
 
 | Knob | Default | Meaning |
 |---|---|---|
 | `CLAUDE_LOOKUP_ENABLED` | off | `1` turns the endpoints on. Off → `403 {"reason":"disabled"}`. |
-| `CLAUDE_LOOKUP_MODEL` | `haiku` | `sonnet` is more thorough and uses more plan usage. |
-| `CLAUDE_LOOKUP_TIMEOUT_SECONDS` | `75` | Per-lookup wall clock (20–300). |
+| `CLAUDE_LOOKUP_MODEL` | `sonnet` | `haiku` uses less plan usage but was wrong on build-your-own items in the first live runs. |
+| `CLAUDE_LOOKUP_TIMEOUT_SECONDS` | `180` | Per-lookup wall clock (20–300). |
 | `CLAUDE_LOOKUP_INIT_SECONDS` | `10` | How long the CLI may take to print its first (init) event (5–30). Raise it only if the smoke's `init latency` is close to the limit. |
 | `CLAUDE_LOOKUP_DAILY_CAP` | `30` | Lookup runs started per day, counted in `logs/service_health.json`. |
 | `CLAUDE_LOOKUP_KEY_SOURCE` | `none` | The `apiKeySource` the guard accepts. Change it only if the smoke tells you to. |
