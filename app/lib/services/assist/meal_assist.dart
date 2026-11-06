@@ -77,7 +77,14 @@
 /// on (or the editor's "Use location"), LookupSupport.locationAllowed (an
 /// http:// own server is brand-only), capture.has_gps, and a RESTAURANT meal
 /// — never takeout, packaged, home or unknown (takeout's position serves
-/// the meal country only; the others' is never read). Steps
+/// the meal country only; the others' is never read). And never for the
+/// automatic auto_branding lookup ([assistTriggerFor]: When unsure, the AI
+/// fairly sure, a chain's brand printed): that lookup takes the brand path
+/// only — Apple Maps is not asked, no location-derived chain is sent, and
+/// the one read of the photo's position it may still make serves the meal
+/// country alone, like takeout's. A trigger may only reduce what is read
+/// or sent, never add; Always and the editor's manual lookup of the same
+/// meal are unchanged and may take this path. Steps
 /// ([MealAssist._where]): the fix's own gate (accuracy, freshness;
 /// place_match.dart placeGate) → PhotoLocationReader → a point in memory →
 /// the meal country (a photo taken outside the US stops here) → its ~100 m
@@ -288,7 +295,11 @@ final class AssistSettingsView {
 
   /// 'Use photo location' (R6c; iOS only): automatic lookups of
   /// restaurant meals may add the chains around where the photo was taken.
-  /// Off, they are brand-only and no location is read.
+  /// Off, they are brand-only and no location is read. On, the automatic
+  /// auto_branding lookup ([assistTriggerFor]) is brand-only all the same:
+  /// Apple Maps is not asked and no location-derived chain is sent; its
+  /// read of the photo's position serves the meal country alone, like
+  /// takeout's.
   final bool useLocation;
   final DateTime? consentAt;
   final String? consentRecipient;
@@ -324,16 +335,33 @@ final class AssistSettingsView {
 }
 
 /// Why [analysis] is looked up automatically under [mode], or null:
-///   * When unsure (auto): estimate_confidence low AND a restaurant or
-///     takeout meal (takeout only ever takes the brand path). Medium, high
-///     or unknown confidence never triggers; home, packaged and unknown
-///     meals never do.
+///   * When unsure (auto), a restaurant or takeout meal only:
+///     estimate_confidence low -> auto_low_confidence (takeout only ever
+///     takes the brand path); estimate_confidence medium AND printed
+///     chain evidence ([assistBrandEvidence]: an item's own brand, or the
+///     receipt or order screen's merchant) -> auto_branding (owner
+///     decision 2026-11-05), which takes the brand path only: Apple Maps
+///     is not asked and no location-derived chain is sent. High or unknown
+///     confidence never triggers; home, packaged and unknown meals never
+///     do.
 ///   * Always: skips only the confidence check. A restaurant or takeout
 ///     meal triggers; a home, packaged or unknown meal only with an item's
 ///     own printed brand (its location is never read either way).
 ///   * Off: never.
-/// The proposed medium-confidence + brand extension (auto_branding) waits
-/// for the owner's answer and is not built.
+///
+/// When unsure stays a subset of Always: every meal it triggers on, Always
+/// triggers on too, and what its lookup reads and sends is never more.
+///
+/// The trigger is written into the meal's block, and the engine reads it
+/// for one thing only ([MealAssist._run]): the automatic auto_branding
+/// lookup stays on the brand path. The invariant: a trigger may only
+/// REDUCE what a lookup reads or sends, never add to it. Brand path only
+/// applies to that automatic lookup alone. Always and the editor's manual
+/// lookup ([MealAssist.lookupNow]) are unchanged: for the same meal they
+/// may take the location path. So are the editor's answers to its result
+/// ([MealAssist.act]): 'Wrong restaurant' and 'Not from a restaurant' may
+/// still read the photo's position once more, for a cell. The decision
+/// rules (decideAssist) never read the trigger.
 AssistTrigger? assistTriggerFor(dynamic analysis, AssistMode mode) {
   if (mode == AssistMode.off) return null;
   final fields = mealContextFields(analysis);
@@ -342,8 +370,21 @@ AssistTrigger? assistTriggerFor(dynamic analysis, AssistMode mode) {
       context == RestaurantContext.restaurant ||
       context == RestaurantContext.takeout;
   if (mode == AssistMode.auto) {
-    if (fields.estimateConfidence != EstimateConfidence.low) return null;
-    return atRestaurant ? AssistTrigger.autoLowConfidence : null;
+    if (!atRestaurant) return null;
+    // Every confidence value is listed, so a new one fails to compile
+    // here instead of silently never (or always) triggering.
+    switch (fields.estimateConfidence) {
+      case EstimateConfidence.low:
+        return AssistTrigger.autoLowConfidence;
+      case EstimateConfidence.medium:
+        final printed = assistBrandEvidence(analysis);
+        return printed.itemBrand || printed.merchant
+            ? AssistTrigger.autoBranding
+            : null;
+      case EstimateConfidence.high:
+      case null:
+        return null;
+    }
   }
   if (atRestaurant) return AssistTrigger.always;
   return assistBrandEvidence(analysis).itemBrand ? AssistTrigger.always : null;
@@ -1184,7 +1225,9 @@ class MealAssist {
       final job = jobs[meal.id];
       // The editor's own lookup still running on the server: polled
       // whatever the triggers say, with the location choice it was made
-      // with (its kept place), and answered as a manual lookup.
+      // with (its kept place), and answered as a manual lookup — also on
+      // a meal this sweep would look up as auto_branding: brand path only
+      // is the automatic lookup's rule, never the editor's.
       final manualJob = job != null && job.manual && job.isPending;
       final trigger = manualJob
           ? AssistTrigger.manual
@@ -1271,6 +1314,13 @@ class MealAssist {
   /// with it, a restaurant meal takes the location path under the same
   /// gates as an automatic lookup (locationAllowed, has_gps, restaurant);
   /// without it no location is read. A failure here is shown, not retried.
+  /// Its trigger is always manual, so the brand-path-only rule of the
+  /// automatic auto_branding lookup ([assistTriggerFor]) does not apply
+  /// here: the same meal, looked up from the editor with "Use location",
+  /// may ask Apple Maps and send nearby chains — the user asked. While an
+  /// automatic job for the meal is still running on the server, calling
+  /// this polls that job as it was sent (an auto_branding job kept no
+  /// place: no places query is made for the poll).
   ///
   /// [chainKey] is the chain the user picked in the editor's 'Which
   /// restaurant?' search after 'Wrong restaurant' (R7b): the request names
@@ -1360,12 +1410,18 @@ class MealAssist {
 
       // ── Where: the meal country and the location path (R6c), or what a
       // job kept of them ──
+      // The one place a trigger changes what a run does, and it can only
+      // take away: the automatic auto_branding lookup (When unsure, the AI
+      // fairly sure, a chain's brand printed) stays on the brand path.
+      // Always and the editor's manual lookup never carry that trigger, so
+      // for the same meal they are unchanged.
       final where = await _where(
         meal,
         support,
         useLocation: useLocation,
         printed: printed,
         job: job,
+        brandPathOnly: trigger == AssistTrigger.autoBranding,
       );
       if (gen != _generation) return _Run.cancelled;
       if (where.later) {
@@ -1569,14 +1625,27 @@ class MealAssist {
   /// places query, and is gone when this returns: what comes back is a
   /// country code, a code and chain keys. A job or a retry keeps what its
   /// first try found: nothing is read again. Never throws.
+  ///
+  /// [brandPathOnly] — set for the automatic auto_branding lookup and for
+  /// nothing else ([_run]; Always and the editor's manual lookup never set
+  /// it) — keeps the lookup off the location path: Apple Maps is not
+  /// asked, its hold is not waited for, and a place a job kept is not
+  /// used, so no location-derived chain reaches the request, the job, the
+  /// cache or the block. The position is still read, under the same
+  /// conditions as without it and at most once, for the meal country
+  /// alone — what a takeout meal gets. It only takes away (the invariant:
+  /// a trigger may only reduce what is read or sent, never add): the one
+  /// read left is a read the lookup makes without it too.
   Future<_Where> _where(
     Meal meal,
     LookupSupport support, {
     required bool useLocation,
     required bool printed,
     required AssistJob? job,
+    bool brandPathOnly = false,
   }) async {
-    final locating = useLocation && _locationPossible(meal, support);
+    final locating =
+        !brandPathOnly && useLocation && _locationPossible(meal, support);
     final keptCountry = job?.country;
     // A job or retry keeps the country it was submitted with — decided
     // then, under the time zone of then: a poll from abroad later answers

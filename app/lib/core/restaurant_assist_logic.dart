@@ -130,11 +130,26 @@ const double _stampEps = 1e-6;
 /// What a decision does.
 enum AssistOutcome { apply, suggest, contextOnly, reject }
 
-/// Why a lookup ran (`analysis.assist.trigger`).
+/// Why a lookup ran (`analysis.assist.trigger`). MealAssist's
+/// assistTriggerFor chooses it; the rules here only carry it into the
+/// block — [decideAssist] never reads it, so the same lookup is judged the
+/// same way whatever started it.
 enum AssistTrigger {
+  /// "When unsure": a restaurant or takeout meal the AI was unsure about
+  /// (estimate_confidence low).
   autoLowConfidence('auto_low_confidence'),
+
+  /// "When unsure": a restaurant or takeout meal the AI was fairly sure
+  /// about (estimate_confidence medium) that shows a chain's printed brand
+  /// — on an item, or as the receipt or order screen's merchant. Its
+  /// automatic lookup takes the brand path only (MealAssist).
   autoBranding('auto_branding'),
+
+  /// "Always": a restaurant or takeout meal whatever the confidence, or
+  /// any other photo meal with an item's own printed brand.
   always('always'),
+
+  /// The editor's lookup: the user asked.
   manual('manual');
 
   const AssistTrigger(this.wire);

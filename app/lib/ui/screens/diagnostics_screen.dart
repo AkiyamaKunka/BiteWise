@@ -388,7 +388,8 @@ class _RestaurantLookups extends StatelessWidget {
 
 /// "AI confidence (14 days)": how many photo meals the AI called low,
 /// medium or high confidence, and how many replies did not say — what
-/// 'When unsure' triggers on (design R7b).
+/// 'When unsure' goes by (low; medium only with a printed chain brand;
+/// design R7b).
 class _Confidence extends StatelessWidget {
   const _Confidence(this.counts);
   final ({int low, int medium, int high, int unknown}) counts;

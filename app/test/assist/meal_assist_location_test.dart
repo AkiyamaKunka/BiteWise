@@ -1549,6 +1549,516 @@ void main() {
     });
   });
 
+  // Owner decision 2026-11-05: "When unsure" also looks up a restaurant or
+  // takeout meal the AI was fairly sure about (medium) when a chain's brand
+  // is printed — trigger auto_branding. The printed brand already names
+  // the chain, so that AUTOMATIC lookup stays on the brand path: Apple
+  // Maps is not asked and no location-derived chain is sent. The photo's
+  // position is still read at most once, on the phone, for the meal
+  // country alone — what a takeout meal gets — and only where 'Use photo
+  // location' already allows it. These tests pin the engine's invariant:
+  // a trigger may only reduce what is read or sent, never add. Always and
+  // the editor's manual lookup of the same meal are unchanged.
+  group('auto_branding takes the brand path only', () {
+    Map<String, dynamic> medium({
+      String? context = 'restaurant',
+      String brand = "McDonald's",
+      Map<String, dynamic>? capture,
+      String name = 'Big Mac',
+    }) => _bigMac(
+      confidence: 'medium',
+      context: context,
+      brand: brand,
+      capture: capture,
+      name: name,
+    );
+
+    void onOwnServer(
+      LookupSupport support, {
+      AssistMode mode = AssistMode.auto,
+    }) {
+      h.lookups.support = support;
+      h.settings = AssistSettingsView(
+        mode: mode,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+    }
+
+    /// The chains Apple Maps would add, were it asked (see _fourChains).
+    const nearby = ['chipotle', 'qdoba', 'subway', 'panera'];
+
+    setUp(() {
+      // Four table chains around the photo: on the location path the
+      // request would name two of them after the printed one ("a printed
+      // brand leads; the location adds its chains after it", above).
+      h.places.answer = NearbyFood(PlacesStatus.ok, places: _fourChains);
+    });
+
+    for (final context in ['restaurant', 'takeout']) {
+      test('a medium $context meal with a printed brand, chains all '
+          'around: the position is read once for the meal country, Apple '
+          'Maps is not asked, the request names the printed chain '
+          'only', () async {
+        final id = h.add(medium(context: context));
+        await h.assist.sweep();
+        expect(h.source.asked, ['asset-1'], reason: 'once, for the US test');
+        expect(h.places.radii, isEmpty, reason: 'Apple Maps is not asked');
+        expect(h.places.points, isEmpty);
+        final request = h.lookups.submits.single;
+        expect(request.chainKeys, ['mcdonalds']);
+        expect(request.body['chains'] as List, hasLength(1));
+        expect(request.body['country'], 'US');
+        final block = h.blockOf(id)!;
+        expect(block['trigger'], 'auto_branding');
+        expect(block['evidence'], 'item_brand');
+        expect(block['status'], AssistStatus.applied);
+        expect(h.analysisOf(id)['total_calories'], 590);
+      });
+    }
+
+    test('the same photo at low confidence is unchanged: the location adds '
+        'its chains', () async {
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.source.asked, ['asset-1']);
+      expect(h.places.radii, hasLength(1));
+      expect(h.lookups.submits.single.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+      expect(h.blockOf(id)?['trigger'], 'auto_low_confidence');
+    });
+
+    test('Always is unchanged: the same medium meal takes the location '
+        'path and is stamped "always"', () async {
+      h.settings = AssistSettingsView(
+        mode: AssistMode.always,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.source.asked, ['asset-1']);
+      expect(h.places.radii, hasLength(1));
+      expect(h.lookups.submits.single.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+      expect(h.blockOf(id)?['trigger'], 'always');
+    });
+
+    // The meal country (run 6) guards the new trigger like any other.
+    test('a photo taken in Shanghai, the phone on US time: its position is '
+        'read once and decides — no places query, no lookup, not asked '
+        'again', () async {
+      h.source.at = _shanghai;
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.source.asked, ['asset-1'], reason: 'read once, on the phone');
+      expect(h.places.radii, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull, reason: 'not even a suggestion');
+      expect(h.assist.lookupsToday, 0);
+      expect(
+        [for (final e in await h.state.decisions()) e.code],
+        [AssistSkip.outsideUs],
+      );
+      expect((await h.state.misses())[id], assistMissesBeforeDenylist);
+      await h.assist.sweep();
+      expect(h.source.asked, hasLength(1), reason: 'not read again');
+      for (final digits in ['31.23', '121.47']) {
+        expect(h.everythingStored(), isNot(contains(digits)));
+      }
+    });
+
+    test('on Shanghai time the zone decides first: nothing is read at '
+        'all', () async {
+      h.offset = _chinaTime;
+      h.source.at = _shanghai;
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty);
+      expect(h.places.radii, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull);
+      expect(
+        [for (final e in await h.state.decisions()) e.code],
+        [AssistSkip.outsideUs],
+      );
+      expect((await h.state.misses())[id], assistMissesBeforeDenylist);
+    });
+
+    // Where no position may be read, none is: the country comes from the
+    // time zone and the region (US Central time, a US region here), and
+    // the one lookup names the printed chain.
+    group('nothing is read where nothing may be', () {
+      void expectBrandOnly(int id, {required String status}) {
+        expect(h.source.asked, isEmpty, reason: 'no position read');
+        expect(h.places.radii, isEmpty, reason: 'Apple Maps not asked');
+        final request = h.lookups.submits.single;
+        expect(request.chainKeys, ['mcdonalds']);
+        expect(request.body['country'], 'US');
+        expect(h.blockOf(id)?['trigger'], 'auto_branding');
+        expect(h.blockOf(id)?['evidence'], 'item_brand');
+        expect(h.blockOf(id)?['status'], status);
+      }
+
+      test("'Use photo location' off (Brand only)", () async {
+        h.settings = AssistSettingsView(
+          mode: AssistMode.auto,
+          consentAt: _consentAt,
+          consentRecipient: 'anthropic',
+        );
+        final id = h.add(medium());
+        await h.assist.sweep();
+        expectBrandOnly(id, status: AssistStatus.applied);
+      });
+
+      test('Android (no location reader, no places resolver)', () async {
+        final android = h.build(android: true);
+        addTearDown(android.dispose);
+        final id = h.add(medium());
+        await android.sweep();
+        expectBrandOnly(id, status: AssistStatus.applied);
+      });
+
+      test('an http:// own server', () async {
+        onOwnServer(_claudePlanHttp);
+        h.lookups.onSubmit = (_) async =>
+            _done(provider: LookupRecipient.claudePlan, verbatim: false);
+        final id = h.add(medium());
+        await h.assist.sweep();
+        expectBrandOnly(id, status: AssistStatus.suggested);
+      });
+
+      test('a photo without GPS', () async {
+        final id = h.add(medium(capture: _capture(hasGps: false)));
+        await h.assist.sweep();
+        expectBrandOnly(id, status: AssistStatus.applied);
+      });
+    });
+
+    test('learned places do not widen it: a medium meal with NO printed '
+        'brand at a spot where the user confirmed a chain is not looked up '
+        '— nothing read, nothing asked, nothing sent', () async {
+      await h.placesStore.confirm('mcdonalds', h.cell);
+      h.places.answer = NearbyFood(PlacesStatus.ok, places: _loneMcDonalds);
+      final id = h.add(medium(brand: ''));
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty);
+      expect(h.places.radii, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.blockOf(id), isNull);
+      expect(await h.state.decisions(), isEmpty);
+      expect(await h.state.misses(), isEmpty);
+
+      // That spot is for the meals the AI was unsure about: the same
+      // photo at low confidence applies on the confirmed location alone.
+      final low = h.add(
+        _bigMac(),
+        timestamp: '2026-10-24T12:40:00.000',
+        fileId: 'asset-2',
+      );
+      await h.assist.sweep();
+      expect(h.source.asked, ['asset-2']);
+      expect(h.blockOf(low)?['evidence'], 'location_confirmed');
+      expect(h.blockOf(id), isNull);
+    });
+
+    test('it does not wait for Apple Maps: while Maps asks the app to hold '
+        'off, a medium meal with a printed brand is looked up in the same '
+        'sweep; a low-confidence one waits', () async {
+      h.places.answer = const NearbyFood(PlacesStatus.throttled);
+      // Newest first: the unbranded low meal asks Apple Maps and is told
+      // to wait, which starts the hold.
+      final unbranded = h.add(_bigMac());
+      final fairlySure = h.add(
+        medium(),
+        timestamp: '2026-10-24T12:20:00.000',
+        fileId: 'asset-2',
+      );
+      final unsure = h.add(
+        _bigMac(brand: "McDonald's", name: 'Quarter Pounder'),
+        timestamp: '2026-10-24T12:10:00.000',
+        fileId: 'asset-3',
+      );
+      await h.assist.sweep();
+      expect(h.places.radii, hasLength(1), reason: 'the unbranded meal only');
+      expect(h.source.asked, [
+        'asset-1',
+        'asset-2',
+      ], reason: 'the low branded meal waits: not even read');
+      expect(h.lookups.submits.single.chainKeys, ['mcdonalds']);
+      expect(h.blockOf(fairlySure)?['trigger'], 'auto_branding');
+      expect(h.blockOf(fairlySure)?['status'], AssistStatus.applied);
+      expect(h.blockOf(unbranded), isNull);
+      expect(h.blockOf(unsure), isNull);
+      expect((await h.state.misses())[unsure], isNull, reason: 'not given up');
+    });
+
+    test('a pending job keeps the country and no place; its poll reads '
+        'nothing again', () async {
+      onOwnServer(_claudePlanHttps);
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      await h.assist.sweep();
+      final job = (await h.state.jobs())[id]!;
+      expect(job.jobId, 'job_abcdef12');
+      expect(job.country, 'US');
+      expect(job.place, isNull);
+      expect(job.manual, isFalse);
+      expect(h.source.asked, hasLength(1));
+
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onPoll = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.lookups.submits, hasLength(1), reason: 'polled, not resent');
+      expect(h.source.asked, hasLength(1), reason: 'not read again');
+      expect(h.places.radii, isEmpty);
+      expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+      expect(h.blockOf(id)?['trigger'], 'auto_branding');
+      expect(await h.state.jobs(), isEmpty);
+    });
+
+    test('busy, three retries later: written unavailable as auto_branding; '
+        'the position was read once, Apple Maps never asked', () async {
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async =>
+          _failure(LookupOutcomeKind.busy, LookupFailureCode.server);
+      await h.assist.sweep();
+      final job = (await h.state.jobs())[id]!;
+      expect((job.jobId, job.attempts), (null, 1));
+      expect(job.country, 'US');
+      expect(job.place, isNull);
+      for (final wait in assistRetryDelays) {
+        expect(h.blockOf(id), isNull);
+        h.now = h.now.add(wait);
+        await h.assist.sweep();
+      }
+      expect(h.lookups.submits, hasLength(1 + assistMaxRetries));
+      for (final request in h.lookups.submits) {
+        expect(request.chainKeys, ['mcdonalds']);
+      }
+      final block = h.blockOf(id)!;
+      expect(block['status'], AssistStatus.unavailable);
+      expect(block['trigger'], 'auto_branding');
+      expect(block['reason'], 'lookup_server');
+      expect(block.containsKey('chain_key'), isFalse);
+      expect(h.analysisOf(id)['total_calories'], 540);
+      expect(h.source.asked, hasLength(1), reason: 'the retries reuse it');
+      expect(h.places.radii, isEmpty);
+      expect(await h.state.jobs(), isEmpty);
+    });
+
+    test('privacy: the coordinates leave nothing behind, Apple Maps never '
+        'hears of them, and no nearby chain is sent, written or '
+        'kept', () async {
+      onOwnServer(_claudePlanHttps);
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      final a = h.add(medium());
+      final b = h.add(
+        medium(context: 'takeout', name: 'Quarter Pounder'),
+        timestamp: '2026-10-24T12:10:00.000',
+        fileId: 'asset-2',
+      );
+      await h.assist.sweep();
+      expect(h.source.asked, ['asset-1', 'asset-2']);
+      expect(h.places.points, isEmpty, reason: 'Apple Maps got nothing');
+      expect(await h.state.jobs(), hasLength(2));
+      final jobs = jsonEncode(h.document(assistJobsDocument));
+
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onPoll = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      await h.assist.sweep();
+      expect(h.blockOf(a)?['trigger'], 'auto_branding');
+
+      final sent = [for (final r in h.lookups.submits) r.toJson()].join('\n');
+      final written = jsonEncode([h.analysisOf(a), h.analysisOf(b)]);
+      final kept = h.everythingStored();
+      expect(kept, contains('mcdonalds'), reason: 'the chain key is kept');
+      for (final text in [sent, written, kept, jobs]) {
+        for (final digits in _coordinateDigits) {
+          expect(text, isNot(contains(digits)));
+        }
+        expect(text, isNot(contains(h.cell.wire)));
+        for (final chain in nearby) {
+          expect(text.toLowerCase(), isNot(contains(chain)), reason: chain);
+        }
+      }
+      expect(jobs, isNot(contains('"place"')));
+      expect(h.places.points, isEmpty);
+      expect(h.places.radii, isEmpty);
+    });
+
+    // The scan and the editor treat the same meal differently, on purpose:
+    // the user asked, and chose "Use location".
+    test("the editor's lookup of that meal is unchanged: \"Use location\" "
+        'asks Apple Maps once and may send nearby chains', () async {
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.places.radii, isEmpty);
+      expect(h.lookups.submits.single.chainKeys, ['mcdonalds']);
+      expect(h.blockOf(id)?['trigger'], 'auto_branding');
+
+      final run = await h.assist.lookupNow(id, useLocation: true);
+      expect(h.places.radii, hasLength(1), reason: 'Apple Maps, once');
+      expect(h.source.asked, hasLength(2));
+      expect(h.lookups.submits, hasLength(2), reason: 'asked again');
+      expect(h.lookups.submits.last.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+      expect(run.decision?.trigger, AssistTrigger.manual);
+      expect(h.blockOf(id)?['trigger'], 'manual');
+
+      // "Brand only" from the editor reads nothing, as before.
+      await h.assist.lookupNow(id);
+      expect(h.places.radii, hasLength(1));
+      expect(h.source.asked, hasLength(2));
+      expect(h.lookups.submits.last.chainKeys, ['mcdonalds']);
+    });
+
+    test("the editor's lookup while the automatic job is still running "
+        'polls that brand-only job: no places query, no second position '
+        'read, no new lookup', () async {
+      onOwnServer(_claudePlanHttps);
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      await h.assist.sweep();
+      expect((await h.state.jobs())[id]?.place, isNull);
+      expect(h.source.asked, hasLength(1));
+
+      h.lookups.onPoll = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      final run = await h.assist.lookupNow(id, useLocation: true);
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.lookups.submits, hasLength(1), reason: 'polled, not resent');
+      expect(h.lookups.submits.single.chainKeys, ['mcdonalds']);
+      expect(h.places.radii, isEmpty);
+      expect(h.source.asked, hasLength(1));
+      expect(run.wrote, isTrue);
+      expect(h.blockOf(id)?['trigger'], 'manual');
+      expect(h.blockOf(id)?['evidence'], 'item_brand');
+      expect(await h.state.jobs(), isEmpty);
+    });
+
+    test("the editor's own pending job on such a meal is polled by the "
+        'sweep as it was sent: its kept place, answered as manual', () async {
+      onOwnServer(_claudePlanHttps);
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      final run = await h.assist.lookupNow(id, useLocation: true);
+      expect(run.code, AssistSkip.pending);
+      final job = (await h.state.jobs())[id]!;
+      expect(job.manual, isTrue);
+      expect(job.place?.chains, ['chipotle', 'qdoba']);
+      expect(h.places.radii, hasLength(1));
+
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onPoll = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.lookups.submits, hasLength(1), reason: 'polled, not resent');
+      expect(h.source.asked, hasLength(1));
+      expect(h.places.radii, hasLength(1));
+      expect(h.blockOf(id)?['trigger'], 'manual');
+    });
+
+    // Brand path only is about the automatic lookup, not about the meal:
+    // the editor's answers to its result follow their own rules, as the
+    // policy says (docs/PRIVACY.md, "reads that photo's location once
+    // more").
+    test("the editor's answers to its result are unchanged: Correct on a "
+        'printed brand teaches nothing and reads nothing; Not from a '
+        'restaurant reads the position once more, for a cell', () async {
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.blockOf(id)?['trigger'], 'auto_branding');
+      expect(h.source.asked, hasLength(1));
+      Future<String> raw() async => (await h.dao.mealSnapshot(id))!.rawAnalysis;
+
+      final correct = await h.assist.act(
+        id,
+        AssistUserAction.correct,
+        expectedRaw: await raw(),
+      );
+      expect(correct.status, AssistActionStatus.done);
+      expect(correct.placeLearned, isFalse);
+      expect(h.source.asked, hasLength(1), reason: 'no position read');
+      expect((await h.placesStore.read()).confirmed, isEmpty);
+
+      final notRestaurant = await h.assist.act(
+        id,
+        AssistUserAction.notFromRestaurant,
+        expectedRaw: await raw(),
+      );
+      expect(notRestaurant.status, AssistActionStatus.done);
+      expect(notRestaurant.placeLearned, isTrue);
+      expect(h.source.asked, hasLength(2), reason: 'once more, for the cell');
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps still not asked');
+      expect((await h.placesStore.read()).inZone(h.cell), isTrue);
+      expect(h.blockOf(id)?['trigger'], 'auto_branding');
+      for (final digits in _coordinateDigits) {
+        expect(h.everythingStored(), isNot(contains(digits)));
+      }
+    });
+
+    test('Always → When unsure with a located job pending: the job is not '
+        'polled; the meal is asked once more with the printed chain only, '
+        'and no position is read again', () async {
+      onOwnServer(_claudePlanHttps, mode: AssistMode.always);
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      await h.assist.sweep();
+      expect(h.lookups.submits.single.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+      final located = (await h.state.jobs())[id]!;
+      expect(located.place?.chains, ['chipotle', 'qdoba']);
+      expect(located.country, 'US');
+      expect(h.source.asked, hasLength(1));
+      expect(h.places.radii, hasLength(1));
+
+      // The mode row: Always → When unsure (the consent stays).
+      onOwnServer(_claudePlanHttps);
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onSubmit = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      await h.assist.sweep();
+      expect(h.lookups.polls, isEmpty, reason: 'the located job is dropped');
+      expect(h.lookups.submits, hasLength(2), reason: 'one more lookup');
+      expect(h.lookups.submits.last.chainKeys, ['mcdonalds']);
+      expect(h.lookups.submits.last.body['chains'] as List, hasLength(1));
+      expect(h.source.asked, hasLength(1), reason: 'the job kept the country');
+      expect(
+        h.places.radii,
+        hasLength(1),
+        reason: 'Apple Maps not asked again',
+      );
+      final block = h.blockOf(id)!;
+      expect(block['trigger'], 'auto_branding');
+      expect(block['evidence'], 'item_brand');
+      expect(block['status'], AssistStatus.suggested);
+      expect(await h.state.jobs(), isEmpty);
+      final kept = h.everythingStored().toLowerCase();
+      for (final chain in nearby) {
+        expect(kept, isNot(contains(chain)), reason: chain);
+      }
+    });
+  });
+
   group('privacy', () {
     test('the coordinates leave nothing behind: not in the request, the '
         'meal, the jobs, the cache or the decision log', () async {

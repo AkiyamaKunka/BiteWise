@@ -315,6 +315,17 @@ typedef Row = ({
   String reason,
 });
 
+/// A meal, a lookup result and the context of the lookup under a given
+/// trigger, with the decision every trigger must yield.
+typedef TriggerFixture = ({
+  String name,
+  Map<String, dynamic> a,
+  Map<String, dynamic> r,
+  AssistContext Function(AssistTrigger) ctx,
+  AssistOutcome outcome,
+  String reason,
+});
+
 void main() {
   group('decideAssist: the APPLY policy, rule by rule', () {
     final rows = <Row>[
@@ -2713,6 +2724,220 @@ void main() {
       expect(brand.runes.length, lessThanOrEqualTo(kAssistBrandNameMax));
       expect(brand, isNot(contains('<')));
       expect(brand.runes.any((r) => r < 0x20), isFalse);
+    });
+  });
+
+  // MealAssist chooses the trigger (assistTriggerFor) and, for the
+  // automatic auto_branding lookup, stays on the brand path. The rules here
+  // never look at it: the same meal, lookup and context are judged the same
+  // way whatever started the lookup, and the block only carries the code —
+  // 'auto_branding' (When unsure, the AI fairly sure, a chain's brand
+  // printed; owner decision 2026-11-05) like the other three.
+  group('the trigger is carried, never read', () {
+    /// Everything a decision says, except its trigger.
+    Map<String, Object?> facts(AssistDecision d) => {
+      'outcome': d.outcome,
+      'status': d.status,
+      'reason': d.reason,
+      'provider': d.provider,
+      'decidedOn': d.decidedOn,
+      'evidence': d.evidence,
+      'chainKey': d.chainKey,
+      'brandName': d.brandName,
+      'source': d.source == null
+          ? null
+          : [
+              d.source!.url,
+              d.source!.host,
+              d.source!.cited,
+              d.source!.official,
+              d.source!.ascii,
+              d.source!.foreign,
+            ],
+      'sourceType': d.sourceType,
+      'sourceYear': d.sourceYear,
+      'grounded': d.grounded,
+      'notes': d.notes,
+      'kcal': [d.oldKcal, d.newKcal],
+      'items': [
+        for (final i in d.items)
+          [
+            i.itemIndex,
+            i.menuItem,
+            i.matchType,
+            i.isDrink,
+            i.ratio,
+            i.grounded,
+            i.applyOk,
+            i.suggestOk,
+            i.reason,
+            for (final n in [i.before, i.proposed, i.pick.published]) ...[
+              n.calories,
+              n.proteinG,
+              n.carbsG,
+              n.fatG,
+            ],
+            i.pick.optionIndex,
+            i.pick.label,
+            i.pick.serving,
+            i.pick.unit,
+            i.pick.multiplier,
+            i.pick.kcal,
+          ],
+      ],
+    };
+
+    /// [written] without the one key a trigger may change.
+    String withoutTrigger(Map<String, dynamic>? written) {
+      if (written == null) return 'nothing written';
+      final block = Map<String, dynamic>.from(written['assist'] as Map)
+        ..remove('trigger');
+      return jsonEncode({...written, 'assist': block});
+    }
+
+    // One fixture for each outcome, and for each kind of evidence a
+    // When unsure lookup can have.
+    final fixtures = <TriggerFixture>[
+      (
+        name: "apply: an item's own brand, the chain's own page",
+        a: analysis(),
+        r: result(),
+        ctx: (t) => ctxOf(trigger: t),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
+      ),
+      (
+        name: 'suggest: a third-party source',
+        a: analysis(),
+        r: result(type: 'third_party_db'),
+        ctx: (t) => ctxOf(trigger: t),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.sourceTypeNotOfficial,
+      ),
+      (
+        name: "suggest: only the receipt's merchant names the chain",
+        a: analysis(
+          items: [food(brand: '')],
+          merchant: 'Chipotle #2381',
+        ),
+        r: result(),
+        ctx: (t) => ctxOf(trigger: t),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.orderMerchantOnly,
+      ),
+      (
+        name: 'suggest: a first visit, location only',
+        a: homeBowl(),
+        r: homeBowlResult(),
+        ctx: (t) =>
+            ctxOf(trigger: t, location: const ['chipotle'], place: 'chipotle'),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.locationUnconfirmed,
+      ),
+      (
+        name: 'context only: the chain publishes nothing',
+        a: analysis(),
+        r: result(status: 'not_published', matches: [], url: null),
+        ctx: (t) => ctxOf(trigger: t),
+        outcome: AssistOutcome.contextOnly,
+        reason: AssistReason.notPublished,
+      ),
+      (
+        name: 'reject: a chain the request never named',
+        a: analysis(),
+        r: result(chain: 'qdoba'),
+        ctx: (t) => ctxOf(trigger: t),
+        outcome: AssistOutcome.reject,
+        reason: AssistReason.chainNotRequested,
+      ),
+    ];
+
+    for (final f in fixtures) {
+      test('${f.name}: the same decision under every trigger', () {
+        AssistDecision under(AssistTrigger t) =>
+            decide(a: f.a, r: f.r, ctx: f.ctx(t));
+        final first = under(AssistTrigger.values.first);
+        expect(first.outcome, f.outcome, reason: first.reason);
+        expect(first.reason, f.reason);
+        final written = recordAssistDecision(f.a, first);
+        for (final t in AssistTrigger.values) {
+          final d = under(t);
+          expect(d.trigger, t);
+          expect(facts(d), facts(first), reason: t.wire);
+          final out = recordAssistDecision(f.a, d);
+          expect(withoutTrigger(out), withoutTrigger(written), reason: t.wire);
+          if (f.outcome == AssistOutcome.reject) {
+            expect(out, isNull, reason: 'a reject writes nothing');
+          } else {
+            expect((out!['assist'] as Map)['trigger'], t.wire);
+          }
+        }
+      });
+    }
+
+    test("the wire values, 'auto_branding' among them, read back", () {
+      expect(
+        [for (final t in AssistTrigger.values) t.wire],
+        ['auto_low_confidence', 'auto_branding', 'always', 'manual'],
+      );
+      for (final t in AssistTrigger.values) {
+        expect(AssistTrigger.fromWire(t.wire), t);
+      }
+      expect(AssistTrigger.fromWire('auto_brand'), isNull);
+      expect(AssistTrigger.fromWire(null), isNull);
+    });
+
+    test("every later write keeps 'auto_branding': Undo, Use AI estimate, a "
+        'declined or accepted suggestion, a chat correction', () {
+      final ctx = ctxOf(trigger: AssistTrigger.autoBranding);
+      final a = analysis();
+      final applied = applyAssist(a, decide(a: a, ctx: ctx))!;
+      expect(applied['assist']['trigger'], 'auto_branding');
+      expect(applied['assist']['status'], AssistStatus.applied);
+      final suggested = recordAssistDecision(
+        a,
+        decide(
+          a: a,
+          r: result(type: 'third_party_db'),
+          ctx: ctx,
+        ),
+      )!;
+      expect(suggested['assist']['trigger'], 'auto_branding');
+      expect(suggested['assist']['status'], AssistStatus.suggested);
+
+      // The snackbar's Undo, and the editor's Use AI estimate.
+      final undone = revertAssist(applied, kind: AssistRevertKind.declined)!;
+      expect(undone['assist']['status'], AssistStatus.declined);
+      expect(undone['assist']['trigger'], 'auto_branding');
+      final reverted = revertAssist(applied)!;
+      expect(reverted['assist']['status'], AssistStatus.reverted);
+      expect(reverted['assist']['trigger'], 'auto_branding');
+      expect(reverted['total_calories'], a['total_calories']);
+
+      // The editor's answers to a suggestion.
+      final declined = declineAssistSuggestion(
+        suggested,
+        reason: AssistReason.userWrongRestaurant,
+      )!;
+      expect(declined['assist']['status'], AssistStatus.declined);
+      expect(declined['assist']['trigger'], 'auto_branding');
+      final accepted = acceptAssistSuggestion(suggested, now: now)!;
+      expect(accepted['assist']['status'], AssistStatus.applied);
+      expect(accepted['assist']['reason'], AssistReason.userAccepted);
+      expect(
+        accepted['assist']['trigger'],
+        'auto_branding',
+        reason: 'not relabelled manual',
+      );
+
+      // A chat correction keeps provenance only — the trigger included.
+      for (final block in [applied['assist'], suggested['assist']]) {
+        final superseded = supersedeAssist(block)!;
+        expect(superseded['status'], AssistStatus.superseded);
+        expect(superseded['trigger'], 'auto_branding');
+      }
+      // A terminal block is carried as it is.
+      expect(supersedeAssist(undone['assist'])!['trigger'], 'auto_branding');
     });
   });
 

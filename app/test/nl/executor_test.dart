@@ -530,6 +530,10 @@ void main() {
         expect(block['reason'], 'nl_correction');
         expect(block['chain_key'], 'chipotle', reason: 'not the forged chain');
         expect(block['provider'], 'anthropic');
+        // Why the lookup ran is provenance too: kept as stored — here the
+        // trigger of a When unsure lookup of a fairly sure, branded meal.
+        expect(block['trigger'], 'auto_branding');
+        expect(block['evidence'], 'item_brand');
         for (final k in ['matches', 'totals', 'applied_total', 'source']) {
           expect(block.containsKey(k), isFalse, reason: k);
         }

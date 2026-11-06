@@ -357,6 +357,17 @@ class _Harness {
   }
 }
 
+/// One line of the trigger rule's truth table: null means "any value".
+typedef _TriggerLine = ({
+  AssistMode mode,
+  Set<String>? conf,
+  Set<String>? ctx,
+  bool? brand,
+  bool? merchant,
+  AssistTrigger? trigger,
+  int rows,
+});
+
 Future<void> _until(bool Function() done, {int ms = 2000}) async {
   final end = DateTime.now().add(Duration(milliseconds: ms));
   while (!done()) {
@@ -763,17 +774,30 @@ void main() {
   });
 
   group('triggers', () {
-    test(
-      'When unsure: unknown, medium or high confidence never triggers',
-      () async {
-        h.add(_bigMac(confidence: null));
-        h.add(_bigMac(confidence: 'medium'));
-        h.add(_bigMac(confidence: 'high'));
-        h.add(_bigMac(confidence: 'unsure'));
-        await h.assist.sweep();
-        expect(h.lookups.submits, isEmpty);
-      },
-    );
+    // Owner decision 2026-11-05: medium confidence is no longer "never".
+    // A medium restaurant or takeout meal that shows a chain's printed
+    // brand — this fixture's default — is looked up as auto_branding (the
+    // group after this one); without a printed chain it still is not.
+    // Unknown and high confidence never trigger, printed brand or not.
+    test('When unsure: unknown or high confidence never triggers, even with '
+        'a printed brand', () async {
+      h.add(_bigMac(confidence: null));
+      h.add(_bigMac(confidence: 'high'));
+      h.add(_bigMac(confidence: 'unsure'));
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+    });
+
+    test('When unsure: medium confidence without a printed chain never '
+        'triggers', () async {
+      h.add(_bigMac(confidence: 'medium', brand: ''));
+      h.add(_bigMac(confidence: 'medium', brand: 'Coca-Cola'));
+      h.add(_bigMac(confidence: 'medium', brand: '', merchant: "Joe's Diner"));
+      h.add(_bigMac(confidence: 'medium', context: 'takeout', brand: ''));
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.dao.snapshotReads, isEmpty, reason: 'no run was started');
+    });
 
     test('low + home, packaged or unknown never triggers', () async {
       h.add(_bigMac(context: 'home'));
@@ -848,6 +872,27 @@ void main() {
         assistTriggerFor(a('medium', 'restaurant'), AssistMode.auto),
         isNull,
       );
+      // Medium with a printed chain: an item's own brand, or the receipt
+      // or order screen's merchant (owner decision 2026-11-05).
+      expect(
+        assistTriggerFor(
+          a('medium', 'restaurant', brand: "McDonald's"),
+          AssistMode.auto,
+        ),
+        AssistTrigger.autoBranding,
+      );
+      expect(
+        assistTriggerFor(
+          _bigMac(
+            confidence: 'medium',
+            context: 'takeout',
+            brand: '',
+            merchant: "McDonald's #2381",
+          ),
+          AssistMode.auto,
+        ),
+        AssistTrigger.autoBranding,
+      );
       expect(
         assistTriggerFor(a('high', 'restaurant'), AssistMode.always),
         AssistTrigger.always,
@@ -861,6 +906,663 @@ void main() {
         AssistTrigger.always,
       );
       expect(assistTriggerFor('junk', AssistMode.always), isNull);
+    });
+
+    // The rule as its table: every line is one row of the design's truth
+    // table (mode, confidence, context, an item's printed brand, a receipt
+    // or order-screen merchant → trigger; null = any value), with the
+    // number of analyses it covers. Written out here on its own, not
+    // derived from the code: 3 modes × 4 confidences × 5 contexts × 2 × 2
+    // = 240 analyses, each matching exactly one line.
+    test('assistTriggerFor: the whole truth table, 240 analyses', () {
+      const eatenOut = {'restaurant', 'takeout'};
+      const elsewhere = {'packaged', 'home', 'unknown'};
+      const auto = AssistMode.auto;
+      const always = AssistMode.always;
+      const lowTrigger = AssistTrigger.autoLowConfidence;
+      const branding = AssistTrigger.autoBranding;
+      final table = <_TriggerLine>[
+        (
+          mode: AssistMode.off,
+          conf: null,
+          ctx: null,
+          brand: null,
+          merchant: null,
+          trigger: null,
+          rows: 80,
+        ),
+        (
+          mode: auto,
+          conf: {'low'},
+          ctx: eatenOut,
+          brand: null,
+          merchant: null,
+          trigger: lowTrigger,
+          rows: 8,
+        ),
+        // The six new rows.
+        (
+          mode: auto,
+          conf: {'medium'},
+          ctx: eatenOut,
+          brand: true,
+          merchant: null,
+          trigger: branding,
+          rows: 4,
+        ),
+        (
+          mode: auto,
+          conf: {'medium'},
+          ctx: eatenOut,
+          brand: false,
+          merchant: true,
+          trigger: branding,
+          rows: 2,
+        ),
+        (
+          mode: auto,
+          conf: {'medium'},
+          ctx: eatenOut,
+          brand: false,
+          merchant: false,
+          trigger: null,
+          rows: 2,
+        ),
+        (
+          mode: auto,
+          conf: {'high', 'unknown'},
+          ctx: eatenOut,
+          brand: null,
+          merchant: null,
+          trigger: null,
+          rows: 16,
+        ),
+        (
+          mode: auto,
+          conf: null,
+          ctx: elsewhere,
+          brand: null,
+          merchant: null,
+          trigger: null,
+          rows: 48,
+        ),
+        (
+          mode: always,
+          conf: null,
+          ctx: eatenOut,
+          brand: null,
+          merchant: null,
+          trigger: AssistTrigger.always,
+          rows: 32,
+        ),
+        (
+          mode: always,
+          conf: null,
+          ctx: elsewhere,
+          brand: true,
+          merchant: null,
+          trigger: AssistTrigger.always,
+          rows: 24,
+        ),
+        (
+          mode: always,
+          conf: null,
+          ctx: elsewhere,
+          brand: false,
+          merchant: null,
+          trigger: null,
+          rows: 24,
+        ),
+      ];
+      final covered = List<int>.filled(table.length, 0);
+      final counts = <AssistMode, Map<AssistTrigger?, int>>{};
+      var analyses = 0;
+      for (final mode in AssistMode.values) {
+        for (final conf in ['low', 'medium', 'high', 'unknown']) {
+          for (final ctx in [...eatenOut, ...elsewhere]) {
+            for (final brand in [true, false]) {
+              for (final merchant in [true, false]) {
+                analyses++;
+                final why = '$mode $conf $ctx brand=$brand merchant=$merchant';
+                final lines = [
+                  for (final (i, line) in table.indexed)
+                    if (line.mode == mode &&
+                        (line.conf?.contains(conf) ?? true) &&
+                        (line.ctx?.contains(ctx) ?? true) &&
+                        (line.brand ?? brand) == brand &&
+                        (line.merchant ?? merchant) == merchant)
+                      i,
+                ];
+                expect(lines, hasLength(1), reason: 'one table line: $why');
+                covered[lines.single]++;
+                final got = assistTriggerFor(
+                  _bigMac(
+                    // Unknown confidence: the reply did not say.
+                    confidence: conf == 'unknown' ? null : conf,
+                    context: ctx,
+                    brand: brand ? "McDonald's" : '',
+                    merchant: merchant ? "McDonald's #2381" : '',
+                  ),
+                  mode,
+                );
+                expect(got, table[lines.single].trigger, reason: why);
+                final byMode = counts.putIfAbsent(mode, () => {});
+                byMode[got] = (byMode[got] ?? 0) + 1;
+              }
+            }
+          }
+        }
+      }
+      expect(analyses, 240);
+      expect(covered, [for (final line in table) line.rows]);
+      expect(counts[AssistMode.off], {null: 80});
+      expect(counts[auto], {lowTrigger: 8, branding: 6, null: 66});
+      expect(counts[always], {AssistTrigger.always: 56, null: 24});
+    });
+
+    test('assistTriggerFor: one analysis for each line of the table', () {
+      AssistTrigger? t(
+        AssistMode mode,
+        String? conf,
+        String? ctx, {
+        String brand = '',
+        String merchant = '',
+      }) => assistTriggerFor(
+        _bigMac(
+          confidence: conf,
+          context: ctx,
+          brand: brand,
+          merchant: merchant,
+        ),
+        mode,
+      );
+      const off = AssistMode.off;
+      const auto = AssistMode.auto;
+      const always = AssistMode.always;
+      const mcd = "McDonald's";
+      const receipt = "McDonald's #2381";
+      // Off: never, whatever the meal shows.
+      expect(
+        t(off, 'low', 'restaurant', brand: mcd, merchant: receipt),
+        isNull,
+      );
+      // When unsure, low: restaurant or takeout, printed chain or not.
+      expect(t(auto, 'low', 'takeout'), AssistTrigger.autoLowConfidence);
+      // When unsure, medium + an item's printed brand (new).
+      expect(
+        t(auto, 'medium', 'restaurant', brand: mcd),
+        AssistTrigger.autoBranding,
+      );
+      // When unsure, medium + the receipt's merchant alone (new).
+      expect(
+        t(auto, 'medium', 'takeout', merchant: receipt),
+        AssistTrigger.autoBranding,
+      );
+      // When unsure, medium, nothing printed names a chain.
+      expect(t(auto, 'medium', 'restaurant'), isNull);
+      // When unsure, high or unknown: never, printed chain or not.
+      expect(
+        t(auto, 'high', 'restaurant', brand: mcd, merchant: receipt),
+        isNull,
+      );
+      expect(t(auto, null, 'takeout', brand: mcd, merchant: receipt), isNull);
+      // When unsure, not a restaurant or takeout meal: never — a branded
+      // supermarket drink, a home meal with a branded sauce, an unknown
+      // context, at any confidence.
+      expect(
+        t(auto, 'medium', 'packaged', brand: mcd, merchant: receipt),
+        isNull,
+      );
+      expect(t(auto, 'medium', 'home', brand: mcd, merchant: receipt), isNull);
+      expect(t(auto, 'low', 'unknown', brand: mcd, merchant: receipt), isNull);
+      expect(t(auto, 'medium', null, brand: mcd, merchant: receipt), isNull);
+      // Always: restaurant or takeout, whatever the confidence — and still
+      // stamped "always", never auto_branding.
+      expect(
+        t(always, 'medium', 'restaurant', brand: mcd),
+        AssistTrigger.always,
+      );
+      expect(t(always, 'high', 'takeout'), AssistTrigger.always);
+      // Always, elsewhere: only with an item's own printed brand.
+      expect(t(always, 'medium', 'home', brand: mcd), AssistTrigger.always);
+      expect(t(always, 'medium', 'home', merchant: receipt), isNull);
+    });
+
+    // The inputs are read as the stored analysis is read everywhere else
+    // (core/coerce.dart; estimate_confidence_test.dart has every spelling)
+    // and as the request composer reads them: a few rows through the rule.
+    test('assistTriggerFor reads the stored fields as the coercions and the '
+        'request composer do', () {
+      AssistTrigger? auto(Map<String, dynamic> a) =>
+          assistTriggerFor(a, AssistMode.auto);
+      Map<String, dynamic> withConfidence(Object? value) => {
+        ..._bigMac(),
+        'estimate_confidence': value,
+      };
+      // Medium, as a model may write it.
+      for (final medium in <Object>['Medium', ' medium ', '中', 0.5, 0.34]) {
+        expect(
+          auto(withConfidence(medium)),
+          AssistTrigger.autoBranding,
+          reason: '$medium',
+        );
+      }
+      for (final low in <Object>['低', 0.1]) {
+        expect(
+          auto(withConfidence(low)),
+          AssistTrigger.autoLowConfidence,
+          reason: '$low',
+        );
+      }
+      // High, and everything that reads as unknown: a numeric string, a
+      // bool, a number outside 0..1, free text.
+      for (final never in <Object?>['高', 0.9, '0.5', true, 1.5, 'unsure']) {
+        expect(auto(withConfidence(never)), isNull, reason: '$never');
+      }
+
+      // The context, case and spaces aside; an invalid one is unknown.
+      Map<String, dynamic> withContext(Object? value) => {
+        ..._bigMac(confidence: 'medium'),
+        'restaurant_context': value,
+      };
+      expect(auto(withContext('Restaurant')), AssistTrigger.autoBranding);
+      expect(auto(withContext(' takeout ')), AssistTrigger.autoBranding);
+      expect(auto(withContext('bar')), isNull);
+      expect(auto(withContext(7)), isNull);
+
+      // A printed brand counts only when it names a chain of OUR table…
+      expect(auto(_bigMac(confidence: 'medium', brand: 'Coca-Cola')), isNull);
+      expect(
+        auto(_bigMac(confidence: 'medium', brand: '', merchant: "Joe's Diner")),
+        isNull,
+      );
+      // …and only on the items a request can name: the first 12.
+      Map<String, dynamic> manyItems(int brandedAt) => {
+        ..._bigMac(confidence: 'medium', brand: ''),
+        'food_items': [
+          for (var i = 0; i < 13; i++)
+            {
+              'name': 'Item $i',
+              'estimated_calories': 100,
+              'brand': i == brandedAt ? "McDonald's" : '',
+            },
+        ],
+      };
+      expect(auto(manyItems(11)), AssistTrigger.autoBranding);
+      expect(auto(manyItems(12)), isNull, reason: 'the 13th item is not sent');
+    });
+  });
+
+  // Owner decision 2026-11-05: "When unsure" also looks up a restaurant or
+  // takeout meal the AI was fairly sure about (medium) when a chain's brand
+  // is printed on an item or names the receipt's merchant. The lookup, the
+  // gates, the decision rules, the cache and the counters are the ones
+  // every lookup uses; only the block's trigger says auto_branding.
+  // (meal_assist_location_test.dart pins that this lookup never takes the
+  // location path.)
+  group('auto_branding: When unsure, a fairly sure meal with a printed '
+      'chain', () {
+    Map<String, dynamic> medium({
+      String? context = 'restaurant',
+      String brand = "McDonald's",
+      String merchant = '',
+    }) => _bigMac(
+      confidence: 'medium',
+      context: context,
+      brand: brand,
+      merchant: merchant,
+    );
+    Map blockOf(int id) => h.analysisOf(id)['assist'] as Map;
+
+    for (final context in ['restaurant', 'takeout']) {
+      test("a $context meal with an item's printed brand: looked up, "
+          'applied, announced, marked unseen', () async {
+        final id = h.add(medium(context: context));
+        await h.assist.sweep();
+
+        expect(h.lookups.submits, hasLength(1));
+        final request = h.lookups.submits.single;
+        expect(request.chainKeys, ['mcdonalds']);
+        expect(request.body['country'], 'US');
+        expect(h.lookups.args.single.stamp, 'anthropic');
+        // Nothing about why it ran is sent: not the trigger, not the
+        // confidence, not the context.
+        expect(request.body.keys.toSet(), {
+          'items',
+          'order_merchant',
+          'chains',
+          'country',
+        });
+        final sent = request.toJson();
+        for (final unsent in ['auto_branding', 'medium', context]) {
+          expect(sent, isNot(contains(unsent)), reason: unsent);
+        }
+
+        final block = blockOf(id);
+        expect(block['status'], AssistStatus.applied);
+        expect(block['trigger'], 'auto_branding');
+        expect(block['evidence'], 'item_brand');
+        expect(h.analysisOf(id)['total_calories'], 590);
+        expect(h.dao.byId(id).corrected, isFalse);
+        final n = h.notices.single;
+        expect((n.mealId, n.oldKcal, n.newKcal), (id, 540, 590));
+        expect(await h.state.unseen(), {id});
+        final log = await h.state.decisions();
+        expect(log.single.code, 'applied');
+        expect((log.single.oldKcal, log.single.newKcal), (540, 590));
+      });
+
+      test('a $context meal whose only printed chain is the receipt\'s '
+          'merchant: looked up, a suggestion at most', () async {
+        final id = h.add(
+          medium(context: context, brand: '', merchant: "McDonald's #2381"),
+        );
+        await h.assist.sweep();
+
+        expect(h.lookups.submits, hasLength(1));
+        final request = h.lookups.submits.single;
+        expect(request.chainKeys, ['mcdonalds']);
+        expect(
+          request.body['order_merchant'],
+          "McDonald's",
+          reason: 'the canonical name, never the receipt text',
+        );
+        final block = blockOf(id);
+        expect(block['status'], AssistStatus.suggested);
+        expect(block['trigger'], 'auto_branding');
+        expect(block['evidence'], 'order_merchant');
+        expect(block['reason'], AssistReason.orderMerchantOnly);
+        expect(h.analysisOf(id)['total_calories'], 540, reason: 'untouched');
+        expect(h.notices, isEmpty);
+        expect(await h.state.unseen(), isEmpty);
+      });
+    }
+
+    test('never without a printed chain, never outside restaurant and '
+        'takeout, never at high or unknown confidence', () async {
+      // Medium, restaurant or takeout, but nothing names a chain of ours.
+      h.add(medium(brand: ''));
+      h.add(medium(brand: 'Coca-Cola'));
+      h.add(medium(brand: '', merchant: "Joe's Diner"));
+      h.add(medium(context: 'takeout', brand: ''));
+      // Medium with a printed chain, but not a restaurant or takeout meal:
+      // a branded supermarket drink, a home meal with a branded sauce.
+      for (final context in ['home', 'packaged', 'unknown', null]) {
+        h.add(medium(context: context));
+        h.add(medium(context: context, brand: '', merchant: "McDonald's"));
+        h.add(medium(context: context, merchant: "McDonald's #2381"));
+      }
+      // A printed chain at a restaurant, but not medium (or low).
+      for (final confidence in ['high', null, 'unsure']) {
+        h.add(_bigMac(confidence: confidence));
+        h.add(_bigMac(confidence: confidence, merchant: "McDonald's #2381"));
+      }
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      expect(h.dao.snapshotReads, isEmpty, reason: 'no run was started');
+      expect(h.dao.assistWrites, isEmpty);
+      expect(await h.state.decisions(), isEmpty);
+    });
+
+    test('the other modes are unchanged: Off reads nothing; Always looks '
+        'the same meal up as "always"', () async {
+      h.settings = const AssistSettingsView();
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.supportReads, 0);
+      expect(h.dao.listings, 0);
+      expect(h.dao.snapshotReads, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.off);
+
+      h.settings = AssistSettingsView(
+        mode: AssistMode.always,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1));
+      expect(blockOf(id)['trigger'], 'always');
+      expect(blockOf(id)['status'], AssistStatus.applied);
+    });
+
+    test('Claude Plan: looked up on the own server, only ever a '
+        'suggestion', () async {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      // The server's text is a search summary, not the page's own.
+      h.lookups.onSubmit = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      final id = h.add(medium());
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1));
+      expect(h.lookups.args.single.recipient, LookupRecipient.claudePlan);
+      expect(h.lookups.args.single.stamp, 'claude_plan:abcd1234');
+      final block = blockOf(id);
+      expect(block['status'], AssistStatus.suggested);
+      expect(block['reason'], AssistReason.notGrounded);
+      expect(block['trigger'], 'auto_branding');
+      expect(block['provider'], 'claude_plan');
+      expect(h.analysisOf(id)['total_calories'], 540);
+      expect(h.notices, isEmpty);
+      expect(await h.state.unseen(), isEmpty);
+    });
+
+    test('the cache and the 6 h rule are keyed by chain and items, never by '
+        'trigger: a low-confidence answer serves the same meal at medium, '
+        'and a refusal holds for it', () async {
+      final first = h.add(_bigMac());
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1));
+      expect(blockOf(first)['trigger'], 'auto_low_confidence');
+      expect(blockOf(first)['status'], AssistStatus.applied);
+
+      // The same items ten minutes later, the AI fairly sure this time.
+      h.now = _now.add(const Duration(minutes: 10));
+      final second = h.add(medium(), timestamp: '2026-10-24T12:40:00.000');
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1), reason: 'a cache hit');
+      expect(blockOf(second)['trigger'], 'auto_branding');
+      expect(blockOf(second)['status'], AssistStatus.suggested);
+      expect(blockOf(second)['reason'], AssistReason.repeat);
+      expect(h.analysisOf(second)['total_calories'], 540);
+      expect(h.notices, hasLength(1), reason: 'no second snackbar');
+
+      // The user turns the first one down: those numbers for those items
+      // are only ever suggested again, whatever triggers the lookup.
+      expect(await h.notices.single.undo(), isTrue);
+      h.now = _now.add(const Duration(minutes: 20));
+      final third = h.add(medium(), timestamp: '2026-10-24T12:50:00.000');
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1), reason: 'still the cache');
+      expect(blockOf(third)['trigger'], 'auto_branding');
+      expect(blockOf(third)['status'], AssistStatus.suggested);
+      expect(blockOf(third)['reason'], AssistReason.declinedBefore);
+      expect(h.analysisOf(third)['total_calories'], 540);
+      expect(h.notices, hasLength(1));
+      // What is kept holds no trigger at all.
+      for (final name in [
+        assistCacheDocument,
+        assistJobsDocument,
+        assistDecisionsDocument,
+      ]) {
+        final kept = jsonEncode(h.document(name));
+        expect(kept, isNot(contains('auto_')), reason: name);
+        expect(kept, isNot(contains('trigger')), reason: name);
+      }
+    });
+
+    // Every gate an automatic lookup passes is checked before the trigger
+    // matters, so the new trigger can open none of them. Each test holds
+    // one gate shut for a medium meal with a printed brand, then shows the
+    // same harness looking a meal up once the gate is open.
+    group('passes the same gates as every automatic lookup', () {
+      Future<void> expectNothing(int id) async {
+        expect(h.lookups.submits, isEmpty);
+        expect(h.lookups.polls, isEmpty);
+        expect(h.dao.assistWrites, isEmpty);
+        expect(h.analysisOf(id).containsKey('assist'), isFalse);
+        expect(await h.state.jobs(), isEmpty);
+      }
+
+      Future<void> expectLookedUpNow() async {
+        await h.assist.sweep();
+        expect(h.lookups.submits, hasLength(1));
+      }
+
+      final allowed = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+
+      test('Off', () async {
+        h.settings = const AssistSettingsView();
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.off);
+        expect(h.lookups.supportReads, 0);
+        h.settings = allowed;
+        await expectLookedUpNow();
+      });
+
+      test('no consent', () async {
+        h.settings = const AssistSettingsView(mode: AssistMode.auto);
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.consentNeeded);
+        expect(
+          h.assist.consentNeeded.value?.recipient,
+          LookupRecipient.anthropic,
+        );
+        h.settings = allowed;
+        await expectLookedUpNow();
+      });
+
+      test('a consent stamped for another recipient: the assist pauses and '
+          'asks', () async {
+        h.lookups.support = _openrouter;
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.consentNeeded);
+        expect(
+          h.assist.consentNeeded.value?.recipient,
+          LookupRecipient.openrouter,
+        );
+        h.lookups.support = _anthropic;
+        await expectLookedUpNow();
+      });
+
+      test('the app in the background', () async {
+        h.foreground = false;
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.background);
+        expect(h.dao.listings, 0);
+        h.foreground = true;
+        await expectLookedUpNow();
+      });
+
+      test('the photo pipeline busy', () async {
+        h.idle = false;
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.pipelineBusy);
+        h.idle = true;
+        await expectLookedUpNow();
+      });
+
+      test('an analyzer call in flight', () async {
+        h.busy.value = 1;
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.analyzerBusy);
+        h.busy.value = 0;
+        await expectLookedUpNow();
+      });
+
+      test('the daily cap reached', () async {
+        SharedPreferences.setMockInitialValues({
+          assistDailyPrefsKey: jsonEncode({'date': _today, 'count': 20}),
+        });
+        h = _Harness(root, await SharedPreferences.getInstance());
+        final id = h.add(medium());
+        await h.assist.sweep();
+        await expectNothing(id);
+        expect(h.assist.lastSkip, AssistSkip.dailyCap);
+        expect(h.assist.lookupsToday, assistDailyCap);
+        // Tomorrow's count starts at zero.
+        h.now = DateTime(2026, 10, 25, 9, 0);
+        h.add(
+          medium(),
+          date: '2026-10-25',
+          timestamp: '2026-10-25T08:30:00.000',
+        );
+        await expectLookedUpNow();
+      });
+
+      test('a meal logged before the consent', () async {
+        final id = h.add(medium(), timestamp: '2026-10-24T07:59:00.000');
+        await h.assist.sweep();
+        await expectNothing(id);
+        h.add(medium(), timestamp: '2026-10-24T08:01:00.000');
+        await expectLookedUpNow();
+      });
+
+      test('a meal logged 25 h ago', () async {
+        h.settings = AssistSettingsView(
+          mode: AssistMode.auto,
+          consentAt: DateTime(2026, 10, 1),
+          consentRecipient: 'anthropic',
+        );
+        final id = h.add(
+          medium(),
+          date: '2026-10-23',
+          timestamp: '2026-10-23T11:59:00.000',
+        );
+        await h.assist.sweep();
+        await expectNothing(id);
+        h.add(
+          medium(),
+          date: '2026-10-23',
+          timestamp: '2026-10-23T13:30:00.000',
+        );
+        await expectLookedUpNow();
+      });
+
+      test('a corrected meal, a text meal, a manual meal', () async {
+        final ids = [
+          h.add(medium(), corrected: true),
+          h.add(medium(), source: MealSource.manualText),
+          h.add(medium(), source: MealSource.appManual),
+        ];
+        await h.assist.sweep();
+        for (final id in ids) {
+          await expectNothing(id);
+        }
+        h.add(medium(), source: MealSource.appPhoto);
+        await expectLookedUpNow();
+      });
+
+      test('a meal open in a screen', () async {
+        final id = h.add(medium());
+        h.inUse.add(id);
+        await h.assist.sweep();
+        await expectNothing(id);
+        h.inUse.clear();
+        await expectLookedUpNow();
+      });
     });
   });
 
