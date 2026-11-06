@@ -196,10 +196,17 @@ whole analysis is the only proof that it still works. It sends a test
 picture that ships with the code (a drawing of a plate). Expect
 `F http 200`, the three context fields filled in, and `brand`, `qty` and
 `unit` among the item keys; in the first rollout the answer came after
-12 seconds. Then take one food photo with the phone. That is not
-optional for this deploy either: it is the only end-to-end proof for the
-app build that is installed. Check
-`systemctl show caloriebot -p NRestarts` is still 0 an hour later.
+12 seconds. The model may also decide that a drawing is not food, which
+the prompt allows: then F prints `F http 200` with `is_food= False`, the
+three fields `None` and `item keys= []`. That is a pass too, for the
+endpoint, the CLI and the JSON contract. Do not roll back for it and do
+not repeat F (each try is one plan run): the meal-context fields are
+then proven by the phone photo.
+
+Then take one food photo with the phone. That is not optional for this
+deploy either: it is the only end-to-end proof for the app build that is
+installed. Check `systemctl show caloriebot -p NRestarts` is still 0 an
+hour later.
 
 ## Restaurant lookup (WebSearch on your server)
 
