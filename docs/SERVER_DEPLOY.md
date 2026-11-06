@@ -52,15 +52,19 @@ fields in a reply, and endpoints an older app never calls.
 
 ```bash
 cd ~/CalorieTracker && git fetch origin
-REF=$(git rev-parse origin/main)   # one exact commit; see "Which commit" below
+# one exact commit: the branch of the open pull request, and origin/main once that is merged
+REF=$(git rev-parse origin/feat/glasses-restaurant-assist)
 SHA=$(git rev-parse --short "$REF")
+# that commit must have the lookup routes: this prints routes ok, or STOP
+git grep -q API_BIND_HOST "$REF" -- telegram_bot.py && echo "routes ok" || echo "STOP: $SHA has no lookup routes"
 # the gate: the jobs CI ran on exactly this commit
 gh run view "$(gh run list --commit "$REF" --workflow Tests --limit 1 \
   --json databaseId --jq '.[0].databaseId')" --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
 ```
 
-Go on only if that printed `test (3.10): success` (see "The gate is CI
-on Python 3.10" below). Then, in the same terminal:
+Go on only if that printed `routes ok` and `test (3.10): success` (see
+"Which commit" and "The gate is CI on Python 3.10" below). Then, in the
+same terminal:
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 python3.12 -m pytest -q -p no:cacheprovider
@@ -75,12 +79,16 @@ gcloud compute ssh "$VM" --zone "$ZONE" --project "$PROJECT"
 **Which commit.** `REF` is one exact commit, so the test result you read,
 the tarball and `DEPLOYED_SHA` all name the same code. While the
 restaurant-assist work is still an open pull request, `origin/main` does
-not contain it: deploy that branch's commit instead
-(`REF=$(git rev-parse origin/feat/glasses-restaurant-assist)`; the first
-rollout deployed f800801, the head of that branch at the time). After
-that, do not deploy `origin/main` again until the pull request is
-merged. `main` has no lookup routes and no `API_BIND_HOST`, so that
-deploy would take both away without any error.
+not contain it, so the block names that branch,
+`origin/feat/glasses-restaurant-assist` (the first rollout deployed
+f800801, its head at the time). Do not deploy `origin/main` until the
+pull request is merged: `main` has no lookup routes and no
+`API_BIND_HOST`, so that deploy would take both away without any error,
+and the script on the VM could not tell. The `routes ok` line is the
+check for it: it looks for `API_BIND_HOST`, which arrived with the
+lookup routes, in that commit's `telegram_bot.py`. Once the pull request
+is merged, change the `REF` line to `REF=$(git rev-parse origin/main)`;
+the check stays as it is and passes there too.
 
 **The gate is CI on Python 3.10.** The VM runs Python 3.10 and the Mac
 runs the tests on 3.12, so the result that counts is the `test (3.10)`
