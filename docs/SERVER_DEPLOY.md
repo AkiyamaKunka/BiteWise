@@ -151,8 +151,9 @@ B=http://127.0.0.1:5000
 sudo journalctl -u caloriebot --since '-3min' --no-pager | grep -E 'Traceback|ImportError|Error' || echo 'A ok'
 # B. auth is enforced: expect "401 401"
 curl -s -o /dev/null -w '%{http_code} ' -X POST $B/api/auth_check; curl -s -o /dev/null -w '%{http_code}\n' -X POST $B/ping
-# C. new code is live. The key goes in via stdin, never argv or echo. Right after this deploy expect
+# C. new code is live. The key goes in via stdin, never argv or echo. Expect
 #    features= {'estimate_confidence': True, 'lookup_jobs': True, 'restaurant_lookup': False}
+#    ('restaurant_lookup': True when CLAUDE_LOOKUP_ENABLED is already set on this server)
 K=$(sudo sed -n 's/^ANDROID_API_KEY=//p' /home/ubuntu/CalorieTracker/.env | head -1 | tr -d "\"'")
 printf 'X-API-Key: %s\n' "$K" | curl -s -X POST -H @- -H 'X-Client-Platform: smoke' $B/api/auth_check \
   | python3 -c 'import json,sys; d=json.load(sys.stdin); print("C ok=",d.get("ok"),"claude_login=",d.get("claude_login"),"features=",d.get("features"))'
@@ -160,10 +161,12 @@ printf 'X-API-Key: %s\n' "$K" | curl -s -X POST -H @- -H 'X-Client-Platform: smo
 IMG=$(printf '\x00\x00\x00\x18ftypheic%064d' 0 | base64 -w0)
 printf 'X-API-Key: %s\n' "$K" | curl -s -w ' %{http_code}\n' -X POST -H @- -H 'Content-Type: application/json' \
   -H 'X-Client-Platform: smoke' --data "{\"image_b64\":\"$IMG\"}" $B/api/analyze_photo
-# E. the lookup routes exist and are off: expect {"error":"disabled","reason":"disabled"}, then 403
+# E. the lookup routes exist. The body is one the server refuses either way, so no lookup runs:
+#    lookups off: {"error":"disabled","reason":"disabled"}, then 403
+#    lookups on:  {"error":"bad_request","field":"items","reason":"bad_request"}, then 400
 #    (a 404 means the old code is still running)
 printf 'X-API-Key: %s\n' "$K" | curl -s -w ' %{http_code}\n' -X POST -H @- -H 'Content-Type: application/json' \
-  -H 'X-Client-Platform: smoke' --data '{"items":[{"name":"bowl","brand":"Chipotle"}]}' $B/api/restaurant_lookup
+  -H 'X-Client-Platform: smoke' --data '{"items":[]}' $B/api/restaurant_lookup
 # F. one whole analysis through the API (ONE plan run; the endpoint stores nothing): expect http 200
 sudo cat /home/ubuntu/CalorieTracker/app/test_live/fixtures/plate.jpg \
   | python3 -c 'import base64,json,sys; json.dump({"image_b64": base64.b64encode(sys.stdin.buffer.read()).decode()}, open("/tmp/photo_body.json","w"))'
@@ -220,13 +223,22 @@ New `.env` knobs (all optional):
 The recommended order for a server that is already live:
 
 1. **Deploy** as above, with the lookups off. Smoke A–F must pass; E
-   proves that the routes are there and that the knob is off.
+   proves that the routes are there and, when it answers `403`, that the
+   knob is off.
 2. **Smoke the guard without spending usage** (on the VM, while the
-   phone is idle):
+   service runs no photo and no lookup). Look first:
 
    ```bash
    APP=/home/ubuntu/CalorieTracker
    PID=$(systemctl show caloriebot -p MainPID --value)
+   pgrep -P "$PID"   # the processes the service has started: must print nothing
+   ```
+
+   Every CLI run is a process the service starts, so a number here means
+   that one is running now (a photo, a text or a lookup): wait and look
+   again. Go on only when it prints nothing:
+
+   ```bash
    # the service's PATH, and only that line: the same file holds the keys
    SPATH=$(sudo cat /proc/$PID/environ | tr '\0' '\n' | sed -n 's/^PATH=//p')
    sudo -u ubuntu -H env PATH="$SPATH" DISABLE_AUTOUPDATER=1 \
@@ -266,11 +278,15 @@ The recommended order for a server that is already live:
    `CLAUDE_ANALYZER_EXTRA_FLAGS` against `claude --help` and analyze one
    real photo (smoke F) before you rely on it.
 
-   Why "while the phone is idle": for about a second the smoke runs a
+   Why "no photo and no lookup": for about a second the smoke runs a
    second CLI process next to the service's, on a VM that has no memory
    to spare. If the kernel kills a photo's CLI run for memory, the server
    answers that the run produced nothing usable (`retry: false`), and
-   the phone gives up on that photo.
+   the phone gives up on that photo. An idle phone is not enough once
+   lookups are on: a lookup the phone asked for runs for up to
+   `CLAUDE_LOOKUP_TIMEOUT_SECONDS`, and longer when it waited behind a
+   photo. The `pgrep` line is new on this page: the first rollout did
+   not run it.
 3. **HTTPS next to http** ([SERVER_TLS.md](SERVER_TLS.md), sections
    1–4). Without it the app keeps lookups to printed brands only, and
    the upload key that now also unlocks a web-searching model still
