@@ -313,11 +313,13 @@ The recommended order for a server that is already live:
    `CLAUDE_LOOKUP_TIMEOUT_SECONDS`, and longer when it waited behind a
    photo. The `pgrep` line is new on this page: the first rollout did
    not run it.
-3. **HTTPS next to http** ([SERVER_TLS.md](SERVER_TLS.md), sections
-   1–4). Without it the app keeps lookups to printed brands only, and
-   the upload key that now also unlocks a web-searching model still
-   travels in clear text. Closing plain http (section 6 there) is a
-   separate, later step and not part of switching lookups on.
+3. **HTTPS next to http** ([SERVER_TLS.md](SERVER_TLS.md), "Before you
+   start" and sections 1–4). This puts https on the server. What it is
+   for arrives only once the app's own address is `https://` (step 7):
+   until then the app keeps lookups to printed brands only, and the
+   upload key that now also unlocks a web-searching model still travels
+   in clear text. Closing plain http (section 6 there) is a separate,
+   later step and not part of switching lookups on.
 4. **Switch it on.** Add the knob to `.env` and restart. Two things to
    get right: the file must end with a newline before you append to it
    (otherwise the new line is glued onto the last one), and its owner
@@ -433,7 +435,14 @@ The recommended order for a server that is already live:
    `--init-only` for this. It runs a whole lookup in a second CLI
    process outside the service's lock, and two CLI processes at once do
    not fit in that memory.
-7. **Record a real stream** (optional; only on a machine with memory
+7. **Switch the app to https**
+   ([SERVER_TLS.md, section 5](SERVER_TLS.md#5-switch-the-app-to-https)):
+   the server address in the app becomes `https://…`. Until you do, the
+   app sends your server only the chains a printed brand or the receipt
+   names, never the ones found by a photo's location, and the upload
+   key still travels in clear text with every photo. The first rollout
+   stopped before this step.
+8. **Record a real stream** (optional; only on a machine with memory
    for a second CLI process, and it spends one more search run). With
    `APP` and `SPATH` set as in step 2:
 
