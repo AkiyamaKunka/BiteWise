@@ -44,6 +44,11 @@ private notes, as in SERVER_DEPLOY.md. Never commit the real name or the
 VM address to this repository — `scripts/check_public_safety.sh` exists
 for exactly that.
 
+On the Mac, set `HOST` yourself before any command that uses it, on a
+line of its own: `HOST=203.0.113.5`, with your address or name. zsh, the
+Mac's default shell, already has a variable `HOST`, and it holds the
+Mac's own name: without that line the checks would go to the Mac itself.
+
 ## Before you start (on the VM)
 
 Look at what answers on ports 80 and 5000 today. These commands change
@@ -359,6 +364,8 @@ That is the whole configuration:
 Test from the Mac (no key, so no plan usage):
 
 ```bash
+# your address or name first: zsh keeps the name of this Mac in HOST
+HOST=203.0.113.5
 # https: prints 401 only if the certificate verifies and Flask answered
 curl -sS -o /dev/null -w '%{http_code}\n' -X POST "https://$HOST/api/auth_check"
 # plain http still answers the API itself: 401, never 308
@@ -504,7 +511,9 @@ Three things first:
 5. From the Mac, `curl -sS --max-time 5 -X POST "http://$HOST:5000/ping"`
    and `curl -sS --max-time 5 -X POST "http://$HOST/ping"` must now fail
    to connect, while `https://$HOST` still answers and the app's test
-   still passes.
+   still passes. Set `HOST` first, as in "Test from the Mac": left to
+   zsh, `$HOST` is the Mac itself, and something on the Mac's own port
+   5000 can answer in the server's place.
 
 ## Rollback
 
@@ -533,7 +542,8 @@ the address.
      section 6 that is
      `sudo iptables -t nat -A PREROUTING -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 5000`.
      Or set the app's address to `http://$HOST:5000` instead.
-  3. From the Mac, the address the phone uses must answer `401`:
+  3. From the Mac, with `HOST` set, the address the phone uses must
+     answer `401`:
      `curl -sS -o /dev/null -w '%{http_code}\n' -X POST "http://$HOST/api/auth_check"`
      (with `:5000` after `$HOST` if that is the phone's address).
   4. Only then `sudo systemctl disable --now caddy`, which stops Caddy
