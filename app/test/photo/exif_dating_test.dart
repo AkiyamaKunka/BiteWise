@@ -201,7 +201,10 @@ void main() {
 
     test('a shared photo with NO capturedAt and no filename date is dated '
         'by its EXIF — the 23:50-shared-after-midnight case', () async {
-      final lastNight = DateTime.now().subtract(const Duration(days: 1));
+      // Yesterday as a CALENDAR day (the constructor) — 24 elapsed hours
+      // back is a different day in the hour around a DST change.
+      final now = DateTime.now();
+      final lastNight = DateTime(now.year, now.month, now.day - 1);
       final stamp = '${lastNight.year}:'
           '${lastNight.month.toString().padLeft(2, '0')}:'
           '${lastNight.day.toString().padLeft(2, '0')} 23:50:00';
@@ -236,7 +239,9 @@ void main() {
     });
 
     test('a FUTURE EXIF date is refused too', () async {
-      final ahead = DateTime.now().add(const Duration(days: 3));
+      // Three CALENDAR days ahead (the constructor), not 72 elapsed hours.
+      final now = DateTime.now();
+      final ahead = DateTime(now.year, now.month, now.day + 3);
       final stamp = '${ahead.year}:'
           '${ahead.month.toString().padLeft(2, '0')}:'
           '${ahead.day.toString().padLeft(2, '0')} 12:00:00';

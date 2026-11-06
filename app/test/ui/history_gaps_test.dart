@@ -18,6 +18,17 @@ String _iso(DateTime d) =>
     '${d.year}-${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
+/// The local calendar day [days] before [from], built with the DateTime
+/// CONSTRUCTOR (which normalises day 0, -3, ... into the previous month) —
+/// the app's own day-stepping rule. Never `from.subtract(Duration(days: n))`:
+/// that is n x 24 ELAPSED hours, so across a DST change (a 25- or 23-hour
+/// day) it lands on the NEIGHBOURING calendar day for one hour of the night:
+/// 23:xx on the n days from the autumn change, 00:xx on the n days after the
+/// spring one. CI runs in UTC and never sees it; a US laptop did (2026-11-05,
+/// 23:01 — four days after the change, so the 6- and 28-day seeds were off).
+DateTime _daysAgo(DateTime from, int days) =>
+    DateTime(from.year, from.month, from.day - days);
+
 Meal _meal(String date, {num cal = 500, int id = 0}) => Meal(
       id: id,
       date: date,
@@ -54,9 +65,9 @@ void main() {
   testWidgets('an interior gap day renders dimmed with "no meals logged"',
       (tester) async {
     final now = DateTime.now();
-    final d3 = _iso(now.subtract(const Duration(days: 3)));
-    final d1 = _iso(now.subtract(const Duration(days: 1)));
-    final d2 = _iso(now.subtract(const Duration(days: 2)));
+    final d3 = _iso(_daysAgo(now, 3));
+    final d1 = _iso(_daysAgo(now, 1));
+    final d2 = _iso(_daysAgo(now, 2));
     await pump(tester, [_meal(d3, cal: 700), _meal(d1, cal: 600)]);
 
     expect(find.byKey(Key('historyDay$d2')), findsOneWidget,
@@ -71,7 +82,7 @@ void main() {
       (tester) async {
     final now = DateTime.now();
     final today = _iso(now);
-    final d2 = _iso(now.subtract(const Duration(days: 2)));
+    final d2 = _iso(_daysAgo(now, 2));
     await pump(tester, [_meal(d2)]);
     expect(find.byKey(Key('historyDay$today')), findsOneWidget,
         reason: '"nothing logged yet today/yesterday" is exactly the gap '
@@ -82,7 +93,7 @@ void main() {
       '29 empty rows', (tester) async {
     final now = DateTime.now();
     final today = _iso(now);
-    final d29 = _iso(now.subtract(const Duration(days: 29)));
+    final d29 = _iso(_daysAgo(now, 29));
     await pump(tester, [_meal(today)]);
     expect(find.byKey(Key('historyDay$d29')), findsNothing,
         reason: 'days before the OLDEST logged day are not rendered');
@@ -92,10 +103,10 @@ void main() {
   testWidgets('gap rows open the day detail (the remedy is one tap away)',
       (tester) async {
     final now = DateTime.now();
-    final d1 = _iso(now.subtract(const Duration(days: 1)));
-    final d3 = _iso(now.subtract(const Duration(days: 3)));
+    final d1 = _iso(_daysAgo(now, 1));
+    final d3 = _iso(_daysAgo(now, 3));
     await pump(tester, [_meal(d3), _meal(d1)]);
-    final d2 = _iso(now.subtract(const Duration(days: 2)));
+    final d2 = _iso(_daysAgo(now, 2));
     await tester.tap(find.byKey(Key('historyDay$d2')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('addMealToDay')), findsOneWidget,
@@ -143,7 +154,7 @@ void main() {
     // screen exists only for clock skew between load and build.
     final now = DateTime.now();
     final today = _iso(now);
-    final future = _iso(now.add(const Duration(days: 2)));
+    final future = _iso(DateTime(now.year, now.month, now.day + 2));
     await pump(tester, [_meal(today), _meal(future)]);
     expect(find.byKey(Key('historyDay$future')), findsNothing);
     expect(find.byKey(Key('historyDay$today')), findsOneWidget);
@@ -153,9 +164,12 @@ void main() {
       'duplicates', (tester) async {
     // Seed the 1st of this month and 28 days earlier — the generated span
     // must contain every date exactly once (the day+1 CONSTRUCTOR rule;
-    // a Duration(hours:24) add would drift under DST).
+    // a Duration(hours:24) add would drift under DST). The SEED follows the
+    // same rule: `now.subtract(Duration(days: 28))` put this meal one day
+    // late at 23:xx for four weeks from the autumn change (28 rows, not 29)
+    // and one day early at 00:xx for four weeks after the spring one (30).
     final now = DateTime.now();
-    final old = now.subtract(const Duration(days: 28));
+    final old = _daysAgo(now, 28);
     await pump(tester, [_meal(_iso(old))]);
     final tiles = tester
         .widgetList<ListTile>(find.byType(ListTile))
@@ -170,7 +184,7 @@ void main() {
     // two adjacent half-width bars while the rows below listed five
     // "no meals logged" days between them.
     final now = DateTime.now();
-    final d6 = _iso(now.subtract(const Duration(days: 6)));
+    final d6 = _iso(_daysAgo(now, 6));
     final today = _iso(now);
     await pump(tester, [_meal(d6, cal: 700), _meal(today, cal: 300)]);
 
@@ -191,7 +205,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(
         tester.widget<DayDetailScreen>(find.byType(DayDetailScreen)).date,
-        _iso(now.subtract(const Duration(days: 3))));
+        _iso(_daysAgo(now, 3)));
   });
 
   testWidgets('a screen reader gets no tap on the chart or the average '
@@ -206,7 +220,7 @@ void main() {
     final now = DateTime.now();
     final meals = [
       for (final back in [0, 2, 4, 6, 8])
-        _meal(_iso(now.subtract(Duration(days: back))), cal: 500 + back),
+        _meal(_iso(_daysAgo(now, back)), cal: 500 + back),
     ];
     await pump(tester, meals);
 
