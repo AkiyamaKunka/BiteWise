@@ -428,7 +428,8 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (stop != true || !mounted) return;
     // The assist first, in ONE settings write: no lookup reads the AI
     // consent, so its own mode and consent are what stop them, and this
-    // row stays until everything behind it is off.
+    // row stays for a retry until the assist is off (Watch Camera Roll is
+    // switched off after the AI consent, as before).
     final route = currentAiConsentRoute(s);
     final assist =
         await stopRestaurantAssistFor(s, widget.restaurantAssist, route);
