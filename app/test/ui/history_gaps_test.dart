@@ -160,6 +160,32 @@ void main() {
     expect(find.byKey(Key('historyDay$today')), findsOneWidget);
   });
 
+  testWidgets('the window STARTS 29 calendar days back: that day is in, the '
+      'day before it is out', (tester) async {
+    // The other edge of [today-29, today]. The start was now minus 29 x
+    // 24 h, a day late at 23:xx for four weeks from the day DST ends (the
+    // oldest day fell out of History for that hour) and a day early at
+    // 00:xx for four weeks after it starts. Only a clock in those hours
+    // tells the two apart; any other hour passes either way.
+    final now = DateTime.now();
+    final d29 = _iso(_daysAgo(now, 29));
+    final d30 = _iso(_daysAgo(now, 30));
+    await pump(tester, [
+      _meal(d30, cal: 900),
+      _meal(d29, cal: 700),
+      _meal(_iso(now), cal: 300),
+    ]);
+    final painter = tester
+        .widget<CustomPaint>(find.byKey(const Key('calorieTrendChart')))
+        .painter as dynamic;
+    final values = (painter.values as List).cast<num>();
+    expect(values, hasLength(30), reason: 'd-29 .. today, one slot a day');
+    expect(values.first, 700, reason: 'd-29 is the oldest day shown');
+    expect(values.last, 300);
+    expect(find.text('Average: ~500 kcal / day'), findsOneWidget,
+        reason: 'd-30 and its 900 kcal are outside the window');
+  });
+
   testWidgets('day iteration crosses a month boundary without skips or '
       'duplicates', (tester) async {
     // Seed the 1st of this month and 28 days earlier — the generated span

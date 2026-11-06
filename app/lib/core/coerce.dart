@@ -181,6 +181,26 @@ String isoDate(DateTime d) =>
     '${d.month.toString().padLeft(2, '0')}-'
     '${d.day.toString().padLeft(2, '0')}';
 
+/// The user-local calendar day [days] after [d] (negative: before), at local
+/// midnight — the one way to step a DATE. The DateTime CONSTRUCTOR normalises
+/// day 0, -3 or 32 into the neighbouring month. Never
+/// `d.add(Duration(days: n))` for a date: that is n x 24 ELAPSED hours, and
+/// across a DST change (a 23- or 25-hour day) it lands on the NEIGHBOURING
+/// day in the hour next to midnight — "yesterday" was still today at 23:30
+/// on the day DST ends (found 2026-11-05, four days after one). Durations
+/// stay for elapsed time: TTLs, grace windows, the capture-age window.
+DateTime addCalendarDays(DateTime d, int days) =>
+    DateTime(d.year, d.month, d.day + days);
+
+/// Whole calendar days from [from]'s local date to [to]'s (negative when
+/// [to] is the earlier day). Counted on UTC dates: local midnights are 23 or
+/// 25 hours apart across a DST change, and `difference().inDays` of the 23
+/// is 0 — tomorrow read "Today" all day on the day DST starts.
+int calendarDaysBetween(DateTime from, DateTime to) =>
+    DateTime.utc(to.year, to.month, to.day)
+        .difference(DateTime.utc(from.year, from.month, from.day))
+        .inDays;
+
 /// Lowercased, hex-normalized image hash (port of _normalize_image_hash).
 String normalizeImageHash(String? hash) => (hash ?? '').trim().toLowerCase();
 
