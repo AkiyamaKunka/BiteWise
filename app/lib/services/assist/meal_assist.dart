@@ -97,7 +97,8 @@
 /// spot, otherwise location (a suggestion at most).
 ///
 /// Jobs and retries (R6c): a pending Claude Plan job is polled every 10 s
-/// for 2 minutes while the app is in the foreground, later on the next
+/// for 4 minutes while the app is in the foreground ([kAssistPollWindow]:
+/// longer than the server's 180 s limit for one lookup), later on the next
 /// sweep. Busy, rate limited (not the daily cap), a timeout or a 5xx is
 /// tried again after 5 min, 30 min and 2 h; a 4th such failure and the
 /// meal is written 'unavailable'; offline, or a failure because the app left the
@@ -201,7 +202,21 @@ const Duration kAssistTransientBackoff = Duration(minutes: 5);
 /// foreground, for [kAssistPollWindow] after it was submitted; after that,
 /// on the next sweep (design R6c).
 const Duration kAssistPollInterval = Duration(seconds: 10);
-const Duration kAssistPollWindow = Duration(minutes: 2);
+
+/// How long after it was submitted a pending job is polled by itself; the
+/// editor's manual lookup keeps asking for as long
+/// (meal_editor_screen.dart). 4 minutes: the server's limit for one
+/// lookup is 180 s by default (CLAUDE_LOOKUP_TIMEOUT_SECONDS; the first
+/// live lookups, 2026-11-05, took about 25-135 s), and a lookup can wait
+/// behind a photo first, which the server always runs before it. With the
+/// 2 minutes this was before, a slow lookup finished just after the window
+/// closed and its answer only appeared at some later sweep.
+///
+/// The window only arms the poll timer: a job still pending when it
+/// closes is kept and polled on the next sweep. Polls stay foreground
+/// only: in the background the timer's sweep stops at the gate
+/// ([AssistSkip.background]) and arms nothing.
+const Duration kAssistPollWindow = Duration(minutes: 4);
 
 /// After the recipient said it cannot look up at all (an old server, the
 /// server's lookup knob off, a rejected key, no key, no search) no

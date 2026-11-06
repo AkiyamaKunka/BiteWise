@@ -4314,13 +4314,13 @@ abstract class AppLocalizations {
   /// **'No chain matches.'**
   String get assistPickerNone;
 
-  /// Shown in the editor while a manual lookup runs (up to 2 minutes on your own server).
+  /// Shown in the editor while a manual lookup runs (up to 4 minutes on your own server).
   ///
   /// In en, this message translates to:
   /// **'Looking up restaurant nutrition…'**
   String get assistLookingUp;
 
-  /// The manual lookup is still running on the server after 2 minutes.
+  /// The manual lookup is still running on the server after 4 minutes.
   ///
   /// In en, this message translates to:
   /// **'Still looking. Open this meal again in a minute.'**

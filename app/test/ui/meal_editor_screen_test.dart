@@ -964,7 +964,7 @@ void main() {
       expect(find.byKey(const Key('assistUseEstimate')), findsOneWidget);
     });
 
-    testWidgets('Look up: still running after two minutes, or nothing to '
+    testWidgets('Look up: still running after four minutes, or nothing to '
         'ask about, says so', (tester) async {
       var (_, assist) = await open(
         tester,
@@ -974,23 +974,24 @@ void main() {
       );
       await tester.tap(find.byKey(const Key('assistLookUp')));
       await tester.pump();
+      // kAssistPollWindow (4 minutes) at the 1 s interval open() sets.
       var waited = 0;
       while (find.byKey(const Key('assistLookingUp')).evaluate().isNotEmpty &&
-          waited < 200) {
+          waited < 400) {
         await tester.pump(const Duration(seconds: 1));
         waited++;
       }
       await tester.pump();
       expect(
         waited,
-        inInclusiveRange(119, 122),
-        reason: 'asked for two minutes, then given up',
+        inInclusiveRange(239, 242),
+        reason: 'asked for four minutes, then given up',
       );
       expect(
         find.text('Still looking. Open this meal again in a minute.'),
         findsOneWidget,
       );
-      expect(assist.lookups.length, 121);
+      expect(assist.lookups.length, 241);
       await tester.pumpAndSettle();
 
       (_, assist) = await open(tester, bigMacAnalysis(brand: ''));

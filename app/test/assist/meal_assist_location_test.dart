@@ -22,14 +22,15 @@
 ///   * the request names at most 3 chains, 1 when one was auto-picked;
 ///   * the coordinates leave nothing behind (nothing stored, sent or
 ///     logged holds them; the source keeps them inside _where);
-///   * a pending job is polled every 10 s for 2 minutes, a lost one is
-///     resubmitted, neither reads the location again;
+///   * a pending job is polled every 10 s for 4 minutes, in the foreground
+///     only; a lost one is resubmitted; neither reads the location again;
 ///   * busy / rate limited / timeout / 5xx: retried after 5 min, 30 min
 ///     and 2 h, then 'unavailable'; offline and the app leaving the
 ///     foreground are not tries;
 ///   * a cached answer makes zero lookup calls and lands on the right items.
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -457,6 +458,44 @@ Future<void> _until(bool Function() done, {int ms = 3000}) async {
     await Future<void>.delayed(const Duration(milliseconds: 5));
   }
 }
+
+/// A timer the test holds instead of the event loop ([_holdingTimers]), so
+/// nothing waits on the real clock: [fire] runs it once, as the loop would
+/// after [wait].
+class _HeldTimer implements Timer {
+  _HeldTimer(this.wait, this._run);
+
+  final Duration wait;
+  final void Function() _run;
+  bool _active = true;
+
+  @override
+  bool get isActive => _active;
+
+  @override
+  int get tick => 0;
+
+  @override
+  void cancel() => _active = false;
+
+  void fire() {
+    if (!_active) return;
+    _active = false;
+    _run();
+  }
+}
+
+/// A zone in which every new timer goes to [held] instead of the event
+/// loop: a test reads the timers the engine arms and fires them itself.
+Zone _holdingTimers(List<_HeldTimer> held) => Zone.current.fork(
+  specification: ZoneSpecification(
+    createTimer: (self, parent, zone, wait, run) {
+      final timer = _HeldTimer(wait, run);
+      held.add(timer);
+      return timer;
+    },
+  ),
+);
 
 String _appRoot() {
   var dir = Directory.current;
@@ -2275,6 +2314,90 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(h.lookups.polls.length, polled);
       expect(h.lookups.submits, hasLength(1));
+    });
+
+    test('a job still pending after 2 minutes is polled again by itself, in '
+        'the foreground only, every 10 s until 4 minutes after it was '
+        'submitted; after that only a sweep polls it', () async {
+      // The engine's timers are held by the test and its clock is the
+      // harness's: the minutes pass by setting it, nothing waits.
+      final timers = <_HeldTimer>[];
+      final zone = _holdingTimers(timers);
+      Future<void> sweep() => zone.run(h.assist.sweep);
+      List<_HeldTimer> armed() => [
+        for (final t in timers)
+          if (t.isActive) t,
+      ];
+      // Completed by the next poll: a poll [fire] waits for was started by
+      // the timer it fired, not by the test.
+      Completer<void>? polled;
+      // The one armed timer — the next poll, an interval on — fires [after]
+      // the submit. Then the sweep it started is joined (sweep() is
+      // single-flight; the pass the call adds finds nothing due).
+      Future<void> fire(Duration after, {bool polls = true}) async {
+        expect(armed(), hasLength(1), reason: 'the poll $after in is armed');
+        final timer = armed().single;
+        expect(timer.wait, kAssistPollInterval);
+        h.now = _now.add(after);
+        final poll = polled = Completer<void>();
+        timer.fire();
+        if (polls) await poll.future;
+        await sweep();
+      }
+
+      expect(
+        kAssistPollWindow,
+        const Duration(minutes: 4),
+        reason: "longer than the server's 180 s limit for one lookup",
+      );
+      h.add(_bigMac());
+      h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
+      h.lookups.onPoll = (_) async {
+        polled?.complete();
+        polled = null;
+        return _pending('job_abcdef12');
+      };
+      await sweep();
+      expect(h.lookups.submits, hasLength(1));
+
+      // Every 10 s for the first 2 minutes…
+      var after = Duration.zero;
+      while (after < const Duration(minutes: 2)) {
+        await fire(after += kAssistPollInterval);
+      }
+      expect(h.lookups.polls, hasLength(12));
+      // …and, still pending, on past them and past the server's limit.
+      while (after < const Duration(minutes: 3)) {
+        await fire(after += kAssistPollInterval);
+      }
+      expect(h.lookups.polls, hasLength(18));
+
+      // In the background the timer's sweep sends nothing and arms
+      // nothing…
+      h.foreground = false;
+      await fire(after += kAssistPollInterval, polls: false);
+      expect(h.assist.lastSkip, AssistSkip.background);
+      expect(h.lookups.polls, hasLength(18));
+      expect(armed(), isEmpty);
+      // …and the sweep a resume starts takes the job up again.
+      h.foreground = true;
+      await sweep();
+      expect(h.lookups.polls, hasLength(19));
+
+      while (after < const Duration(minutes: 4)) {
+        await fire(after += kAssistPollInterval);
+      }
+      expect(h.lookups.polls, hasLength(24));
+      // 4 minutes after the submit the window is closed: nothing is armed,
+      // and the job, still pending, waits for the next sweep — which polls
+      // it once and arms nothing either.
+      expect(armed(), isEmpty);
+      h.now = _now.add(const Duration(minutes: 5));
+      await sweep();
+      expect(h.lookups.polls, hasLength(25));
+      expect(armed(), isEmpty);
+      expect(h.lookups.submits, hasLength(1), reason: 'polled, not resent');
+      expect((await h.state.jobs()).values.single.jobId, 'job_abcdef12');
     });
 
     test('the editor\'s lookup that came back pending is polled by the '

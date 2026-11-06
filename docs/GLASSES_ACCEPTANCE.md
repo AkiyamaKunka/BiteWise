@@ -195,7 +195,7 @@ The card covers the last 20 glasses photos from the last 14 days. It never shows
 ### Where and what to order
 - Pick a **free-standing** location of a chain that is in Bitewise's chain table: **McDonald's, Chick-fil-A, Culver's, Starbucks, Panera Bread or Chipotle**. Each one's own website (for example mcdonalds.com) is the only source Bitewise accepts for an automatic apply. Avoid malls, food courts and busy blocks: with 3 or more restaurants close together, Bitewise only suggests.
 - Order **one standard menu item, whole**: no combo meal, no sharing, nothing customized. Take the photo **before you eat**.
-- The assist runs **only while Bitewise is open on screen**, never in the background. After the meal, open Bitewise **the same day and within 12 hours** and keep it on the Today screen for about **3 minutes**. Lookups on your server run as jobs, which the app checks every 10 s for up to 2 minutes.
+- The assist runs **only while Bitewise is open on screen**, never in the background. After the meal, open Bitewise **the same day and within 12 hours** and keep it on the Today screen for about **5 minutes**. Lookups on your server run as jobs, which the app checks every 10 s for up to 4 minutes.
 - You can combine this with B1: take lunch photos at the chain, wait 4 hours for the background check, then open Bitewise in the afternoon. That is still the same day and within 12 hours.
 
 ### C1. Brand path (the cup, wrapper or bag is in the photo)
