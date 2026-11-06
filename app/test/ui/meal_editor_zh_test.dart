@@ -5,6 +5,7 @@
 // 'kcal' / 'P g' while the meal cards one screen back say 蛋/碳/脂.
 // The English values stay byte-identical (meal_editor_screen_test.dart and
 // meal_edit_logic_test.dart pin them without delegates).
+import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/meal_edit_logic.dart';
@@ -12,6 +13,7 @@ import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/assist_fixtures.dart';
 import 'fakes.dart';
 
 Widget zhHost(Widget child) => MaterialApp(
@@ -50,6 +52,39 @@ void main() {
     expect(find.textContaining('cannot be negative'), findsNothing);
     expect(find.textContaining('things need fixing'), findsNothing);
     expect(dao.saved, isEmpty);
+  });
+
+  testWidgets('zh: the save-conflict notice is Chinese (design R6a)',
+      (tester) async {
+    useTallSurface(tester);
+    final dao = FakeDao()
+      ..seed(const Meal(
+          id: 1,
+          date: '2026-07-24',
+          time: '01:30 PM',
+          timestamp: '2026-07-24T13:30:00.000',
+          source: 'app_photo',
+          analysis: {
+            'is_food': true,
+            'meal_description': '鸡肉沙拉',
+            'total_calories': 450,
+          }));
+    await tester.pumpWidget(zhHost(
+        MealEditorScreen(dao: dao, meal: dao.meals.first, now: clock)));
+    await tester.pump();
+    // A restaurant lookup lands while the editor is open.
+    final snap = (await dao.mealSnapshot(1))!;
+    await dao.applyAssist(1,
+        expectedRaw: snap.rawAnalysis,
+        analysis: {...snap.meal.analysis, 'total_calories': 610});
+
+    await tester.enterText(find.byKey(const Key('editorCalories')), '520');
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('这餐刚刚被更新，请查看。'), findsOneWidget);
+    expect(find.text('好'), findsOneWidget);
+    expect(find.textContaining('just updated'), findsNothing);
+    expect(dao.fieldUpdates, isEmpty);
   });
 
   testWidgets('zh: item rows use 千卡/蛋/碳/脂 and name the row in Chinese',
@@ -138,5 +173,92 @@ void main() {
       'Calories looks too large (max 20000).',
       'Too many items (max 40).',
     ]);
+  });
+
+  group('zh: the restaurant source card (design R7b)', () {
+    FakeSettings zhSettings() => FakeSettings()
+      ..appLanguage = 'zh'
+      ..restaurantAssist = 'always'
+      ..restaurantAssistConsentAt = DateTime(2026, 10, 24, 8)
+      ..restaurantAssistConsentRecipient = 'anthropic';
+
+    Future<FakeAssist> open(
+        WidgetTester tester, Map<String, dynamic> analysis) async {
+      useTallSurface(tester);
+      final dao = FakeDao()..seed(assistMeal(analysis));
+      final assist = FakeAssist(dao);
+      await tester.pumpWidget(KeyedSubtree(
+        key: UniqueKey(),
+        child: zhHost(MealEditorScreen(
+          dao: dao,
+          meal: dao.meals.first,
+          now: clock,
+          assist: assist.controls(),
+          settings: zhSettings(),
+        )),
+      ));
+      await tester.pumpAndSettle();
+      return assist;
+    }
+
+    testWidgets('applied: every line and answer in Chinese', (tester) async {
+      // Applied where the user confirmed the chain: Correct is offered.
+      await open(tester, appliedBigMacAtSpot());
+      expect(find.text('麦当劳'), findsOneWidget);
+      expect(find.text('已采用公布的数值'), findsOneWidget);
+      expect(find.text('来源：mcdonalds.com'), findsOneWidget);
+      expect(find.text('通过 Claude · 2026-10-24'), findsOneWidget);
+      expect(find.text('数值见于来源页面'), findsOneWidget);
+      for (final t in ['改用 AI 估算', '不是这家', '不是餐厅的', '没错']) {
+        expect(find.text(t), findsOneWidget, reason: t);
+      }
+      expect(find.textContaining('Source:'), findsNothing);
+      expect(find.textContaining('Use AI estimate'), findsNothing);
+    });
+
+    testWidgets('suggested, stale, context only and the lookup, in Chinese',
+        (tester) async {
+      await open(tester, suggestedBigMac());
+      expect(find.text('采用公布数值'), findsOneWidget);
+      expect(find.text('建议：AI 的数值未改动'), findsOneWidget);
+      expect(find.text('未在来源页面确认'), findsOneWidget);
+
+      await open(tester, editedFirstItem(appliedBigMac(), 600));
+      expect(find.text('使用餐厅数值后，这餐又被修改过。'), findsOneWidget);
+
+      await open(tester, contextOnlyBigMac());
+      expect(find.text('未找到公布的营养信息 — 保留 AI 估算'), findsOneWidget);
+      expect(find.textContaining('麦当劳'), findsNothing);
+      expect(find.text('查找餐厅营养'), findsOneWidget);
+    });
+
+    testWidgets('Wrong restaurant: the chain search in Chinese, Chinese '
+        'chain names from our table', (tester) async {
+      await open(tester, appliedBigMac());
+      await tester.tap(find.text('不是这家'));
+      await tester.pumpAndSettle();
+      expect(find.text('是哪家餐厅？'), findsOneWidget);
+      expect(find.text('搜索连锁店'), findsOneWidget);
+      await tester.enterText(
+          find.byKey(const Key('chainPickerSearch')), '汉堡王');
+      await tester.pump();
+      final tile = find.byKey(const Key('chainPick-burger_king'));
+      expect(
+          find.descendant(of: tile, matching: find.text('汉堡王')),
+          findsOneWidget);
+      expect(
+          find.descendant(of: tile, matching: find.text('Burger King')),
+          findsOneWidget);
+    });
+
+    testWidgets('a meal changed meanwhile: the notice is Chinese',
+        (tester) async {
+      final assist = await open(tester, appliedBigMac());
+      assist.dao.meals[0] = assistMeal(
+          editedFirstItem(appliedBigMac(), 700)..['total_calories'] = 700);
+      await tester.tap(find.text('改用 AI 估算'));
+      await tester.pumpAndSettle();
+      expect(find.text('这餐刚刚被更新，请查看。'), findsOneWidget);
+    });
   });
 }

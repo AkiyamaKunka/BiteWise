@@ -14,12 +14,18 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'package:http/http.dart' as http;
 
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show formatRecentMealsBlock;
 import '../../core/prompts.dart';
+import '../assist/clients/lookup_client.dart';
+import '../assist/clients/lookup_clients.dart';
+import '../assist/clients/lookup_contract_adapter.dart' show LookupRequest;
+import '../assist/clients/lookup_cost.dart' show LookupBudget;
+import '../assist/clients/server_lookup_client.dart';
 import '../settings/app_settings.dart';
 import 'gemini_analyzer.dart' show createAnalyzer;
 import 'platform_decode.dart';
@@ -620,9 +626,18 @@ String _chatReplyText(Map<String, dynamic> body) =>
 
 /// Per-call delegation on [AppSettings.provider]: switching providers in
 /// Settings takes effect on the NEXT request — no DI rewiring, no restart.
-class MultiProviderAnalyzer implements AnalyzerService, TextIntentExplainer {
-  MultiProviderAnalyzer(this._settings, {http.Client? client})
-      : _gemini = createAnalyzer(_settings, client: client),
+///
+/// Also the restaurant lookup seam (design R5a): [LookupClient] calls go to
+/// the active provider's lookup client through one [ProviderLookupRouter]
+/// (the owner's server through [ServerLookupClient]; providers without a
+/// lookup answer unsupported with zero HTTP calls), and [analyzerBusy]
+/// counts the foreground analyzer calls a lookup must wait for.
+class MultiProviderAnalyzer
+    implements AnalyzerService, TextIntentExplainer, LookupClient {
+  MultiProviderAnalyzer(this._settings,
+      {http.Client? client, this.lookupBudget})
+      : _client = client,
+        _gemini = createAnalyzer(_settings, client: client),
         _openai = OpenAiAnalyzer(_settings, client: client),
         _anthropic = AnthropicAnalyzer(_settings, client: client),
         _server = ServerAnalyzer(_settings, client: client),
@@ -634,6 +649,11 @@ class MultiProviderAnalyzer implements AnalyzerService, TextIntentExplainer {
         _openrouter = createOpenRouterAnalyzer(_settings, client: client);
 
   final AppSettings _settings;
+  final http.Client? _client;
+
+  /// The app's daily lookup ledger (design: 20 a day), shared by every
+  /// provider's lookup client; null = no daily limit here.
+  final LookupBudget? lookupBudget;
   final AnalyzerService _gemini;
   final OpenAiAnalyzer _openai;
   final AnthropicAnalyzer _anthropic;
@@ -673,34 +693,80 @@ class MultiProviderAnalyzer implements AnalyzerService, TextIntentExplainer {
     return AnalysisOutcome(error: msg, retryable: true, wall: Duration.zero);
   }
 
+  final ValueNotifier<int> _busy = ValueNotifier<int>(0);
+
+  /// Analyzer calls in flight on this instance: photos, leftover photos and
+  /// text intents (the chat, fix and describe-a-meal paths all ask
+  /// through textIntent / textIntentOutcome). Design D7: the restaurant
+  /// assist starts a lookup only while this is 0, so a lookup never
+  /// competes with the user's own request. Raised before the call and
+  /// lowered in `finally`: a failure or a throw cannot leave it up. Key
+  /// checks (validateKey, probeKey) are not counted.
+  ValueListenable<int> get analyzerBusy => _busy;
+
+  Future<T> _counted<T>(Future<T> Function() call) async {
+    _busy.value++;
+    try {
+      return await call();
+    } finally {
+      _busy.value--;
+    }
+  }
+
   @override
   Future<AnalysisOutcome> analyzePhoto(Uint8List originalBytes,
       {List<Map<String, dynamic>>? recentMeals}) async {
     final missing = _missingCredential();
     if (missing != null) return missing;
-    return _active.analyzePhoto(originalBytes, recentMeals: recentMeals);
+    return _counted(
+        () => _active.analyzePhoto(originalBytes, recentMeals: recentMeals));
   }
 
   @override
   Future<Map<String, dynamic>?> textIntent(String prompt) =>
-      _active.textIntent(prompt);
+      _counted(() => _active.textIntent(prompt));
 
   /// Forwarded, or the executor would only ever see the reason-less
   /// fallback and keep telling a rejected key to "retry".
   @override
   Future<TextIntentOutcome> textIntentOutcome(String prompt) =>
-      askTextIntent(_active, prompt);
+      _counted(() => askTextIntent(_active, prompt));
 
   @override
   Future<Map<String, dynamic>?> leftoverIntent(
           Uint8List originalBytes, String originalCompact) =>
-      _active.leftoverIntent(originalBytes, originalCompact);
+      _counted(() => _active.leftoverIntent(originalBytes, originalCompact));
 
   @override
   Future<String?> validateKey(String apiKey) => _active.validateKey(apiKey);
 
   @override
   Future<KeyProbe> probeKey(String apiKey) => _active.probeKey(apiKey);
+
+  /// Built on first use: the background engine's instance never looks up.
+  late final ProviderLookupRouter _lookups = ProviderLookupRouter(_settings,
+      client: _client,
+      budget: lookupBudget,
+      serverClient:
+          ServerLookupClient(_settings, client: _client, budget: lookupBudget));
+
+  @override
+  LookupSupport lookupSupport() => _lookups.lookupSupport();
+
+  @override
+  Future<LookupOutcome> submit(LookupRequest request,
+          {List<String> chainDomains = const [],
+          LookupCancelToken? cancel,
+          LookupRecipient? expectedRecipient,
+          String? expectedRecipientStamp}) =>
+      _lookups.submit(request,
+          chainDomains: chainDomains,
+          cancel: cancel,
+          expectedRecipient: expectedRecipient,
+          expectedRecipientStamp: expectedRecipientStamp);
+
+  @override
+  Future<LookupOutcome> poll(String jobId) => _lookups.poll(jobId);
 }
 
 /// Integration seam for di.dart — replaces the direct Gemini factory.

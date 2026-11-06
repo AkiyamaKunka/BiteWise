@@ -55,6 +55,21 @@ Map<String, dynamic> coerceStoredAnalysis(dynamic stored) {
   return <String, dynamic>{};
 }
 
+/// What analysis.capture.shutter_key holds (services/photo/glasses.dart
+/// shutterKey): 16 lowercase hex characters. Nothing else is ever looked
+/// up — the key also goes into a LIKE pattern, where it must carry no
+/// wildcard.
+final RegExp shutterKeyShape = RegExp(r'^[0-9a-f]{16}$');
+
+/// Whether a stored meal [analysis] names [key] as its shutter press
+/// (analysis.capture.shutter_key, design G2a/G2b). Stored analyses are
+/// untrusted: any other shape is a no.
+bool analysisHasShutterKey(Map<String, dynamic> analysis, String key) {
+  if (!shutterKeyShape.hasMatch(key)) return false;
+  final capture = analysis['capture'];
+  return capture is Map && capture['shutter_key'] == key;
+}
+
 /// Start date of an inclusive N-calendar-day window ending today
 /// (spec §1.2 / §5.3: "last N days including today" → [today−(N−1), today]).
 String windowStartDate(DateTime today, int days) =>

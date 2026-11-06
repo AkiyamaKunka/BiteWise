@@ -9,8 +9,11 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:image/image.dart' show ExifData, InputBuffer, decodeJpgExif;
+import 'package:image/image.dart'
+    show ExifData, IfdDirectory, IfdValue, IfdValueType, InputBuffer,
+        decodeJpgExif;
 
+import '../../core/contracts.dart' show ExifCapture;
 import '../../core/shared_generated.dart';
 
 /// Port of `_FILENAME_TS_RE` (upload_photo.py): 8 digits, '_', 6 digits,
@@ -168,21 +171,266 @@ final RegExp _exifOffsetRe = RegExp(r'^([+-])(\d{2}):(\d{2})');
     if (exif == null) return null;
     final wall =
         _parseExifDateTime(exif.exifIfd['DateTimeOriginal']?.toString());
-    final rawOffset = exif.exifIfd['OffsetTimeOriginal']?.toString();
-    if (wall == null || rawOffset == null) return null;
-    final m = _exifOffsetRe.firstMatch(rawOffset.trim());
-    if (m == null) return null;
-    final hours = int.parse(m.group(2)!);
-    final minutes = int.parse(m.group(3)!);
-    if (hours > 14 || minutes > 59) return null; // no such zone
-    final sign = m.group(1) == '-' ? -1 : 1;
-    return (
-      wall: wall,
-      offset: Duration(minutes: sign * (hours * 60 + minutes)),
-    );
+    final offset =
+        _parseExifOffset(exif.exifIfd['OffsetTimeOriginal']?.toString());
+    if (wall == null || offset == null) return null;
+    return (wall: wall, offset: offset);
   } catch (_) {
     return null;
   }
+}
+
+/// An EXIF '±HH:MM' zone offset, or null when missing or malformed.
+Duration? _parseExifOffset(String? raw) {
+  if (raw == null) return null;
+  final m = _exifOffsetRe.firstMatch(raw.trim());
+  if (m == null) return null;
+  final hours = int.parse(m.group(2)!);
+  final minutes = int.parse(m.group(3)!);
+  if (hours > 14 || minutes > 59) return null; // no such zone
+  final sign = m.group(1) == '-' ? -1 : 1;
+  return Duration(minutes: sign * (hours * 60 + minutes));
+}
+
+/// Make / Model: at most this many characters are kept.
+const int _exifTextMax = 64;
+
+/// A pixel dimension no camera writes past.
+const int _maxPixelDimension = 100000;
+
+/// The capture facts in a JPEG or HEIC/HEIF original's own EXIF (design
+/// G2a, 2026-10-24): Make and Model, the shutter's wall clock with its
+/// fraction of a second and its zone, whether the GPS block names a
+/// position — never the position: its tags are only tested for presence —
+/// with that fix's accuracy and UTC time, and the image's pixel size.
+///
+/// Header-only: the JPEG's APP1 block and frame header, the HEIF's Exif
+/// item ([_embeddedExif]) and image extents. The pixel size comes from the
+/// frame header or the extents first — what the file really holds; a
+/// resized copy can carry its original's EXIF dimensions — then from EXIF.
+/// Null when none of it is there. Never throws: hostile bytes return null.
+ExifCapture? exifCapture(Uint8List bytes) {
+  try {
+    final isJpeg = bytes.length >= 2 && bytes[0] == 0xff && bytes[1] == 0xd8;
+    ExifData? exif;
+    try {
+      exif = isJpeg ? decodeJpgExif(bytes) : _embeddedExif(bytes);
+    } catch (_) {
+      exif = null; // a broken EXIF block still leaves the frame size
+    }
+    // Read-only lookups: ExifData's own getters create the directories
+    // they are asked for.
+    final ifd0 = exif?.directories['ifd0'];
+    IfdDirectory? sub(String name) =>
+        (ifd0 != null && ifd0.sub.containsKey(name)) ? ifd0.sub[name] : null;
+    final exifIfd = sub('exif');
+    final gps = sub('gps');
+
+    var size = isJpeg ? _jpegFrameSize(bytes) : _heifImageSize(bytes);
+    size ??= _dimensions(exifIfd?[0xa002], exifIfd?[0xa003]); // PixelX/Y
+    size ??= _dimensions(ifd0?[0x100], ifd0?[0x101]); // ImageWidth/Length
+
+    final subSecText = _exifText(exifIfd?[0x9291]); // SubSecTimeOriginal
+    final capture = ExifCapture(
+      make: _exifText(ifd0?[0x10f]),
+      model: _exifText(ifd0?[0x110]),
+      dateTimeOriginal: _parseExifDateTime(_exifText(exifIfd?[0x9003])),
+      subSec: subSecText == null
+          ? null
+          : RegExp(r'^\d{1,9}').firstMatch(subSecText)?.group(0),
+      offsetTimeOriginal: _parseExifOffset(_exifText(exifIfd?[0x9011])),
+      // GPSLatitude (2) and GPSLongitude (4): present or not, nothing more.
+      gpsPresent: gps != null && gps.containsKey(0x02) && gps.containsKey(0x04),
+      gpsAccuracyM: _gpsAccuracy(gps?[0x1f]), // GPSHPositioningError
+      gpsFixUtc: _gpsFixUtc(gps?[0x1d], gps?[0x07]), // GPSDateStamp, TimeStamp
+      pixelW: size?.$1,
+      pixelH: size?.$2,
+    );
+    final empty = capture.make == null &&
+        capture.model == null &&
+        capture.dateTimeOriginal == null &&
+        capture.subSec == null &&
+        capture.offsetTimeOriginal == null &&
+        !capture.gpsPresent &&
+        capture.gpsAccuracyM == null &&
+        capture.gpsFixUtc == null &&
+        size == null;
+    return empty ? null : capture;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// A text tag's value: control characters and NUL padding out, runs of
+/// whitespace collapsed, at most [max] characters; null when empty or not
+/// text.
+String? _exifText(IfdValue? value, {int max = _exifTextMax}) {
+  if (value == null) return null;
+  final String raw;
+  switch (value.type) {
+    case IfdValueType.ascii:
+      raw = value.toString();
+    case IfdValueType.undefined || IfdValueType.byte:
+      raw = String.fromCharCodes(value.toData());
+    default:
+      return null;
+  }
+  final cleaned = raw
+      .replaceAll(RegExp(r'[\x00-\x1f\x7f]'), ' ')
+      .replaceAll(RegExp(r'\s+'), ' ')
+      .trim();
+  if (cleaned.isEmpty) return null;
+  return cleaned.length > max ? cleaned.substring(0, max) : cleaned;
+}
+
+/// An integer dimension tag pair as (width, height), when both are sane.
+(int, int)? _dimensions(IfdValue? width, IfdValue? height) {
+  int? dim(IfdValue? v) {
+    if (v == null || v.length < 1) return null;
+    final ok = v.type == IfdValueType.short ||
+        v.type == IfdValueType.long ||
+        v.type == IfdValueType.sShort ||
+        v.type == IfdValueType.sLong;
+    if (!ok) return null;
+    final n = v.toInt();
+    return n >= 1 && n <= _maxPixelDimension ? n : null;
+  }
+
+  final w = dim(width), h = dim(height);
+  return (w == null || h == null) ? null : (w, h);
+}
+
+/// GPSHPositioningError in metres, when it is a sane number.
+double? _gpsAccuracy(IfdValue? value) {
+  if (value == null || value.length < 1) return null;
+  final double metres;
+  switch (value.type) {
+    case IfdValueType.rational:
+      final r = value.toRational();
+      if (r.denominator == 0) return null; // package:image would say 0.0
+      metres = r.numerator / r.denominator;
+    case IfdValueType.short ||
+          IfdValueType.long ||
+          IfdValueType.sShort ||
+          IfdValueType.sLong:
+      metres = value.toInt().toDouble();
+    default:
+      return null;
+  }
+  return metres.isFinite && metres >= 0 && metres <= 1e6 ? metres : null;
+}
+
+final RegExp _gpsDateRe = RegExp(r'^(\d{4})[:-](\d{2})[:-](\d{2})');
+
+/// GPSDateStamp ('YYYY:MM:DD', UTC) + GPSTimeStamp (hours, minutes,
+/// seconds as rationals, UTC) as one UTC instant; null unless both are
+/// there and valid — a time without its date says nothing.
+DateTime? _gpsFixUtc(IfdValue? date, IfdValue? time) {
+  final d = _gpsDateRe.firstMatch(_exifText(date) ?? '');
+  if (d == null || time == null || time.length < 3) return null;
+  if (time.type != IfdValueType.rational) return null;
+  final parts = [for (var k = 0; k < 3; k++) time.toRational(k)];
+  // A zero denominator is junk, not midnight (package:image says 0.0).
+  if (parts.any((r) => r.denominator == 0)) return null;
+  final year = int.parse(d.group(1)!);
+  final month = int.parse(d.group(2)!);
+  final day = int.parse(d.group(3)!);
+  final hour = parts[0].numerator / parts[0].denominator;
+  final minute = parts[1].numerator / parts[1].denominator;
+  final second = parts[2].numerator / parts[2].denominator;
+  if (hour < 0 || hour >= 24 || hour != hour.truncateToDouble()) return null;
+  if (minute < 0 || minute >= 60 || minute != minute.truncateToDouble()) {
+    return null;
+  }
+  if (second < 0 || second >= 61) return null;
+  if (year < 1990 || year > 2200) return null;
+  final whole = second.floor();
+  final fix = DateTime.utc(year, month, day, hour.toInt(), minute.toInt(),
+      whole, ((second - whole) * 1000).floor());
+  // DateTime normalizes overflow (month 13, Feb 31): that was junk.
+  if (fix.year != year || fix.month != month || fix.day != day) return null;
+  return fix;
+}
+
+/// The JPEG frame header's (width, height): the first SOFn segment, met
+/// by walking the segments from the start (an EXIF thumbnail's own frame
+/// sits inside APP1 and is skipped with it). Null at the first scan or
+/// anything malformed.
+(int, int)? _jpegFrameSize(Uint8List b) {
+  var i = 2;
+  while (i + 3 < b.length) {
+    if (b[i] != 0xff) return null;
+    final marker = b[i + 1];
+    if (marker == 0xff) {
+      i++; // fill byte
+      continue;
+    }
+    if (marker == 0x01 || (marker >= 0xd0 && marker <= 0xd8)) {
+      i += 2; // standalone markers carry no length
+      continue;
+    }
+    if (marker == 0xd9 || marker == 0xda) return null; // EOI / SOS first
+    final length = (b[i + 2] << 8) | b[i + 3];
+    if (length < 2) return null;
+    final frame = marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker != 0xc4 && // DHT
+        marker != 0xc8 && // JPG extension
+        marker != 0xcc; // DAC
+    if (frame) {
+      if (i + 8 >= b.length || length < 7) return null;
+      final h = (b[i + 5] << 8) | b[i + 6];
+      final w = (b[i + 7] << 8) | b[i + 8];
+      return (w >= 1 && h >= 1) ? (w, h) : null;
+    }
+    i += 2 + length;
+  }
+  return null;
+}
+
+int _u32(Uint8List b, int i) =>
+    (b[i] << 24) | (b[i + 1] << 16) | (b[i + 2] << 8) | b[i + 3];
+
+bool _fourCc(Uint8List b, int i, String type) =>
+    i + 4 <= b.length &&
+    b[i] == type.codeUnitAt(0) &&
+    b[i + 1] == type.codeUnitAt(1) &&
+    b[i + 2] == type.codeUnitAt(2) &&
+    b[i + 3] == type.codeUnitAt(3);
+
+/// A HEIF's full image size: the largest 'ispe' (image spatial extents)
+/// property inside its top-level 'meta' box. Every image item has one —
+/// the 512-px grid tiles and the thumbnail too — and the full image is the
+/// largest. Null without a well-formed meta box.
+(int, int)? _heifImageSize(Uint8List b) {
+  var i = 0;
+  while (i + 8 <= b.length) {
+    var size = _u32(b, i);
+    var header = 8;
+    if (size == 1) {
+      if (i + 16 > b.length || _u32(b, i + 8) != 0) return null;
+      size = _u32(b, i + 12);
+      header = 16;
+    } else if (size == 0) {
+      size = b.length - i;
+    }
+    if (size < header) return null;
+    if (_fourCc(b, i + 4, 'meta')) {
+      final end = i + size < b.length ? i + size : b.length;
+      (int, int)? best;
+      for (var j = i + header + 4; j + 16 <= end; j++) {
+        // size 20 = header 8 + version/flags 4 + width 4 + height 4.
+        if (!_fourCc(b, j, 'ispe') || _u32(b, j - 4) != 20) continue;
+        final w = _u32(b, j + 8), h = _u32(b, j + 12);
+        if (w < 1 || h < 1) continue;
+        if (w > _maxPixelDimension || h > _maxPixelDimension) continue;
+        if (best == null || w * h > best.$1 * best.$2) best = (w, h);
+      }
+      return best;
+    }
+    i += size;
+  }
+  return null;
 }
 
 /// The EXIF block of a non-JPEG original (HEIC/HEIF): decodeJpgExif

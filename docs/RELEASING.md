@@ -185,7 +185,8 @@ at first launch (R-F13), an on-device food check before the watcher uploads
 (`NSPhotoLibraryAddUsageDescription`, R-F10 — today iOS simply leaves the
 option out).
 
-**When PR #19 (restaurant assist) is merged on top of this build**, seven
+**When PR #19 (restaurant assist) is merged on top of this build** (done
+2026-10-30 on PR #19's branch, following these notes), seven
 files conflict (`di.dart`, `add_flow.dart`, `fix_meal_screen.dart`,
 `provider_page.dart`, `settings_screen.dart`, `services.dart`, this
 document); every hunk keeps both sides:
@@ -225,6 +226,11 @@ again keeps both sides:
   string that brings back Chinese text, VPN advice or plan talk.
 - `docs/PRIVACY.md`: the effective date conflicts (#19 2026-10-24, this
   branch 2026-10-29); #19 changes the policy, so give it the merge date.
+  The date (line 3) and its pin in `app/test/release_decisions_test.dart`
+  ("with the new effective date") are set by hand, and must be set again
+  to the merge date when PR #19 merges and once more when PR #22 (run 7)
+  merges. A 3-way merge keeps the older date without a conflict, and no
+  test can tell that the date is stale.
   #19's added sentences say "Claude Plan" (the intro's "with Claude Plan,
   the server you run", the restaurant section's **Claude Plan:** bullet, and
   the 中文 counterparts): rename them to "your own server" / 你自己的服务器.
@@ -238,11 +244,17 @@ again keeps both sides:
 The assist's lookups (chain and item names to the user's server,
 Anthropic or OpenRouter/Exa) already have their own per-recipient consent
 (#19's restaurant consent sheet; every lookup checks `consentCovers`), so
-they need no second gate on the AI consent. Before #19 reaches a store
-build, though, *Stop Sharing with …* must also turn the assist off when
-its lookups go to the same company or server: that row says "nothing more
-is sent to …", while the assist keeps its own consent and could go on
-sending lookups (a manual one, or a meal still waiting for one).
+they need no second gate on the AI consent. *Stop Sharing with …* also
+turns the assist off when its lookups go to the same company or server
+(`stopRestaurantAssistFor` in ui/widgets/restaurant_consent_sheet.dart):
+the row says "nothing more is sent to …", so it takes the mode row's Off
+path (pending lookups dropped) and forgets the assist's consent for that
+recipient; turning lookups back on for it asks again. One residual is
+known and accepted: a direct Anthropic lookup already in flight when the
+row is confirmed may still send one continuation of the request it
+started (a paused turn) before its cancellation lands, which is up to
+three preference writes later (a few milliseconds by estimate); no new
+lookup, poll or retry starts.
 
 ---
 
@@ -444,7 +456,8 @@ All done; this is what each one is and where it lives.
      confirming it is the consent.
 
    Settings › *Stop Sharing with …* withdraws it and turns *Watch Camera
-   Roll* off. A foreground send without a configured key asks nothing
+   Roll* off (and the restaurant assist, when its lookups go to that
+   recipient). A foreground send without a configured key asks nothing
    (nothing can leave; it fails with its own "no key" message).
    Existing installs: on the first launch of this build an install with the
    watcher on, or that accepted the old camera-roll notice, keeps its
@@ -673,6 +686,42 @@ photo_manager's bundled manifest already declares PhotosorVideos, so
 Xcode's privacy report lists it either way. If what the app sends ever
 changes, change these answers, both manifests and `docs/PRIVACY.md`
 (§ 1.7.3) together.
+
+**Restaurant nutrition lookup** (design R7a; off by default) does not change
+the answer: it stays **B**, and the lookup adds no data type. The Runner
+manifest keeps exactly the three types above and the ShareExtension's stays
+empty (pinned by `release_decisions_test.dart` and
+`manifest_gate_test.dart`), because:
+
+- **The developer collects nothing.** There is still no developer backend;
+  nothing about a lookup reaches the developer.
+- **Lookups go to the same user-chosen recipient as the photos.** The
+  request (up to three chain names from the app's bundled table, the food
+  names with amounts, the region code and reply language — never the
+  photo, coordinates, city, street or distance) goes from the phone to the
+  user's own server (which searches with Claude web search) or to the
+  user's own provider account (Anthropic web search; OpenRouter with Exa).
+  Other providers make no lookup calls. Food names with amounts are meal
+  data, already declared as Health; chain names add no new type. The
+  lookup asks for its own per-recipient consent (the restaurant consent
+  sheet; every lookup checks `consentCovers`).
+- **The photo location goes only to Apple.** On iOS, with "Use photo
+  location" on, the photo's position is read from PhotoKit and used for
+  one MapKit nearby-places query; MapKit is Apple's service, collected by
+  Apple under its terms. The app keeps the position only in memory for
+  that query and stores, shows or sends nothing MapKit returns (developer
+  license Attachment 6 §2.4–2.5). Chain names derived from it go only to
+  the recipient above, and only over https for the user's own server.
+  There is no `NSLocation*` key and no location permission (also pinned),
+  so the Location row stays *No*.
+- **What stays on the phone** (learned places as ~100 m cells, pending
+  jobs, the 30-day answer cache, the decision log) lives in the
+  backup-excluded store and is never exported.
+
+`docs/PRIVACY.md` (§ *Restaurant nutrition lookup*, English and 中文) is
+the user-facing text for all of this; keep it, the consent sheet
+(`app/lib/ui/widgets/restaurant_consent_sheet.dart`) and these answers in
+step. Revisit if the app is ever published with a developer-run service.
 
 ### 4.4 Review submission checklist
 
@@ -904,6 +953,10 @@ every upload; § 9 says why and how to change that.
   ephemerally, not stored by the developer); nothing is collected by the
   developer; data is encrypted in transit; users can delete everything by
   uninstalling (no account). Declare the local database as on-device only.
+  Restaurant nutrition lookup changes nothing here in v1: on Android it
+  reads no photo location (brand only, no `ACCESS_MEDIA_LOCATION`), and the
+  chain and food names it sends go to the same user-selected provider, so
+  there is no Location row.
 - **Photo and video permissions**: the manifest declares
   `READ_MEDIA_IMAGES` and `READ_MEDIA_VISUAL_USER_SELECTED` because the core
   feature is watching the camera roll for new food photos; Play requires

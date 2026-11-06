@@ -1,0 +1,80 @@
+{
+ "id": "resp_68c9fa0502748190b7dd390736892e100be649c1a5ff9609",
+ "object": "response",
+ "created_at": 1761234567,
+ "status": "completed",
+ "background": false,
+ "error": null,
+ "incomplete_details": null,
+ "instructions": null,
+ "max_output_tokens": 1500,
+ "max_tool_calls": 2,
+ "model": "gpt-4.1-mini-2025-04-14",
+ "output": [
+  {
+   "type": "web_search_call",
+   "id": "ws_68c9fa0574548190a0ad8d0e8b6a64b50be649c1a5ff9609",
+   "status": "completed",
+   "action": {
+    "type": "search",
+    "query": "McDonald's Big Mac calories",
+    "sources": [
+     {
+      "type": "url",
+      "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html"
+     },
+     {
+      "type": "url",
+      "url": "https://www.fastfoodnutrition.org/mcdonalds/big-mac"
+     }
+    ]
+   }
+  },
+  {
+   "id": "msg_68c9fa077bc48190b6d7b2e3d6d1c0f40be649c1a5ff9609",
+   "type": "message",
+   "status": "completed",
+   "role": "assistant",
+   "content": [
+    {
+     "type": "output_text",
+     "text": "{\"status\": \"found\", \"chain_key\": \"mcdonalds\", \"restaurant_name\": \"McDonald's\", \"matches\": [{\"item_index\": 0, \"menu_item\": \"Big Mac\", \"match_type\": \"exact_item\", \"is_drink\": false, \"components\": [], \"options\": [{\"label\": \"Big Mac\", \"serving\": \"1 sandwich (219 g)\", \"unit\": \"sandwich\", \"calories\": 590, \"calories_range\": null, \"protein_g\": 25, \"carbs_g\": 46, \"fat_g\": 34}]}], \"source_url\": \"https://www.mcdonalds.com/us/en-us/product/big-mac.html\", \"source_title\": \"Big Mac®\", \"source_type\": \"official_site\", \"source_year\": 2026, \"match_confidence\": 0.93, \"notes\": \"\"} ([mcdonalds.com](https://www.mcdonalds.com/us/en-us/product/big-mac.html?utm_source=openai))",
+     "annotations": [
+      {
+       "type": "url_citation",
+       "start_index": 567,
+       "end_index": 659,
+       "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html?utm_source=openai",
+       "title": "Big Mac®: McDonald's Iconic Burger | McDonald's"
+      }
+     ],
+     "logprobs": []
+    }
+   ]
+  }
+ ],
+ "parallel_tool_calls": true,
+ "previous_response_id": null,
+ "store": false,
+ "tools": [
+  {
+   "type": "web_search",
+   "search_context_size": "low",
+   "user_location": {
+    "type": "approximate",
+    "country": "US"
+   }
+  }
+ ],
+ "usage": {
+  "input_tokens": 8721,
+  "input_tokens_details": {
+   "cached_tokens": 0
+  },
+  "output_tokens": 412,
+  "output_tokens_details": {
+   "reasoning_tokens": 0
+  },
+  "total_tokens": 9133
+ }
+}

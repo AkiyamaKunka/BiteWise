@@ -25,6 +25,15 @@ class _Changes extends ChangeNotifier {
 
 Widget _wrap(Widget child) => MaterialApp(home: Scaffold(body: child));
 
+/// Settings now carries both the Stop Sharing row (AI consent) and the
+/// glasses row (design G3), so the report section sits below the default
+/// 800×600 test surface's build extent: give the screen a tall view.
+void _tallView(WidgetTester tester) {
+  tester.view.physicalSize = const Size(800, 2400);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+}
+
 /// The 2026-08-02 Apple restructure moved provider/key/model/server
 /// controls onto their own page (progressive disclosure): tests that
 /// exercise them walk through the root's AI Provider row first.
@@ -943,6 +952,7 @@ void planTuningTests() {
     testWidgets(
         'off persists through the store and hides the time row, the '
         'armed-slot row and the notifications-off remedy', (tester) async {
+      _tallView(tester);
       final settings = FakeSettings(apiKey: 'k');
       await tester.pumpWidget(screen(settings));
       await tester.pumpAndSettle();
@@ -972,6 +982,7 @@ void planTuningTests() {
 
     testWidgets('a stored off shows the switch off from the first frame',
         (tester) async {
+      _tallView(tester);
       await tester.pumpWidget(
           screen(FakeSettings(apiKey: 'k', summaryEnabled: false)));
       await tester.pumpAndSettle();
@@ -998,6 +1009,7 @@ void planTuningTests() {
         ));
 
     testWidgets('shows the armed slot, today or tomorrow', (tester) async {
+      _tallView(tester);
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day, 21, 30);
       await tester.pumpWidget(screen(next: () async => today));
@@ -1017,6 +1029,7 @@ void planTuningTests() {
     // red 'Not scheduled' — and settle on the slot once the arm completes.
     testWidgets('a probe still waiting on the startup arm shows …, then slot',
         (tester) async {
+      _tallView(tester);
       final now = DateTime.now();
       final slot = DateTime(now.year, now.month, now.day + 1, 21, 30);
       final armed = Completer<DateTime?>();
@@ -1259,6 +1272,7 @@ void planTuningTests() {
 
     testWidgets('nothing armed → "Not scheduled"; no probe → no row',
         (tester) async {
+      _tallView(tester);
       await tester.pumpWidget(screen(next: () async => null));
       await tester.pumpAndSettle();
       expect(find.text('Not scheduled'), findsOneWidget);
@@ -1313,6 +1327,7 @@ void planTuningTests() {
     });
 
     testWidgets('re-probes on resume and clears itself', (tester) async {
+      _tallView(tester);
       var enabled = false;
       await tester.pumpWidget(screen(enabled: () async => enabled));
       await tester.pumpAndSettle();

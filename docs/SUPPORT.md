@@ -92,8 +92,9 @@ people who run the open-source server from the app's GitHub repository
   stored on the phone. Your iCloud or computer backups and exported files
   may still hold a copy.
 - **Stop sharing with a provider**: Settings › **Stop Sharing with …**
-  stops all sending to it and turns off Watch Camera Roll. What was
-  already sent is handled under that provider's own privacy policy.
+  stops all sending to it and turns off Watch Camera Roll (and restaurant
+  lookups that go to it). What was already sent is handled under that
+  provider's own privacy policy.
 
 ## Contact
 

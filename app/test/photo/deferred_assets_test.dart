@@ -165,4 +165,107 @@ void main() {
     await r.deferred('B');
     expect(stored().map((e) => e.id), ['A', 'B']);
   });
+
+  // Design G2b: a glasses preview copy is held back ONCE, for 10 minutes
+  // from the first time the automatic intake met it.
+  group('holdGlassesPreview', () {
+    Future<bool> hold(String id, DateTime at) => holdGlassesPreview(id,
+        loadPrefs: () async => prefs, clock: () => at);
+    Map<String, DateTime> holds() =>
+        decodeGlassesPreviewHolds(prefs.getString(glassesPreviewPrefsKey));
+
+    test('held from the first meeting until 10 minutes have passed, then '
+        'never again', () async {
+      expect(await hold('P', t0), isTrue);
+      expect(holds(), {'P': t0}, reason: 'only the id and the first time');
+      expect(await hold('P', t0.add(const Duration(minutes: 9, seconds: 59))),
+          isTrue);
+      expect(await hold('P', t0.add(const Duration(minutes: 10))), isFalse);
+      expect(await hold('P', t0.add(const Duration(hours: 5))), isFalse,
+          reason: 'once: the entry stays, so it is not held again');
+      expect(holds()['P'], t0);
+      expect(await hold('Q', t0.add(const Duration(minutes: 1))), isTrue,
+          reason: 'each photo has its own clock');
+    });
+
+    test('entries go after 2 days (a photo met again is held once more), '
+        'and a stamp ahead of a clock that moved back is dropped', () async {
+      await hold('old', t0);
+      await hold('ahead', t0.add(const Duration(hours: 3)));
+      final later = t0.add(const Duration(days: 2, minutes: 1));
+      expect(await hold('new', later), isTrue);
+      expect(holds().keys, unorderedEquals(['ahead', 'new']));
+      // The clock moves back to t0: 'ahead' is from its future.
+      expect(await hold('ahead', t0), isTrue,
+          reason: 'its note is dropped and taken again now');
+      expect(holds()['ahead'], t0);
+    });
+
+    test('capped at 100: the earliest-held goes first', () async {
+      for (var i = 0; i < 101; i++) {
+        await hold('p$i', t0.add(Duration(seconds: i)));
+      }
+      final kept = holds();
+      expect(kept, hasLength(glassesPreviewKept));
+      expect(kept.containsKey('p0'), isFalse);
+      expect(kept.containsKey('p100'), isTrue);
+    });
+
+    test('any trouble processes the photo now: an empty id, an unreadable '
+        'store, a note that cannot be written', () async {
+      expect(await hold('', t0), isFalse);
+      expect(
+          await holdGlassesPreview('P',
+              loadPrefs: () async => throw StateError('no store'),
+              clock: () => t0),
+          isFalse);
+      expect(
+          await holdGlassesPreview('P',
+              loadPrefs: () async => _UnwritablePrefs(prefs), clock: () => t0),
+          isFalse,
+          reason: 'a hold nobody remembers would start over at every offer');
+      expect(holds(), isEmpty);
+    });
+
+    test('a damaged store reads as empty, damaged entries are skipped',
+        () async {
+      await prefs.setString(glassesPreviewPrefsKey, '[not a map');
+      expect(await hold('P', t0), isTrue);
+      await prefs.setString(
+          glassesPreviewPrefsKey,
+          jsonEncode({
+            'P': t0.toIso8601String(),
+            'Q': 7,
+            'R': 'not a date',
+            '': t0.toIso8601String(),
+          }));
+      expect(decodeGlassesPreviewHolds(prefs.getString(glassesPreviewPrefsKey)),
+          {'P': t0});
+      expect(await hold('P', t0.add(const Duration(minutes: 11))), isFalse);
+    });
+
+    test('kept apart from the background run\'s deferrals', () async {
+      await hold('P', t0);
+      final run = await DeferredAssets.load(prefs, clock: () => t0);
+      expect(run.passOver('P'), isFalse);
+      expect(prefs.getString(deferredAssetsPrefsKey), isNull);
+    });
+  });
+}
+
+/// A store whose writes all fail.
+class _UnwritablePrefs implements SharedPreferences {
+  _UnwritablePrefs(this._inner);
+  final SharedPreferences _inner;
+
+  @override
+  Future<void> reload() => _inner.reload();
+  @override
+  String? getString(String key) => _inner.getString(key);
+  @override
+  Future<bool> setString(String key, String value) async => false;
+  @override
+  Future<bool> remove(String key) async => false;
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }

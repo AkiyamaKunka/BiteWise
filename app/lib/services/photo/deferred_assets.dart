@@ -220,3 +220,103 @@ Future<void> _rewrite(SharedPreferences prefs,
     }
   } catch (_) {}
 }
+
+// ---------------------------------------------------------------------------
+// Glasses preview copies (design G2b, 2026-10-24).
+//
+// The Meta AI app can put a small preview of a glasses photo in the library
+// before the full-size one. Analyzed at once, the preview is a worse photo
+// to estimate from, and the full-size copy that follows becomes a second
+// meal (the duplicate-capture guard then skips whichever comes second). So
+// the automatic intake holds a glasses photo below 2 MP back ONCE, for
+// [glassesPreviewWait] from the first time it met it: released, retryable,
+// and a later scan offers it again. After that it is analyzed like any
+// photo. Deliberate adds are never held (photo_pipeline.dart decides who
+// asks).
+//
+// Both engines read and write the list (asset ids and the first meeting's
+// time, nothing else); an entry is let go after [glassesPreviewKeep].
+
+/// A JSON map {assetId: first hold, UTC ISO-8601}.
+const String glassesPreviewPrefsKey = 'photo.glasses_preview_holds_v1';
+
+/// How long a preview copy is held back from the first time it was met.
+const Duration glassesPreviewWait = Duration(minutes: 10);
+
+/// How long an entry is kept. A photo offered again after it is gone is
+/// held once more, which only delays it.
+const Duration glassesPreviewKeep = Duration(days: 2);
+
+/// Entries kept at most; past it the earliest go.
+const int glassesPreviewKept = 100;
+
+/// Parses the stored map; unreadable entries are skipped.
+Map<String, DateTime> decodeGlassesPreviewHolds(String? stored) {
+  if (stored == null || stored.isEmpty) return {};
+  try {
+    final map = jsonDecode(stored);
+    if (map is! Map) return {};
+    return {
+      for (final MapEntry(:key, :value) in map.entries)
+        if (key is String && key.isNotEmpty && value is String)
+          if (DateTime.tryParse(value) case final at?) key: at.toUtc(),
+    };
+  } catch (_) {
+    return {};
+  }
+}
+
+/// Whether the automatic intake holds the glasses preview [assetId] back
+/// for now: true the first time it is met (noted here) and until
+/// [glassesPreviewWait] has passed since; false after that, and for any
+/// trouble — an unreadable store, or a note that could not be written,
+/// processes the photo now rather than holding it for good. Never throws.
+Future<bool> holdGlassesPreview(String assetId,
+    {Future<SharedPreferences> Function()? loadPrefs,
+    DateTime Function()? clock}) async {
+  if (assetId.isEmpty) return false;
+  try {
+    final prefs = await (loadPrefs ?? SharedPreferences.getInstance)();
+    await prefs.reload(); // the other engine writes it too
+    final now = (clock ?? DateTime.now)().toUtc();
+    final holds =
+        decodeGlassesPreviewHolds(prefs.getString(glassesPreviewPrefsKey));
+    final stored = holds.length;
+    // Gone stale, or stamped ahead of a clock that has since moved back.
+    holds.removeWhere((_, at) =>
+        now.difference(at) > glassesPreviewKeep ||
+        at.isAfter(now.add(_previewClockSlack)));
+    final first = holds[assetId];
+    if (first != null) {
+      if (holds.length != stored) await _writeHolds(prefs, holds);
+      return now.difference(first) < glassesPreviewWait;
+    }
+    holds[assetId] = now;
+    if (holds.length > glassesPreviewKept) {
+      final byAge = holds.entries.toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      for (final e in byAge.take(holds.length - glassesPreviewKept)) {
+        holds.remove(e.key);
+      }
+    }
+    // Held only once the note is stored: a hold nobody remembers would
+    // start over at every offer.
+    return await _writeHolds(prefs, holds);
+  } catch (_) {
+    return false;
+  }
+}
+
+/// A hold stamped this far ahead of now is from a clock that moved back.
+const Duration _previewClockSlack = Duration(minutes: 2);
+
+Future<bool> _writeHolds(
+    SharedPreferences prefs, Map<String, DateTime> holds) async {
+  if (holds.isEmpty) return prefs.remove(glassesPreviewPrefsKey);
+  return prefs.setString(
+      glassesPreviewPrefsKey,
+      jsonEncode({
+        for (final MapEntry(:key, :value) in holds.entries)
+          key: value.toUtc().toIso8601String(),
+      }));
+}

@@ -84,6 +84,70 @@ void main() {
     expect((await daoB.photoStatus('h1'))?.status, IngestionStatus.saved);
   });
 
+  // Design R6a / data_contracts §2–3: analysis.assist and analysis.capture
+  // are exported and come back intact — and the moved row stays writable
+  // by the compare-and-set writers, which compare the raw text the import
+  // stored, not a re-encoding of it.
+  test('assist and capture blocks round-trip, and the moved meal stays '
+      'compare-and-set writable', () async {
+    const assist = {
+      'v': 2,
+      'status': 'applied',
+      'trigger': 'auto_branding',
+      'evidence': 'item_brand',
+      'chain_key': 'chipotle',
+      'brand_name': 'Chipotle',
+      'applied_total': 1050,
+      'provider': 'anthropic',
+      'decided_on': '2026-07-30',
+      'reason': 'ok',
+    };
+    const capture = {
+      'device': 'meta_glasses',
+      'signal': 'filename',
+      'has_gps': true,
+      'gps_acc_m': 12,
+      'shutter_key': '0123456789abcdef',
+    };
+    final analysis = {
+      'is_food': true,
+      'meal_description': 'Burrito bowl',
+      'total_calories': 1050,
+      'food_items': [
+        {'name': 'Burrito bowl', 'estimated_calories': 1050, 'published': true},
+      ],
+      'assist': assist,
+      'capture': capture,
+    };
+    await daoA.saveMeal(
+        Meal(
+          id: 0,
+          date: '2026-07-30',
+          time: '12:30 PM',
+          timestamp: '2026-07-30T12:30:00.000',
+          source: MealSource.appWatch,
+          imageHash: 'h-assist',
+          analysis: analysis,
+        ),
+        markStatus: IngestionStatus.saved);
+
+    await daoB.importJson(await daoA.exportJson());
+    final moved =
+        (await daoB.mealsBetween('2026-07-30', '2026-07-30')).single;
+    expect(moved.analysis['assist'], assist);
+    expect(moved.analysis['capture'], capture);
+    expect((moved.analysis['food_items'] as List).single['published'], isTrue);
+    expect(moved.corrected, isFalse,
+        reason: 'an applied lookup is not a user edit, on either phone');
+
+    final snap = (await daoB.mealSnapshot(moved.id))!;
+    expect(
+        await daoB.applyAssist(moved.id,
+            expectedRaw: snap.rawAnalysis,
+            analysis: {...analysis, 'total_calories': 900}..remove('assist')),
+        isTrue);
+  });
+
   test('importing the SAME file twice adds nothing the second time',
       () async {
     await seed(daoA, date: '2026-07-29', cal: 610, hash: 'h1');

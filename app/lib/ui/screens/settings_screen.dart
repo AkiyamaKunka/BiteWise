@@ -3,6 +3,8 @@
 /// action (the diagnostics page), photo intake (watcher, coverage audit,
 /// backfill window), daily-report time, dietary profile, and the data
 /// section (export to a file, import by merge — settings/data_section.dart).
+/// Restaurant nutrition (design R7a) is its own widget,
+/// settings/restaurant_section.dart, shown when the app wires the assist.
 library;
 
 import 'dart:async' show unawaited;
@@ -20,6 +22,9 @@ import '../../services/photo/photo_library.dart';
 import '../ai_consent.dart';
 import '../photo_pipeline.dart';
 import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
+import '../restaurant_assist_controls.dart';
+import '../widgets/restaurant_consent_sheet.dart'
+    show restaurantAssistStopFor, stopRestaurantAssistFor;
 import '../services.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
@@ -28,6 +33,7 @@ import 'meal_editor_screen.dart';
 import 'settings/data_section.dart';
 import 'settings/profile_page.dart';
 import 'settings/provider_page.dart';
+import 'settings/restaurant_section.dart';
 
 /// The published privacy policy (docs/PRIVACY.md in the public repo).
 /// App Store guideline 5.1.1(i) and Google Play both want it reachable
@@ -85,6 +91,10 @@ class SettingsScreen extends StatefulWidget {
   /// a tab switch (API 35 emulator, 2026-10-12). Null in most tests.
   final Listenable? changes;
 
+  /// The restaurant assist (design R7a): its Settings group and consent
+  /// sheets. Null hides the group (most tests).
+  final RestaurantAssistControls? restaurantAssist;
+
   const SettingsScreen({
     super.key,
     required this.settings,
@@ -106,6 +116,7 @@ class SettingsScreen extends StatefulWidget {
     this.backgroundRefreshEnabled,
     this.backgroundScanStuck,
     this.changes,
+    this.restaurantAssist,
   });
 
   @override
@@ -119,6 +130,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   late String _reportTime;
   late bool _summaryEnabled;
   late bool _watcherEnabled;
+  late bool _watchGlasses;
 
   /// True only when the OS says notifications are OFF for this app. On iOS
   /// a declined permission makes every scheduled summary vanish silently,
@@ -141,6 +153,9 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// The recorded runs show no progress (backgroundScanLooksStuck).
   bool _backgroundStuck = false;
 
+  final GlobalKey<RestaurantAssistSectionState> _restaurantKey =
+      GlobalKey<RestaurantAssistSectionState>();
+
   @override
   void initState() {
     super.initState();
@@ -151,6 +166,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _reportTime = s.reportTime.isEmpty ? '21:00' : s.reportTime;
     _summaryEnabled = s.summaryEnabled;
     _watcherEnabled = s.watcherEnabled;
+    _watchGlasses = s.watchGlasses;
     WidgetsBinding.instance.addObserver(this);
     _probeNotifications();
     _probeNextSummary();
@@ -350,6 +366,11 @@ class _SettingsScreenState extends State<SettingsScreen>
     await widget.settings.update(watcherEnabled: enable);
   }
 
+  Future<void> _toggleWatchGlasses(bool include) async {
+    setState(() => _watchGlasses = include);
+    await widget.settings.update(watchGlasses: include);
+  }
+
   /// The 照片会发送给 AI 服务 notice: the AI consent for the current
   /// recipient, then what the camera roll adds; true = Continue.
   Future<bool> _confirmWatcherDisclosure() {
@@ -370,19 +391,29 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   /// Settings' Stop sharing row: withdraws the AI consent for the current
-  /// recipient and turns Watch Camera Roll off through the same path as
-  /// its switch, so nothing more is sent until the user allows it again
-  /// (App Store 5.1.1(ii): consent can be withdrawn).
+  /// recipient, turns Watch Camera Roll off through the same path as its
+  /// switch and, when its lookups go to that recipient, the restaurant
+  /// assist through the same path as its mode row (pending lookups
+  /// dropped, its consent forgotten), so nothing more is sent until the
+  /// user allows it again (App Store 5.1.1(ii): consent can be withdrawn).
   Future<void> _stopSharing() async {
     final l = context.l10n;
     final s = widget.settings;
     final provider = providerDisplayLabel(l, s.provider, s.serverBackend);
+    // Restaurant lookups to this same recipient stop with it
+    // (docs/RELEASING.md): the dialog says so when it turns them off.
+    final lookupsToo = restaurantAssistStopFor(
+            s, widget.restaurantAssist, currentAiConsentRoute(s))
+        .turnOff;
     final stop = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('aiStopSharingDialog'),
         title: Text(ctx.l10n.aiStopSharingTitle(provider)),
-        content: Text(ctx.l10n.aiStopSharingBody(provider)),
+        content: SingleChildScrollView(
+            child: Text(lookupsToo
+                ? ctx.l10n.aiStopSharingBodyWithLookups(provider)
+                : ctx.l10n.aiStopSharingBody(provider))),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -395,12 +426,21 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
     if (stop != true || !mounted) return;
-    await s.setAiConsent(currentAiConsentRoute(s), granted: false);
+    // The assist first, in ONE settings write: no lookup reads the AI
+    // consent, so its own mode and consent are what stop them, and this
+    // row stays for a retry until the assist is off (Watch Camera Roll is
+    // switched off after the AI consent, as before).
+    final route = currentAiConsentRoute(s);
+    final assist =
+        await stopRestaurantAssistFor(s, widget.restaurantAssist, route);
+    await s.setAiConsent(route, granted: false);
     if (_watcherEnabled || s.watcherEnabled) await _toggleWatcher(false);
     if (!mounted) return;
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.aiStopSharingDone(provider))));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(assist.turnOff
+            ? l.aiStopSharingDoneWithLookups(provider)
+            : l.aiStopSharingDone(provider))));
   }
 
   Future<void> _pickReportTime() async {
@@ -442,6 +482,12 @@ class _SettingsScreenState extends State<SettingsScreen>
           SliverList.list(children: [
             ..._aiSection(theme),
             ..._photoSection(theme),
+            if (widget.restaurantAssist != null)
+              RestaurantAssistSection(
+                key: _restaurantKey,
+                settings: widget.settings,
+                controls: widget.restaurantAssist!,
+              ),
             ..._reportSection(theme),
             ..._profileSection(theme),
             ..._languageSection(theme),
@@ -499,6 +545,11 @@ class _SettingsScreenState extends State<SettingsScreen>
               value: providerDisplayLabel(context.l10n,
                   widget.settings.provider, widget.settings.serverBackend),
               onTap: () async {
+                // Who a restaurant lookup would reach before the visit: a
+                // new provider or server pauses the assist until the user
+                // agrees to it (design R7a).
+                final stampBefore =
+                    _restaurantKey.currentState?.currentRecipientStamp();
                 await Navigator.of(context).push(MaterialPageRoute(
                   builder: (_) => ProviderSettingsPage(
                     settings: widget.settings,
@@ -507,9 +558,15 @@ class _SettingsScreenState extends State<SettingsScreen>
                     completeClaudeAuth: widget.completeClaudeAuth,
                     serverLoginState: widget.serverLoginState,
                     openUrl: widget.openUrl,
+                    dao: widget.dao,
+                    restaurantAssist: widget.restaurantAssist,
                   ),
                 ));
                 if (mounted) setState(() {}); // provider label refresh
+                if (stampBefore != null) {
+                  await _restaurantKey.currentState
+                      ?.promptIfRecipientChanged(stampBefore);
+                }
               },
             ),
             // Only while the current recipient is allowed: withdrawing a
@@ -589,6 +646,19 @@ class _SettingsScreenState extends State<SettingsScreen>
               title: context.l10n.settingsRowWatch,
               value: _watcherEnabled,
               onChanged: (v) => _toggleWatcher(v),
+            ),
+            // Design G3: photos recognized as taken with Meta glasses. Off,
+            // the automatic scan does not offer them at all; on (the
+            // default), an iPhone checks each one for food on the phone
+            // before anything is sent (docs/PRIVACY.md).
+            GroupedToggleRow(
+              key: const Key('watchGlassesRow'),
+              switchKey: const Key('watchGlassesToggle'),
+              icon: Icons.visibility_outlined,
+              iconColor: theme.colorScheme.secondary,
+              title: context.l10n.settingsRowWatchGlasses,
+              value: _watchGlasses,
+              onChanged: (v) => _toggleWatchGlasses(v),
             ),
             GroupedRow(
               icon: Icons.history,

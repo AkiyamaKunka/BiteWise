@@ -1,0 +1,35 @@
+{
+ "id": "gen-1761234567-AbCdEfGhIjKlMnOpQrSt",
+ "provider": "Google",
+ "model": "google/gemini-3.8-flash",
+ "object": "chat.completion",
+ "created": 1761234567,
+ "choices": [
+  {
+   "logprobs": null,
+   "finish_reason": "length",
+   "native_finish_reason": "STOP",
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "{\"status\": \"fo",
+    "refusal": null,
+    "reasoning": null,
+    "annotations": []
+   }
+  }
+ ],
+ "usage": {
+  "prompt_tokens": 3120,
+  "completion_tokens": 380,
+  "total_tokens": 3500,
+  "cost": 0.00912,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0
+  }
+ }
+}

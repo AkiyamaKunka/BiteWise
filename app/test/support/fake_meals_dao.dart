@@ -18,6 +18,7 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:calorie_tracker/core/coerce.dart' show finiteAnalysis;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/data/meals_logic.dart';
 
@@ -146,7 +147,10 @@ class BaseFakeDao implements MealsDao {
   }
 
   void _patch(int mealId,
-      {Map<String, dynamic>? analysis, String? date, String? time}) {
+      {Map<String, dynamic>? analysis,
+      String? date,
+      String? time,
+      bool correct = true}) {
     final i = meals.indexWhere((m) => m.id == mealId);
     if (i < 0) return;
     final m = meals[i];
@@ -159,8 +163,98 @@ class BaseFakeDao implements MealsDao {
       imageHash: m.imageHash,
       fileId: m.fileId,
       analysis: analysis ?? m.analysis,
-      corrected: true, // any correction write sets corrected=1 (spec §2.4)
+      // Any correction write sets corrected=1 (spec §2.4); the assist's
+      // write never does (MealsDao.applyAssist).
+      corrected: correct || m.corrected,
     );
+  }
+
+  // ------------------------------------------- compare-and-set (R6a)
+
+  /// The analysis column's text for [m]: what the SQLite DAO would hand
+  /// back as [MealSnapshot.rawAnalysis]. Any write that changes the
+  /// analysis changes it.
+  String rawOf(Meal m) => jsonEncode(finiteAnalysis(m.analysis));
+
+  /// Test hook: awaited by every compare-and-set write BEFORE it compares,
+  /// with the meal id — a test changes the meal here to play the writer
+  /// that got in between the caller's read and its write. Writes the hook
+  /// itself makes do not call it again.
+  Future<void> Function(int mealId)? beforeCompareAndSet;
+  bool _inCompareHook = false;
+
+  /// Compare-and-set writes refused because the meal changed (or is gone).
+  int compareMisses = 0;
+
+  /// [applyAssist] writes that landed, in order.
+  final List<(int, Map<String, dynamic>)> assistWrites = [];
+
+  /// Every [mealSnapshot] read, by meal id.
+  final List<int> snapshotReads = [];
+
+  Future<bool> _unchanged(int mealId, String expectedRaw,
+      {bool uncorrected = false}) async {
+    final hook = beforeCompareAndSet;
+    if (hook != null && !_inCompareHook) {
+      _inCompareHook = true;
+      try {
+        await hook(mealId);
+      } finally {
+        _inCompareHook = false;
+      }
+    }
+    final m = meals.where((m) => m.id == mealId).firstOrNull;
+    final ok = m != null &&
+        rawOf(m) == expectedRaw &&
+        (!uncorrected || !m.corrected);
+    if (!ok) compareMisses++;
+    return ok;
+  }
+
+  @override
+  Future<MealSnapshot?> mealSnapshot(int mealId) async {
+    snapshotReads.add(mealId);
+    final m = meals.where((m) => m.id == mealId).firstOrNull;
+    if (m == null) return null;
+    return (meal: m, rawAnalysis: rawOf(m), corrected: m.corrected);
+  }
+
+  @override
+  Future<bool> applyAssist(int mealId,
+      {required String expectedRaw,
+      required Map<String, dynamic> analysis}) async {
+    if (!await _unchanged(mealId, expectedRaw, uncorrected: true)) {
+      return false;
+    }
+    assistWrites.add((mealId, analysis));
+    _patch(mealId, analysis: analysis, correct: false);
+    return true;
+  }
+
+  @override
+  Future<bool> updateMealAnalysisIfUnchanged(int mealId,
+      {required String expectedRaw,
+      required Map<String, dynamic> analysis}) async {
+    if (throwOnUpdate) throw StateError('boom');
+    if (!await _unchanged(mealId, expectedRaw)) return false;
+    updates.add((mealId, analysis));
+    _patch(mealId, analysis: analysis);
+    return true;
+  }
+
+  @override
+  Future<bool> updateMealFieldsIfUnchanged(int mealId,
+      {required String expectedRaw,
+      Map<String, dynamic>? analysis,
+      String? date,
+      String? time}) async {
+    if (throwOnUpdate) throw StateError('boom');
+    if (!await _unchanged(mealId, expectedRaw)) return false;
+    // Recorded like updateMealFields: the editor suites read fieldUpdates.
+    fieldUpdates.add((mealId, analysis, date, time));
+    if (analysis != null) updates.add((mealId, analysis));
+    _patch(mealId, analysis: analysis, date: date, time: time);
+    return true;
   }
 
   @override
@@ -233,17 +327,21 @@ class BaseFakeDao implements MealsDao {
   }
 
   @override
-  Future<void> applyLeftoverVerdict(
+  Future<bool> applyLeftoverVerdict(
       String imageHash, int mealId, Map<String, dynamic> analysis,
-      {String? ownerStamp}) async {
-    // All-or-nothing like the SQLite transaction: check, then update, and
-    // only then the tombstone.
+      {String? ownerStamp, String? expectedRaw}) async {
+    // All-or-nothing like the SQLite transaction: the stamp, then the
+    // meal's text, then the update, and only then the tombstone.
     _requireHeld(imageHash, ownerStamp);
+    if (expectedRaw != null && !await _unchanged(mealId, expectedRaw)) {
+      return false;
+    }
     await updateMealAnalysis(mealId, analysis);
     if (imageHash.isNotEmpty) {
       ledger[imageHash] = IngestionStatus.skipped;
       stamps.remove(imageHash);
     }
+    return true;
   }
 
   @override
@@ -267,6 +365,40 @@ class BaseFakeDao implements MealsDao {
     if (st == null) return null;
     final match = meals.where((m) => m.imageHash == imageHash).toList();
     return (status: st, mealId: match.isEmpty ? null : match.first.id);
+  }
+
+  /// Every call's ids, in order (the late-import pass's pre-filter).
+  final List<List<String>> loggedAssetIdsCalls = [];
+
+  @override
+  Future<Set<String>> loggedAssetIds(List<String> assetIds) async {
+    loggedAssetIdsCalls.add(List.of(assetIds));
+    final wanted = assetIds.where((id) => id.isNotEmpty).toSet();
+    return {
+      for (final m in meals)
+        if (wanted.contains(m.fileId)) m.fileId,
+    };
+  }
+
+  final List<(String, String, String)> shutterKeyCalls = [];
+
+  /// Throws when set: a store that cannot answer the duplicate-capture
+  /// lookup (the guard must fail open).
+  Object? shutterKeyError;
+
+  @override
+  Future<List<int>> mealIdsWithShutterKey(
+      String key, String fromDate, String toDate) async {
+    shutterKeyCalls.add((key, fromDate, toDate));
+    final error = shutterKeyError;
+    if (error != null) throw error;
+    return [
+      for (final m in meals)
+        if (m.date.compareTo(fromDate) >= 0 &&
+            m.date.compareTo(toDate) <= 0 &&
+            analysisHasShutterKey(m.analysis, key))
+          m.id,
+    ]..sort();
   }
 
   @override
