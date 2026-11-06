@@ -1,6 +1,6 @@
 # Chopstats · 筷拍 — Privacy Policy
 
-Effective date: 2026-10-30
+Effective date: 2026-11-05
 
 [English](#english) · [中文](#中文)
 
@@ -118,10 +118,13 @@ the app asks again, and sends nothing, when you switch to another AI
 service or server.
 
 - **Which meals:** photo meals the AI marks as eaten at a restaurant or as
-  takeout ("When unsure": only when the AI also says its estimate is
-  unsure), meals whose cup, bag, box or receipt shows a chain's brand, and
-  any meal you look up yourself. A meal marked as home-cooked, packaged or
-  unknown never has its location read.
+  takeout. "When unsure" looks one up only when the AI says its estimate
+  is unsure, or when the AI is fairly sure and a cup, bag, box or receipt
+  in the photo shows a chain's brand. "Always" does not wait for either:
+  every such meal can be looked up, and so can any other photo meal whose
+  own cup, bag or box shows a chain's brand. You can also look up any meal
+  yourself. A meal marked as home-cooked, packaged or unknown never has
+  its location read.
 - **US meals only:** the built-in list holds US chains, and the numbers
   they publish are for their US restaurants, so only a meal eaten in the
   US is looked up. While your phone's time zone is outside the US (its
@@ -181,10 +184,10 @@ service or server.
   published numbers, the address of the chain's page they came from, which
   service answered, the date, each item's numbers before and after, the
   lookup's notes (at most 200 characters, shown as plain text), why a
-  suggestion was not used by itself (a code), and how the meal was tied to
-  the chain (a brand printed on an item or receipt, the photo's location,
-  or your own pick). This holds no location and is part of the meal in
-  exports.
+  suggestion was not used by itself (a code), why the lookup ran (a code),
+  and how the meal was tied to the chain (a brand printed on an item or
+  receipt, the photo's location, or your own pick). This holds no location
+  and is part of the meal in exports.
 - Turning it off cancels lookups in progress, drops pending ones, and can
   clear learned places at the same time.
 
@@ -314,7 +317,7 @@ date. Questions: open an issue at
 
 当一张餐食照片看起来来自连锁餐厅时，应用可以查一下这家连锁店是否公布了该食物的营养信息。此功能默认关闭。开启时会显示一份说明，写明查询会发送给谁；当你换用其他 AI 服务或服务器时，应用会再次询问，在你同意之前不会发送任何查询。
 
-- **哪些餐会被查询：** AI 标记为在餐厅吃的或外卖的照片餐食（「不确定时」模式下，还要 AI 表示自己的估算没有把握），杯子、袋子、盒子或小票上印有连锁品牌的餐，以及你自己手动查询的任意一餐。被标记为家里做的、包装食品或无法判断的餐，绝不会读取其位置。
+- **哪些餐会被查询：** AI 标记为在餐厅吃的或外卖的照片餐食。「不确定时」模式下，只有当 AI 表示自己的估算没有把握，或者 AI 比较有把握、但照片里的杯子、袋子、盒子或小票上印有连锁品牌时，才会查询这样的餐。「总是」模式下不看这两个条件：这样的餐都可能被查询，其他照片餐食只要自己的杯子、袋子或盒子上印有连锁品牌，也可能被查询。你也可以自己手动查询任意一餐。被标记为家里做的、包装食品或无法判断的餐，绝不会读取其位置。
 - **只查询在美国吃的餐：** 内置列表里是美国的连锁店，它们公布的数值针对其美国餐厅，所以只有在美国吃的餐才会被查询。只要手机当前的时区不在美国（与 UTC 的时差不在 UTC−10（夏威夷）到 UTC−4（波多黎各及美国东部夏令时）之间），就完全不会查询，不论其他信息如何：手机默认按网络自动设置时区，所以在国外时区会变，即使地区设置没有变。应用只在决定是否查询时在手机上读取这个时差，不会保存或发送任何与它有关的内容。在 iPhone 上开启「使用照片位置」时，应用会在手机上把餐厅餐或外卖照片的拍摄位置与内置的美国轮廓比对，判断照片是否在美国拍摄（靠近国境线拍摄的照片按不在美国处理）；这一判断不会发送任何内容。否则以你手机的地区设置为准。不在美国吃的餐，或应用无法判断在哪里吃的餐，完全不会被查询。
 - **照片位置（仅限 iPhone，且开启了「使用照片位置」）：** 对 AI 标记为在餐厅吃的或外卖的餐，应用会从照片库读取这张照片的拍摄位置，用于判断是否在美国拍摄（见上文）；对在美国拍摄的餐厅餐，还会在手机上向 Apple 地图查询附近的餐饮场所。Apple 会收到该位置（与使用地图时相同），并按 Apple 自己的隐私政策处理。Apple 地图返回的任何内容都不会被保存、显示或发送到任何地方：应用只是把这些场所与它内置的美国连锁餐厅列表比对（并看 Apple 是否把它们归在美国），然后丢弃。该位置只在这一次判断和查询期间存在于手机内存中。当你在编辑页回应查询结果（**「没错」**、**「采用公布数值」**、**「不是这家」**或**「不是餐厅的」**）时，应用会再读取一次这张照片的拍摄位置，仅用于在手机上按约 100 米的范围记住你的回答（见上文）；按印出的品牌得到的数值不会让它记住任何地点。在 Android 上，应用绝不读取照片的拍摄位置，只按印出的品牌查询；在 iPhone 上选择**「仅按品牌」**也是如此，查询和你的回答都一样。
 - **查询会发送的内容：** 最多三个来自这份内置列表的连锁店名称（在照片拍摄地点附近找到的连锁店，或照片里杯子、袋子、小票上印的品牌），食物名称及其份量和单位，国家代码（总是 US：不在美国吃的餐不会被查询）以及回复所用的语言。在附近找到的连锁店会显示你当时在它附近。
@@ -326,7 +329,7 @@ date. Questions: open an issue at
   - 其他任何 AI 服务：完全不会进行查询。
 
   它们如何处理你发送的内容，以它们各自的隐私政策和条款为准。
-- **随餐保存的内容：** 连锁店、匹配到的菜品、公布的数值、数值来源的连锁店网页地址、由哪个服务给出的结果、日期、每项食物在采用前后的数值、查询的备注（最多 200 个字符，以纯文本显示）、建议没有被自动采用的原因（一个代码），以及这一餐是如何与该连锁店对应上的（食物或小票上印的品牌、照片的拍摄位置，或你自己选的）。其中不含任何位置，导出时作为这一餐的一部分。
+- **随餐保存的内容：** 连锁店、匹配到的菜品、公布的数值、数值来源的连锁店网页地址、由哪个服务给出的结果、日期、每项食物在采用前后的数值、查询的备注（最多 200 个字符，以纯文本显示）、建议没有被自动采用的原因（一个代码）、这次查询的起因（一个代码），以及这一餐是如何与该连锁店对应上的（食物或小票上印的品牌、照片的拍摄位置，或你自己选的）。其中不含任何位置，导出时作为这一餐的一部分。
 - 关闭此功能会取消进行中的查询、丢弃待处理的查询，并可同时清除已记住的地点。
 
 ### 导出、导入与备份

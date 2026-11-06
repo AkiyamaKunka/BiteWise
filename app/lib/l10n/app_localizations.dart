@@ -3912,7 +3912,7 @@ abstract class AppLocalizations {
   /// **'Off'**
   String get restaurantModeOff;
 
-  /// Restaurant lookup mode: only when the AI says its estimate of a restaurant meal is unsure.
+  /// Restaurant lookup mode: when the AI says its estimate of a restaurant or takeout meal is unsure (low confidence), or fairly sure (medium) and a chain's brand is printed on an item or a receipt.
   ///
   /// In en, this message translates to:
   /// **'When unsure'**
@@ -3927,7 +3927,7 @@ abstract class AppLocalizations {
   /// Footer line under the Restaurant nutrition group.
   ///
   /// In en, this message translates to:
-  /// **'When your AI is unsure about a restaurant meal, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.'**
+  /// **'When your AI is unsure about a restaurant meal, or fairly sure about one that shows a chain\'s brand on a cup, bag or receipt, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.'**
   String get restaurantModeHelper;
 
   /// Switch: automatic lookups may use where a restaurant meal photo was taken (iOS only).
@@ -4473,7 +4473,7 @@ abstract class AppLocalizations {
   /// Explains the confidence counts.
   ///
   /// In en, this message translates to:
-  /// **'How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.'**
+  /// **'How sure your AI said it was about each photo meal. \"When unsure\" looks up low-confidence restaurant meals, and medium-confidence ones that show a chain\'s brand.'**
   String get diagConfidenceIntro;
 
   /// Counts of photo meals by the AI's estimate_confidence; Not given = an older server or model that did not say.

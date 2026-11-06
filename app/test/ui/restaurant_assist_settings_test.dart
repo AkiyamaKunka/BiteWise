@@ -761,6 +761,55 @@ void main() {
       expect(footer(tester), isNot(contains('needs an update')));
       expect(footer(tester), isNot(contains('turned off on your server')));
     });
+
+    // Owner decision 2026-11-05: "When unsure" also looks up a restaurant
+    // meal the AI was fairly sure about when a chain's brand is printed
+    // (the auto_branding trigger). The footer's first line is where
+    // Settings says when a lookup happens; the mode keeps its name.
+    for (final (locale, phrase, helper, mode) in const [
+      (
+        Locale('en'),
+        "fairly sure about one that shows a chain's brand",
+        'When your AI is unsure about a restaurant meal, or fairly sure '
+            "about one that shows a chain's brand on a cup, bag or receipt, "
+            'Chopstats checks whether the chain publishes nutrition for it. '
+            'Only meals eaten in the US are looked up.',
+        'When unsure',
+      ),
+      (
+        Locale('zh'),
+        '比较有把握但杯子、袋子或小票上印有连锁品牌',
+        '当 AI 对餐厅餐的估算没有把握，或者比较有把握但杯子、袋子或小票上印有连锁品牌时，'
+            '筷拍会查看该连锁店是否公布了营养信息。只查询在美国吃的餐。',
+        '不确定时',
+      ),
+    ]) {
+      testWidgets('says when a lookup happens: the AI unsure, or fairly sure '
+          'and a chain\'s brand printed ($locale)', (tester) async {
+        final settings = _planSettings()
+          ..restaurantAssist = 'auto'
+          ..restaurantAssistLocation = true
+          ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+          ..restaurantAssistConsentRecipient = 'claude_plan:0a1b2c3d';
+        final c = _Controls(_plan, server: AssistServerState.ready);
+        await pump(tester, settings, c, locale: locale);
+        expect(footer(tester), contains(phrase));
+        expect(footer(tester), startsWith(helper));
+        expect(
+            find.descendant(
+                of: find.byKey(const Key('restaurantModeRow')),
+                matching: find.text(mode)),
+            findsOneWidget);
+
+        // The same first line in every mode.
+        for (final other in ['always', 'off']) {
+          settings.restaurantAssist = other;
+          settings.notifyListeners();
+          await tester.pumpAndSettle();
+          expect(footer(tester), startsWith(helper), reason: other);
+        }
+      });
+    }
   });
 
   // The owner's requirement before PR #19 ships (docs/RELEASING.md):

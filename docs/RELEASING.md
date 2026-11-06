@@ -226,6 +226,12 @@ again keeps both sides:
   string that brings back Chinese text, VPN advice or plan talk.
 - `docs/PRIVACY.md`: the effective date conflicts (#19 2026-10-24, this
   branch 2026-10-29); #19 changes the policy, so give it the merge date.
+  The date (line 3) and its pin in `app/test/release_decisions_test.dart`
+  ("with the new effective date") are set by hand, and must be set again
+  to the merge date when PR #19 merges and once more when PR #22 (run 7)
+  merges. A 3-way merge keeps the older date without a conflict, and no
+  test can tell that the date is stale. (Last set to 2026-11-05, when the
+  "Which meals" bullet was rewritten for the `auto_branding` trigger.)
   #19's added sentences say "Claude Plan" (the intro's "with Claude Plan,
   the server you run", the restaurant section's **Claude Plan:** bullet, and
   the 中文 counterparts): rename them to "your own server" / 你自己的服务器.

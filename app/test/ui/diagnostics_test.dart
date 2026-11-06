@@ -843,6 +843,36 @@ void main() {
       expect(find.text('低 0 · 中 0 · 高 0 · 未给出 0'), findsOneWidget);
     });
 
+    // Owner decision 2026-11-05: what "When unsure" goes by is low
+    // confidence, and medium only with a printed chain brand (the
+    // auto_branding trigger).
+    for (final (locale, intro) in const [
+      (
+        Locale('en'),
+        'How sure your AI said it was about each photo meal. "When unsure" '
+            'looks up low-confidence restaurant meals, and medium-confidence '
+            "ones that show a chain's brand.",
+      ),
+      (
+        Locale('zh'),
+        'AI 对每餐照片估算的把握程度。“不确定时”会查询把握低的餐厅餐，'
+            '以及把握中等且印有连锁品牌的餐厅餐。',
+      ),
+    ]) {
+      testWidgets('the confidence counts say what "When unsure" looks up '
+          '($locale)', (tester) async {
+        await pump(tester,
+            diag: const RestaurantLookupsDiagnostics(today: 0, cap: 20),
+            counts: (low: 2, medium: 5, high: 9, unknown: 1),
+            locale: locale);
+        expect(
+            find.descendant(
+                of: find.byKey(const Key('diagConfidence')),
+                matching: find.text(intro)),
+            findsOneWidget);
+      });
+    }
+
     testWidgets('no assist (tests, the background engine): no section',
         (tester) async {
       await pump(tester);

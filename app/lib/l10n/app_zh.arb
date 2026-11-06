@@ -743,7 +743,7 @@
   "restaurantModeOff": "关闭",
   "restaurantModeAuto": "不确定时",
   "restaurantModeAlways": "总是",
-  "restaurantModeHelper": "当 AI 对餐厅餐的估算没有把握时，筷拍会查看该连锁店是否公布了营养信息。只查询在美国吃的餐。",
+  "restaurantModeHelper": "当 AI 对餐厅餐的估算没有把握，或者比较有把握但杯子、袋子或小票上印有连锁品牌时，筷拍会查看该连锁店是否公布了营养信息。只查询在美国吃的餐。",
   "settingsRowRestaurantLocation": "使用照片位置",
   "restaurantLocationOffHint": "仅按品牌：只用杯子、袋子或小票上印的品牌名。",
   "restaurantLocationAndroidHint": "Android 目前只按印出的品牌查询。",
@@ -834,6 +834,6 @@
   "diagRestaurantIntro": "最近 20 个决定：原因代码、千卡（之前 → 之后）、服务。不保存餐厅名称或地点。",
   "diagRestaurantNone": "还没有餐厅查询的决定。",
   "diagConfidenceTitle": "AI 把握程度（14 天）",
-  "diagConfidenceIntro": "AI 对每餐照片估算的把握程度。“不确定时”只查询把握低的餐厅餐。",
+  "diagConfidenceIntro": "AI 对每餐照片估算的把握程度。“不确定时”会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。",
   "diagConfidenceLine": "低 {low} · 中 {medium} · 高 {high} · 未给出 {unknown}"
 }

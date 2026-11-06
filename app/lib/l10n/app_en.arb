@@ -2049,13 +2049,13 @@
   },
   "restaurantModeAuto": "When unsure",
   "@restaurantModeAuto": {
-    "description": "Restaurant lookup mode: only when the AI says its estimate of a restaurant meal is unsure."
+    "description": "Restaurant lookup mode: when the AI says its estimate of a restaurant or takeout meal is unsure (low confidence), or fairly sure (medium) and a chain's brand is printed on an item or a receipt."
   },
   "restaurantModeAlways": "Always",
   "@restaurantModeAlways": {
     "description": "Restaurant lookup mode: every restaurant or takeout meal (still never a home meal's location)."
   },
-  "restaurantModeHelper": "When your AI is unsure about a restaurant meal, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.",
+  "restaurantModeHelper": "When your AI is unsure about a restaurant meal, or fairly sure about one that shows a chain's brand on a cup, bag or receipt, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.",
   "@restaurantModeHelper": {
     "description": "Footer line under the Restaurant nutrition group."
   },
@@ -2497,7 +2497,7 @@
   "@diagConfidenceTitle": {
     "description": "Diagnostics: how sure the AI said it was about photo meals in the last 14 days."
   },
-  "diagConfidenceIntro": "How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.",
+  "diagConfidenceIntro": "How sure your AI said it was about each photo meal. \"When unsure\" looks up low-confidence restaurant meals, and medium-confidence ones that show a chain's brand.",
   "@diagConfidenceIntro": {
     "description": "Explains the confidence counts."
   },

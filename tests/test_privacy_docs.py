@@ -260,6 +260,84 @@ def test_the_time_zone_check_and_the_us_country_code_are_said_everywhere():
     assert "时区" in zha["assistLookupOutsideUs"]
 
 
+def test_when_unsure_also_looks_up_a_fairly_sure_meal_with_a_printed_brand():
+    """Owner decision 2026-11-05: "When unsure" also looks up a restaurant
+    or takeout meal the AI was fairly sure about (medium confidence) when a
+    chain's brand is printed (the app's auto_branding trigger). The
+    policy's "Which meals" bullet, Settings' footer and the Diagnostics
+    line say so in both languages, and the policy lists the code, saved
+    with the meal, that says why a lookup ran."""
+    en, zh = _policy_halves()
+    en_lookup = _lookup_section(en, "### Restaurant nutrition lookup")
+    zh_lookup = _lookup_section(zh, "### 餐厅营养查询")
+
+    # Which meals: When unsure, in both of its cases.
+    assert ('"When unsure" looks one up only when the AI says its estimate '
+            "is unsure, or when the AI is fairly sure and a cup, bag, box or "
+            "receipt in the photo shows a chain's brand.") in en_lookup
+    assert "only when the AI also says its estimate is unsure" not in en_lookup
+    assert ("「不确定时」模式下，只有当 AI 表示自己的估算没有把握，或者 AI "
+            "比较有把握、但照片里的杯子、袋子、盒子或小票上印有连锁品牌时，"
+            "才会查询这样的餐。") in zh_lookup
+    assert "比较有把握" in zh_lookup
+    assert "还要 AI 表示自己的估算没有把握" not in zh_lookup
+    # Always is said on its own: every restaurant or takeout meal, and any
+    # other photo meal only by its OWN packaging (not a receipt).
+    assert ('"Always" does not wait for either: every such meal can be looked '
+            "up, and so can any other photo meal whose own cup, bag or box "
+            "shows a chain's brand.") in en_lookup
+    assert ("「总是」模式下不看这两个条件：这样的餐都可能被查询，其他照片餐食"
+            "只要自己的杯子、袋子或盒子上印有连锁品牌，也可能被查询。") in zh_lookup
+    assert "You can also look up any meal yourself." in en_lookup
+    assert "你也可以自己手动查询任意一餐。" in zh_lookup
+    # Unchanged by it: which meals never have their location read.
+    assert ("A meal marked as home-cooked, packaged or unknown never has its "
+            "location read.") in en_lookup
+    assert "被标记为家里做的、包装食品或无法判断的餐，绝不会读取其位置。" in zh_lookup
+    # The Apple Maps sentence is as it was, with no exception for these
+    # meals: the automatic lookup of a fairly sure, branded meal does not
+    # ask Apple Maps, but the same meal looked up from the editor with "Use
+    # photo location" on, or in Always, does. The policy may describe more
+    # than the app does for a meal, never less.
+    assert ("For a restaurant meal taken in the US, it also asks Apple Maps, "
+            "on the phone, which food places are nearby. Apple receives that "
+            "location") in en_lookup
+    assert ("对在美国拍摄的餐厅餐，还会在手机上向 Apple 地图查询附近的餐饮场所。"
+            "Apple 会收到该位置") in zh_lookup
+
+    # What is saved with the meal: the code that says why the lookup ran.
+    assert ("why a suggestion was not used by itself (a code), why the "
+            "lookup ran (a code), and how the meal was tied to the "
+            "chain") in en_lookup
+    assert ("建议没有被自动采用的原因（一个代码）、这次查询的起因（一个代码），"
+            "以及这一餐是如何与该连锁店对应上的") in zh_lookup
+
+    ena, zha = _arb("en"), _arb("zh")
+    # Settings' footer, the line every phone shows.
+    assert ("When your AI is unsure about a restaurant meal, or fairly sure "
+            "about one that shows a chain's brand on a cup, bag or "
+            "receipt,") in ena["restaurantModeHelper"]
+    assert "fairly sure" in ena["restaurantModeHelper"]
+    assert ("当 AI 对餐厅餐的估算没有把握，或者比较有把握但杯子、袋子或小票上"
+            "印有连锁品牌时，") in zha["restaurantModeHelper"]
+    assert "比较有把握" in zha["restaurantModeHelper"]
+    # Diagnostics: what the confidence counts mean for "When unsure".
+    assert ("looks up low-confidence restaurant meals, and medium-confidence "
+            "ones that show a chain's brand.") in ena["diagConfidenceIntro"]
+    assert "medium-confidence" in ena["diagConfidenceIntro"]
+    assert "only low-confidence" not in ena["diagConfidenceIntro"]
+    assert ("会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。"
+            ) in zha["diagConfidenceIntro"]
+    assert "把握中等" in zha["diagConfidenceIntro"]
+    assert "只查询把握低" not in zha["diagConfidenceIntro"]
+    # The mode keeps its name, and the translator's note states the rule.
+    assert ena["restaurantModeAuto"] == "When unsure"
+    assert zha["restaurantModeAuto"] == "不确定时"
+    note = ena["@restaurantModeAuto"]["description"]
+    assert "unsure (low confidence), or fairly sure (medium)" in note
+    assert "only when the AI says" not in note
+
+
 def _paragraph(half, start):
     """The paragraph of [half] that begins with [start], whitespace flat."""
     at = half.index(start)

@@ -2332,7 +2332,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restaurantModeHelper =>
-      '当 AI 对餐厅餐的估算没有把握时，筷拍会查看该连锁店是否公布了营养信息。只查询在美国吃的餐。';
+      '当 AI 对餐厅餐的估算没有把握，或者比较有把握但杯子、袋子或小票上印有连锁品牌时，筷拍会查看该连锁店是否公布了营养信息。只查询在美国吃的餐。';
 
   @override
   String get settingsRowRestaurantLocation => '使用照片位置';
@@ -2641,7 +2641,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagConfidenceTitle => 'AI 把握程度（14 天）';
 
   @override
-  String get diagConfidenceIntro => 'AI 对每餐照片估算的把握程度。“不确定时”只查询把握低的餐厅餐。';
+  String get diagConfidenceIntro =>
+      'AI 对每餐照片估算的把握程度。“不确定时”会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。';
 
   @override
   String diagConfidenceLine(int low, int medium, int high, int unknown) {

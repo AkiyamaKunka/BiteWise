@@ -2495,7 +2495,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantModeHelper =>
-      'When your AI is unsure about a restaurant meal, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.';
+      'When your AI is unsure about a restaurant meal, or fairly sure about one that shows a chain\'s brand on a cup, bag or receipt, Chopstats checks whether the chain publishes nutrition for it. Only meals eaten in the US are looked up.';
 
   @override
   String get settingsRowRestaurantLocation => 'Use photo location';
@@ -2834,7 +2834,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagConfidenceIntro =>
-      'How sure your AI said it was about each photo meal. \"When unsure\" looks up only low-confidence restaurant meals.';
+      'How sure your AI said it was about each photo meal. \"When unsure\" looks up low-confidence restaurant meals, and medium-confidence ones that show a chain\'s brand.';
 
   @override
   String diagConfidenceLine(int low, int medium, int high, int unknown) {
