@@ -284,6 +284,11 @@ The recommended order for a server that is already live:
    which the first rollout ran. If it says `FAIL guard_fail:apiKeySource`
    and shows a value you expect for your sign-in, add
    `CLAUDE_LOOKUP_KEY_SOURCE=<that value>` to `.env` and run it again.
+   `FAIL guard_fail:init_timeout` (with `init latency : -`) means that
+   the CLI printed nothing within `CLAUDE_LOOKUP_INIT_SECONDS`: set that
+   knob to `20` (at most `30`) in `.env`, on a line of its own as in
+   step 4, and run the smoke again. Treat it as a different CLI only if
+   it still fails.
    Any other `FAIL`, or any `status` other than `init_ok`, means this CLI
    version behaves differently: do not enable the feature; report the
    printed lines instead. For `cli_error (no_init)`, this lists the
