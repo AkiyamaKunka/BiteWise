@@ -152,8 +152,18 @@ sudo chmod o+r /usr/share/keyrings/caddy-stable-archive-keyring.gpg /etc/apt/sou
 # refresh only Caddy's list
 sudo -E apt-get update -o Dir::Etc::sourcelist="sources.list.d/caddy-stable.list" \
   -o Dir::Etc::sourceparts="-" -o APT::Get::List-Cleanup="0"
-# dry run: exactly one "Inst caddy ..." line and no "Remv" line, or stop here
+# dry run: what would apt do?
 sudo -E apt-get install --no-install-recommends -s caddy | grep -E '^(Inst|Remv|Conf) '
+```
+
+Go on only if the dry run printed exactly one `Inst` line, the one for
+`caddy` (its `Conf caddy` line belongs to it), and no `Remv` line.
+Anything else means apt would install or remove more than Caddy: stop
+here and find out why. Then install (the first line is the same as
+above, in case this is a new terminal):
+
+```bash
+export DEBIAN_FRONTEND=noninteractive NEEDRESTART_MODE=l NEEDRESTART_SUSPEND=1
 # install without starting the service, then take the block away again
 printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null; sudo chmod 755 /usr/sbin/policy-rc.d
 sudo -E apt-get install -y --no-install-recommends caddy
@@ -312,9 +322,11 @@ asked for the real one only after a restart.
 
 ```bash
 grep -c 'acme-staging' /etc/caddy/Caddyfile            # 0
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl restart caddy
+sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl restart caddy
 ```
+
+The `&&` matters: Caddy is restarted only when the file is valid. A
+restart with a broken Caddyfile would leave Caddy stopped.
 
 Give it a minute and run the journal and `openssl` checks again. The
 issuer no longer says `(STAGING)`; the first rollout got `YE2`, one of
@@ -526,8 +538,9 @@ the address.
 - Do not reinstall Caddy or empty `/var/lib/caddy` to start over: Let's
   Encrypt issues only a few new certificates a week for the same address
   or name, while the stored certificate renews without that limit. After
-  any change to the Caddyfile, run `caddy validate` and then
-  `sudo systemctl restart caddy`.
+  any change to the Caddyfile, run
+  `sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl restart caddy`,
+  as one line: the restart then happens only when the file is valid.
 - If the address (route A) or the name (route B) ever changes, edit the
   Caddyfile, restart Caddy and update the app's server address. The
   host changed, so the lookup consent is asked again.

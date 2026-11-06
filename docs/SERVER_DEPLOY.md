@@ -57,6 +57,12 @@ SHA=$(git rev-parse --short "$REF")
 # the gate: the jobs CI ran on exactly this commit
 gh run view "$(gh run list --commit "$REF" --workflow Tests --limit 1 \
   --json databaseId --jq '.[0].databaseId')" --json jobs --jq '.jobs[] | "\(.name): \(.conclusion)"'
+```
+
+Go on only if that printed `test (3.10): success` (see "The gate is CI
+on Python 3.10" below). Then, in the same terminal:
+
+```bash
 PYTHONDONTWRITEBYTECODE=1 python3.12 -m pytest -q -p no:cacheprovider
 bash scripts/check_public_safety.sh
 OUT="$TMPDIR/ct_deploy_$SHA.tgz"
