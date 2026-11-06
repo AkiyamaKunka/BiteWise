@@ -178,13 +178,22 @@ printf '#!/bin/sh\nexit 101\n' | sudo tee /usr/sbin/policy-rc.d >/dev/null; sudo
 sudo -E apt-get install -y --no-install-recommends caddy
 sudo rm -f /usr/sbin/policy-rc.d
 sudo systemctl stop caddy 2>/dev/null || true
+sudo systemctl disable caddy
 caddy version; systemctl is-active caddy; systemctl is-enabled caddy
 sudo ss -ltnpH | awk '$4 ~ /:(80|443)$/ {print $4, $6}'   # still nothing on 80 or 443
 ```
 
 `caddy version` must be 2.11.1 or newer for route A (the first rollout
-installed 2.11.9). Caddy is `inactive` for now and should be `enabled`,
-so that it starts at boot once its Caddyfile is right.
+installed 2.11.9). Caddy is `inactive` and `disabled` for now, and stays
+that way until its Caddyfile is right: section 4 enables it. The reason
+is a restart of the VM between the two sections. The redirect rule
+would be gone, an enabled Caddy would start with the packaged Caddyfile,
+and its page would answer the phone on port 80 in Flask's place. For an
+upload that should be a `404` or `405` (by Caddy's documentation; it was
+not tried), and the app takes such an answer as final for that photo,
+while it tries again after a refused connection. The first rollout only
+stopped Caddy here and started it in section 4 the same day; `disable`
+and `enable --now` are new on this page and were not part of it.
 
 What the precautions are for:
 
@@ -193,8 +202,8 @@ What the precautions are for:
   file stops that for this one install. Remove it right after, as
   shown: while it exists, no package can start its service on this VM.
   If you installed Caddy the ordinary way instead, run
-  `sudo systemctl stop caddy` at once and write your Caddyfile before
-  you start it again.
+  `sudo systemctl disable --now caddy` at once and write your Caddyfile
+  before section 4 starts it again.
 - **`NEEDRESTART_MODE=l`** makes `needrestart`, where it is installed,
   only list services after an install instead of restarting them.
 - **One package, nothing else.** The dry run shows what apt would do.
@@ -295,8 +304,8 @@ its first test.
 Validate, start, and watch for the certificate:
 
 ```bash
-sudo caddy validate --config /etc/caddy/Caddyfile     # must end with "Valid configuration"
-sudo systemctl start caddy
+# must end with "Valid configuration": only then is Caddy enabled and started
+sudo caddy validate --config /etc/caddy/Caddyfile && sudo systemctl enable --now caddy
 sudo ss -ltnpH | awk '$4 ~ /:(80|443)$/ {print $4, $6}'   # Caddy now holds 80 and 443
 sudo journalctl -u caddy --since '-10min' --no-pager \
   | grep -E 'served key authentication certificate|certificate obtained successfully|could not get certificate|challenge failed'
