@@ -277,8 +277,10 @@ The recommended order for a server that is already live:
    `CLAUDE_LOOKUP_INIT_SECONDS=20`).
 
    The service's `PATH` matters because the service and the smoke both
-   find `claude` through it. Under plain `sudo` the smoke could test a
-   different `claude` than the one the service runs, or find none.
+   find `claude` through it, unless `.env` sets `CLAUDE_ANALYZER_BIN` to
+   a full path, which both then use instead. Under plain `sudo` the
+   smoke could test a different `claude` than the one the service runs,
+   or find none.
 
    The guard was written against CLI 2.1.233 and also passes on 2.1.210,
    which the first rollout ran. If it says `FAIL guard_fail:apiKeySource`
@@ -291,13 +293,20 @@ The recommended order for a server that is already live:
    it still fails.
    Any other `FAIL`, or any `status` other than `init_ok`, means this CLI
    version behaves differently: do not enable the feature; report the
-   printed lines instead. For `cli_error (no_init)`, this lists the
-   flags the lookup uses and whether this CLI knows them (its
-   `--permission-mode` help must also name `dontAsk`):
+   printed lines instead. For `cli_error (no_init)`, this prints which
+   `claude` that `PATH` leads to, then the flags the lookup uses and
+   whether this CLI's help knows them (the last line is the `dontAsk`
+   permission mode, which must say `yes` too):
 
    ```bash
-   sudo -u ubuntu -H env PATH="$SPATH" DISABLE_AUTOUPDATER=1 bash -c 'H=$(claude --help 2>&1); for f in --safe-mode --json-schema --no-session-persistence --strict-mcp-config --tools --allowedTools --disallowedTools --permission-mode --output-format --verbose --model; do if printf "%s" "$H" | grep -q -- "$f"; then echo "$f yes"; else echo "$f NO"; fi; done; printf "%s" "$H" | grep -A3 -- "--permission-mode" | head -5'
+   sudo -u ubuntu -H env PATH="$SPATH" DISABLE_AUTOUPDATER=1 /bin/bash -c 'C=claude; command -v "$C" || echo "$C: NOT FOUND"; H=$("$C" --help 2>&1); for f in --safe-mode --json-schema --no-session-persistence --strict-mcp-config --tools --allowedTools --disallowedTools --permission-mode --output-format --verbose --model dontAsk; do case "$H" in *"$f"*) echo "$f yes";; *) echo "$f NO";; esac; done'
    ```
+
+   If `.env` sets `CLAUDE_ANALYZER_BIN`, write that path in place of
+   `claude` in `C=claude`. The line takes nothing from the service's
+   `PATH` but the CLI itself, so it also works where that `PATH` holds
+   little else (the example unit in [SERVER.md](SERVER.md) has only the
+   venv's `bin`).
 
    A different CLI version changes the photo path too, because it is
    the same program. After any CLI change, check
@@ -366,9 +375,10 @@ The recommended order for a server that is already live:
    If `restaurant_lookup` is still `False`, the server did not read the
    knob as on or cannot run the Claude backend: `CLAUDE_LOOKUP_ENABLED`
    must be on a line of its own with the value `1`,
-   `CLAUDE_ANALYZER_ENABLED` must be on as well, `claude` must be on the
-   service's `PATH`, and the service must have been restarted since the
-   edit.
+   `CLAUDE_ANALYZER_ENABLED` must be on as well, the service must find
+   the CLI (`claude` on its `PATH`, or the full path in
+   `CLAUDE_ANALYZER_BIN`), and the service must have been restarted
+   since the edit.
 6. **One real lookup, inside the service** (spends one search run on
    your plan and counts as one of the day's `CLAUDE_LOOKUP_DAILY_CAP`
    runs). It goes through the API, so it runs under the service's own
