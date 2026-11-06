@@ -1089,7 +1089,7 @@ LOOKUP_INIT_EXPECT = {
 }
 LOOKUP_KEY_SOURCES_DEFAULT = ("none",)
 LOOKUP_ENV_KEYS = ("PATH", "HOME", "LANG", "CLAUDE_CODE_OAUTH_TOKEN")
-LOOKUP_MODEL_DEFAULT = "sonnet"
+LOOKUP_MODEL_DEFAULT = "haiku"
 LOOKUP_INIT_DEADLINE_SECONDS = 10  # default for CLAUDE_LOOKUP_INIT_SECONDS
 LOOKUP_READ_SLICE_SECONDS = 0.25  # how often a blocked read checks cancel
 LOOKUP_EXIT_GRACE_SECONDS = 5
@@ -1106,7 +1106,7 @@ _LINKS_PREFIX = "Links: "
 
 
 def lookup_model() -> str:
-    """CLAUDE_LOOKUP_MODEL (default 'sonnet'); anything that is not a
+    """CLAUDE_LOOKUP_MODEL (default 'haiku'); anything that is not a
     plain model name/alias falls back to the default — it becomes argv."""
     raw = (os.environ.get("CLAUDE_LOOKUP_MODEL") or "").strip()
     return raw if raw and _LOOKUP_MODEL_RE.match(raw) else LOOKUP_MODEL_DEFAULT

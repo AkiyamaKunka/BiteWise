@@ -134,7 +134,7 @@ New `.env` knobs (all optional):
 | Knob | Default | Meaning |
 |---|---|---|
 | `CLAUDE_LOOKUP_ENABLED` | off | `1` turns the endpoints on. Off → `403 {"reason":"disabled"}`. |
-| `CLAUDE_LOOKUP_MODEL` | `sonnet` | `haiku` uses less plan usage. |
+| `CLAUDE_LOOKUP_MODEL` | `haiku` | `sonnet` is more thorough and uses more plan usage. |
 | `CLAUDE_LOOKUP_TIMEOUT_SECONDS` | `75` | Per-lookup wall clock (20–300). |
 | `CLAUDE_LOOKUP_INIT_SECONDS` | `10` | How long the CLI may take to print its first (init) event (5–30). Raise it only if the smoke's `init latency` is close to the limit. |
 | `CLAUDE_LOOKUP_DAILY_CAP` | `30` | Lookup runs started per day, counted in `logs/service_health.json`. |

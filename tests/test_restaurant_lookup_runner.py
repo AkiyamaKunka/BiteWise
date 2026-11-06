@@ -318,7 +318,7 @@ def test_argv_is_pinned_exactly(monkeypatch, tmp_path):
         "Bash,Read,Write,Edit,Glob,Grep,LS,WebFetch,NotebookEdit,Task,mcp__*",
         "--permission-mode", "dontAsk", "--strict-mcp-config",
         "--no-session-persistence", "--json-schema", SCHEMA,
-        "--model", "sonnet",
+        "--model", "haiku",
     ]
 
 
@@ -329,18 +329,18 @@ def test_extra_flags_and_analyzer_model_never_reach_the_lookup(
     monkeypatch.setenv("CLAUDE_ANALYZER_EXTRA_FLAGS",
                        "--dangerously-skip-permissions --tools default")
     monkeypatch.setenv("CLAUDE_ANALYZER_MODEL", "opus")
-    monkeypatch.setenv("CLAUDE_LOOKUP_MODEL", "haiku")
+    monkeypatch.setenv("CLAUDE_LOOKUP_MODEL", "sonnet")
     claude_analyzer.lookup_restaurant(PROMPT, SCHEMA)
     argv = read_record(record)["argv"]
     assert "--dangerously-skip-permissions" not in argv
     assert argv.count("--tools") == 1
-    assert argv[-2:] == ["--model", "haiku"]
+    assert argv[-2:] == ["--model", "sonnet"]
 
 
 @pytest.mark.parametrize("raw,expected", [
-    (None, "sonnet"), ("", "sonnet"), ("haiku", "haiku"),
+    (None, "haiku"), ("", "haiku"), ("sonnet", "sonnet"),
     ("claude-sonnet-5-5", "claude-sonnet-5-5"),
-    ("opus --dangerously-skip-permissions", "sonnet"), ("a" * 80, "sonnet"),
+    ("opus --dangerously-skip-permissions", "haiku"), ("a" * 80, "haiku"),
 ])
 def test_lookup_model_knob(monkeypatch, raw, expected):
     if raw is None:
