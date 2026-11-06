@@ -790,10 +790,18 @@ void main() {
 
     test('When unsure: medium confidence without a printed chain never '
         'triggers', () async {
-      h.add(_bigMac(confidence: 'medium', brand: ''));
-      h.add(_bigMac(confidence: 'medium', brand: 'Coca-Cola'));
-      h.add(_bigMac(confidence: 'medium', brand: '', merchant: "Joe's Diner"));
-      h.add(_bigMac(confidence: 'medium', context: 'takeout', brand: ''));
+      final rows = [
+        _bigMac(confidence: 'medium', brand: ''),
+        _bigMac(confidence: 'medium', brand: 'Coca-Cola'),
+        _bigMac(confidence: 'medium', brand: '', merchant: "Joe's Diner"),
+        _bigMac(confidence: 'medium', context: 'takeout', brand: ''),
+      ];
+      for (final row in rows) {
+        // The rule itself: this harness has no location reader, so the
+        // sweep would skip these meals whatever the trigger said.
+        expect(assistTriggerFor(row, AssistMode.auto), isNull);
+        h.add(row);
+      }
       await h.assist.sweep();
       expect(h.lookups.submits, isEmpty);
       expect(h.dao.snapshotReads, isEmpty, reason: 'no run was started');
