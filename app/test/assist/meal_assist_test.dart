@@ -1397,6 +1397,52 @@ void main() {
       }
     });
 
+    // Settings' Stop Sharing (Off and the consent forgotten in one write)
+    // stops these lookups like every other: the consent is read again at
+    // the send (MealAssist._maySend), whatever the trigger.
+    test('Settings stopped the lookups after its gate, before any '
+        'notification: nothing is sent, a pending job is not polled', () async {
+      const stopped = AssistSettingsView();
+      h.lookups.support = _claudePlan;
+      final allowed = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      h.settings = allowed;
+      final id = h.add(medium());
+      h.dao.onSnapshot = (_) => h.settings = stopped;
+      await h.assist.sweep();
+      expect(h.dao.snapshotReads, [id], reason: 'the gate let it through');
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+      expect(h.dao.assistWrites, isEmpty);
+      expect(await h.state.jobs(), isEmpty);
+      expect(await h.state.misses(), isEmpty, reason: "not the meal's fault");
+
+      // Allowed again, its lookup becomes a job on the server…
+      h.dao.onSnapshot = null;
+      h.settings = allowed;
+      h.lookups.onSubmit = (_) async => const LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job_abcdef12',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1));
+      expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+
+      // …which is not polled, and not sent again, once stopped.
+      h.now = _now.add(kAssistPollInterval);
+      h.dao.onSnapshot = (_) => h.settings = stopped;
+      await h.assist.sweep();
+      expect(h.lookups.polls, isEmpty);
+      expect(h.lookups.submits, hasLength(1));
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+      expect(h.analysisOf(id).containsKey('assist'), isFalse);
+    });
+
     // Every gate an automatic lookup passes is checked before the trigger
     // matters, so the new trigger can open none of them. Each test holds
     // one gate shut for a medium meal with a printed brand, then shows the

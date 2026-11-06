@@ -17,6 +17,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
+    show AssistTrigger;
 import 'package:calorie_tracker/services/assist/assist_local_state.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_clients.dart';
@@ -240,14 +242,21 @@ void main() {
         consentNeeded: assist.consentNeeded,
       );
 
-  int addMeal({String timestamp = '2026-10-24T12:30:00.000'}) => dao.put(
+  /// A Big Mac in its McDonald's box at a restaurant. [confidence] is how
+  /// sure the AI said it was: 'low' is what "When unsure" always looked
+  /// up; 'medium' is looked up since the auto_branding trigger (owner
+  /// decision 2026-11-05), because the box names the chain.
+  int addMeal({
+    String timestamp = '2026-10-24T12:30:00.000',
+    String confidence = 'low',
+  }) => dao.put(
     Meal(
       id: 0,
       date: _today,
       time: '12:30 PM',
       timestamp: timestamp,
       source: MealSource.appWatch,
-      analysis: _bigMac(),
+      analysis: {..._bigMac(), 'estimate_confidence': confidence},
     ),
   );
 
@@ -409,6 +418,54 @@ void main() {
     expect(restaurantConsentCovers(store, support), isFalse);
     expect(lookups.submits, hasLength(2));
     expect(lookups.polls, isEmpty);
+    expect(requests, isEmpty);
+  });
+
+  // Owner decision 2026-11-05: "When unsure" also looks up a restaurant
+  // meal the AI was fairly sure about when a chain's brand is printed (the
+  // auto_branding trigger), so more meals are looked up under the same
+  // consent. The row stops those lookups like every other.
+  test('Stop Sharing also stops what the auto_branding trigger starts: a '
+      'fairly sure meal with a printed brand makes no submit and no poll '
+      'afterwards', () async {
+    final assist = engine();
+    final controls = controlsOf(assist);
+    await turnOn();
+    final route = currentAiConsentRoute(store);
+
+    // Before: such a meal is looked up, and its lookup is a job the
+    // server is running.
+    final waiting = addMeal(
+        timestamp: '2026-10-24T11:00:00.000', confidence: 'medium');
+    expect(assistTriggerFor(dao.byId(waiting).analysis, AssistMode.auto),
+        AssistTrigger.autoBranding);
+    lookups.onSubmit = (_) async => _pending;
+    await assist.sweep();
+    expect(lookups.submits, hasLength(1));
+    expect((await state.jobs()).keys, [waiting]);
+
+    // The row: the assist first, then the AI consent.
+    assist.start(observeLifecycle: false);
+    expect(await stopRestaurantAssistFor(store, controls, route),
+        (turnOff: true, forgetConsent: true));
+    await store.setAiConsent(route, granted: false);
+    await _until(() => jobsDocument().isEmpty);
+    expect(await state.jobs(), isEmpty);
+
+    // Afterwards: another such meal arrives, and the first one's poll
+    // would be due. Nothing is sent, polled or written — by the sweep or
+    // by the editor.
+    final later = addMeal(confidence: 'medium');
+    now = _now.add(kAssistPollInterval);
+    await assist.sweep();
+    expect(assist.lastSkip, AssistSkip.off);
+    expect((await assist.lookupNow(later)).code, AssistSkip.consentNeeded);
+    expect(lookups.submits, hasLength(1), reason: 'the one from before');
+    expect(lookups.polls, isEmpty);
+    expect(dao.assistWrites, isEmpty);
+    for (final id in [waiting, later]) {
+      expect(dao.byId(id).analysis.containsKey('assist'), isFalse);
+    }
     expect(requests, isEmpty);
   });
 

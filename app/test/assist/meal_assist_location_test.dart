@@ -11,6 +11,11 @@
 ///     (no places query, no cache, no suggestion); without a position the
 ///     phone's region decides; with none, nothing is looked up; the
 ///     request's country and the decision's are always the same, US;
+///   * the automatic auto_branding lookup ("When unsure", the AI fairly
+///     sure, a chain's brand printed) takes the brand path only: no places
+///     query, no location-derived chain, the position read for the meal
+///     country alone; Always and the editor's lookup of the same meal are
+///     unchanged (a trigger may only reduce what is read or sent);
 ///   * a 'Not from a restaurant' zone asks Apple Maps nothing;
 ///   * a dense spot sends its candidates and gets a suggestion at most; a
 ///     chain the user confirmed at a lone spot can apply on location alone;

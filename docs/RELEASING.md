@@ -230,8 +230,7 @@ again keeps both sides:
   ("with the new effective date") are set by hand, and must be set again
   to the merge date when PR #19 merges and once more when PR #22 (run 7)
   merges. A 3-way merge keeps the older date without a conflict, and no
-  test can tell that the date is stale. (Last set to 2026-11-05, when the
-  "Which meals" bullet was rewritten for the `auto_branding` trigger.)
+  test can tell that the date is stale.
   #19's added sentences say "Claude Plan" (the intro's "with Claude Plan,
   the server you run", the restaurant section's **Claude Plan:** bullet, and
   the 中文 counterparts): rename them to "your own server" / 你自己的服务器.
