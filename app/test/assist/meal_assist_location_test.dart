@@ -333,12 +333,25 @@ class _Places implements PlaceResolver {
   }
 }
 
+/// A FakeDao that can play Settings changing right after the gate let a
+/// lookup through: [onSnapshot] runs before a meal's snapshot is answered,
+/// the run's first read (as in meal_assist_test.dart).
+class _Dao extends FakeDao {
+  void Function(int mealId)? onSnapshot;
+
+  @override
+  Future<MealSnapshot?> mealSnapshot(int mealId) {
+    onSnapshot?.call(mealId);
+    return super.mealSnapshot(mealId);
+  }
+}
+
 class _Harness {
   _Harness(this.root, this.prefs);
 
   final Directory root;
   final SharedPreferences prefs;
-  final FakeDao dao = FakeDao();
+  final _Dao dao = _Dao();
   final _Lookups lookups = _Lookups();
   final _Source source = _Source();
   final _Places places = _Places();
@@ -671,6 +684,72 @@ void main() {
       final codes = [for (final e in await h.state.decisions()) e.code];
       // Newest meal first.
       expect(codes, ['place_inaccurate', 'place_stale']);
+    });
+
+    // The run's first check after its gate (MealAssist._maySend, right
+    // after the meal's snapshot): a run Settings already stopped reads
+    // nothing more. meal_assist_test.dart pins that such a run sends
+    // nothing; only this harness has a location reader and Apple Maps, so
+    // only here can a test see that neither is touched. The meal is the
+    // one of the first test of this group, which reads both.
+    test('Settings stopped the lookups right after the gate: the photo '
+        'position is not read and Apple Maps is not asked', () async {
+      h.add(_bigMac());
+      final allowed = h.settings;
+      h.dao.onSnapshot = (_) => h.settings = const AssistSettingsView();
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty, reason: 'no position read');
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps not asked');
+      expect(h.lookups.submits, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+
+      // Allowed again, the same meal takes the location path: it was the
+      // stop that kept the run from reading, not the meal.
+      h.dao.onSnapshot = null;
+      h.settings = allowed;
+      await h.assist.sweep();
+      expect(h.source.asked, ['asset-1']);
+      expect(h.places.radii, [40]);
+      expect(h.lookups.submits, hasLength(1));
+    });
+
+    test('the consent alone forgotten or re-stamped after the gate (the '
+        'mode still on): nothing is read either, for the editor\'s "Use '
+        'location" lookup and for an automatic one', () async {
+      final id = h.add(_bigMac());
+      final allowed = h.settings;
+      // Forgotten: the mode and 'Use photo location' stay as they were.
+      h.dao.onSnapshot = (_) => h.settings = const AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+      );
+      final run = await h.assist.lookupNow(id, useLocation: true);
+      expect(run.code, AssistSkip.cancelled);
+      expect(h.source.asked, isEmpty, reason: 'no position read');
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps not asked');
+      expect(h.lookups.submits, isEmpty);
+
+      // Stamped for another recipient.
+      h.settings = allowed;
+      h.dao.onSnapshot = (_) => h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'openrouter',
+      );
+      await h.assist.sweep();
+      expect(h.source.asked, isEmpty, reason: 'no position read');
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps not asked');
+      expect(h.lookups.submits, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+
+      // With the consent back, the editor's lookup reads and asks once.
+      h.dao.onSnapshot = null;
+      h.settings = allowed;
+      await h.assist.lookupNow(id, useLocation: true);
+      expect(h.source.asked, ['asset-1']);
+      expect(h.places.radii, [40]);
+      expect(h.lookups.submits, hasLength(1));
     });
   });
 
