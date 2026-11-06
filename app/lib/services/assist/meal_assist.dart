@@ -1238,7 +1238,8 @@ class MealAssist {
     final consentAt = s.consentAt!;
     final now = _clock();
     final meals = await _dao.mealsBetween(
-      isoDate(now.subtract(const Duration(days: 1))),
+      // Yesterday by the CALENDAR (addCalendarDays), not 24 hours back.
+      isoDate(addCalendarDays(now, -1)),
       isoDate(now),
     );
     if (gen != _generation) return;
@@ -2219,7 +2220,7 @@ class MealAssist {
     // Read now, not at the sweep's start: an application this sweep just
     // wrote on another meal counts for the 6 h repeat rule.
     final recent = await _dao.mealsBetween(
-      isoDate(now.subtract(const Duration(days: 1))),
+      isoDate(addCalendarDays(now, -1)),
       isoDate(now),
     );
     // Off while the answer was on its way here: discarded.
