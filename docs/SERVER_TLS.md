@@ -72,6 +72,10 @@ straight to Flask before anything that listens on port 80 sees it. Then:
 - If the third command prints nothing, the rule lives only in memory: a
   reboot drops it. The `:80` block in section 4 is the safety net for
   that day (port 80 then reaches Caddy, which passes it on to Flask).
+- Keep the rule's text now, while it is still listed:
+  `sudo iptables -t nat -S PREROUTING | tee -a ~/iptables_nat_prerouting.txt`.
+  Once a reboot has dropped the rule, that file is the only record of
+  it, and Rollback needs it.
 
 The first rollout found exactly this: the rule, saved nowhere, and a
 phone on plain http.
@@ -457,7 +461,7 @@ Three things first:
    block instead of Flask.
 
    ```bash
-   sudo iptables -t nat -S PREROUTING | tee ~/iptables_nat_prerouting.txt   # keep the rule's text
+   sudo iptables -t nat -S PREROUTING | tee -a ~/iptables_nat_prerouting.txt   # keep the rule's text (added to the file)
    # delete it with the same text, -D in place of -A, for example:
    sudo iptables -t nat -D PREROUTING -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 5000
    sudo iptables -t nat -S PREROUTING                                        # the rule is gone
@@ -492,7 +496,11 @@ Three things first:
    `tcp:80` in from the internet
    (`gcloud compute firewall-rules delete <name> --project "$PROJECT"`).
    Look first: a rule that also allows `tcp:22` is your ssh access, so
-   change that one in the console instead of deleting it.
+   change that one in the console instead of deleting it. And keep what
+   each rule was before you delete it
+   (`gcloud compute firewall-rules describe <name> --project "$PROJECT"`
+   prints its ports, source ranges and target tags): the rollback of
+   this section has to create it again.
 5. From the Mac, `curl -sS --max-time 5 -X POST "http://$HOST:5000/ping"`
    and `curl -sS --max-time 5 -X POST "http://$HOST/ping"` must now fail
    to connect, while `https://$HOST` still answers and the app's test
@@ -512,10 +520,29 @@ the address.
   the saved rule back: `sudo iptables -t nat` followed by the
   `-A PREROUTING …` line you kept in `~/iptables_nat_prerouting.txt`. Do
   that before you stop Caddy, or port 80 has nothing behind it.
-- **Caddy:** `sudo systemctl disable --now caddy` stops it and keeps it
-  from starting at boot. Then delete the firewall rule for 443
-  (`gcloud compute firewall-rules delete caloriebot-https --project "$PROJECT"`).
-  The reserved address can stay.
+- **Caddy:** once Caddy is stopped, plain http on port 80 needs the
+  redirect rule again, and an unsaved rule is gone after any reboot. So
+  go in this order:
+  1. Set the app back to the `http://` address (the first bullet).
+  2. On the VM, `sudo iptables -t nat -S PREROUTING`. If the
+     `--dport 80 -j REDIRECT --to-ports 5000` rule is not listed, port
+     80 is being answered by Caddy's `:80` block and would have nothing
+     behind it without Caddy. Put the rule back first:
+     `sudo iptables -t nat` followed by the `-A PREROUTING …` line you
+     kept in `~/iptables_nat_prerouting.txt`. For the rule shown in
+     section 6 that is
+     `sudo iptables -t nat -A PREROUTING -p tcp -m tcp --dport 80 -j REDIRECT --to-ports 5000`.
+     Or set the app's address to `http://$HOST:5000` instead.
+  3. From the Mac, the address the phone uses must answer `401`:
+     `curl -sS -o /dev/null -w '%{http_code}\n' -X POST "http://$HOST/api/auth_check"`
+     (with `:5000` after `$HOST` if that is the phone's address).
+  4. Only then `sudo systemctl disable --now caddy`, which stops Caddy
+     and keeps it from starting at boot. Run the check of step 3 once
+     more: it must still print `401`. If it does not,
+     `sudo systemctl enable --now caddy` brings Caddy back.
+  5. Delete the firewall rule for 443
+     (`gcloud compute firewall-rules delete caloriebot-https --project "$PROJECT"`).
+     The reserved address can stay.
 - **A code rollback** (SERVER_DEPLOY.md) to a build from before
   `API_BIND_HOST` existed makes Flask listen on `0.0.0.0` again, whatever
   `.env` says. Repeat step 3 of section 6 after any code rollback.
