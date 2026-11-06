@@ -1,3 +1,5 @@
 /* 与 Android values-zh/strings.xml 的 app_name 保持一致：中文系统下主屏显示 筷拍。 */
 "CFBundleDisplayName" = "筷拍";
 "NSPhotoLibraryUsageDescription" = "筷拍读取你的照片库以找到食物照片：你手动选择的，以及开启「监控相册」后自动发现的新照片。被分析的照片会发送到你在设置中选择的 AI 服务。如果你开启了使用照片位置的餐厅查询，筷拍还会读取餐厅餐或外卖照片的拍摄位置，仅用于在本机判断照片是否在美国拍摄、向 Apple 地图查询附近的餐厅，以及在本机记住你在那里确认或排除的餐厅。";
+"NSBluetoothAlwaysUsageDescription" = "在眼镜拍摄模式中，筷拍通过蓝牙连接你的 Meta 眼镜，接收你用眼镜拍下的食物照片。";
+"NSBluetoothPeripheralUsageDescription" = "在眼镜拍摄模式中，筷拍通过蓝牙连接你的 Meta 眼镜，接收你用眼镜拍下的食物照片。";

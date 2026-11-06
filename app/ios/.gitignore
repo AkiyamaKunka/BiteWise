@@ -32,3 +32,7 @@ Runner/GeneratedPluginRegistrant.*
 !default.mode2v3
 !default.pbxuser
 !default.perspectivev3
+
+# Meta glasses (feat/meta-dat): optional META_APP_ID / META_CLIENT_TOKEN
+# for a release-channel build. Never committed; Developer Mode needs neither.
+Flutter/MetaDat.xcconfig

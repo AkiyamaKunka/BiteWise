@@ -8,18 +8,22 @@ library;
 
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show revertedLeftover;
 import '../../core/outcome_kind.dart';
 import '../../services/analyzer/platform_decode.dart';
+import '../../services/glasses/meta_dat_flags.dart';
 import '../ai_consent.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
 import 'fix_meal_screen.dart';
+import 'glasses_session_screen.dart';
+import 'glasses_session_strings.dart';
 import 'leftover_flow.dart';
 import 'meal_editor_screen.dart';
 import '../services.dart';
@@ -64,6 +68,18 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
                 title: ctx.l10n.addFromPhotos,
                 onTap: () => Navigator.of(ctx).pop('photos'),
               ),
+              // Meta glasses session (feat/meta-dat prototype): only with
+              // BITEWISE_META_DAT on an iPhone; absent from every other
+              // build, so nothing initialises the glasses SDK.
+              if (metaDatEntryVisible(defaultTargetPlatform))
+                GroupedRow(
+                  key: const Key('addGlassesSession'),
+                  icon: Icons.visibility_outlined,
+                  iconColor: Theme.of(ctx).colorScheme.primary,
+                  title: GlassesSessionStrings.of(ctx).entryTitle,
+                  value: GlassesSessionStrings.of(ctx).entryNote,
+                  onTap: () => Navigator.of(ctx).pop('glasses'),
+                ),
               GroupedRow(
                 key: const Key('addLeftover'),
                 icon: Icons.restaurant_outlined,
@@ -118,6 +134,17 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   if (choice == 'photos') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => AddPhotoScreen(services: services)));
+  } else if (choice == 'glasses') {
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => GlassesSessionScreen(
+              // The app's ONE pipeline, as the photo picker uses it.
+              processPhoto: services.processPhoto ??
+                  PhotoPipeline(dao: services.dao, analyzer: services.analyzer)
+                      .process,
+              announceOutcome: services.announceOutcome,
+              links: services.setupLinks,
+              initialLink: services.initialSetupLink,
+            )));
   } else if (choice == 'leftover') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => LeftoverScreen(services: services)));

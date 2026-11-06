@@ -41,6 +41,18 @@ import workmanager_apple
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     AppDelegate.registerAppPlugins(with: engineBridge.pluginRegistry)
+    AppDelegate.registerForegroundOnlyPlugins(with: engineBridge.pluginRegistry)
+  }
+
+  /// Plugins for the app's own engine and NEVER workmanager's headless
+  /// one: Meta glasses (MetaDatPlugin.swift, feat/meta-dat prototype). A
+  /// DAT session lives only while the app is in the foreground, and
+  /// registering does not initialise the SDK — only the flag-gated Dart
+  /// "Glasses session" screen calls `configure`.
+  static func registerForegroundOnlyPlugins(with registry: FlutterPluginRegistry) {
+    if let registrar = registry.registrar(forPlugin: "MetaDatPlugin") {
+      MetaDatPlugin.register(with: registrar)
+    }
   }
 
   /// shared_preferences' name for Dart's 'background.native_launch_iso'
