@@ -249,7 +249,12 @@ turns the assist off when its lookups go to the same company or server
 (`stopRestaurantAssistFor` in ui/widgets/restaurant_consent_sheet.dart):
 the row says "nothing more is sent to …", so it takes the mode row's Off
 path (pending lookups dropped) and forgets the assist's consent for that
-recipient; turning lookups back on for it asks again.
+recipient; turning lookups back on for it asks again. One residual is
+known and accepted: a direct Anthropic lookup already in flight when the
+row is confirmed may still send one continuation of the request it
+started (a paused turn) before its cancellation lands, which is up to
+three preference writes later (a few milliseconds by estimate); no new
+lookup, poll or retry starts.
 
 ---
 

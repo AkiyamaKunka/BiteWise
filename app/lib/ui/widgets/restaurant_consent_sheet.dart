@@ -413,7 +413,11 @@ RestaurantAssistStop restaurantAssistStopFor(SettingsStore settings,
 /// with the AI consent still given; a retry in the same session finds the
 /// assist already Off in memory, writes nothing here and withdraws the AI
 /// consent, and after a restart the mode and the consent are back as they
-/// were last saved.
+/// were last saved. Also known and accepted: a direct Anthropic lookup
+/// already in flight may still send one continuation of the request it
+/// started (a paused turn) between that flip and the notification, which
+/// cancels its token (up to three preference writes later, a few
+/// milliseconds by estimate).
 Future<RestaurantAssistStop> stopRestaurantAssistFor(SettingsStore settings,
     RestaurantAssistControls? controls, String route) async {
   final plan = restaurantAssistStopFor(settings, controls, route);

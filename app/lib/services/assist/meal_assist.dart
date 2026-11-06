@@ -135,8 +135,15 @@
 /// Settings' Stop Sharing turns the mode Off and forgets the consent in
 /// one write (stopRestaurantAssistFor, restaurant_consent_sheet.dart), and
 /// the notification that cancels a run lands only once that write is
-/// saved: a run already past its checks reads the settings themselves, so
-/// it cannot send in between. This is the restaurant consent read again;
+/// saved: a run that has not sent yet reads the settings themselves at
+/// its send, so it cannot start a poll, a submit or a resubmit in
+/// between. Known and accepted: while that write is being saved (up to
+/// three preference writes, a few milliseconds by estimate) a direct
+/// Anthropic lookup already in flight may still send one continuation of
+/// the request it started (a paused turn), until the notification cancels
+/// its token; and a run that is already reading the photo's position
+/// still makes its one Apple Maps query, after which nothing is sent to
+/// the lookup's recipient. This is the restaurant consent read again;
 /// no lookup reads the AI consent. [MealAssist.lookupNow] is the editor's
 /// manual lookup (R7b), also with the chain the user picked after 'Wrong
 /// restaurant'; its result on a meal the user already corrected is written
