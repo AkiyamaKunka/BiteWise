@@ -4,7 +4,9 @@
 /// (24 h, the consent time, corrected, in use, the miss list), the triggers,
 /// the compare-and-set write and its miss counting, Undo, Off cancelling
 /// the call in flight, the Claude Plan job kept for the next sweep, the
-/// snackbar wording, and a decision log without names or places.
+/// snackbar wording, and a decision log without names or places. And the
+/// consent read again at the send: Settings that stopped the lookups after
+/// a run's gate (Stop Sharing, before its notification lands) send nothing.
 library;
 
 import 'dart:async';
@@ -152,6 +154,17 @@ class _Dao extends FakeDao {
     return super.mealsBetween(startDate, endDate);
   }
 
+  /// Called before a meal's snapshot is answered — a run's first read,
+  /// right after the gate that let its lookup through: a test plays
+  /// Settings changing right then, before any notification lands.
+  void Function(int mealId)? onSnapshot;
+
+  @override
+  Future<MealSnapshot?> mealSnapshot(int mealId) {
+    onSnapshot?.call(mealId);
+    return super.mealSnapshot(mealId);
+  }
+
   /// Rewrites meal [id] in place the way another writer would, keeping
   /// corrected as it was.
   void rewrite(int id, Map<String, dynamic> Function(Map<String, dynamic>) f) {
@@ -231,6 +244,15 @@ class _HookStore extends LocalNoBackupStore {
     : super(root: () async => root, createMissingDirectory: true, clock: clock);
 
   Future<void> Function(String name)? beforeWrite;
+
+  /// Called with each document's name before it is read.
+  void Function(String name)? beforeRead;
+
+  @override
+  Future<Map<String, Object?>> read(String name, {int? version}) {
+    beforeRead?.call(name);
+    return super.read(name, version: version);
+  }
 
   @override
   Future<bool> write(
@@ -986,6 +1008,257 @@ void main() {
       await h.assist.sweep();
       expect(h.dao.assistWrites, isEmpty);
       expect(h.analysisOf(id).containsKey('assist'), isFalse);
+    });
+  });
+
+  // Settings' Stop Sharing turns the mode Off and forgets the assist's
+  // consent in ONE settings write (stopRestaurantAssistFor). The settings
+  // say so at once; the notification that cancels a run lands only once
+  // the write is saved. A run already past its gate must send nothing in
+  // between: the consent is read again at the send (MealAssist._maySend).
+  // No start() in these tests: nobody listens, so only that read can tell.
+  group('Settings stopped the lookups after the gate, before any '
+      'notification', () {
+    const stopped = AssistSettingsView(); // Off, the consent forgotten
+    const pendingJob = LookupOutcome(
+      kind: LookupOutcomeKind.pending,
+      provider: LookupRecipient.claudePlan,
+      jobId: 'job_abcdef12',
+    );
+    // The server no longer knows the job: pending without a job id.
+    const lostJob = LookupOutcome(
+      kind: LookupOutcomeKind.pending,
+      provider: LookupRecipient.claudePlan,
+    );
+
+    void onClaudePlan({AssistMode mode = AssistMode.auto}) {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: mode,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+    }
+
+    /// The harness's engine with one more seam: [beforeSend] runs when a
+    /// run composes its request — after the meal's snapshot was read and
+    /// checked, with nothing but the answer cache (automatic runs only)
+    /// left before the send.
+    MealAssist engine(void Function() beforeSend) {
+      final assist = MealAssist(
+        dao: h.dao,
+        lookups: h.lookups,
+        analyzerBusy: h.busy,
+        pipelineIdle: () => h.idle,
+        inUse: h.inUse.contains,
+        budget: h.budget,
+        state: h.state,
+        settings: () => h.settings,
+        inForeground: () => h.foreground,
+        country: () => 'US',
+        repliesInChinese: () {
+          beforeSend();
+          return false;
+        },
+        utcOffset: () => const Duration(hours: -5),
+        clock: () => h.now,
+      );
+      addTearDown(assist.dispose);
+      return assist;
+    }
+
+    test('Off and no consent right after the gate: an automatic lookup '
+        'sends nothing and writes nothing; allowed again, it is looked '
+        'up', () async {
+      final id = h.add(_bigMac());
+      final allowed = h.settings;
+      h.dao.onSnapshot = (_) => h.settings = stopped;
+      await h.assist.sweep();
+      expect(h.dao.snapshotReads, [id], reason: 'the gate let it through');
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+      expect(h.dao.assistWrites, isEmpty);
+      expect(h.analysisOf(id).containsKey('assist'), isFalse);
+      expect(await h.state.jobs(), isEmpty);
+      expect(await h.state.misses(), isEmpty, reason: "not the meal's fault");
+      expect(await h.state.decisions(), isEmpty);
+      expect(h.assist.consentNeeded.value, isNull);
+      expect(h.signals, 0);
+
+      h.dao.onSnapshot = null;
+      h.settings = allowed;
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1));
+    });
+
+    test('the same at the send itself, after the snapshot and its check: '
+        'nothing is sent', () async {
+      final id = h.add(_bigMac());
+      var composed = 0;
+      final assist = engine(() {
+        composed++;
+        expect(h.dao.snapshotReads, [id]);
+        h.settings = stopped;
+      });
+      await assist.sweep();
+      expect(composed, 1, reason: 'the run got as far as its request');
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      expect(assist.lastSkip, AssistSkip.cancelled);
+      expect(h.dao.assistWrites, isEmpty);
+      expect(await h.state.jobs(), isEmpty);
+      expect(await h.state.misses(), isEmpty);
+    });
+
+    test('stopped right after the gate, the run reads nothing more: not '
+        'even the answer cache', () async {
+      h.add(_bigMac());
+      final read = <String>[];
+      h.store.beforeRead = read.add;
+      h.dao.onSnapshot = (_) {
+        read.clear(); // the sweep's own reads (misses, jobs) came before
+        h.settings = stopped;
+      };
+      await h.assist.sweep();
+      expect(read, isEmpty);
+      expect(h.lookups.submits, isEmpty);
+    });
+
+    test('a pending job is not polled (not even its id is sent) and not '
+        'sent again', () async {
+      onClaudePlan();
+      final id = h.add(_bigMac());
+      h.lookups.onSubmit = (_) async => pendingJob;
+      await h.assist.sweep();
+      expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+
+      h.now = _now.add(kAssistPollInterval);
+      h.dao.onSnapshot = (_) => h.settings = stopped;
+      await h.assist.sweep();
+      expect(h.lookups.polls, isEmpty);
+      expect(h.lookups.submits, hasLength(1));
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+      expect(h.analysisOf(id).containsKey('assist'), isFalse);
+    });
+
+    test('stopped while a poll runs, and the server lost the job: it is '
+        'not sent again, and the run ends cancelled, not pending', () async {
+      onClaudePlan();
+      final id = h.add(_bigMac());
+      h.lookups.onSubmit = (_) async => pendingJob;
+      await h.assist.sweep();
+      h.now = _now.add(kAssistPollInterval);
+      h.lookups.onPoll = (_) async {
+        h.settings = stopped;
+        return lostJob;
+      };
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.lookups.submits, hasLength(1), reason: 'no resubmit');
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+      expect(h.dao.assistWrites, isEmpty);
+      expect(h.analysisOf(id).containsKey('assist'), isFalse);
+    });
+
+    test("the same for the editor's own job: its poll loop is told "
+        'cancelled, so it stops asking', () async {
+      // The editor's lookup ignores the mode: only the consent decides.
+      onClaudePlan(mode: AssistMode.off);
+      final id = h.add(_bigMac());
+      h.lookups.onSubmit = (_) async => pendingJob;
+      expect((await h.assist.lookupNow(id)).code, AssistSkip.pending);
+      expect((await h.state.jobs())[id]?.manual, isTrue);
+
+      h.lookups.onPoll = (_) async {
+        h.settings = stopped;
+        return lostJob;
+      };
+      final run = await h.assist.lookupNow(id);
+      expect(run.code, AssistSkip.cancelled);
+      expect(run.wrote, isFalse);
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect(h.lookups.submits, hasLength(1), reason: 'no resubmit');
+    });
+
+    test("the editor's lookup: the consent forgotten after its check — "
+        'cancelled, nothing sent', () async {
+      final id = h.add(_bigMac());
+      h.inUse.add(id); // the editor holds it
+      h.dao.onSnapshot = (_) => h.settings = stopped;
+      final run = await h.assist.lookupNow(id);
+      expect(run.code, AssistSkip.cancelled);
+      expect(run.wrote, isFalse);
+      expect(h.lookups.submits, isEmpty);
+      expect(h.dao.assistWrites, isEmpty);
+
+      // And at the send itself: a manual run has no await left before it.
+      h.dao.onSnapshot = null;
+      h.settings = AssistSettingsView(
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      final assist = engine(() => h.settings = stopped);
+      final again = await assist.lookupNow(id);
+      expect(again.code, AssistSkip.cancelled);
+      expect(h.lookups.submits, isEmpty);
+    });
+
+    test('a consent stamped for another recipient, or another server, '
+        'covers nothing here: nothing sent', () async {
+      h.add(_bigMac());
+      h.dao.onSnapshot = (_) => h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'openrouter',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+
+      // The own server: the consent now names another host.
+      onClaudePlan();
+      h.dao.onSnapshot = (_) => h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:ffffffff',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+    });
+
+    test("the mode row's own Off (the consent kept) before its "
+        'notification: an automatic lookup is not sent; the editor\'s own '
+        'still is', () async {
+      final id = h.add(_bigMac());
+      final off = AssistSettingsView(
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      h.dao.onSnapshot = (_) => h.settings = off;
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.assist.lastSkip, AssistSkip.cancelled);
+
+      final run = await h.assist.lookupNow(id);
+      expect(run.code, AssistSkip.applied);
+      expect(h.lookups.submits, hasLength(1));
+    });
+
+    test('a change that keeps the consent for this recipient does not stop '
+        'the send (another mode, a fresh consent time)', () async {
+      final id = h.add(_bigMac());
+      h.dao.onSnapshot = (_) => h.settings = AssistSettingsView(
+        mode: AssistMode.always,
+        consentAt: _consentAt.add(const Duration(hours: 1)),
+        consentRecipient: 'anthropic',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1));
+      expect(h.lookups.args.single.stamp, 'anthropic');
+      expect((h.analysisOf(id)['assist'] as Map)['status'], 'applied');
     });
   });
 

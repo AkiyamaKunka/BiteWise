@@ -15,12 +15,22 @@
 /// changes (the assist is paused until it is answered), and before a
 /// manual lookup without consent. A recipient the app has no copy for can
 /// never be consented to: its lookups stay off.
+///
+/// Also here: what Settings' Stop Sharing does to the assist
+/// ([restaurantAssistStopFor], [stopRestaurantAssistFor]). Withdrawing the
+/// AI consent for a company or server turns the assist off, and forgets
+/// its consent, when its lookups go to that same recipient — so the sheet
+/// is shown again before the next lookup there.
 library;
 
 import 'package:flutter/material.dart';
 
 import '../../services/assist/clients/lookup_client.dart'
-    show LookupRecipient, LookupSupport;
+    show
+        LookupRecipient,
+        LookupSupport,
+        lookupAiConsentRoute,
+        lookupRecipientOfStamp;
 import '../../services/assist/meal_assist.dart'
     show AssistMode, AssistSettingsView;
 import '../l10n.dart';
@@ -321,4 +331,95 @@ Future<({bool clearPlaces})?> confirmRestaurantAssistOff(
   );
   if (go != true) return null;
   return (clearPlaces: clear);
+}
+
+/// What Settings' Stop Sharing does to the restaurant assist
+/// ([restaurantAssistStopFor]): turn its mode Off, forget its consent, both
+/// or neither.
+typedef RestaurantAssistStop = ({bool turnOff, bool forgetConsent});
+
+/// What Settings › Stop Sharing with … must do to the restaurant assist
+/// when it withdraws the AI consent for [route] (core/ai_consent.dart
+/// aiConsentRoute). That row says "nothing more is sent to …", and no
+/// lookup reads the AI consent — the assist has its own, per recipient —
+/// so the assist stops with it when its lookups go to that same company or
+/// server (docs/RELEASING.md). Pure: read from the settings as they are.
+///
+///   * on: the mode is not Off;
+///   * named: the assist's consent names a recipient of [route] (the wire
+///     id of its stamp; for the own server, any host of that plan — the AI
+///     consent is per plan);
+///   * reaches: on, and a lookup now would go to [route] — or that cannot
+///     be told (no [controls], or `lookupSupport` throws): fail closed.
+///
+/// `turnOff` = on and (reaches or named); `forgetConsent` = named:
+///
+///   1. on, reaches, the consent names [route]           → Off, forgotten
+///   2. on, reaches, it names another host of the plan   → Off, forgotten
+///   3. on, reaches, it names another route, or none     → Off, kept (the
+///      assist was only paused for this recipient; left on, the app shell
+///      would ask to consent to the recipient just stopped)
+///   4. on, no lookup possible now, it names [route]     → Off, forgotten
+///   5. on, does not reach, another route or none        → untouched
+///   6. on, cannot be told                               → Off (forgotten
+///      when it names [route])
+///   7. off, it names [route]                            → forgotten
+///   8. off, another route or none                       → untouched
+///
+/// Afterwards no consent covers a recipient of [route]: turning lookups
+/// back on for it shows the consent sheet again, and allowing AI analysis
+/// again never turns them back on. 'Use photo location', the learned
+/// places, the answer cache, the decision log and the assist blocks on
+/// meals are kept: nothing is sent by keeping them.
+RestaurantAssistStop restaurantAssistStopFor(SettingsStore settings,
+    RestaurantAssistControls? controls, String route) {
+  final on = settings.restaurantAssist != 'off';
+  final named =
+      lookupRecipientOfStamp(settings.restaurantAssistConsentRecipient);
+  final forget = named != null && lookupAiConsentRoute(named) == route;
+  var reaches = false;
+  if (on) {
+    try {
+      final support = controls?.lookupSupport();
+      reaches = support == null ||
+          (support.supported &&
+              lookupAiConsentRoute(support.recipient) == route);
+    } catch (_) {
+      reaches = true;
+    }
+  }
+  return (turnOff: on && (reaches || forget), forgetConsent: forget);
+}
+
+/// Carries out [restaurantAssistStopFor] for [route] and returns what it
+/// did: ONE settings write — the mode row's own Off, with `clearConsent`
+/// when the consent names [route] — or no write at all when the assist has
+/// nothing to do with [route]. MealAssist hears that one notification and,
+/// when the mode was on, cancels the call in flight, drops its pending jobs
+/// and retries and withdraws its consent prompt.
+///
+/// The write is started before this function's first await, and the store
+/// flips the mode and the consent in memory before ITS first await
+/// (AppSettings.setRestaurantAssist). So from the moment this is called —
+/// before anything is saved, before the notification — every lookup gate,
+/// and the engine's own check at the send (MealAssist._maySend), reads Off
+/// and the consent as forgotten. Stop Sharing calls it FIRST and withdraws
+/// the AI consent after it: nothing but the assist's own mode and consent
+/// stops a lookup, and the Stop Sharing row (shown only while the AI
+/// consent stands) stays for a retry when this throws.
+///
+/// Known and accepted (remote: it takes a failing preferences write): when
+/// the store throws after that in-memory flip, Stop Sharing ends there
+/// with the AI consent still given; a retry in the same session finds the
+/// assist already Off in memory, writes nothing here and withdraws the AI
+/// consent, and after a restart the mode and the consent are back as they
+/// were last saved.
+Future<RestaurantAssistStop> stopRestaurantAssistFor(SettingsStore settings,
+    RestaurantAssistControls? controls, String route) async {
+  final plan = restaurantAssistStopFor(settings, controls, route);
+  if (plan.turnOff || plan.forgetConsent) {
+    await settings.updateRestaurantAssist(
+        mode: 'off', clearConsent: plan.forgetConsent);
+  }
+  return plan;
 }

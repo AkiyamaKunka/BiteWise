@@ -23,6 +23,10 @@
 ///   * the consent is stamped with the CURRENT recipient — otherwise the
 ///     assist pauses and [MealAssist.consentNeeded] asks R7a's sheet;
 ///   * today's lookups are under the daily cap (20, [AssistDailyBudget]).
+/// The consent is read once more at the send itself, for an automatic
+/// lookup and the editor's alike ([MealAssist._maySend]): a poll, a submit
+/// or a resubmit goes out only while it still names the recipient those
+/// checks saw.
 ///
 /// Eligible meals: a photo meal (app_watch / app_photo), not corrected, no
 /// assist block yet, logged at or after the consent and at most 24 h ago,
@@ -116,7 +120,16 @@
 /// result: every write a run makes — the meal, a job or retry record, the
 /// cache, the miss list — first checks that no Off (or dispose) came since
 /// the run started, and for an automatic run that Settings still say on.
-/// Off also forgets pending jobs. [MealAssist.lookupNow] is the editor's
+/// Off also forgets pending jobs. A run SENDS nothing either — no poll, no
+/// submit, no resubmit, automatic or the editor's — unless the same holds
+/// right at the send and the consent, read fresh, still names the
+/// recipient the run was checked against ([MealAssist._maySend]).
+/// Settings' Stop Sharing turns the mode Off and forgets the consent in
+/// one write (stopRestaurantAssistFor, restaurant_consent_sheet.dart), and
+/// the notification that cancels a run lands only once that write is
+/// saved: a run already past its checks reads the settings themselves, so
+/// it cannot send in between. This is the restaurant consent read again;
+/// no lookup reads the AI consent. [MealAssist.lookupNow] is the editor's
 /// manual lookup (R7b), also with the chain the user picked after 'Wrong
 /// restaurant'; its result on a meal the user already corrected is written
 /// through the user's own compare-and-set. [MealAssist.act] is the editor's
@@ -1057,6 +1070,18 @@ class MealAssist {
     return manual || _readSettings().mode != AssistMode.off;
   }
 
+  /// A run started in generation [gen] may still SEND — a poll, the first
+  /// submit or a resubmit, automatic or the editor's: [_current] holds, and
+  /// the consent, read fresh, still names [support]'s recipient (the one
+  /// the run's gate checked). Settings' Stop Sharing turns the mode Off and
+  /// forgets the consent in ONE write, and the notification that cancels
+  /// this run lands only once that write is saved; the settings themselves
+  /// say so at once, and this reads them. At a send it is checked with no
+  /// await between it and the call. It is the gate's own consent check
+  /// again: not a gate on the AI consent, which no lookup reads.
+  bool _maySend(int gen, LookupSupport support, {required bool manual}) =>
+      _current(gen, manual: manual) && _readSettings().consentCovers(support);
+
   /// The first precondition that fails for an automatic lookup, or null.
   String? _gate(AssistSettingsView s, LookupSupport support) {
     if (_disposed || s.mode == AssistMode.off) return AssistSkip.off;
@@ -1313,7 +1338,10 @@ class MealAssist {
     if (!_working.add(mealId)) return const _Run(AssistSkip.working);
     try {
       final snap = await _dao.mealSnapshot(mealId);
-      if (gen != _generation) return _Run.cancelled;
+      // Settings stopped the lookups since the gate (Off, or a consent that
+      // no longer names this recipient): nothing more is read for this
+      // run — not the photo's position, not Apple Maps — and nothing sent.
+      if (!_maySend(gen, support, manual: manual)) return _Run.cancelled;
       if (snap == null) return const _Run(AssistSkip.mealGone);
       final meal = snap.meal;
       if (!manual &&
@@ -1426,6 +1454,11 @@ class MealAssist {
         );
       }
 
+      // The send. Settings are read once more, with no await between this
+      // check and the call below: Off, or a consent that no longer names
+      // this recipient (Stop Sharing, before its notification lands), and
+      // nothing goes out — no poll, no submit.
+      if (!_maySend(gen, support, manual: manual)) return _Run.cancelled;
       final token = LookupCancelToken();
       _tokens.add(token);
       final epoch = _backgroundEpoch;
@@ -1436,9 +1469,13 @@ class MealAssist {
         if (jobId != null && job!.reqHash == prepared.hash) {
           polled = true;
           outcome = await _lookups.poll(jobId);
-          if (gen == _generation && outcome.needsResubmit) {
+          if (outcome.needsResubmit) {
             // The server lost the job: the same request again (a request
-            // it still holds is the same job, a finished one a cache hit).
+            // it still holds is the same job, a finished one a cache hit)
+            // — unless Settings stopped the lookups while the poll ran:
+            // then nothing is sent again, and the run ends as cancelled
+            // (not as a job still pending, which would be polled again).
+            if (!_maySend(gen, support, manual: manual)) return _Run.cancelled;
             polled = false;
             outcome = await _submit(request, settings, support, token);
           }

@@ -15,6 +15,7 @@ library;
 
 import 'dart:async';
 
+import '../../../core/ai_consent.dart' show aiConsentRoute;
 import '../../../core/restaurant_assist_logic.dart'
     show AssistEvidence, AssistLookup;
 import 'lookup_contract_adapter.dart';
@@ -98,6 +99,40 @@ class LookupSupport {
   String get recipientStamp => recipientHostTag == null
       ? recipient.wire
       : '${recipient.wire}:$recipientHostTag';
+}
+
+/// The AI-consent route (core/ai_consent.dart aiConsentRoute) a lookup to
+/// [recipient] goes to: the same company or server the photos and meal
+/// text go to. Settings' Stop Sharing withdraws that route, and the
+/// restaurant assist stops with it when its lookups reach it
+/// (restaurantAssistStopFor in ui/widgets/restaurant_consent_sheet.dart).
+/// The AI consent is per plan, so Claude Plan is `server:claude` whatever
+/// the host (the lookup's own stamp adds the host tag); null for `none`.
+/// Exhaustive on purpose: a new recipient does not compile until it names
+/// the route whose withdrawal ends its lookups.
+String? lookupAiConsentRoute(LookupRecipient recipient) => switch (recipient) {
+      LookupRecipient.claudePlan => aiConsentRoute('server', 'claude'),
+      LookupRecipient.anthropic => 'anthropic',
+      LookupRecipient.openrouter => 'openrouter',
+      LookupRecipient.openai => 'openai',
+      LookupRecipient.xai => 'xai',
+      LookupRecipient.none => null,
+    };
+
+/// The recipient a consent stamp names ([LookupSupport.recipientStamp],
+/// the `restaurant_assist_consent_recipient` setting): its wire id is the
+/// part before the first ':' (Claude Plan's host tag follows it). Null for
+/// no stamp, for `none` and for an id this build does not know.
+LookupRecipient? lookupRecipientOfStamp(String? stamp) {
+  if (stamp == null) return null;
+  final colon = stamp.indexOf(':');
+  final wire = colon == -1 ? stamp : stamp.substring(0, colon);
+  for (final recipient in LookupRecipient.values) {
+    if (recipient != LookupRecipient.none && recipient.wire == wire) {
+      return recipient;
+    }
+  }
+  return null;
 }
 
 /// data_contracts §7 kinds. Direct clients use done, unsupported,

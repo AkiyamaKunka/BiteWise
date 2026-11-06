@@ -582,7 +582,7 @@ abstract class AppLocalizations {
   /// **'The shared photo was not analyzed — nothing was sent.'**
   String get shareConsentDeclined;
 
-  /// Settings > AI row that withdraws the AI consent for the current recipient and turns Watch Camera Roll off. {provider} is the provider's short display name.
+  /// Settings > AI row that withdraws the AI consent for the current recipient, turns Watch Camera Roll off and, when its lookups go to that recipient, turns the restaurant assist off. {provider} is the provider's short display name.
   ///
   /// In en, this message translates to:
   /// **'Stop Sharing with {provider}'**
@@ -611,6 +611,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Stopped — nothing more is sent to {provider}.'**
   String aiStopSharingDone(String provider);
+
+  /// Stop Sharing dialog body, shown instead of aiStopSharingBody when Stop Sharing also turns the restaurant assist off: the assist is on and its lookups go to this same recipient (or its consent names it). Pending lookups are dropped, and a consent the assist holds for this recipient is forgotten, so the app asks again before a lookup goes there. {provider} as in aiStopSharingRow.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats stops sending photos, meal text and restaurant lookups to {provider}. Watch Camera Roll and restaurant lookups turn off, and pending lookups are cancelled. Meals already logged stay on this phone. Chopstats asks again before it sends anything to {provider}.'**
+  String aiStopSharingBodyWithLookups(String provider);
+
+  /// Snackbar after Stop Sharing also turned the restaurant assist off (instead of aiStopSharingDone).
+  ///
+  /// In en, this message translates to:
+  /// **'Stopped — nothing more is sent to {provider}. Restaurant lookups are off.'**
+  String aiStopSharingDoneWithLookups(String provider);
 
   /// No description provided for @settingsRowLookback.
   ///

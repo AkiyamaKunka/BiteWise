@@ -8,6 +8,11 @@
 /// location goes only to Apple Maps, the recipient gets chain and food
 /// names, the own server gets location-derived names only over https, and
 /// Claude Plan only suggests.
+///
+/// Settings › Stop Sharing with … (the AI consent's own row) also stops the
+/// assist when its lookups go to that same company or server: the mode
+/// goes Off and the assist's consent is forgotten, before the AI consent is
+/// withdrawn, and the dialog says so. A different recipient is left alone.
 library;
 
 import 'dart:async' show unawaited;
@@ -15,6 +20,8 @@ import 'dart:async' show unawaited;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:calorie_tracker/core/ai_consent.dart'
+    show allAiConsentRoutes;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
@@ -753,6 +760,545 @@ void main() {
       await pump(tester, settings, c);
       expect(footer(tester), isNot(contains('needs an update')));
       expect(footer(tester), isNot(contains('turned off on your server')));
+    });
+  });
+
+  // The owner's requirement before PR #19 ships (docs/RELEASING.md):
+  // Settings › Stop Sharing with … says "nothing more is sent to …", and no
+  // lookup reads the AI consent — the assist has its own. So the row also
+  // turns the assist Off, and forgets its consent, when its lookups go to
+  // that same company or server (restaurantAssistStopFor).
+  group('Stop Sharing with …', () {
+    String bodyWithLookups(String provider) =>
+        'Chopstats stops sending photos, meal text and restaurant lookups to '
+        '$provider. Watch Camera Roll and restaurant lookups turn off, and '
+        'pending lookups are cancelled. Meals already logged stay on this '
+        'phone. Chopstats asks again before it sends anything to $provider.';
+    String plainBody(String provider) =>
+        'Chopstats stops sending photos and meal text to $provider, and '
+        'Watch Camera Roll turns off. Meals already logged stay on this '
+        'phone. The next time you use AI analysis, Chopstats asks again.';
+    String doneWithLookups(String provider) =>
+        'Stopped — nothing more is sent to $provider. Restaurant lookups are '
+        'off.';
+    String plainDone(String provider) =>
+        'Stopped — nothing more is sent to $provider.';
+
+    final consentAt = DateTime(2026, 10, 1);
+
+    /// [provider] with the assist in [mode] and a consent stamped
+    /// [consent] (null: never given).
+    FakeSettings assist(String provider, String mode, String? consent) =>
+        _planSettings()
+          ..provider = provider
+          ..apiKey = 'k'
+          ..restaurantAssist = mode
+          ..restaurantAssistLocation = true
+          ..restaurantAssistConsentAt = consent == null ? null : consentAt
+          ..restaurantAssistConsentRecipient = consent;
+
+    Finder row() => find.byKey(const Key('aiStopSharingRow'));
+    Finder dialog() => find.byKey(const Key('aiStopSharingDialog'));
+    Finder modeValue(String label) => find.descendant(
+        of: find.byKey(const Key('restaurantModeRow')),
+        matching: find.text(label));
+
+    Future<void> open(WidgetTester tester) async {
+      await tester.ensureVisible(row());
+      await tester.tap(row());
+      await tester.pumpAndSettle();
+      expect(dialog(), findsOneWidget);
+    }
+
+    Future<void> confirm(WidgetTester tester) async {
+      await tester.tap(find.byKey(const Key('aiStopSharingConfirm')));
+      await tester.pumpAndSettle();
+      expect(dialog(), findsNothing);
+    }
+
+    testWidgets('lookups go to the same company: the dialog says so; the '
+        'assist goes Off and its consent is forgotten, in one write',
+        (tester) async {
+      final settings = assist('anthropic', 'auto', 'anthropic');
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      expect(restaurantConsentCovers(settings, _anthropic), isTrue);
+      expect(modeValue('When unsure'), findsOneWidget);
+
+      await open(tester);
+      expect(find.text('Stop sharing with Claude?'), findsOneWidget);
+      expect(find.text(bodyWithLookups('Claude')), findsOneWidget);
+      expect(find.text(plainBody('Claude')), findsNothing);
+      await confirm(tester);
+
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentAt, isNull);
+      expect(settings.restaurantAssistConsentRecipient, isNull);
+      expect(settings.restaurantAssistUpdates, 1,
+          reason: 'Off and the forgotten consent in ONE write');
+      expect(settings.restaurantAssistLocation, isTrue,
+          reason: "'Use photo location' is kept: nothing is sent by it");
+      expect(c.clears, 0, reason: 'the learned places are kept');
+      expect(settings.aiConsentWrites, [('anthropic', false)]);
+      expect(settings.hasAiConsent('anthropic'), isFalse);
+      expect(settings.hasAiConsent('openrouter'), isTrue,
+          reason: 'only the current recipient is withdrawn');
+      expect(restaurantConsentCovers(settings, _anthropic), isFalse);
+      expect(modeValue('Off'), findsOneWidget);
+      expect(find.text(doneWithLookups('Claude')), findsOneWidget);
+      expect(row(), findsNothing);
+    });
+
+    testWidgets('the own server, the same server: Off and forgotten, and '
+        'Watch Camera Roll goes off as before', (tester) async {
+      final settings = assist('server', 'always', 'claude_plan:0a1b2c3d')
+        ..watcherEnabled = true
+        ..watcherDisclosureSeen = true;
+      final c = _Controls(_plan);
+      await pump(tester, settings, c);
+      await open(tester);
+      expect(find.text(bodyWithLookups('Claude (server)')), findsOneWidget);
+      await confirm(tester);
+
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentAt, isNull);
+      expect(settings.restaurantAssistConsentRecipient, isNull);
+      expect(settings.restaurantAssistUpdates, 1);
+      expect(settings.hasAiConsent('server:claude'), isFalse);
+      expect(settings.hasAiConsent('server:glm'), isTrue,
+          reason: 'another plan on the server is another recipient');
+      expect(settings.hasAiConsent('anthropic'), isTrue,
+          reason: 'an Anthropic key is another recipient than the server');
+      expect(settings.watcherEnabled, isFalse);
+      expect(restaurantConsentCovers(settings, _plan), isFalse);
+      expect(find.text(doneWithLookups('Claude (server)')), findsOneWidget);
+    });
+
+    testWidgets('the own server, a consent for another host of the same '
+        'plan (the address changed): Off and forgotten', (tester) async {
+      final settings = assist('server', 'auto', 'claude_plan:ffffffff');
+      final c = _Controls(_plan);
+      await pump(tester, settings, c);
+      expect(find.byKey(const Key('restaurantPausedRow')), findsOneWidget);
+      await open(tester);
+      expect(find.text(bodyWithLookups('Claude (server)')), findsOneWidget);
+      await confirm(tester);
+
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentAt, isNull);
+      expect(settings.restaurantAssistConsentRecipient, isNull,
+          reason: 'the AI consent is per plan: any host of it is forgotten');
+      expect(settings.restaurantAssistUpdates, 1);
+      expect(settings.hasAiConsent('server:claude'), isFalse);
+      expect(find.text(doneWithLookups('Claude (server)')), findsOneWidget);
+    });
+
+    testWidgets('paused for this recipient (the consent names another '
+        'one): Off, and that other consent is kept', (tester) async {
+      final settings = assist('anthropic', 'auto', 'openrouter');
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      expect(find.byKey(const Key('restaurantPausedRow')), findsOneWidget);
+      await open(tester);
+      expect(find.text(bodyWithLookups('Claude')), findsOneWidget);
+      await confirm(tester);
+
+      // Left on, the app shell would ask to consent to the recipient the
+      // user just stopped.
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentRecipient, 'openrouter');
+      expect(settings.restaurantAssistConsentAt, consentAt);
+      expect(settings.restaurantAssistUpdates, 1);
+      expect(settings.hasAiConsent('anthropic'), isFalse);
+      expect(restaurantConsentCovers(settings, _anthropic), isFalse);
+      expect(find.byKey(const Key('restaurantPausedRow')), findsNothing);
+      expect(find.text(doneWithLookups('Claude')), findsOneWidget);
+    });
+
+    testWidgets('a different recipient is left alone: no write, the mode '
+        'and the consent stay, the plain dialog and snackbar',
+        (tester) async {
+      // Stop Sharing with Gemini, which gets no lookups; the assist's
+      // consent names Anthropic.
+      final settings = FakeSettings()
+        ..provider = 'gemini'
+        ..apiKey = 'k'
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistLocation = true
+        ..restaurantAssistConsentAt = consentAt
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      final c = _Controls(const LookupSupport.unsupported('needs_l1'));
+      await pump(tester, settings, c);
+      await open(tester);
+      expect(find.text(plainBody('Gemini')), findsOneWidget);
+      expect(find.textContaining('restaurant lookups'), findsNothing);
+      await confirm(tester);
+
+      expect(settings.restaurantAssistUpdates, 0);
+      expect(settings.restaurantAssist, 'auto');
+      expect(settings.restaurantAssistConsentRecipient, 'anthropic');
+      expect(settings.restaurantAssistConsentAt, consentAt);
+      expect(settings.restaurantAssistLocation, isTrue);
+      expect(settings.hasAiConsent('gemini'), isFalse);
+      expect(settings.hasAiConsent('anthropic'), isTrue);
+      expect(restaurantConsentCovers(settings, _anthropic), isTrue);
+      expect(find.text(plainDone('Gemini')), findsOneWidget);
+      expect(find.textContaining('Restaurant lookups are off'), findsNothing);
+    });
+
+    testWidgets('already Off with a consent for this recipient: the consent '
+        'is forgotten, the plain copy; turning lookups on asks again',
+        (tester) async {
+      final settings = assist('anthropic', 'off', 'anthropic');
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      await open(tester);
+      expect(find.text(plainBody('Claude')), findsOneWidget,
+          reason: 'nothing the user sees on is switched off');
+      await confirm(tester);
+
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentAt, isNull);
+      expect(settings.restaurantAssistConsentRecipient, isNull);
+      expect(settings.restaurantAssistUpdates, 1);
+      expect(settings.hasAiConsent('anthropic'), isFalse);
+      expect(find.text(plainDone('Claude')), findsOneWidget);
+
+      // The mode row's own Off keeps the consent, so On again needs no
+      // sheet ('the sheet shows once', above). After Stop Sharing the
+      // sheet is shown again: a new, explicit consent.
+      await pickMode(tester, 'always');
+      expect(sheet(), findsOneWidget);
+      expect(settings.restaurantAssist, 'off');
+      await tester.tap(find.byKey(const Key('restaurantConsentDecline')));
+      await tester.pumpAndSettle();
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentRecipient, isNull);
+    });
+
+    testWidgets('after the stop, allowing AI analysis again does not turn '
+        'lookups back on; turning them on asks', (tester) async {
+      final settings = assist('anthropic', 'auto', 'anthropic');
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      await open(tester);
+      await confirm(tester);
+      await settings.setAiConsent('anthropic', granted: true);
+      await tester.pumpAndSettle();
+      expect(settings.restaurantAssist, 'off');
+      expect(restaurantConsentCovers(settings, _anthropic), isFalse);
+      expect(modeValue('Off'), findsOneWidget);
+
+      await pickMode(tester, 'auto');
+      expect(sheet(), findsOneWidget);
+      await tester.tap(find.byKey(const Key('restaurantConsentBrandOnly')));
+      await tester.pumpAndSettle();
+      expect(settings.restaurantAssist, 'auto');
+      expect(settings.restaurantAssistConsentRecipient, 'anthropic');
+      expect(settings.restaurantAssistConsentAt, _now);
+    });
+
+    testWidgets('Cancel writes nothing', (tester) async {
+      final settings = assist('anthropic', 'auto', 'anthropic');
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      await open(tester);
+      await tester.tap(find.descendant(
+          of: dialog(), matching: find.text('Cancel')));
+      await tester.pumpAndSettle();
+      expect(dialog(), findsNothing);
+      expect(settings.restaurantAssistUpdates, 0);
+      expect(settings.aiConsentWrites, isEmpty);
+      expect(settings.restaurantAssist, 'auto');
+      expect(settings.restaurantAssistConsentRecipient, 'anthropic');
+      expect(settings.hasAiConsent('anthropic'), isTrue);
+      expect(row(), findsOneWidget);
+    });
+
+    // No lookup reads the AI consent: only the assist's own mode and
+    // consent stop one. So they go first, and at no moment is the AI
+    // consent withdrawn while lookups to that recipient are still on.
+    testWidgets('the assist is stopped BEFORE the AI consent is withdrawn',
+        (tester) async {
+      final settings = assist('anthropic', 'auto', 'anthropic')
+        ..watcherEnabled = true
+        ..watcherDisclosureSeen = true;
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      await open(tester);
+      final seen = <({String mode, String? consent, bool ai, bool watcher})>[];
+      settings.addListener(() => seen.add((
+            mode: settings.restaurantAssist,
+            consent: settings.restaurantAssistConsentRecipient,
+            ai: settings.hasAiConsent('anthropic'),
+            watcher: settings.watcherEnabled,
+          )));
+      await confirm(tester);
+
+      expect(seen, [
+        (mode: 'off', consent: null, ai: true, watcher: true),
+        (mode: 'off', consent: null, ai: false, watcher: true),
+        (mode: 'off', consent: null, ai: false, watcher: false),
+      ]);
+      expect(
+          seen.where((e) =>
+              !e.ai && (e.mode != 'off' || e.consent == 'anthropic')),
+          isEmpty);
+    });
+
+    // The body is about half as long again. A bare Text in an AlertDialog
+    // is squeezed and cut off, silently, when the dialog runs out of room
+    // (a short screen, a large text size): the content scrolls instead.
+    testWidgets('the longer body scrolls on a short screen instead of being '
+        'cut off', (tester) async {
+      final settings = assist('server', 'auto', 'claude_plan:0a1b2c3d');
+      final c = _Controls(_plan);
+      await pump(tester, settings, c);
+      tester.view.physicalSize = const Size(800, 300);
+      await tester.pumpAndSettle();
+      await open(tester);
+      expect(tester.takeException(), isNull);
+      expect(find.text(bodyWithLookups('Claude (server)')), findsOneWidget);
+      final positions = tester
+          .stateList<ScrollableState>(find.descendant(
+              of: dialog(), matching: find.byType(Scrollable)))
+          .map((s) => s.position)
+          .toList();
+      expect(positions, isNotEmpty,
+          reason: 'the dialog content is a scroll view');
+      expect(positions.any((p) => p.maxScrollExtent > 0), isTrue,
+          reason: 'the rest of the text can be scrolled to');
+      // The buttons stay on screen.
+      await confirm(tester);
+      expect(settings.restaurantAssist, 'off');
+    });
+
+    testWidgets('中文: the dialog and the snackbar', (tester) async {
+      final settings = assist('server', 'auto', 'claude_plan:0a1b2c3d');
+      final c = _Controls(_plan);
+      await pump(tester, settings, c, locale: const Locale('zh'));
+      await open(tester);
+      expect(
+          find.text('筷拍不再把照片、餐食文字和餐厅营养查询发送给 你服务器上的 Claude，'
+              '「监控相册」和餐厅营养查询都会关闭，未完成的查询会被取消。'
+              '已记录的餐食仍保存在这台手机上。再向 你服务器上的 Claude '
+              '发送任何内容之前，筷拍会再次征求你的同意。'),
+          findsOneWidget);
+      await confirm(tester);
+      expect(settings.restaurantAssist, 'off');
+      expect(settings.restaurantAssistConsentRecipient, isNull);
+      expect(find.text('已停止 — 不再向 你服务器上的 Claude 发送任何内容，餐厅营养查询已关闭。'),
+          findsOneWidget);
+    });
+  });
+
+  // The rule itself (the truth table in restaurant_consent_sheet.dart),
+  // without a widget: R is the AI-consent route being withdrawn.
+  group('restaurantAssistStopFor', () {
+    final consentAt = DateTime(2026, 10, 1);
+    FakeSettings state(String mode, String? consent) => FakeSettings()
+      ..restaurantAssist = mode
+      ..restaurantAssistLocation = true
+      ..restaurantAssistConsentAt = consent == null ? null : consentAt
+      ..restaurantAssistConsentRecipient = consent;
+    RestaurantAssistControls reaching(LookupSupport support) =>
+        _Controls(support).controls;
+    final unreadable = RestaurantAssistControls(
+      lookupSupport: () => throw StateError('no lookup router'),
+      clearLearnedPlaces: () async => true,
+    );
+    const noAddress = LookupSupport.unsupported(
+        LookupUnsupportedReason.noServerAddress);
+    const noSearch =
+        LookupSupport.unsupported(LookupUnsupportedReason.needsL1);
+    const otherPlan = LookupSupport.unsupported(
+        LookupUnsupportedReason.serverBackendNotClaude);
+
+    const offAndForgotten = (turnOff: true, forgetConsent: true);
+    const offOnly = (turnOff: true, forgetConsent: false);
+    const forgottenOnly = (turnOff: false, forgetConsent: true);
+    const untouched = (turnOff: false, forgetConsent: false);
+
+    final rows = <(
+      String,
+      String mode,
+      String? consent,
+      RestaurantAssistControls? controls,
+      String route,
+      RestaurantAssistStop,
+    )>[
+      ('1: on, reaches R, the consent names R and covers', 'auto',
+          'anthropic', reaching(_anthropic), 'anthropic', offAndForgotten),
+      ('1: the same on the own server', 'always', 'claude_plan:0a1b2c3d',
+          reaching(_plan), 'server:claude', offAndForgotten),
+      ('2: on, reaches R, the consent names another host of the plan',
+          'auto', 'claude_plan:ffffffff', reaching(_plan), 'server:claude',
+          offAndForgotten),
+      ('3: on, reaches R, the consent names another route', 'auto',
+          'openrouter', reaching(_anthropic), 'anthropic', offOnly),
+      ('3: on, reaches R, no consent at all', 'always', null,
+          reaching(_openrouter), 'openrouter', offOnly),
+      ('4: on, no lookup possible now, the consent names R', 'auto',
+          'claude_plan:0a1b2c3d', reaching(noAddress), 'server:claude',
+          offAndForgotten),
+      ('5: on, lookups go elsewhere, the consent names another route',
+          'auto', 'anthropic', reaching(noSearch), 'gemini', untouched),
+      ('5: on, no lookup possible, no consent', 'auto', null,
+          reaching(noSearch), 'gemini', untouched),
+      ('5: another plan on the same server is another recipient', 'auto',
+          'claude_plan:0a1b2c3d', reaching(otherPlan), 'server:glm',
+          untouched),
+      ('5: an Anthropic key is not the own server on the Claude plan',
+          'auto', 'claude_plan:0a1b2c3d', reaching(_plan), 'anthropic',
+          untouched),
+      ('6: on, no controls (cannot be told): fails closed', 'auto',
+          'openrouter', null, 'anthropic', offOnly),
+      ('6: on, no controls, the consent names R', 'auto', 'anthropic', null,
+          'anthropic', offAndForgotten),
+      ('6: on, lookupSupport throws: fails closed', 'always', null,
+          unreadable, 'gemini', offOnly),
+      ('6: on, lookupSupport throws, the consent names R', 'auto',
+          'openrouter', unreadable, 'openrouter', offAndForgotten),
+      ('7: off, the consent names R', 'off', 'anthropic',
+          reaching(_anthropic), 'anthropic', forgottenOnly),
+      ('7: off, the consent names another host of the plan', 'off',
+          'claude_plan:ffffffff', reaching(_plan), 'server:claude',
+          forgottenOnly),
+      ('7: off, the lookup client is not even asked', 'off', 'anthropic',
+          unreadable, 'anthropic', forgottenOnly),
+      ('8: off, the consent names another route', 'off', 'openrouter',
+          reaching(_anthropic), 'anthropic', untouched),
+      ('8: off, no consent, nothing to tell by', 'off', null, null,
+          'anthropic', untouched),
+    ];
+    for (final (name, mode, consent, controls, route, want) in rows) {
+      test(name, () {
+        expect(restaurantAssistStopFor(state(mode, consent), controls, route),
+            want);
+      });
+    }
+
+    test('stopRestaurantAssistFor: one write (Off, the consent forgotten '
+        'only when it names R), started before its first await', () async {
+      final both = state('auto', 'anthropic');
+      final stopping =
+          stopRestaurantAssistFor(both, reaching(_anthropic), 'anthropic');
+      // Not awaited yet: Settings already say Off and no consent.
+      expect(both.restaurantAssist, 'off');
+      expect(both.restaurantAssistConsentRecipient, isNull);
+      expect(await stopping, offAndForgotten);
+      expect(both.restaurantAssistUpdates, 1);
+      expect(both.restaurantAssistConsentAt, isNull);
+      expect(both.restaurantAssistLocation, isTrue);
+
+      final kept = state('auto', 'openrouter');
+      expect(
+          await stopRestaurantAssistFor(
+              kept, reaching(_anthropic), 'anthropic'),
+          offOnly);
+      expect(kept.restaurantAssistUpdates, 1);
+      expect(kept.restaurantAssist, 'off');
+      expect(kept.restaurantAssistConsentRecipient, 'openrouter');
+      expect(kept.restaurantAssistConsentAt, consentAt);
+
+      final forgotten = state('off', 'anthropic');
+      expect(
+          await stopRestaurantAssistFor(
+              forgotten, reaching(_anthropic), 'anthropic'),
+          forgottenOnly);
+      expect(forgotten.restaurantAssistUpdates, 1);
+      expect(forgotten.restaurantAssist, 'off');
+      expect(forgotten.restaurantAssistConsentRecipient, isNull);
+
+      final other = state('auto', 'anthropic');
+      expect(
+          await stopRestaurantAssistFor(other, reaching(noSearch), 'gemini'),
+          untouched);
+      expect(other.restaurantAssistUpdates, 0, reason: 'no write, no signal');
+      expect(other.restaurantAssist, 'auto');
+      expect(other.restaurantAssistConsentRecipient, 'anthropic');
+    });
+
+    // Every route × mode × stored consent × recipient a lookup would reach.
+    test('afterwards no consent covers a recipient of the stopped route, a '
+        'mode that reached it is Off, and anything else is left alone',
+        () async {
+      const supports = <LookupSupport>[
+        _plan,
+        _planHttp,
+        _anthropic,
+        _openrouter,
+        LookupSupport(
+            supported: true,
+            recipient: LookupRecipient.openai,
+            locationAllowed: true),
+        LookupSupport(
+            supported: true,
+            recipient: LookupRecipient.xai,
+            locationAllowed: true),
+        noAddress,
+      ];
+      const stamps = <String?>[
+        null,
+        'anthropic',
+        'openrouter',
+        'openai',
+        'xai',
+        'claude_plan:0a1b2c3d',
+        'claude_plan:ffffffff',
+        'none',
+        'bogus',
+      ];
+      var checked = 0;
+      for (final route in allAiConsentRoutes) {
+        for (final mode in const ['off', 'auto', 'always']) {
+          for (final stamp in stamps) {
+            for (final support in supports) {
+              final settings = state(mode, stamp);
+              final why = '$route | $mode | $stamp | '
+                  '${support.recipientStamp}';
+              final named = lookupRecipientOfStamp(stamp);
+              final namesRoute =
+                  named != null && lookupAiConsentRoute(named) == route;
+              final reaches = mode != 'off' &&
+                  support.supported &&
+                  lookupAiConsentRoute(support.recipient) == route;
+              final did = await stopRestaurantAssistFor(
+                  settings, reaching(support), route);
+              // P1: no consent is left for a recipient of the route.
+              for (final s in supports) {
+                if (lookupAiConsentRoute(s.recipient) == route) {
+                  expect(restaurantConsentCovers(settings, s), isFalse,
+                      reason: why);
+                }
+              }
+              // P2: lookups that reached it, or were consented for it, are
+              // Off.
+              if (reaches || namesRoute) {
+                expect(settings.restaurantAssist, 'off', reason: why);
+              }
+              // A different recipient: nothing is written at all.
+              if (!reaches && !namesRoute) {
+                expect(did, untouched, reason: why);
+                expect(settings.restaurantAssistUpdates, 0, reason: why);
+                expect(settings.restaurantAssist, mode, reason: why);
+                expect(settings.restaurantAssistConsentRecipient, stamp,
+                    reason: why);
+              } else {
+                expect(settings.restaurantAssistUpdates, 1, reason: why);
+              }
+              // A consent for another route is never forgotten.
+              if (!namesRoute) {
+                expect(settings.restaurantAssistConsentRecipient, stamp,
+                    reason: why);
+              }
+              expect(settings.restaurantAssistLocation, isTrue, reason: why);
+              checked++;
+            }
+          }
+        }
+      }
+      expect(checked, allAiConsentRoutes.length * 3 * 9 * 7);
     });
   });
 

@@ -1,9 +1,13 @@
 // Provider coverage: which provider gets a lookup client, and the zero-call
-// guarantee for every provider without a usable search tool.
+// guarantee for every provider without a usable search tool. Also which AI
+// consent route each lookup recipient belongs to (Settings' Stop Sharing
+// stops the lookups that go to the route it withdraws).
+import 'package:calorie_tracker/core/ai_consent.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_clients.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
+import 'package:calorie_tracker/services/assist/clients/server_lookup_client.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -237,6 +241,100 @@ void main() {
           .submit(bigMacRequest, expectedRecipient: LookupRecipient.anthropic);
       expect(o.failure!.code, LookupFailureCode.consentChanged);
       expect(s.requests, isEmpty);
+    });
+  });
+
+  // Settings › Stop Sharing with … withdraws ONE AI consent route and must
+  // stop the lookups that go to that same company or server
+  // (restaurantAssistStopFor). lookupAiConsentRoute is what says which
+  // route a lookup recipient belongs to.
+  group('the AI consent route of a lookup recipient', () {
+    test('every recipient names a real route; none names none', () {
+      expect(lookupAiConsentRoute(LookupRecipient.claudePlan), 'server:claude');
+      expect(lookupAiConsentRoute(LookupRecipient.anthropic), 'anthropic');
+      expect(lookupAiConsentRoute(LookupRecipient.openrouter), 'openrouter');
+      expect(lookupAiConsentRoute(LookupRecipient.openai), 'openai');
+      expect(lookupAiConsentRoute(LookupRecipient.xai), 'xai');
+      expect(lookupAiConsentRoute(LookupRecipient.none), isNull);
+      for (final r in LookupRecipient.values) {
+        if (r == LookupRecipient.none) continue;
+        expect(allAiConsentRoutes, contains(lookupAiConsentRoute(r)),
+            reason: r.name);
+      }
+    });
+
+    // The invariant Stop Sharing rests on, with the real settings and the
+    // real router (the server's job client wired in, an address set):
+    // wherever lookups are supported at all, they go to the company or
+    // server of the CURRENT AI consent route — the one the row withdraws.
+    test('whenever lookups are supported, they go to the current AI '
+        "route's company or server", () async {
+      final supported = <String>{};
+      for (final provider in AiProvider.values) {
+        for (final backend in AppSettings.serverBackends) {
+          for (final signedOff in [false, true]) {
+            final settings = await _settings(provider);
+            await settings.setServerBaseUrl('https://bitewise.example.test');
+            await settings.setServerBackend(backend);
+            final s = _anything();
+            final router = ProviderLookupRouter(settings,
+                client: s.client,
+                enableResponsesProviders: signedOff,
+                serverClient: ServerLookupClient(settings, client: s.client));
+            final support = router.lookupSupport();
+            final route = aiConsentRoute(provider.name, backend);
+            final why = '${provider.name} | $backend | signedOff=$signedOff';
+            expect(allAiConsentRoutes, contains(route), reason: why);
+            if (support.supported) {
+              expect(lookupAiConsentRoute(support.recipient), route,
+                  reason: why);
+              expect(lookupRecipientOfStamp(support.recipientStamp),
+                  support.recipient,
+                  reason: why);
+              supported.add(route);
+            } else {
+              expect(support.recipient, LookupRecipient.none, reason: why);
+              expect(lookupAiConsentRoute(support.recipient), isNull,
+                  reason: why);
+            }
+            expect(s.requests, isEmpty, reason: why);
+          }
+        }
+      }
+      // Not vacuous: these are the routes that get lookups today (OpenAI
+      // and xAI only with the owner's sign-off; the own server only on
+      // the Claude plan).
+      expect(supported,
+          {'anthropic', 'openrouter', 'openai', 'xai', 'server:claude'});
+    });
+
+    test('lookupRecipientOfStamp: the wire id before the host tag', () {
+      expect(lookupRecipientOfStamp('anthropic'), LookupRecipient.anthropic);
+      expect(lookupRecipientOfStamp('openrouter'), LookupRecipient.openrouter);
+      expect(lookupRecipientOfStamp('claude_plan:0a1b2c3d'),
+          LookupRecipient.claudePlan);
+      expect(lookupRecipientOfStamp('claude_plan'), LookupRecipient.claudePlan);
+      expect(lookupRecipientOfStamp(null), isNull);
+      expect(lookupRecipientOfStamp(''), isNull);
+      expect(lookupRecipientOfStamp('none'), isNull);
+      expect(lookupRecipientOfStamp('bogus'), isNull);
+      expect(lookupRecipientOfStamp('bogus:0a1b2c3d'), isNull);
+      expect(lookupRecipientOfStamp(':anthropic'), isNull);
+      expect(lookupRecipientOfStamp('Anthropic'), isNull,
+          reason: 'wire ids are exact');
+      // Whatever a consent is stamped with reads back as its recipient.
+      for (final r in LookupRecipient.values) {
+        if (r == LookupRecipient.none) continue;
+        for (final tag in [null, '0a1b2c3d']) {
+          final stamp = LookupSupport(
+                  supported: true,
+                  recipient: r,
+                  locationAllowed: true,
+                  recipientHostTag: tag)
+              .recipientStamp;
+          expect(lookupRecipientOfStamp(stamp), r, reason: stamp);
+        }
+      }
     });
   });
 

@@ -369,6 +369,16 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String aiStopSharingBodyWithLookups(String provider) {
+    return 'Chopstats stops sending photos, meal text and restaurant lookups to $provider. Watch Camera Roll and restaurant lookups turn off, and pending lookups are cancelled. Meals already logged stay on this phone. Chopstats asks again before it sends anything to $provider.';
+  }
+
+  @override
+  String aiStopSharingDoneWithLookups(String provider) {
+    return 'Stopped — nothing more is sent to $provider. Restaurant lookups are off.';
+  }
+
+  @override
   String get settingsRowLookback => 'Backfill Lookback';
 
   @override

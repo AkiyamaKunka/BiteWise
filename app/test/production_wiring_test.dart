@@ -58,6 +58,21 @@ Matcher _wired(String pattern) => matches(
   RegExp(pattern.replaceAll(' ', r'\s*').replaceAll(r'\)', r',?\s*\)')),
 );
 
+/// The one call in [source] that starts with [opening] ('Name('), through
+/// its matching parenthesis.
+String _call(String source, String opening) {
+  expect(opening.allMatches(source), hasLength(1), reason: opening);
+  final start = source.indexOf(opening);
+  var depth = 0;
+  for (var i = start + opening.length - 1; i < source.length; i++) {
+    if (source[i] == '(') depth++;
+    if (source[i] == ')' && --depth == 0) {
+      return source.substring(start, i + 1);
+    }
+  }
+  fail('no end for "$opening"');
+}
+
 void main() {
   group('lib/ui/di.dart (the app engine)', () {
     String init() => _body(
@@ -294,6 +309,144 @@ void main() {
       expect(ctor, isNot(contains('ssist')));
       expect(pipeline, isNot(contains('meal_assist')));
       expect(pipeline, contains('bool get isIdle =>'));
+    });
+  });
+
+  // The owner's requirement before PR #19 ships (docs/RELEASING.md):
+  // Settings › Stop Sharing with … says "nothing more is sent to …", so it
+  // also stops the restaurant assist when its lookups go to that recipient.
+  // The behaviour is tested through fakes and the real settings
+  // (restaurant_assist_settings_test, stop_sharing_assist_test,
+  // meal_assist_test). These pin the lines that make it true in the app:
+  // another branch rewrites settings_screen.dart, and a merge that kept the
+  // wrong side of these lines would leave lookups running after the stop.
+  group('Stop Sharing also stops the restaurant assist', () {
+    String stopSharing() => _body(
+      _source('lib/ui/screens/settings_screen.dart'),
+      'Future<void> _stopSharing() async {',
+      indent: '  ',
+    );
+
+    test('the row stops the assist first, then withdraws the AI consent: '
+        'nothing awaited before, nothing skipped in between', () {
+      final body = stopSharing();
+      final confirmed = body.indexOf('if (stop != true || !mounted) return;');
+      expect(confirmed, isNot(-1));
+      final after = body.substring(confirmed);
+      final assist = RegExp(
+        r'await\s+stopRestaurantAssistFor\(\s*s,\s*widget\.restaurantAssist,'
+        r'\s*route,?\s*\);',
+      ).firstMatch(after);
+      final consent = RegExp(
+        r'await\s+s\.setAiConsent\(\s*route,\s*granted:\s*false,?\s*\);',
+      ).firstMatch(after);
+      expect(assist, isNotNull, reason: 'the assist is stopped');
+      expect(consent, isNotNull, reason: 'the AI consent is withdrawn');
+      // No lookup reads the AI consent: only the assist's own mode and
+      // consent stop one, so they go first.
+      expect(assist!.start, lessThan(consent!.start));
+      // The route is read after the dialog, and the assist's write starts
+      // with nothing awaited before it: the settings say Off at once.
+      final before = after.substring(0, assist.start);
+      expect(before, _wired(r'final route = currentAiConsentRoute\(s\);'));
+      expect(before, isNot(contains('await')));
+      // A stop that began is finished: no way out between the two steps.
+      final between = after.substring(assist.end, consent.start);
+      expect(between, isNot(contains('return')));
+      expect(between, isNot(contains('mounted')));
+      expect(between, isNot(contains('await')));
+      // The dialog says what will happen, from the same rule.
+      expect(
+        body.substring(0, confirmed),
+        _wired(
+          r'restaurantAssistStopFor\( s, widget\.restaurantAssist, '
+          r'currentAiConsentRoute\(s\)\) \.turnOff;',
+        ),
+      );
+    });
+
+    test('nothing else withdraws an AI consent: the only call is the '
+        "row's", () {
+      final lib = Directory('${_appRoot().path}/lib');
+      final withdrawals = <String>[];
+      for (final file in lib.listSync(recursive: true).whereType<File>()) {
+        if (!file.path.endsWith('.dart')) continue;
+        final found = RegExp(
+          r'granted:\s*false',
+        ).allMatches(file.readAsStringSync()).length;
+        for (var i = 0; i < found; i++) {
+          withdrawals.add(file.path.substring(lib.parent.path.length + 1));
+        }
+      }
+      expect(withdrawals, ['lib/ui/screens/settings_screen.dart']);
+      expect(stopSharing(), contains(RegExp(r'granted:\s*false')));
+    });
+
+    test('the engine sends through one poll and one submit, each behind '
+        'the consent read again with nothing awaited in between', () {
+      final source = _source('lib/services/assist/meal_assist.dart');
+      expect('_lookups.poll('.allMatches(source), hasLength(1));
+      expect('_lookups.submit('.allMatches(source), hasLength(1));
+      const submit =
+          'outcome = await _submit(request, settings, support, token);';
+      expect(submit.allMatches(source), hasLength(2));
+      expect('_submit('.allMatches(source), hasLength(3),
+          reason: 'its declaration and the two calls in _run');
+      // The check is the gate's own consent rule on freshly read settings.
+      expect(
+        source,
+        _wired(
+          r'bool _maySend\(int gen, LookupSupport support, '
+          r'\{required bool manual\}\) => '
+          r'_current\(gen, manual: manual\) && '
+          r'_readSettings\(\)\.consentCovers\(support\);',
+        ),
+      );
+
+      final run = _body(source, 'Future<_Run> _run(', indent: '  ');
+      const check =
+          r'if \(!_maySend\(gen, support, manual: manual\)\) '
+          r'return _Run\.cancelled;';
+      // Right before the send: the check, then the token, then the call.
+      final send = RegExp(
+        '$check\\s*final token = LookupCancelToken\\(\\);',
+      ).firstMatch(run);
+      expect(send, isNotNull, reason: 'the check at the send');
+      const poll = 'outcome = await _lookups.poll(jobId);';
+      expect(poll.allMatches(run), hasLength(1));
+      expect(
+        run.indexOf('await', send!.end),
+        run.indexOf(poll) + 'outcome = '.length,
+        reason: 'nothing is awaited between the check and the poll',
+      );
+      // A job the server lost is sent again only behind the same check,
+      // and a refused resubmit ends the run as cancelled.
+      expect(
+        run,
+        contains(
+          RegExp(
+            'if \\(outcome\\.needsResubmit\\) \\{(\\s*//[^\\n]*)*\\s*$check'
+            '\\s*polled = false;\\s*${RegExp.escape(submit)}',
+          ),
+        ),
+      );
+      // The first submit follows the same check with nothing awaited: it
+      // is the other branch of the poll.
+      expect(
+        run,
+        contains(RegExp('\\} else \\{\\s*${RegExp.escape(submit)}\\s*\\}')),
+      );
+      // Every submit and the poll come after the check at the send.
+      expect(run.indexOf(submit), greaterThan(send.end));
+      expect(run.indexOf(poll), greaterThan(send.end));
+    });
+
+    // Without the controls the row cannot tell who a lookup reaches, and
+    // fails closed (the assist goes Off whenever it is on).
+    test('the app shell hands the assist to the Settings screen', () {
+      final screen = _call(_source('lib/ui/app.dart'), 'SettingsScreen(');
+      expect(screen, _wired(r'settings: s\.settings,'));
+      expect(screen, _wired(r'restaurantAssist: s\.restaurantAssist,'));
     });
   });
 

@@ -258,3 +258,86 @@ def test_the_time_zone_check_and_the_us_country_code_are_said_everywhere():
     assert "地区不是美国" in zha["restaurantRegionHint"]
     assert "time zone" in ena["assistLookupOutsideUs"]
     assert "时区" in zha["assistLookupOutsideUs"]
+
+
+def _paragraph(half, start):
+    """The paragraph of [half] that begins with [start], whitespace flat."""
+    at = half.index(start)
+    end = half.find("\n\n", at)
+    return _flat(half[at:] if end == -1 else half[at:end])
+
+
+def test_stop_sharing_also_stops_restaurant_lookups_to_that_recipient():
+    """The owner's requirement before PR #19 ships (docs/RELEASING.md):
+    Settings > Stop Sharing with ... says "nothing more is sent to ...", and
+    no lookup reads the AI consent, so the row also turns restaurant lookup
+    off, and forgets its consent, when its lookups go to that recipient.
+    The policy, the dialog and the snackbar say so in both languages; the
+    strings shown when the assist is not touched keep their wording."""
+    en, zh = _policy_halves()
+    en_p = _paragraph(en, "**Withdrawing consent.**")
+    zh_p = _paragraph(zh, "**撤回同意。**")
+    assert "Stop Sharing with …" in en_p
+    assert "stops all sending to that recipient" in en_p
+    assert "turns off Watch Camera Roll" in en_p
+    assert ("restaurant nutrition lookup too when its lookups go to that "
+            "recipient") in en_p
+    assert "lookups still waiting are dropped" in en_p
+    assert ("asks again before it sends anything there, lookups "
+            "included") in en_p
+    assert "停止发送给 …" in zh_p
+    assert "关闭「监控相册」" in zh_p
+    assert "如果餐厅营养查询也是发给这个接收方，查询也会一并关闭" in zh_p
+    assert "待处理的查询会被丢弃" in zh_p
+    assert "之后再向它发送任何内容（包括查询）前，应用都会重新询问" in zh_p
+
+    ena, zha = _arb("en"), _arb("zh")
+    # The dialog when the row also turns the assist off, and its snackbar.
+    for k in ("aiStopSharingBodyWithLookups", "aiStopSharingDoneWithLookups"):
+        assert "{provider}" in ena[k], k
+        assert "{provider}" in zha[k], k
+        assert ena["@" + k]["placeholders"]["provider"]["type"] == "String"
+    body_en = ena["aiStopSharingBodyWithLookups"]
+    body_zh = zha["aiStopSharingBodyWithLookups"]
+    assert "photos, meal text and restaurant lookups to {provider}" in body_en
+    assert "Watch Camera Roll and restaurant lookups turn off" in body_en
+    assert "pending lookups are cancelled" in body_en
+    assert "照片、餐食文字和餐厅营养查询发送给 {provider}" in body_zh
+    assert "「监控相册」和餐厅营养查询都会关闭" in body_zh
+    assert "未完成的查询会被取消" in body_zh
+    # What it promises is scoped to the recipient, so it is always true: a
+    # consent the assist holds for ANOTHER recipient is kept, and turning
+    # lookups on for that one asks nothing.
+    assert body_en.endswith(
+        "Chopstats asks again before it sends anything to {provider}.")
+    assert body_zh.endswith("再向 {provider} 发送任何内容之前，筷拍会再次征求你的同意。")
+    assert "turn restaurant lookups back on" not in body_en
+    assert "重新开启餐厅营养查询" not in body_zh
+    assert ena["aiStopSharingDoneWithLookups"] == (
+        "Stopped — nothing more is sent to {provider}. Restaurant lookups "
+        "are off.")
+    assert zha["aiStopSharingDoneWithLookups"] == (
+        "已停止 — 不再向 {provider} 发送任何内容，餐厅营养查询已关闭。")
+
+    # Unchanged: what is shown when the assist is left alone.
+    assert ena["aiStopSharingDone"] == (
+        "Stopped — nothing more is sent to {provider}.")
+    assert zha["aiStopSharingDone"] == "已停止 — 不再向 {provider} 发送任何内容。"
+    assert ena["aiStopSharingBody"] == (
+        "Chopstats stops sending photos and meal text to {provider}, and "
+        "Watch Camera Roll turns off. Meals already logged stay on this "
+        "phone. The next time you use AI analysis, Chopstats asks again.")
+    assert zha["aiStopSharingBody"] == (
+        "筷拍不再把照片和餐食文字发送给 {provider}，「监控相册」也会关闭。"
+        "已记录的餐食仍保存在这台手机上。下次使用 AI 分析时，筷拍会再次征求你的同意。")
+
+    # The release notes no longer list it as still to do, and the support
+    # page says it too.
+    releasing = _flat(_read("docs", "RELEASING.md"))
+    assert "must also turn the assist off" not in releasing
+    assert ("*Stop Sharing with …* also turns the assist off when its "
+            "lookups go to the same company or server") in releasing
+    assert "`stopRestaurantAssistFor`" in releasing
+    support = _flat(_read("docs", "SUPPORT.md"))
+    assert ("turns off Watch Camera Roll (and restaurant lookups that go to "
+            "it)") in support

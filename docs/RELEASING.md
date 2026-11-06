@@ -239,11 +239,12 @@ again keeps both sides:
 The assist's lookups (chain and item names to the user's server,
 Anthropic or OpenRouter/Exa) already have their own per-recipient consent
 (#19's restaurant consent sheet; every lookup checks `consentCovers`), so
-they need no second gate on the AI consent. Before #19 reaches a store
-build, though, *Stop Sharing with …* must also turn the assist off when
-its lookups go to the same company or server: that row says "nothing more
-is sent to …", while the assist keeps its own consent and could go on
-sending lookups (a manual one, or a meal still waiting for one).
+they need no second gate on the AI consent. *Stop Sharing with …* also
+turns the assist off when its lookups go to the same company or server
+(`stopRestaurantAssistFor` in ui/widgets/restaurant_consent_sheet.dart):
+the row says "nothing more is sent to …", so it takes the mode row's Off
+path (pending lookups dropped) and forgets the assist's consent for that
+recipient; turning lookups back on for it asks again.
 
 ---
 
@@ -445,7 +446,8 @@ All done; this is what each one is and where it lives.
      confirming it is the consent.
 
    Settings › *Stop Sharing with …* withdraws it and turns *Watch Camera
-   Roll* off. A foreground send without a configured key asks nothing
+   Roll* off (and the restaurant assist, when its lookups go to that
+   recipient). A foreground send without a configured key asks nothing
    (nothing can leave; it fails with its own "no key" message).
    Existing installs: on the first launch of this build an install with the
    watcher on, or that accepted the old camera-roll notice, keeps its

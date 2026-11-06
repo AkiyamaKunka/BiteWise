@@ -23,6 +23,8 @@ import '../ai_consent.dart';
 import '../photo_pipeline.dart';
 import '../outcome_text.dart' show autoScanPausedLine, dayTimeLabel;
 import '../restaurant_assist_controls.dart';
+import '../widgets/restaurant_consent_sheet.dart'
+    show restaurantAssistStopFor, stopRestaurantAssistFor;
 import '../services.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
@@ -389,19 +391,29 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 
   /// Settings' Stop sharing row: withdraws the AI consent for the current
-  /// recipient and turns Watch Camera Roll off through the same path as
-  /// its switch, so nothing more is sent until the user allows it again
-  /// (App Store 5.1.1(ii): consent can be withdrawn).
+  /// recipient, turns Watch Camera Roll off through the same path as its
+  /// switch and, when its lookups go to that recipient, the restaurant
+  /// assist through the same path as its mode row (pending lookups
+  /// dropped, its consent forgotten), so nothing more is sent until the
+  /// user allows it again (App Store 5.1.1(ii): consent can be withdrawn).
   Future<void> _stopSharing() async {
     final l = context.l10n;
     final s = widget.settings;
     final provider = providerDisplayLabel(l, s.provider, s.serverBackend);
+    // Restaurant lookups to this same recipient stop with it
+    // (docs/RELEASING.md): the dialog says so when it turns them off.
+    final lookupsToo = restaurantAssistStopFor(
+            s, widget.restaurantAssist, currentAiConsentRoute(s))
+        .turnOff;
     final stop = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('aiStopSharingDialog'),
         title: Text(ctx.l10n.aiStopSharingTitle(provider)),
-        content: Text(ctx.l10n.aiStopSharingBody(provider)),
+        content: SingleChildScrollView(
+            child: Text(lookupsToo
+                ? ctx.l10n.aiStopSharingBodyWithLookups(provider)
+                : ctx.l10n.aiStopSharingBody(provider))),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -414,12 +426,20 @@ class _SettingsScreenState extends State<SettingsScreen>
       ),
     );
     if (stop != true || !mounted) return;
-    await s.setAiConsent(currentAiConsentRoute(s), granted: false);
+    // The assist first, in ONE settings write: no lookup reads the AI
+    // consent, so its own mode and consent are what stop them, and this
+    // row stays until everything behind it is off.
+    final route = currentAiConsentRoute(s);
+    final assist =
+        await stopRestaurantAssistFor(s, widget.restaurantAssist, route);
+    await s.setAiConsent(route, granted: false);
     if (_watcherEnabled || s.watcherEnabled) await _toggleWatcher(false);
     if (!mounted) return;
     setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(l.aiStopSharingDone(provider))));
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(assist.turnOff
+            ? l.aiStopSharingDoneWithLookups(provider)
+            : l.aiStopSharingDone(provider))));
   }
 
   Future<void> _pickReportTime() async {

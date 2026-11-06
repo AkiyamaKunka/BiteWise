@@ -246,7 +246,9 @@ the link's dialog says so.
 
 **Withdrawing consent.** Settings › **Stop Sharing with …** (followed by
 the recipient's name) stops all sending to that recipient and turns off
-Watch Camera Roll; the app asks again before it sends anything there.
+Watch Camera Roll, and restaurant nutrition lookup too when its lookups go
+to that recipient (lookups still waiting are dropped); the app asks again
+before it sends anything there, lookups included.
 Meals already logged stay on your phone. The app cannot call back what was
 already sent: that is held under the provider's own rules (or on your own
 server).
@@ -353,7 +355,7 @@ date. Questions: open an issue at
 
 **先征得同意。**第一次向某个接收方发送任何内容之前，应用会弹出对话框，写明公司名称和要发送的内容；在你点**「允许」**之前，不会向它发送任何内容。换用其他服务商，或换用你服务器上的其他 AI，都算新的接收方，会再次询问。确认你自己服务器的设置链接即表示同意，链接的对话框里也会写明。
 
-**撤回同意。**设置 › **停止发送给 …**（后面是接收方的名称）会停止向该接收方发送任何内容，并关闭「监控相册」；之后再向它发送任何内容前，应用都会重新询问。已经记录的餐食仍保留在你的手机上。已经发送出去的内容，应用无法收回：它们按该服务商自己的规定保存（或保存在你自己的服务器上）。
+**撤回同意。**设置 › **停止发送给 …**（后面是接收方的名称）会停止向该接收方发送任何内容，并关闭「监控相册」；如果餐厅营养查询也是发给这个接收方，查询也会一并关闭（待处理的查询会被丢弃）；之后再向它发送任何内容（包括查询）前，应用都会重新询问。已经记录的餐食仍保留在你的手机上。已经发送出去的内容，应用无法收回：它们按该服务商自己的规定保存（或保存在你自己的服务器上）。
 
 **以它们自己的条款为准。**每家服务商都按它自己的隐私政策、条款和数据保留规则处理收到的内容——例如请求保存多久、是否可能用于改进它的模型。这些规则因服务商而异，有时同一服务商的免费和付费方案也不同，筷拍无法改变它们。请阅读你所选服务商的政策。DeepSeek、阿里云、火山引擎和智谱在中国大陆处理数据，同意对话框里也会说明。
 

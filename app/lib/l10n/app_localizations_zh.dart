@@ -348,6 +348,16 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String aiStopSharingBodyWithLookups(String provider) {
+    return '筷拍不再把照片、餐食文字和餐厅营养查询发送给 $provider，「监控相册」和餐厅营养查询都会关闭，未完成的查询会被取消。已记录的餐食仍保存在这台手机上。再向 $provider 发送任何内容之前，筷拍会再次征求你的同意。';
+  }
+
+  @override
+  String aiStopSharingDoneWithLookups(String provider) {
+    return '已停止 — 不再向 $provider 发送任何内容，餐厅营养查询已关闭。';
+  }
+
+  @override
   String get settingsRowLookback => '补扫回溯';
 
   @override
