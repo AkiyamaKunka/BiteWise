@@ -1035,15 +1035,20 @@ void main() {
           )));
       await confirm(tester);
 
-      expect(seen, [
-        (mode: 'off', consent: null, ai: true, watcher: true),
-        (mode: 'off', consent: null, ai: false, watcher: true),
-        (mode: 'off', consent: null, ai: false, watcher: false),
-      ]);
+      // The first thing the settings say: the assist Off and its consent
+      // forgotten, in one write, with the AI consent still standing.
+      expect(seen, isNotEmpty);
+      expect(seen.first,
+          (mode: 'off', consent: null, ai: true, watcher: true));
+      // At no notification is the AI consent withdrawn while lookups to
+      // that recipient are still on, or still consented to.
       expect(
-          seen.where((e) =>
-              !e.ai && (e.mode != 'off' || e.consent == 'anthropic')),
+          seen.where((e) => !e.ai && (e.mode != 'off' || e.consent != null)),
           isEmpty);
+      // Then the AI consent is withdrawn and Watch Camera Roll goes off.
+      expect(seen.last.ai, isFalse);
+      expect(seen.last.watcher, isFalse);
+      expect(settings.aiConsentWrites, [('anthropic', false)]);
     });
 
     // The body is about half as long again. A bare Text in an AlertDialog

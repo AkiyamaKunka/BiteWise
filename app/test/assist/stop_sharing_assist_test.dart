@@ -353,7 +353,9 @@ void main() {
     final stopping = stopRestaurantAssistFor(store, controls, route);
     // At once: nothing is saved yet and no notification has landed, but
     // the settings every lookup gate reads say Off and no consent.
-    expect(notified, 0);
+    expect(notified, 0,
+        reason: 'the window the engine closes by itself (should the store '
+            'ever notify before it saves, this line goes)');
     expect(settings.restaurantAssist, 'off');
     expect(settings.restaurantAssistConsentAt, isNull);
     expect(settings.restaurantAssistConsentRecipient, isNull);
