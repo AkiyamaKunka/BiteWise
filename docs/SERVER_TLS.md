@@ -24,7 +24,7 @@ a server that is already live is in
   hours, a little under seven days); Caddy renews them on its own. You
   need a reserved (static) address, Caddy 2.11.1 or newer, and port 443
   open to the internet. The app's address becomes `https://203.0.113.5`:
-  the same host as before, only the scheme changes.
+  the same host as before.
 - **B. A DNS name you control** (for example `food.example.com`) whose
   `A` record points at the VM. The app's address becomes
   `https://food.example.com`: a new host.
@@ -32,10 +32,10 @@ a server that is already live is in
 Pick A when you have no domain, B when you have one. The steps are the
 same; each section says where B differs.
 
-Route A is the one that was run end to end, on 2026-11-05: a Google
-Cloud e2-micro VM (Ubuntu 22.04, 1 GB of memory, no swap) and Caddy
-2.11.9. "The first rollout" on this page means that run. Route B was not
-run there.
+Route A is the one that was run, up to and including section 4, on
+2026-11-05: a Google Cloud e2-micro VM (Ubuntu 22.04, 1 GB of memory, no
+swap) and Caddy 2.11.9. "The first rollout" on this page means that run.
+Route B was not run there.
 
 Placeholders: `$HOST` is what follows `https://` in the app, so the VM's
 external IPv4 address on route A (the examples use `203.0.113.5`) or

@@ -71,10 +71,10 @@ the tarball and `DEPLOYED_SHA` all name the same code. While the
 restaurant-assist work is still an open pull request, `origin/main` does
 not contain it: deploy that branch's commit instead
 (`REF=$(git rev-parse origin/feat/glasses-restaurant-assist)`; the first
-rollout deployed f800801 this way). After that, do not deploy
-`origin/main` again until the pull request is merged. `main` has no
-lookup routes and no `API_BIND_HOST`, so that deploy would take both away
-without any error.
+rollout deployed f800801, the head of that branch at the time). After
+that, do not deploy `origin/main` again until the pull request is
+merged. `main` has no lookup routes and no `API_BIND_HOST`, so that
+deploy would take both away without any error.
 
 **The gate is CI on Python 3.10.** The VM runs Python 3.10 and the Mac
 runs the tests on 3.12, so the result that counts is the `test (3.10)`
