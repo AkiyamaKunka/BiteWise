@@ -318,7 +318,7 @@ Use these only when needed:
 - `VPN_OFF_REMOTE_CIDRS` for known direct/non-VPN ranges
 - `/vpn` in Telegram to inspect the latest evidence
 
-The upload API trusts the direct peer IP and ignores `X-Forwarded-For`. If you ever put a reverse proxy in front of it, set `TRUSTED_PROXY_ENABLED=1` so the forwarded address is honored.
+The upload API trusts the direct peer IP and ignores `X-Forwarded-For`. Set `TRUSTED_PROXY_ENABLED=1` only when a reverse proxy is the only way in, with Flask bound to localhost ([SERVER_TLS.md](SERVER_TLS.md#6-close-plain-http)): while Flask can still be reached directly, any client could send that header.
 
 ## Telegram Commands
 
