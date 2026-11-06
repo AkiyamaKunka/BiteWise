@@ -15,7 +15,9 @@
 ///     sure, a chain's brand printed) takes the brand path only: no places
 ///     query, no location-derived chain, the position read for the meal
 ///     country alone; Always and the editor's lookup of the same meal are
-///     unchanged (a trigger may only reduce what is read or sent);
+///     unchanged, except while that lookup's job or retry record waits (a
+///     run handed it uses what it kept: the country and no place) — a
+///     trigger may only reduce what is read or sent;
 ///   * a 'Not from a restaurant' zone asks Apple Maps nothing;
 ///   * a dense spot sends its candidates and gets a suggestion at most; a
 ///     chain the user confirmed at a lone spot can apply on location alone;
@@ -2071,6 +2073,71 @@ void main() {
       expect(run.wrote, isTrue);
       expect(h.blockOf(id)?['trigger'], 'manual');
       expect(h.blockOf(id)?['evidence'], 'item_brand');
+      expect(await h.state.jobs(), isEmpty);
+    });
+
+    // The same window for a RETRY record (the automatic lookup failed for
+    // now: busy, a timeout, offline): it kept the country and no place,
+    // and a run handed it uses what it kept. So "unchanged" has this one
+    // exception, for the editor and for Always alike. Nothing more is
+    // read or sent than without the record, only less.
+    test("the editor's lookup while the automatic lookup's retry is "
+        'waiting: that record kept the country and no place, so this one '
+        'lookup names the printed chain only; the next one takes the '
+        'location path', () async {
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async =>
+          _failure(LookupOutcomeKind.busy, LookupFailureCode.server);
+      await h.assist.sweep();
+      final record = (await h.state.jobs())[id]!;
+      expect((record.jobId, record.attempts), (null, 1));
+      expect(record.country, 'US');
+      expect(record.place, isNull);
+
+      h.lookups.onSubmit = null;
+      final run = await h.assist.lookupNow(id, useLocation: true);
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps is not asked');
+      expect(h.source.asked, hasLength(1), reason: 'nothing read again');
+      expect(h.lookups.polls, isEmpty);
+      expect(h.lookups.submits, hasLength(2), reason: 'a new lookup');
+      expect(h.lookups.submits.last.chainKeys, ['mcdonalds']);
+      expect(run.decision?.trigger, AssistTrigger.manual);
+      expect(await h.state.jobs(), isEmpty, reason: 'the record is used up');
+
+      await h.assist.lookupNow(id, useLocation: true);
+      expect(h.places.radii, hasLength(1), reason: 'Apple Maps, once');
+      expect(h.source.asked, hasLength(2));
+      expect(h.lookups.submits.last.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+    });
+
+    test('When unsure → Always while that retry is waiting: the retry '
+        'runs with what the record kept, the printed chain only, stamped '
+        '"always"', () async {
+      final id = h.add(medium());
+      h.lookups.onSubmit = (_) async =>
+          _failure(LookupOutcomeKind.busy, LookupFailureCode.server);
+      await h.assist.sweep();
+      expect((await h.state.jobs())[id]?.place, isNull);
+
+      // The mode row: When unsure → Always (the consent stays).
+      h.settings = AssistSettingsView(
+        mode: AssistMode.always,
+        useLocation: true,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      h.now = h.now.add(assistRetryDelays.first);
+      h.lookups.onSubmit = null;
+      await h.assist.sweep();
+      expect(h.places.radii, isEmpty, reason: 'Apple Maps is not asked');
+      expect(h.source.asked, hasLength(1));
+      expect(h.lookups.submits, hasLength(2));
+      expect(h.lookups.submits.last.chainKeys, ['mcdonalds']);
+      expect(h.blockOf(id)?['trigger'], 'always');
       expect(await h.state.jobs(), isEmpty);
     });
 

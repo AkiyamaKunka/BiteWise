@@ -1342,7 +1342,12 @@ class MealAssist {
   /// may ask Apple Maps and send nearby chains — the user asked. While an
   /// automatic job for the meal is still running on the server, calling
   /// this polls that job as it was sent (an auto_branding job kept no
-  /// place: no places query is made for the poll).
+  /// place: no places query is made for the poll). The same holds while
+  /// that automatic lookup's retry is waiting (it failed for now, and its
+  /// record kept the country and no place): this call is then ONE new
+  /// lookup of the printed chain only — nothing is read again, Apple Maps
+  /// is not asked — the record is used up, and the next call takes the
+  /// location path.
   ///
   /// [chainKey] is the chain the user picked in the editor's 'Which
   /// restaurant?' search after 'Wrong restaurant' (R7b): the request names
@@ -1436,7 +1441,10 @@ class MealAssist {
       // take away: the automatic auto_branding lookup (When unsure, the AI
       // fairly sure, a chain's brand printed) stays on the brand path.
       // Always and the editor's manual lookup never carry that trigger, so
-      // for the same meal they are unchanged.
+      // for the same meal they are unchanged — except while a job or a
+      // retry record of that automatic lookup is waiting: a run handed
+      // that record uses what it kept (the country, no place) and reads
+      // nothing again.
       final where = await _where(
         meal,
         support,
@@ -1646,7 +1654,10 @@ class MealAssist {
   /// something could be asked; it lives in [point] for the US test and one
   /// places query, and is gone when this returns: what comes back is a
   /// country code, a code and chain keys. A job or a retry keeps what its
-  /// first try found: nothing is read again. Never throws.
+  /// first try found: nothing is read again — also when that first try
+  /// was the automatic auto_branding lookup, whose record keeps the
+  /// country and no place: a later run handed it (the editor's, or Always
+  /// after a mode switch) does not ask Apple Maps either. Never throws.
   ///
   /// [brandPathOnly] — set for the automatic auto_branding lookup and for
   /// nothing else ([_run]; Always and the editor's manual lookup never set
