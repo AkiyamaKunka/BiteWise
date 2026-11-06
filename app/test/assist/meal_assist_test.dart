@@ -376,6 +376,20 @@ Future<void> _until(bool Function() done, {int ms = 2000}) async {
   }
 }
 
+// A test that ends while the engine still writes races tearDown, which
+// deletes the store's folder under the write (PathNotFoundException, or
+// "Directory not empty"). These two wait for what a test started without
+// awaiting it, after its last expect.
+
+/// A sweep a timer or a listener started is still writing its records:
+/// sweep() joins it (single-flight) and returns once it is over.
+Future<void> _sweepDone(_Harness h) => h.assist.sweep();
+
+/// The settings listener's Off is not awaited, and its jobs deletion may
+/// still be running: another Off queues its own deletion behind it (the
+/// local state runs its writes one at a time) and returns after both.
+Future<void> _offDone(_Harness h) => h.assist.turnOff();
+
 void main() {
   late Directory root;
   late _Harness h;
@@ -599,6 +613,7 @@ void main() {
       await h.assist.sweep();
       h.idle = true;
       await _until(() => h.lookups.submits.isNotEmpty);
+      await _sweepDone(h);
     });
 
     test('an unsupported provider makes zero calls', () async {
@@ -632,6 +647,7 @@ void main() {
       expect(h.assist.consentNeeded.value, isNull);
       await _until(() => h.lookups.submits.isNotEmpty);
       expect(h.lookups.args.single.stamp, 'openrouter');
+      await _sweepDone(h);
     });
 
     test('the provider switched after the consent check: the router refuses, '
@@ -1680,6 +1696,7 @@ void main() {
       expect(h.analysisOf(id).containsKey('assist'), isFalse);
       expect(await h.state.unseen(), isEmpty);
       expect(h.notices, isEmpty);
+      await _offDone(h);
     });
 
     test(
@@ -1698,6 +1715,7 @@ void main() {
         await h.assist.sweep();
         expect(h.lookups.submits, hasLength(1), reason: 'a cache hit');
         expect(h.analysisOf(second).containsKey('assist'), isFalse);
+        await _offDone(h);
       },
     );
 
@@ -1764,6 +1782,7 @@ void main() {
       await h.assist.sweep();
       expect(h.dao.assistWrites, isEmpty);
       expect(h.analysisOf(id).containsKey('assist'), isFalse);
+      await _offDone(h);
     });
   });
 
@@ -2227,6 +2246,7 @@ void main() {
       h.add(_bigMac());
       h.assist.onResumed();
       await _until(() => h.lookups.submits.isNotEmpty);
+      await _sweepDone(h);
     });
 
     test('turning the mode on sweeps at once', () async {
@@ -2241,6 +2261,7 @@ void main() {
         ),
       );
       await _until(() => h.lookups.submits.isNotEmpty);
+      await _sweepDone(h);
     });
 
     test('newest meal first', () async {
