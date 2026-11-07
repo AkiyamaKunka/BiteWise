@@ -26,6 +26,8 @@ import '../refresh_signal.dart';
 import '../restaurant_assist_controls.dart';
 import '../services.dart' show SettingsStore;
 import '../../services/usual/usual_foods.dart';
+import '../widgets/usual_chip.dart';
+import '../widgets/usual_offer_card.dart' show showUsualUsedSnack;
 import '../widgets/meal_card.dart';
 import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
@@ -82,6 +84,13 @@ class TodayScreenState extends State<TodayScreen> {
   /// since (design R7b).
   Set<int> _assistUnseen = const {};
 
+  /// Today's usual-numbers offers by meal id (usual foods §3.4; never
+  /// stored), the reply that may still replace them, and the meals whose
+  /// Use is being written.
+  Map<int, UsualOffer> _usualOffers = const {};
+  int _usualGen = 0;
+  final Set<int> _usualUsing = {};
+
   @override
   void initState() {
     super.initState();
@@ -121,7 +130,15 @@ class TodayScreenState extends State<TodayScreen> {
         _priorDayTotals = dailyCalorieTotals(prior);
         _loading = false;
         _error = null;
+        // Until the fresh reply: no chip on a meal that is gone or became
+        // the user's (corrected) since the offers were worked out.
+        _usualOffers = {
+          for (final m in todayMeals)
+            if (!m.corrected && _usualOffers[m.id] != null)
+              m.id: _usualOffers[m.id]!,
+        };
       });
+      _refreshUsual(todayMeals, today);
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -129,6 +146,80 @@ class TodayScreenState extends State<TodayScreen> {
         _error = 'Could not load today\'s meals: $e';
       });
     }
+  }
+
+  /// Fire-and-forget, like the Garmin line: the list never waits for the
+  /// offers, a reply older than the last reload or from before midnight is
+  /// dropped, and a failure shows no chip.
+  void _refreshUsual(List<Meal> meals, String today) {
+    final usual = widget.usual;
+    if (usual == null) return;
+    final gen = ++_usualGen;
+    Future<Map<int, UsualOffer>> offers;
+    try {
+      offers = usual.offersFor(meals);
+    } catch (_) {
+      return;
+    }
+    offers.then((o) {
+      if (!mounted || gen != _usualGen || isoDate(DateTime.now()) != today) {
+        return;
+      }
+      setState(() => _usualOffers = o);
+    }, onError: (Object _) {
+      if (!mounted || gen != _usualGen) return;
+      setState(() => _usualOffers = const {});
+    });
+  }
+
+  /// Use on a one-food chip: the user's numbers written through the
+  /// compare-and-set (nothing changes without this tap), the meal totals
+  /// on the snackbar with Undo. A meal changed since the chip was shown
+  /// writes nothing and says so.
+  Future<void> _useUsual(Meal meal, UsualOffer offer) async {
+    final usual = widget.usual;
+    if (usual == null || !_usualUsing.add(meal.id)) return;
+    setState(() {});
+    final messenger = ScaffoldMessenger.of(context);
+    final l = context.l10n;
+    UsualAcceptResult? result;
+    try {
+      result = await usual.accept(meal.id, shown: offer);
+    } catch (_) {
+      result = null;
+    } finally {
+      _usualUsing.remove(meal.id);
+    }
+    switch (result?.status) {
+      case UsualAcceptStatus.written:
+        if (mounted) {
+          setState(() => _usualOffers = {..._usualOffers}..remove(meal.id));
+        }
+        showUsualUsedSnack(messenger, l, usual, result!, onUndone: () {
+          if (mounted) reload();
+        });
+      case UsualAcceptStatus.busy:
+        break;
+      case UsualAcceptStatus.conflict:
+      case UsualAcceptStatus.gone:
+      case null:
+        messenger.showSnackBar(SnackBar(
+            key: const Key('usualConflict'),
+            content: Text(l.editorSaveConflict)));
+    }
+    if (mounted) await reload();
+  }
+
+  /// The usual-numbers chip for [meal], or null.
+  Widget? _usualChip(Meal meal) {
+    final offer = _usualOffers[meal.id];
+    if (offer == null || widget.usual == null) return null;
+    return UsualChip(
+      offer: offer,
+      busy: _usualUsing.contains(meal.id),
+      onUse: () => _useUsual(meal, offer),
+      onReview: () => _editMeal(meal),
+    );
   }
 
   /// The 'updated' dots; none when the assist cannot say (never fails
@@ -156,7 +247,8 @@ class TodayScreenState extends State<TodayScreen> {
           meal: meal,
           inUse: widget.mealInUse,
           assist: widget.restaurantAssist,
-          settings: widget.settings),
+          settings: widget.settings,
+          usual: widget.usual),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie
     // An edit or delete changes the summary the iOS OS card carries; the
@@ -320,6 +412,7 @@ class TodayScreenState extends State<TodayScreen> {
                 onTap: () => _editMeal(meal),
                 thumb: widget.thumbs?.thumbFor(meal),
                 assistUnseen: _assistUnseen.contains(meal.id),
+                usualChip: _usualChip(meal),
               ),
           ]),
         ),
