@@ -228,9 +228,10 @@ again keeps both sides:
   branch 2026-10-29); #19 changes the policy, so give it the merge date.
   The date (line 3) and its pin in `app/test/release_decisions_test.dart`
   ("with the new effective date") are set by hand, and must be set again
-  to the merge date when PR #19 merges and once more when PR #22 (run 7)
-  merges. A 3-way merge keeps the older date without a conflict, and no
-  test can tell that the date is stale.
+  to the merge date when PR #19 merges, when the usual-foods PR merges
+  (below), and once more when PR #22 (run 7) merges. A 3-way merge keeps
+  the older date without a conflict, and no test can tell that the date
+  is stale.
   #19's added sentences say "Claude Plan" (the intro's "with Claude Plan,
   the server you run", the restaurant section's **Claude Plan:** bullet, and
   the 中文 counterparts): rename them to "your own server" / 你自己的服务器.
@@ -255,6 +256,93 @@ row is confirmed may still send one continuation of the request it
 started (a paused turn) before its cancellation lands, which is up to
 three preference writes later (a few milliseconds by estimate); no new
 lookup, poll or retry starts.
+
+**When the usual-foods PR is merged** (`feat/usual-foods`: lookup answers
+that found a chain's published numbers are kept a year, your usual
+numbers on a photo, *My usual foods*):
+- **Order:** **#19 → this PR → #22 (run 7)**, then one restyle commit
+  (below). This is the default; the order is the owner's call. #22 waits
+  for the 1.5.0 review anyway.
+- **Retarget to `main`.** The PR is a draft stacked on #19 (base
+  `feat/glasses-restaurant-assist`). When #19 merges, change its base to
+  `main` before merging it.
+- **The policy date** is set by hand at each of the three merges (the
+  `docs/PRIVACY.md` note above).
+- Its logic lives in new files under `app/lib/`:
+  `core/usual_foods_logic.dart`, `services/usual/usual_foods.dart`,
+  `services/usual/usual_choices.dart`, `ui/widgets/usual_chip.dart`,
+  `ui/widgets/usual_offer_card.dart` and `ui/screens/usual_foods_screen.dart`.
+  It does not touch `photo_pipeline.dart`, `background_glue.dart`,
+  `executor.dart`, `day_detail_screen.dart`, `history_screen.dart`,
+  `meals_dao_impl.dart`, `db.dart`, `local_store.dart`, `app_settings.dart`,
+  the Python server or `shared/`.
+
+This PR's hunks against #22, predicted with `git merge-file` per file (base
+7fce5d4 = `main`; ours = f1033b3 plus this PR's hunks; theirs = 8e24932 =
+#22). Paths are under `app/lib/` unless they start with `docs/` or
+`test/`:
+
+| File | #22 change | This PR's hunk, and where it must go | Result |
+|---|---|---|---|
+| `ui/screens/add_flow.dart` | Log sheet becomes `showGroupedSheet`; main 31-117 rewritten | One line `if (services.usualFoods != null) usualFoodsRow(ctx),` after `addFromPhotos`; the `else if (choice == 'usual')` branch in the dispatch (main 118-141, untouched by #22); the import after `meal_editor_screen.dart` or `small_spinner.dart` | **The row line conflicts** (certain). Re-add that one line into #22's first `GroupedSection`, right after the `addFromPhotos` row. The dispatch and the import merge clean. |
+| `ui/screens/today_screen.dart` | list body rewritten | `usual` field after `final SettingsStore? settings;`; `this.usual`; `_usualOffers` after `_assistUnseen`; `_refreshUsual(todayMeals)` after the `setState` in `reload()`; `usual: widget.usual` in `_editMeal`; `usualChip:` after `assistUnseen:`; imports next to #19's `restaurant_assist_controls` / `services` imports, not after `meal_editor_screen.dart` | Clean |
+| `ui/widgets/meal_card.dart` | header moved to `meal_parts.dart` | field, constructor parameter, and the slot after `_AssistChip(...)`; no new import (it takes a `Widget`) | Clean |
+| `ui/screens/meal_editor_screen.dart` | ~65 layout lines; appends imports after `small_spinner.dart` | `fresh` / `_freshNext`, the snackbars, `onSearchAgain`, the `usual` parameter, the prefill strip, `keepUserMarks`, the card after `assistCard`, `toAnalysis(now:)`; imports mid-block (`usual_offer_card` after `glasses_badge`; `services/usual/...` before `services/photo/glasses...`) | Clean only with mid-block imports |
+| `ui/app.dart`, `ui/services.dart`, `ui/di.dart`, `core/contracts.dart` | +291 / +20 / +61 / `reservePhotoHash` signature | `usual: s.usualFoods` after `settings: s.settings` on `TodayScreen`; the field after `restaurantAssist`; `UsualChoices(...)` / `UsualFoods(...)` after #19's `RestaurantAssistControls(` block and `usualFoods:` after `restaurantAssist: restaurantAssist`; `appRepeat` after `appManualPhoto` | Clean |
+| `l10n/app_en.arb`, `l10n/app_zh.arb` | last hunks end at main :1787 / :685 | keys appended at the end; `clearPlacesBody` (#19 only) edited | Clean, and valid JSON |
+| `docs/PRIVACY.md` | hunks at :62, :113; zh :181, :208 | the on-phone bullets, saved with the meal, turning it off, deleting | Clean (checked again on 2026-11-07 with this PR's policy and 8e24932). Reset the date and its pin by hand. |
+| `test/widget_test.dart` | 7 lines | `addUsual` cases | Keep both |
+| #19-only files (`restaurant_section.dart`, `restaurant_consent_sheet.dart`, `assist_source_card.dart`, `assist_view.dart`, `restaurant_assist_controls.dart`, `restaurant_assist_logic.dart`, `meal_assist.dart`, `assist_local_state.dart`) and `meal_edit_logic.dart`, which #22 does not touch | — | — | No conflict possible |
+
+The prediction was made before the hunks were written, so run it again on
+the real heads before merging (on `main` with this PR in; a file that
+prints is a conflict):
+
+```bash
+(
+  set -eu
+  theirs=8e24932   # #22's head at the time; use its current head
+  base=$(git merge-base main "$theirs")
+  t=$(mktemp -d "${TMPDIR:-/tmp}/merge-check.XXXXXX")
+  for f in $(git diff --name-only "$base" "$theirs"); do
+    git show "${base}:${f}" > "$t/b" 2>/dev/null || : > "$t/b"
+    git show "main:${f}" > "$t/o" 2>/dev/null || : > "$t/o"
+    git show "${theirs}:${f}" > "$t/t" 2>/dev/null || : > "$t/t"
+    git merge-file -q "$t/o" "$t/b" "$t/t" || echo "conflict: $f"
+  done
+)
+```
+
+When merging #22 after this PR:
+- **Never hand-merge the generated `app_localizations*.dart`.** Take
+  either side, then run `flutter gen-l10n` in `app/`.
+- `app/test/ui/usual_copy_test.dart` pins 771 keys in each ARB file. #22
+  adds 33 (at 8e24932, none shared with this PR), so the merged files have
+  804 each. Change the number in that test to the merged count; both files
+  must still have the same keys. Do not drop the check.
+- The policy's *My usual foods* bullet says a meal changed with them goes
+  with "the next photo you log that day". #22 also sends the day before's
+  meals with a photo taken before 4 a.m., so say that in this bullet too,
+  in both languages, when you give #22 its merge date.
+
+**After #22, one restyle commit:**
+- Move the *My usual foods* screen, the usual-numbers card and the chip to
+  run 7's kit: `context.colors/type/nums`, `GroupedRow.custom`,
+  `EmptyState` for the empty and all-hidden states, `LoadingState`, and
+  `appAlertDialog` for "Log it again?" and the Android clear dialog.
+- Re-add the Log sheet row with run 7's neutral badge role.
+- Tests: `add_flow_refresh_test` builds services with a fake `UsualFoods`
+  and asserts `_badgeFill(tester, 'addUsual') == badgeNeutral`, and its
+  AX5-on-SE loop (375×667, en and zh) runs with the row present;
+  `meal_editor_large_text_test` renders the usual card with two items;
+  `large_text_dialog_test` adds "Log it again?"; `theme_contrast_test`
+  still passes.
+
+**Check after any of these merges.** The #19 × #22 merge is textually
+clean but has never been compiled. On the merged tree run
+`flutter gen-l10n`, `flutter analyze` and `flutter test` in `app/`, and
+`pytest tests/` from the repo root (`tests/test_privacy_docs.py` pins the
+policy).
 
 ---
 
@@ -715,8 +803,14 @@ empty (pinned by `release_decisions_test.dart` and
   There is no `NSLocation*` key and no location permission (also pinned),
   so the Location row stays *No*.
 - **What stays on the phone** (learned places as ~100 m cells, pending
-  jobs, the 30-day answer cache, the decision log) lives in the
-  backup-excluded store and is never exported.
+  jobs, the answer cache (a year for answers that found published
+  numbers, 30 days for the rest, least recently used first), the decision
+  log) lives in the backup-excluded store and is never exported.
+
+**Usual foods** (*My usual foods* and your usual numbers) are worked out
+on the phone from the meal log and make no network call, so they add no
+App Store or Play data type. The saved lookup answers never leave the
+phone either, and Location stays *No*. The answer stays **B**.
 
 `docs/PRIVACY.md` (§ *Restaurant nutrition lookup*, English and 中文) is
 the user-facing text for all of this; keep it, the consent sheet
