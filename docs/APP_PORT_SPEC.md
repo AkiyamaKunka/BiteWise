@@ -1101,7 +1101,7 @@ one SQLite file). Each is pinned by tests named alongside.
 
 ### §9.1 `source` vocabulary (app)
 
-FIVE wire values, defined once in `core/contracts.dart` as `MealSource` and
+SIX wire values, defined once in `core/contracts.dart` as `MealSource` and
 never spelled as literals at call sites — the reclaim sweep MATCHES on
 `app_watch` in SQL, so a drifting literal silently changes intake policy
 instead of failing.
@@ -1113,5 +1113,6 @@ instead of failing.
 | `manual_text` | describe-a-meal screen, NL `new_meal` | n/a (no photo); server parity, `telegram_bot` writes the same string |
 | `app_manual` | meal editor, numbers typed by hand | n/a; distinct from `manual_text` to record that NO model produced the values |
 | `app_manual_photo` | meal editor reached from the coverage screen's "log it yourself" | a photo EXISTS and its md5 is ledgered, but every number came from the user |
+| `app_repeat` | `UsualFoods.logAgain` (Log › My usual foods) | n/a (no photo, no ledger row, empty `image_hash` and `file_id`); numbers copied on the phone from earlier meals, the user's own where they set them; no model call |
 
 Pinned by `test/core/meal_source_test.dart` (frozen strings + distinctness).

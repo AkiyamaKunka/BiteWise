@@ -23,10 +23,17 @@
 ///   - a draft of a STORED meal carries [MealDraft.expectedRaw], the
 ///     analysis text it was loaded from: the save is a compare-and-set
 ///     against it (MealsDao.updateMealFieldsIfUnchanged).
+///   - the save is the one moment that knows which rows the USER set, so
+///     it writes the usual-foods mark there (usual-foods spec §3.1): a row
+///     added here, or a stored row whose numbers the user changed, gains
+///     `user {set, at, n, qty}`; a rename keeps the AI's old name as
+///     `user.ai_name`. The mark is self-validating (usualMarkValid): it
+///     counts only while the row's numbers still equal `n`.
 library;
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
+import '../core/usual_foods_logic.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 
@@ -134,18 +141,96 @@ class MealItemDraft {
             0,
       };
 
-  /// The item to persist: an [untouched] row keeps every key it was stored
-  /// with, its name and four numbers normalized exactly as [toMap] writes
-  /// them (a numeric string becomes the number it already read as); any
-  /// other row is [toMap].
-  Map<String, dynamic> toStoredMap() {
+  /// The item to persist (usual-foods spec §3.1 for `user`):
+  ///   * an [untouched] stored row keeps every key it was stored with,
+  ///     `user` included byte for byte, its name and four numbers
+  ///     normalized exactly as [toMap] writes them (a numeric string
+  ///     becomes the number it already read as);
+  ///   * a row the user ADDED is [toMap] plus `user {set: true, at: now,
+  ///     n: its four numbers, qty: 1}`: every number on it is the user's;
+  ///   * a stored row the user TOUCHED is [toMap] plus a `user` map: a new
+  ///     `set`/`at`/`n` when any number differs numerically from the
+  ///     stored row ("450" equals 450), else the stored ones while they
+  ///     are still valid ([usualMarkValid]); `qty` from the stored mark or
+  ///     the stored row (toMap drops `qty`); `ai_name` from the stored
+  ///     mark, else the stored name when the name changed. `user` is
+  ///     written only when it says something: `set`, `ai_name`, or a
+  ///     count other than 1.
+  /// [now] stamps `at` (UTC, ms); null reads the device clock.
+  Map<String, dynamic> toStoredMap([DateTime? now]) {
     final src = stored;
-    if (src == null || !untouched) return toMap();
-    return {
-      for (final e in src.entries) e.key: e.value,
-      ...toMap(),
-    };
+    if (src != null && untouched) {
+      return {
+        for (final e in src.entries) e.key: e.value,
+        ...toMap(),
+      };
+    }
+    final out = toMap();
+    final when = now ?? DateTime.now();
+    final numbers = [
+      out['estimated_calories'] as num,
+      out['protein_g'] as num,
+      out['carbs_g'] as num,
+      out['fat_g'] as num,
+    ];
+    if (src == null) {
+      out['user'] = {
+        'set': true,
+        'at': usualStamp(when),
+        'n': numbers,
+        'qty': 1,
+      };
+      return out;
+    }
+    final user = <String, dynamic>{};
+    final storedNumbers = [
+      _storedNumber(src['estimated_calories']),
+      _storedNumber(src['protein_g']),
+      _storedNumber(src['carbs_g']),
+      _storedNumber(src['fat_g']),
+    ];
+    var changed = false;
+    for (var i = 0; i < 4; i++) {
+      if ((numbers[i] - storedNumbers[i]).abs() > 1e-9) changed = true;
+    }
+    final storedUser = src['user'];
+    if (changed) {
+      user['set'] = true;
+      user['at'] = usualStamp(when);
+      user['n'] = numbers;
+    } else if (storedUser is Map && usualMarkValid(src, when)) {
+      user['set'] = true;
+      user['at'] = storedUser['at'];
+      user['n'] = List<Object?>.from(storedUser['n'] as List);
+    }
+    final qty = usualItemQty(src);
+    user['qty'] = qty;
+    final storedAiName = storedUser is Map ? storedUser['ai_name'] : null;
+    if (storedAiName is String && storedAiName.trim().isNotEmpty) {
+      user['ai_name'] = storedAiName;
+    } else {
+      final storedName = src['name'] is String ? src['name'] as String : '';
+      final aiName = cleanShortText(storedName, kUsualAiNameMax);
+      if (name.trim() != storedName.trim() && aiName.isNotEmpty) {
+        user['ai_name'] = aiName;
+      }
+    }
+    if (user.containsKey('set') || user.containsKey('ai_name') || qty != 1) {
+      out['user'] = user;
+    }
+    return out;
   }
+}
+
+/// Longest kept `user.ai_name`, in code points.
+const int kUsualAiNameMax = 80;
+
+/// A stored number as the editor loaded it ([_numText]): a number, or a
+/// numeric string; anything else is 0, like a blank field.
+num _storedNumber(dynamic v) {
+  var n = safeNumberOr(v, null);
+  if (n == null && v is String) n = safeNumberOr(num.tryParse(v.trim()), null);
+  return n ?? 0;
 }
 
 /// Field text for a stored value. Numeric STRINGS must parse: the analyzer
@@ -304,7 +389,10 @@ class MealDraft {
   }
 
   /// The analysis map to persist. Call only when [validate] is empty.
-  Map<String, dynamic> toAnalysis() {
+  /// [now] stamps the usual-foods marks of the rows the user set
+  /// ([MealItemDraft.toStoredMap]); null reads the device clock.
+  Map<String, dynamic> toAnalysis({DateTime? now}) {
+    final when = now ?? DateTime.now();
     final out = Map<String, dynamic>.from(base);
     num field(String raw, num max) =>
         parseNumberField(raw, label: 'x', max: max).value ?? 0;
@@ -317,7 +405,7 @@ class MealDraft {
     // A hand-curated meal is food by definition — see the library note.
     out['is_food'] = true;
     out['food_items'] = [
-      for (final it in items.where((i) => !i.isBlank)) it.toStoredMap()
+      for (final it in items.where((i) => !i.isBlank)) it.toStoredMap(when)
     ];
     return out;
   }
