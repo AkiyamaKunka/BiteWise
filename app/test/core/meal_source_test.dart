@@ -14,18 +14,22 @@ void main() {
     expect(MealSource.manualText, 'manual_text');
     expect(MealSource.appManual, 'app_manual');
     expect(MealSource.appManualPhoto, 'app_manual_photo');
+    expect(MealSource.appRepeat, 'app_repeat');
   });
 
-  test('all five are distinct — each records a different provenance', () {
+  test('all six are distinct — each records a different provenance', () {
     const all = [
       MealSource.appPhoto,
       MealSource.appWatch,
       MealSource.manualText,
       MealSource.appManual,
       MealSource.appManualPhoto,
+      MealSource.appRepeat,
     ];
+    expect(all, hasLength(6));
     expect(all.toSet(), hasLength(all.length),
         reason: 'manual_text = parsed from a description; app_manual = '
-            'numbers typed by hand, no model involved');
+            'numbers typed by hand, no model involved; app_repeat = logged '
+            'again from My usual foods, numbers copied on the phone');
   });
 }
