@@ -17,6 +17,8 @@ import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
     show LookupRecipient, LookupSupport;
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
     show AssistRun, AssistSkip, AssistUserAction;
+import 'package:calorie_tracker/services/usual/usual_foods.dart'
+    show UsualFoods;
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:crypto/crypto.dart';
@@ -648,6 +650,187 @@ void main() {
     expect(user['set'], isTrue);
     expect(user['n'], [350, 10, 50, 6]);
     expect(user['at'], usualStamp(clock()));
+  });
+
+  group('your usual numbers (usual foods T36)', () {
+    /// The user's own oatmeal and latte, typed by hand on 2026-07-22, and
+    /// today's photo of both (AI 300 and 150).
+    Future<(FakeDao, UsualFoods)> open(WidgetTester tester,
+        {bool withUsual = true}) async {
+      useTallSurface(tester);
+      final dao = FakeDao()
+        ..seed(foodMeal(
+          id: 2,
+          date: '2026-07-22',
+          source: MealSource.appManual,
+          items: [
+            foodItem('Oatmeal (~250 g)', 350, p: 12, c: 50, f: 14),
+            foodItem('Oat milk latte', 190, p: 4, c: 24, f: 8),
+          ],
+        ))
+        ..seed(foodMeal(
+          id: 1,
+          date: '2026-07-24',
+          description: 'Oatmeal and a latte',
+          items: [
+            foodItem('Oatmeal (~260 g)', 300, p: 10, c: 45, f: 8),
+            foodItem('Oat milk latte', 150, p: 3, c: 18, f: 6),
+          ],
+        ));
+      final usual = await makeUsualFoods(dao, clock: clock);
+      await tester.pumpWidget(KeyedSubtree(
+        key: UniqueKey(),
+        child: host(MealEditorScreen(
+          dao: dao,
+          meal: dao.byId(1),
+          now: clock,
+          usual: withUsual ? usual : null,
+        )),
+      ));
+      await tester.pumpAndSettle();
+      return (dao, usual);
+    }
+
+    String fieldText(WidgetTester tester, String key) =>
+        tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+
+    testWidgets('the card names each food, the AI number and yours, and '
+        'where yours came from; no checkboxes', (tester) async {
+      await open(tester);
+      final card = find.byKey(const Key('usualOfferCard'));
+      expect(card, findsOneWidget);
+      for (final line in [
+        'Your usual numbers',
+        'Oatmeal: AI 300 → your usual 350 kcal',
+        'From your Oatmeal on 2026-07-22.',
+        'Oat milk latte: AI 150 → your usual 190 kcal',
+        'From your Oat milk latte on 2026-07-22.',
+      ]) {
+        expect(find.descendant(of: card, matching: find.text(line)),
+            findsOneWidget, reason: line);
+      }
+      expect(find.byType(Checkbox), findsNothing);
+      expect(find.byType(CheckboxListTile), findsNothing);
+      // Above the description, under where the source card goes.
+      expect(tester.getRect(card).bottom,
+          lessThan(tester.getRect(find.byKey(const Key('editorDescription'))).top));
+
+      // Not offered without the service (Day detail, History: D31).
+      await open(tester, withUsual: false);
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+    });
+
+    testWidgets('Use my numbers writes every offered food, shows the meal '
+        "totals and the stored meal, and Undo puts the AI's back",
+        (tester) async {
+      final (dao, _) = await open(tester);
+      final stored = dao.rawOf(dao.byId(1));
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      final m = dao.byId(1);
+      expect(m.corrected, isTrue);
+      final items = m.analysis['food_items'] as List;
+      expect(
+        [for (final i in items) i['estimated_calories']],
+        [350, 190],
+      );
+      expect(items[0]['protein_g'], 12);
+      expect(items[1]['fat_g'], 8);
+      expect((items[0]['user'] as Map)['set'], isTrue);
+      expect(m.analysis['total_calories'], 540);
+      expect(dao.rawOf(m), isNot(stored));
+      expect(find.text('Used your usual numbers: 450 → 540 kcal'),
+          findsOneWidget);
+      // The form shows the stored meal (the basis was read again) and the
+      // offer is gone: the meal is the user's now.
+      expect(fieldText(tester, 'editorCalories'), '540');
+      expect(fieldText(tester, 'itemCal0'), '350');
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+
+      await tester.tap(find.text('Undo'));
+      await tester.pumpAndSettle();
+      expect(
+        [
+          for (final i in dao.byId(1).analysis['food_items'] as List)
+            i['estimated_calories'],
+        ],
+        [300, 150],
+      );
+      expect(fieldText(tester, 'editorCalories'), '450');
+
+      // Saving now writes against the newer row: no conflict.
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editorSaveConflict')), findsNothing);
+    });
+
+    testWidgets('a meal changed under the card: Use writes nothing and says '
+        'so', (tester) async {
+      final (dao, _) = await open(tester);
+      // Another writer (a chat fix) lands between the read and the write.
+      dao.beforeCompareAndSet = (id) async {
+        await dao.updateMealAnalysisIfUnchanged(id,
+            expectedRaw: dao.rawOf(dao.byId(id)),
+            analysis: editedFirstItem(dao.byId(id).analysis, 320));
+      };
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      expect(find.text('This meal was just updated — please review.'),
+          findsOneWidget);
+      expect(
+        (dao.byId(1).analysis['food_items'] as List)[0]['estimated_calories'],
+        320,
+      );
+      expect(fieldText(tester, 'itemCal0'), '320');
+    });
+
+    testWidgets('Keep AI estimate writes nothing and the card goes',
+        (tester) async {
+      final (dao, usual) = await open(tester);
+      final stored = dao.rawOf(dao.byId(1));
+      await tester.tap(find.byKey(const Key('usualKeepAi')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+      expect(dao.updates, isEmpty);
+      expect(dao.rawOf(dao.byId(1)), stored);
+      expect(dao.byId(1).corrected, isFalse);
+      expect(await usual.offerFor(dao.byId(1)), isNull,
+          reason: 'turned down for this meal');
+    });
+
+    testWidgets('unsaved typing: both buttons wait and the card says why',
+        (tester) async {
+      final (dao, _) = await open(tester);
+      await tester.enterText(
+          find.byKey(const Key('editorDescription')), 'Big breakfast');
+      await tester.pump();
+      final card = find.byKey(const Key('usualOfferCard'));
+      expect(
+        find.descendant(
+            of: card,
+            matching: find.text('Save your changes first to use these buttons.')),
+        findsOneWidget,
+      );
+      expect(
+          tester.widget<FilledButton>(find.byKey(const Key('usualUseMine')))
+              .onPressed,
+          isNull);
+      expect(
+          tester.widget<OutlinedButton>(find.byKey(const Key('usualKeepAi')))
+              .onPressed,
+          isNull);
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      expect(dao.updates, isEmpty);
+      // Typing it back: the buttons are live again.
+      await tester.enterText(
+          find.byKey(const Key('editorDescription')), 'Oatmeal and a latte');
+      await tester.pump();
+      expect(
+          tester.widget<FilledButton>(find.byKey(const Key('usualUseMine')))
+              .onPressed,
+          isNotNull);
+    });
   });
 
   testWidgets('empty day offers the add path', (tester) async {
