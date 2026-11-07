@@ -123,6 +123,18 @@ bool _sameSet(Set<String> a, Set<String> b) =>
 /// Latin token has 3 or more letters and there is no CJK token ("Pb",
 /// "2"); or when the set equals a generic name's ("Snack", 零食).
 String? usualNameKey(Object? name) {
+  if (name is! String) return null;
+  // Pure and deterministic, and a 90-day index asks for the same few
+  // dozen names hundreds of times: remembered, within a small bound.
+  if (_keyCache.containsKey(name)) return _keyCache[name];
+  if (_keyCache.length >= _keyCacheMax) _keyCache.clear();
+  return _keyCache[name] = _nameKey(name);
+}
+
+const int _keyCacheMax = 4096;
+final Map<String, String?> _keyCache = {};
+
+String? _nameKey(String name) {
   final tokens = usualNameTokens(name);
   if (tokens.isEmpty) return null;
   final anyCjk = tokens.any(_isCjkToken);
