@@ -32,15 +32,17 @@
 ///         or a retry never reads the photo's position again. `pick` is
 ///         the chain the user picked in the editor (R7b), a table key;
 ///       - 'assist_cache'     {entries: [{key, chain_key, names, provider,
-///         result, cited_urls, evidence, at, declined?}]}: finished lookups,
-///         keyed by the chain and the meal's item names
+///         result, cited_urls, evidence, at, used_at, declined?}]}: finished
+///         lookups, keyed by the chain and the meal's item names
 ///         ([AssistCachedLookup]), so the same meal at the same chain is
-///         never looked up twice by the same provider; 30 d, newest 200
-///         (design R6c). `declined` marks an answer the user turned down
-///         (Undo, Use AI estimate, Wrong restaurant, Not from a restaurant)
-///         for those items at that chain: from then on it can only be
-///         suggested, until the user accepts it or confirms it. Not used
-///         for a later Gemini path (L1).
+///         never looked up twice by the same provider; an answer that
+///         found published numbers 365 d from `at` (its fetch), any other
+///         30 d; the 200 used most recently (`used_at`) are kept (design
+///         R6c, usual foods §2.1). `declined` marks an answer the user
+///         turned down (Undo, Use AI estimate, Wrong restaurant, Not from a
+///         restaurant) for those items at that chain: from then on it can
+///         only be suggested, until the user accepts it or confirms it. Not
+///         used for a later Gemini path (L1).
 ///
 /// Meal ids are row ids of this phone's database: they name no place and
 /// no restaurant. Nothing here is exported, backed up or logged. Reads never
@@ -197,8 +199,16 @@ const List<Duration> assistRetryDelays = [
   Duration(hours: 2),
 ];
 
-/// The on-device lookup cache (design R6c): 30 days, the newest 200.
+/// The on-device lookup cache (design R6c, usual foods §2.1): an answer
+/// that found a chain's published numbers lives [assistCacheFoundTtl] from
+/// its fetch; an answer that found nothing (not published, no match,
+/// ambiguous) lives [assistCacheTtl]. Neither life slides with use. The
+/// [assistCacheCap] answers used most recently are kept.
 const Duration assistCacheTtl = Duration(days: 30);
+
+/// The life of an answer that found published numbers, from its fetch
+/// (`at`, never moved): a year (usual foods D1).
+const Duration assistCacheFoundTtl = Duration(days: 365);
 const int assistCacheCap = 200;
 
 /// One cache entry's most bytes as stored: 200 of them stay well under the
@@ -449,8 +459,9 @@ final class AssistCachedLookup {
     required this.names,
     required this.lookup,
     required this.at,
+    DateTime? usedAt,
     this.declined = false,
-  });
+  }) : usedAt = usedAt ?? at;
 
   final String key;
   final String chainKey;
@@ -459,12 +470,27 @@ final class AssistCachedLookup {
   /// The answer as decideAssist reads it (provider, result, the search's
   /// URLs and its text for the source).
   final AssistLookup lookup;
+
+  /// When the answer was fetched. Its life is counted from here and never
+  /// slides ([assistCacheFoundTtl], [assistCacheTtl]).
   final DateTime at;
+
+  /// When the answer was last used (fetched, or answered a meal), stored
+  /// as `used_at`: the store keeps the [assistCacheCap] used most
+  /// recently. An entry written before it existed reads as [at].
+  final DateTime usedAt;
 
   /// The user turned these published numbers down for these items at this
   /// chain: they are only ever suggested again (meal_assist.dart), until
   /// the user accepts or confirms them.
   final bool declined;
+
+  /// The search found the chain's published numbers ('found'); any other
+  /// answer is kept only [assistCacheTtl] and never answers the editor.
+  bool get found => switch (lookup.result) {
+    final Map<Object?, Object?> r => r['status'] == 'found',
+    _ => false,
+  };
 
   Map<String, Object?> toJson() => {
     'key': key,
@@ -483,6 +509,7 @@ final class AssistCachedLookup {
         },
     ],
     'at': at.toUtc().toIso8601String(),
+    'used_at': usedAt.toUtc().toIso8601String(),
     if (declined) 'declined': true,
   };
 
@@ -493,11 +520,26 @@ final class AssistCachedLookup {
     names: names,
     lookup: lookup,
     at: at,
+    usedAt: usedAt,
     declined: value,
   );
 
-  /// Null for anything that is not a well-formed entry.
-  static AssistCachedLookup? fromJson(Object? raw) {
+  /// [usedAt] changed, everything else kept.
+  AssistCachedLookup withUsedAt(DateTime value) => AssistCachedLookup(
+    key: key,
+    chainKey: chainKey,
+    names: names,
+    lookup: lookup,
+    at: at,
+    usedAt: value,
+    declined: declined,
+  );
+
+  /// Null for anything that is not a well-formed entry. A `used_at` that
+  /// is missing or unreadable, earlier than `at`, or later than [now] (the
+  /// clock; default the wall clock) plus the store's slack
+  /// (ttlFutureSlack) reads as `at`.
+  static AssistCachedLookup? fromJson(Object? raw, {DateTime? now}) {
     if (raw is! Map) return null;
     final key = raw['key'];
     final chainKey = raw['chain_key'];
@@ -560,8 +602,23 @@ final class AssistCachedLookup {
         evidence: List.unmodifiable(pieces),
       ),
       at: at,
+      usedAt: _usedAt(raw['used_at'], at: at, now: now ?? DateTime.now()),
       declined: raw['declined'] == true,
     );
+  }
+
+  static DateTime _usedAt(
+    Object? raw, {
+    required DateTime at,
+    required DateTime now,
+  }) {
+    final used = raw is String ? DateTime.tryParse(raw) : null;
+    if (used == null ||
+        used.isBefore(at) ||
+        used.isAfter(now.add(ttlFutureSlack))) {
+      return at;
+    }
+    return used;
   }
 }
 
@@ -845,21 +902,34 @@ class AssistLocalState {
 
   // ── The lookup cache ──
 
+  /// Every readable entry still alive: a found answer up to
+  /// [assistCacheFoundTtl] after its fetch, any other up to
+  /// [assistCacheTtl] (both measured from `at`, never from `used_at`).
   Future<List<AssistCachedLookup>> _cacheEntries() async {
+    final now = _clock();
     final out = <AssistCachedLookup>[];
     for (final e in await _entries(
       assistCacheDocument,
       'entries',
       'at',
-      assistCacheTtl,
+      assistCacheFoundTtl,
     )) {
-      final entry = AssistCachedLookup.fromJson(e);
-      if (entry != null) out.add(entry);
+      final entry = AssistCachedLookup.fromJson(e, now: now);
+      if (entry == null) continue;
+      if (!entry.found && now.difference(entry.at) > assistCacheTtl) continue;
+      out.add(entry);
     }
     return out;
   }
 
-  /// The cached answer for [key], or null (none, past 30 days, unreadable).
+  Future<bool> _writeCache(List<Map<String, Object?>> entries) =>
+      _store.write(assistCacheDocument, {
+        'entries': capNewest(entries, assistCacheCap, field: 'used_at'),
+      }, version: assistLocalVersion);
+
+  /// The cached answer for [key], or null (none, past its life, unreadable).
+  /// Reading is not a use: the caller that answers a meal with it calls
+  /// [touchCachedLookup].
   Future<AssistCachedLookup?> cachedLookup(String key) async {
     try {
       for (final e in (await _cacheEntries()).reversed) {
@@ -871,34 +941,52 @@ class AssistLocalState {
     }
   }
 
-  /// Keeps [entry] (replacing one with its key), the newest
-  /// [assistCacheCap]. A refusal stays with the key: an entry it replaces
-  /// that the user [AssistCachedLookup.declined] keeps that mark (a fresh
-  /// answer, from any provider, is still the numbers the user turned down
-  /// for these items at this chain). False — nothing kept — for an entry
+  /// Keeps [entry] (replacing one with its key, its `used_at` set to its
+  /// fetch), the [assistCacheCap] used most recently. A refusal stays with
+  /// the key: an entry it replaces that the user
+  /// [AssistCachedLookup.declined] keeps that mark (a fresh answer, from
+  /// any provider, is still the numbers the user turned down for these
+  /// items at this chain).
+  ///
+  /// Usual foods D2a: an answer that found nothing never replaces an
+  /// unexpired found answer from the same provider for the key. Nothing is
+  /// written then, and the found answer stays.
+  ///
+  /// True when the store holds the best answer for the key, including when
+  /// D2a kept the older found one. False — nothing kept — for an entry
   /// whose JSON is over [assistCacheEntryMaxBytes].
   Future<bool> putCachedLookup(AssistCachedLookup entry) => _serial(() async {
     final current = await _cacheEntries();
+    AssistCachedLookup? old;
+    for (final e in current) {
+      if (e.key == entry.key) old = e;
+    }
+    // D2a: a search that found nothing never pushes out published numbers
+    // the same provider found earlier for these items at this chain.
+    if (!entry.found &&
+        old != null &&
+        old.found &&
+        old.lookup.provider == entry.lookup.provider) {
+      return true;
+    }
     final declined =
         entry.declined || current.any((e) => e.key == entry.key && e.declined);
-    final json = entry.withDeclined(declined).toJson();
+    final json = entry.withDeclined(declined).withUsedAt(entry.at).toJson();
     if (utf8.encode(jsonEncode(json)).length > assistCacheEntryMaxBytes) {
       return false;
     }
-    if (AssistCachedLookup.fromJson(json) == null) return false;
-    final entries = [
+    if (AssistCachedLookup.fromJson(json, now: _clock()) == null) return false;
+    return _writeCache([
       for (final e in current)
         if (e.key != entry.key) e.toJson(),
       json,
-    ];
-    return _store.write(assistCacheDocument, {
-      'entries': capNewest(entries, assistCacheCap, field: 'at'),
-    }, version: assistLocalVersion);
+    ]);
   }, false);
 
   /// Marks the cached answer for [key] as turned down by the user
   /// ([declined]) or accepted again. True when it is marked so now (or
-  /// there is no such answer to mark); its age is unchanged.
+  /// there is no such answer to mark). A mark is not a use: its `at` and
+  /// `used_at` are unchanged.
   Future<bool> markCachedLookup(String key, {required bool declined}) =>
       _serial(() async {
         final current = await _cacheEntries();
@@ -914,10 +1002,31 @@ class AssistLocalState {
           }
         }
         if (!found) return true;
-        return _store.write(assistCacheDocument, {
-          'entries': capNewest(entries, assistCacheCap, field: 'at'),
-        }, version: assistLocalVersion);
+        return _writeCache(entries);
       }, false);
+
+  /// The cached answer for [key] answered a meal: its `used_at` becomes
+  /// the clock, so it is the last to go when the store is full. Its `at`
+  /// (the start of its life) and [AssistCachedLookup.declined] are kept.
+  /// True when it was touched, or there is no such answer; never throws.
+  Future<bool> touchCachedLookup(String key) => _serial(() async {
+    final current = await _cacheEntries();
+    final now = _clock();
+    var found = false;
+    final entries = <Map<String, Object?>>[];
+    for (final e in current) {
+      if (e.key == key) {
+        found = true;
+        // A clock behind the fetch (inside the store's slack) is no use
+        // earlier than the fetch itself.
+        entries.add(e.withUsedAt(now.isBefore(e.at) ? e.at : now).toJson());
+      } else {
+        entries.add(e.toJson());
+      }
+    }
+    if (!found) return true;
+    return _writeCache(entries);
+  }, false);
 
   /// Forgets every cached answer.
   Future<bool> clearCache() =>
