@@ -32,11 +32,13 @@
 ///         or a retry never reads the photo's position again. `pick` is
 ///         the chain the user picked in the editor (R7b), a table key;
 ///       - 'assist_cache'     {entries: [{key, chain_key, names, provider,
-///         result, cited_urls, evidence, at, declined?}]}: finished lookups,
-///         keyed by the chain and the meal's item names
+///         result, cited_urls, evidence, at, used_at, declined?}]}: finished
+///         lookups, keyed by the chain and the meal's item names
 ///         ([AssistCachedLookup]), so the same meal at the same chain is
-///         never looked up twice by the same provider; 30 d, newest 200
-///         (design R6c). `declined` marks an answer the user turned down
+///         never looked up twice by the same provider; an answer that
+///         found published numbers 365 d from `at` (its fetch), any other
+///         30 d; the 200 used most recently (`used_at`) are kept (design
+///         R6c, usual foods §2.1). `declined` marks an answer the user turned down
 ///         (Undo, Use AI estimate, Wrong restaurant, Not from a restaurant)
 ///         for those items at that chain: from then on it can only be
 ///         suggested, until the user accepts it or confirms it. Not used

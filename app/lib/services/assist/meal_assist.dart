@@ -112,14 +112,23 @@
 /// job or retry record, so a poll, a resubmit or a retry never reads the
 /// position again.
 ///
-/// The cache (R6c, 'assist_cache', 30 days, 200): a finished answer keyed by
-/// its chain and the meal's item names (sorted, parenthetical weights
-/// dropped). An automatic lookup's hit makes no lookup call — only an
-/// answer from the provider a lookup would reach now counts (one cached
-/// from Anthropic never answers on Claude Plan, whose lookups are
-/// suggestions only). The editor's lookup never reads the cache: the user
-/// asked again. Once the user turns an answer down (Undo, Use AI estimate,
-/// Wrong restaurant, Not from a restaurant) that chain and those items are
+/// The cache (R6c and usual foods Part 1, 'assist_cache', 200 answers): a
+/// finished answer keyed by its chain and the meal's item names (sorted,
+/// parenthetical weights dropped). An answer that found a chain's
+/// published numbers is kept a year from its fetch, any other 30 days;
+/// when the store is full the answer used longest ago goes first. A
+/// lookup's hit makes no lookup call — only an answer from the provider a
+/// lookup would reach now counts (one cached from Anthropic never answers
+/// on Claude Plan, whose lookups are suggestions only) — and is judged
+/// again by today's rules; its block says the day it was fetched
+/// (`fetched_on`). Which chains a saved answer may answer for: the user's
+/// pick after Wrong restaurant alone; else the printed chains in rank
+/// order; else only the top-ranked location chain. The editor's lookup
+/// reads only an answer that found published numbers, and only on a meal
+/// not looked up yet (or for the picked chain); never for Search again,
+/// and never while a job of the meal is still running on the server.
+/// Once the user turns an answer down (Undo, Use AI estimate, Wrong
+/// restaurant, Not from a restaurant) that chain and those items are
 /// marked declined: an APPLY for them, cached or fresh, is written as a
 /// suggestion (reason declined_before) until the user accepts or confirms
 /// one (Use published numbers, Correct).
@@ -897,7 +906,8 @@ class MealAssist {
   /// from a restaurant' zones and the confirmed and blocked chains — are
   /// forgotten, through the same store instance the location path reads;
   /// so are the other records that hold chains found near a photo: the
-  /// 30-day answer cache (with the answers the user turned down) and the
+  /// saved lookup answers (a year for the ones that found published
+  /// numbers, with the answers the user turned down) and the
   /// pending jobs and retries with what their location path found (the
   /// next sweep asks again). True when the places are gone (none were ever
   /// kept without a store). Never throws.
@@ -1371,8 +1381,17 @@ class MealAssist {
   /// for one) and room under the daily cap for anything new it sends (a
   /// poll of the meal's pending job is not new: see below); ignores the
   /// mode, the triggers, the 24 h window, the miss list and a retry's
-  /// wait — the user asked — and the cache: it always asks the provider
-  /// again.
+  /// wait — the user asked.
+  ///
+  /// Saved lookup answers (usual foods §2.3): on a meal not looked up yet,
+  /// a saved answer that found published numbers, from the provider a
+  /// lookup would reach now, answers with no lookup call
+  /// ([AssistRun.fromCache]; the block's `fetched_on` says when it was
+  /// fetched). A meal already looked up asks the provider again, and so
+  /// does [fresh] (Search again, and the editor's press right after a
+  /// saved answer). While a job of the meal is still running on the
+  /// server it is polled, never answered by a saved answer. At the daily
+  /// cap no saved answer is used either (the cap check comes first).
   /// [useLocation] is the user's choice ("Use location" / "Brand only"):
   /// with it, a restaurant meal takes the location path under the same
   /// gates as an automatic lookup (locationAllowed, has_gps, restaurant);
@@ -1394,7 +1413,8 @@ class MealAssist {
   /// restaurant?' search after 'Wrong restaurant' (R7b): the request names
   /// it (after any chain a printed brand names — the composer's rule), no
   /// location is read, and decideAssist accepts an answer for that chain
-  /// alone, as a suggestion at most. To the owner's server over http,
+  /// alone, as a suggestion at most. A saved answer is read for that chain
+  /// alone too, even on a meal already looked up. To the owner's server over http,
   /// where the pick would be stripped with the location-derived chains,
   /// nothing is sent ([AssistSkip.pickNeedsHttps]). Calling again while
   /// the server still runs this meal's job — this call's own, or the
