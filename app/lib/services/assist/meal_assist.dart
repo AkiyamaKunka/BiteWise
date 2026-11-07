@@ -1414,9 +1414,9 @@ class MealAssist {
   /// it (after any chain a printed brand names — the composer's rule), no
   /// location is read, and decideAssist accepts an answer for that chain
   /// alone, as a suggestion at most. A saved answer is read for that chain
-  /// alone too, even on a meal already looked up. To the owner's server over http,
-  /// where the pick would be stripped with the location-derived chains,
-  /// nothing is sent ([AssistSkip.pickNeedsHttps]). Calling again while
+  /// alone too, even on a meal already looked up. To the owner's server
+  /// over http, where the pick would be stripped with the location-derived
+  /// chains, nothing is sent ([AssistSkip.pickNeedsHttps]). Calling again while
   /// the server still runs this meal's job — this call's own, or the
   /// automatic lookup's — polls it: no new lookup, so not held by the daily
   /// cap. At the cap nothing else is sent: not a lookup that differs from

@@ -38,11 +38,11 @@
 ///         never looked up twice by the same provider; an answer that
 ///         found published numbers 365 d from `at` (its fetch), any other
 ///         30 d; the 200 used most recently (`used_at`) are kept (design
-///         R6c, usual foods §2.1). `declined` marks an answer the user turned down
-///         (Undo, Use AI estimate, Wrong restaurant, Not from a restaurant)
-///         for those items at that chain: from then on it can only be
-///         suggested, until the user accepts it or confirms it. Not used
-///         for a later Gemini path (L1).
+///         R6c, usual foods §2.1). `declined` marks an answer the user
+///         turned down (Undo, Use AI estimate, Wrong restaurant, Not from a
+///         restaurant) for those items at that chain: from then on it can
+///         only be suggested, until the user accepts it or confirms it. Not
+///         used for a later Gemini path (L1).
 ///
 /// Meal ids are row ids of this phone's database: they name no place and
 /// no restaurant. Nothing here is exported, backed up or logged. Reads never

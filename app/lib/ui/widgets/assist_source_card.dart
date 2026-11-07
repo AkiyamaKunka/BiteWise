@@ -12,10 +12,11 @@
 /// else is never a link), 'via {provider} · {date}' (for a saved lookup
 /// answer, 'via {provider} · saved answer from {date}', the day it was
 /// fetched), whether the number was found on the source page, and the
-/// lookup's notes as plain text (at most 200 characters, never links). Everything shown is the chain's
-/// name from the app's own table and what the lookup returned — nothing
-/// from Apple Maps exists to show. A lookup that found nothing names no
-/// restaurant.
+/// lookup's notes as plain text (at most 200 characters, never links).
+/// Everything shown is the chain's name from the app's own table and what
+/// the lookup returned — nothing from Apple Maps exists to show. A lookup
+/// that found nothing names no restaurant (a saved one says when it was
+/// fetched).
 ///
 /// Buttons: Use AI estimate (a note replaces it once the meal changed
 /// after the numbers were used), Wrong restaurant, Not from a restaurant,
