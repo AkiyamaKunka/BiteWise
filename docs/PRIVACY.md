@@ -1,6 +1,6 @@
 # Chopstats · 筷拍 — Privacy Policy
 
-Effective date: 2026-11-05
+Effective date: 2026-11-07
 
 [English](#english) · [中文](#中文)
 
@@ -30,13 +30,27 @@ accounts, and receives none of your data.**
   confirmed or marked as wrong and the spots you marked as "not a
   restaurant" (each kept as an area of roughly 100 m, for up to 180 days;
   only on iPhone, where photo locations are used), lookups still waiting
-  for an answer, recent lookup answers (up to 30 days, each marked if you
-  turned it down, so it is only suggested again), which updated meals you
-  have not opened yet, and a log of the last 20 lookup decisions (result
-  codes and calorie numbers only). These are kept outside your phone's
-  backups and are never exported. **Clear learned places** in Settings
-  deletes the places, the recent lookup answers and the lookups still
-  waiting.
+  for an answer, saved lookup answers (an answer that found a chain's
+  published numbers for up to a year, any other for up to 30 days; each
+  with when it was last used, so the one used longest ago goes first when
+  space runs out, and marked if you turned it down, so it is only
+  suggested again), which updated meals you have not opened yet, and a log
+  of the last 20 lookup decisions (result codes and calorie numbers only).
+  These are kept outside your phone's backups and are never exported.
+  **Clear learned places** in Settings deletes the places, the saved
+  lookup answers and the lookups still waiting. On Android, where no
+  places are kept, **Clear saved lookup answers** deletes the saved lookup
+  answers and the lookups still waiting.
+- **My usual foods** and **your usual numbers** are worked out on the
+  phone from the meals you logged in the last 90 days: which foods you log
+  often, and the numbers you set for a food yourself (in the meal editor,
+  or by tapping **Use**). The meal keeps a small mark on that food saying
+  you set them. Working them out sends nothing: no AI call, no lookup. A
+  meal you log or change with them is then like any other meal: its
+  summary goes with the next photo you log that day, as described under
+  "What is sent, and to whom". Which foods you hid from **My usual foods**
+  and which offers you turned down are kept with the app's settings as
+  short codes, not food names.
 
 The app contains no analytics, no crash reporting, no advertising and no
 tracking SDK, and it does not use your data to track you across apps or
@@ -182,14 +196,17 @@ service or server.
   send.
 - **What is saved with the meal:** the chain, the matched menu items, the
   published numbers, the address of the chain's page they came from, which
-  service answered, the date, each item's numbers before and after, the
+  service answered, the date (and, for a saved answer, the day it was
+  looked up), each item's numbers before and after, the
   lookup's notes (at most 200 characters, shown as plain text), why a
   suggestion was not used by itself (a code), why the lookup ran (a code),
   and how the meal was tied to the chain (a brand printed on an item or
   receipt, the photo's location, or your own pick). This holds no location
   and is part of the meal in exports.
 - Turning it off cancels lookups in progress, drops pending ones, and can
-  clear learned places at the same time.
+  clear learned places and the saved lookup answers at the same time (on
+  Android, the saved lookup answers). If you do not clear them, they are
+  kept as described above.
 
 ### Export, import and backups
 
@@ -205,9 +222,11 @@ service or server.
 
 ### Deleting your data
 
-Delete meals inside the app, use **Clear learned places** (Settings ›
-Restaurant nutrition) to delete the places the restaurant lookup learned
-and its recent answers, or uninstall the app to delete everything it stored on the phone. Copies you exported or that sit in your own backups,
+Delete meals inside the app (My usual foods and your usual numbers are
+worked out from them, so they change with them), use
+**Clear learned places** (Settings › Restaurant nutrition; on Android
+**Clear saved lookup answers**) to delete the places the restaurant lookup
+learned and its saved answers, or uninstall the app to delete everything it stored on the phone. Copies you exported or that sit in your own backups,
 and anything already sent to the AI service you chose, are governed by
 where they now live (your files, your backup, or that provider's policy).
 
@@ -283,7 +302,8 @@ date. Questions: open an issue at
 - API Key（以及你自己服务器的密钥，如果你使用的话）保存在 iOS 钥匙串中；在 Android 上保存在由 Android Keystore 保护的加密存储中。
 - 通知（餐食卡片、每日总结）在手机上生成。
 - 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
-- 仅当你开启**「餐厅营养」查询**时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、最近的查询结果（最长 30 天；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的**「清除已记住的地点」**会删除这些地点、最近的查询结果和还在等待的查询。
+- 仅当你开启**「餐厅营养」查询**时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；每条都记录最后一次使用的时间，空间不够时先删除最久没用的；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的**「清除已记住的地点」**会删除这些地点、保存的查询结果和还在等待的查询。在不保存地点的 Android 上，**「清除保存的查询结果」**会删除保存的查询结果和还在等待的查询。
+- **「我常吃的」**和**「你平时的数值」**都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按**「采用」**）。这一餐会在该食物上保存一个小标记，说明数值是你设定的。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时，它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
 
 应用不包含任何统计分析、崩溃上报、广告或追踪 SDK，也不会利用你的数据在其他应用或网站之间追踪你。
 
@@ -329,8 +349,8 @@ date. Questions: open an issue at
   - 其他任何 AI 服务：完全不会进行查询。
 
   它们如何处理你发送的内容，以它们各自的隐私政策和条款为准。
-- **随餐保存的内容：** 连锁店、匹配到的菜品、公布的数值、数值来源的连锁店网页地址、由哪个服务给出的结果、日期、每项食物在采用前后的数值、查询的备注（最多 200 个字符，以纯文本显示）、建议没有被自动采用的原因（一个代码）、这次查询的起因（一个代码），以及这一餐是如何与该连锁店对应上的（食物或小票上印的品牌、照片的拍摄位置，或你自己选的）。其中不含任何位置，导出时作为这一餐的一部分。
-- 关闭此功能会取消进行中的查询、丢弃待处理的查询，并可同时清除已记住的地点。
+- **随餐保存的内容：** 连锁店、匹配到的菜品、公布的数值、数值来源的连锁店网页地址、由哪个服务给出的结果、日期（使用保存的结果时，还有当初查询的日期）、每项食物在采用前后的数值、查询的备注（最多 200 个字符，以纯文本显示）、建议没有被自动采用的原因（一个代码）、这次查询的起因（一个代码），以及这一餐是如何与该连锁店对应上的（食物或小票上印的品牌、照片的拍摄位置，或你自己选的）。其中不含任何位置，导出时作为这一餐的一部分。
+- 关闭此功能会取消进行中的查询、丢弃待处理的查询，并可同时清除已记住的地点和保存的查询结果（Android 上是保存的查询结果）。如果不清除，它们会按上文所述保存。
 
 ### 导出、导入与备份
 
@@ -339,7 +359,7 @@ date. Questions: open an issue at
 
 ### 删除数据
 
-在应用内删除餐食，用**「清除已记住的地点」**（设置 › 餐厅营养）删除餐厅查询记住的地点和最近的查询结果，或卸载应用以删除它在手机上保存的全部数据。你导出的文件、你自己备份中的副本，以及已经发送给你所选 AI 服务的内容，分别由它们现在所在的位置（你的文件、你的备份或该服务商的政策）决定。
+在应用内删除餐食（「我常吃的」和你平时的数值都根据餐食算出，会随之改变），用**「清除已记住的地点」**（设置 › 餐厅营养；Android 上是**「清除保存的查询结果」**）删除餐厅查询记住的地点和保存的查询结果，或卸载应用以删除它在手机上保存的全部数据。你导出的文件、你自己备份中的副本，以及已经发送给你所选 AI 服务的内容，分别由它们现在所在的位置（你的文件、你的备份或该服务商的政策）决定。
 
 ### 第三方与你的同意
 

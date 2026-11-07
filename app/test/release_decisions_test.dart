@@ -485,11 +485,13 @@ void main() {
     test('in English and 中文, with the new effective date', () {
       // The merge of PR #19 (restaurant lookup) changed the policy again,
       // and so did its "Which meals" bullet, rewritten on 2026-11-05 for
-      // the auto_branding trigger. The date and this pin are set by hand,
-      // and again to the merge date when PR #19 merges and when PR #22
-      // merges (docs/RELEASING.md): a 3-way merge keeps the older date
-      // without a conflict.
-      expect(policy, contains('Effective date: 2026-11-05'));
+      // the auto_branding trigger, and the usual-foods PR on 2026-11-07
+      // (saved lookup answers kept up to a year; My usual foods). The date
+      // and this pin are set by hand, and again to the merge date when PR
+      // #19 merges, when the usual-foods PR merges and when PR #22 merges
+      // (docs/RELEASING.md): a 3-way merge keeps the older date without a
+      // conflict.
+      expect(policy, contains('Effective date: 2026-11-07'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));
