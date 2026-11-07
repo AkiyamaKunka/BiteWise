@@ -5,6 +5,8 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/usual_foods_logic.dart'
+    show usualStamp;
 import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
     show
         AssistDecision,
@@ -539,6 +541,113 @@ void main() {
     expect(saved.containsKey('assist'), isFalse);
     expect((saved['food_items'] as List).single.containsKey('published'),
         isFalse);
+  });
+
+  testWidgets("a describe preview's user marks are dropped when it opens; "
+      'a number the user changes there is saved as theirs (usual foods T26)',
+      (tester) async {
+    useTallSurface(tester);
+    final dao = FakeDao();
+    final forged = {
+      'set': true,
+      'at': '2026-01-01T00:00:00.000Z',
+      'n': [1050, 40, 120, 30],
+      'qty': 1,
+    };
+    await tester.pumpWidget(host(MealEditorScreen(
+      dao: dao,
+      now: clock,
+      newMealSource: MealSource.manualText,
+      initialAnalysis: {
+        'is_food': true,
+        'meal_description': 'Burrito bowl and chips',
+        'total_calories': 1250,
+        'total_protein_g': 43,
+        'total_carbs_g': 145,
+        'total_fat_g': 40,
+        'assist': {'v': 2, 'status': 'applied', 'chain_key': 'chipotle'},
+        'food_items': [
+          {
+            'name': 'Burrito bowl',
+            'estimated_calories': 1050,
+            'protein_g': 40,
+            'carbs_g': 120,
+            'fat_g': 30,
+            'published': true,
+            'user': forged,
+          },
+          {
+            'name': 'Chips',
+            'estimated_calories': 200,
+            'protein_g': 3,
+            'carbs_g': 25,
+            'fat_g': 10,
+            'user': {...forged, 'n': [200, 3, 25, 10]},
+          },
+        ],
+      },
+    )));
+    await tester.pumpAndSettle();
+    // Shown as the model wrote the numbers.
+    expect(
+      tester.widget<TextField>(find.byKey(const Key('itemCal0'))).controller!
+          .text,
+      '1050',
+    );
+    await tester.enterText(find.byKey(const Key('itemCal1')), '250');
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+
+    final saved = dao.saved.single.analysis;
+    expect(saved.containsKey('assist'), isFalse);
+    final items = [
+      for (final e in saved['food_items'] as List) e as Map<String, dynamic>,
+    ];
+    // Untouched: no mark (the model's was not the user's), no flag.
+    expect(items[0].containsKey('user'), isFalse);
+    expect(items[0].containsKey('published'), isFalse);
+    expect(items[0]['estimated_calories'], 1050);
+    // Changed here: the user's numbers, stamped with the editor's clock.
+    final user = items[1]['user'] as Map;
+    expect(user['set'], isTrue);
+    expect(user['n'], [250, 3, 25, 10]);
+    expect(user['at'], usualStamp(clock()));
+    expect(user['qty'], 1);
+    expect(saved['total_calories'], 1300);
+  });
+
+  testWidgets('a hand-typed meal\'s rows are saved as the user\'s numbers, '
+      'and an edit of a stored meal stamps the editor\'s clock', (tester) async {
+    useTallSurface(tester);
+    final dao = FakeDao()
+      ..seed(meal(analysis: {
+        'is_food': true,
+        'meal_description': 'Oatmeal',
+        'total_calories': 300,
+        'total_protein_g': 10,
+        'total_carbs_g': 50,
+        'total_fat_g': 6,
+        'food_items': [
+          {
+            'name': 'Oatmeal (~250 g)',
+            'estimated_calories': 300,
+            'protein_g': 10,
+            'carbs_g': 50,
+            'fat_g': 6,
+          },
+        ],
+      }));
+    await tester.pumpWidget(host(
+        MealEditorScreen(dao: dao, meal: dao.meals.first, now: clock)));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('itemCal0')), '350');
+    await tester.tap(find.byKey(const Key('saveMealButton')));
+    await tester.pumpAndSettle();
+    final (_, analysis, _, _) = dao.fieldUpdates.single;
+    final user = (analysis!['food_items'] as List).single['user'] as Map;
+    expect(user['set'], isTrue);
+    expect(user['n'], [350, 10, 50, 6]);
+    expect(user['at'], usualStamp(clock()));
   });
 
   testWidgets('empty day offers the add path', (tester) async {

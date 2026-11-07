@@ -209,7 +209,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     final clock = widget.now ?? DateTime.now;
     final meal = widget.meal;
     final photo = widget.fromPhoto;
-    final prefill = widget.initialAnalysis;
+    // A describe preview's reply is no evidence that a chain published
+    // anything or that the user set a number (design R6a, usual foods
+    // D25): its claims go before the form is built, so the only marks a
+    // new meal is saved with are this session's own.
+    final prefill = _withoutClaims(widget.initialAnalysis);
     // The photo's capture moment in the zone it was TAKEN in — the same
     // clock the automatic pipeline dates by, so a manual log of a photo
     // from before a flight agrees with an automatic one.
@@ -264,6 +268,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         seen(meal.id).then((_) {}, onError: (Object _) {});
       }
     }
+  }
+
+  /// A copy of [analysis] without the assist block, published flags and
+  /// user marks a model may have written ([dropAssistClaims]).
+  static Map<String, dynamic>? _withoutClaims(Map<String, dynamic>? analysis) {
+    if (analysis == null) return null;
+    final copy = Map<String, dynamic>.from(analysis);
+    dropAssistClaims(copy);
+    return copy;
   }
 
   /// Everything the form shows, as one string: unchanged while the user has
@@ -510,16 +523,20 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       _saving = true;
     });
     try {
-      final analysis = _draft.toAnalysis();
+      // The marks of the rows changed here (usual foods §3.1) carry the
+      // editor's clock.
+      final analysis = _draft.toAnalysis(now: (widget.now ?? DateTime.now)());
       if (widget.isNew) {
         final photo = widget.fromPhoto;
         // How the photo was taken (design G2a), from the intake's reading
         // of its bytes — never from a model's preview — as the automatic
         // pipeline stores it. Nor an assist block or a published flag a
         // describe preview's model wrote (design R6a): only a verified
-        // restaurant lookup writes those.
+        // restaurant lookup writes those. The rows' user marks stay: the
+        // prefill lost the model's when the editor opened, so these are
+        // the numbers the user set in this session (usual foods D25).
         analysis.remove('capture');
-        dropAssistClaims(analysis);
+        dropAssistClaims(analysis, keepUserMarks: true);
         final capture = photo?.capture;
         if (capture != null) analysis['capture'] = captureAnalysis(capture);
         // md5 of the ORIGINAL bytes: the same identity the watcher uses, so
