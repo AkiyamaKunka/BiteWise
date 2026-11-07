@@ -2399,7 +2399,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get clearPlacesBody =>
-      '筷拍会忘记你确认过或标记为不对的餐厅，以及你标记为\"不是餐厅\"的地点。这些只保存在这台手机上。';
+      '筷拍会忘记你确认过或标记为不对的餐厅、你标记为「不是餐厅的」地点、保存的查询结果和还在等待的查询。这些只保存在这台手机上。';
 
   @override
   String get clearPlacesConfirm => '清除';
@@ -2648,4 +2648,163 @@ class AppLocalizationsZh extends AppLocalizations {
   String diagConfidenceLine(int low, int medium, int high, int unknown) {
     return '低 $low · 中 $medium · 高 $high · 未给出 $unknown';
   }
+
+  @override
+  String assistViaSaved(String provider, String date) {
+    return '通过 $provider · $date 保存的结果';
+  }
+
+  @override
+  String assistContextSaved(String date) {
+    return '$date 保存的结果。';
+  }
+
+  @override
+  String get assistSearchAgain => '重新查找';
+
+  @override
+  String assistFoundSaved(String date) {
+    return '找到了 $date 保存的结果。要重新查找，请点按「重新查找」。';
+  }
+
+  @override
+  String get assistSearchAgainNoChange => '重新查找没有找到更合适的数值，保留现在的数值。';
+
+  @override
+  String get assistSearchAgainSame => '重新查找得到的数值和现在的相同。';
+
+  @override
+  String assistSearchAgainDiffers(String kcal) {
+    return '重新查找得到这些食物共 $kcal 千卡。要采用，请先点按「改用 AI 估算」，再重新查找。';
+  }
+
+  @override
+  String get restaurantSavedAnswersHint =>
+      '查到的连锁店营养信息会在这台手机上保存最长一年并再次使用，同样的食物不用再查。';
+
+  @override
+  String get settingsRowClearSavedAnswers => '清除保存的查询结果';
+
+  @override
+  String get clearAnswersTitle => '清除保存的查询结果？';
+
+  @override
+  String get clearAnswersBody =>
+      '筷拍会忘记查到的餐厅营养信息和还在等待的查询。已记录的餐食数值不变。这些结果只保存在这台手机上。';
+
+  @override
+  String get clearAnswersDone => '已清除保存的查询结果。';
+
+  @override
+  String get restaurantOffClearAnswers => '同时清除保存的查询结果';
+
+  @override
+  String usualItemLine(String name, String ai, String mine) {
+    return '$name：AI $ai → 你平时的 $mine 千卡';
+  }
+
+  @override
+  String usualChipMany(int count) {
+    return '$count 项可用你平时的数值';
+  }
+
+  @override
+  String get usualChipUse => '采用';
+
+  @override
+  String get usualChipReview => '查看';
+
+  @override
+  String usualChipUseLabel(String name) {
+    return '「$name」采用你平时的数值';
+  }
+
+  @override
+  String get usualCardTitle => '你平时的数值';
+
+  @override
+  String usualCardFrom(String name, String date) {
+    return '来自你 $date 记录的「$name」。';
+  }
+
+  @override
+  String get usualUseMine => '采用我的数值';
+
+  @override
+  String get usualKeepAi => '保留 AI 估算';
+
+  @override
+  String usualUsedSnack(String before, String after) {
+    return '已采用你平时的数值：$before → $after 千卡';
+  }
+
+  @override
+  String get usualUndoStale => '这一餐之后有改动，所以没有撤销。';
+
+  @override
+  String get addUsual => '我常吃的';
+
+  @override
+  String get usualNowHeader => '这个时间常吃的';
+
+  @override
+  String get usualMoreHeader => '其他';
+
+  @override
+  String usualRowStats(int days, String day) {
+    return '最近 90 天里有 $days 天 · 上次 $day';
+  }
+
+  @override
+  String usualLoggedToday(String time) {
+    return '今天 $time 已记录';
+  }
+
+  @override
+  String get usualScreenHint => '点一下，就按这些数值现在记一餐。不用拍照，也不用 AI。';
+
+  @override
+  String usualLoggedSnack(String name, String kcal) {
+    return '已记录「$name」· $kcal 千卡';
+  }
+
+  @override
+  String get usualLogFailed => '没能记录，请再试一次。';
+
+  @override
+  String get usualListFailed => '没能载入你常吃的食物。';
+
+  @override
+  String get usualMoreActions => '更多操作';
+
+  @override
+  String get usualHide => '不在列表里显示';
+
+  @override
+  String get usualHiddenSnack => '已从「我常吃的」里隐藏。';
+
+  @override
+  String usualHiddenRow(int count) {
+    return '已隐藏的食物（$count）';
+  }
+
+  @override
+  String get usualUnhide => '重新显示';
+
+  @override
+  String get usualEmpty => '最近 90 天里至少有 2 天记过的食物会出现在这里。照常记录就好。';
+
+  @override
+  String get usualAllHidden => '你常吃的食物都已隐藏。';
+
+  @override
+  String get usualAgainTitle => '再记一次？';
+
+  @override
+  String usualAgainBody(String name, String time) {
+    return '你 $time 已经记过「$name」。';
+  }
+
+  @override
+  String get usualAgainConfirm => '再记一次';
 }

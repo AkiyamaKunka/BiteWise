@@ -2140,9 +2140,9 @@
   "@clearPlacesTitle": {
     "description": "Confirm dialog title."
   },
-  "clearPlacesBody": "Chopstats forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.",
+  "clearPlacesBody": "Chopstats forgets the restaurants you confirmed or marked as wrong, the spots you marked as not a restaurant, the saved lookup answers and the lookups still waiting. They are kept only on this phone.",
   "@clearPlacesBody": {
-    "description": "Confirm dialog body."
+    "description": "Body of the iPhone confirm dialog for Clear learned places. It also clears the saved lookup answers and the lookups still waiting."
   },
   "clearPlacesConfirm": "Clear",
   "@clearPlacesConfirm": {
@@ -2518,5 +2518,271 @@
         "type": "int"
       }
     }
+  },
+  "assistViaSaved": "via {provider} · saved answer from {date}",
+  "@assistViaSaved": {
+    "description": "Source card's via line when the numbers came from an answer saved on this phone: provider is Claude Plan, Claude or OpenRouter; date is the YYYY-MM-DD the answer was fetched.",
+    "placeholders": {
+      "provider": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "assistContextSaved": "Saved answer from {date}.",
+  "@assistContextSaved": {
+    "description": "Source card, under 'No published nutrition found', when that answer was a saved one: date is the YYYY-MM-DD it was fetched.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "assistSearchAgain": "Search again",
+  "@assistSearchAgain": {
+    "description": "Source card button: ask the provider for a new answer instead of the saved one. On suggested-stale and context-only cards it replaces 'Look up restaurant nutrition'."
+  },
+  "assistFoundSaved": "Found a saved answer from {date}. Tap Search again for a new search.",
+  "@assistFoundSaved": {
+    "description": "Meal editor snackbar after Look up used an answer saved on this phone instead of searching: date is the YYYY-MM-DD it was fetched. Do not say 'Used': on Claude Plan it is only a suggestion.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "assistSearchAgainNoChange": "The new search found nothing better. These numbers stay.",
+  "@assistSearchAgainNoChange": {
+    "description": "Meal editor snackbar: Search again over numbers already in use found nothing usable, so the meal keeps its numbers."
+  },
+  "assistSearchAgainSame": "The new search found the same numbers.",
+  "@assistSearchAgainSame": {
+    "description": "Meal editor snackbar: Search again over numbers already in use found the same numbers."
+  },
+  "assistSearchAgainDiffers": "The new search found {kcal} kcal for these items. To use it, tap Use AI estimate, then look up again.",
+  "@assistSearchAgainDiffers": {
+    "description": "Meal editor snackbar: Search again over numbers already in use found different ones, which are not applied. kcal is the found total for the looked-up items, already formatted.",
+    "placeholders": {
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "restaurantSavedAnswersHint": "Chain nutrition that was found is kept on this phone for up to a year and used again, so the same food is not searched again.",
+  "@restaurantSavedAnswersHint": {
+    "description": "Settings › Restaurant nutrition footer, right after the line naming who receives lookups, only while lookups are on."
+  },
+  "settingsRowClearSavedAnswers": "Clear saved lookup answers",
+  "@settingsRowClearSavedAnswers": {
+    "description": "Settings › Restaurant nutrition row on Android (which has no learned places): clears the saved lookup answers."
+  },
+  "clearAnswersTitle": "Clear saved lookup answers?",
+  "@clearAnswersTitle": {
+    "description": "Title of the Android confirm dialog for Clear saved lookup answers."
+  },
+  "clearAnswersBody": "Chopstats forgets the restaurant nutrition it looked up and the lookups still waiting. Your meals keep their numbers. These answers are kept only on this phone.",
+  "@clearAnswersBody": {
+    "description": "Body of the Android confirm dialog for Clear saved lookup answers."
+  },
+  "clearAnswersDone": "Saved lookup answers cleared.",
+  "@clearAnswersDone": {
+    "description": "Snackbar after clearing the saved lookup answers on Android."
+  },
+  "restaurantOffClearAnswers": "Also clear saved lookup answers",
+  "@restaurantOffClearAnswers": {
+    "description": "Checkbox in the Off dialog on Android (iOS shows 'Also clear learned places' there)."
+  },
+  "usualItemLine": "{name}: AI {ai} → your usual {mine} kcal",
+  "@usualItemLine": {
+    "description": "Today chip for one food, and each food on the meal editor's Your usual numbers card: the AI's kcal and the kcal you set for this food before. name is the food's name; ai and mine are kcal, already formatted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "ai": {
+        "type": "String"
+      },
+      "mine": {
+        "type": "String"
+      }
+    }
+  },
+  "usualChipMany": "Your usual numbers for {count} items",
+  "@usualChipMany": {
+    "description": "Today chip when two or more foods in the meal have your usual numbers: count is 2 or more.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usualChipUse": "Use",
+  "@usualChipUse": {
+    "description": "Today chip button for one food: use your usual numbers for it."
+  },
+  "usualChipReview": "Review",
+  "@usualChipReview": {
+    "description": "Today chip button for two or more foods: opens the meal editor."
+  },
+  "usualChipUseLabel": "Use your usual numbers for {name}",
+  "@usualChipUseLabel": {
+    "description": "Screen-reader label of the Today chip's Use button: name is the food's name.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "usualCardTitle": "Your usual numbers",
+  "@usualCardTitle": {
+    "description": "Title of the meal editor card that offers your usual numbers."
+  },
+  "usualCardFrom": "From your {name} on {date}.",
+  "@usualCardFrom": {
+    "description": "Meal editor card, under each food: the meal the usual numbers came from. name is that food's name; date is YYYY-MM-DD.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "usualUseMine": "Use my numbers",
+  "@usualUseMine": {
+    "description": "Meal editor card button: use your usual numbers for every food it lists."
+  },
+  "usualKeepAi": "Keep AI estimate",
+  "@usualKeepAi": {
+    "description": "Meal editor card button: keep the AI's numbers. The card goes away and the meal is not changed."
+  },
+  "usualUsedSnack": "Used your usual numbers: {before} → {after} kcal",
+  "@usualUsedSnack": {
+    "description": "Snackbar after Use, with Undo: before and after are the meal's total kcal, already formatted.",
+    "placeholders": {
+      "before": {
+        "type": "String"
+      },
+      "after": {
+        "type": "String"
+      }
+    }
+  },
+  "usualUndoStale": "This meal changed since, so nothing was undone.",
+  "@usualUndoStale": {
+    "description": "Snackbar when Undo (of Use, or of a log from My usual foods) finds the meal changed since, so nothing was undone."
+  },
+  "addUsual": "My usual foods",
+  "@addUsual": {
+    "description": "Log sheet row (right after From recent photos) and the title of the My usual foods screen."
+  },
+  "usualNowHeader": "Around this time",
+  "@usualNowHeader": {
+    "description": "My usual foods: header over the meals you usually log around this time of day."
+  },
+  "usualMoreHeader": "More",
+  "@usualMoreHeader": {
+    "description": "My usual foods: header over the rest of the list."
+  },
+  "usualRowStats": "{days} of the last 90 days · last logged {day}",
+  "@usualRowStats": {
+    "description": "My usual foods row, third line: on how many of the last 90 days the meal was logged, and the last day it was (a friendly day such as 'Tuesday, Nov 04').",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "day": {
+        "type": "String"
+      }
+    }
+  },
+  "usualLoggedToday": "Logged today at {time}",
+  "@usualLoggedToday": {
+    "description": "My usual foods row, third line, when the meal was already logged today: time is that clock time.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "usualScreenHint": "Tap a food to log it now with these numbers. No photo, no AI.",
+  "@usualScreenHint": {
+    "description": "My usual foods screen footer."
+  },
+  "usualLoggedSnack": "Logged {name} · {kcal} kcal",
+  "@usualLoggedSnack": {
+    "description": "Snackbar after a one-tap log on My usual foods, with Undo: name is the meal's title; kcal is already formatted.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "usualLogFailed": "Couldn't log it. Try again.",
+  "@usualLogFailed": {
+    "description": "Snackbar when a one-tap log on My usual foods could not be saved."
+  },
+  "usualListFailed": "Couldn't load your usual foods.",
+  "@usualListFailed": {
+    "description": "My usual foods error state, shown above Retry."
+  },
+  "usualMoreActions": "More actions",
+  "@usualMoreActions": {
+    "description": "Screen-reader label of the more button at the end of a My usual foods row."
+  },
+  "usualHide": "Hide from this list",
+  "@usualHide": {
+    "description": "The only item in a My usual foods row's more menu."
+  },
+  "usualHiddenSnack": "Hidden from My usual foods.",
+  "@usualHiddenSnack": {
+    "description": "Snackbar after hiding a meal from My usual foods, with Undo."
+  },
+  "usualHiddenRow": "Hidden foods ({count})",
+  "@usualHiddenRow": {
+    "description": "My usual foods footer row that opens the hidden meals: count is how many are hidden.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "usualUnhide": "Show again",
+  "@usualUnhide": {
+    "description": "Button on each meal in the hidden foods sheet: list it again."
+  },
+  "usualEmpty": "Foods you log on at least 2 of the last 90 days show up here. Keep logging as usual.",
+  "@usualEmpty": {
+    "description": "My usual foods when nothing is listed yet and nothing is hidden."
+  },
+  "usualAllHidden": "All your usual foods are hidden.",
+  "@usualAllHidden": {
+    "description": "My usual foods when every meal it would list is hidden. The Hidden foods row shows under it."
+  },
+  "usualAgainTitle": "Log it again?",
+  "@usualAgainTitle": {
+    "description": "Title of the dialog before a one-tap log, when a similar meal was logged in the last 3 hours."
+  },
+  "usualAgainBody": "You logged {name} at {time}.",
+  "@usualAgainBody": {
+    "description": "Body of that dialog: name is the earlier meal's title; time is its clock time.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "usualAgainConfirm": "Log again",
+  "@usualAgainConfirm": {
+    "description": "That dialog's action: log the meal anyway."
   }
 }

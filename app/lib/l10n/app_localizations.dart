@@ -4044,10 +4044,10 @@ abstract class AppLocalizations {
   /// **'Clear learned places?'**
   String get clearPlacesTitle;
 
-  /// Confirm dialog body.
+  /// Body of the iPhone confirm dialog for Clear learned places. It also clears the saved lookup answers and the lookups still waiting.
   ///
   /// In en, this message translates to:
-  /// **'Chopstats forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.'**
+  /// **'Chopstats forgets the restaurants you confirmed or marked as wrong, the spots you marked as not a restaurant, the saved lookup answers and the lookups still waiting. They are kept only on this phone.'**
   String get clearPlacesBody;
 
   /// Confirm dialog action.
@@ -4481,6 +4481,264 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Low {low} · Medium {medium} · High {high} · Not given {unknown}'**
   String diagConfidenceLine(int low, int medium, int high, int unknown);
+
+  /// Source card's via line when the numbers came from an answer saved on this phone: provider is Claude Plan, Claude or OpenRouter; date is the YYYY-MM-DD the answer was fetched.
+  ///
+  /// In en, this message translates to:
+  /// **'via {provider} · saved answer from {date}'**
+  String assistViaSaved(String provider, String date);
+
+  /// Source card, under 'No published nutrition found', when that answer was a saved one: date is the YYYY-MM-DD it was fetched.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved answer from {date}.'**
+  String assistContextSaved(String date);
+
+  /// Source card button: ask the provider for a new answer instead of the saved one. On suggested-stale and context-only cards it replaces 'Look up restaurant nutrition'.
+  ///
+  /// In en, this message translates to:
+  /// **'Search again'**
+  String get assistSearchAgain;
+
+  /// Meal editor snackbar after Look up used an answer saved on this phone instead of searching: date is the YYYY-MM-DD it was fetched. Do not say 'Used': on Claude Plan it is only a suggestion.
+  ///
+  /// In en, this message translates to:
+  /// **'Found a saved answer from {date}. Tap Search again for a new search.'**
+  String assistFoundSaved(String date);
+
+  /// Meal editor snackbar: Search again over numbers already in use found nothing usable, so the meal keeps its numbers.
+  ///
+  /// In en, this message translates to:
+  /// **'The new search found nothing better. These numbers stay.'**
+  String get assistSearchAgainNoChange;
+
+  /// Meal editor snackbar: Search again over numbers already in use found the same numbers.
+  ///
+  /// In en, this message translates to:
+  /// **'The new search found the same numbers.'**
+  String get assistSearchAgainSame;
+
+  /// Meal editor snackbar: Search again over numbers already in use found different ones, which are not applied. kcal is the found total for the looked-up items, already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'The new search found {kcal} kcal for these items. To use it, tap Use AI estimate, then look up again.'**
+  String assistSearchAgainDiffers(String kcal);
+
+  /// Settings › Restaurant nutrition footer, right after the line naming who receives lookups, only while lookups are on.
+  ///
+  /// In en, this message translates to:
+  /// **'Chain nutrition that was found is kept on this phone for up to a year and used again, so the same food is not searched again.'**
+  String get restaurantSavedAnswersHint;
+
+  /// Settings › Restaurant nutrition row on Android (which has no learned places): clears the saved lookup answers.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear saved lookup answers'**
+  String get settingsRowClearSavedAnswers;
+
+  /// Title of the Android confirm dialog for Clear saved lookup answers.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear saved lookup answers?'**
+  String get clearAnswersTitle;
+
+  /// Body of the Android confirm dialog for Clear saved lookup answers.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats forgets the restaurant nutrition it looked up and the lookups still waiting. Your meals keep their numbers. These answers are kept only on this phone.'**
+  String get clearAnswersBody;
+
+  /// Snackbar after clearing the saved lookup answers on Android.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved lookup answers cleared.'**
+  String get clearAnswersDone;
+
+  /// Checkbox in the Off dialog on Android (iOS shows 'Also clear learned places' there).
+  ///
+  /// In en, this message translates to:
+  /// **'Also clear saved lookup answers'**
+  String get restaurantOffClearAnswers;
+
+  /// Today chip for one food, and each food on the meal editor's Your usual numbers card: the AI's kcal and the kcal you set for this food before. name is the food's name; ai and mine are kcal, already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: AI {ai} → your usual {mine} kcal'**
+  String usualItemLine(String name, String ai, String mine);
+
+  /// Today chip when two or more foods in the meal have your usual numbers: count is 2 or more.
+  ///
+  /// In en, this message translates to:
+  /// **'Your usual numbers for {count} items'**
+  String usualChipMany(int count);
+
+  /// Today chip button for one food: use your usual numbers for it.
+  ///
+  /// In en, this message translates to:
+  /// **'Use'**
+  String get usualChipUse;
+
+  /// Today chip button for two or more foods: opens the meal editor.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get usualChipReview;
+
+  /// Screen-reader label of the Today chip's Use button: name is the food's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Use your usual numbers for {name}'**
+  String usualChipUseLabel(String name);
+
+  /// Title of the meal editor card that offers your usual numbers.
+  ///
+  /// In en, this message translates to:
+  /// **'Your usual numbers'**
+  String get usualCardTitle;
+
+  /// Meal editor card, under each food: the meal the usual numbers came from. name is that food's name; date is YYYY-MM-DD.
+  ///
+  /// In en, this message translates to:
+  /// **'From your {name} on {date}.'**
+  String usualCardFrom(String name, String date);
+
+  /// Meal editor card button: use your usual numbers for every food it lists.
+  ///
+  /// In en, this message translates to:
+  /// **'Use my numbers'**
+  String get usualUseMine;
+
+  /// Meal editor card button: keep the AI's numbers. The card goes away and the meal is not changed.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep AI estimate'**
+  String get usualKeepAi;
+
+  /// Snackbar after Use, with Undo: before and after are the meal's total kcal, already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'Used your usual numbers: {before} → {after} kcal'**
+  String usualUsedSnack(String before, String after);
+
+  /// Snackbar when Undo (of Use, or of a log from My usual foods) finds the meal changed since, so nothing was undone.
+  ///
+  /// In en, this message translates to:
+  /// **'This meal changed since, so nothing was undone.'**
+  String get usualUndoStale;
+
+  /// Log sheet row (right after From recent photos) and the title of the My usual foods screen.
+  ///
+  /// In en, this message translates to:
+  /// **'My usual foods'**
+  String get addUsual;
+
+  /// My usual foods: header over the meals you usually log around this time of day.
+  ///
+  /// In en, this message translates to:
+  /// **'Around this time'**
+  String get usualNowHeader;
+
+  /// My usual foods: header over the rest of the list.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get usualMoreHeader;
+
+  /// My usual foods row, third line: on how many of the last 90 days the meal was logged, and the last day it was (a friendly day such as 'Tuesday, Nov 04').
+  ///
+  /// In en, this message translates to:
+  /// **'{days} of the last 90 days · last logged {day}'**
+  String usualRowStats(int days, String day);
+
+  /// My usual foods row, third line, when the meal was already logged today: time is that clock time.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged today at {time}'**
+  String usualLoggedToday(String time);
+
+  /// My usual foods screen footer.
+  ///
+  /// In en, this message translates to:
+  /// **'Tap a food to log it now with these numbers. No photo, no AI.'**
+  String get usualScreenHint;
+
+  /// Snackbar after a one-tap log on My usual foods, with Undo: name is the meal's title; kcal is already formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged {name} · {kcal} kcal'**
+  String usualLoggedSnack(String name, String kcal);
+
+  /// Snackbar when a one-tap log on My usual foods could not be saved.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t log it. Try again.'**
+  String get usualLogFailed;
+
+  /// My usual foods error state, shown above Retry.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your usual foods.'**
+  String get usualListFailed;
+
+  /// Screen-reader label of the more button at the end of a My usual foods row.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get usualMoreActions;
+
+  /// The only item in a My usual foods row's more menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide from this list'**
+  String get usualHide;
+
+  /// Snackbar after hiding a meal from My usual foods, with Undo.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden from My usual foods.'**
+  String get usualHiddenSnack;
+
+  /// My usual foods footer row that opens the hidden meals: count is how many are hidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden foods ({count})'**
+  String usualHiddenRow(int count);
+
+  /// Button on each meal in the hidden foods sheet: list it again.
+  ///
+  /// In en, this message translates to:
+  /// **'Show again'**
+  String get usualUnhide;
+
+  /// My usual foods when nothing is listed yet and nothing is hidden.
+  ///
+  /// In en, this message translates to:
+  /// **'Foods you log on at least 2 of the last 90 days show up here. Keep logging as usual.'**
+  String get usualEmpty;
+
+  /// My usual foods when every meal it would list is hidden. The Hidden foods row shows under it.
+  ///
+  /// In en, this message translates to:
+  /// **'All your usual foods are hidden.'**
+  String get usualAllHidden;
+
+  /// Title of the dialog before a one-tap log, when a similar meal was logged in the last 3 hours.
+  ///
+  /// In en, this message translates to:
+  /// **'Log it again?'**
+  String get usualAgainTitle;
+
+  /// Body of that dialog: name is the earlier meal's title; time is its clock time.
+  ///
+  /// In en, this message translates to:
+  /// **'You logged {name} at {time}.'**
+  String usualAgainBody(String name, String time);
+
+  /// That dialog's action: log the meal anyway.
+  ///
+  /// In en, this message translates to:
+  /// **'Log again'**
+  String get usualAgainConfirm;
 }
 
 class _AppLocalizationsDelegate
