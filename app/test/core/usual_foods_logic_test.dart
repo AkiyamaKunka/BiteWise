@@ -2,8 +2,110 @@
 // portions, the self-validating mark, the index, offers, Use and its
 // undo, the My usual foods list and the re-log whitelist.
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
+    show assistStampValid, kAssistVersion;
 import 'package:calorie_tracker/core/usual_foods_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+// ─── Fixtures ──────────────────────────────────────────────────────────
+
+/// Local noon on the fixtures' "today".
+final DateTime now = DateTime(2026, 11, 7, 12, 30);
+const String today = '2026-11-07';
+
+Map<String, dynamic> item(String name, num kcal,
+        {num p = 10,
+        num c = 54,
+        num f = 6,
+        Map<String, dynamic>? user,
+        Object? qty,
+        Map<String, dynamic> extra = const {}}) =>
+    {
+      'name': name,
+      'estimated_calories': kcal,
+      'protein_g': p,
+      'carbs_g': c,
+      'fat_g': f,
+      'qty': ?qty,
+      'user': ?user,
+      ...extra,
+    };
+
+/// A mark that vouches for [n].
+Map<String, dynamic> mark(List<num> n,
+        {String at = '2026-11-03T08:00:00.000Z',
+        num qty = 1,
+        String? aiName}) =>
+    {
+      'set': true,
+      'at': at,
+      'n': n,
+      'qty': qty,
+      'ai_name': ?aiName,
+    };
+
+/// An item the user set to [n], with the mark.
+Map<String, dynamic> mine(String name, List<num> n,
+        {String at = '2026-11-03T08:00:00.000Z',
+        num qty = 1,
+        String? aiName}) =>
+    item(name, n[0],
+        p: n[1],
+        c: n[2],
+        f: n[3],
+        user: mark(n, at: at, qty: qty, aiName: aiName));
+
+Meal meal(int id, List<Map<String, dynamic>> items,
+    {String date = today,
+    String time = '07:40 AM',
+    String source = MealSource.appWatch,
+    bool corrected = false,
+    num? total,
+    String? description,
+    Map<String, dynamic> extra = const {}}) {
+  num sum = 0;
+  for (final i in items) {
+    sum += i['estimated_calories'] as num;
+  }
+  return Meal(
+    id: id,
+    date: date,
+    time: time,
+    timestamp: '${date}T08:00:00.000',
+    source: source,
+    corrected: corrected,
+    analysis: {
+      'is_food': true,
+      'meal_description': description ?? 'Breakfast',
+      'total_calories': total ?? sum,
+      'total_protein_g': 10,
+      'total_carbs_g': 54,
+      'total_fat_g': 6,
+      'estimate_confidence': 'medium',
+      'restaurant_context': 'home',
+      'portion_state': 'whole',
+      'food_items': items,
+      ...extra,
+    },
+  );
+}
+
+/// The user fixed the AI's oatmeal to 350 on Nov 3 (a corrected photo
+/// meal).
+Meal learned({int id = 1, Map<String, dynamic>? it}) => meal(
+    id, [it ?? mine('Oatmeal (~250 g)', [350, 12, 50, 14])],
+    date: '2026-11-03', source: MealSource.appPhoto, corrected: true);
+
+/// Today's watcher photo of the same food, AI 300.
+Meal photo({int id = 2, Map<String, dynamic>? it, Map<String, dynamic>? extra}) =>
+    meal(id, [it ?? item('Oatmeal (~260 g)', 300)], extra: extra ?? const {});
+
+UsualOffer? offer(List<Meal> meals, Meal m,
+        {bool lookupTakesIt = false,
+        UsualChoicesView choices = UsualChoicesView.empty,
+        DateTime? at}) =>
+    usualOfferFor(m, buildUsualIndex(meals, now: at ?? now),
+        now: at ?? now, lookupTakesIt: lookupTakesIt, choices: choices);
 
 void main() {
   group('usualNameKey (spec §3.2 key table)', () {
@@ -245,6 +347,517 @@ void main() {
       ]) {
         expect(usualMarksTrusted(m(s)), isTrue, reason: s);
       }
+    });
+  });
+  group('buildUsualIndex (T28)', () {
+    UsualRecord? rec(List<Meal> meals, String name, {DateTime? at}) =>
+        buildUsualIndex(meals, now: at ?? now).records[usualNameKey(name)];
+
+    test('the latest by user.at wins, not the latest meal', () {
+      final older = meal(1, [
+        mine('Oatmeal', [380, 12, 50, 14], at: '2026-11-05T08:00:00.000Z')
+      ], date: '2026-11-02', corrected: true);
+      final newer = meal(2, [
+        mine('Oatmeal', [340, 12, 50, 14], at: '2026-11-01T08:00:00.000Z')
+      ], date: '2026-11-06', corrected: true);
+      final r = rec([newer, older], 'Oatmeal')!;
+      expect(r.mealId, 1);
+      expect(r.numbers.kcal, 380);
+      expect(r.at, DateTime.utc(2026, 11, 5, 8));
+    });
+
+    test('day 90 is in and day 91 is out (calendar days, DST-safe)', () {
+      // 23:30 on Nov 2 2026, the day after US DST ended: under
+      // TZ=America/Chicago, Duration(days: 89) lands on Aug 6 and drops
+      // day 90 (Aug 5). The window is counted in calendar days.
+      final late = DateTime(2026, 11, 2, 23, 30);
+      expect(usualWindowStart(late), '2026-08-05');
+      Meal on(int id, String date, String name) => meal(
+          id, [mine(name, [350, 12, 50, 14], at: '${date}T08:00:00.000Z')],
+          date: date, corrected: true);
+      final index = buildUsualIndex(
+          [on(1, '2026-08-05', 'Oatmeal'), on(2, '2026-08-04', 'Granola')],
+          now: late);
+      expect(index.records.containsKey('oatmeal'), isTrue);
+      expect(index.records.containsKey('granola'), isFalse);
+      expect(usualWindowStart(now), '2026-08-10');
+    });
+
+    test('not sources: published items, leftover meals, untrusted marks, '
+        'void marks, qty-2 rows', () {
+      final published = meal(1, [
+        {...mine('Burrito bowl', [1050, 50, 110, 40]), 'published': true}
+      ], date: '2026-11-03', corrected: true);
+      final leftover = meal(2, [mine('Fried rice', [600, 12, 80, 20])],
+          date: '2026-11-03', corrected: true,
+          extra: {'leftover': {'original': {}}});
+      // P9: a valid mark on an uncorrected photo meal is a model's claim.
+      final untrusted = meal(3, [mine('Latte', [190, 8, 18, 9])],
+          date: '2026-11-03', source: MealSource.appWatch);
+      // P7: the numbers moved under the mark (a lookup, a deduction).
+      final voided = meal(4, [
+        item('Bagel', 290, p: 11, c: 56, f: 2, user: mark([250, 9, 48, 1]))
+      ], date: '2026-11-03', corrected: true);
+      // P1: a qty-2 correction says nothing about one.
+      final twice = meal(5, [mine('Taco', [340, 14, 30, 18], qty: 2)],
+          date: '2026-11-03', corrected: true);
+      final index = buildUsualIndex(
+          [published, leftover, untrusted, voided, twice],
+          now: now);
+      expect(index.records, isEmpty);
+    });
+
+    test('sources: hand-typed unmarked items, and describe-preview marks', () {
+      final manual = meal(1, [item('Toast with jam', 210, p: 5, c: 38, f: 4)],
+          date: '2026-11-04', source: MealSource.appManual);
+      final manualPhoto = meal(2, [item('Dal', 320, p: 16, c: 40, f: 9)],
+          date: '2026-11-04', source: MealSource.appManualPhoto);
+      final described = meal(3, [mine('Green tea latte', [180, 6, 26, 5])],
+          date: '2026-11-04', source: MealSource.manualText);
+      // An unmarked item of a model's meal is not the user's.
+      final model = meal(4, [item('Pho', 450)],
+          date: '2026-11-04', source: MealSource.manualText);
+      final index = buildUsualIndex(
+          [manual, manualPhoto, described, model],
+          now: now);
+      expect(index.records.keys.toSet(),
+          {'jam toast', 'dal', 'green latte tea'});
+      final t = index.records['jam toast']!;
+      expect(t.numbers, (kcal: 210, p: 5, c: 38, f: 4));
+      expect(t.at, DateTime.parse('2026-11-04T08:00:00.000'),
+          reason: 'an unmarked hand-typed row dates from the meal');
+    });
+
+    test('kcal-only at kcal >= 50 with zero macros (P8)', () {
+      final index = buildUsualIndex([
+        meal(1, [item('Cola', 140, p: 0, c: 0, f: 0)],
+            date: '2026-11-04', source: MealSource.appManual),
+        meal(2, [item('Gum', 49, p: 0, c: 0, f: 0)],
+            date: '2026-11-04', source: MealSource.appManual),
+        meal(3, [item('Juice', 120, p: 0, c: 28, f: 0)],
+            date: '2026-11-04', source: MealSource.appManual),
+      ], now: now);
+      expect(index.records['cola']!.kcalOnly, isTrue);
+      expect(index.records['gum']!.kcalOnly, isFalse);
+      expect(index.records['juice']!.kcalOnly, isFalse);
+    });
+
+    test('the record portion is the AI name\'s guess', () {
+      final r = rec([
+        learned(
+            it: mine('Overnight oats', [350, 12, 50, 14],
+                aiName: 'Oatmeal (~250 g)'))
+      ], 'Overnight oats')!;
+      expect(r.portion, const UsualPortion(UsualPortionKind.mass, 250));
+      expect(r.aiName, 'Oatmeal (~250 g)');
+    });
+  });
+
+  group('aliases (T28b)', () {
+    Map<String, dynamic> renamed() => mine('Overnight oats', [350, 12, 50, 14],
+        aiName: 'Oatmeal (~250 g)');
+
+    test('one rename gives no match through ai_name', () {
+      expect(offer([learned(it: renamed()), photo()], photo()), isNull);
+    });
+
+    test('the same rename on 2 meals gives a match flagged viaAlias', () {
+      final a = learned(id: 1, it: renamed());
+      final b = meal(3, [renamed()],
+          date: '2026-11-04', source: MealSource.appPhoto, corrected: true);
+      final o = offer([a, b, photo()], photo())!;
+      expect(o.items.single.viaAlias, isTrue);
+      expect(o.items.single.learnedName, 'Overnight oats');
+      expect(o.items.single.name, 'Oatmeal');
+      expect(o.items.single.mine, (kcal: 350, p: 12, c: 50, f: 14));
+      expect(buildUsualIndex([a, b], now: now).aliases,
+          {'oatmeal': 'oat overnight'});
+    });
+
+    test('an AI name renamed to two foods twice each gives no alias', () {
+      Meal m(int id, String name, String date) => meal(
+          id,
+          [mine(name, [350, 12, 50, 14], aiName: 'Oatmeal (~250 g)')],
+          date: date,
+          source: MealSource.appPhoto,
+          corrected: true);
+      final meals = [
+        m(1, 'Overnight oats', '2026-11-01'),
+        m(3, 'Overnight oats', '2026-11-02'),
+        m(4, 'Porridge', '2026-11-03'),
+        m(5, 'Porridge', '2026-11-04'),
+      ];
+      expect(buildUsualIndex(meals, now: now).aliases, isEmpty);
+      expect(offer([...meals, photo()], photo()), isNull);
+    });
+  });
+
+  group('usualOfferFor (T29)', () {
+    test('the base fixture gets an offer', () {
+      final o = offer([learned(), photo()], photo())!;
+      expect(o.mealId, 2);
+      final it = o.items.single;
+      expect(it.index, 0);
+      expect(it.key, 'oatmeal');
+      expect(it.ai, (kcal: 300, p: 10, c: 54, f: 6));
+      expect(it.mine, (kcal: 350, p: 12, c: 50, f: 14));
+      expect(it.kcalOnly, isFalse);
+      expect(it.viaAlias, isFalse);
+      expect(it.fromMealId, 1);
+      expect(it.fromDate, '2026-11-03');
+      expect(it.mineAt, DateTime.utc(2026, 11, 3, 8));
+      expect(o.beforeKcal, 300);
+      expect(o.afterKcal, 350);
+    });
+
+    group('meal gates', () {
+      UsualOffer? flipped(Meal m,
+              {bool lookupTakesIt = false,
+              UsualChoicesView choices = UsualChoicesView.empty}) =>
+          offer([learned(), m], m,
+              lookupTakesIt: lookupTakesIt, choices: choices);
+      Meal with_(Map<String, dynamic> a, {String? source, String? date,
+              bool corrected = false}) =>
+          Meal(
+              id: 2,
+              date: date ?? today,
+              time: '07:40 AM',
+              timestamp: '${today}T07:40:00.000',
+              source: source ?? MealSource.appWatch,
+              corrected: corrected,
+              analysis: {...photo().analysis, ...a});
+
+      test('1. a photo source (app_photo or app_watch)', () {
+        expect(flipped(with_({}, source: MealSource.appPhoto)), isNotNull);
+        for (final s in [
+          MealSource.appManual,
+          MealSource.appManualPhoto,
+          MealSource.manualText,
+          MealSource.appRepeat,
+        ]) {
+          expect(flipped(with_({}, source: s)), isNull, reason: s);
+        }
+      });
+      test('2. dated today', () {
+        expect(flipped(with_({}, date: '2026-11-06')), isNull);
+      });
+      test('3. not corrected', () {
+        expect(flipped(with_({}, corrected: true)), isNull);
+      });
+      test('4. a food meal', () {
+        expect(flipped(with_({'is_food': false})), isNull);
+      });
+      test('5. no leftover block', () {
+        expect(flipped(with_({'leftover': {'original': {}}})), isNull);
+      });
+      test('6. a whole plate (or no portion state)', () {
+        expect(flipped(with_({'portion_state': 'partial'})), isNull);
+        expect(flipped(with_({'portion_state': 'shared'})), isNull);
+        expect(flipped(with_({'portion_state': null})), isNotNull);
+      });
+      test('7. not a high-confidence estimate', () {
+        expect(flipped(with_({'estimate_confidence': 'high'})), isNull);
+        expect(flipped(with_({'estimate_confidence': 'low'})), isNotNull);
+      });
+      test('8. not a meal the restaurant lookup takes', () {
+        expect(flipped(photo(), lookupTakesIt: true), isNull);
+      });
+      test('9. no live applied or suggested assist block', () {
+        final block = {
+          'v': kAssistVersion,
+          'status': 'suggested',
+          'matches': [
+            {
+              'item_index': 0,
+              'before': {
+                'estimated_calories': 300,
+                'protein_g': 10,
+                'carbs_g': 54,
+                'fat_g': 6,
+              },
+            }
+          ],
+        };
+        final live = with_({'assist': block});
+        expect(assistStampValid(live.analysis), isTrue);
+        expect(flipped(live), isNull);
+        // A stale block (the numbers moved since) does not hold the meal.
+        final stale = with_({
+          'assist': {
+            ...block,
+            'matches': [
+              {
+                'item_index': 0,
+                'before': {'estimated_calories': 280},
+              }
+            ],
+          }
+        });
+        expect(assistStampValid(stale.analysis), isFalse);
+        expect(flipped(stale), isNotNull);
+      });
+      test('10. no chain merchant', () {
+        expect(flipped(with_({'order_merchant': 'Chipotle'})), isNull);
+        expect(flipped(with_({'order_merchant': 'Joe\'s Diner'})), isNotNull);
+      });
+      test('11. not declined', () {
+        final declined = UsualChoicesView(declined: [
+          UsualDecline(
+              mealId: 2, hideId: usualHideId('oatmeal'), at: now),
+        ]);
+        expect(flipped(photo(), choices: declined), isNull);
+        final other = UsualChoicesView(declined: [
+          UsualDecline(
+              mealId: 9, hideId: usualHideId('oatmeal'), at: now),
+        ]);
+        expect(flipped(photo(), choices: other), isNotNull);
+      });
+    });
+
+    group('item gates', () {
+      test('1. a key with a record from another meal', () {
+        expect(offer([learned(), photo(it: item('Snack', 300))],
+            photo(it: item('Snack', 300))), isNull);
+        expect(offer([learned(), photo(it: item('Granola', 300))],
+            photo(it: item('Granola', 300))), isNull);
+        // Numbers learned only from this same meal are never offered back.
+        final self = learned(id: 2);
+        expect(
+            usualOfferFor(photo(), buildUsualIndex([self], now: now),
+                now: now,
+                lookupTakesIt: false,
+                choices: UsualChoicesView.empty),
+            isNull);
+      });
+      test('2. not muted', () {
+        UsualDecline d(int m, DateTime at) =>
+            UsualDecline(mealId: m, hideId: usualHideId('oatmeal'), at: at);
+        final after = DateTime.utc(2026, 11, 4);
+        expect(
+            offer([learned(), photo()], photo(),
+                choices: UsualChoicesView(declined: [d(5, after), d(6, after)])),
+            isNull);
+        expect(
+            offer([learned(), photo()], photo(),
+                choices: UsualChoicesView(declined: [d(5, after)])),
+            isNotNull,
+            reason: 'one decline does not mute');
+      });
+      test('3. no chain brand on the item', () {
+        final branded =
+            photo(it: item('Oatmeal (~260 g)', 300, extra: {'brand': 'Starbucks'}));
+        expect(offer([learned(), branded], branded), isNull);
+        final local = photo(
+            it: item('Oatmeal (~260 g)', 300, extra: {'brand': 'Mom\'s'}));
+        expect(offer([learned(), local], local), isNotNull);
+      });
+      test('4. not published', () {
+        final p = photo(
+            it: item('Oatmeal (~260 g)', 300, extra: {'published': true}));
+        expect(offer([learned(), p], p), isNull);
+      });
+      test('5. qty 1', () {
+        final two = photo(it: item('Oatmeal (~260 g)', 300, qty: 2));
+        expect(offer([learned(), two], two), isNull);
+      });
+      test('6. compatible portions: a 250 g record, a 500 g photo', () {
+        final big = photo(it: item('Oatmeal (~500 g)', 300));
+        expect(offer([learned(), big], big), isNull);
+      });
+      test('7. both kcal at least 10', () {
+        // Isolated from the other gates: a 6 g protein difference.
+        Meal rec(List<num> n) => learned(it: mine('Black coffee', n));
+        final cup = photo(it: item('Black coffee', 9, p: 0, c: 0, f: 0));
+        expect(offer([rec([9, 6, 0, 0]), cup], cup), isNull);
+        final cup12 = photo(it: item('Black coffee', 12, p: 0, c: 0, f: 0));
+        expect(offer([rec([8, 6, 0, 0]), cup12], cup12), isNull);
+        expect(offer([rec([12, 6, 0, 0]), cup12], cup12), isNotNull);
+      });
+      test('8. the ratio within 0.4-2.5', () {
+        Meal rec(num k) => learned(it: mine('Oatmeal (~250 g)', [k, 12, 50, 14]));
+        expect(offer([rec(760), photo()], photo()), isNull);
+        expect(offer([rec(740), photo()], photo()), isNotNull);
+        expect(offer([rec(110), photo()], photo()), isNull);
+        expect(offer([rec(130), photo()], photo()), isNotNull);
+      });
+      test('9. a difference worth a tap', () {
+        Meal rec(List<num> n) => learned(it: mine('Oatmeal (~250 g)', n));
+        // max(20, 10% of 300) = 30 kcal.
+        expect(offer([rec([329, 10, 54, 6]), photo()], photo()), isNull);
+        expect(offer([rec([330, 10, 54, 6]), photo()], photo()), isNotNull);
+        // Or a 5 g macro.
+        expect(offer([rec([300, 14.9, 54, 6]), photo()], photo()), isNull);
+        expect(offer([rec([300, 15, 54, 6]), photo()], photo()), isNotNull);
+      });
+    });
+
+    test('a qty-2 corrected row gives no offer on a qty-1 photo (P1)', () {
+      final two = learned(it: mine('Oatmeal (~250 g)', [700, 24, 100, 28], qty: 2));
+      expect(offer([two, photo()], photo()), isNull);
+    });
+
+    test('a kcal-only record keeps the AI macros and ignores a 25 g carb '
+        'difference (P8)', () {
+      final cola = learned(it: mine('Oatmeal (~250 g)', [350, 0, 0, 0]));
+      final o = offer([cola, photo()], photo())!;
+      expect(o.items.single.kcalOnly, isTrue);
+      expect(o.items.single.mine, (kcal: 350, p: 10, c: 54, f: 6));
+      final close = learned(it: mine('Oatmeal (~250 g)', [310, 0, 0, 0]));
+      final carbs = photo(it: item('Oatmeal (~260 g)', 300, c: 25));
+      expect(offer([close, carbs], carbs), isNull,
+          reason: 'a 10 kcal difference, and the macro trigger is off');
+    });
+
+    test('several items are offered together, indices from safeFoodItems', () {
+      final both = meal(1, [
+        mine('Oatmeal (~250 g)', [350, 12, 50, 14]),
+        mine('Latte', [190, 8, 18, 9]),
+      ], date: '2026-11-03', source: MealSource.appPhoto, corrected: true);
+      final p = Meal(
+          id: 2,
+          date: today,
+          time: '07:40 AM',
+          timestamp: '${today}T07:40:00.000',
+          source: MealSource.appWatch,
+          analysis: {
+            ...photo().analysis,
+            'total_calories': 450,
+            'food_items': [
+              'not a map',
+              item('Latte', 150, p: 8, c: 18, f: 9),
+              item('Toast', 100),
+              item('Oatmeal (~260 g)', 300),
+            ],
+          });
+      final o = offer([both, p], p)!;
+      expect([for (final i in o.items) i.index], [0, 2]);
+      expect(o.afterKcal, 450 + 40 + 50);
+    });
+  });
+
+  group('applyUsualOffer and revertUsualOffer (T30)', () {
+    final at = DateTime.utc(2026, 11, 7, 18, 30, 1, 250);
+    Meal mismatched() => Meal(
+        id: 2,
+        date: today,
+        time: '07:40 AM',
+        timestamp: '${today}T07:40:00.000',
+        source: MealSource.appWatch,
+        analysis: {
+          ...photo().analysis,
+          'total_calories': 420, // the items sum to 400
+          'total_protein_g': 15.04,
+          'food_items': [
+            item('Oatmeal (~260 g)', 300,
+                user: {'ai_name': 'Porridge', 'qty': 1}),
+            item('Banana', 100, p: 1, c: 27, f: 0, extra: {'brand': ''}),
+          ],
+          'notes': 'kept',
+        });
+
+    test('afterKcal is the stored total plus the deltas', () {
+      final o = offer([learned(), mismatched()], mismatched())!;
+      expect(o.beforeKcal, 420);
+      expect(o.afterKcal, 470);
+    });
+
+    test('Use writes the numbers, the mark and the moved totals', () {
+      final m = mismatched();
+      final o = offer([learned(), m], m)!;
+      final out = applyUsualOffer(m.analysis, o, now: at)!;
+      final items = out['food_items'] as List;
+      expect(items[0], {
+        'name': 'Oatmeal (~260 g)',
+        'estimated_calories': 350,
+        'protein_g': 12,
+        'carbs_g': 50,
+        'fat_g': 14,
+        'user': {
+          'set': true,
+          'at': '2026-11-07T18:30:01.250Z',
+          'n': [350, 12, 50, 14],
+          'qty': 1,
+          'ai_name': 'Porridge',
+        },
+      });
+      expect(items[1], (m.analysis['food_items'] as List)[1]);
+      expect(out['total_calories'], o.afterKcal);
+      expect(out['total_protein_g'], 17);
+      expect(out['total_carbs_g'], 50);
+      expect(out['total_fat_g'], 14);
+      expect(out['notes'], 'kept');
+      expect(out['meal_description'], 'Breakfast');
+      expect(usualMarkValid(items[0], at), isTrue);
+      expect((m.analysis['food_items'] as List)[0]['estimated_calories'], 300,
+          reason: 'the input is never edited in place');
+    });
+
+    test('a kcal-only record changes only kcal', () {
+      final m = photo();
+      final o = offer([learned(it: mine('Oatmeal (~250 g)', [350, 0, 0, 0])), m],
+          m)!;
+      final out = applyUsualOffer(m.analysis, o, now: at)!;
+      final it = (out['food_items'] as List).single as Map;
+      expect(it['estimated_calories'], 350);
+      expect([it['protein_g'], it['carbs_g'], it['fat_g']], [10, 54, 6]);
+      expect((it['user'] as Map)['n'], [350, 10, 54, 6]);
+      expect(out['total_protein_g'], 10);
+    });
+
+    test('null on a leftover meal, or once the shown AI numbers moved', () {
+      final m = photo();
+      final o = offer([learned(), m], m)!;
+      expect(
+          applyUsualOffer({...m.analysis, 'leftover': {'original': {}}}, o,
+              now: at),
+          isNull);
+      final moved = {
+        ...m.analysis,
+        'food_items': [item('Oatmeal (~260 g)', 310)],
+      };
+      expect(applyUsualOffer(moved, o, now: at), isNull);
+    });
+
+    test('revert restores exactly, and is null once an item changed', () {
+      final m = mismatched();
+      final o = offer([learned(), m], m)!;
+      final after = applyUsualOffer(m.analysis, o, now: at)!;
+      final undo = UsualUndo(
+          before: m.analysis, after: after, indices: [0]);
+      final back = revertUsualOffer(after, undo)!;
+      expect(back, m.analysis);
+
+      final edited = {
+        ...after,
+        'food_items': [
+          {...(after['food_items'] as List)[0] as Map, 'estimated_calories': 360},
+          (after['food_items'] as List)[1],
+        ],
+      };
+      expect(revertUsualOffer(edited, undo), isNull);
+      final remarked = {
+        ...after,
+        'food_items': [
+          {
+            ...(after['food_items'] as List)[0] as Map,
+            'user': mark([350, 12, 50, 14], at: '2026-11-07T19:00:00.000Z'),
+          },
+          (after['food_items'] as List)[1],
+        ],
+      };
+      expect(revertUsualOffer(remarked, undo), isNull,
+          reason: 'a newer mark is a newer edit');
+    });
+
+    test('revert moves the totals back by the delta once they changed', () {
+      final m = mismatched();
+      final o = offer([learned(), m], m)!;
+      final after = applyUsualOffer(m.analysis, o, now: at)!;
+      final undo = UsualUndo(before: m.analysis, after: after, indices: [0]);
+      final back = revertUsualOffer({...after, 'total_calories': 500}, undo)!;
+      expect(back['total_calories'], 450);
+      expect((back['food_items'] as List)[0],
+          (m.analysis['food_items'] as List)[0]);
     });
   });
 }
