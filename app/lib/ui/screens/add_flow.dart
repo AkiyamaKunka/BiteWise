@@ -22,6 +22,7 @@ import '../widgets/grouped.dart';
 import 'fix_meal_screen.dart';
 import 'leftover_flow.dart';
 import 'meal_editor_screen.dart';
+import 'usual_foods_screen.dart';
 import '../services.dart';
 import '../widgets/small_spinner.dart';
 
@@ -64,6 +65,7 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
                 title: ctx.l10n.addFromPhotos,
                 onTap: () => Navigator.of(ctx).pop('photos'),
               ),
+              if (services.usualFoods != null) usualFoodsRow(ctx),
               GroupedRow(
                 key: const Key('addLeftover'),
                 icon: Icons.restaurant_outlined,
@@ -127,6 +129,10 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
             executor: services.executor,
             dao: services.dao,
             settings: services.settings)));
+  } else if (choice == 'usual') {
+    // Logged again with saved numbers: no model, so no AI consent.
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => UsualFoodsScreen(usual: services.usualFoods!)));
   } else if (choice == 'manual') {
     // Defaults to today/now inside the editor (MealDraft.blank).
     await Navigator.of(context).push(MaterialPageRoute<void>(
