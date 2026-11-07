@@ -50,6 +50,10 @@ import 'package:calorie_tracker/ui/widgets/calorie_ring.dart'
     show ArithmeticRow, CalorieRing;
 import 'package:calorie_tracker/ui/widgets/grouped.dart';
 import 'package:calorie_tracker/ui/widgets/meal_card.dart';
+import 'package:calorie_tracker/ui/widgets/usual_chip.dart';
+import 'package:calorie_tracker/services/usual/usual_foods.dart'
+    show UsualOffer, UsualOfferItem;
+import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/services.dart' show FontLoader;
@@ -173,8 +177,9 @@ void main() {
     String lang,
     Widget home, {
     double scale = 3.1,
+    Size size = const Size(390, 844),
   }) async {
-    tester.view.physicalSize = const Size(390, 844);
+    tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
@@ -807,6 +812,123 @@ void main() {
                   reason: '"${p.text.toPlainText()}" was cut');
             }
           }
+        });
+
+        // Usual foods (T50): the smallest phone width, 320 pt.
+        const small = Size(320, 640);
+
+        /// [p] reads in full: not cut to an ellipsis, inside the screen.
+        void expectInFull(WidgetTester tester, Finder within) {
+          expect(tester.getRect(within).right, lessThanOrEqualTo(320));
+          for (final p in tester.renderObjectList<RenderParagraph>(
+            find.descendant(of: within, matching: find.byType(RichText)),
+          )) {
+            expect(p.didExceedMaxLines, isFalse,
+                reason: '"${p.text.toPlainText()}" was cut');
+          }
+        }
+
+        final food = lang == 'zh' ? '蓝莓燕麦粥' : 'Oatmeal with blueberries';
+
+        testWidgets('$lang: the usual chip wraps in full, Use under its words',
+            (tester) async {
+          final meal = foodMeal(
+            id: 1,
+            date: isoDate(DateTime.now()),
+            items: [foodItem('$food (~260 g)', 300)],
+          );
+          final offer = UsualOffer(
+            mealId: 1,
+            items: [
+              UsualOfferItem(
+                index: 0,
+                name: food,
+                key: 'k',
+                learnedName: food,
+                viaAlias: false,
+                ai: (kcal: 300, p: 10, c: 50, f: 6),
+                mine: (kcal: 350, p: 12, c: 50, f: 14),
+                kcalOnly: false,
+                mineAt: DateTime(2026, 11, 3),
+                fromMealId: 2,
+                fromDate: '2026-11-03',
+              ),
+            ],
+            beforeKcal: 300,
+            afterKcal: 350,
+          );
+          await pumpAt(
+            tester,
+            lang,
+            Scaffold(
+              body: ListView(children: [
+                MealCard(
+                  meal: meal,
+                  onTap: () {},
+                  usualChip: UsualChip(offer: offer, onUse: () {}),
+                ),
+              ]),
+            ),
+            size: small,
+          );
+          expect(tester.takeException(), isNull);
+          final chip = find.byKey(const Key('usualChip'));
+          expectInFull(tester, chip);
+          final use = find.byKey(const Key('usualChipUse'));
+          expect(tester.getRect(use).right, lessThanOrEqualTo(320));
+          expect(
+            tester.getRect(use).top,
+            greaterThanOrEqualTo(
+                tester.getRect(find.byKey(const Key('usualChipText'))).bottom),
+            reason: 'at large text the button goes under the words',
+          );
+          expectOneLine(tester, use);
+        });
+
+        testWidgets('$lang: a My usual foods row and the hidden row read in '
+            'full', (tester) async {
+          DateTime now() => DateTime(2026, 11, 7, 12, 30);
+          final dao = FakeDao();
+          for (final (id, date) in [(10, '2026-11-03'), (11, '2026-11-05')]) {
+            dao.seed(foodMeal(
+              id: id,
+              date: date,
+              description: '$food ${lang == 'zh' ? '和核桃' : 'and walnuts'}',
+              items: [foodItem('$food (~300 g)', 1320, p: 10, c: 155, f: 6)],
+            ));
+          }
+          for (final (id, date) in [(12, '2026-11-04'), (13, '2026-11-06')]) {
+            dao.seed(foodMeal(
+              id: id,
+              date: date,
+              items: [foodItem(lang == 'zh' ? '拿铁' : 'Latte', 190)],
+            ));
+          }
+          final usual = await makeUsualFoods(dao, clock: now);
+          final listed = (await usual.frequentMeals()).more;
+          // The latte hidden: the long oatmeal row stays, with the hidden
+          // row under it.
+          await usual.hide(listed.firstWhere((m) => !m.title.contains(food)));
+          final oatmeal = listed.firstWhere((m) => m.title.contains(food));
+          await pumpAt(tester, lang, UsualFoodsScreen(usual: usual, now: now),
+              size: small);
+          expect(tester.takeException(), isNull);
+          final row = find.byKey(ValueKey('usualRow:${oatmeal.key}'));
+          expect(row, findsOneWidget);
+          expect(find.text('1,320 ${lang == 'zh' ? '千卡' : 'kcal'} · '
+              '${lang == 'zh' ? '蛋' : 'P'}: 10g · '
+              '${lang == 'zh' ? '碳' : 'C'}: 155g · '
+              '${lang == 'zh' ? '脂' : 'F'}: 6g'), findsOneWidget);
+          expectInFull(tester, row);
+          expect(
+              tester.getRect(find.descendant(
+                      of: row, matching: find.byIcon(Icons.more_horiz)))
+                  .right,
+              lessThanOrEqualTo(320));
+          await tester.scrollUntilVisible(
+              find.byKey(const Key('usualHiddenRow')), 200);
+          expect(tester.takeException(), isNull);
+          expectInFull(tester, find.byKey(const Key('usualHiddenRow')));
         });
 
         testWidgets('$lang: standard sizes keep the settings value beside '
