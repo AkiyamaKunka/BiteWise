@@ -477,17 +477,12 @@ String lookupRequestHash(LookupRequest request) =>
 
 // ─── The on-device cache's key (design R6c) ────────────────────────────
 
-/// A parenthetical holding a digit: an assumed weight or count the model
-/// added to a name ("Big Mac (220 g)", "Fries (约117克)", "Nuggets [6 pc]").
-final RegExp _measureRe = RegExp(
-  r'\([^()]*[0-9][^()]*\)|\[[^\[\]]*[0-9][^\[\]]*\]|【[^【】]*[0-9][^【】]*】',
-);
 final RegExp _spacesRe = RegExp(r'\s+');
 
 /// An item name as the cache compares it: the request's cleaned name,
 /// lower-cased, parenthetical weights removed, spaces collapsed.
 String assistCacheItemName(Object? name) => (name is String ? name : '')
-    .replaceAll(_measureRe, ' ')
+    .replaceAll(assistMeasureRe, ' ')
     .toLowerCase()
     .replaceAll(_spacesRe, ' ')
     .trim();

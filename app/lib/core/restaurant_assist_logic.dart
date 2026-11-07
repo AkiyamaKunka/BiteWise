@@ -575,7 +575,18 @@ num? _publishedGrams(dynamic v) {
 
 // ─── Tokens and word lists ─────────────────────────────────────────────
 
-String _singular(String t) {
+/// A parenthetical holding a digit: an assumed weight or count the model
+/// added to a name ("Big Mac (220 g)", "Fries (约117克)", "Nuggets [6 pc]").
+/// The on-device lookup cache's item names drop it (`assistCacheItemName`),
+/// and usual_foods_logic.dart reuses it for the usual-foods name keys.
+final RegExp assistMeasureRe = RegExp(
+  r'\([^()]*[0-9][^()]*\)|\[[^\[\]]*[0-9][^\[\]]*\]|【[^【】]*[0-9][^【】]*】',
+);
+
+/// [t]'s singular form by the plain English suffix rules ("fries" → fry,
+/// "lunches" → lunch, "eggs" → egg; "glass" stays). usual_foods_logic.dart
+/// reuses it for the usual-foods name keys.
+String assistSingular(String t) {
   if (t.length > 3 && t.endsWith('ies')) {
     return '${t.substring(0, t.length - 3)}y';
   }
@@ -604,7 +615,7 @@ String _unitKey(dynamic unit) {
   if (tokens.isEmpty) return '';
   final key = [
     ...tokens.take(tokens.length - 1),
-    _singular(tokens.last),
+    assistSingular(tokens.last),
   ].join(' ');
   return _unitSynonyms[key] ?? key;
 }
@@ -612,7 +623,7 @@ String _unitKey(dynamic unit) {
 /// Each token and its singular ("Smoothies" → smoothies, smoothy …), so a
 /// word list can name either form.
 Set<String> _wordSet(String? text) => {
-  for (final t in chainTokens(text)) ...[t, _singular(t)],
+  for (final t in chainTokens(text)) ...[t, assistSingular(t)],
 };
 
 /// Words that make a menu item a set of several items (a combo meal,
@@ -714,7 +725,7 @@ Set<String> _nameWords(dynamic name) {
   return {
     for (final t in chainTokens(name.replaceAll(_parenRe, ' ')))
       if (!_nameStopWords.contains(t) && !RegExp(r'^[0-9]+$').hasMatch(t))
-        _singular(t),
+        assistSingular(t),
   };
 }
 
@@ -750,7 +761,7 @@ bool _packagedItem(dynamic item) {
     if (tokens[i] != 'can' && _packagedWords.contains(tokens[i])) return true;
     if (i + 1 < tokens.length &&
         tokens[i] == 'k' &&
-        _singular(tokens[i + 1]) == 'cup') {
+        assistSingular(tokens[i + 1]) == 'cup') {
       return true;
     }
   }
