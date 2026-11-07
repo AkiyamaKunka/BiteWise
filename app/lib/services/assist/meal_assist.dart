@@ -605,10 +605,20 @@ final class AssistAppliedNotice {
 /// One lookup's end, for the editor's manual lookup (R7b): a skip or
 /// failure code, or the decision and whether it was written.
 final class AssistRun {
-  const AssistRun(this.code, {this.decision, this.wrote = false});
+  const AssistRun(
+    this.code, {
+    this.decision,
+    this.wrote = false,
+    this.fromCache = false,
+  });
   final String code;
   final AssistDecision? decision;
   final bool wrote;
+
+  /// The answer came from a saved lookup answer on the phone (usual foods
+  /// §2.3), not from the provider: the editor's next press asks the
+  /// provider again.
+  final bool fromCache;
 }
 
 /// The editor's answers to a restaurant result (R7b; design "Feedback
@@ -711,7 +721,13 @@ final class _Prepared {
 }
 
 final class _Run {
-  const _Run(this.code, {this.decision, this.wrote = false, this.stop = false});
+  const _Run(
+    this.code, {
+    this.decision,
+    this.wrote = false,
+    this.stop = false,
+    this.fromCache = false,
+  });
   static const _Run cancelled = _Run(AssistSkip.cancelled, stop: true);
 
   final String code;
@@ -722,7 +738,15 @@ final class _Run {
   /// meal, a pause, a cancel).
   final bool stop;
 
-  AssistRun get public => AssistRun(code, decision: decision, wrote: wrote);
+  /// Decided on a saved answer ([AssistRun.fromCache]).
+  final bool fromCache;
+
+  AssistRun get public => AssistRun(
+    code,
+    decision: decision,
+    wrote: wrote,
+    fromCache: fromCache,
+  );
 }
 
 /// Failures that say nothing about the meal: every lookup to this
@@ -1383,6 +1407,7 @@ class MealAssist {
     int mealId, {
     bool useLocation = false,
     String? chainKey,
+    bool fresh = false,
   }) async {
     try {
       if (_disposed) return const AssistRun(AssistSkip.off);
@@ -1420,6 +1445,7 @@ class MealAssist {
         useLocation: chainKey == null && useLocation,
         pick: chainKey,
         capped: capped,
+        fresh: fresh,
       );
       return run.public;
     } catch (_) {
@@ -1442,6 +1468,7 @@ class MealAssist {
     required bool useLocation,
     String? pick,
     bool capped = false,
+    bool fresh = false,
   }) async {
     if (!_working.add(mealId)) return const _Run(AssistSkip.working);
     try {
@@ -1551,23 +1578,39 @@ class MealAssist {
         request.body['country']! as String,
       );
 
-      // ── The cache (R6c): the same items at the same chain, answered by
-      // the provider a lookup would reach now. Never for the editor's
-      // lookup: the user asked again. ──
-      final cached = manual
-          ? null
-          : await _fromCache(request, provider: support.recipient.wire);
+      // ── The cache (R6c, usual foods §2.3): the same items at the same
+      // chain, answered by the provider a lookup would reach now. The
+      // editor's lookup reads only a found answer, and only on a meal not
+      // looked up yet (or for the chain the user just picked after Wrong
+      // restaurant); never for Search again ([fresh]), and never while the
+      // server still runs a job for this meal — that job is polled, so a
+      // pending Search again is never answered by the old answer. ──
+      final polling = job != null && job.isPending;
+      final useCache =
+          !manual ||
+          (!fresh &&
+              !polling &&
+              (pick != null || !meal.analysis.containsKey('assist')));
+      final hit = useCache
+          ? await _fromCache(
+              request,
+              provider: support.recipient.wire,
+              foundOnly: manual,
+              pick: pick,
+            )
+          : null;
       if (gen != _generation) return _Run.cancelled;
-      if (cached != null) {
+      if (hit != null) {
         if (job != null) await _state.removeJob(mealId);
         return await _decide(
-          cached,
+          hit.lookup,
           snap: snap,
           base: base,
           trigger: trigger,
           prepared: prepared,
           manual: manual,
           gen: gen,
+          fetchedAt: hit.at,
         );
       }
 
@@ -1866,25 +1909,47 @@ class MealAssist {
 
   // ── The cache (R6c) ──
 
-  /// A cached answer for [request]: the first of its chains (rank order)
-  /// with one for these item names from [provider] — the provider a lookup
-  /// would reach now (an answer kept from another provider is a miss: a
-  /// direct provider's page text never stands in for Claude Plan's
-  /// suggestions-only search) — moved onto this meal's item order.
-  Future<AssistLookup?> _fromCache(
+  /// A cached answer for [request], moved onto this meal's item order,
+  /// with when it was fetched; null for none. Only an answer from
+  /// [provider] counts — the provider a lookup would reach now (an answer
+  /// kept from another provider is a miss: a direct provider's page text
+  /// never stands in for Claude Plan's suggestions-only search) — and with
+  /// [foundOnly] (the editor) only one that found published numbers.
+  ///
+  /// The chains it may answer for (usual foods D7): the [pick] alone after
+  /// Wrong restaurant; otherwise the chains printed brands or the receipt
+  /// merchant name, in rank order; otherwise only the top-ranked location
+  /// chain (the resolver's pick when it made one: PlaceMatch
+  /// .lookupChainKeys is then [picked]). So a year-old answer for a
+  /// lower-ranked nearby chain never answers first.
+  ///
+  /// A hit is a use: its `used_at` is touched, so it is the last to go
+  /// when the store is full.
+  Future<({AssistLookup lookup, DateTime at})?> _fromCache(
     LookupRequest request, {
     required String provider,
+    required bool foundOnly,
+    String? pick,
   }) async {
     final names = assistCacheNames(request);
-    for (final chain in request.chainKeys) {
+    final printed = request.withoutLocationChains(request.chainKeys).chainKeys;
+    final candidates = pick != null
+        ? [pick]
+        : printed.isNotEmpty
+        ? printed
+        : request.chainKeys.take(1).toList();
+    for (final chain in candidates) {
       final hit = await _state.cachedLookup(assistCacheKey(chain, names));
       if (hit == null ||
           hit.chainKey != chain ||
           hit.lookup.provider != provider) {
         continue;
       }
+      if (foundOnly && !hit.found) continue;
       final moved = remapCachedLookup(hit.lookup, from: hit.names, to: names);
-      if (moved != null) return moved;
+      if (moved == null) continue;
+      await _state.touchCachedLookup(hit.key);
+      return (lookup: moved, at: hit.at);
     }
     return null;
   }
@@ -2198,6 +2263,8 @@ class MealAssist {
     return true;
   }
 
+  /// Decides [lookup] for the meal and writes the block. [fetchedAt] is
+  /// set for a saved answer: when it was fetched (usual foods D11).
   Future<_Run> _decide(
     AssistLookup lookup, {
     required MealSnapshot snap,
@@ -2206,7 +2273,9 @@ class MealAssist {
     required _Prepared prepared,
     required bool manual,
     required int gen,
+    DateTime? fetchedAt,
   }) async {
+    final fromCache = fetchedAt != null;
     final meal = snap.meal;
     final now = _clock();
     final request = prepared.request;
@@ -2255,13 +2324,13 @@ class MealAssist {
       if (decision.outcome == AssistOutcome.reject && !manual) {
         await _state.addMiss(meal.id, denylist: true);
       }
-      return _Run(decided, decision: decision);
+      return _Run(decided, decision: decision, fromCache: fromCache);
     }
     if (!manual && _mealInUse(meal.id)) {
       // Opened while the lookup ran: the editor's copy wins.
       await _log(decision, AssistSkip.inUse);
       await _state.addMiss(meal.id);
-      return _Run(AssistSkip.inUse, decision: decision);
+      return _Run(AssistSkip.inUse, decision: decision, fromCache: fromCache);
     }
     // Right before the write, with no await between: Off now still wins.
     if (!_current(gen, manual: manual)) return _Run.cancelled;
@@ -2270,7 +2339,7 @@ class MealAssist {
       // The meal changed while the lookup ran: the result is dropped.
       await _log(decision, AssistSkip.casMiss);
       if (!manual) await _state.addMiss(meal.id);
-      return _Run(AssistSkip.casMiss, decision: decision);
+      return _Run(AssistSkip.casMiss, decision: decision, fromCache: fromCache);
     }
     await _log(decision, decided);
     final automatic = decision.outcome == AssistOutcome.apply && !manual;
@@ -2280,7 +2349,12 @@ class MealAssist {
     if (automatic && gen == _generation) {
       _announce(meal.id, decision, base, next);
     }
-    return _Run(decided, decision: decision, wrote: true);
+    return _Run(
+      decided,
+      decision: decision,
+      wrote: true,
+      fromCache: fromCache,
+    );
   }
 
   /// [d], an APPLY, as a one-tap suggestion of the same items with

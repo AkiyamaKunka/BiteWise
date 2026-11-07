@@ -514,6 +514,40 @@ Zone _holdingTimers(List<_HeldTimer> held) => Zone.current.fork(
   ),
 );
 
+/// A saved lookup answer (usual foods §2.1) for [analysis]'s items at
+/// [chain], fetched at [at] (default: now). Its key.
+Future<String> _saved(
+  _Harness h, {
+  Map<String, dynamic>? analysis,
+  String chain = 'mcdonalds',
+  String status = 'found',
+  DateTime? at,
+}) async {
+  final request = composeAssistRequest(analysis ?? _bigMac(), country: 'US');
+  final names = assistCacheNames(request);
+  final key = assistCacheKey(chain, names);
+  final lookup = _done(
+    json: {
+      ..._found(chainKey: chain),
+      'status': status,
+      if (status != 'found') 'matches': <Object>[],
+    },
+  ).toAssistLookup()!;
+  expect(
+    await h.state.putCachedLookup(
+      AssistCachedLookup(
+        key: key,
+        chainKey: chain,
+        names: names,
+        lookup: lookup,
+        at: at ?? h.now,
+      ),
+    ),
+    isTrue,
+  );
+  return key;
+}
+
 String _appRoot() {
   var dir = Directory.current;
   while (!File('${dir.path}/pubspec.yaml').existsSync()) {
@@ -792,10 +826,19 @@ void main() {
         fileId: 'a2',
       );
       await h.assist.sweep();
+      // An answer that found published numbers 300 days ago is still kept
+      // (usual foods D1), and goes with the rest.
+      final old = await _saved(
+        h,
+        analysis: _bigMac(name: 'Filet-O-Fish'),
+        at: _now.subtract(const Duration(days: 300)),
+      );
+      expect(await h.state.cachedLookup(old), isNotNull);
       expect(h.document(assistCacheDocument), isNot(isEmpty));
       expect(await h.state.jobs(), hasLength(1));
       expect(await h.assist.clearLearnedPlaces(), isTrue);
       expect(h.document(assistCacheDocument), isEmpty);
+      expect(await h.state.cachedLookup(old), isNull);
       expect(await h.state.jobs(), isEmpty);
     });
 
@@ -2972,7 +3015,10 @@ void main() {
       expect(byItem, {1: 'Big Mac', 0: 'Medium French Fries'});
     });
 
-    test('kept: the answer and the source\'s text only; 30 days', () async {
+    // Usual foods D1/D2: an answer that found published numbers is kept a
+    // year from its fetch, one that found nothing 30 days.
+    test('a found answer is kept past 30 days; a negative one is not',
+        () async {
       h.add(_bigMac(brand: "McDonald's"));
       await h.assist.sweep();
       final doc = h.document(assistCacheDocument);
@@ -2984,12 +3030,80 @@ void main() {
       ]);
       expect(jsonEncode(entry), isNot(contains('Something else entirely')));
 
+      h.lookups.onSubmit = (_) async => _done(
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      h.add(
+        _bigMac(brand: "McDonald's", name: 'McRib'),
+        timestamp: '2026-10-24T12:40:00.000',
+        fileId: 'a2',
+      );
+      await h.assist.sweep();
+      final entries = h.document(assistCacheDocument)['entries'] as List;
+      expect(entries, hasLength(2));
+      final negative = entries.cast<Map>().firstWhere(
+        (e) => (e['result'] as Map)['status'] == 'not_published',
+      );
+
       h.now = _now.add(const Duration(days: 31));
+      expect(await h.state.cachedLookup(entry['key'] as String), isNotNull);
       expect(
-        await h.state.cachedLookup(entry['key'] as String),
+        await h.state.cachedLookup(negative['key'] as String),
         isNull,
         reason: 'past 30 days',
       );
+      h.now = _now.add(const Duration(days: 366));
+      expect(
+        await h.state.cachedLookup(entry['key'] as String),
+        isNull,
+        reason: 'past a year',
+      );
+    });
+
+    // Usual foods D7 / P14: which chains a saved answer may answer for.
+    test('a printed chain leads: only a location chain saved is a miss; the '
+        'printed chain saved is a hit', () async {
+      h.places.answer = NearbyFood(PlacesStatus.ok, places: _fourChains);
+      final printed = _bigMac(brand: "McDonald's");
+      await _saved(h, analysis: printed, chain: 'chipotle');
+      h.add(printed);
+      await h.assist.sweep();
+      expect(h.lookups.submits.single.chainKeys, [
+        'mcdonalds',
+        'chipotle',
+        'qdoba',
+      ]);
+
+      await _saved(h, analysis: printed, chain: 'mcdonalds');
+      final second = h.add(
+        printed,
+        timestamp: '2026-10-24T12:45:00.000',
+        fileId: 'a2',
+      );
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1), reason: 'a hit');
+      expect(h.blockOf(second)?['chain_key'], 'mcdonalds');
+    });
+
+    test('no printed chain: only the top-ranked location chain is read',
+        () async {
+      h.places.answer = NearbyFood(PlacesStatus.ok, places: _fourChains);
+      h.lookups.onSubmit = (_) async =>
+          _done(json: {..._found(), 'status': 'no_match', 'chain_key': null});
+      await _saved(h, chain: 'qdoba');
+      h.add(_bigMac());
+      await h.assist.sweep();
+      expect(h.lookups.submits.single.chainKeys, [
+        'chipotle',
+        'qdoba',
+        'subway',
+      ]);
+      expect(h.lookups.submits, hasLength(1), reason: 'a lower-ranked chain');
+
+      await _saved(h, chain: 'chipotle');
+      h.add(_bigMac(), timestamp: '2026-10-24T12:45:00.000', fileId: 'a2');
+      await h.assist.sweep();
+      expect(h.lookups.submits, hasLength(1), reason: 'the top-ranked chain');
     });
 
     test('a cache hit needs no lookup call even where the location named '
@@ -3145,8 +3259,8 @@ void main() {
       expect(await raw(id), before);
     });
 
-    test('the editor\'s lookup never answers from the cache — a picked '
-        'chain or not', () async {
+    test('the editor asks again on a meal already looked up, and for a '
+        'picked chain with no saved answer', () async {
       // McDonald's is cached for these items by the first lookup.
       final id = await suggested();
       final calls = h.lookups.submits.length;
@@ -3161,6 +3275,54 @@ void main() {
           _done(json: _found(chainKey: 'burger_king'));
       await h.assist.lookupNow(id, chainKey: 'burger_king');
       expect(h.lookups.submits, hasLength(calls + 2));
+    });
+
+    // Usual foods D7: after Wrong restaurant a saved answer may answer
+    // for the picked chain alone.
+    test("a pick: the picked chain's saved found answer answers with no "
+        'lookup call', () async {
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      expect(h.blockOf(id)?['status'], AssistStatus.applied);
+      await h.assist.act(
+        id,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(id),
+      );
+      await _saved(
+        h,
+        analysis: _bigMac(brand: "McDonald's"),
+        chain: 'burger_king',
+      );
+      final calls = h.lookups.submits.length;
+      final asked = h.source.asked.length;
+      final run = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(h.lookups.submits, hasLength(calls), reason: 'a saved answer');
+      expect(h.source.asked, hasLength(asked), reason: 'no location read');
+      expect(run.fromCache, isTrue);
+      expect(run.wrote, isTrue);
+      final block = h.blockOf(id)!;
+      expect(block['chain_key'], 'burger_king');
+      expect(block['status'], AssistStatus.suggested);
+      expect(block['evidence'], 'user_picked');
+    });
+
+    test('a pick never reads the printed chain\'s saved answer', () async {
+      // McDonald's, printed, is saved for these items by the first lookup.
+      final id = h.add(_bigMac(brand: "McDonald's"));
+      await h.assist.sweep();
+      await h.assist.act(
+        id,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(id),
+      );
+      final calls = h.lookups.submits.length;
+      h.lookups.onSubmit = (request) async =>
+          _done(json: _found(chainKey: 'burger_king'));
+      final run = await h.assist.lookupNow(id, chainKey: 'burger_king');
+      expect(h.lookups.submits, hasLength(calls + 1));
+      expect(h.lookups.submits.last.chainKeys, ['mcdonalds', 'burger_king']);
+      expect(run.fromCache, isFalse);
     });
 
     test('over http to the owner\'s server a picked chain is not sent: its '
