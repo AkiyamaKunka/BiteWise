@@ -2,13 +2,17 @@
 /// unsure / Always), 'Use photo location' (iOS; disabled with a hint for
 /// an http:// own server), who receives lookups, the owner's server hints
 /// (outdated / lookups off / needs https), a paused row while a new
-/// recipient waits for consent, and 'Clear learned places'.
+/// recipient waits for consent, and 'Clear learned places' (iOS: the
+/// places, the saved lookup answers and the waiting lookups) or, on
+/// Android where no places are kept, 'Clear saved lookup answers'. While
+/// a mode is on, the footer says found chain answers are kept up to a year.
 ///
 /// Turning a mode on asks for consent first unless the consent already
 /// names the current recipient (restaurant_consent_sheet.dart); turning it
 /// back on stamps a fresh consent time, so meals logged while it was off
 /// are never looked up. Turning it Off asks, with 'Also clear learned
-/// places'; MealAssist hears the change and cancels what is in flight.
+/// places' (Android: 'Also clear saved lookup answers'); MealAssist hears
+/// the change and cancels what is in flight.
 library;
 
 import 'dart:async' show unawaited;
@@ -155,10 +159,10 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
     if (mode == current) return;
     if (mode == 'off') {
       final answer = await confirmRestaurantAssistOff(context,
-          offerClearPlaces: _c.locationSupported);
+          offerClearPlaces: true, placesKept: _c.locationSupported);
       if (answer == null || !mounted) return;
       await _s.updateRestaurantAssist(mode: 'off');
-      if (answer.clearPlaces) await _clearPlaces(announce: false);
+      if (answer.clearPlaces) await _clearPlaces(announce: null);
       if (mounted) setState(() {});
       return;
     }
@@ -225,18 +229,43 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
       ),
     );
     if (go != true || !mounted) return;
-    await _clearPlaces(announce: true);
+    await _clearPlaces(announce: context.l10n.clearPlacesDone);
   }
 
-  Future<void> _clearPlaces({required bool announce}) async {
+  /// Android (no places are kept): the saved lookup answers and the
+  /// waiting lookups, through the same clear (the places store is never
+  /// written there).
+  Future<void> _confirmClearAnswers() async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        key: const Key('clearAnswersDialog'),
+        title: Text(ctx.l10n.clearAnswersTitle),
+        content: SingleChildScrollView(child: Text(ctx.l10n.clearAnswersBody)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: Text(ctx.l10n.cancel)),
+          FilledButton(
+              key: const Key('clearAnswersConfirm'),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: Text(ctx.l10n.clearPlacesConfirm)),
+        ],
+      ),
+    );
+    if (go != true || !mounted) return;
+    await _clearPlaces(announce: context.l10n.clearAnswersDone);
+  }
+
+  /// Clears what the lookups learned; [announce] is the snackbar, or null.
+  Future<void> _clearPlaces({required String? announce}) async {
     final messenger = ScaffoldMessenger.maybeOf(context);
-    final done = context.l10n.clearPlacesDone;
     var ok = false;
     try {
       ok = await _c.clearLearnedPlaces();
     } catch (_) {}
-    if (ok && announce) {
-      messenger?.showSnackBar(SnackBar(content: Text(done)));
+    if (ok && announce != null) {
+      messenger?.showSnackBar(SnackBar(content: Text(announce)));
     }
   }
 
@@ -288,6 +317,8 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
       }
     }
     lines.add(copy.footnote);
+    // Found chain answers are kept up to a year (usual foods D16).
+    if (on) lines.add(l.restaurantSavedAnswersHint);
     if (support.recipient == LookupRecipient.claudePlan) {
       lines.add(l.restaurantSuggestOnly);
     }
@@ -362,6 +393,15 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
             title: l.settingsRowClearLearnedPlaces,
             showChevron: false,
             onTap: _confirmClearPlaces,
+          )
+        else
+          GroupedRow(
+            key: const Key('clearSavedAnswersRow'),
+            icon: Icons.delete_sweep_outlined,
+            iconColor: theme.colorScheme.tertiary,
+            title: l.settingsRowClearSavedAnswers,
+            showChevron: false,
+            onTap: _confirmClearAnswers,
           ),
       ],
     );
