@@ -256,14 +256,28 @@ void main() {
 
     test('an intake-derived capturedAt still outranks EXIF (§6.3 order '
         'unchanged)', () async {
-      final assetDate = DateTime.now().subtract(const Duration(hours: 3));
+      // Both stamps sit on yesterday, inside the 45-day window, so only the
+      // ORDER decides which one dates the meal. (2026-11-07: a fixed
+      // 2026-07-01 EXIF stamp had aged out of the window in August, after
+      // which a swapped order was refused as too old and the test passed
+      // anyway; and an asset time of now - 3 h read "01:01 AM", the EXIF's
+      // time, once a day at 04:01 — the one minute the old isNot() failed.)
+      final now = DateTime.now();
+      final yesterday = DateTime(now.year, now.month, now.day - 1);
+      final ymd = '${yesterday.year}:'
+          '${yesterday.month.toString().padLeft(2, '0')}:'
+          '${yesterday.day.toString().padLeft(2, '0')}';
+      final assetDate =
+          DateTime(yesterday.year, yesterday.month, yesterday.day, 13, 7);
       final meal = await savedMealFor(IntakePhoto(
-          jpegWithExif(dateTimeOriginal: '2026:07:01 01:01:01'),
+          jpegWithExif(dateTimeOriginal: '$ymd 01:01:01'),
           'asset-1',
           'IMG_1.jpg',
           capturedAt: assetDate,
           deliberate: true));
+      expect(meal.time, '01:07 PM', reason: 'the asset date, not the EXIF');
       expect(meal.time, isNot('01:01 AM'));
+      expect(meal.date, ymd.replaceAll(':', '-'));
     });
 
     test('an iPhone photo scanned after a flight is dated by the clock where '
