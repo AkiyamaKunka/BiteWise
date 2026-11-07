@@ -409,7 +409,7 @@ void main() {
           'protein_g': 10,
           'carbs_g': 54,
           'fat_g': 6,
-          if (qty != null) 'qty': qty,
+          'qty': ?qty,
         };
     Map<String, dynamic> analysisOf(List<Map<String, dynamic>> items) => {
           'is_food': true,
