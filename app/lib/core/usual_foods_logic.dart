@@ -588,8 +588,9 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
 /// Builds the index from [meals] (spec §3.2): the food meals dated in the
 /// last [kUsualWindowDays] calendar days, today included. Pass 1 learns
 /// the records (the latest per key wins: by `at`, then the meal's date
-/// and time, then id) and the confirmed aliases; pass 2 groups the meals
-/// for My usual foods.
+/// and time, then id) and the confirmed aliases (renames counted on
+/// meals other than re-logs); pass 2 groups the meals for My usual
+/// foods.
 UsualIndex buildUsualIndex(List<Meal> meals, {required DateTime now}) {
   final today = isoDate(now);
   final start = usualWindowStart(now);
@@ -610,7 +611,11 @@ UsualIndex buildUsualIndex(List<Meal> meals, {required DateTime now}) {
       if (r == null) continue;
       final held = records[r.key];
       if (held == null || _isLatestOver(r, held)) records[r.key] = r;
-      final aiKey = r.aiName == null ? null : usualNameKey(r.aiName);
+      // A re-log copies the rename it was logged from; it is not a second
+      // rename, so it never helps confirm an alias (P4).
+      final aiKey = r.aiName == null || m.source == MealSource.appRepeat
+          ? null
+          : usualNameKey(r.aiName);
       if (aiKey != null && aiKey != r.key) {
         renames
             .putIfAbsent(aiKey, () => {})
@@ -1077,4 +1082,383 @@ Map<String, dynamic>? revertUsualOffer(
     _moveTotals(out, delta);
   }
   return out;
+}
+
+// ─── My usual foods: the list (spec §4.2) ──────────────────────────────
+
+/// A meal is listed once it was logged on this many distinct days.
+const int kUsualListMinDays = 2;
+
+/// At most this many rows.
+const int kUsualListMax = 20;
+
+/// "Around this time": within this many minutes of now's clock...
+const int kUsualAroundMinutes = 120;
+
+/// ...on at least this many of the last [kUsualAroundWindowDays] days.
+const int kUsualAroundMinDays = 2;
+const int kUsualAroundWindowDays = 30;
+
+/// The editor's bounds (meal_edit_logic.dart maxMealCalories /
+/// maxMacroGrams): a re-log never writes a number the editor would refuse.
+const num kUsualMaxKcal = 20000;
+const num kUsualMaxGrams = 2000;
+
+/// A meal's title for a row, a snackbar or a dialog: its description
+/// (cleaned, at most 80 characters), else — empty, or the editor's
+/// "Meal" placeholder — its items' display names joined by ", ".
+String usualMealTitle(Map<String, dynamic> analysis) {
+  final desc = cleanShortText(analysis['meal_description'], 80);
+  if (desc.isNotEmpty && desc != 'Meal') return desc;
+  final names = [
+    for (final it in safeFoodItems(analysis))
+      if (usualDisplayName(it['name']).isNotEmpty) usualDisplayName(it['name']),
+  ];
+  if (names.isEmpty) return desc.isEmpty ? 'Meal' : desc;
+  return cleanShortText(names.join(', '), 80);
+}
+
+/// One row of My usual foods.
+final class UsualMeal {
+  const UsualMeal({
+    required this.key,
+    required this.title,
+    required this.template,
+    required this.days90,
+    required this.days30,
+    required this.aroundDays,
+    required this.lastDate,
+    required this.lastTime,
+    required this.loggedTodayTime,
+    required this.numbers,
+  });
+
+  /// [usualMealKey].
+  final String key;
+  String get hideId => usualHideId(key);
+  final String title;
+
+  /// The meal a log copies (the most recent without a leftover block).
+  final Meal template;
+
+  /// Distinct days in the last 90 / 30 days.
+  final int days90;
+  final int days30;
+
+  /// Distinct days in the last 30 within ±2 h of now's clock.
+  final int aroundDays;
+
+  /// The most recent day and stored clock (hh:mm AM/PM) it was logged.
+  final String lastDate;
+  final String lastTime;
+
+  /// The stored clock of today's latest log, or null.
+  final String? loggedTodayTime;
+
+  /// The totals a log writes ([usualLogAnalysis]).
+  final UsualNumbers numbers;
+}
+
+/// My usual foods: "Around this time", then "More", and how many listed
+/// meals are hidden.
+final class UsualList {
+  const UsualList(
+      {required this.around, required this.more, required this.hiddenCount});
+  static const UsualList empty =
+      UsualList(around: [], more: [], hiddenCount: 0);
+  final List<UsualMeal> around;
+  final List<UsualMeal> more;
+  final int hiddenCount;
+  bool get isEmpty => around.isEmpty && more.isEmpty;
+}
+
+int _circularMinutes(int a, int b) {
+  final d = (a - b).abs() % 1440;
+  return d < 1440 - d ? d : 1440 - d;
+}
+
+/// More's order: days in 30, then days in 90, then the most recent, then
+/// the title.
+int _moreOrder(UsualMeal a, UsualMeal b) {
+  if (a.days30 != b.days30) return b.days30.compareTo(a.days30);
+  if (a.days90 != b.days90) return b.days90.compareTo(a.days90);
+  final day = b.lastDate.compareTo(a.lastDate);
+  if (day != 0) return day;
+  final clock = (_clockMinutes(b.lastTime) ?? -1)
+      .compareTo(_clockMinutes(a.lastTime) ?? -1);
+  if (clock != 0) return clock;
+  return a.title.compareTo(b.title);
+}
+
+/// Every group that is listed when not hidden, as rows (unordered).
+List<UsualMeal> _listable(UsualIndex index, DateTime now) {
+  final today = isoDate(now);
+  final start90 = usualWindowStart(now);
+  final start30 = usualWindowStart(now, days: kUsualAroundWindowDays);
+  final clock = now.hour * 60 + now.minute;
+  final out = <UsualMeal>[];
+  for (final g in index.groups.values) {
+    final template = g.template;
+    if (template == null) continue;
+    final dates = <String>{};
+    final dates30 = <String>{};
+    final around = <String>{};
+    String? todayTime;
+    for (final m in g.meals) {
+      if (m.date.compareTo(start90) < 0 || m.date.compareTo(today) > 0) {
+        continue;
+      }
+      dates.add(m.date);
+      if (m.date == today) todayTime ??= m.time; // newest first
+      if (m.date.compareTo(start30) < 0) continue;
+      dates30.add(m.date);
+      final minutes = _clockMinutes(m.time);
+      if (minutes != null &&
+          _circularMinutes(minutes, clock) <= kUsualAroundMinutes) {
+        around.add(m.date);
+      }
+    }
+    if (dates.length < kUsualListMinDays) continue;
+    final written = _logAnalysis(template, index, now);
+    out.add(UsualMeal(
+      key: g.key,
+      title: usualMealTitle(template.analysis),
+      template: template,
+      days90: dates.length,
+      days30: dates30.length,
+      aroundDays: around.length,
+      lastDate: g.meals.first.date,
+      lastTime: g.meals.first.time,
+      loggedTodayTime: todayTime,
+      numbers: (
+        kcal: written['total_calories'] as num,
+        p: written['total_protein_g'] as num,
+        c: written['total_carbs_g'] as num,
+        f: written['total_fat_g'] as num,
+      ),
+    ));
+  }
+  return out;
+}
+
+/// My usual foods (spec §4.2): food meals of any source logged on at
+/// least [kUsualListMinDays] distinct days of the last 90, hidden ones
+/// left out, then at most [kUsualListMax]. "Around this time" (within
+/// ±2 h of now's clock, circular, on 2 or more of the last 30 days) comes
+/// first, by that day count; the rest by days in 30, days in 90, recency
+/// and title.
+UsualList usualMealList(UsualIndex index,
+    {required DateTime now, required UsualChoicesView choices}) {
+  var hidden = 0;
+  final around = <UsualMeal>[];
+  final more = <UsualMeal>[];
+  for (final m in _listable(index, now)) {
+    if (choices.isHidden(m.hideId)) {
+      hidden++;
+    } else if (m.aroundDays >= kUsualAroundMinDays) {
+      around.add(m);
+    } else {
+      more.add(m);
+    }
+  }
+  around.sort((a, b) => a.aroundDays != b.aroundDays
+      ? b.aroundDays.compareTo(a.aroundDays)
+      : _moreOrder(a, b));
+  more.sort(_moreOrder);
+  final keepAround = around.take(kUsualListMax).toList();
+  final keepMore = more.take(kUsualListMax - keepAround.length).toList();
+  return UsualList(around: keepAround, more: keepMore, hiddenCount: hidden);
+}
+
+/// The hidden meals that would be listed, by title: what the Hidden foods
+/// sheet offers to show again (so its count is exactly what it lists).
+List<UsualMeal> usualHiddenMeals(UsualIndex index,
+        {required DateTime now, required UsualChoicesView choices}) =>
+    [
+      for (final m in _listable(index, now))
+        if (choices.isHidden(m.hideId)) m,
+    ]..sort((a, b) => a.title.compareTo(b.title));
+
+// ─── Log again: the analysis written (spec §4.4) ───────────────────────
+
+num _clamp(num v, num max) => v < 0 ? 0 : (v > max ? max : v);
+
+String? _aiNameOf(Map item) {
+  final user = item['user'];
+  final v = user is Map ? user['ai_name'] : null;
+  return v is String && v.trim().isNotEmpty ? v : null;
+}
+
+/// What is left of a mark that may not vouch for its numbers (void, or
+/// on an untrusted meal): its count when not 1 and the AI's old name, as
+/// the editor writes a mark without `set`. Null when it says neither.
+Map<String, dynamic>? _noSetMark(Map user) {
+  final q = user['qty'];
+  final aiName = user['ai_name'];
+  final out = <String, dynamic>{
+    if (q is num && q != 1) 'qty': q,
+    if (aiName is String && aiName.trim().isNotEmpty) 'ai_name': aiName,
+  };
+  return out.isEmpty ? null : out;
+}
+
+Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
+    DateTime now) {
+  final a = template.analysis;
+  final trusted = usualMarksTrusted(template);
+  final items = <Map<String, dynamic>>[];
+  for (final item in safeFoodItems(a).take(kUsualMaxItems)) {
+    final q = usualItemQty(item);
+    final unit = cleanUnit(item['unit']);
+    final own = usualItemNumbers(item);
+    final k = _canonicalKey(item, index.aliases);
+    final r = k == null ? null : index.recordFor(k, excludeMealId: -1)?.record;
+    final ownAiName = _aiNameOf(item);
+    UsualNumbers numbers = own;
+    Map<String, dynamic>? user;
+    if (r != null &&
+        q == 1 &&
+        usualPortionsCompatible(
+            usualPortion(ownAiName ?? item['name']), r.portion)) {
+      if (r.kcalOnly) {
+        // Mixed numbers (the user's kcal, the template's macros): no
+        // `set` mark vouches for them.
+        numbers = (kcal: r.numbers.kcal, p: own.p, c: own.c, f: own.f);
+        if (ownAiName != null) user = {'qty': 1, 'ai_name': ownAiName};
+      } else {
+        numbers = r.numbers;
+        // The row's own old name; else the record's, when this row bears
+        // the record's (renamed) name. A row still named by the AI keeps
+        // no ai_name, so its key still reads through the alias.
+        final aiName = ownAiName ??
+            (usualNameKey(item['name']) == r.key ? r.aiName : null);
+        user = {
+          'set': true,
+          'at': r.atRaw,
+          'n': [
+            _clamp(r.numbers.kcal, kUsualMaxKcal),
+            _clamp(r.numbers.p, kUsualMaxGrams),
+            _clamp(r.numbers.c, kUsualMaxGrams),
+            _clamp(r.numbers.f, kUsualMaxGrams),
+          ],
+          'qty': 1,
+          'ai_name': ?aiName,
+        };
+      }
+    } else {
+      final mark = item['user'];
+      if (mark is Map) {
+        user = mark['set'] == true
+            ? (trusted && usualMarkValid(item, now)
+                ? _copyMap(mark)
+                : _noSetMark(mark))
+            : _copyMap(mark);
+      }
+    }
+    items.add({
+      'name': cleanShortText(item['name'], 300),
+      'estimated_calories': _clamp(numbers.kcal, kUsualMaxKcal),
+      'protein_g': _clamp(numbers.p, kUsualMaxGrams),
+      'carbs_g': _clamp(numbers.c, kUsualMaxGrams),
+      'fat_g': _clamp(numbers.f, kUsualMaxGrams),
+      if (q != 1) 'qty': q,
+      if (unit.isNotEmpty) 'unit': unit,
+      'user': ?user,
+    });
+  }
+  final desc = cleanShortText(a['meal_description'], 300);
+  final out = <String, dynamic>{
+    'is_food': true,
+    'meal_description': desc.isEmpty ? 'Meal' : desc,
+    'food_items': items,
+  };
+  if (items.isEmpty) {
+    out['total_calories'] =
+        _clamp(safeNumber(a['total_calories']), kUsualMaxKcal).round();
+    out['total_protein_g'] =
+        _round1(_clamp(safeNumber(a['total_protein_g']), kUsualMaxGrams));
+    out['total_carbs_g'] =
+        _round1(_clamp(safeNumber(a['total_carbs_g']), kUsualMaxGrams));
+    out['total_fat_g'] =
+        _round1(_clamp(safeNumber(a['total_fat_g']), kUsualMaxGrams));
+  } else {
+    num k = 0, p = 0, c = 0, f = 0;
+    for (final it in items) {
+      k += it['estimated_calories'] as num;
+      p += it['protein_g'] as num;
+      c += it['carbs_g'] as num;
+      f += it['fat_g'] as num;
+    }
+    out['total_calories'] = k.round();
+    out['total_protein_g'] = _round1(p);
+    out['total_carbs_g'] = _round1(c);
+    out['total_fat_g'] = _round1(f);
+  }
+  out['logged_again'] = usualStamp(now);
+  return out;
+}
+
+/// The analysis "Log again" writes for [m] (spec §4.4), and ONLY these
+/// keys: is_food, meal_description, food_items (name, the four numbers,
+/// qty when not 1, unit when set, user), the four totals (the item sums)
+/// and `logged_again` (now, so two same-minute re-logs stay two meals on
+/// import). An item whose canonical key has a record takes the user's
+/// numbers when its count is 1 and the portions agree; otherwise it keeps
+/// the template's, with its own mark only from a trusted meal. Never a
+/// photo hash, a capture, an assist block, a published flag, a leftover
+/// block, a brand or any other key.
+Map<String, dynamic> usualLogAnalysis(UsualMeal m, UsualIndex index,
+        {required DateTime now}) =>
+    _logAnalysis(m.template, index, now);
+
+// ─── "Logged it already?" (spec §4.3, P12) ─────────────────────────────
+
+/// Latin tokens sharing a word: equal, or one starts or ends the other
+/// (oat / oatmeal, berry / blueberry); the shorter has 3+ letters.
+bool _latinShared(Set<String> a, Set<String> b) {
+  for (final x in a) {
+    if (_isCjkToken(x) || _latinLetters(x) < 3) continue;
+    for (final y in b) {
+      if (_isCjkToken(y) || _latinLetters(y) < 3) continue;
+      if (x == y ||
+          x.startsWith(y) ||
+          x.endsWith(y) ||
+          y.startsWith(x) ||
+          y.endsWith(x)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+List<Set<String>> _foodTokens(Map<String, dynamic> analysis) {
+  final items = safeFoodItems(analysis);
+  if (items.isEmpty) {
+    final d = usualNameTokens(analysis['meal_description']);
+    return d.isEmpty ? const [] : [d];
+  }
+  return [
+    for (final it in items)
+      if (usualNameTokens(it['name']).isNotEmpty) usualNameTokens(it['name']),
+  ];
+}
+
+/// Whether two meals LOOSELY share a food, for the "Log it again?" check
+/// only (a false yes costs one tap): some pair of their items shares a
+/// Latin word of 3+ letters (or one word starts or ends the other), or 2
+/// CJK characters, or one item's tokens are all in the other's. Tokens are
+/// [usualNameTokens], so reworded names ("Steel-cut oats with berries",
+/// "Blueberry oatmeal") still meet.
+bool usualLooselyShares(Map<String, dynamic> a, Map<String, dynamic> b) {
+  final xs = _foodTokens(a);
+  final ys = _foodTokens(b);
+  for (final x in xs) {
+    for (final y in ys) {
+      if (_latinShared(x, y)) return true;
+      if (x.where(_isCjkToken).where(y.contains).length >= 2) return true;
+      if (x.containsAll(y) || y.containsAll(x)) return true;
+    }
+  }
+  return false;
 }

@@ -860,4 +860,473 @@ void main() {
           (m.analysis['food_items'] as List)[0]);
     });
   });
+  group('My usual foods: keys and ranking (T37)', () {
+    Meal logged(int id, String title, String food, String date, String time,
+            {String source = MealSource.appWatch}) =>
+        meal(id, [item(food, 300)],
+            date: date, time: time, description: title, source: source);
+
+    test('usualMealKey: the sorted multiset of item keys', () {
+      final index = buildUsualIndex(const [], now: now);
+      Map<String, dynamic> a(List<Map<String, dynamic>> items,
+              {String desc = 'Breakfast'}) =>
+          {'is_food': true, 'meal_description': desc, 'food_items': items};
+      expect(usualMealKey(a([item('Latte', 1), item('Toast', 1)]), index),
+          usualMealKey(a([item('Toast', 1), item('Latte', 1)]), index));
+      expect(usualMealKey(a([item('Egg', 1), item('Egg', 1)]), index),
+          'egg + egg');
+      expect(usualMealKey(a([item('Egg', 1)]), index), 'egg');
+      expect(usualMealKey(a([], desc: 'Green smoothie'), index),
+          'd:green smoothie');
+      expect(usualMealKey(a([item('Latte', 1), item('Snack', 1)]), index),
+          isNull,
+          reason: 'any item without a key: never listed');
+      expect(usualMealKey(a([], desc: 'Meal'), index), isNull);
+    });
+
+    test('listed on 2 distinct days, not 2 meals; [燕麦粥, 茶] is listed', () {
+      final meals = [
+        logged(1, 'Pancakes', 'Pancakes', '2026-11-06', '08:00 AM'),
+        logged(2, 'Pancakes', 'Pancakes', '2026-11-06', '10:00 AM'),
+        meal(3, [item('燕麦粥', 200), item('茶', 5)],
+            date: '2026-11-01', description: '早餐'),
+        meal(4, [item('茶', 5), item('燕麦粥（约300克）', 200)],
+            date: '2026-11-02', description: '早餐'),
+      ];
+      final list = usualMealList(buildUsualIndex(meals, now: now),
+          now: now, choices: UsualChoicesView.empty);
+      final rows = [...list.around, ...list.more];
+      expect([for (final r in rows) r.title], ['早餐']);
+      expect(rows.single.days90, 2);
+      expect(rows.single.template.id, 4, reason: 'the most recent');
+    });
+
+    test('Around this time first (circular clock), then More by days in 30, '
+        'days in 90, recency and title', () {
+      final at = DateTime(2026, 11, 7, 0, 15);
+      var id = 0;
+      List<Meal> on(String title, String food, List<String> dates,
+              String time) =>
+          [for (final d in dates) logged(++id, title, food, d, time)];
+      final meals = [
+        ...on('Midnight noodles', 'Instant noodles',
+            ['2026-11-06', '2026-11-05', '2026-11-04'], '12:00 AM'),
+        // 23:30 is 45 minutes from 00:15 across midnight (M13).
+        ...on('Snack mix', 'Trail mix', ['2026-11-05', '2026-11-03'],
+            '11:30 PM'),
+        ...on('Late tea', 'Chamomile tea', ['2026-11-01', '2026-10-30'],
+            '01:00 AM'),
+        logged(++id, 'Hot cocoa', 'Hot cocoa', '2026-11-06', '11:45 PM'),
+        logged(++id, 'Hot cocoa', 'Hot cocoa', '2026-11-02', '08:00 AM'),
+        ...on('Oatmeal', 'Oatmeal', ['2026-11-06', '2026-11-05', '2026-11-04'],
+            '07:40 AM'),
+        ...on('Bagel', 'Bagel', ['2026-10-20', '2026-10-21'], '08:00 AM'),
+        ...on('Latte', 'Latte', ['2026-10-20', '2026-09-01', '2026-08-20'],
+            '03:10 PM'),
+        ...on('Rice', 'Rice', ['2026-11-06', '2026-09-30'], '12:00 PM'),
+        ...on('Soup', 'Soup', ['2026-10-30', '2026-09-29'], '12:00 PM'),
+        ...on('Banana', 'Banana', ['2026-10-25', '2026-08-15'], '10:00 AM'),
+        ...on('Apple', 'Apple', ['2026-10-25', '2026-08-15'], '10:00 AM'),
+        // Aug 9 is day 91: one day in the window, not listed.
+        ...on('Kale', 'Kale', ['2026-08-09', '2026-11-01'], '06:00 PM'),
+      ];
+      final list = usualMealList(buildUsualIndex(meals, now: at),
+          now: at, choices: UsualChoicesView.empty);
+      expect([for (final r in list.around) r.title],
+          ['Midnight noodles', 'Snack mix', 'Late tea']);
+      expect([for (final r in list.more) r.title], [
+        'Oatmeal',
+        'Hot cocoa',
+        'Bagel',
+        'Latte',
+        'Rice',
+        'Soup',
+        'Apple',
+        'Banana',
+      ]);
+      final cocoa = list.more[1];
+      expect((cocoa.days30, cocoa.days90, cocoa.aroundDays), (2, 2, 1));
+      expect((cocoa.lastDate, cocoa.lastTime), ('2026-11-06', '11:45 PM'));
+      expect(cocoa.loggedTodayTime, isNull);
+    });
+
+    test('at most 20 rows; hidden keys are left out and counted', () {
+      final meals = [
+        for (var i = 0; i < 25; i++) ...[
+          logged(2 * i + 1, 'Granola $i', 'Granola $i', '2026-11-05',
+              '09:00 AM'),
+          logged(2 * i + 2, 'Granola $i', 'Granola $i', '2026-11-06',
+              '09:00 AM'),
+        ],
+      ];
+      final index = buildUsualIndex(meals, now: now);
+      final all = usualMealList(index,
+          now: now, choices: UsualChoicesView.empty);
+      expect(all.around.length + all.more.length, kUsualListMax);
+      expect(all.hiddenCount, 0);
+      final hide = all.more.first;
+      final choices = UsualChoicesView(hidden: {hide.hideId});
+      final some = usualMealList(index, now: now, choices: choices);
+      final titles = [for (final r in [...some.around, ...some.more]) r.title];
+      expect(titles, isNot(contains(hide.title)));
+      expect(titles, hasLength(kUsualListMax));
+      expect(some.hiddenCount, 1);
+      expect([for (final m in usualHiddenMeals(index, now: now, choices: choices))
+        m.title], [hide.title]);
+      expect(hide.hideId, matches(RegExp(r'^[0-9a-f]{16}$')));
+    });
+
+    test('"Logged today at" comes from today\'s latest log', () {
+      final meals = [
+        logged(1, 'Latte', 'Latte', '2026-11-05', '08:00 AM'),
+        logged(2, 'Latte', 'Latte', today, '07:15 AM'),
+        logged(3, 'Latte', 'Latte', today, '09:05 AM'),
+      ];
+      final row = usualMealList(buildUsualIndex(meals, now: now),
+              now: now, choices: UsualChoicesView.empty)
+          .more
+          .single;
+      expect(row.loggedTodayTime, '09:05 AM');
+      expect(row.days90, 2);
+    });
+
+    test('realistic AI name drift across 10 days (a measurement)', () {
+      // Ten watcher photos of the same breakfast, named as models do.
+      // Listing rate on this fixture: 5 of the 10 breakfasts share the
+      // one listed row ("blueberry oatmeal"); the other five each name a
+      // set of their own (fresh / bowl / topped / honey / oats) and are
+      // logged once, so they are not listed. A miss is safe: the row is
+      // still offered, on 5 days instead of 10.
+      const names = [
+        'Oatmeal with blueberries (~300 g)',
+        'Blueberry oatmeal (~250 g)',
+        'Oatmeal with fresh blueberries',
+        'Bowl of oatmeal with blueberries',
+        'Oatmeal with blueberries',
+        'Blueberry oatmeal',
+        'Oatmeal topped with blueberries (~280 g)',
+        'Oatmeal with blueberries and honey',
+        'Blueberry oatmeal (~300 g)',
+        'Oats with blueberries',
+      ];
+      final meals = [
+        for (var i = 0; i < names.length; i++)
+          meal(i + 1, [item(names[i], 320)],
+              date: '2026-10-${(20 + i).toString().padLeft(2, '0')}',
+              description: names[i]),
+      ];
+      final list = usualMealList(buildUsualIndex(meals, now: now),
+          now: now, choices: UsualChoicesView.empty);
+      final rows = [...list.around, ...list.more];
+      expect(rows, hasLength(1));
+      expect(rows.single.key, 'blueberry oatmeal');
+      expect(rows.single.days90, 5);
+    });
+  });
+
+  group('usualLogAnalysis: numbers and marks (T38)', () {
+    UsualMeal rowOf(List<Meal> meals, {DateTime? at}) {
+      final list = usualMealList(buildUsualIndex(meals, now: at ?? now),
+          now: at ?? now, choices: UsualChoicesView.empty);
+      return [...list.around, ...list.more].single;
+    }
+
+    Map<String, dynamic> logOf(List<Meal> meals, {DateTime? at}) =>
+        usualLogAnalysis(rowOf(meals, at: at),
+            buildUsualIndex(meals, now: at ?? now), now: at ?? now);
+
+    test('the template is the most recent meal without a leftover block', () {
+      final meals = [
+        meal(1, [item('Fried rice', 600)], date: '2026-11-04'),
+        meal(2, [item('Fried rice', 650)],
+            date: '2026-11-05',
+            extra: {'leftover': {'original': {}}}),
+      ];
+      final row = rowOf(meals);
+      expect(row.template.id, 1);
+      expect(row.days90, 2, reason: 'a deducted meal still counts');
+      expect(row.lastDate, '2026-11-05');
+      expect(row.numbers.kcal, 600);
+    });
+
+    test('learned numbers and the mark (original at) replace a qty-1 item '
+        'with compatible portions', () {
+      final meals = [
+        learned(),
+        meal(5, [item('Oatmeal (~260 g)', 300)], date: '2026-11-04'),
+        meal(6, [item('Oatmeal (~260 g)', 300)], date: '2026-11-05'),
+      ];
+      final out = logOf(meals);
+      expect((out['food_items'] as List).single, {
+        'name': 'Oatmeal (~260 g)',
+        'estimated_calories': 350,
+        'protein_g': 12,
+        'carbs_g': 50,
+        'fat_g': 14,
+        'user': {
+          'set': true,
+          'at': '2026-11-03T08:00:00.000Z',
+          'n': [350, 12, 50, 14],
+          'qty': 1,
+        },
+      });
+      expect(out['total_calories'], 350);
+      final row = rowOf(meals);
+      expect(row.numbers, (kcal: 350, p: 12, c: 50, f: 14),
+          reason: 'the row shows what a log writes');
+    });
+
+    test('no replacement for a qty-2 item or an incompatible portion', () {
+      final two = logOf([
+        learned(),
+        meal(5, [item('Oatmeal', 600, qty: 2)], date: '2026-11-04'),
+        meal(6, [item('Oatmeal', 600, qty: 2)], date: '2026-11-05'),
+      ]);
+      final it = (two['food_items'] as List).single as Map;
+      expect(it['estimated_calories'], 600);
+      expect(it['qty'], 2);
+      final big = logOf([
+        learned(),
+        meal(5, [item('Oatmeal (~500 g)', 520)], date: '2026-11-04'),
+        meal(6, [item('Oatmeal (~500 g)', 520)], date: '2026-11-05'),
+      ]);
+      expect((big['food_items'] as List).single['estimated_calories'], 520);
+    });
+
+    test('a qty-2 item round-trips through two re-logs unchanged', () {
+      // The user set a count-2 row by hand (its qty lives in the mark).
+      final set2 = {
+        'name': 'Tacos',
+        'estimated_calories': 680,
+        'protein_g': 28,
+        'carbs_g': 60,
+        'fat_g': 36,
+        'unit': 'piece',
+        'user': mark([680, 28, 60, 36], qty: 2),
+      };
+      var meals = <Meal>[
+        meal(1, [set2], date: '2026-11-04', corrected: true),
+        meal(2, [set2], date: '2026-11-05', corrected: true),
+      ];
+      Map<String, dynamic>? first;
+      for (var round = 0; round < 2; round++) {
+        final at = DateTime(2026, 11, 7, 12, round);
+        final out = logOf(meals, at: at);
+        first ??= out;
+        final it = (out['food_items'] as List).single as Map;
+        expect(it['estimated_calories'], 680);
+        expect(it['qty'], 2);
+        expect(it['unit'], 'piece');
+        expect(usualItemQty(it), 2);
+        expect((it['user'] as Map)['at'], '2026-11-03T08:00:00.000Z',
+            reason: 'the original at');
+        meals = [
+          ...meals,
+          Meal(
+              id: 10 + round,
+              date: today,
+              time: '12:0$round PM',
+              timestamp: at.toIso8601String(),
+              source: MealSource.appRepeat,
+              analysis: out),
+        ];
+      }
+      expect(usualMealKey(first!, buildUsualIndex(meals, now: now)), 'taco');
+    });
+
+    test('a mark from an untrusted template is not copied', () {
+      final forged = item('Latte', 190, p: 8, c: 18, f: 9,
+          user: mark([190, 8, 18, 9], aiName: 'Coffee'));
+      final out = logOf([
+        meal(1, [forged], date: '2026-11-04'),
+        meal(2, [forged], date: '2026-11-05'),
+      ]);
+      final it = (out['food_items'] as List).single as Map;
+      expect(it['user'], {'ai_name': 'Coffee'},
+          reason: 'a photo meal never edited: only the no-number parts');
+      expect(it['estimated_calories'], 190);
+    });
+
+    test('a kcal-only substitution writes no set', () {
+      final out = logOf([
+        meal(1, [mine('Cola', [140, 0, 0, 0])],
+            date: '2026-11-03', corrected: true),
+        meal(5, [item('Cola', 150, p: 0, c: 39, f: 0)], date: '2026-11-04'),
+        meal(6, [item('Cola', 150, p: 0, c: 39, f: 0)], date: '2026-11-05'),
+      ]);
+      final it = (out['food_items'] as List).single as Map;
+      expect(it['estimated_calories'], 140);
+      expect(it['carbs_g'], 39, reason: "the template's macros");
+      expect(it.containsKey('user'), isFalse);
+    });
+
+    test('an AI-named row matched through an alias keeps its group key', () {
+      Meal renamed(int id, String date) => meal(id, [
+            mine('Overnight oats', [350, 12, 50, 14],
+                aiName: 'Oatmeal (~250 g)')
+          ], date: date, source: MealSource.appPhoto, corrected: true);
+      final meals = [
+        renamed(1, '2026-11-01'),
+        renamed(2, '2026-11-02'),
+        meal(5, [item('Oatmeal (~260 g)', 300)], date: '2026-11-05'),
+      ];
+      final index = buildUsualIndex(meals, now: now);
+      final row = usualMealList(index,
+              now: now, choices: UsualChoicesView.empty)
+          .more
+          .single;
+      expect(row.key, 'oat overnight');
+      expect(row.days90, 3);
+      final out = usualLogAnalysis(row, index, now: now);
+      expect(usualMealKey(out, index), row.key);
+    });
+  });
+
+  group('usualLogAnalysis: the whitelist (T39)', () {
+    UsualMeal rowFor(Meal template) => UsualMeal(
+        key: 'k',
+        title: 't',
+        template: template,
+        days90: 2,
+        days30: 2,
+        aroundDays: 0,
+        lastDate: template.date,
+        lastTime: template.time,
+        loggedTodayTime: null,
+        numbers: (kcal: 0, p: 0, c: 0, f: 0));
+    final empty = buildUsualIndex(const [], now: now);
+
+    test('exactly the listed keys; everything else is left behind', () {
+      final template = Meal(
+          id: 1,
+          date: '2026-11-05',
+          time: '12:00 PM',
+          timestamp: '2026-11-05T12:00:00.000',
+          source: MealSource.appPhoto,
+          imageHash: 'a' * 32,
+          fileId: 'asset-1',
+          analysis: {
+            'is_food': 'yes',
+            'meal_description': 'Burrito bowl',
+            'total_calories': 9999,
+            'capture': {'shutter_key': 'b' * 16},
+            'assist': {'v': kAssistVersion, 'status': 'applied'},
+            'leftover': {'original': {}},
+            'image_hash': 'c' * 32,
+            'restaurant_context': 'restaurant',
+            'estimate_confidence': 'low',
+            'portion_state': 'whole',
+            'order_merchant': 'Chipotle',
+            'confidence_note': 'n',
+            'food_items': [
+              {
+                'name': 'Burrito bowl',
+                'estimated_calories': 25000,
+                'protein_g': 2500,
+                'carbs_g': -5,
+                'fat_g': '40',
+                'qty': 2,
+                'unit': ' bowl ',
+                'brand': 'Chipotle',
+                'published': true,
+                'leftover_left_fraction': 0.5,
+                'is_drink': false,
+              },
+              {'name': 'Chips', 'estimated_calories': 100.4, 'unit': ''},
+            ],
+          });
+      final out = usualLogAnalysis(rowFor(template), empty,
+          now: DateTime.utc(2026, 11, 7, 18, 0, 1, 5));
+      expect(out.keys.toSet(), {
+        'is_food',
+        'meal_description',
+        'food_items',
+        'total_calories',
+        'total_protein_g',
+        'total_carbs_g',
+        'total_fat_g',
+        'logged_again',
+      });
+      expect(out['is_food'], isTrue);
+      expect(out['logged_again'], '2026-11-07T18:00:01.005Z');
+      final items = out['food_items'] as List;
+      expect(items[0], {
+        'name': 'Burrito bowl',
+        'estimated_calories': 20000,
+        'protein_g': 2000,
+        'carbs_g': 0,
+        'fat_g': 0,
+        'qty': 2,
+        'unit': 'bowl',
+      });
+      expect(items[1], {
+        'name': 'Chips',
+        'estimated_calories': 100.4,
+        'protein_g': 0,
+        'carbs_g': 0,
+        'fat_g': 0,
+      });
+      expect(out['total_calories'], 20100, reason: 'the item sums, whole');
+      expect(out['total_protein_g'], 2000);
+      final text = out.toString();
+      for (final gone in ['capture', 'assist', 'published', 'leftover',
+          'brand', 'image_hash', 'Chipotle', 'restaurant_context']) {
+        expect(text.contains(gone), isFalse, reason: gone);
+      }
+    });
+
+    test('at most 40 items; no items keeps the template totals', () {
+      Meal t(List<Map<String, dynamic>> items, {num total = 500}) => Meal(
+          id: 1,
+          date: '2026-11-05',
+          time: '12:00 PM',
+          timestamp: '2026-11-05T12:00:00.000',
+          source: MealSource.appManual,
+          analysis: {
+            'is_food': true,
+            'meal_description': 'Tapas',
+            'total_calories': total,
+            'total_protein_g': 21.26,
+            'food_items': items,
+          });
+      final many = usualLogAnalysis(
+          rowFor(t([for (var i = 0; i < 45; i++) item('Olive $i', 10)])),
+          empty,
+          now: now);
+      expect(many['food_items'], hasLength(40));
+      expect(many['total_calories'], 400);
+      final none = usualLogAnalysis(rowFor(t(const [])), empty, now: now);
+      expect(none['food_items'], isEmpty);
+      expect(none['total_calories'], 500);
+      expect(none['total_protein_g'], 21.3);
+      expect(none['total_carbs_g'], 0);
+    });
+  });
+
+  group('usualLooselyShares (P12)', () {
+    Map<String, dynamic> a(List<String> names, {String desc = 'x'}) => {
+          'meal_description': desc,
+          'food_items': [for (final n in names) item(n, 100)],
+        };
+    test('reworded pairs meet', () {
+      expect(
+          usualLooselyShares(a(['Steel-cut oats with berries (~250 g)']),
+              a(['Blueberry oatmeal'])),
+          isTrue);
+      expect(usualLooselyShares(a(['2 eggs']), a(['Eggs'])), isTrue);
+      expect(usualLooselyShares(a(['燕麦粥']), a(['蓝莓燕麦片'])), isTrue);
+      expect(usualLooselyShares(a(['粥']), a(['皮蛋瘦肉粥'])), isTrue,
+          reason: 'one token set inside the other');
+      expect(usualLooselyShares(a(['Pb']), a(['Pb and j'])), isTrue);
+      expect(usualLooselyShares(a([], desc: 'Green smoothie'),
+          a(['Smoothie bowl'])), isTrue);
+    });
+    test('different foods do not', () {
+      expect(usualLooselyShares(a(['Steak']), a(['Iced tea'])), isFalse);
+      expect(usualLooselyShares(a(['牛肉面']), a(['鸡蛋'])), isFalse);
+      expect(usualLooselyShares(a(['Ham']), a(['Banana'])), isFalse);
+      expect(usualLooselyShares(a(['燕麦粥']), a(['白粥'])), isFalse,
+          reason: 'one shared CJK character is not enough');
+    });
+  });
 }
