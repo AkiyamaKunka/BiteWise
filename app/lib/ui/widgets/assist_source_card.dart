@@ -9,9 +9,10 @@
 /// unclear size, a combo, the closest menu item, another unit, numbers the
 /// user turned down before). Then 'Source: {host}' (the
 /// normalized https address only, opened in the browser on tap; anything
-/// else is never a link), 'via {provider} · {date}', whether the number
-/// was found on the source page, and the lookup's notes as plain text
-/// (at most 200 characters, never links). Everything shown is the chain's
+/// else is never a link), 'via {provider} · {date}' (for a saved lookup
+/// answer, 'via {provider} · saved answer from {date}', the day it was
+/// fetched), whether the number was found on the source page, and the
+/// lookup's notes as plain text (at most 200 characters, never links). Everything shown is the chain's
 /// name from the app's own table and what the lookup returned — nothing
 /// from Apple Maps exists to show. A lookup that found nothing names no
 /// restaurant.
@@ -21,8 +22,11 @@
 /// Correct (only where it can teach the spot: the place step named the
 /// chain there); on a suggestion, Use published numbers (the editor asks
 /// first, with the new total, when the reason says the numbers may not fit
-/// what was eaten); with no result, Look up restaurant nutrition. A null
-/// callback hides its button; [busy] disables them all.
+/// what was eaten); with no result, Look up restaurant nutrition. On a
+/// block decided on a saved answer, Search again asks for a fresh one: an
+/// extra button on applied and suggested cards, and in place of Look up on
+/// stale suggestions and context-only cards. A null callback hides its
+/// button; [busy] disables them all.
 library;
 
 import 'package:flutter/material.dart';
@@ -45,6 +49,7 @@ class AssistSourceCard extends StatelessWidget {
     this.onNotRestaurant,
     this.onCorrect,
     this.onLookUp,
+    this.onSearchAgain,
     this.onOpenSource,
   });
 
@@ -67,12 +72,29 @@ class AssistSourceCard extends StatelessWidget {
   final VoidCallback? onCorrect;
   final VoidCallback? onLookUp;
 
+  /// Search again (usual foods §2.4): a fresh lookup over a block decided
+  /// on a saved answer ([AssistView.fetchedOn]). Shown only on such a
+  /// block, and not while a lookup runs.
+  final VoidCallback? onSearchAgain;
+
   /// Opens a normalized https source URL in the browser.
   final void Function(String url)? onOpenSource;
 
   bool get _locked => busy || lookingUp || editFirst;
 
   VoidCallback? _gate(VoidCallback? f) => _locked ? null : f;
+
+  /// Search again shows: the block came from a saved answer, the editor
+  /// can look up, and no lookup is running.
+  bool get _searchAgain =>
+      view.fetchedOn.isNotEmpty && onSearchAgain != null && !lookingUp;
+
+  Widget _searchAgainButton(BuildContext context) => OutlinedButton.icon(
+    key: const Key('assistSearchAgain'),
+    onPressed: _gate(onSearchAgain),
+    icon: const Icon(Icons.refresh, size: 18),
+    label: Text(context.l10n.assistSearchAgain),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -129,7 +151,22 @@ class AssistSourceCard extends StatelessWidget {
               context.l10n.assistContextOnly,
               style: theme.textTheme.bodyMedium,
             ),
-            if (lookingUp || onLookUp != null) ...[
+            if (view.fetchedOn.isNotEmpty)
+              Text(
+                context.l10n.assistContextSaved(view.fetchedOn),
+                key: const Key('assistContextSaved'),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
+            // Search again replaces Look up on a saved answer's record.
+            if (_searchAgain) ...[
+              const SizedBox(height: 8),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: _searchAgainButton(context),
+              ),
+            ] else if (lookingUp || onLookUp != null) ...[
               const SizedBox(height: 8),
               _lookUpOnly(context),
             ],
@@ -185,7 +222,11 @@ class AssistSourceCard extends StatelessWidget {
             child: Text(l.assistCorrect),
           ),
       ],
-      if (view.kind == AssistViewKind.suggestedStale &&
+      // A saved answer's block: Search again, which on a stale suggestion
+      // replaces Look up.
+      if (_searchAgain)
+        _searchAgainButton(context)
+      else if (view.kind == AssistViewKind.suggestedStale &&
           onLookUp != null &&
           !lookingUp)
         OutlinedButton.icon(
@@ -265,10 +306,15 @@ class AssistSourceCard extends StatelessWidget {
                 style: muted,
               ),
             Text(
-              l.assistVia(
-                provider.isEmpty ? '—' : provider,
-                view.decidedOn.isEmpty ? '—' : view.decidedOn,
-              ),
+              view.fetchedOn.isNotEmpty
+                  ? l.assistViaSaved(
+                      provider.isEmpty ? '—' : provider,
+                      view.fetchedOn,
+                    )
+                  : l.assistVia(
+                      provider.isEmpty ? '—' : provider,
+                      view.decidedOn.isEmpty ? '—' : view.decidedOn,
+                    ),
               key: const Key('assistVia'),
               style: muted,
             ),

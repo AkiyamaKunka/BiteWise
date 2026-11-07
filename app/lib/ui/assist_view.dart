@@ -150,6 +150,7 @@ final class AssistView {
     this.sourceOfficial = false,
     this.provider = '',
     this.decidedOn = '',
+    this.fetchedOn = '',
     this.grounded = false,
     this.notes = '',
     this.evidence,
@@ -180,6 +181,11 @@ final class AssistView {
 
   /// YYYY-MM-DD, or ''.
   final String decidedOn;
+
+  /// YYYY-MM-DD the saved lookup answer behind the block was fetched
+  /// (usual foods D11), or '' for an answer fetched for this meal. The
+  /// card then says so and offers Search again.
+  final String fetchedOn;
 
   /// Every covered figure was found in text taken from the source page.
   final bool grounded;
@@ -245,10 +251,15 @@ final class AssistView {
       AssistStatus.noMatch => AssistViewKind.contextOnly,
       _ => AssistViewKind.other,
     };
-    if (kind == AssistViewKind.contextOnly || kind == AssistViewKind.other) {
+    final fetched = block['fetched_on'];
+    final fetchedOn = fetched is String && _isoDateRe.hasMatch(fetched)
+        ? fetched
+        : '';
+    if (kind == AssistViewKind.contextOnly) {
       // A context-only record names no restaurant, so neither does this.
-      return AssistView._(kind: kind);
+      return AssistView._(kind: kind, fetchedOn: fetchedOn);
     }
+    if (kind == AssistViewKind.other) return AssistView._(kind: kind);
     final key = block['chain_key'];
     final chain = key is String ? chainByKey(key) : null;
     final brand = chain != null
@@ -309,6 +320,7 @@ final class AssistView {
       decidedOn: decided is String && _isoDateRe.hasMatch(decided)
           ? decided
           : '',
+      fetchedOn: fetchedOn,
       grounded: block['grounded'] == true,
       notes: sanitizeAssistText(notes, kAssistNotesMax),
       evidence: AssistEvidenceKind.fromWire(block['evidence']),
