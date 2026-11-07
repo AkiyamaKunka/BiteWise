@@ -25,6 +25,7 @@ import '../meal_thumbs.dart';
 import '../refresh_signal.dart';
 import '../restaurant_assist_controls.dart';
 import '../services.dart' show SettingsStore;
+import '../../services/usual/usual_foods.dart';
 import '../widgets/meal_card.dart';
 import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
@@ -50,6 +51,11 @@ class TodayScreen extends StatefulWidget {
 
   /// The assist's mode and consent, for the editor's lookup.
   final SettingsStore? settings;
+
+  /// Usual foods: a chip on a photo meal of today offering the numbers
+  /// the user set for a food before (Use / Review), and the editor's card.
+  /// Null (tests) shows neither.
+  final UsualFoods? usual;
   const TodayScreen(
       {super.key,
       required this.dao,
@@ -58,7 +64,8 @@ class TodayScreen extends StatefulWidget {
       this.garminDaily,
       this.mealInUse,
       this.restaurantAssist,
-      this.settings});
+      this.settings,
+      this.usual});
 
   @override
   State<TodayScreen> createState() => TodayScreenState();

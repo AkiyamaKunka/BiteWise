@@ -44,6 +44,7 @@ import '../services/photo/watcher.dart';
 import '../services/report/builders.dart';
 import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
+import '../services/usual/usual_foods.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'ai_consent.dart' show SharedPhotoConsentGate;
@@ -259,6 +260,16 @@ class AppServices {
 
     final photoLibrary = PhotoManagerLibrary();
 
+    // The restaurant assist's mode, 'Use photo location' and consent, read
+    // fresh from the real settings: MealAssist decides with it, and usual
+    // foods leave the meals it takes to it.
+    AssistSettingsView assistSettingsView() => AssistSettingsView(
+          mode: AssistMode.fromWire(settings.restaurantAssist),
+          useLocation: settings.restaurantAssistLocation,
+          consentAt: settings.restaurantAssistConsentAt,
+          consentRecipient: settings.restaurantAssistConsentRecipient,
+        );
+
     // The restaurant assist (design R6b): saved meals are enriched later,
     // in the foreground only, when the pipeline is idle and no analyzer
     // call is in flight. The mode, 'Use photo location' and the consent
@@ -272,12 +283,7 @@ class AppServices {
       inUse: mealInUse.isInUse,
       budget: assistBudget,
       state: AssistLocalState.platform(),
-      settings: () => AssistSettingsView(
-        mode: AssistMode.fromWire(settings.restaurantAssist),
-        useLocation: settings.restaurantAssistLocation,
-        consentAt: settings.restaurantAssistConsentAt,
-        consentRecipient: settings.restaurantAssistConsentRecipient,
-      ),
+      settings: assistSettingsView,
       settingsChanges: settings,
       mealsChanged: mealsChangedSignal,
       onMealsChanged: signalMealsChanged,
@@ -329,6 +335,25 @@ class AppServices {
         cap: mealAssist.dailyCap,
         decisions: await mealAssist.decisions(),
       ),
+    );
+
+    // Usual foods (Today's "your usual numbers", Log › My usual foods):
+    // worked out on the phone from the meals table, nothing sent. The
+    // choices (hidden foods, offers turned down) live in one preferences
+    // value of short codes. A meal the restaurant lookup takes gets no
+    // usual offer: Off decides before the lookup client is asked who a
+    // lookup would reach.
+    final usualFoods = UsualFoods(
+      dao: dao,
+      choices: UsualChoices(await SharedPreferences.getInstance()),
+      mealsChanged: mealsChangedSignal,
+      onMealsChanged: signalMealsChanged,
+      lookupTakesIt: (analysis) {
+        final view = assistSettingsView();
+        if (view.mode == AssistMode.off) return false;
+        return usualLookupTakesIt(analysis,
+            settings: view, support: analyzer.lookupSupport());
+      },
     );
 
     // PhotoManager, NOT permission_handler: on Android <=12 the latter's
@@ -399,6 +424,7 @@ class AppServices {
       },
       mealInUse: mealInUse,
       restaurantAssist: restaurantAssist,
+      usualFoods: usualFoods,
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     // Share sheet (deliberate), each photo held until its AI recipient is

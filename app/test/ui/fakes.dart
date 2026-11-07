@@ -10,6 +10,8 @@ import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:calorie_tracker/core/ai_consent.dart' show allAiConsentRoutes;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
+import 'package:calorie_tracker/services/usual/usual_foods.dart'
+    show UsualFoods;
 import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
@@ -420,6 +422,7 @@ UiServices makeServices({
   PhotoLibrary? photoLibrary,
   MealInUseRegistry? mealInUse,
   RestaurantAssistControls? restaurantAssist,
+  UsualFoods? usualFoods,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -440,5 +443,6 @@ UiServices makeServices({
     photoLibrary: photoLibrary,
     mealInUse: mealInUse,
     restaurantAssist: restaurantAssist,
+    usualFoods: usualFoods,
   );
 }

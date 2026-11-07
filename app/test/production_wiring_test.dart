@@ -220,16 +220,23 @@ void main() {
         r'places: Platform\.isIOS \? MapKitPlaces\(\) : null,',
         r'placesStore: AssistPlacesStore\.platform\(\),',
         // R7a: the mode, 'Use photo location' and the consent, read fresh
-        // from the real settings on every decision.
-        r'settings: \(\) => AssistSettingsView\( '
-            r'mode: AssistMode\.fromWire\(settings\.restaurantAssist\), '
-            r'useLocation: settings\.restaurantAssistLocation, '
-            r'consentAt: settings\.restaurantAssistConsentAt, '
-            r'consentRecipient: settings\.restaurantAssistConsentRecipient, '
-            r'\),',
+        // from the real settings on every decision (through the one view
+        // usual foods reads too, pinned below).
+        r'settings: assistSettingsView,',
       ]) {
         expect(build, _wired(wire), reason: wire);
       }
+      expect(
+        source,
+        _wired(
+          r'AssistSettingsView assistSettingsView\(\) => AssistSettingsView\( '
+          r'mode: AssistMode\.fromWire\(settings\.restaurantAssist\), '
+          r'useLocation: settings\.restaurantAssistLocation, '
+          r'consentAt: settings\.restaurantAssistConsentAt, '
+          r'consentRecipient: settings\.restaurantAssistConsentRecipient, '
+          r'\);',
+        ),
+      );
       // The meal country's time zone is the phone's own (MealAssist's
       // default, DateTime.now().timeZoneOffset): di passes no other.
       expect(build, isNot(contains('utcOffset')));
@@ -447,6 +454,70 @@ void main() {
       final screen = _call(_source('lib/ui/app.dart'), 'SettingsScreen(');
       expect(screen, _wired(r'settings: s\.settings,'));
       expect(screen, _wired(r'restaurantAssist: s\.restaurantAssist,'));
+    });
+  });
+
+  // Usual foods (spec T47, Lane C): worked out on the phone, app engine
+  // only. The behaviour of usualLookupTakesIt is tested per branch in
+  // usual_foods_test; these pin the lines that hand it the real settings
+  // and lookup support, and keep the background engine and the photo
+  // pipeline free of it.
+  group('usual foods', () {
+    String init() => _body(
+      _source('lib/ui/di.dart'),
+      'static Future<AppServices> init(',
+      indent: '  ',
+    );
+
+    test('di.dart builds one UsualFoods over one UsualChoices, with the '
+        'lookup rule, and hands it to the screens', () {
+      final di = _source('lib/ui/di.dart');
+      expect('UsualFoods('.allMatches(di), hasLength(1));
+      expect('UsualChoices('.allMatches(di), hasLength(1));
+      final build = _call(init(), 'UsualFoods(');
+      for (final wire in [
+        r'dao: dao,',
+        r'choices: UsualChoices\(await SharedPreferences\.getInstance\(\)\),',
+        r'mealsChanged: mealsChangedSignal,',
+        r'onMealsChanged: signalMealsChanged,',
+        // Off decides first: the lookup client is not asked who a lookup
+        // would reach (that builds it) while lookups are off.
+        r'lookupTakesIt: \(analysis\) \{ '
+            r'final view = assistSettingsView\(\); '
+            r'if \(view\.mode == AssistMode\.off\) return false; '
+            r'return usualLookupTakesIt\(analysis, '
+            r'settings: view, support: analyzer\.lookupSupport\(\)\); '
+            r'\},',
+      ]) {
+        expect(build, _wired(wire), reason: wire);
+      }
+      expect(build, isNot(contains('clock')),
+          reason: 'the device clock, as every other service');
+      expect(init(), _wired(r'usualFoods: usualFoods,'));
+      final today = _call(_source('lib/ui/app.dart'), 'TodayScreen(');
+      expect(today, _wired(r'usual: s\.usualFoods\)'));
+    });
+
+    test('background_glue.dart never references it, and the photo '
+        'pipeline takes nothing from it', () {
+      final glue = _source('lib/ui/background_glue.dart');
+      for (final banned in [
+        'services/usual',
+        'usual_foods',
+        'usual_choices',
+        'UsualFoods',
+        'UsualChoices',
+        'usualLookupTakesIt',
+      ]) {
+        expect(glue, isNot(contains(banned)), reason: banned);
+      }
+      final pipeline = _source('lib/ui/photo_pipeline.dart');
+      expect(pipeline, isNot(contains('sual')));
+      final from = pipeline.indexOf('\n  PhotoPipeline(\n');
+      expect(from, isNot(-1));
+      final ctor = pipeline.substring(
+          from, pipeline.indexOf('_clock = clock ?? DateTime.now;', from));
+      expect(ctor, isNot(contains('sual')));
     });
   });
 
