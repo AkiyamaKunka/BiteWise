@@ -327,27 +327,36 @@ void main() {
       expect(kept.verified, isTrue);
     });
 
-    AssistCachedLookup entry(String key, {String text = 'Big Mac 590 Cal.'}) =>
-        AssistCachedLookup(
-          key: key,
-          chainKey: 'mcdonalds',
-          names: const ['big mac'],
-          lookup: AssistLookup(
-            result: const {'status': 'found', 'chain_key': 'mcdonalds'},
-            provider: 'anthropic',
-            citedUrls: const ['https://www.mcdonalds.com/big-mac'],
-            evidence: [
-              AssistEvidence(
-                url: 'https://www.mcdonalds.com/big-mac',
-                text: text,
-                pageAge: '2026-01-02',
-              ),
-            ],
+    AssistCachedLookup entry(
+      String key, {
+      String text = 'Big Mac 590 Cal.',
+      String status = 'found',
+      String provider = 'anthropic',
+      DateTime? at,
+    }) => AssistCachedLookup(
+      key: key,
+      chainKey: 'mcdonalds',
+      names: const ['big mac'],
+      lookup: AssistLookup(
+        result: {'status': status, 'chain_key': 'mcdonalds'},
+        provider: provider,
+        citedUrls: const ['https://www.mcdonalds.com/big-mac'],
+        evidence: [
+          AssistEvidence(
+            url: 'https://www.mcdonalds.com/big-mac',
+            text: text,
+            pageAge: '2026-01-02',
           ),
-          at: now,
-        );
+        ],
+      ),
+      at: at ?? now,
+    );
 
-    test('the cache: put, read, replace, clear; 30 days', () async {
+    List<Map<String, Object?>> stored() =>
+        ((doc(assistCacheDocument)['entries'] as List)
+            .cast<Map<String, Object?>>());
+
+    test('the cache: put, read, replace, clear', () async {
       final s = state();
       final key = 'a' * 32;
       expect(await s.cachedLookup(key), isNull);
@@ -358,19 +367,235 @@ void main() {
       expect(hit.lookup.provider, 'anthropic');
       expect(hit.lookup.evidence.single.pageAge, '2026-01-02');
       expect(hit.lookup.evidence.single.verbatim, isTrue);
+      expect(hit.found, isTrue);
       expect(await s.putCachedLookup(entry(key, text: 'newer')), isTrue);
       expect((await s.cachedLookup(key))!.lookup.evidence.single.text, 'newer');
-      expect(
-        (jsonDecode(file(assistCacheDocument).readAsStringSync())['entries']
-                as List)
-            .length,
-        1,
-      );
+      expect(stored().length, 1);
       expect(await s.clearCache(), isTrue);
       expect(await s.cachedLookup(key), isNull);
-      await s.putCachedLookup(entry(key));
-      now = now.add(const Duration(days: 31));
+    });
+
+    // Usual foods D1/D2: published numbers a search found are kept a year
+    // from the fetch, an answer that found nothing 30 days. Neither slides
+    // with use.
+    test('a found answer reads at 364 days and is gone at 366; any other '
+        'is gone at 31; both are measured from the fetch', () async {
+      final s = state();
+      final fetched = now;
+      final found = 'a' * 32;
+      await s.putCachedLookup(entry(found));
+      final negatives = {
+        'not_published': 'b' * 32,
+        'no_match': 'c' * 32,
+        'ambiguous': 'd' * 32,
+      };
+      for (final MapEntry(key: status, value: key) in negatives.entries) {
+        expect(await s.putCachedLookup(entry(key, status: status)), isTrue);
+        expect((await s.cachedLookup(key))!.found, isFalse, reason: status);
+      }
+      now = fetched.add(const Duration(days: 30));
+      for (final key in negatives.values) {
+        expect(await s.cachedLookup(key), isNotNull, reason: 'day 30');
+      }
+      now = fetched.add(const Duration(days: 31));
+      for (final MapEntry(key: status, value: key) in negatives.entries) {
+        expect(await s.cachedLookup(key), isNull, reason: status);
+      }
+      expect(await s.cachedLookup(found), isNotNull);
+      // Uses on day 300 and day 363 do not move its life.
+      now = fetched.add(const Duration(days: 300));
+      expect(await s.touchCachedLookup(found), isTrue);
+      now = fetched.add(const Duration(days: 363));
+      expect(await s.touchCachedLookup(found), isTrue);
+      now = fetched.add(const Duration(days: 364));
+      final late = (await s.cachedLookup(found))!;
+      expect(late.at, fetched);
+      expect(late.usedAt, fetched.add(const Duration(days: 363)));
+      now = fetched.add(const Duration(days: 366));
+      expect(await s.cachedLookup(found), isNull,
+          reason: 'measured from at, not used_at');
+    });
+
+    // Usual foods D3: the least recently used goes first, so an answer
+    // the owner keeps using is never pushed out by newer fetches.
+    test('the cap keeps the answers used most recently', () async {
+      final s = state();
+      String k(int i) => i.toRadixString(16).padLeft(32, '0');
+      for (var i = 0; i < assistCacheCap; i++) {
+        now = now.add(const Duration(minutes: 1));
+        expect(await s.putCachedLookup(entry(k(i))), isTrue);
+      }
+      now = now.add(const Duration(minutes: 1));
+      expect(await s.touchCachedLookup(k(0)), isTrue,
+          reason: 'the first fetched is used again');
+      now = now.add(const Duration(minutes: 1));
+      expect(await s.putCachedLookup(entry(k(assistCacheCap))), isTrue);
+      expect(stored(), hasLength(assistCacheCap));
+      expect(await s.cachedLookup(k(0)), isNotNull);
+      expect(await s.cachedLookup(k(1)), isNull,
+          reason: 'the least recently used went');
+      expect(await s.cachedLookup(k(assistCacheCap)), isNotNull);
+    });
+
+    test('a touch sets used_at to the clock and keeps at and the declined '
+        'mark; a mark keeps used_at; a replacing found answer resets it',
+        () async {
+      final s = state();
+      final key = 'e' * 32;
+      final fetched = now;
+      expect(await s.touchCachedLookup(key), isTrue, reason: 'absent');
       expect(await s.cachedLookup(key), isNull);
+      await s.putCachedLookup(entry(key));
+      expect((await s.cachedLookup(key))!.usedAt, fetched);
+      expect(stored().single['used_at'], fetched.toIso8601String());
+      expect(await s.markCachedLookup(key, declined: true), isTrue);
+
+      now = fetched.add(const Duration(days: 40));
+      expect(await s.touchCachedLookup(key), isTrue);
+      final touched = (await s.cachedLookup(key))!;
+      expect(touched.usedAt, now);
+      expect(touched.at, fetched, reason: 'a touch never moves the year');
+      expect(touched.declined, isTrue);
+
+      final usedAt = now;
+      now = fetched.add(const Duration(days: 41));
+      expect(await s.markCachedLookup(key, declined: false), isTrue);
+      expect(await s.markCachedLookup(key, declined: true), isTrue);
+      final marked = (await s.cachedLookup(key))!;
+      expect(marked.usedAt, usedAt, reason: 'a mark is not a use');
+      expect(marked.at, fetched);
+
+      now = fetched.add(const Duration(days: 42));
+      await s.putCachedLookup(entry(key, text: 'fresh'));
+      final fresh = (await s.cachedLookup(key))!;
+      expect(fresh.at, now);
+      expect(fresh.usedAt, now);
+      expect(fresh.declined, isTrue);
+    });
+
+    // Usual foods D2a: a later search that found nothing never pushes out
+    // published numbers the same provider found for these items.
+    test('a negative answer never replaces a found one from the same '
+        'provider; a newer found answer, or another provider, does',
+        () async {
+      final s = state();
+      final key = 'f' * 32;
+      final fetched = now;
+      await s.putCachedLookup(entry(key, text: 'found'));
+      final before = file(assistCacheDocument).readAsStringSync();
+      now = fetched.add(const Duration(days: 5));
+      expect(
+        await s.putCachedLookup(entry(key, status: 'not_published')),
+        isTrue,
+        reason: 'the store holds the best answer',
+      );
+      expect(file(assistCacheDocument).readAsStringSync(), before,
+          reason: 'nothing is written');
+      final kept = (await s.cachedLookup(key))!;
+      expect(kept.found, isTrue);
+      expect(kept.lookup.evidence.single.text, 'found');
+
+      await s.putCachedLookup(entry(key, text: 'newer found'));
+      final newer = (await s.cachedLookup(key))!;
+      expect(newer.lookup.evidence.single.text, 'newer found');
+      expect(newer.at, now);
+
+      final other = 'f0' * 16;
+      await s.putCachedLookup(entry(other, text: 'found'));
+      expect(
+        await s.putCachedLookup(
+          entry(other, status: 'no_match', provider: 'claude_plan'),
+        ),
+        isTrue,
+      );
+      final replaced = (await s.cachedLookup(other))!;
+      expect(replaced.found, isFalse);
+      expect(replaced.lookup.provider, 'claude_plan');
+
+      // An expired found answer is gone, so a negative takes its key.
+      final aged = 'f1' * 16;
+      now = fetched;
+      await s.putCachedLookup(entry(aged));
+      now = fetched.add(const Duration(days: 366));
+      await s.putCachedLookup(entry(aged, status: 'not_published'));
+      expect((await s.cachedLookup(aged))!.found, isFalse);
+    });
+
+    test('an entry written before used_at existed reads used_at as at; the '
+        'other documents still read after a cache write', () async {
+      final s = state();
+      await s.addUnseen(3);
+      await s.addMiss(4);
+      await s.logDecision(AssistDecisionEntry(at: now, code: 'ok'));
+      await s.putJob(
+        5,
+        AssistJob(
+          jobId: 'job_abcdef01',
+          reqHash: '0123456789abcdef',
+          at: now,
+          nextAt: now,
+        ),
+      );
+      final fetched = now.subtract(const Duration(days: 45));
+      Map<String, Object?> legacy(String key, {Object? usedAt}) =>
+          {...entry(key, at: fetched).toJson()}
+            ..remove('used_at')
+            ..addAll({'used_at': ?usedAt});
+      file(assistCacheDocument).writeAsStringSync(
+        jsonEncode({
+          'v': assistLocalVersion,
+          'entries': [
+            legacy('1' * 32),
+            legacy('2' * 32, usedAt: 'yesterday'),
+            legacy('3' * 32,
+                usedAt: fetched.subtract(const Duration(days: 1))
+                    .toIso8601String()),
+            legacy('4' * 32,
+                usedAt: now.add(const Duration(days: 3)).toIso8601String()),
+            legacy('5' * 32,
+                usedAt: now.subtract(const Duration(days: 2))
+                    .toIso8601String()),
+          ],
+        }),
+      );
+      for (final k in ['1', '2', '3', '4']) {
+        expect((await s.cachedLookup(k * 32))!.usedAt, fetched, reason: k);
+      }
+      expect((await s.cachedLookup('5' * 32))!.usedAt,
+          now.subtract(const Duration(days: 2)));
+      // The next write stores it, and the version is unchanged.
+      await s.putCachedLookup(entry('6' * 32));
+      expect(doc(assistCacheDocument)['v'], 1);
+      expect(stored().every((e) => e['used_at'] is String), isTrue);
+      expect(await s.unseen(), {3});
+      expect(await s.misses(), {4: 1});
+      expect(await s.decisions(), hasLength(1));
+      expect((await s.jobs()).keys, [5]);
+    });
+
+    test('an entry that fits only without used_at is refused; the full '
+        'store fits in one document', () async {
+      final s = state();
+      // The text that makes the entry, with used_at, one byte over the cap.
+      int size(AssistCachedLookup e) =>
+          utf8.encode(jsonEncode(e.toJson())).length;
+      final base = size(entry('a' * 32, text: ''));
+      final over = entry(
+        'a' * 32,
+        text: 'x' * (assistCacheEntryMaxBytes - base + 1),
+      );
+      expect(size(over), assistCacheEntryMaxBytes + 1);
+      final withoutUsedAt = {...over.toJson()}..remove('used_at');
+      expect(
+        utf8.encode(jsonEncode(withoutUsedAt)).length,
+        lessThanOrEqualTo(assistCacheEntryMaxBytes),
+      );
+      expect(await s.putCachedLookup(over), isFalse);
+      expect(await s.cachedLookup('a' * 32), isNull);
+      expect(
+        assistCacheCap * assistCacheEntryMaxBytes + 4096,
+        lessThan(localDocumentMaxBytes),
+      );
     });
 
     test('a declined mark: set and cleared in place, kept when a fresh '
@@ -411,8 +636,8 @@ void main() {
       expect((await s.cachedLookup(key))!.declined, isFalse);
     });
 
-    test('the cache keeps the newest 200 and refuses an oversized or '
-        'malformed entry', () async {
+    test('the cache keeps 200 and refuses an oversized or malformed entry',
+        () async {
       final s = state();
       for (var i = 0; i < assistCacheCap + 3; i++) {
         now = now.add(const Duration(minutes: 1));
