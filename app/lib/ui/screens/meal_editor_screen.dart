@@ -44,7 +44,13 @@ import '../../core/coerce.dart'
     show finiteAnalysis, isFoodTruthy, normalizeImageHash;
 import '../../core/contracts.dart';
 import '../../core/restaurant_assist_logic.dart'
-    show acceptAssistSuggestion, dropAssistClaims, normalizeSourceUrl;
+    show
+        AssistOutcome,
+        acceptAssistSuggestion,
+        assistDecisionItemsKcal,
+        assistSameNumbers,
+        dropAssistClaims,
+        normalizeSourceUrl;
 import '../../services/assist/meal_assist.dart'
     show
         AssistActionResult,
@@ -188,6 +194,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   /// A manual restaurant lookup is running (polled while a server job).
   bool _lookingUp = false;
+
+  /// The last lookup was answered by a saved lookup answer (usual foods
+  /// D9): the next press asks the provider, whatever the button.
+  bool _freshNext = false;
 
   /// [_load] is setting the fields one by one: their listener must not copy
   /// a half-updated form into the draft.
@@ -808,7 +818,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// recipient, then MealAssist.lookupNow — asked again every
   /// [MealEditorScreen.assistPollInterval] while the owner's server still
   /// runs it, for up to [kAssistPollWindow] (later, the sweep collects it).
-  Future<void> _lookUp({String? chainKey}) async {
+  ///
+  /// [fresh] is Search again (usual foods §2.4): the provider is asked,
+  /// never a saved lookup answer. The press right after a saved answer
+  /// was used is fresh too ([_freshNext], D9).
+  Future<void> _lookUp({String? chainKey, bool fresh = false}) async {
     final meal = _meal;
     final assist = widget.assist;
     final settings = widget.settings;
@@ -824,6 +838,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         settings: settings, controls: assist);
     if (choice == null || !mounted) return;
     final useLocation = chainKey == null && choice.useLocation;
+    // One answer for every poll of this press: a pending fresh search is
+    // never answered by the saved answer it is replacing.
+    final f = fresh || _freshNext;
+    // The block before this lookup, for what a fresh search over applied
+    // numbers says when it writes nothing.
+    final before = meal.analysis;
     setState(() => _lookingUp = true);
     var run = const AssistRun(AssistSkip.error);
     try {
@@ -842,7 +862,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           }
         }
         run = await lookupNow(meal.id,
-            useLocation: useLocation, chainKey: chainKey);
+            useLocation: useLocation, chainKey: chainKey, fresh: f);
         if (!mounted) return;
         // Pending on the server, or the automatic lookup of this meal
         // still running here (its result is dropped: the editor holds the
@@ -854,9 +874,17 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     } finally {
       if (mounted) setState(() => _lookingUp = false);
     }
+    _freshNext = run.fromCache;
     if (!mounted) return;
     if (run.wrote) {
       await _refreshBasis();
+      if (!mounted) return;
+      if (run.fromCache) {
+        // Never "used": on Claude Plan a saved answer is a suggestion.
+        final on = run.decision?.fetchedOn ??
+            AssistView.of((_meal ?? meal).analysis).fetchedOn;
+        _say(l.assistFoundSaved(on), key: const Key('assistFoundSavedSnack'));
+      }
       return;
     }
     if (run.code == AssistSkip.casMiss) {
@@ -864,19 +892,61 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       await _refreshBasis();
       return;
     }
-    final message = run.code == AssistSkip.pending ||
-            run.code == AssistSkip.working ||
-            run.code == AssistSkip.background
+    final stillRunning = run.code == AssistSkip.pending ||
+        run.code == AssistSkip.working ||
+        run.code == AssistSkip.background;
+    final message = stillRunning
         ? l.assistLookupStillRunning
-        : run.decision != null
-            // Answered, but nothing usable to write (another chain, items
-            // that changed meanwhile, a malformed answer).
-            ? l.assistContextOnly
-            : _lookupFailureText(l, run.code);
+        : f && AssistView.of(before).kind == AssistViewKind.applied
+            ? _searchAgainText(l, run, before)
+            : run.decision != null
+                // Answered, but nothing usable to write (another chain,
+                // items that changed meanwhile, a malformed answer).
+                ? l.assistContextOnly
+                : _lookupFailureText(l, run.code);
     if (message != null) {
       _say(message, key: const Key('assistLookupSnack'));
     }
   }
+
+  /// A fresh search over published numbers that stand on the meal wrote
+  /// nothing (usual foods §2.4; a weaker answer never replaces applied
+  /// numbers): what it found. A search that could not run says why
+  /// instead.
+  static String? _searchAgainText(
+      AppLocalizations l, AssistRun run, Map<String, dynamic> before) {
+    final d = run.decision;
+    if (d == null && _lookupFailed(run.code)) {
+      return _lookupFailureText(l, run.code);
+    }
+    if (d == null ||
+        d.outcome == AssistOutcome.reject ||
+        d.outcome == AssistOutcome.contextOnly ||
+        d.items.isEmpty) {
+      return l.assistSearchAgainNoChange;
+    }
+    if (assistSameNumbers(before, d)) return l.assistSearchAgainSame;
+    return l.assistSearchAgainDiffers(formatKcal(assistDecisionItemsKcal(d)));
+  }
+
+  /// [code] says the lookup got no answer (not started, refused, or
+  /// failed): a code [_lookupFailureText] names, not its "no chain"
+  /// fallback.
+  static bool _lookupFailed(String code) =>
+      code.startsWith('lookup_') ||
+      const {
+        AssistSkip.consentNeeded,
+        AssistSkip.off,
+        AssistSkip.cancelled,
+        AssistSkip.pickNeedsHttps,
+        AssistSkip.outsideUs,
+        AssistSkip.regionUnknown,
+        AssistSkip.dailyCap,
+        AssistSkip.placeThrottled,
+        AssistSkip.placeError,
+        AssistSkip.error,
+        AssistSkip.unsupported,
+      }.contains(code);
 
   /// Why a manual lookup wrote nothing, or null when there is nothing to
   /// say (it was not started, or already runs).
@@ -978,6 +1048,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           ? answer(AssistUserAction.correct)
           : null,
       onLookUp: canLookUp ? () => _lookUp() : null,
+      // On a block decided on a saved lookup answer (the card shows it
+      // only there): a fresh lookup.
+      onSearchAgain: canLookUp ? () => _lookUp(fresh: true) : null,
       onOpenSource: _openSource,
     );
   }

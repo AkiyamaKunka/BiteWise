@@ -6,7 +6,11 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
-    show AssistReason;
+    show
+        AssistDecision,
+        AssistReason,
+        acceptAssistSuggestion,
+        recordAssistDecision;
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
     show LookupRecipient, LookupSupport;
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
@@ -1109,8 +1113,266 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('assistLookUp')), findsNothing);
+
+      // Logged again from My usual foods (usual foods T44): not a photo
+      // meal, so never looked up.
+      final repeat = FakeDao()
+        ..seed(
+          Meal(
+            id: 1,
+            date: '2026-10-24',
+            time: '12:30 PM',
+            timestamp: '2026-10-24T12:30:00.000',
+            source: MealSource.appRepeat,
+            analysis: bigMacAnalysis(),
+          ),
+        );
+      await tester.pumpWidget(
+        host(
+          MealEditorScreen(
+            key: UniqueKey(),
+            dao: repeat,
+            meal: repeat.meals.first,
+            now: clock,
+            assist: FakeAssist(repeat).controls(),
+            settings: assistSettings(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assistLookUp')), findsNothing);
+      expect(find.byKey(const Key('editorAssistCard')), findsNothing);
+    });
+
+    // ── Saved lookup answers (usual foods §2.4, T23) ──
+
+    testWidgets('Search again asks the provider on every poll of its press',
+        (tester) async {
+      var calls = 0;
+      final (dao, assist) = await open(
+        tester,
+        acceptedSavedBigMac(),
+        setUp: (a) => a.onLookup = (_, _, _) async {
+          calls++;
+          if (calls < 3) return const AssistRun(AssistSkip.pending);
+          return AssistRun(
+            AssistReason.notGrounded,
+            decision: planBigMacDecision(),
+          );
+        },
+      );
+      expect(
+        find.text('via Claude (server) · saved answer from 2026-03-02'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('assistSearchAgain')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('assistSearchAgain')));
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(assist.lookups, hasLength(3));
+      expect(
+        assist.lookups.map((l) => l.fresh),
+        everyElement(isTrue),
+        reason: 'a pending fresh search is never answered by the saved one',
+      );
+      expect(dao.meals.first.analysis['total_calories'], 590);
+    });
+
+    testWidgets('a saved answer found says so (never "used"), and the next '
+        'press asks the provider, whatever the button', (tester) async {
+      late FakeDao store;
+      var calls = 0;
+      final (dao, assist) = await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) {
+          store = a.dao as FakeDao;
+          a.onLookup = (id, _, _) async {
+            calls++;
+            if (calls == 1) {
+              // A Claude Plan answer saved on 2026-03-02: a suggestion.
+              final d = planBigMacDecision().withFetchedOn('2026-03-02');
+              final m = store.meals.first;
+              await store.updateMealAnalysisIfUnchanged(
+                id,
+                expectedRaw: store.rawOf(m),
+                analysis: recordAssistDecision(m.analysis, d)!,
+              );
+              return AssistRun(
+                AssistReason.notGrounded,
+                decision: d,
+                wrote: true,
+                fromCache: true,
+              );
+            }
+            return const AssistRun(AssistSkip.noBrand);
+          };
+        },
+      );
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(assist.lookups.single.fresh, isFalse);
+      final notice = find.byKey(const Key('assistFoundSavedSnack'));
+      expect(notice, findsOneWidget);
+      expect(
+        find.text(
+          'Found a saved answer from 2026-03-02. Tap Search again for a new '
+          'search.',
+        ),
+        findsOneWidget,
+      );
+      expect(
+        find.descendant(of: notice, matching: find.textContaining('Used')),
+        findsNothing,
+      );
+      // The saved suggestion: Search again, not Look up.
+      expect(find.byKey(const Key('assistUsePublished')), findsOneWidget);
+      expect(find.byKey(const Key('assistSearchAgain')), findsOneWidget);
+      expect(find.byKey(const Key('assistLookUp')), findsNothing);
+      expect(dao.meals.first.analysis['total_calories'], 540);
+
+      // Wrong restaurant, then a chain picked: the press right after the
+      // saved answer asks the provider.
+      await tester.tap(find.byKey(const Key('assistWrongRestaurant')));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byKey(const Key('chainPickerSearch')),
+        'burger king',
+      );
+      await tester.pump();
+      await tester.tap(find.byKey(const Key('chainPick-burger_king')));
+      await tester.pumpAndSettle();
+      expect(assist.lookups, hasLength(2));
+      expect(assist.lookups.last.chainKey, 'burger_king');
+      expect(assist.lookups.last.fresh, isTrue);
+
+      // That one came from the provider: the next plain Look up may use a
+      // saved answer again.
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(assist.lookups, hasLength(3));
+      expect(assist.lookups.last.fresh, isFalse);
+    });
+
+    testWidgets('a saved answer the provider then confirms: the press after '
+        'a saved answer that wrote nothing is fresh too', (tester) async {
+      var calls = 0;
+      final (_, assist) = await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) => a.onLookup = (_, _, _) async {
+          calls++;
+          // First a saved answer that could not be used, then the
+          // provider.
+          return calls == 1
+              ? AssistRun(
+                  AssistReason.notGrounded,
+                  decision: planBigMacDecision(),
+                  fromCache: true,
+                )
+              : const AssistRun(AssistSkip.noBrand);
+        },
+      );
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assistFoundSavedSnack')), findsNothing);
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(assist.lookups.map((l) => l.fresh), [false, true]);
+    });
+
+    testWidgets('a fresh search over published numbers in use that writes '
+        'nothing says what it found', (tester) async {
+      Future<void> searchAgain(AssistRun answer, String says) async {
+        final (dao, assist) = await open(
+          tester,
+          acceptedSavedBigMac(),
+          settings: assistSettings(),
+          setUp: (a) => a.onLookup = (_, _, _) async => answer,
+        );
+        await tester.tap(find.byKey(const Key('assistSearchAgain')));
+        await tester.pumpAndSettle();
+        expect(assist.lookups.single.fresh, isTrue);
+        expect(find.text(says), findsOneWidget, reason: says);
+        expect(
+          find.text('No published nutrition found — AI estimate kept'),
+          findsNothing,
+        );
+        expect(dao.meals.first.analysis['total_calories'], 590);
+        expect(dao.compareMisses, 0);
+      }
+
+      const nothing = 'The new search found nothing better. These numbers stay.';
+      // No decision at all.
+      await searchAgain(const AssistRun(AssistSkip.noBrand), nothing);
+      // A search that found no published nutrition.
+      final none = decideFixture(
+        bigMacAnalysis(),
+        {...bigMacFound(), 'status': 'not_published', 'matches': <Object>[]},
+        verbatim: false,
+        provider: 'claude_plan',
+      );
+      await searchAgain(
+        AssistRun(AssistReason.notPublished, decision: none),
+        nothing,
+      );
+      // The same published numbers (a Claude Plan suggestion of them).
+      await searchAgain(
+        AssistRun(AssistReason.notGrounded, decision: planBigMacDecision()),
+        'The new search found the same numbers.',
+      );
+      // Other numbers: how to use them.
+      await searchAgain(
+        AssistRun(
+          AssistReason.notGrounded,
+          decision: planBigMacDecision(kcal: 610),
+        ),
+        'The new search found 610 kcal for these items. To use it, tap Use '
+        'AI estimate, then look up again.',
+      );
+      // A search that could not run says why, not "nothing better".
+      await searchAgain(
+        const AssistRun(AssistSkip.dailyCap),
+        "Today's restaurant lookups are used up. Try again tomorrow.",
+      );
     });
   });
+}
+
+/// The owner's server (Claude Plan) answering McDonald's Big Mac at
+/// [kcal]: never grounded, so a suggestion at most.
+AssistDecision planBigMacDecision({int kcal = 590}) {
+  final found = bigMacFound();
+  final match = Map<String, dynamic>.from(
+    (found['matches'] as List).single as Map,
+  );
+  final option = Map<String, dynamic>.from(
+    (match['options'] as List).single as Map,
+  )..['calories'] = kcal;
+  match['options'] = [option];
+  found['matches'] = [match];
+  return decideFixture(
+    bigMacAnalysis(),
+    found,
+    verbatim: false,
+    provider: 'claude_plan',
+  );
+}
+
+/// A Claude Plan suggestion decided on a lookup answer saved on
+/// [fetchedOn], which the user then accepted: published numbers in use,
+/// with Search again on the card.
+Map<String, dynamic> acceptedSavedBigMac({String fetchedOn = '2026-03-02'}) {
+  final a = bigMacAnalysis();
+  final d = planBigMacDecision().withFetchedOn(fetchedOn);
+  final accepted = acceptAssistSuggestion(
+    recordAssistDecision(a, d)!,
+    now: assistFixtureNow,
+  )!;
+  assert((accepted['assist'] as Map)['fetched_on'] == fetchedOn);
+  return accepted;
 }
 
 /// mealSnapshot waits for [gate] while it is set: the editor's open-time
