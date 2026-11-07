@@ -13,6 +13,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:calorie_tracker/core/coerce.dart' show isoDate;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/restaurant_assist_logic.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
@@ -2683,10 +2684,13 @@ void main() {
   // next photo of the same items at once, and answers the editor's Look up
   // on a meal not looked up yet.
   group('saved lookup answers (usual foods Part 1)', () {
-    final fetched = DateTime(2026, 3, 2, 12);
+    // Early on 2 March in UTC, still 1 March in the Americas: the block
+    // says the LOCAL day it was fetched.
+    final fetched = DateTime.utc(2026, 3, 2, 3);
+    final fetchedOn = isoDate(fetched.toLocal());
 
-    test('an automatic hit makes no lookup call and touches the entry',
-        () async {
+    test('an automatic hit makes no lookup call, touches the entry and '
+        'writes the day it was fetched', () async {
       final key = await _saved(h, at: fetched);
       final id = h.add(_bigMac());
       await h.assist.sweep();
@@ -2694,6 +2698,8 @@ void main() {
       expect(h.lookups.polls, isEmpty);
       final block = h.analysisOf(id)['assist'] as Map;
       expect(block['status'], AssistStatus.applied);
+      expect(block['fetched_on'], fetchedOn);
+      expect(block['decided_on'], _today);
       final entry = (await h.state.cachedLookup(key))!;
       expect(entry.usedAt.isAtSameMomentAs(h.now), isTrue, reason: 'a use');
       expect(entry.at.isAtSameMomentAs(fetched), isTrue);
@@ -2710,7 +2716,10 @@ void main() {
       expect(run.wrote, isTrue);
       expect(run.fromCache, isTrue);
       expect(run.code, AssistSkip.applied);
-      expect((h.analysisOf(id)['assist'] as Map)['trigger'], 'manual');
+      expect(run.decision?.fetchedOn, fetchedOn);
+      final block = h.analysisOf(id)['assist'] as Map;
+      expect(block['trigger'], 'manual');
+      expect(block['fetched_on'], fetchedOn);
       expect(
         (await h.state.cachedLookup(key))!.usedAt.isAtSameMomentAs(h.now),
         isTrue,
@@ -2731,6 +2740,11 @@ void main() {
       expect(h.lookups.submits, hasLength(1));
       expect(run.fromCache, isFalse);
       expect(run.wrote, isTrue);
+      expect(
+        (h.analysisOf(id)['assist'] as Map).containsKey('fetched_on'),
+        isFalse,
+        reason: 'a fresh answer',
+      );
     });
 
     // PROBE3 kept: an answer that found nothing never answers the editor.

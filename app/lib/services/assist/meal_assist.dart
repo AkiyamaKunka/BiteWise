@@ -2313,6 +2313,11 @@ class MealAssist {
       // one tap away, never written by themselves again.
       decision = _asSuggestion(decision, AssistReason.declinedBefore);
     }
+    // A saved answer: the block says the day it was fetched (usual foods
+    // D11), after the declined-before step, whose copy would drop it.
+    if (fetchedAt != null) {
+      decision = decision.withFetchedOn(isoDate(fetchedAt.toLocal()));
+    }
     final next = recordAssistDecision(meal.analysis, decision);
     final decided = decision.outcome == AssistOutcome.apply
         ? AssistSkip.applied
@@ -2376,6 +2381,7 @@ class MealAssist {
         sourceYear: d.sourceYear,
         grounded: d.grounded,
         notes: d.notes,
+        fetchedOn: d.fetchedOn,
       );
 
   /// The decision's write, against the raw text read before the lookup.
