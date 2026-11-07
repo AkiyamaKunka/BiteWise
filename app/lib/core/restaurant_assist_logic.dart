@@ -2498,25 +2498,36 @@ Map<String, Object?>? supersedeAssist(dynamic assist) {
 }
 
 /// Drops, in place, every assist claim a MODEL wrote into [analysis]
-/// (design R6a, "Write safety"): the `assist` block and the items'
-/// `published` flags. Only [applyAssist], [recordAssistDecision],
-/// [revertAssist] and [supersedeAssist] write those, from a verified
-/// lookup; a photo, chat or describe reply carrying them is not evidence
-/// that any chain published anything (the stored-prompt-injection item).
-/// Item maps are copied before a flag is removed, never edited in place.
-void dropAssistClaims(Map<String, dynamic> analysis) {
+/// (design R6a, "Write safety"): the `assist` block, the items'
+/// `published` flags and, unless [keepUserMarks], the items' `user` marks
+/// ("these numbers are the user's", usual foods D25). Only [applyAssist],
+/// [recordAssistDecision], [revertAssist] and [supersedeAssist] write the
+/// first two, from a verified lookup, and only the meal editor and the
+/// usual-foods writers write a `user` mark; a photo, chat or describe
+/// reply carrying them is not evidence that any chain published anything,
+/// or that the user set any number (the stored-prompt-injection item).
+/// The editor's new-meal save passes [keepUserMarks] true: its describe
+/// prefill was stripped when the editor opened, so the marks left at save
+/// are that session's own.
+/// Item maps are copied before a key is removed, never edited in place.
+void dropAssistClaims(
+  Map<String, dynamic> analysis, {
+  bool keepUserMarks = false,
+}) {
   analysis.remove('assist');
   final items = analysis['food_items'];
+  bool claim(Object? k) =>
+      k == 'published' || (!keepUserMarks && k == 'user');
   if (items is! List ||
-      !items.any((e) => e is Map && e.containsKey('published'))) {
+      !items.any((e) => e is Map && e.keys.any(claim))) {
     return;
   }
   analysis['food_items'] = [
     for (final e in items)
-      e is Map && e.containsKey('published')
+      e is Map && e.keys.any(claim)
           ? <String, dynamic>{
               for (final kv in e.entries)
-                if (kv.key != 'published') '${kv.key}': kv.value,
+                if (!claim(kv.key)) '${kv.key}': kv.value,
             }
           : e,
   ];

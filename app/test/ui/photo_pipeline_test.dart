@@ -330,6 +330,37 @@ void main() {
         'estimated_calories': 650,
       });
     });
+
+    // Usual foods D25: a `user` mark says the user set an item's numbers.
+    // Only the meal editor and the usual-foods writers write one; a model
+    // reply carrying it is the same forged claim as a published flag.
+    test("a model reply's user marks are never stored", () async {
+      final forged = {
+        ..._foodAnalysis(),
+        'food_items': [
+          {
+            'name': 'Oatmeal (~300 g)',
+            'estimated_calories': 350,
+            'user': {
+              'set': true,
+              'at': '2026-11-06T13:40:12.345Z',
+              'n': [350, 12, 50, 14],
+              'qty': 1,
+            },
+          },
+          {
+            'name': 'Coffee',
+            'estimated_calories': 5,
+            'user': {'ai_name': 'Tea'},
+          },
+        ],
+      };
+      final a = await savedAnalysis(null, reply: forged);
+      expect(a['food_items'], [
+        {'name': 'Oatmeal (~300 g)', 'estimated_calories': 350},
+        {'name': 'Coffee', 'estimated_calories': 5},
+      ]);
+    });
   });
 
   // Design G2b: what the automatic intake does with a Meta glasses photo

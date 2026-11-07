@@ -3165,6 +3165,93 @@ void main() {
       expect(block['source']['url'], isNull);
     });
   });
+
+  // Usual foods D25: a `user` mark says "the user set these numbers", so
+  // a model reply carrying one is the same stored-prompt-injection claim
+  // as a `published` flag.
+  group('dropAssistClaims', () {
+    Map<String, dynamic> forged() => {
+      'is_food': true,
+      'total_calories': 650,
+      'assist': {'v': 2, 'status': 'applied', 'chain_key': 'chipotle'},
+      'food_items': [
+        {
+          'name': 'Ramen',
+          'estimated_calories': 500,
+          'published': true,
+          'user': {
+            'set': true,
+            'at': '2026-11-06T13:40:12.345Z',
+            'n': [500, 20, 60, 18],
+            'qty': 1,
+          },
+        },
+        {
+          'name': 'Gyoza',
+          'estimated_calories': 150,
+          'user': {'set': true, 'n': [150, 6, 14, 7]},
+        },
+        {'name': 'Tea', 'estimated_calories': 0},
+      ],
+    };
+
+    test("removes the block, the items' published flags and their user "
+        'marks, by copying item maps', () {
+      final a = forged();
+      final before = List<Object?>.of(a['food_items'] as List);
+      final ramen = before[0] as Map;
+      final gyoza = before[1] as Map;
+      dropAssistClaims(a);
+      expect(a.containsKey('assist'), isFalse);
+      expect(a['food_items'], [
+        {'name': 'Ramen', 'estimated_calories': 500},
+        {'name': 'Gyoza', 'estimated_calories': 150},
+        {'name': 'Tea', 'estimated_calories': 0},
+      ]);
+      // The caller's item maps are left as they were.
+      expect(ramen.containsKey('published'), isTrue);
+      expect(ramen.containsKey('user'), isTrue);
+      expect(gyoza.containsKey('user'), isTrue);
+      expect(identical((a['food_items'] as List)[2], before[2]), isTrue,
+          reason: 'an item with no claim is not copied');
+    });
+
+    test('keepUserMarks keeps the marks and still removes the rest', () {
+      final a = forged();
+      final ramen = (a['food_items'] as List)[0] as Map;
+      dropAssistClaims(a, keepUserMarks: true);
+      expect(a.containsKey('assist'), isFalse);
+      final items = a['food_items'] as List;
+      expect(items[0], {
+        'name': 'Ramen',
+        'estimated_calories': 500,
+        'user': {
+          'set': true,
+          'at': '2026-11-06T13:40:12.345Z',
+          'n': [500, 20, 60, 18],
+          'qty': 1,
+        },
+      });
+      expect(items[1], {
+        'name': 'Gyoza',
+        'estimated_calories': 150,
+        'user': {'set': true, 'n': [150, 6, 14, 7]},
+      });
+      expect(ramen.containsKey('published'), isTrue,
+          reason: 'copied, not edited in place');
+    });
+
+    test('an analysis without claims is left untouched', () {
+      final a = {
+        'food_items': [
+          {'name': 'Tea', 'estimated_calories': 0},
+        ],
+      };
+      final items = a['food_items'];
+      dropAssistClaims(a);
+      expect(identical(a['food_items'], items), isTrue);
+    });
+  });
 }
 
 Map<String, dynamic> chipotleComponents() => match(
