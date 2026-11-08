@@ -77,6 +77,7 @@ void main() {
     FakeDao dao, {
     UsualFoods? usual,
     Locale? locale,
+    DateTime Function()? now,
   }) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
@@ -94,6 +95,7 @@ void main() {
           dao: dao,
           executor: FakeExecutor(),
           usual: usual,
+          now: now,
         ),
       ),
     ));
@@ -212,6 +214,37 @@ void main() {
     expect(find.text('This meal was just updated — please review.'),
         findsOneWidget);
     expect(kcalOf(dao.byId(1), 0), 280);
+    expect(dao.byId(1).corrected, isFalse);
+  });
+
+  testWidgets('past midnight, Use on a chip still shown drops it quietly: '
+      'Today reloads, no message, nothing written', (tester) async {
+    var now = DateTime(2026, 11, 7, 23, 50);
+    final dao = FakeDao()
+      ..seed(foodMeal(
+          id: 2,
+          date: '2026-11-05',
+          source: MealSource.appManual,
+          items: [foodItem('Oatmeal (~250 g)', 350, p: 12, c: 50, f: 14)]))
+      ..seed(foodMeal(
+          id: 1,
+          date: '2026-11-07',
+          source: MealSource.appWatch,
+          items: [aiOatmeal()]));
+    final usual = await makeUsualFoods(dao, clock: () => now);
+    await pump(tester, dao, usual: usual, now: () => now);
+    expect(find.byKey(const Key('usualChip')), findsOneWidget);
+    // The app stays open past midnight; Today was not reloaded.
+    now = DateTime(2026, 11, 8, 0, 5);
+    await tester.tap(find.byKey(const Key('usualChipUse')));
+    await tester.pumpAndSettle();
+    expect(find.text('This meal was just updated — please review.'),
+        findsNothing);
+    expect(find.byType(SnackBar), findsNothing);
+    expect(find.byKey(const Key('usualChip')), findsNothing);
+    expect(find.byKey(const Key('meal1')), findsNothing,
+        reason: 'Today shows the new day');
+    expect(dao.updates, isEmpty);
     expect(dao.byId(1).corrected, isFalse);
   });
 

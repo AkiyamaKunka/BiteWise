@@ -819,6 +819,39 @@ void main() {
           (dao.byId(1).analysis['food_items'] as List)[0]['protein_g'], 25);
     });
 
+    testWidgets('past midnight, Use my numbers drops the card quietly: no '
+        'message, nothing written', (tester) async {
+      useTallSurface(tester);
+      var now = DateTime(2026, 7, 24, 23, 50);
+      final dao = FakeDao()
+        ..seed(foodMeal(
+          id: 2,
+          date: '2026-07-22',
+          source: MealSource.appManual,
+          items: [foodItem('Oatmeal (~250 g)', 350, p: 12, c: 50, f: 14)],
+        ))
+        ..seed(foodMeal(
+          id: 1,
+          date: '2026-07-24',
+          items: [foodItem('Oatmeal (~260 g)', 300, p: 10, c: 45, f: 8)],
+        ));
+      final usual = await makeUsualFoods(dao, clock: () => now);
+      await tester.pumpWidget(host(MealEditorScreen(
+          dao: dao, meal: dao.byId(1), now: () => now, usual: usual)));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualOfferCard')), findsOneWidget);
+      // The editor stays open past midnight.
+      now = DateTime(2026, 7, 25, 0, 5);
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      expect(find.text('This meal was just updated — please review.'),
+          findsNothing);
+      expect(find.byType(SnackBar), findsNothing);
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+      expect(dao.updates, isEmpty);
+      expect(dao.byId(1).corrected, isFalse);
+    });
+
     testWidgets('Keep AI estimate writes nothing and the card goes',
         (tester) async {
       final (dao, usual) = await open(tester);

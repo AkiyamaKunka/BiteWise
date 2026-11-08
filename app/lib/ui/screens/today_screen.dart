@@ -58,6 +58,10 @@ class TodayScreen extends StatefulWidget {
   /// the user set for a food before (Use / Review), and the editor's card.
   /// Null (tests) shows neither.
   final UsualFoods? usual;
+
+  /// The clock that says which day is today; null is the device's (tests
+  /// inject one to cross midnight).
+  final DateTime Function()? now;
   const TodayScreen(
       {super.key,
       required this.dao,
@@ -67,7 +71,8 @@ class TodayScreen extends StatefulWidget {
       this.mealInUse,
       this.restaurantAssist,
       this.settings,
-      this.usual});
+      this.usual,
+      this.now});
 
   @override
   State<TodayScreen> createState() => TodayScreenState();
@@ -97,19 +102,21 @@ class TodayScreenState extends State<TodayScreen> {
     reload();
   }
 
+  DateTime _now() => (widget.now ?? DateTime.now)();
+
   /// Fire-and-forget: a cosmetic line must never delay the meal list. The
   /// date guard drops a reply that arrives after midnight rolled the day.
   void _refreshGarmin(String today) {
     final fetch = widget.garminDaily;
     if (fetch == null) return;
     fetch(today).then((daily) {
-      if (!mounted || isoDate(DateTime.now()) != today) return;
+      if (!mounted || isoDate(_now()) != today) return;
       setState(() => _garmin = daily);
     }, onError: (Object _) {});
   }
 
   Future<void> reload() async {
-    final now = DateTime.now();
+    final now = _now();
     final today = isoDate(now);
     _refreshGarmin(today);
     try {
@@ -162,7 +169,7 @@ class TodayScreenState extends State<TodayScreen> {
       return;
     }
     offers.then((o) {
-      if (!mounted || gen != _usualGen || isoDate(DateTime.now()) != today) {
+      if (!mounted || gen != _usualGen || isoDate(_now()) != today) {
         return;
       }
       setState(() => _usualOffers = o);
@@ -175,10 +182,18 @@ class TodayScreenState extends State<TodayScreen> {
   /// Use on a one-food chip: the user's numbers written through the
   /// compare-and-set (nothing changes without this tap), the meal totals
   /// on the snackbar with Undo. A meal changed since the chip was shown
-  /// writes nothing and says so.
+  /// writes nothing and says so. Past midnight the meal is no longer
+  /// today's and is offered nothing: the chip goes with the reload, and
+  /// nothing is said (the meal did not change).
   Future<void> _useUsual(Meal meal, UsualOffer offer) async {
     final usual = widget.usual;
-    if (usual == null || !_usualUsing.add(meal.id)) return;
+    if (usual == null) return;
+    if (meal.date != isoDate(_now())) {
+      setState(() => _usualOffers = {..._usualOffers}..remove(meal.id));
+      await reload();
+      return;
+    }
+    if (!_usualUsing.add(meal.id)) return;
     setState(() {});
     final messenger = ScaffoldMessenger.of(context);
     final l = context.l10n;
@@ -248,7 +263,8 @@ class TodayScreenState extends State<TodayScreen> {
           inUse: widget.mealInUse,
           assist: widget.restaurantAssist,
           settings: widget.settings,
-          usual: widget.usual),
+          usual: widget.usual,
+          now: widget.now),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie
     // An edit or delete changes the summary the iOS OS card carries; the
@@ -302,7 +318,7 @@ class TodayScreenState extends State<TodayScreen> {
     final theme = Theme.of(context); // captured before any await
     final locale = Localizations.localeOf(context);
     try {
-      final today = isoDate(DateTime.now());
+      final today = isoDate(_now());
       final foodMeals = _todayMeals.where(isFoodMeal).toList();
       // Pre-decode every thumbnail so the report paints in one frame.
       final report = <ReportMeal>[];

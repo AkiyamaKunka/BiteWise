@@ -769,7 +769,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   /// Use my numbers: every offered food at once, through the compare-and-
   /// set against the stored text the form shows (nothing changes without
-  /// this tap). The snackbar says the meal's totals and has Undo.
+  /// this tap). The snackbar says the meal's totals and has Undo. Past
+  /// midnight the card goes quietly.
   Future<void> _useUsual() async {
     final usual = widget.usual;
     final meal = _meal;
@@ -779,6 +780,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     final l = context.l10n;
     if (_dirty) {
       _say(l.assistEditFirst, key: const Key('assistEditFirstSnack'));
+      return;
+    }
+    // Past midnight the meal is no longer today's and is offered nothing:
+    // the card goes, and nothing is said (the meal did not change).
+    if (meal.date != isoDate((widget.now ?? DateTime.now)())) {
+      setState(() {
+        _usualOffer = null;
+        _usualGen++; // a reply still on its way must not bring it back
+      });
       return;
     }
     final messenger = ScaffoldMessenger.of(context);
