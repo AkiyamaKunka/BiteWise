@@ -2321,12 +2321,23 @@ Map<String, dynamic>? applyAssist(
 /// match, and for a suggestion or context-only result on a meal whose
 /// earlier application still stands: a weaker answer never silently
 /// undoes published numbers (the caller reverts first if the user asks).
+/// With [keepSuggested] (the editor's Search again) a context-only result
+/// also writes nothing over a suggestion that still stands: a search that
+/// found nothing never takes "Use published numbers" off the meal.
 Map<String, dynamic>? recordAssistDecision(
   Map<String, dynamic> analysis,
-  AssistDecision decision,
-) {
+  AssistDecision decision, {
+  bool keepSuggested = false,
+}) {
+  final standing = _block(analysis)?['status'];
   if (decision.outcome != AssistOutcome.apply &&
-      _block(analysis)?['status'] == AssistStatus.applied &&
+      standing == AssistStatus.applied &&
+      assistStampValid(analysis)) {
+    return null;
+  }
+  if (keepSuggested &&
+      decision.outcome == AssistOutcome.contextOnly &&
+      standing == AssistStatus.suggested &&
       assistStampValid(analysis)) {
     return null;
   }

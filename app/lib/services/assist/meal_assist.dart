@@ -1389,9 +1389,12 @@ class MealAssist {
   /// ([AssistRun.fromCache]; the block's `fetched_on` says when it was
   /// fetched). A meal already looked up asks the provider again, and so
   /// does [fresh] (Search again, and the editor's press right after a
-  /// saved answer). While a job of the meal is still running on the
-  /// server it is polled, never answered by a saved answer. At the daily
-  /// cap no saved answer is used either (the cap check comes first).
+  /// saved answer). A [fresh] search that finds nothing writes nothing
+  /// over a suggestion or applied numbers that still stand, also when its
+  /// job is collected later (the job keeps `fresh`). While a job of the
+  /// meal is still running on the server it is polled, never answered by
+  /// a saved answer. At the daily cap no saved answer is used either (the
+  /// cap check comes first).
   /// [useLocation] is the user's choice ("Use location" / "Brand only"):
   /// with it, a restaurant meal takes the location path under the same
   /// gates as an automatic lookup (locationAllowed, has_gps, restaurant);
@@ -1491,6 +1494,10 @@ class MealAssist {
     bool fresh = false,
   }) async {
     if (!_working.add(mealId)) return const _Run(AssistSkip.working);
+    // A Search again still running on the server stays one, whoever polls
+    // it (the editor's plain Look up, or the sweep).
+    final freshRun = fresh ||
+        (manual && job != null && job.isPending && job.manual && job.fresh);
     try {
       final snap = await _dao.mealSnapshot(mealId);
       // Settings stopped the lookups since the gate (Off, or a consent that
@@ -1608,7 +1615,7 @@ class MealAssist {
       final polling = job != null && job.isPending;
       final useCache =
           !manual ||
-          (!fresh &&
+          (!freshRun &&
               !polling &&
               (pick != null || !meal.analysis.containsKey('assist')));
       final hit = useCache
@@ -1629,6 +1636,7 @@ class MealAssist {
           trigger: trigger,
           prepared: prepared,
           manual: manual,
+          fresh: freshRun,
           gen: gen,
           fetchedAt: hit.at,
         );
@@ -1707,6 +1715,7 @@ class MealAssist {
         polled: polled,
         support: support,
         manual: manual,
+        fresh: freshRun,
         gen: gen,
         wentBackground: _backgroundEpoch != epoch || !_foreground(),
       );
@@ -2090,6 +2099,7 @@ class MealAssist {
     required bool polled,
     required LookupSupport support,
     required bool manual,
+    required bool fresh,
     required int gen,
     required bool wentBackground,
   }) async {
@@ -2112,6 +2122,7 @@ class MealAssist {
           trigger: trigger,
           prepared: prepared,
           manual: manual,
+          fresh: fresh,
           gen: gen,
         );
       case LookupOutcomeKind.pending:
@@ -2127,6 +2138,7 @@ class MealAssist {
             attempts: job?.attempts ?? 0,
             place: prepared.place,
             manual: manual,
+            fresh: manual && fresh,
             pick: prepared.pick,
             country: prepared.country,
           );
@@ -2201,6 +2213,7 @@ class MealAssist {
             attempts: job?.attempts ?? 0,
             place: prepared.place,
             manual: manual,
+            fresh: manual && fresh,
             pick: prepared.pick,
             country: prepared.country,
           ),
@@ -2285,6 +2298,9 @@ class MealAssist {
 
   /// Decides [lookup] for the meal and writes the block. [fetchedAt] is
   /// set for a saved answer: when it was fetched (usual foods D11).
+  /// [fresh]: the editor's Search again, whose answer that found nothing
+  /// writes nothing over a standing suggestion (recordAssistDecision
+  /// keepSuggested), as over applied numbers.
   Future<_Run> _decide(
     AssistLookup lookup, {
     required MealSnapshot snap,
@@ -2293,6 +2309,7 @@ class MealAssist {
     required _Prepared prepared,
     required bool manual,
     required int gen,
+    bool fresh = false,
     DateTime? fetchedAt,
   }) async {
     final fromCache = fetchedAt != null;
@@ -2338,7 +2355,11 @@ class MealAssist {
     if (fetchedAt != null) {
       decision = decision.withFetchedOn(isoDate(fetchedAt.toLocal()));
     }
-    final next = recordAssistDecision(meal.analysis, decision);
+    final next = recordAssistDecision(
+      meal.analysis,
+      decision,
+      keepSuggested: manual && fresh,
+    );
     final decided = decision.outcome == AssistOutcome.apply
         ? AssistSkip.applied
         : decision.reason;

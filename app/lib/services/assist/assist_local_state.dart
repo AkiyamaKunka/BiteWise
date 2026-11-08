@@ -402,6 +402,7 @@ final class AssistJob {
     this.attempts = 0,
     this.place,
     this.manual = false,
+    this.fresh = false,
     this.pick,
     this.country,
   });
@@ -430,6 +431,12 @@ final class AssistJob {
   /// The editor's lookup (MealAssist.lookupNow): the sweep polls it
   /// whatever the triggers say, and writes its answer as a manual one.
   final bool manual;
+
+  /// The editor's Search again (MealAssist.lookupNow `fresh`): the answer
+  /// this job brings is written as a fresh search's, wherever it is
+  /// collected (the editor's poll or the sweep's), so a search that finds
+  /// nothing never replaces a standing suggestion. Only with [manual].
+  final bool fresh;
 
   /// The chain the user picked in the editor's 'Which restaurant?' search
   /// (R7b; a key of OUR table), so a later poll asks about the same
@@ -835,6 +842,7 @@ class AssistLocalState {
               : 0,
           place: place,
           manual: e['manual'] == true,
+          fresh: e['manual'] == true && e['fresh'] == true,
           pick: pick as String?,
           country: country as String?,
         );
@@ -857,6 +865,7 @@ class AssistLocalState {
           'at': e.value.at.toUtc().toIso8601String(),
           'place': ?e.value.place?.toJson(),
           if (e.value.manual) 'manual': true,
+          if (e.value.manual && e.value.fresh) 'fresh': true,
           'pick': ?e.value.pick,
           'country': ?e.value.country,
         },

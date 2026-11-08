@@ -2848,6 +2848,111 @@ void main() {
       expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
     });
 
+    // Claude Plan, the owner's setup: a saved found answer is a one-tap
+    // suggestion. Search again then gets not_published. A weaker answer
+    // never replaces a standing suggestion, as for applied numbers: the
+    // meal keeps "Use published numbers", and D2a keeps the found answer
+    // in the cache.
+    test('Search again that finds nothing keeps a saved suggestion',
+        () async {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      final key = await _saved(
+        h,
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+      );
+      final id = h.add(_bigMac());
+      h.inUse.add(id);
+      final reuse = await h.assist.lookupNow(id);
+      expect(reuse.fromCache, isTrue);
+      final suggested = h.analysisOf(id)['assist'] as Map;
+      expect(suggested['status'], AssistStatus.suggested);
+
+      h.lookups.onSubmit = (_) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      final again = await h.assist.lookupNow(id, fresh: true);
+      expect(h.lookups.submits, hasLength(1));
+      expect(again.wrote, isFalse, reason: 'nothing better was found');
+      expect(again.decision?.outcome, AssistOutcome.contextOnly);
+      expect(h.analysisOf(id)['assist'], suggested,
+          reason: 'Use published numbers stays on this meal');
+      expect((await h.state.cachedLookup(key))!.found, isTrue);
+    });
+
+    test('a pending Search again the sweep collects keeps the suggestion too',
+        () async {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      await _saved(h, provider: LookupRecipient.claudePlan, verbatim: false);
+      final id = h.add(_bigMac());
+      h.inUse.add(id);
+      expect((await h.assist.lookupNow(id)).fromCache, isTrue);
+      final suggested = h.analysisOf(id)['assist'] as Map;
+      expect(suggested['status'], AssistStatus.suggested);
+
+      // Search again: the server takes a while.
+      h.lookups.onSubmit = (_) async => const LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job_abcdef12',
+      );
+      expect((await h.assist.lookupNow(id, fresh: true)).code,
+          AssistSkip.pending);
+      final job = (await h.state.jobs())[id]!;
+      expect((job.manual, job.fresh), (true, true));
+
+      // The editor is closed; the sweep collects the job: nothing found.
+      h.lookups.onPoll = (_) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      h.inUse.clear();
+      h.now = _now.add(kAssistPollInterval);
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect((await h.state.jobs())[id], isNull);
+      expect(h.analysisOf(id)['assist'], suggested);
+    });
+
+    test('a plain Look up that finds nothing still replaces a suggestion',
+        () async {
+      // Only Search again keeps it: this rule is unchanged elsewhere.
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      final id = h.add(_bigMac());
+      h.inUse.add(id);
+      h.lookups.onSubmit = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      await h.assist.lookupNow(id);
+      expect((h.analysisOf(id)['assist'] as Map)['status'],
+          AssistStatus.suggested);
+      h.lookups.onSubmit = (_) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      final run = await h.assist.lookupNow(id);
+      expect(run.wrote, isTrue);
+      expect((h.analysisOf(id)['assist'] as Map)['status'], 'not_published');
+    });
+
     // D10: at the cap the editor gets no saved answer either.
     test('at the daily cap the editor answers daily_cap before any saved '
         'answer is read', () async {

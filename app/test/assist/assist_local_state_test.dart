@@ -311,6 +311,38 @@ void main() {
       expect(await s.jobs(), isEmpty);
     });
 
+    test('a Search again job says so; only the editor\'s job can', () async {
+      final s = state();
+      AssistJob job({required bool manual}) => AssistJob(
+        jobId: 'job_fresh_0001',
+        reqHash: '0123456789abcdef',
+        at: now,
+        nextAt: now,
+        manual: manual,
+        fresh: true,
+      );
+      expect(await s.putJob(1, job(manual: true)), isTrue);
+      expect(await s.putJob(2, job(manual: false)), isTrue);
+      final jobs = await s.jobs();
+      expect((jobs[1]!.manual, jobs[1]!.fresh), (true, true));
+      expect((jobs[2]!.manual, jobs[2]!.fresh), (false, false));
+      final stored = {
+        for (final e in (doc(assistJobsDocument)['jobs'] as List).cast<Map>())
+          e['meal_id']: e,
+      };
+      expect(stored[1]!['fresh'], isTrue);
+      expect(stored[2]!.containsKey('fresh'), isFalse);
+      // A job written before the key existed reads as no Search again.
+      await s.putJob(3, AssistJob(
+        jobId: 'job_fresh_0003',
+        reqHash: '0123456789abcdef',
+        at: now,
+        nextAt: now,
+        manual: true,
+      ));
+      expect((await s.jobs())[3]!.fresh, isFalse);
+    });
+
     test('AssistPlaceContext.within keeps what the request carries', () {
       const place = AssistPlaceContext(
         chains: ['mcdonalds', 'starbucks'],
