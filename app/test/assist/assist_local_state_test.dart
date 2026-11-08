@@ -416,6 +416,27 @@ void main() {
           reason: 'measured from at, not used_at');
     });
 
+    // An automatic lookup touches a negative hit too, so a life measured
+    // from used_at would keep a "not published" answer alive for as long
+    // as it keeps being hit.
+    test('a used negative answer is still gone 31 days after its fetch',
+        () async {
+      final s = state();
+      final key = 'b' * 32;
+      final fetched = now;
+      expect(await s.putCachedLookup(entry(key, status: 'not_published')),
+          isTrue);
+      // Hit (and touched) on days 20 and 29.
+      now = fetched.add(const Duration(days: 20));
+      expect(await s.touchCachedLookup(key), isTrue);
+      now = fetched.add(const Duration(days: 29));
+      expect(await s.touchCachedLookup(key), isTrue);
+      expect((await s.cachedLookup(key))!.usedAt, now);
+      now = fetched.add(const Duration(days: 31));
+      expect(await s.cachedLookup(key), isNull,
+          reason: '30 days from at, not from used_at');
+    });
+
     // Usual foods D3: the least recently used goes first, so an answer
     // the owner keeps using is never pushed out by newer fetches.
     test('the cap keeps the answers used most recently', () async {
