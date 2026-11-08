@@ -516,17 +516,93 @@ void main() {
     });
 
     test('an added row gives set with qty 1', () {
+      // Updated on purpose: this row was a 5 kcal coffee, and a row under
+      // the 10 kcal minimum is no longer marked (the test below).
       final d = MealDraft.fromMeal(mealWith(analysisOf([aiRow()])));
       d.addItem()
-        ..name = 'Coffee'
-        ..calories = '5';
+        ..name = 'Latte'
+        ..calories = '190';
       final out = (d.toAnalysis(now: now)['food_items'] as List)[1] as Map;
       expect(out['user'], {
         'set': true,
         'at': stamp,
-        'n': [5, 0, 0, 0],
+        'n': [190, 0, 0, 0],
         'qty': 1,
       });
+    });
+
+    test('an added row left blank, or under 10 kcal, gets no mark', () {
+      final d = MealDraft.fromMeal(mealWith(analysisOf([aiRow()])));
+      d.addItem().name = 'Toast';
+      d.addItem()
+        ..name = 'Black coffee'
+        ..calories = '5';
+      d.addItem()
+        ..name = 'Mints'
+        ..calories = '9.9'
+        ..carbs = '2';
+      final rows = (d.toAnalysis(now: now)['food_items'] as List).skip(1);
+      expect([for (final r in rows) (r as Map).containsKey('user')],
+          [false, false, false]);
+      expect([for (final r in rows) (r as Map)['estimated_calories']],
+          [0, 5, 9.9]);
+    });
+
+    test('a blank row added to a lunch is never re-logged as 0 kcal', () {
+      // Toast and eggs on two mornings (listed in My usual foods).
+      Meal breakfast(int id, String date) => Meal(
+            id: id,
+            date: date,
+            time: '08:00 AM',
+            timestamp: '${date}T08:00:00.000',
+            source: MealSource.appWatch,
+            analysis: {
+              'is_food': true,
+              'meal_description': 'Toast and eggs',
+              'total_calories': 320,
+              'food_items': [
+                {
+                  'name': 'Toast',
+                  'estimated_calories': 120,
+                  'protein_g': 4,
+                  'carbs_g': 20,
+                  'fat_g': 2,
+                },
+                {
+                  'name': 'Scrambled eggs',
+                  'estimated_calories': 200,
+                  'protein_g': 12,
+                  'carbs_g': 2,
+                  'fat_g': 15,
+                },
+              ],
+            },
+          );
+      // Today's lunch photo: the user adds a "Toast" row by name only.
+      final lunch = MealDraft.fromMeal(mealWith(analysisOf([aiRow()]),
+          date: '2026-11-07', time: '12:00 PM'))
+        ..items.add(MealItemDraft(name: 'Toast'));
+      expect(lunch.validate(), isEmpty, reason: 'blank numbers are allowed');
+      final saved = Meal(
+          id: 12,
+          date: '2026-11-07',
+          time: '12:00 PM',
+          timestamp: '2026-11-07T12:00:00.000',
+          source: MealSource.appPhoto,
+          corrected: true,
+          analysis: lunch.toAnalysis(now: now));
+      final at = DateTime(2026, 11, 7, 12, 30);
+      final index = buildUsualIndex(
+          [breakfast(10, '2026-11-03'), breakfast(11, '2026-11-05'), saved],
+          now: at);
+      expect(index.records['toast'], isNull);
+      final list =
+          usualMealList(index, now: at, choices: UsualChoicesView.empty);
+      final row = [...list.around, ...list.more]
+          .firstWhere((m) => m.title == 'Toast and eggs');
+      final relog = usualLogAnalysis(row, index, now: at);
+      expect((relog['food_items'] as List).first['estimated_calories'], 120);
+      expect(relog['total_calories'], 320);
     });
 
     group('the first row "Add item" seeds from the totals', () {

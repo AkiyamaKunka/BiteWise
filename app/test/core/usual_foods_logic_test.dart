@@ -447,6 +447,22 @@ void main() {
       expect(index.records.keys.toSet(), {'jam toast'});
     });
 
+    test('a row under 10 kcal is no record, so it never shadows or re-logs',
+        () {
+      // A blank row on a new hand-typed meal is stored unmarked as 0/0/0/0;
+      // a marked 5 kcal row is under the offer minimum too.
+      final blank = meal(1, [item('Toast', 0, p: 0, c: 0, f: 0)],
+          date: '2026-11-04', source: MealSource.appManual);
+      final tiny = meal(2, [mine('Black coffee', [5, 0, 1, 0])],
+          date: '2026-11-04', corrected: true);
+      expect(buildUsualIndex([blank, tiny], now: now).records, isEmpty);
+      // The user's real toast from earlier still stands behind the blank.
+      final real = meal(3, [mine('Toast', [120, 4, 20, 2])],
+          date: '2026-11-02', corrected: true);
+      final r = buildUsualIndex([real, blank], now: now).records['toast']!;
+      expect((r.mealId, r.numbers.kcal), (3, 120));
+    });
+
     test('kcal-only at kcal >= 50 with zero macros (P8)', () {
       final index = buildUsualIndex([
         meal(1, [item('Cola', 140, p: 0, c: 0, f: 0)],

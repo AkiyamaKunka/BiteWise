@@ -545,7 +545,8 @@ String? _nonEmptyString(Object? v, int max) {
 /// unmarked item of a hand-typed meal never corrected since (a fix by
 /// chat keeps the source and drops every mark, and its model re-estimated
 /// every item); never published, never from a meal with a leftover block
-/// (the caller checks), and qty exactly 1.
+/// (the caller checks), qty exactly 1, and at least [kUsualMinKcal]
+/// kcal.
 UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     DateTime now) {
   if (item['published'] == true) return null;
@@ -585,6 +586,9 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     return null;
   }
   if (qty != 1) return null;
+  // Under the offer minimum (a row left blank reads 0): no number of the
+  // user's, and it must not shadow their real record or be re-logged.
+  if (numbers.kcal < kUsualMinKcal) return null;
   final kcalOnly = numbers.kcal >= kUsualKcalOnlyMin &&
       numbers.p == 0 &&
       numbers.c == 0 &&

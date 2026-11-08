@@ -170,7 +170,8 @@ class MealItemDraft {
   ///   * a row the user ADDED is [toMap] plus `user {set: true, at: now,
   ///     n: its four numbers, qty: 1}`: every number on it is the user's —
   ///     except the first row seeded from a loaded meal's totals
-  ///     ([MealDraft.addItem]) while it still holds them, which gets no
+  ///     ([MealDraft.addItem]) while it still holds them, and a row under
+  ///     [kUsualMinKcal] kcal (one left blank reads 0), which get no
   ///     `user`;
   ///   * a stored row the user TOUCHED is [toMap] plus a `user` map: a new
   ///     `set`/`at`/`n` when any number differs numerically from the
@@ -202,6 +203,10 @@ class MealItemDraft {
       // A row seeded from a stored meal's totals and never changed holds
       // the meal's numbers, not the user's.
       if (seed != null && !_differs(numbers, seed)) return out;
+      // A row whose numbers were left blank (all four read 0), or that is
+      // under the usual-foods minimum, says no number of the user's: a
+      // name-only "Toast" row must never teach 0 kcal toast.
+      if (numbers[0] < kUsualMinKcal) return out;
       out['user'] = {
         'set': true,
         'at': usualStamp(when),
