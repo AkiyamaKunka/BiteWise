@@ -14,20 +14,9 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../core/usual_foods_logic.dart'
-    show kUsualMinDiffKcal, kUsualMinDiffShare;
 import '../../services/usual/usual_foods.dart';
 import '../format.dart' show formatKcal;
 import '../l10n.dart';
-
-/// [item]'s kcal moves less than an offer's kcal threshold, so it was
-/// offered for its macros alone (D30): the same test usualOfferFor makes,
-/// with the same constants.
-bool _macrosOnly(UsualOfferItem item) {
-  final share = kUsualMinDiffShare * item.ai.kcal;
-  final threshold = share > kUsualMinDiffKcal ? share : kUsualMinDiffKcal;
-  return (item.mine.kcal - item.ai.kcal).abs() < threshold;
-}
 
 /// Grams as the meal card writes them: whole, else to 0.1 g.
 String _grams(num v) =>
@@ -43,7 +32,7 @@ String _macros(AppLocalizations l, UsualNumbers n) =>
 /// kcal and yours, or, when the kcal hardly moves (an offer on the macros
 /// alone), the AI's macros and yours. The chip and the card both say it.
 String usualItemText(AppLocalizations l, UsualOfferItem item, String name) =>
-    _macrosOnly(item)
+    item.macroOnly
         ? l.usualItemLineMacros(name, _macros(l, item.ai), _macros(l, item.mine))
         : l.usualItemLine(
             name, formatKcal(item.ai.kcal), formatKcal(item.mine.kcal));
