@@ -1017,8 +1017,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // never answered by the saved answer it is replacing.
     final f = fresh || _freshNext;
     // The block before this lookup, for what a fresh search over applied
-    // numbers says when it writes nothing.
+    // numbers or a suggestion says when it writes nothing.
     final before = meal.analysis;
+    final beforeKind = AssistView.of(before).kind;
     setState(() => _lookingUp = true);
     var run = const AssistRun(AssistSkip.error);
     try {
@@ -1072,7 +1073,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         run.code == AssistSkip.background;
     final message = stillRunning
         ? l.assistLookupStillRunning
-        : f && AssistView.of(before).kind == AssistViewKind.applied
+        : f &&
+                (beforeKind == AssistViewKind.applied ||
+                    beforeKind == AssistViewKind.suggested)
             ? _searchAgainText(l, run, before)
             : run.decision != null
                 // Answered, but nothing usable to write (another chain,
@@ -1084,10 +1087,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     }
   }
 
-  /// A fresh search over published numbers that stand on the meal wrote
-  /// nothing (usual foods §2.4; a weaker answer never replaces applied
-  /// numbers): what it found. A search that could not run says why
-  /// instead.
+  /// A fresh search over published numbers that stand on the meal, or
+  /// over a suggestion it can still take, wrote nothing (usual foods §2.4;
+  /// an answer that found nothing never replaces either): what it found. A
+  /// search that could not run says why instead.
   static String? _searchAgainText(
       AppLocalizations l, AssistRun run, Map<String, dynamic> before) {
     final d = run.decision;

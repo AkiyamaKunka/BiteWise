@@ -1698,7 +1698,65 @@ void main() {
         "Today's restaurant lookups are used up. Try again tomorrow.",
       );
     });
+
+    testWidgets('a fresh search over a saved suggestion that writes nothing '
+        'says the suggestion stays, never "AI estimate kept"',
+        (tester) async {
+      Future<void> searchAgain(AssistRun answer, String says) async {
+        final (dao, assist) = await open(
+          tester,
+          savedSuggestionBigMac(),
+          settings: assistSettings(),
+          setUp: (a) => a.onLookup = (_, _, _) async => answer,
+        );
+        final stored = dao.rawOf(dao.meals.first);
+        expect(find.byKey(const Key('assistUsePublished')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('assistSearchAgain')));
+        await tester.pumpAndSettle();
+        expect(assist.lookups.single.fresh, isTrue);
+        expect(find.text(says), findsOneWidget, reason: says);
+        expect(
+          find.text('No published nutrition found — AI estimate kept'),
+          findsNothing,
+        );
+        // The suggestion is still there to take.
+        expect(dao.rawOf(dao.meals.first), stored);
+        expect(find.byKey(const Key('assistUsePublished')), findsOneWidget);
+        expect(dao.meals.first.analysis['total_calories'], 540);
+      }
+
+      const nothing = 'The new search found nothing better. These numbers stay.';
+      // The provider found no published nutrition (the engine writes
+      // nothing over a standing suggestion).
+      final none = decideFixture(
+        bigMacAnalysis(),
+        {...bigMacFound(), 'status': 'not_published', 'matches': <Object>[]},
+        verbatim: false,
+        provider: 'claude_plan',
+      );
+      await searchAgain(
+        AssistRun(AssistReason.notPublished, decision: none),
+        nothing,
+      );
+      // No decision at all.
+      await searchAgain(const AssistRun(AssistSkip.noBrand), nothing);
+      // A search that could not run says why.
+      await searchAgain(
+        const AssistRun(AssistSkip.dailyCap),
+        "Today's restaurant lookups are used up. Try again tomorrow.",
+      );
+    });
   });
+}
+
+/// A Claude Plan suggestion decided on a lookup answer saved on
+/// [fetchedOn], not taken yet: Use published numbers and Search again on
+/// the card.
+Map<String, dynamic> savedSuggestionBigMac({String fetchedOn = '2026-03-02'}) {
+  final d = planBigMacDecision().withFetchedOn(fetchedOn);
+  final suggested = recordAssistDecision(bigMacAnalysis(), d)!;
+  assert((suggested['assist'] as Map)['status'] == 'suggested');
+  return suggested;
 }
 
 /// The owner's server (Claude Plan) answering McDonald's Big Mac at
