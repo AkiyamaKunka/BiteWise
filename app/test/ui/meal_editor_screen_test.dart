@@ -784,6 +784,41 @@ void main() {
       expect(fieldText(tester, 'itemCal0'), '320');
     });
 
+    testWidgets('a food offered for its macros alone: the card names the '
+        'macros, and the snackbar does not read the same kcal twice',
+        (tester) async {
+      useTallSurface(tester);
+      final dao = FakeDao()
+        ..seed(foodMeal(
+          id: 2,
+          date: '2026-07-22',
+          source: MealSource.appManual,
+          items: [foodItem('Oatmeal (~250 g)', 350, p: 25, c: 40, f: 10)],
+        ))
+        ..seed(foodMeal(
+          id: 1,
+          date: '2026-07-24',
+          items: [foodItem('Oatmeal (~260 g)', 350, p: 10, c: 50, f: 14)],
+        ));
+      final usual = await makeUsualFoods(dao, clock: clock);
+      await tester.pumpWidget(host(MealEditorScreen(
+          dao: dao, meal: dao.byId(1), now: clock, usual: usual)));
+      await tester.pumpAndSettle();
+      final card = find.byKey(const Key('usualOfferCard'));
+      expect(
+        find.descendant(
+            of: card,
+            matching: find.text('Oatmeal: AI P 10g · C 50g · F 14g → your '
+                'usual P 25g · C 40g · F 10g')),
+        findsOneWidget,
+      );
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      expect(find.text('Used your usual numbers.'), findsOneWidget);
+      expect(
+          (dao.byId(1).analysis['food_items'] as List)[0]['protein_g'], 25);
+    });
+
     testWidgets('Keep AI estimate writes nothing and the card goes',
         (tester) async {
       final (dao, usual) = await open(tester);

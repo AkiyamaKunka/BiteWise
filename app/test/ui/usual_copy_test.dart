@@ -9,8 +9,9 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 771 keys, and the generated classes say what
+/// - Both files have the same 773 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
+/// - Keys added after review (fix list U3, U5, C5) follow the same rules.
 library;
 
 import 'dart:convert';
@@ -21,7 +22,8 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Spec §6: the 43 new keys and their placeholders ('String' or 'int').
+/// Spec §6: the 43 new keys, then the ones review added, and their
+/// placeholders ('String' or 'int').
 const Map<String, Map<String, String>> _newKeys = {
   // Part 1: saved lookup answers.
   'assistViaSaved': {'provider': 'String', 'date': 'String'},
@@ -69,7 +71,13 @@ const Map<String, Map<String, String>> _newKeys = {
   'usualAgainTitle': {},
   'usualAgainBody': {'name': 'String', 'time': 'String'},
   'usualAgainConfirm': {},
+  // Added after review: an offer on the macros alone (U3).
+  'usualItemLineMacros': {'name': 'String', 'ai': 'String', 'mine': 'String'},
+  'usualUsedSnackSame': {},
 };
+
+/// How many of [_newKeys] the spec's §6 lists; the rest came from review.
+const int _specKeys = 43;
 
 /// The one changed key.
 const String _changed = 'clearPlacesBody';
@@ -121,6 +129,9 @@ final Map<String, String Function(AppLocalizations l)> _render = {
   'usualAgainTitle': (l) => l.usualAgainTitle,
   'usualAgainBody': (l) => l.usualAgainBody('{name}', '{time}'),
   'usualAgainConfirm': (l) => l.usualAgainConfirm,
+  'usualItemLineMacros': (l) =>
+      l.usualItemLineMacros('{name}', '{ai}', '{mine}'),
+  'usualUsedSnackSame': (l) => l.usualUsedSnackSame,
   _changed: (l) => l.clearPlacesBody,
 };
 
@@ -161,14 +172,15 @@ void main() {
   final zh = _arb('zh');
   final checked = [..._newKeys.keys, _changed];
 
-  test('the spec lists 43 new keys, and each has a generated getter', () {
-    expect(_newKeys, hasLength(43));
+  test('the spec lists 43 new keys, review added 2, and each has a '
+      'generated getter', () {
+    expect(_newKeys, hasLength(_specKeys + 2));
     expect(_render.keys.toSet(), {..._newKeys.keys, _changed});
   });
 
-  test('both files have the same 771 keys', () {
-    expect(_messageKeys(en), hasLength(771));
-    expect(_messageKeys(zh), hasLength(771));
+  test('both files have the same 773 keys', () {
+    expect(_messageKeys(en), hasLength(773));
+    expect(_messageKeys(zh), hasLength(773));
     expect(_messageKeys(zh).toSet(), _messageKeys(en).toSet());
   });
 
@@ -245,6 +257,18 @@ void main() {
     expect(zh['assistFoundSaved'], contains('「重新查找」'));
   });
 
+  test('the keys review added say it in the terms the app already uses',
+      () {
+    // The macro line reads as the kcal line does, with the macros in place
+    // of the kcal; the snackbar keeps Use's verb (采用).
+    expect(en['usualItemLineMacros'], startsWith('{name}: AI {ai} → your usual'));
+    expect(zh['usualItemLineMacros'], startsWith('{name}：AI {ai} → 你平时的'));
+    expect(en['usualItemLineMacros'], isNot(contains('kcal')));
+    expect(zh['usualItemLineMacros'], isNot(contains('千卡')));
+    expect(en['usualUsedSnackSame'], startsWith('Used your usual numbers'));
+    expect(zh['usualUsedSnackSame'], startsWith('已采用你平时的数值'));
+  });
+
   test('the generated classes say what the ARB files say', () {
     for (final (l, arb) in [
       (AppLocalizationsEn() as AppLocalizations, en),
@@ -270,6 +294,17 @@ void main() {
       'Oatmeal: AI 300 → your usual 350 kcal',
     );
     expect(z.usualItemLine('燕麦粥', '300', '350'), '燕麦粥：AI 300 → 你平时的 350 千卡');
+    expect(
+      e.usualItemLineMacros(
+          'Oatmeal', 'P 10g · C 54g · F 6g', 'P 25g · C 40g · F 10g'),
+      'Oatmeal: AI P 10g · C 54g · F 6g → your usual P 25g · C 40g · F 10g',
+    );
+    expect(
+      z.usualItemLineMacros('燕麦粥', '蛋 10g · 碳 54g · 脂 6g', '蛋 25g · 碳 40g · 脂 10g'),
+      '燕麦粥：AI 蛋 10g · 碳 54g · 脂 6g → 你平时的 蛋 25g · 碳 40g · 脂 10g',
+    );
+    expect(e.usualUsedSnackSame, 'Used your usual numbers.');
+    expect(z.usualUsedSnackSame, '已采用你平时的数值。');
     expect(e.usualChipMany(2), 'Your usual numbers for 2 items');
     expect(e.usualHiddenRow(1), 'Hidden foods (1)');
     expect(z.usualHiddenRow(1), '已隐藏的食物（1）');

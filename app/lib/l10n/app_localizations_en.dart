@@ -3003,4 +3003,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get usualAgainConfirm => 'Log again';
+
+  @override
+  String usualItemLineMacros(String name, String ai, String mine) {
+    return '$name: AI $ai → your usual $mine';
+  }
+
+  @override
+  String get usualUsedSnackSame => 'Used your usual numbers.';
 }

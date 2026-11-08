@@ -892,8 +892,8 @@ void main() {
             ? '蓝莓核桃燕麦粥配希腊酸奶和蜂蜜'
             : 'Overnight oats with blueberries';
         final longLine = lang == 'zh'
-            ? '$longFood：AI 1,320 → 你平时的 1,450 千卡'
-            : '$longFood: AI 1,320 → your usual 1,450 kcal';
+            ? '$longFood：AI 1,320 → 你平时的 1,500 千卡'
+            : '$longFood: AI 1,320 → your usual 1,500 kcal';
         for (final width in const [320.0, 390.0]) {
           for (final scale in const [1.0, 1.15, 1.35]) {
             testWidgets('$lang ${width.round()} pt ×$scale: the usual chip '
@@ -914,7 +914,7 @@ void main() {
                     learnedName: longFood,
                     viaAlias: false,
                     ai: (kcal: 1320, p: 10, c: 50, f: 6),
-                    mine: (kcal: 1450, p: 12, c: 50, f: 14),
+                    mine: (kcal: 1500, p: 12, c: 50, f: 14),
                     kcalOnly: false,
                     mineAt: DateTime(2026, 11, 3),
                     fromMealId: 2,
@@ -922,7 +922,7 @@ void main() {
                   ),
                 ],
                 beforeKcal: 1320,
-                afterKcal: 1450,
+                afterKcal: 1500,
               );
               await pumpAt(
                 tester,

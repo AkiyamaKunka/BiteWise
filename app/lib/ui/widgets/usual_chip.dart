@@ -1,8 +1,9 @@
 /// Today's "your usual numbers" chip (usual foods §3.4, D17), in the meal
 /// card's assist-chip slot when the restaurant assist shows none.
 ///
-/// One food: "Oatmeal: AI 300 → your usual 350 kcal" and **Use**, which
-/// writes them (with Undo on the snackbar). Two or more: "Your usual
+/// One food: "Oatmeal: AI 300 → your usual 350 kcal" (its macros instead
+/// when the kcal hardly moves) and **Use**, which writes them (with Undo on
+/// the snackbar). Two or more: "Your usual
 /// numbers for {count} items" and **Review**, which opens the editor's
 /// card: an offer of several foods is taken or left whole, after a look.
 /// Nothing changes without the tap. No dot, no notification.
@@ -11,9 +12,9 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/usual/usual_foods.dart';
-import '../format.dart' show formatKcal;
 import '../l10n.dart';
 import '../large_text.dart';
+import 'usual_offer_card.dart' show usualItemText;
 
 class UsualChip extends StatelessWidget {
   const UsualChip({
@@ -40,11 +41,7 @@ class UsualChip extends StatelessWidget {
     final single = offer.items.length == 1;
     final item = offer.items.first;
     final text = single
-        ? l.usualItemLine(
-            item.learnedName,
-            formatKcal(item.ai.kcal),
-            formatKcal(item.mine.kcal),
-          )
+        ? usualItemText(l, item, item.learnedName)
         : l.usualChipMany(offer.items.length);
     final icon = MediaQuery.textScalerOf(context).scale(14).clamp(14.0, 28.0);
     final label = Text(

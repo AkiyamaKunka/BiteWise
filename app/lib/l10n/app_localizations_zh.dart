@@ -2807,4 +2807,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get usualAgainConfirm => '再记一次';
+
+  @override
+  String usualItemLineMacros(String name, String ai, String mine) {
+    return '$name：AI $ai → 你平时的 $mine';
+  }
+
+  @override
+  String get usualUsedSnackSame => '已采用你平时的数值。';
 }

@@ -148,6 +148,54 @@ void main() {
     expect(find.byKey(const Key('usualChip')), findsNothing);
   });
 
+  testWidgets('an offer on the macros alone names the macros, and its '
+      'snackbar does not read the same kcal twice', (tester) async {
+    final dao = FakeDao()
+      // The user's own oatmeal, typed by hand: the same kcal, more
+      // protein.
+      ..seed(foodMeal(
+          id: 2,
+          date: daysAgo(2),
+          source: MealSource.appManual,
+          items: [foodItem('Oatmeal (~250 g)', 350, p: 25, c: 40, f: 10)]))
+      ..seed(photo([foodItem('Oatmeal (~260 g)', 350, p: 10, c: 50, f: 14)]));
+    final usual = await makeUsualFoods(dao, clock: DateTime.now);
+    await pump(tester, dao, usual: usual);
+    expect(
+        find.text('Oatmeal: AI P 10g · C 50g · F 14g → your usual '
+            'P 25g · C 40g · F 10g'),
+        findsOneWidget);
+    expect(find.text('Oatmeal: AI 350 → your usual 350 kcal'), findsNothing);
+    await tester.tap(find.byKey(const Key('usualChipUse')));
+    await tester.pumpAndSettle();
+    expect(find.text('Used your usual numbers.'), findsOneWidget);
+    expect(find.text('Used your usual numbers: 350 → 350 kcal'), findsNothing);
+    final item = (dao.byId(1).analysis['food_items'] as List).single as Map;
+    expect(item['protein_g'], 25, reason: 'Use wrote the macros');
+    expect(item['estimated_calories'], 350);
+  });
+
+  testWidgets('a kcal change under the threshold names the macros too, and '
+      'the snackbar then says the totals', (tester) async {
+    final dao = FakeDao()
+      ..seed(foodMeal(
+          id: 2,
+          date: daysAgo(2),
+          source: MealSource.appManual,
+          items: [foodItem('Oatmeal (~250 g)', 360, p: 25, c: 40, f: 10)]))
+      ..seed(photo([foodItem('Oatmeal (~260 g)', 350, p: 10, c: 50, f: 14)]));
+    final usual = await makeUsualFoods(dao, clock: DateTime.now);
+    await pump(tester, dao, usual: usual);
+    expect(
+        find.text('Oatmeal: AI P 10g · C 50g · F 14g → your usual '
+            'P 25g · C 40g · F 10g'),
+        findsOneWidget);
+    await tester.tap(find.byKey(const Key('usualChipUse')));
+    await tester.pumpAndSettle();
+    expect(find.text('Used your usual numbers: 350 → 360 kcal'),
+        findsOneWidget);
+  });
+
   testWidgets('Use on a meal changed since the chip showed writes nothing '
       'and says so', (tester) async {
     final dao = FakeDao()

@@ -4739,6 +4739,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Log again'**
   String get usualAgainConfirm;
+
+  /// Today chip for one food, and each food on the meal editor's Your usual numbers card, when your numbers for it differ in protein, carbs or fat but hardly in kcal. name is the food's name; ai and mine are its three macros, already formatted (P 10g · C 54g · F 6g).
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: AI {ai} → your usual {mine}'**
+  String usualItemLineMacros(String name, String ai, String mine);
+
+  /// Snackbar after Use, with Undo, when the meal's total kcal is the same before and after (your numbers changed only its protein, carbs or fat).
+  ///
+  /// In en, this message translates to:
+  /// **'Used your usual numbers.'**
+  String get usualUsedSnackSame;
 }
 
 class _AppLocalizationsDelegate

@@ -2784,5 +2784,24 @@
   "usualAgainConfirm": "Log again",
   "@usualAgainConfirm": {
     "description": "That dialog's action: log the meal anyway."
+  },
+  "usualItemLineMacros": "{name}: AI {ai} → your usual {mine}",
+  "@usualItemLineMacros": {
+    "description": "Today chip for one food, and each food on the meal editor's Your usual numbers card, when your numbers for it differ in protein, carbs or fat but hardly in kcal. name is the food's name; ai and mine are its three macros, already formatted (P 10g · C 54g · F 6g).",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "ai": {
+        "type": "String"
+      },
+      "mine": {
+        "type": "String"
+      }
+    }
+  },
+  "usualUsedSnackSame": "Used your usual numbers.",
+  "@usualUsedSnackSame": {
+    "description": "Snackbar after Use, with Undo, when the meal's total kcal is the same before and after (your numbers changed only its protein, carbs or fat)."
   }
 }

@@ -14,9 +14,39 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/usual_foods_logic.dart'
+    show kUsualMinDiffKcal, kUsualMinDiffShare;
 import '../../services/usual/usual_foods.dart';
 import '../format.dart' show formatKcal;
 import '../l10n.dart';
+
+/// [item]'s kcal moves less than an offer's kcal threshold, so it was
+/// offered for its macros alone (D30): the same test usualOfferFor makes,
+/// with the same constants.
+bool _macrosOnly(UsualOfferItem item) {
+  final share = kUsualMinDiffShare * item.ai.kcal;
+  final threshold = share > kUsualMinDiffKcal ? share : kUsualMinDiffKcal;
+  return (item.mine.kcal - item.ai.kcal).abs() < threshold;
+}
+
+/// Grams as the meal card writes them: whole, else to 0.1 g.
+String _grams(num v) =>
+    v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
+/// The three macros of [n] on one line: "P 10g · C 54g · F 6g".
+String _macros(AppLocalizations l, UsualNumbers n) =>
+    '${l.macroProteinShort} ${_grams(n.p)}g · '
+    '${l.macroCarbsShort} ${_grams(n.c)}g · '
+    '${l.macroFatShort} ${_grams(n.f)}g';
+
+/// The line that says what Use changes for [item], named [name]: the AI's
+/// kcal and yours, or, when the kcal hardly moves (an offer on the macros
+/// alone), the AI's macros and yours. The chip and the card both say it.
+String usualItemText(AppLocalizations l, UsualOfferItem item, String name) =>
+    _macrosOnly(item)
+        ? l.usualItemLineMacros(name, _macros(l, item.ai), _macros(l, item.mine))
+        : l.usualItemLine(
+            name, formatKcal(item.ai.kcal), formatKcal(item.mine.kcal));
 
 class UsualOfferCard extends StatelessWidget {
   const UsualOfferCard({
@@ -73,11 +103,7 @@ class UsualOfferCard extends StatelessWidget {
             for (final item in offer.items) ...[
               const SizedBox(height: 8),
               Text(
-                l.usualItemLine(
-                  item.name,
-                  formatKcal(item.ai.kcal),
-                  formatKcal(item.mine.kcal),
-                ),
+                usualItemText(l, item, item.name),
                 key: Key('usualOfferItem${item.index}'),
                 style: theme.textTheme.bodyMedium,
               ),
@@ -117,7 +143,8 @@ class UsualOfferCard extends StatelessWidget {
 }
 
 /// After Use wrote the user's numbers: the meal totals before → after,
-/// as assistAppliedSnack does, with Undo on [messenger] (the app's own, so
+/// as assistAppliedSnack does (or, when the total kcal did not move, only
+/// that they were used), with Undo on [messenger] (the app's own, so
 /// it outlives the screen that showed the offer). Undo puts the earlier
 /// numbers back while the meal still holds exactly what Use wrote, and
 /// otherwise says nothing was undone; [onUndone] runs after an Undo that
@@ -129,14 +156,15 @@ void showUsualUsedSnack(
   UsualAcceptResult result, {
   VoidCallback? onUndone,
 }) {
+  final before = formatKcal(result.beforeKcal);
+  final after = formatKcal(result.afterKcal);
   messenger.showSnackBar(
     SnackBar(
       key: const Key('usualUsedSnack'),
       content: Text(
-        l.usualUsedSnack(
-          formatKcal(result.beforeKcal),
-          formatKcal(result.afterKcal),
-        ),
+        before == after
+            ? l.usualUsedSnackSame
+            : l.usualUsedSnack(before, after),
       ),
       action: SnackBarAction(
         label: l.assistUndo,
