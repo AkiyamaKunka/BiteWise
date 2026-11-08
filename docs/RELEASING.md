@@ -316,9 +316,9 @@ prints is a conflict):
 When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
-- `app/test/ui/usual_copy_test.dart` pins 771 keys in each ARB file. #22
+- `app/test/ui/usual_copy_test.dart` pins 774 keys in each ARB file. #22
   adds 33 (at 8e24932, none shared with this PR), so the merged files have
-  804 each. Change the number in that test to the merged count; both files
+  807 each. Change the number in that test to the merged count; both files
   must still have the same keys. Do not drop the check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
   with "the next photo you log that day". #22 also sends the day before's
