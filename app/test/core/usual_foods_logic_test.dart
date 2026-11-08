@@ -543,6 +543,37 @@ void main() {
           (380, false));
     });
 
+    test('one rename plus its re-log confirms no alias', () {
+      // P4/D24: a re-log copies the rename it was logged from; it is not a
+      // second rename.
+      final typed = meal(1, [item('Overnight oats', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-02', source: MealSource.appManual);
+      final renamedOnce = meal(2, [renamed()],
+          date: '2026-11-03', source: MealSource.appPhoto, corrected: true);
+      final index = buildUsualIndex([typed, renamedOnce], now: now);
+      final row = usualMealList(index,
+              now: now, choices: UsualChoicesView.empty)
+          .more
+          .single;
+      expect(row.template.id, 2);
+      final relog = Meal(
+          id: 3,
+          date: today,
+          time: '12:30 PM',
+          timestamp: '${today}T12:30:00.000',
+          source: MealSource.appRepeat,
+          analysis: usualLogAnalysis(row, index, now: now));
+      expect(
+          ((relog.analysis['food_items'] as List).single as Map)['user']
+              ['ai_name'],
+          'Oatmeal (~250 g)',
+          reason: 'the re-log carries the rename');
+      expect(buildUsualIndex([typed, renamedOnce, relog], now: now).aliases,
+          isEmpty);
+      expect(offer([typed, renamedOnce, relog, photo()], photo()), isNull,
+          reason: 'no alias, so the AI-named photo gets nothing');
+    });
+
     test('an AI name renamed to two foods twice each gives no alias', () {
       Meal m(int id, String name, String date) => meal(
           id,
