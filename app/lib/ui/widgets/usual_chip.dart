@@ -53,9 +53,8 @@ class UsualChip extends StatelessWidget {
       style: theme.textTheme.labelSmall?.copyWith(
         color: scheme.onSurfaceVariant,
       ),
-      // At the accessibility sizes the words take the lines they need.
-      maxLines: large ? null : 2,
-      overflow: large ? null : TextOverflow.ellipsis,
+      // Never cut: the number at its end is what Use writes, so the words
+      // take the lines they need at every size.
     );
     final button = single
         ? TextButton(
@@ -90,7 +89,9 @@ class UsualChip extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       // At large text the button goes under the words; side by side they
-      // would leave the words a few glyphs a line.
+      // would leave the words a few glyphs a line. At the standard sizes it
+      // sits beside them when both fit on one line, and under them when
+      // they do not (a long name, a narrow phone).
       child: large
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -99,9 +100,15 @@ class UsualChip extends StatelessWidget {
                 button,
               ],
             )
-          : Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [Flexible(child: lead), button],
+          : Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: lead,
+                ),
+                button,
+              ],
             ),
     );
   }

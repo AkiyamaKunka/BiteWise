@@ -885,6 +885,138 @@ void main() {
           expectOneLine(tester, use);
         });
 
+        // The standard sizes: a long name on the narrowest phone and on a
+        // 390 pt one. The line is never cut; Use goes under it when the
+        // two do not fit side by side.
+        final longFood = lang == 'zh'
+            ? '蓝莓核桃燕麦粥配希腊酸奶和蜂蜜'
+            : 'Overnight oats with blueberries';
+        final longLine = lang == 'zh'
+            ? '$longFood：AI 1,320 → 你平时的 1,450 千卡'
+            : '$longFood: AI 1,320 → your usual 1,450 kcal';
+        for (final width in const [320.0, 390.0]) {
+          for (final scale in const [1.0, 1.15, 1.35]) {
+            testWidgets('$lang ${width.round()} pt ×$scale: the usual chip '
+                'lays out its whole line, the number included',
+                (tester) async {
+              final meal = foodMeal(
+                id: 1,
+                date: isoDate(DateTime.now()),
+                items: [foodItem('$longFood (~260 g)', 1320)],
+              );
+              final offer = UsualOffer(
+                mealId: 1,
+                items: [
+                  UsualOfferItem(
+                    index: 0,
+                    name: longFood,
+                    key: 'k',
+                    learnedName: longFood,
+                    viaAlias: false,
+                    ai: (kcal: 1320, p: 10, c: 50, f: 6),
+                    mine: (kcal: 1450, p: 12, c: 50, f: 14),
+                    kcalOnly: false,
+                    mineAt: DateTime(2026, 11, 3),
+                    fromMealId: 2,
+                    fromDate: '2026-11-03',
+                  ),
+                ],
+                beforeKcal: 1320,
+                afterKcal: 1450,
+              );
+              await pumpAt(
+                tester,
+                lang,
+                Scaffold(
+                  body: ListView(children: [
+                    MealCard(
+                      meal: meal,
+                      onTap: () {},
+                      usualChip: UsualChip(offer: offer, onUse: () {}),
+                    ),
+                  ]),
+                ),
+                scale: scale,
+                size: Size(width, 900),
+              );
+              expect(tester.takeException(), isNull);
+              final chip = find.byKey(const Key('usualChip'));
+              final text = find.byKey(const Key('usualChipText'));
+              expect(find.descendant(of: chip, matching: find.text(longLine)),
+                  findsOneWidget);
+              final p = tester.renderObject<RenderParagraph>(find.descendant(
+                  of: text, matching: find.byType(RichText)));
+              expect(p.didExceedMaxLines, isFalse,
+                  reason: '"${p.text.toPlainText()}" was cut');
+              // Every line of it is laid out: the paragraph is as tall as
+              // the whole text needs at its width.
+              final whole = TextPainter(
+                text: p.text,
+                textDirection: TextDirection.ltr,
+                textScaler: p.textScaler,
+              )..layout(maxWidth: p.size.width);
+              expect(p.size.height, greaterThanOrEqualTo(whole.height - 0.5),
+                  reason: 'the end of "$longLine" is not laid out');
+              whole.dispose();
+              final textRect = tester.getRect(text);
+              final use = tester.getRect(find.byKey(const Key('usualChipUse')));
+              expect(tester.getRect(chip).right, lessThanOrEqualTo(width));
+              expect(use.right, lessThanOrEqualTo(width));
+              expect(use.overlaps(textRect), isFalse,
+                  reason: 'Use sits beside or under the words, never on them');
+              expectOneLine(tester, find.byKey(const Key('usualChipUse')));
+            });
+          }
+        }
+
+        testWidgets('$lang 390 pt ×1.0: a short line keeps Use beside it',
+            (tester) async {
+          final name = lang == 'zh' ? '燕麦粥' : 'Oatmeal';
+          final offer = UsualOffer(
+            mealId: 1,
+            items: [
+              UsualOfferItem(
+                index: 0,
+                name: name,
+                key: 'k',
+                learnedName: name,
+                viaAlias: false,
+                ai: (kcal: 300, p: 10, c: 50, f: 6),
+                mine: (kcal: 350, p: 12, c: 50, f: 14),
+                kcalOnly: false,
+                mineAt: DateTime(2026, 11, 3),
+                fromMealId: 2,
+                fromDate: '2026-11-03',
+              ),
+            ],
+            beforeKcal: 300,
+            afterKcal: 350,
+          );
+          await pumpAt(
+            tester,
+            lang,
+            Scaffold(
+              body: ListView(children: [
+                MealCard(
+                  meal: foodMeal(
+                    id: 1,
+                    date: isoDate(DateTime.now()),
+                    items: [foodItem('$name (~260 g)', 300)],
+                  ),
+                  onTap: () {},
+                  usualChip: UsualChip(offer: offer, onUse: () {}),
+                ),
+              ]),
+            ),
+            scale: 1.0,
+          );
+          expect(tester.takeException(), isNull);
+          final text = tester.getRect(find.byKey(const Key('usualChipText')));
+          final use = tester.getRect(find.byKey(const Key('usualChipUse')));
+          expect(use.left, greaterThanOrEqualTo(text.right));
+          expect(use.top, lessThan(text.bottom));
+        });
+
         testWidgets('$lang: a My usual foods row and the hidden row read in '
             'full', (tester) async {
           DateTime now() => DateTime(2026, 11, 7, 12, 30);
