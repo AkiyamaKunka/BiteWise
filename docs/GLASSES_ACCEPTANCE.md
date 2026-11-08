@@ -234,7 +234,7 @@ Check these three things:
 - The source line names only the chain's own website.
 
 ### Afterwards
-Set **Restaurant nutrition lookup** back to what you want to keep: **When unsure** (不确定时), or **Off**, which is the default. Turning it Off offers "Also clear learned places".
+Set **Restaurant nutrition lookup** back to what you want to keep: **When unsure** (不确定时), or **Off**, which is the default. Turning it Off offers "Also clear learned places and saved lookup answers".
 
 ---
 
