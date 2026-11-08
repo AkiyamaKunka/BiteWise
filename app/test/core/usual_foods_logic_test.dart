@@ -428,6 +428,25 @@ void main() {
           reason: 'an unmarked hand-typed row dates from the meal');
     });
 
+    test('a hand-typed meal fixed by chat teaches only its marked rows', () {
+      // A chat fix keeps the source and drops every mark, and the text
+      // model re-estimated every item: its unmarked rows are not yours.
+      final chatFixed = meal(1, [
+        item('Oatmeal', 520, p: 18, c: 80, f: 16),
+        item('Banana', 105, p: 1, c: 27, f: 0),
+      ], date: '2026-11-04', source: MealSource.appManual, corrected: true);
+      final chatFixedPhoto = meal(2, [item('Dal', 320, p: 16, c: 40, f: 9)],
+          date: '2026-11-04',
+          source: MealSource.appManualPhoto,
+          corrected: true);
+      // An editor save of such a meal marks the rows the user set.
+      final edited = meal(3, [mine('Toast with jam', [210, 5, 38, 4])],
+          date: '2026-11-04', source: MealSource.appManual, corrected: true);
+      final index =
+          buildUsualIndex([chatFixed, chatFixedPhoto, edited], now: now);
+      expect(index.records.keys.toSet(), {'jam toast'});
+    });
+
     test('kcal-only at kcal >= 50 with zero macros (P8)', () {
       final index = buildUsualIndex([
         meal(1, [item('Cola', 140, p: 0, c: 0, f: 0)],

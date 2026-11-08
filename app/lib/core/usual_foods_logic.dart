@@ -537,8 +537,10 @@ String? _nonEmptyString(Object? v, int max) {
 
 /// The learned record an item of meal [m] gives, or null (spec §3.1
 /// "What counts as yours"): (a) a valid mark on a trusted meal, or (b) an
-/// unmarked item of a hand-typed meal; never published, never from a
-/// meal with a leftover block (the caller checks), and qty exactly 1.
+/// unmarked item of a hand-typed meal never corrected since (a fix by
+/// chat keeps the source and drops every mark, and its model re-estimated
+/// every item); never published, never from a meal with a leftover block
+/// (the caller checks), and qty exactly 1.
 UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     DateTime now) {
   if (item['published'] == true) return null;
@@ -566,6 +568,7 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     qty = usualItemQty(item);
   } else if ((m.source == MealSource.appManual ||
           m.source == MealSource.appManualPhoto) &&
+      !m.corrected &&
       user is! Map) {
     final parsed = DateTime.tryParse(m.timestamp);
     if (parsed == null) return null;

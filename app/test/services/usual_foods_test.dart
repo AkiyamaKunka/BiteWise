@@ -8,11 +8,13 @@ import 'package:calorie_tracker/core/usual_foods_logic.dart'
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
     show AssistMode, AssistSettingsView;
+import 'package:calorie_tracker/services/nl/executor.dart';
 import 'package:calorie_tracker/services/usual/usual_foods.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../nl/fakes.dart' show FakeAnalyzer, testSettings;
 import '../support/fake_meals_dao.dart';
 
 class _Dao extends BaseFakeDao {
@@ -320,6 +322,60 @@ void main() {
               since: DateTime.utc(2026, 11, 3), now: DateTime(2027, 2, 10)),
           isFalse);
       expect(await usual.offerFor(dao.byId(id)), isNotNull);
+    });
+  });
+
+  group('a fix by chat teaches nothing (spec §3.1, P10)', () {
+    /// Applies a chat correction of meal [id] to [analysis], as the Fix
+    /// screen does: the executor stores the text model's analysis.
+    Future<void> chatFix(int id, Map<String, dynamic> analysis) async {
+      final exec = createExecutor(dao, FakeAnalyzer(), await testSettings())
+          as DefaultNlExecutor;
+      final recent = await dao.recentMeals();
+      await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': recent.indexWhere((m) => m.id == id),
+        'analysis': analysis,
+      }, 'it was a bigger bowl', recent);
+    }
+
+    test('the model\'s numbers on a hand-typed meal are neither learned nor '
+        'offered', () async {
+      final typed = seed([item('Oatmeal', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-03', source: MealSource.appManual);
+      await chatFix(
+          typed,
+          analysisOf([
+            item('Oatmeal', 520, p: 18, c: 80, f: 16),
+            item('Banana', 105, p: 1, c: 27, f: 0),
+          ]));
+      final fixed = dao.byId(typed);
+      expect((fixed.source, fixed.corrected), (MealSource.appManual, true),
+          reason: 'the fix keeps the source');
+      final index = await usual.index();
+      expect((index.records['oatmeal'], index.records['banana']),
+          (null, null));
+      final photo = seed([item('Oatmeal (~260 g)', 300)]);
+      expect(await usual.offerFor(dao.byId(photo)), isNull);
+    });
+
+    test('a re-log of the fixed meal never stamps the model\'s numbers as '
+        'yours', () async {
+      seed([item('Oatmeal', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-03', source: MealSource.appManual);
+      final typed = seed([item('Oatmeal', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-04', source: MealSource.appManual);
+      await chatFix(
+          typed, analysisOf([item('Oatmeal', 520, p: 18, c: 80, f: 16)]));
+      final row = (await usual.frequentMeals()).more.single;
+      expect(row.template.id, typed);
+      final done = (await usual.logAgain(row))!;
+      final it =
+          (dao.byId(done.mealId).analysis['food_items'] as List).single as Map;
+      // The numbers the user typed on Nov 3 replace the template's; the
+      // chat model's 520 is no record, so no mark vouches for it.
+      expect(it['estimated_calories'], 350, reason: 'the re-log wrote $it');
+      expect((it['user'] as Map)['n'], [350, 12, 50, 14]);
     });
   });
 
