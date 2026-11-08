@@ -71,6 +71,50 @@ class _HangingUsual extends UsualFoods {
   }
 }
 
+/// UsualFoods whose offers arrive when the test completes [replies], one
+/// per call, in order.
+class _HeldUsual extends UsualFoods {
+  _HeldUsual(BaseFakeDao dao, UsualChoices choices)
+      : super(
+          dao: dao,
+          choices: choices,
+          mealsChanged: ValueNotifier<int>(0),
+          onMealsChanged: () {},
+          lookupTakesIt: (_) => false,
+        );
+
+  final List<Completer<Map<int, UsualOffer>>> replies = [];
+
+  @override
+  Future<Map<int, UsualOffer>> offersFor(List<Meal> meals) {
+    final c = Completer<Map<int, UsualOffer>>();
+    replies.add(c);
+    return c.future;
+  }
+}
+
+/// The oatmeal offer for meal 1, as offersFor would work it out.
+UsualOffer oatmealOffer() => UsualOffer(
+      mealId: 1,
+      items: [
+        UsualOfferItem(
+          index: 0,
+          name: 'Oatmeal',
+          key: 'oatmeal',
+          learnedName: 'Oatmeal',
+          viaAlias: false,
+          ai: (kcal: 300, p: 10, c: 45, f: 8),
+          mine: (kcal: 350, p: 12, c: 50, f: 14),
+          kcalOnly: false,
+          mineAt: DateTime(2026, 11, 5),
+          fromMealId: 2,
+          fromDate: '2026-11-05',
+        ),
+      ],
+      beforeKcal: 300,
+      afterKcal: 350,
+    );
+
 void main() {
   Future<void> pump(
     WidgetTester tester,
@@ -269,6 +313,83 @@ void main() {
     expect(find.text('Oat milk latte: AI 150 → your usual 190 kcal'),
         findsOneWidget);
     expect(dao.byId(1).corrected, isFalse, reason: 'Review writes nothing');
+  });
+
+  group('a reply that comes late', () {
+    Future<_HeldUsual> held() async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
+      return _HeldUsual(FakeDao(), UsualChoices(prefs));
+    }
+
+    TodayScreenState today(WidgetTester tester) =>
+        tester.state<TodayScreenState>(find.byType(TodayScreen));
+
+    testWidgets('an older reload\'s reply never replaces a newer one',
+        (tester) async {
+      final dao = FakeDao()..seed(photo([aiOatmeal()]));
+      final usual = await held();
+      await pump(tester, dao, usual: usual);
+      expect(usual.replies, hasLength(1));
+      // A second reload before the first reply: the newer one answers
+      // first (nothing to offer), then the older one arrives.
+      final again = today(tester).reload();
+      await tester.pump();
+      await again;
+      expect(usual.replies, hasLength(2));
+      usual.replies[1].complete(const {});
+      await tester.pump();
+      usual.replies[0].complete({1: oatmealOffer()});
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('meal1')), findsOneWidget);
+      expect(find.byKey(const Key('usualChip')), findsNothing);
+    });
+
+    testWidgets('a reply that arrives after midnight is dropped',
+        (tester) async {
+      var now = DateTime(2026, 11, 7, 23, 50);
+      final dao = FakeDao()
+        ..seed(foodMeal(
+            id: 1,
+            date: '2026-11-07',
+            source: MealSource.appWatch,
+            items: [aiOatmeal()]));
+      final usual = await held();
+      await pump(tester, dao, usual: usual, now: () => now);
+      expect(find.byKey(const Key('meal1')), findsOneWidget);
+      now = DateTime(2026, 11, 8, 0, 5);
+      usual.replies.single.complete({1: oatmealOffer()});
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('meal1')), findsOneWidget,
+          reason: 'Today was not reloaded');
+      expect(find.byKey(const Key('usualChip')), findsNothing,
+          reason: 'yesterday\'s meal is offered nothing');
+    });
+
+    testWidgets('a meal that became the user\'s loses its chip at the '
+        'reload, before the new reply', (tester) async {
+      final dao = FakeDao()..seed(photo([aiOatmeal()]));
+      final usual = await held();
+      await pump(tester, dao, usual: usual);
+      usual.replies.single.complete({1: oatmealOffer()});
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualChip')), findsOneWidget);
+      // The user fixed it elsewhere (corrected); the reload's own reply
+      // has not come yet.
+      dao.meals[dao.meals.indexWhere((m) => m.id == 1)] = foodMeal(
+          id: 1,
+          date: daysAgo(0),
+          source: MealSource.appWatch,
+          corrected: true,
+          items: [aiOatmeal()]);
+      final again = today(tester).reload();
+      await tester.pump();
+      await again;
+      await tester.pump();
+      expect(usual.replies, hasLength(2));
+      expect(find.byKey(const Key('meal1')), findsOneWidget);
+      expect(find.byKey(const Key('usualChip')), findsNothing);
+    });
   });
 
   testWidgets('no service, no chip', (tester) async {

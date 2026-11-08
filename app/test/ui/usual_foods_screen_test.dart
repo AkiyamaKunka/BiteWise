@@ -126,6 +126,32 @@ void main() {
     expect(find.byKey(const Key('usualHiddenRow')), findsNothing);
   });
 
+  testWidgets('the list is worked out fresh on every open: a meal the '
+      'background run saved (no signal) shows', (tester) async {
+    final dao = usualDao();
+    final usual = await makeUsualFoods(dao, clock: clock);
+    // The list was read once (an earlier open) ...
+    final first = await usual.frequentMeals();
+    expect([...first.around, ...first.more].map((m) => m.title),
+        isNot(contains('Greek yogurt')));
+    // ... then the background run saved two yogurts, bumping no signal.
+    dao
+      ..seed(foodMeal(
+          id: 40,
+          date: '2026-11-04',
+          time: '03:10 PM',
+          description: 'Greek yogurt',
+          items: [foodItem('Greek yogurt', 150, p: 15, c: 8, f: 5)]))
+      ..seed(foodMeal(
+          id: 41,
+          date: '2026-11-06',
+          time: '03:20 PM',
+          description: 'Greek yogurt',
+          items: [foodItem('Greek yogurt', 150, p: 15, c: 8, f: 5)]));
+    await pump(tester, usual);
+    expect(find.text('Greek yogurt'), findsOneWidget);
+  });
+
   testWidgets('one tap logs the meal now, once, with Undo', (tester) async {
     final dao = usualDao();
     await pump(tester, await makeUsualFoods(dao, clock: clock));

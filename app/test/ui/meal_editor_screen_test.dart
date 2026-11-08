@@ -18,13 +18,14 @@ import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
     show AssistRun, AssistSkip, AssistUserAction;
 import 'package:calorie_tracker/services/usual/usual_foods.dart'
-    show UsualFoods;
+    show UsualChoices, UsualFoods, UsualOffer;
 import 'package:calorie_tracker/ui/screens/day_detail_screen.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:image/image.dart' as img;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../support/assist_fixtures.dart';
 import 'fakes.dart';
@@ -850,6 +851,97 @@ void main() {
       expect(find.byKey(const Key('usualOfferCard')), findsNothing);
       expect(dao.updates, isEmpty);
       expect(dao.byId(1).corrected, isFalse);
+    });
+
+    testWidgets('Use writes against the stored text the form shows: a meal '
+        'changed since, even where the offer did not, writes nothing',
+        (tester) async {
+      final (dao, _) = await open(tester);
+      // Another writer renamed the meal after the form read it; the offered
+      // foods and their numbers are the same.
+      final at = dao.meals.indexWhere((m) => m.id == 1);
+      dao.meals[at] = foodMeal(
+        id: 1,
+        date: '2026-07-24',
+        description: 'Breakfast',
+        items: [
+          foodItem('Oatmeal (~260 g)', 300, p: 10, c: 45, f: 8),
+          foodItem('Oat milk latte', 150, p: 3, c: 18, f: 6),
+        ],
+      );
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      expect(find.text('This meal was just updated — please review.'),
+          findsOneWidget);
+      expect(dao.updates, isEmpty);
+      expect(dao.byId(1).corrected, isFalse);
+      expect(fieldText(tester, 'editorDescription'), 'Breakfast');
+    });
+
+    testWidgets('a tap that lands before the form shows its typing writes '
+        'nothing and says to save first', (tester) async {
+      final (dao, _) = await open(tester);
+      // The button as it was drawn, before the typing rebuilt it.
+      final use = tester
+          .widget<FilledButton>(find.byKey(const Key('usualUseMine')))
+          .onPressed!;
+      await tester.enterText(
+          find.byKey(const Key('editorDescription')), 'Big breakfast');
+      use();
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('assistEditFirstSnack')), findsOneWidget);
+      expect(dao.updates, isEmpty);
+      expect(dao.byId(1).corrected, isFalse);
+    });
+
+    testWidgets('Keep AI estimate: an offer still on its way does not bring '
+        'the card back', (tester) async {
+      useTallSurface(tester);
+      final dao = FakeDao()
+        ..seed(foodMeal(
+          id: 2,
+          date: '2026-07-22',
+          source: MealSource.appManual,
+          items: [foodItem('Oatmeal (~250 g)', 350, p: 12, c: 50, f: 14)],
+        ))
+        ..seed(foodMeal(
+          id: 1,
+          date: '2026-07-24',
+          items: [foodItem('Oatmeal (~260 g)', 300, p: 10, c: 45, f: 8)],
+        ));
+      SharedPreferences.setMockInitialValues({});
+      final usual = _HeldOfferUsual(
+          dao, UsualChoices(await SharedPreferences.getInstance(), clock: clock));
+      // A lookup the meal changed under: the editor reads the meal again
+      // and works the offer out again (held here).
+      final assist = FakeAssist(dao)
+        ..onLookup = (_, _, _) async => const AssistRun(AssistSkip.casMiss);
+      await tester.pumpWidget(host(MealEditorScreen(
+        dao: dao,
+        meal: dao.byId(1),
+        now: clock,
+        usual: usual,
+        assist: assist.controls(),
+        settings: FakeSettings()
+          ..restaurantAssist = 'auto'
+          ..restaurantAssistConsentAt = DateTime(2026, 7, 20, 8)
+          ..restaurantAssistConsentRecipient = 'anthropic',
+      )));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualOfferCard')), findsOneWidget);
+      usual.hold = true;
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pumpAndSettle();
+      expect(usual.held, hasLength(1));
+      expect(find.byKey(const Key('usualOfferCard')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('usualKeepAi')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+      usual.held.single.complete(usual.last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+      expect(dao.updates, isEmpty);
     });
 
     testWidgets('Keep AI estimate writes nothing and the card goes',
@@ -1791,6 +1883,32 @@ Map<String, dynamic> acceptedSavedBigMac({String fetchedOn = '2026-03-02'}) {
   )!;
   assert((accepted['assist'] as Map)['fetched_on'] == fetchedOn);
   return accepted;
+}
+
+/// UsualFoods whose offerFor is held, once [hold] is set, until the test
+/// completes [held]; [last] is the last offer worked out before.
+class _HeldOfferUsual extends UsualFoods {
+  _HeldOfferUsual(BaseFakeDao dao, UsualChoices choices)
+      : super(
+          dao: dao,
+          choices: choices,
+          mealsChanged: ValueNotifier<int>(0),
+          onMealsChanged: () {},
+          lookupTakesIt: (_) => false,
+          clock: () => DateTime(2026, 7, 24, 19, 5),
+        );
+
+  bool hold = false;
+  UsualOffer? last;
+  final List<Completer<UsualOffer?>> held = [];
+
+  @override
+  Future<UsualOffer?> offerFor(Meal meal) async {
+    if (!hold) return last = await super.offerFor(meal);
+    final c = Completer<UsualOffer?>();
+    held.add(c);
+    return c.future;
+  }
 }
 
 /// mealSnapshot waits for [gate] while it is set: the editor's open-time
