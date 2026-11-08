@@ -287,8 +287,9 @@ Future<({bool useLocation})?> restaurantManualLookupChoice(
 
 /// The Off dialog: 'Pending lookups are cancelled.' with a box, unticked,
 /// to clear what the lookups kept on this phone at the same time:
-/// 'Also clear learned places' where places are learned ([placesKept],
-/// iOS: the places, the saved lookup answers and the waiting lookups), else
+/// 'Also clear learned places and saved lookup answers' where places are
+/// learned ([placesKept], iOS: the places, the saved lookup answers and the
+/// waiting lookups), else
 /// 'Also clear saved lookup answers' (Android: no places are kept). Either
 /// way, the answer's clearPlaces asks for that one clear
 /// (RestaurantAssistControls.clearLearnedPlaces).

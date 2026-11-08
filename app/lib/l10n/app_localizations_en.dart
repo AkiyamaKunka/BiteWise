@@ -2586,7 +2586,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get restaurantOffBody => 'Pending lookups are cancelled.';
 
   @override
-  String get restaurantOffClearPlaces => 'Also clear learned places';
+  String get restaurantOffClearPlaces =>
+      'Also clear learned places and saved lookup answers';
 
   @override
   String get restaurantOffConfirm => 'Turn off';

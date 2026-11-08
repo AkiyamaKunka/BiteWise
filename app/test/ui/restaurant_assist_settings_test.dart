@@ -320,8 +320,8 @@ void main() {
   });
 
   group('the Off dialog', () {
-    testWidgets('Also clear learned places clears them; Cancel keeps it on',
-        (tester) async {
+    testWidgets('Also clear learned places and saved lookup answers clears '
+        'them; Cancel keeps it on', (tester) async {
       final settings = _planSettings()
         ..restaurantAssist = 'auto'
         ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
@@ -338,7 +338,10 @@ void main() {
       expect(c.clears, 0);
 
       await pickMode(tester, 'off');
-      expect(find.text('Also clear learned places'), findsOneWidget);
+      // The box names everything that one clear deletes on iOS: the
+      // places, and the saved answers (with the lookups still waiting).
+      expect(find.text('Also clear learned places and saved lookup answers'),
+          findsOneWidget);
       expect(find.byKey(const Key('restaurantOffClearAnswers')), findsNothing);
       expect(
           tester
@@ -1526,7 +1529,7 @@ void main() {
       expect(find.text('使用照片位置'), findsOneWidget);
       await pickMode(tester, 'off');
       expect(find.text('关闭餐厅查询？'), findsOneWidget);
-      expect(find.text('同时清除已记住的地点'), findsOneWidget);
+      expect(find.text('同时清除已记住的地点和保存的查询结果'), findsOneWidget);
       await tester.tap(find.byKey(const Key('restaurantOffConfirm')));
       await tester.pumpAndSettle();
       expect(settings.restaurantAssist, 'off');

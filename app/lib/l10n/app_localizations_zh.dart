@@ -2414,7 +2414,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restaurantOffBody => '未完成的查询会被取消。';
 
   @override
-  String get restaurantOffClearPlaces => '同时清除已记住的地点';
+  String get restaurantOffClearPlaces => '同时清除已记住的地点和保存的查询结果';
 
   @override
   String get restaurantOffConfirm => '关闭';

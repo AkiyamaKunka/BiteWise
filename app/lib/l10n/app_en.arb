@@ -2160,9 +2160,9 @@
   "@restaurantOffBody": {
     "description": "Body of the Off dialog."
   },
-  "restaurantOffClearPlaces": "Also clear learned places",
+  "restaurantOffClearPlaces": "Also clear learned places and saved lookup answers",
   "@restaurantOffClearPlaces": {
-    "description": "Checkbox in the Off dialog."
+    "description": "Checkbox in the Off dialog on iOS: one clear deletes the learned places, the saved lookup answers and the lookups still waiting."
   },
   "restaurantOffConfirm": "Turn off",
   "@restaurantOffConfirm": {
@@ -2592,7 +2592,7 @@
   },
   "restaurantOffClearAnswers": "Also clear saved lookup answers",
   "@restaurantOffClearAnswers": {
-    "description": "Checkbox in the Off dialog on Android (iOS shows 'Also clear learned places' there)."
+    "description": "Checkbox in the Off dialog on Android (iOS shows 'Also clear learned places and saved lookup answers' there)."
   },
   "usualItemLine": "{name}: AI {ai} → your usual {mine} kcal",
   "@usualItemLine": {

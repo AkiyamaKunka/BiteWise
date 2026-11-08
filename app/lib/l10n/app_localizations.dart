@@ -4074,10 +4074,10 @@ abstract class AppLocalizations {
   /// **'Pending lookups are cancelled.'**
   String get restaurantOffBody;
 
-  /// Checkbox in the Off dialog.
+  /// Checkbox in the Off dialog on iOS: one clear deletes the learned places, the saved lookup answers and the lookups still waiting.
   ///
   /// In en, this message translates to:
-  /// **'Also clear learned places'**
+  /// **'Also clear learned places and saved lookup answers'**
   String get restaurantOffClearPlaces;
 
   /// The Off dialog's action.
@@ -4554,7 +4554,7 @@ abstract class AppLocalizations {
   /// **'Saved lookup answers cleared.'**
   String get clearAnswersDone;
 
-  /// Checkbox in the Off dialog on Android (iOS shows 'Also clear learned places' there).
+  /// Checkbox in the Off dialog on Android (iOS shows 'Also clear learned places and saved lookup answers' there).
   ///
   /// In en, this message translates to:
   /// **'Also clear saved lookup answers'**

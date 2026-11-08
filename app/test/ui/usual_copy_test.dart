@@ -11,7 +11,8 @@
 ///   only a suggestion.
 /// - Both files have the same 774 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
-/// - Keys added after review (fix list U3, U5, C5) follow the same rules.
+/// - Keys added or changed after review (fix list U3, U5, C5) follow the
+///   same rules; the iOS Off box names the saved answers it also clears.
 library;
 
 import 'dart:convert';
@@ -85,6 +86,10 @@ const int _specKeys = 43;
 /// The one changed key.
 const String _changed = 'clearPlacesBody';
 
+/// The key review changed (C5): the iOS Off dialog's box names the saved
+/// answers it also deletes.
+const String _changedOff = 'restaurantOffClearPlaces';
+
 /// Each new key's generated getter. A String placeholder gets its own
 /// `{name}` back, an int placeholder gets 7, so the output can be compared
 /// with the ARB text.
@@ -137,6 +142,7 @@ final Map<String, String Function(AppLocalizations l)> _render = {
   'usualUsedSnackSame': (l) => l.usualUsedSnackSame,
   'usualLoggedLabel': (l) => l.usualLoggedLabel,
   _changed: (l) => l.clearPlacesBody,
+  _changedOff: (l) => l.restaurantOffClearPlaces,
 };
 
 // The same ranges release_decisions_test.dart uses: CJK radicals through
@@ -174,12 +180,12 @@ Set<String> _placeholders(String text) => {
 void main() {
   final en = _arb('en');
   final zh = _arb('zh');
-  final checked = [..._newKeys.keys, _changed];
+  final checked = [..._newKeys.keys, _changed, _changedOff];
 
   test('the spec lists 43 new keys, review added 3, and each has a '
       'generated getter', () {
     expect(_newKeys, hasLength(_specKeys + 3));
-    expect(_render.keys.toSet(), {..._newKeys.keys, _changed});
+    expect(_render.keys.toSet(), {..._newKeys.keys, _changed, _changedOff});
   });
 
   test('both files have the same 774 keys', () {
@@ -207,8 +213,10 @@ void main() {
       expect(_placeholders(en[key] as String), want, reason: 'en $key');
       expect(_placeholders(zh[key] as String), want, reason: 'zh $key');
     }
-    expect(_placeholders(en[_changed] as String), isEmpty);
-    expect(_placeholders(zh[_changed] as String), isEmpty);
+    for (final key in [_changed, _changedOff]) {
+      expect(_placeholders(en[key] as String), isEmpty, reason: key);
+      expect(_placeholders(zh[key] as String), isEmpty, reason: key);
+    }
   });
 
   test('each new English key says where it is shown, with typed '
@@ -251,6 +259,17 @@ void main() {
     expect(z, contains('还在等待的查询'));
     expect(z, contains('「不是餐厅的」'));
     expect(z, isNot(contains('"')));
+  });
+
+  test('the iOS Off box names the saved answers it also clears, in the '
+      "Android box's words", () {
+    expect(en[_changedOff],
+        'Also clear learned places and saved lookup answers');
+    expect(zh[_changedOff], '同时清除已记住的地点和保存的查询结果');
+    expect(en[_changedOff], endsWith('saved lookup answers'));
+    expect(en['restaurantOffClearAnswers'], endsWith('saved lookup answers'));
+    expect(zh[_changedOff], endsWith('保存的查询结果'));
+    expect(zh['restaurantOffClearAnswers'], endsWith('保存的查询结果'));
   });
 
   test('assistFoundSaved does not say the answer was used', () {

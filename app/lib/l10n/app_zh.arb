@@ -768,7 +768,7 @@
   "clearPlacesDone": "已清除记住的地点。",
   "restaurantOffTitle": "关闭餐厅查询？",
   "restaurantOffBody": "未完成的查询会被取消。",
-  "restaurantOffClearPlaces": "同时清除已记住的地点",
+  "restaurantOffClearPlaces": "同时清除已记住的地点和保存的查询结果",
   "restaurantOffConfirm": "关闭",
   "restaurantConsentTitle": "查找餐厅公布的营养？",
   "restaurantConsentWhat": "当一餐看起来来自餐厅时，筷拍可以查一下这家连锁店是否公布了该菜品的营养信息。",
