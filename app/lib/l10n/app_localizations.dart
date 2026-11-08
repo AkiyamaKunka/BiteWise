@@ -4751,6 +4751,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Used your usual numbers.'**
   String get usualUsedSnackSame;
+
+  /// What a screen reader says for the check on a My usual foods row logged since the screen opened.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged'**
+  String get usualLoggedLabel;
 }
 
 class _AppLocalizationsDelegate

@@ -155,6 +155,17 @@ void main() {
     expect(find.byKey(const Key('usualLoggedCheck')), findsOneWidget);
     expect(find.byType(UsualFoodsScreen), findsOneWidget,
         reason: 'the screen stays open');
+    // A screen reader hears the check too.
+    final semantics = tester.ensureSemantics();
+    await tester.pump();
+    expect(
+        tester.widget<Icon>(find.byKey(const Key('usualLoggedCheck')))
+            .semanticLabel,
+        'Logged');
+    expect(
+        tester.getSemantics(find.byKey(const Key('usualLoggedCheck'))).label,
+        contains('Logged'));
+    semantics.dispose();
     // A tap once that one is in: it asks first.
     await tester.tap(row('Oatmeal with blueberries'));
     await tester.pumpAndSettle();

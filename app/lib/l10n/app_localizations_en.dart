@@ -3011,4 +3011,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get usualUsedSnackSame => 'Used your usual numbers.';
+
+  @override
+  String get usualLoggedLabel => 'Logged';
 }

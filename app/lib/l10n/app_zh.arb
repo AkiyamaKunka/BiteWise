@@ -880,5 +880,6 @@
   "usualAgainBody": "你 {time} 已经记过「{name}」。",
   "usualAgainConfirm": "再记一次",
   "usualItemLineMacros": "{name}：AI {ai} → 你平时的 {mine}",
-  "usualUsedSnackSame": "已采用你平时的数值。"
+  "usualUsedSnackSame": "已采用你平时的数值。",
+  "usualLoggedLabel": "已记录"
 }

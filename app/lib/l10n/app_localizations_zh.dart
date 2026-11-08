@@ -2815,4 +2815,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get usualUsedSnackSame => '已采用你平时的数值。';
+
+  @override
+  String get usualLoggedLabel => '已记录';
 }

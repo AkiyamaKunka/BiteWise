@@ -464,7 +464,8 @@ class _UsualRow extends StatelessWidget {
                     child: Icon(Icons.check_circle,
                         key: const Key('usualLoggedCheck'),
                         size: 20,
-                        color: scheme.primary),
+                        color: scheme.primary,
+                        semanticLabel: l.usualLoggedLabel),
                   ),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_horiz),

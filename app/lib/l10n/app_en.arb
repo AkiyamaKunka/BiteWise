@@ -2803,5 +2803,9 @@
   "usualUsedSnackSame": "Used your usual numbers.",
   "@usualUsedSnackSame": {
     "description": "Snackbar after Use, with Undo, when the meal's total kcal is the same before and after (your numbers changed only its protein, carbs or fat)."
+  },
+  "usualLoggedLabel": "Logged",
+  "@usualLoggedLabel": {
+    "description": "What a screen reader says for the check on a My usual foods row logged since the screen opened."
   }
 }

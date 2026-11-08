@@ -9,7 +9,7 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 773 keys, and the generated classes say what
+/// - Both files have the same 774 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
 /// - Keys added after review (fix list U3, U5, C5) follow the same rules.
 library;
@@ -74,6 +74,9 @@ const Map<String, Map<String, String>> _newKeys = {
   // Added after review: an offer on the macros alone (U3).
   'usualItemLineMacros': {'name': 'String', 'ai': 'String', 'mine': 'String'},
   'usualUsedSnackSame': {},
+  // Added after review: what a screen reader says for the logged check
+  // (U5).
+  'usualLoggedLabel': {},
 };
 
 /// How many of [_newKeys] the spec's §6 lists; the rest came from review.
@@ -132,6 +135,7 @@ final Map<String, String Function(AppLocalizations l)> _render = {
   'usualItemLineMacros': (l) =>
       l.usualItemLineMacros('{name}', '{ai}', '{mine}'),
   'usualUsedSnackSame': (l) => l.usualUsedSnackSame,
+  'usualLoggedLabel': (l) => l.usualLoggedLabel,
   _changed: (l) => l.clearPlacesBody,
 };
 
@@ -172,15 +176,15 @@ void main() {
   final zh = _arb('zh');
   final checked = [..._newKeys.keys, _changed];
 
-  test('the spec lists 43 new keys, review added 2, and each has a '
+  test('the spec lists 43 new keys, review added 3, and each has a '
       'generated getter', () {
-    expect(_newKeys, hasLength(_specKeys + 2));
+    expect(_newKeys, hasLength(_specKeys + 3));
     expect(_render.keys.toSet(), {..._newKeys.keys, _changed});
   });
 
-  test('both files have the same 773 keys', () {
-    expect(_messageKeys(en), hasLength(773));
-    expect(_messageKeys(zh), hasLength(773));
+  test('both files have the same 774 keys', () {
+    expect(_messageKeys(en), hasLength(774));
+    expect(_messageKeys(zh), hasLength(774));
     expect(_messageKeys(zh).toSet(), _messageKeys(en).toSet());
   });
 
@@ -267,6 +271,9 @@ void main() {
     expect(zh['usualItemLineMacros'], isNot(contains('千卡')));
     expect(en['usualUsedSnackSame'], startsWith('Used your usual numbers'));
     expect(zh['usualUsedSnackSame'], startsWith('已采用你平时的数值'));
+    // The logged check says what the row's own lines say (usualLoggedToday).
+    expect(en['usualLoggedToday'], startsWith(en['usualLoggedLabel'] as String));
+    expect(zh['usualLoggedToday'], endsWith(zh['usualLoggedLabel'] as String));
   });
 
   test('the generated classes say what the ARB files say', () {
