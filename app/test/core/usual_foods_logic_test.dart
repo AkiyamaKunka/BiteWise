@@ -493,6 +493,40 @@ void main() {
           {'oatmeal': 'oat overnight'});
     });
 
+    test('the newer of the direct record and the alias target wins', () {
+      final a = learned(id: 1, it: renamed());
+      final b = meal(3, [renamed()],
+          date: '2026-11-04', source: MealSource.appPhoto, corrected: true);
+      // This morning's Use through the alias wrote the user's 350 on an
+      // AI-named row: a direct record under "oatmeal".
+      final used = meal(4, [
+        mine('Oatmeal (~260 g)', [350, 12, 50, 14],
+            at: '2026-11-07T13:00:00.000Z')
+      ], time: '07:00 AM', source: MealSource.appWatch, corrected: true);
+      // Later today the user sets new numbers for their overnight oats.
+      final newer = meal(5, [
+        mine('Overnight oats', [420, 14, 60, 16],
+            at: '2026-11-07T19:30:00.000Z', aiName: 'Oatmeal (~250 g)')
+      ], time: '01:30 PM', source: MealSource.appPhoto, corrected: true);
+      final p = photo(id: 6);
+      final o = offer([a, b, used, newer, p], p)!;
+      expect(
+          (
+            mine: o.items.single.mine.kcal,
+            learned: o.items.single.learnedName,
+            viaAlias: o.items.single.viaAlias,
+          ),
+          (mine: 420, learned: 'Overnight oats', viaAlias: true));
+      // And a direct record newer than the alias target still wins.
+      final usedLater = meal(4, [
+        mine('Oatmeal (~260 g)', [380, 12, 50, 14],
+            at: '2026-11-07T20:00:00.000Z')
+      ], time: '07:00 AM', source: MealSource.appWatch, corrected: true);
+      final o2 = offer([a, b, usedLater, newer, p], p)!;
+      expect((o2.items.single.mine.kcal, o2.items.single.viaAlias),
+          (380, false));
+    });
+
     test('an AI name renamed to two foods twice each gives no alias', () {
       Meal m(int id, String name, String date) => meal(
           id,

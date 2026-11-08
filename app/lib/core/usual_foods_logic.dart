@@ -478,19 +478,24 @@ final class UsualIndex {
   final Map<String, UsualGroup> groups;
 
   /// The record for name [key] that comes from a meal other than
-  /// [excludeMealId]: the direct record, else the record its confirmed
-  /// alias points to (`viaAlias`), else null. Numbers learned only from the
-  /// meal being offered are never offered back to it.
+  /// [excludeMealId]: the direct record or the record its confirmed alias
+  /// points to (`viaAlias`), the newer of the two when both exist (the
+  /// latest record wins: one Use through the alias leaves a direct copy,
+  /// and it must not hide the numbers the user sets later), else null.
+  /// Numbers learned only from the meal being offered are never offered
+  /// back to it.
   UsualRecordHit? recordFor(String key, {required int excludeMealId}) {
-    final direct = records[key];
-    if (direct != null && direct.mealId != excludeMealId) {
-      return (record: direct, viaAlias: false);
-    }
+    final d = records[key];
+    final direct = d != null && d.mealId != excludeMealId ? d : null;
     final target = aliases[key];
-    if (target == null) return null;
-    final viaAlias = records[target];
-    if (viaAlias == null || viaAlias.mealId == excludeMealId) return null;
-    return (record: viaAlias, viaAlias: true);
+    final t = target == null ? null : records[target];
+    final viaAlias = t != null && t.mealId != excludeMealId ? t : null;
+    if (viaAlias != null &&
+        (direct == null || _isLatestOver(viaAlias, direct))) {
+      return (record: viaAlias, viaAlias: true);
+    }
+    if (direct == null) return null;
+    return (record: direct, viaAlias: false);
   }
 }
 

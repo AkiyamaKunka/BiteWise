@@ -4,7 +4,7 @@
 // read, and usualLookupTakesIt (T31-T33, T41, the B part of T47).
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/usual_foods_logic.dart'
-    show usualHideId, UsualDecline;
+    show usualHideId, usualStamp, UsualDecline;
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
     show AssistMode, AssistSettingsView;
@@ -251,6 +251,36 @@ void main() {
           reason: 'still the hand-typed record, not photo A\'s AI macros '
               '(${rec.numbers})');
       expect(await usual.offerFor(dao.byId(b)), isNull);
+    });
+
+    test('the user\'s later numbers win over an earlier Use through an alias',
+        () async {
+      Map<String, dynamic> renamed(List<num> n, String at) =>
+          item('Overnight oats', n[0], p: n[1], c: n[2], f: n[3], user: {
+            ...mark(n, at: at),
+            'ai_name': 'Oatmeal (~250 g)',
+          });
+      // The same rename on 2 meals: a confirmed alias.
+      seed([renamed([350, 12, 50, 14], '2026-11-01T08:00:00.000Z')],
+          date: '2026-11-01', source: MealSource.appPhoto, corrected: true);
+      seed([renamed([350, 12, 50, 14], '2026-11-02T08:00:00.000Z')],
+          date: '2026-11-02', source: MealSource.appPhoto, corrected: true);
+      // This morning's photo is offered through the alias; Use.
+      final p1 = seed([item('Oatmeal (~260 g)', 300)], time: '07:00 AM');
+      final o1 = (await usual.offerFor(dao.byId(p1)))!;
+      expect(o1.items.single.viaAlias, isTrue);
+      expect((await usual.accept(p1, shown: o1)).status,
+          UsualAcceptStatus.written);
+      // An hour later the user sets new numbers for their overnight oats.
+      clock = DateTime(2026, 11, 7, 13, 30);
+      seed([renamed([420, 14, 60, 16], usualStamp(clock))],
+          time: '01:30 PM', source: MealSource.appPhoto, corrected: true);
+      signal.value++;
+      final p2 = seed([item('Oatmeal (~260 g)', 300)], time: '03:00 PM');
+      final o2 = (await usual.offerFor(dao.byId(p2)))!;
+      expect((o2.items.single.mine.kcal, o2.items.single.learnedName),
+          (420, 'Overnight oats'),
+          reason: 'the morning Use\'s copy must not hide the newer numbers');
     });
 
     test('a deleted meal is gone', () async {
