@@ -82,6 +82,20 @@ class MealItemDraft {
     this.carbs = '',
     this.fat = '',
   })  : stored = null,
+        _seed = null,
+        _loaded = null;
+
+  /// The first row "Add item" adds to a stored meal with no rows
+  /// ([MealDraft.addItem]): its fields are the totals above it, and [_seed]
+  /// holds the meal's stored totals.
+  MealItemDraft._seeded(
+    List<num> this._seed, {
+    required this.calories,
+    required this.protein,
+    required this.carbs,
+    required this.fat,
+  })  : name = '',
+        stored = null,
         _loaded = null;
 
   MealItemDraft._fromStored(Map<String, dynamic> m)
@@ -91,6 +105,7 @@ class MealItemDraft {
         carbs = _numText(m['carbs_g']),
         fat = _numText(m['fat_g']),
         stored = m,
+        _seed = null,
         _loaded = null {
     _loaded = (name, calories, protein, carbs, fat);
   }
@@ -104,6 +119,12 @@ class MealItemDraft {
   /// The stored item this row was loaded from; null for a row the user
   /// added.
   final Map<String, dynamic>? stored;
+
+  /// For the first row added to a STORED meal with no rows: the meal's
+  /// stored totals (kcal, protein, carbs, fat) the row was seeded with —
+  /// the AI's, not the user's. The row is the user's only once one of its
+  /// numbers differs from them. Null for every other row.
+  final List<num>? _seed;
 
   /// The five field texts as loaded, to tell an untouched row.
   (String, String, String, String, String)? _loaded;
@@ -147,7 +168,11 @@ class MealItemDraft {
   ///     normalized exactly as [toMap] writes them (a numeric string
   ///     becomes the number it already read as);
   ///   * a row the user ADDED is [toMap] plus `user {set: true, at: now,
-  ///     n: its four numbers, qty: 1}`: every number on it is the user's;
+  ///     n: its four numbers, qty: 1}`: every number on it is the user's —
+  ///     except the first row seeded from a loaded meal's totals
+  ///     ([MealDraft.addItem]) while it still holds them, and a row under
+  ///     [kUsualMinKcal] kcal (one left blank reads 0), which get no
+  ///     `user`;
   ///   * a stored row the user TOUCHED is [toMap] plus a `user` map: a new
   ///     `set`/`at`/`n` when any number differs numerically from the
   ///     stored row ("450" equals 450), else the stored ones while they
@@ -174,6 +199,14 @@ class MealItemDraft {
       out['fat_g'] as num,
     ];
     if (src == null) {
+      final seed = _seed;
+      // A row seeded from a stored meal's totals and never changed holds
+      // the meal's numbers, not the user's.
+      if (seed != null && !_differs(numbers, seed)) return out;
+      // A row whose numbers were left blank (all four read 0), or that is
+      // under the usual-foods minimum, says no number of the user's: a
+      // name-only "Toast" row must never teach 0 kcal toast.
+      if (numbers[0] < kUsualMinKcal) return out;
       out['user'] = {
         'set': true,
         'at': usualStamp(when),
@@ -189,10 +222,7 @@ class MealItemDraft {
       _storedNumber(src['carbs_g']),
       _storedNumber(src['fat_g']),
     ];
-    var changed = false;
-    for (var i = 0; i < 4; i++) {
-      if ((numbers[i] - storedNumbers[i]).abs() > 1e-9) changed = true;
-    }
+    final changed = _differs(numbers, storedNumbers);
     final storedUser = src['user'];
     if (changed) {
       user['set'] = true;
@@ -224,6 +254,14 @@ class MealItemDraft {
 
 /// Longest kept `user.ai_name`, in code points.
 const int kUsualAiNameMax = 80;
+
+/// Some of the four numbers differ numerically ("450" equals 450).
+bool _differs(List<num> a, List<num> b) {
+  for (var i = 0; i < 4; i++) {
+    if ((a[i] - b[i]).abs() > 1e-9) return true;
+  }
+  return false;
+}
 
 /// A stored number as the editor loaded it ([_numText]): a number, or a
 /// numeric string; anything else is 0, like a blank field.
@@ -284,6 +322,11 @@ class MealDraft {
   /// and until the read confirmed the row still matches this draft.
   String? expectedRaw;
 
+  /// The totals the meal was loaded with ([fromMeal]: a stored meal, or the
+  /// describe preview's model estimate), as the editor reads them; null for
+  /// a new hand-typed meal ([blank]), whose totals are all the user's.
+  List<num>? _loadedTotals;
+
   static MealDraft fromMeal(Meal meal) => MealDraft(
         description: mealDescriptionRaw(meal.analysis),
         dateIso: meal.date,
@@ -296,7 +339,15 @@ class MealDraft {
           for (final m in safeFoodItems(meal.analysis)) MealItemDraft.fromMap(m)
         ],
         base: Map<String, dynamic>.from(meal.analysis),
-      );
+      ).._loadedTotals = [
+          for (final k in const [
+            'total_calories',
+            'total_protein_g',
+            'total_carbs_g',
+            'total_fat_g',
+          ])
+            _storedNumber(meal.analysis[k]),
+        ];
 
   static MealDraft blank(DateTime now) => MealDraft(
         description: '',
@@ -316,11 +367,20 @@ class MealDraft {
   /// 2026-10-07: a hand-entered 450 kcal meal read 0 right after the tap).
   /// Later rows start blank — by then the totals belong to the rows, and a
   /// seeded row would double them.
+  ///
+  /// The seeded row is the user's (a usual-foods mark at save) on a new
+  /// hand-typed meal; on a loaded meal only once one of its numbers
+  /// differs from the totals the meal was loaded with, which are the AI's
+  /// (or the stored meal's), never typed in this session.
   MealItemDraft addItem() {
-    final it = items.isEmpty
-        ? MealItemDraft(
-            calories: calories, protein: protein, carbs: carbs, fat: fat)
-        : MealItemDraft();
+    final loaded = _loadedTotals;
+    final it = items.isNotEmpty
+        ? MealItemDraft()
+        : loaded != null
+            ? MealItemDraft._seeded(loaded,
+                calories: calories, protein: protein, carbs: carbs, fat: fat)
+            : MealItemDraft(
+                calories: calories, protein: protein, carbs: carbs, fat: fat);
     items.add(it);
     return it;
   }

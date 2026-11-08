@@ -478,19 +478,24 @@ final class UsualIndex {
   final Map<String, UsualGroup> groups;
 
   /// The record for name [key] that comes from a meal other than
-  /// [excludeMealId]: the direct record, else the record its confirmed
-  /// alias points to (`viaAlias`), else null. Numbers learned only from the
-  /// meal being offered are never offered back to it.
+  /// [excludeMealId]: the direct record or the record its confirmed alias
+  /// points to (`viaAlias`), the newer of the two when both exist (the
+  /// latest record wins: one Use through the alias leaves a direct copy,
+  /// and it must not hide the numbers the user sets later), else null.
+  /// Numbers learned only from the meal being offered are never offered
+  /// back to it.
   UsualRecordHit? recordFor(String key, {required int excludeMealId}) {
-    final direct = records[key];
-    if (direct != null && direct.mealId != excludeMealId) {
-      return (record: direct, viaAlias: false);
-    }
+    final d = records[key];
+    final direct = d != null && d.mealId != excludeMealId ? d : null;
     final target = aliases[key];
-    if (target == null) return null;
-    final viaAlias = records[target];
-    if (viaAlias == null || viaAlias.mealId == excludeMealId) return null;
-    return (record: viaAlias, viaAlias: true);
+    final t = target == null ? null : records[target];
+    final viaAlias = t != null && t.mealId != excludeMealId ? t : null;
+    if (viaAlias != null &&
+        (direct == null || _isLatestOver(viaAlias, direct))) {
+      return (record: viaAlias, viaAlias: true);
+    }
+    if (direct == null) return null;
+    return (record: direct, viaAlias: false);
   }
 }
 
@@ -537,8 +542,11 @@ String? _nonEmptyString(Object? v, int max) {
 
 /// The learned record an item of meal [m] gives, or null (spec §3.1
 /// "What counts as yours"): (a) a valid mark on a trusted meal, or (b) an
-/// unmarked item of a hand-typed meal; never published, never from a
-/// meal with a leftover block (the caller checks), and qty exactly 1.
+/// unmarked item of a hand-typed meal never corrected since (a fix by
+/// chat keeps the source and drops every mark, and its model re-estimated
+/// every item); never published, never from a meal with a leftover block
+/// (the caller checks), qty exactly 1, and at least [kUsualMinKcal]
+/// kcal.
 UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     DateTime now) {
   if (item['published'] == true) return null;
@@ -566,6 +574,7 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     qty = usualItemQty(item);
   } else if ((m.source == MealSource.appManual ||
           m.source == MealSource.appManualPhoto) &&
+      !m.corrected &&
       user is! Map) {
     final parsed = DateTime.tryParse(m.timestamp);
     if (parsed == null) return null;
@@ -577,6 +586,9 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     return null;
   }
   if (qty != 1) return null;
+  // Under the offer minimum (a row left blank reads 0): no number of the
+  // user's, and it must not shadow their real record or be re-logged.
+  if (numbers.kcal < kUsualMinKcal) return null;
   final kcalOnly = numbers.kcal >= kUsualKcalOnlyMin &&
       numbers.p == 0 &&
       numbers.c == 0 &&
@@ -786,7 +798,19 @@ final class UsualOfferItem {
   final DateTime mineAt;
   final int fromMealId;
   final String fromDate;
+
+  /// Offered for a macro difference alone: [mine]'s kcal is within the
+  /// offer's kcal threshold of [ai]'s (the same rule the offer gate uses),
+  /// so a line that names only kcal would read "350 → 350". Never true for
+  /// a kcal-only record (macros are ignored there).
+  bool get macroOnly => !usualKcalDiffWorthIt(ai.kcal, mine.kcal);
 }
+
+/// Whether [mine] kcal differs from the AI's [ai] kcal by enough to offer
+/// (spec §3.3 item gate 9): by at least max([kUsualMinDiffKcal],
+/// [kUsualMinDiffShare] of the AI's).
+bool usualKcalDiffWorthIt(num ai, num mine) =>
+    (mine - ai).abs() >= _max(kUsualMinDiffKcal, kUsualMinDiffShare * ai);
 
 /// The user's numbers offered for one meal ([usualOfferFor]). Never stored.
 final class UsualOffer {
@@ -881,8 +905,7 @@ UsualOffer? usualOfferFor(Meal meal, UsualIndex index,
     if (ai.kcal < kUsualMinKcal || mine.kcal < kUsualMinKcal) continue;
     final ratio = mine.kcal / ai.kcal;
     if (ratio < kUsualRatioMin || ratio > kUsualRatioMax) continue;
-    final kcalDiff = (mine.kcal - ai.kcal).abs() >=
-        _max(kUsualMinDiffKcal, kUsualMinDiffShare * ai.kcal);
+    final kcalDiff = usualKcalDiffWorthIt(ai.kcal, mine.kcal);
     final macroDiff = !r.kcalOnly &&
         ((mine.p - ai.p).abs() >= kUsualMinMacroDiffG ||
             (mine.c - ai.c).abs() >= kUsualMinMacroDiffG ||
@@ -954,10 +977,12 @@ void _moveTotals(Map<String, dynamic> out, List<num> delta) {
 }
 
 /// [analysis] with [offer] used (spec §3.5): every offered item's numbers
-/// become `mine` (only kcal for a kcal-only record) and gain `user {set,
-/// at: now, n: the written numbers, qty: 1}`, keeping an existing
-/// `ai_name`; the totals move by the delta. Names, the description and
-/// every other key stay. Null — write nothing — on a meal with a leftover
+/// become `mine` and gain `user {set, at: now, n: the written numbers,
+/// qty: 1}`, keeping an existing `ai_name`; for a kcal-only record only
+/// kcal changes and no `set` is written (the AI's macros are not the
+/// user's): `user` is then `{qty: 1, ai_name}`, or none without an old
+/// name. The totals move by the delta. Names, the description and every
+/// other key stay. Null — write nothing — on a meal with a leftover
 /// block, or unless every offered item still holds the AI numbers shown.
 Map<String, dynamic>? applyUsualOffer(
     Map<String, dynamic> analysis, UsualOffer offer,
@@ -987,13 +1012,25 @@ Map<String, dynamic>? applyUsualOffer(
     }
     final old = item['user'];
     final aiName = old is Map ? old['ai_name'] : null;
-    item['user'] = {
-      'set': true,
-      'at': usualStamp(now),
-      'n': [written.kcal, written.p, written.c, written.f],
-      'qty': 1,
-      if (aiName is String && aiName.trim().isNotEmpty) 'ai_name': aiName,
-    };
+    final keepName = aiName is String && aiName.trim().isNotEmpty;
+    if (it.kcalOnly) {
+      // Mixed numbers (the user's kcal, the AI's macros): no `set` mark
+      // vouches for them, as for the kcal-only re-log. Only the parts that
+      // vouch for no number stay.
+      if (keepName) {
+        item['user'] = {'qty': 1, 'ai_name': aiName};
+      } else {
+        item.remove('user');
+      }
+    } else {
+      item['user'] = {
+        'set': true,
+        'at': usualStamp(now),
+        'n': [written.kcal, written.p, written.c, written.f],
+        'qty': 1,
+        if (keepName) 'ai_name': aiName,
+      };
+    }
     delta[0] += written.kcal - cur.kcal;
     delta[1] += written.p - cur.p;
     delta[2] += written.c - cur.c;
@@ -1143,11 +1180,23 @@ final class UsualMeal {
     required this.lastTime,
     required this.loggedTodayTime,
     required this.numbers,
+    this.mergedHideIds = const {},
   });
 
   /// [usualMealKey].
   final String key;
   String get hideId => usualHideId(key);
+
+  /// The hide ids of the meal keys a confirmed alias merged into this row
+  /// (its meals' keys read without aliases, other than [key]): a meal the
+  /// user hid before the alias was confirmed stays hidden after it, and
+  /// Show again clears these too.
+  final Set<String> mergedHideIds;
+
+  /// Hidden by [choices]: its own hide id, or one of [mergedHideIds].
+  bool hiddenIn(UsualChoicesView choices) =>
+      choices.isHidden(hideId) || mergedHideIds.any(choices.isHidden);
+
   final String title;
 
   /// The meal a log copies (the most recent without a leftover block).
@@ -1232,6 +1281,14 @@ List<UsualMeal> _listable(UsualIndex index, DateTime now) {
     }
     if (dates.length < kUsualListMinDays) continue;
     final written = _logAnalysis(template, index, now);
+    final merged = index.aliases.isEmpty
+        ? const <String>{}
+        : {
+            for (final m in g.meals)
+              if (_mealKey(m.analysis, const {}) case final k?
+                  when k != g.key)
+                usualHideId(k),
+          };
     out.add(UsualMeal(
       key: g.key,
       title: usualMealTitle(template.analysis),
@@ -1248,6 +1305,7 @@ List<UsualMeal> _listable(UsualIndex index, DateTime now) {
         c: written['total_carbs_g'] as num,
         f: written['total_fat_g'] as num,
       ),
+      mergedHideIds: merged,
     ));
   }
   return out;
@@ -1255,17 +1313,17 @@ List<UsualMeal> _listable(UsualIndex index, DateTime now) {
 
 /// My usual foods (spec §4.2): food meals of any source logged on at
 /// least [kUsualListMinDays] distinct days of the last 90, hidden ones
-/// left out, then at most [kUsualListMax]. "Around this time" (within
-/// ±2 h of now's clock, circular, on 2 or more of the last 30 days) comes
-/// first, by that day count; the rest by days in 30, days in 90, recency
-/// and title.
+/// ([UsualMeal.hiddenIn]) left out, then at most [kUsualListMax].
+/// "Around this time" (within ±2 h of now's clock, circular, on 2 or more
+/// of the last 30 days) comes first, by that day count; the rest by days
+/// in 30, days in 90, recency and title.
 UsualList usualMealList(UsualIndex index,
     {required DateTime now, required UsualChoicesView choices}) {
   var hidden = 0;
   final around = <UsualMeal>[];
   final more = <UsualMeal>[];
   for (final m in _listable(index, now)) {
-    if (choices.isHidden(m.hideId)) {
+    if (m.hiddenIn(choices)) {
       hidden++;
     } else if (m.aroundDays >= kUsualAroundMinDays) {
       around.add(m);
@@ -1288,7 +1346,7 @@ List<UsualMeal> usualHiddenMeals(UsualIndex index,
         {required DateTime now, required UsualChoicesView choices}) =>
     [
       for (final m in _listable(index, now))
-        if (choices.isHidden(m.hideId)) m,
+        if (m.hiddenIn(choices)) m,
     ]..sort((a, b) => a.title.compareTo(b.title));
 
 // ─── Log again: the analysis written (spec §4.4) ───────────────────────

@@ -311,6 +311,38 @@ void main() {
       expect(await s.jobs(), isEmpty);
     });
 
+    test('a Search again job says so; only the editor\'s job can', () async {
+      final s = state();
+      AssistJob job({required bool manual}) => AssistJob(
+        jobId: 'job_fresh_0001',
+        reqHash: '0123456789abcdef',
+        at: now,
+        nextAt: now,
+        manual: manual,
+        fresh: true,
+      );
+      expect(await s.putJob(1, job(manual: true)), isTrue);
+      expect(await s.putJob(2, job(manual: false)), isTrue);
+      final jobs = await s.jobs();
+      expect((jobs[1]!.manual, jobs[1]!.fresh), (true, true));
+      expect((jobs[2]!.manual, jobs[2]!.fresh), (false, false));
+      final stored = {
+        for (final e in (doc(assistJobsDocument)['jobs'] as List).cast<Map>())
+          e['meal_id']: e,
+      };
+      expect(stored[1]!['fresh'], isTrue);
+      expect(stored[2]!.containsKey('fresh'), isFalse);
+      // A job written before the key existed reads as no Search again.
+      await s.putJob(3, AssistJob(
+        jobId: 'job_fresh_0003',
+        reqHash: '0123456789abcdef',
+        at: now,
+        nextAt: now,
+        manual: true,
+      ));
+      expect((await s.jobs())[3]!.fresh, isFalse);
+    });
+
     test('AssistPlaceContext.within keeps what the request carries', () {
       const place = AssistPlaceContext(
         chains: ['mcdonalds', 'starbucks'],
@@ -414,6 +446,27 @@ void main() {
       now = fetched.add(const Duration(days: 366));
       expect(await s.cachedLookup(found), isNull,
           reason: 'measured from at, not used_at');
+    });
+
+    // An automatic lookup touches a negative hit too, so a life measured
+    // from used_at would keep a "not published" answer alive for as long
+    // as it keeps being hit.
+    test('a used negative answer is still gone 31 days after its fetch',
+        () async {
+      final s = state();
+      final key = 'b' * 32;
+      final fetched = now;
+      expect(await s.putCachedLookup(entry(key, status: 'not_published')),
+          isTrue);
+      // Hit (and touched) on days 20 and 29.
+      now = fetched.add(const Duration(days: 20));
+      expect(await s.touchCachedLookup(key), isTrue);
+      now = fetched.add(const Duration(days: 29));
+      expect(await s.touchCachedLookup(key), isTrue);
+      expect((await s.cachedLookup(key))!.usedAt, now);
+      now = fetched.add(const Duration(days: 31));
+      expect(await s.cachedLookup(key), isNull,
+          reason: '30 days from at, not from used_at');
     });
 
     // Usual foods D3: the least recently used goes first, so an answer

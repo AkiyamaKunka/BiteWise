@@ -485,6 +485,13 @@ def test_policy_usual_foods_and_saved_answers():
             % (usual_zh, zha["usualCardTitle"])) in zh_phone
     assert "or by tapping **%s**" % ena["usualChipUse"] in en_phone
     assert "或点按**「%s」**" % zha["usualChipUse"] in zh_phone
+    # What the mark holds: that you set the numbers and, for a food you
+    # renamed, the AI's first name for it (user.ai_name).
+    assert ("The meal keeps a small mark on that food saying you set them "
+            "and, for a food you renamed, the name the AI first gave it.") \
+        in en_phone
+    assert ("这一餐会在该食物上保存一个小标记，说明数值是你设定的，"
+            "以及你改过名的食物最初由 AI 给出的名称。") in zh_phone
     assert "Working them out sends nothing: no AI call, no lookup." \
         in en_phone
     assert "算出这些内容不会发送任何东西：不调用 AI，也不查询。" in zh_phone

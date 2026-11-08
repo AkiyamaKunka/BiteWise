@@ -4,15 +4,17 @@
 // read, and usualLookupTakesIt (T31-T33, T41, the B part of T47).
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/usual_foods_logic.dart'
-    show usualHideId, UsualDecline;
+    show usualHideId, usualStamp, UsualDecline;
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
     show AssistMode, AssistSettingsView;
+import 'package:calorie_tracker/services/nl/executor.dart';
 import 'package:calorie_tracker/services/usual/usual_foods.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../nl/fakes.dart' show FakeAnalyzer, testSettings;
 import '../support/fake_meals_dao.dart';
 
 class _Dao extends BaseFakeDao {
@@ -227,6 +229,60 @@ void main() {
       expect(dao.updates, hasLength(1));
     });
 
+    test('Use of a kcal-only offer does not make the AI macros yours',
+        () async {
+      // A hand-typed latte, kcal only (macros left blank): a kcal-only
+      // record.
+      final typed = seed([item('Oat milk latte', 190, p: 0, c: 0, f: 0)],
+          date: '2026-11-03', source: MealSource.appManual);
+      // Photo A: AI 120 kcal, 4/15/5. Use.
+      final a = seed([item('Oat milk latte', 120, p: 4, c: 15, f: 5)],
+          time: '08:00 AM');
+      final offerA = (await usual.offerFor(dao.byId(a)))!;
+      expect(offerA.items.single.kcalOnly, isTrue);
+      expect((await usual.accept(a, shown: offerA)).status,
+          UsualAcceptStatus.written);
+      // Photo B: AI 185 kcal, 7/22/7. Against the kcal-only record the kcal
+      // differs by 5 (< 20) and macros are ignored: no offer.
+      final b = seed([item('Oat milk latte', 185, p: 7, c: 22, f: 7)],
+          time: '03:00 PM');
+      final rec = (await usual.index()).records['latte milk oat']!;
+      expect((rec.mealId, rec.kcalOnly), (typed, true),
+          reason: 'still the hand-typed record, not photo A\'s AI macros '
+              '(${rec.numbers})');
+      expect(await usual.offerFor(dao.byId(b)), isNull);
+    });
+
+    test('the user\'s later numbers win over an earlier Use through an alias',
+        () async {
+      Map<String, dynamic> renamed(List<num> n, String at) =>
+          item('Overnight oats', n[0], p: n[1], c: n[2], f: n[3], user: {
+            ...mark(n, at: at),
+            'ai_name': 'Oatmeal (~250 g)',
+          });
+      // The same rename on 2 meals: a confirmed alias.
+      seed([renamed([350, 12, 50, 14], '2026-11-01T08:00:00.000Z')],
+          date: '2026-11-01', source: MealSource.appPhoto, corrected: true);
+      seed([renamed([350, 12, 50, 14], '2026-11-02T08:00:00.000Z')],
+          date: '2026-11-02', source: MealSource.appPhoto, corrected: true);
+      // This morning's photo is offered through the alias; Use.
+      final p1 = seed([item('Oatmeal (~260 g)', 300)], time: '07:00 AM');
+      final o1 = (await usual.offerFor(dao.byId(p1)))!;
+      expect(o1.items.single.viaAlias, isTrue);
+      expect((await usual.accept(p1, shown: o1)).status,
+          UsualAcceptStatus.written);
+      // An hour later the user sets new numbers for their overnight oats.
+      clock = DateTime(2026, 11, 7, 13, 30);
+      seed([renamed([420, 14, 60, 16], usualStamp(clock))],
+          time: '01:30 PM', source: MealSource.appPhoto, corrected: true);
+      signal.value++;
+      final p2 = seed([item('Oatmeal (~260 g)', 300)], time: '03:00 PM');
+      final o2 = (await usual.offerFor(dao.byId(p2)))!;
+      expect((o2.items.single.mine.kcal, o2.items.single.learnedName),
+          (420, 'Overnight oats'),
+          reason: 'the morning Use\'s copy must not hide the newer numbers');
+    });
+
     test('a deleted meal is gone', () async {
       final id = learnedAndPhoto();
       final shown = (await usual.offerFor(dao.byId(id)))!;
@@ -323,6 +379,60 @@ void main() {
     });
   });
 
+  group('a fix by chat teaches nothing (spec §3.1, P10)', () {
+    /// Applies a chat correction of meal [id] to [analysis], as the Fix
+    /// screen does: the executor stores the text model's analysis.
+    Future<void> chatFix(int id, Map<String, dynamic> analysis) async {
+      final exec = createExecutor(dao, FakeAnalyzer(), await testSettings())
+          as DefaultNlExecutor;
+      final recent = await dao.recentMeals();
+      await exec.executeParsed({
+        'intent': 'correction',
+        'meal_index': recent.indexWhere((m) => m.id == id),
+        'analysis': analysis,
+      }, 'it was a bigger bowl', recent);
+    }
+
+    test('the model\'s numbers on a hand-typed meal are neither learned nor '
+        'offered', () async {
+      final typed = seed([item('Oatmeal', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-03', source: MealSource.appManual);
+      await chatFix(
+          typed,
+          analysisOf([
+            item('Oatmeal', 520, p: 18, c: 80, f: 16),
+            item('Banana', 105, p: 1, c: 27, f: 0),
+          ]));
+      final fixed = dao.byId(typed);
+      expect((fixed.source, fixed.corrected), (MealSource.appManual, true),
+          reason: 'the fix keeps the source');
+      final index = await usual.index();
+      expect((index.records['oatmeal'], index.records['banana']),
+          (null, null));
+      final photo = seed([item('Oatmeal (~260 g)', 300)]);
+      expect(await usual.offerFor(dao.byId(photo)), isNull);
+    });
+
+    test('a re-log of the fixed meal never stamps the model\'s numbers as '
+        'yours', () async {
+      seed([item('Oatmeal', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-03', source: MealSource.appManual);
+      final typed = seed([item('Oatmeal', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-04', source: MealSource.appManual);
+      await chatFix(
+          typed, analysisOf([item('Oatmeal', 520, p: 18, c: 80, f: 16)]));
+      final row = (await usual.frequentMeals()).more.single;
+      expect(row.template.id, typed);
+      final done = (await usual.logAgain(row))!;
+      final it =
+          (dao.byId(done.mealId).analysis['food_items'] as List).single as Map;
+      // The numbers the user typed on Nov 3 replace the template's; the
+      // chat model's 520 is no record, so no mark vouches for it.
+      expect(it['estimated_calories'], 350, reason: 'the re-log wrote $it');
+      expect((it['user'] as Map)['n'], [350, 12, 50, 14]);
+    });
+  });
+
   group('My usual foods (T41)', () {
     UsualMeal row(Map<String, dynamic> analysis) => UsualMeal(
         key: 'k',
@@ -360,6 +470,34 @@ void main() {
           ['Oat milk latte']);
       await usual.unhide(m);
       expect((await usual.frequentMeals()).hiddenCount, 0);
+    });
+
+    test('Show again shows a hidden meal an alias merged since', () async {
+      seed([item('Oatmeal (~260 g)', 300)],
+          date: '2026-11-01', desc: 'Oatmeal');
+      seed([item('Oatmeal (~260 g)', 300)],
+          date: '2026-11-05', desc: 'Oatmeal');
+      await usual.hide((await usual.frequentMeals()).more.single);
+      // The same rename on two meals: oatmeal is now overnight oats.
+      for (final date in ['2026-11-02', '2026-11-03']) {
+        seed([
+          item('Overnight oats', 350, p: 12, c: 50, f: 14, user: {
+            ...mark([350, 12, 50, 14], at: '${date}T14:00:00.000Z'),
+            'ai_name': 'Oatmeal (~250 g)',
+          })
+        ], date: date, source: MealSource.appPhoto, corrected: true,
+            desc: 'Overnight oats');
+      }
+      signal.value++;
+      final list = await usual.frequentMeals();
+      expect((list.isEmpty, list.hiddenCount), (true, 1));
+      final merged = (await usual.hiddenMeals()).single;
+      await usual.unhide(merged);
+      final shown = await usual.frequentMeals();
+      expect([for (final m in [...shown.around, ...shown.more]) m.key],
+          ['oat overnight']);
+      expect(shown.hiddenCount, 0);
+      expect(await usual.hiddenMeals(), isEmpty);
     });
 
     test('logAgain saves one app_repeat meal now, with no photo and no '

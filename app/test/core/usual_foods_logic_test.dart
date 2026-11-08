@@ -428,6 +428,41 @@ void main() {
           reason: 'an unmarked hand-typed row dates from the meal');
     });
 
+    test('a hand-typed meal fixed by chat teaches only its marked rows', () {
+      // A chat fix keeps the source and drops every mark, and the text
+      // model re-estimated every item: its unmarked rows are not yours.
+      final chatFixed = meal(1, [
+        item('Oatmeal', 520, p: 18, c: 80, f: 16),
+        item('Banana', 105, p: 1, c: 27, f: 0),
+      ], date: '2026-11-04', source: MealSource.appManual, corrected: true);
+      final chatFixedPhoto = meal(2, [item('Dal', 320, p: 16, c: 40, f: 9)],
+          date: '2026-11-04',
+          source: MealSource.appManualPhoto,
+          corrected: true);
+      // An editor save of such a meal marks the rows the user set.
+      final edited = meal(3, [mine('Toast with jam', [210, 5, 38, 4])],
+          date: '2026-11-04', source: MealSource.appManual, corrected: true);
+      final index =
+          buildUsualIndex([chatFixed, chatFixedPhoto, edited], now: now);
+      expect(index.records.keys.toSet(), {'jam toast'});
+    });
+
+    test('a row under 10 kcal is no record, so it never shadows or re-logs',
+        () {
+      // A blank row on a new hand-typed meal is stored unmarked as 0/0/0/0;
+      // a marked 5 kcal row is under the offer minimum too.
+      final blank = meal(1, [item('Toast', 0, p: 0, c: 0, f: 0)],
+          date: '2026-11-04', source: MealSource.appManual);
+      final tiny = meal(2, [mine('Black coffee', [5, 0, 1, 0])],
+          date: '2026-11-04', corrected: true);
+      expect(buildUsualIndex([blank, tiny], now: now).records, isEmpty);
+      // The user's real toast from earlier still stands behind the blank.
+      final real = meal(3, [mine('Toast', [120, 4, 20, 2])],
+          date: '2026-11-02', corrected: true);
+      final r = buildUsualIndex([real, blank], now: now).records['toast']!;
+      expect((r.mealId, r.numbers.kcal), (3, 120));
+    });
+
     test('kcal-only at kcal >= 50 with zero macros (P8)', () {
       final index = buildUsualIndex([
         meal(1, [item('Cola', 140, p: 0, c: 0, f: 0)],
@@ -472,6 +507,71 @@ void main() {
       expect(o.items.single.mine, (kcal: 350, p: 12, c: 50, f: 14));
       expect(buildUsualIndex([a, b], now: now).aliases,
           {'oatmeal': 'oat overnight'});
+    });
+
+    test('the newer of the direct record and the alias target wins', () {
+      final a = learned(id: 1, it: renamed());
+      final b = meal(3, [renamed()],
+          date: '2026-11-04', source: MealSource.appPhoto, corrected: true);
+      // This morning's Use through the alias wrote the user's 350 on an
+      // AI-named row: a direct record under "oatmeal".
+      final used = meal(4, [
+        mine('Oatmeal (~260 g)', [350, 12, 50, 14],
+            at: '2026-11-07T13:00:00.000Z')
+      ], time: '07:00 AM', source: MealSource.appWatch, corrected: true);
+      // Later today the user sets new numbers for their overnight oats.
+      final newer = meal(5, [
+        mine('Overnight oats', [420, 14, 60, 16],
+            at: '2026-11-07T19:30:00.000Z', aiName: 'Oatmeal (~250 g)')
+      ], time: '01:30 PM', source: MealSource.appPhoto, corrected: true);
+      final p = photo(id: 6);
+      final o = offer([a, b, used, newer, p], p)!;
+      expect(
+          (
+            mine: o.items.single.mine.kcal,
+            learned: o.items.single.learnedName,
+            viaAlias: o.items.single.viaAlias,
+          ),
+          (mine: 420, learned: 'Overnight oats', viaAlias: true));
+      // And a direct record newer than the alias target still wins.
+      final usedLater = meal(4, [
+        mine('Oatmeal (~260 g)', [380, 12, 50, 14],
+            at: '2026-11-07T20:00:00.000Z')
+      ], time: '07:00 AM', source: MealSource.appWatch, corrected: true);
+      final o2 = offer([a, b, usedLater, newer, p], p)!;
+      expect((o2.items.single.mine.kcal, o2.items.single.viaAlias),
+          (380, false));
+    });
+
+    test('one rename plus its re-log confirms no alias', () {
+      // P4/D24: a re-log copies the rename it was logged from; it is not a
+      // second rename.
+      final typed = meal(1, [item('Overnight oats', 350, p: 12, c: 50, f: 14)],
+          date: '2026-11-02', source: MealSource.appManual);
+      final renamedOnce = meal(2, [renamed()],
+          date: '2026-11-03', source: MealSource.appPhoto, corrected: true);
+      final index = buildUsualIndex([typed, renamedOnce], now: now);
+      final row = usualMealList(index,
+              now: now, choices: UsualChoicesView.empty)
+          .more
+          .single;
+      expect(row.template.id, 2);
+      final relog = Meal(
+          id: 3,
+          date: today,
+          time: '12:30 PM',
+          timestamp: '${today}T12:30:00.000',
+          source: MealSource.appRepeat,
+          analysis: usualLogAnalysis(row, index, now: now));
+      expect(
+          ((relog.analysis['food_items'] as List).single as Map)['user']
+              ['ai_name'],
+          'Oatmeal (~250 g)',
+          reason: 'the re-log carries the rename');
+      expect(buildUsualIndex([typed, renamedOnce, relog], now: now).aliases,
+          isEmpty);
+      expect(offer([typed, renamedOnce, relog, photo()], photo()), isNull,
+          reason: 'no alias, so the AI-named photo gets nothing');
     });
 
     test('an AI name renamed to two foods twice each gives no alias', () {
@@ -708,6 +808,29 @@ void main() {
           reason: 'a 10 kcal difference, and the macro trigger is off');
     });
 
+    test('macroOnly: offered on a macro difference alone, kcal under the '
+        'threshold', () {
+      // 305 vs 300 kcal is under max(20, 10 %); protein 25 vs 10 g is not.
+      final macro = offer([
+        learned(it: mine('Oatmeal (~250 g)', [305, 25, 30, 6])),
+        photo(),
+      ], photo())!;
+      expect(macro.items.single.macroOnly, isTrue);
+      expect(offer([learned(), photo()], photo())!.items.single.macroOnly,
+          isFalse);
+      // The kcal threshold is the gate's own: 30 kcal on a 300 kcal item.
+      final edge = offer([
+        learned(it: mine('Oatmeal (~250 g)', [330, 25, 30, 6])),
+        photo(),
+      ], photo())!;
+      expect(edge.items.single.macroOnly, isFalse);
+      final under = offer([
+        learned(it: mine('Oatmeal (~250 g)', [329, 25, 30, 6])),
+        photo(),
+      ], photo())!;
+      expect(under.items.single.macroOnly, isTrue);
+    });
+
     test('several items are offered together, indices from safeFoodItems', () {
       final both = meal(1, [
         mine('Oatmeal (~250 g)', [350, 12, 50, 14]),
@@ -792,7 +915,11 @@ void main() {
           reason: 'the input is never edited in place');
     });
 
-    test('a kcal-only record changes only kcal', () {
+    test('a kcal-only record changes only kcal, and writes no set mark', () {
+      // Updated on purpose (fix D2): a set mark here vouched for the AI's
+      // macros as the user's, so the next record was no longer kcal-only
+      // and those macros were offered later. Like the kcal-only re-log,
+      // Use keeps only what vouches for no number.
       final m = photo();
       final o = offer([learned(it: mine('Oatmeal (~250 g)', [350, 0, 0, 0])), m],
           m)!;
@@ -800,8 +927,22 @@ void main() {
       final it = (out['food_items'] as List).single as Map;
       expect(it['estimated_calories'], 350);
       expect([it['protein_g'], it['carbs_g'], it['fat_g']], [10, 54, 6]);
-      expect((it['user'] as Map)['n'], [350, 10, 54, 6]);
+      expect(it.containsKey('user'), isFalse);
       expect(out['total_protein_g'], 10);
+      final undo = UsualUndo(before: m.analysis, after: out, indices: [0]);
+      expect(revertUsualOffer(out, undo), m.analysis);
+    });
+
+    test('a kcal-only Use keeps the AI\'s old name, with no set', () {
+      final m = mismatched();
+      final o = offer([learned(it: mine('Oatmeal (~250 g)', [350, 0, 0, 0])), m],
+          m)!;
+      expect(o.items.single.kcalOnly, isTrue);
+      final out = applyUsualOffer(m.analysis, o, now: at)!;
+      final it = (out['food_items'] as List)[0] as Map;
+      expect(it['estimated_calories'], 350);
+      expect(it['user'], {'qty': 1, 'ai_name': 'Porridge'});
+      expect(usualMarkValid(it, at), isFalse);
     });
 
     test('null on a leftover meal, or once the shown AI numbers moved', () {
@@ -974,6 +1115,50 @@ void main() {
       expect([for (final m in usualHiddenMeals(index, now: now, choices: choices))
         m.title], [hide.title]);
       expect(hide.hideId, matches(RegExp(r'^[0-9a-f]{16}$')));
+    });
+
+    test('a hidden meal stays hidden when an alias is confirmed later', () {
+      Meal oats(int id, String date) => meal(
+          id, [item('Oatmeal (~260 g)', 300)],
+          date: date, description: 'Oatmeal');
+      Meal renamed(int id, String date) => meal(
+          id,
+          [
+            mine('Overnight oats', [350, 12, 50, 14],
+                at: '${date}T14:00:00.000Z', aiName: 'Oatmeal (~250 g)')
+          ],
+          date: date,
+          time: '08:00 AM',
+          source: MealSource.appPhoto,
+          corrected: true,
+          description: 'Overnight oats');
+      final before = [oats(1, '2026-11-01'), oats(2, '2026-11-05')];
+      final i1 = buildUsualIndex(before, now: now);
+      final row = usualMealList(i1, now: now, choices: UsualChoicesView.empty)
+          .more
+          .single;
+      final hidden = UsualChoicesView(hidden: {row.hideId});
+      expect(usualMealList(i1, now: now, choices: hidden).isEmpty, isTrue);
+      // Later the same rename on two meals confirms oatmeal -> overnight
+      // oats, and the hidden group merges into a new meal key.
+      final after = [
+        ...before,
+        renamed(3, '2026-11-02'),
+        renamed(4, '2026-11-03'),
+      ];
+      final i2 = buildUsualIndex(after, now: now);
+      expect(i2.aliases, {'oatmeal': 'oat overnight'});
+      final list = usualMealList(i2, now: now, choices: hidden);
+      final sheet = usualHiddenMeals(i2, now: now, choices: hidden);
+      expect([for (final m in [...list.around, ...list.more]) m.title],
+          isEmpty,
+          reason: 'the hidden Oatmeal row came back under a new key');
+      expect((hiddenCount: list.hiddenCount, sheet: sheet.length),
+          (hiddenCount: 1, sheet: 1),
+          reason: 'the count and the Hidden foods sheet agree');
+      expect(sheet.single.mergedHideIds, {row.hideId});
+      // With no alias a row merges nothing.
+      expect(row.mergedHideIds, isEmpty);
     });
 
     test('"Logged today at" comes from today\'s latest log', () {

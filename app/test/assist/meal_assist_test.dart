@@ -255,6 +255,13 @@ class _HookStore extends LocalNoBackupStore {
     return super.read(name, version: version);
   }
 
+  /// Documents whose delete fails (a disk error), leaving them in place.
+  final Set<String> failDeletes = {};
+
+  @override
+  Future<bool> delete(String name) async =>
+      failDeletes.contains(name) ? false : super.delete(name);
+
   @override
   Future<bool> write(
     String name,
@@ -2747,6 +2754,26 @@ void main() {
       );
     });
 
+    // Usual foods D2 / spec §1: an answer that found nothing is still kept
+    // 30 days, and it answers the next automatic lookup of the same items
+    // with no call.
+    test('an automatic lookup is answered by a saved negative answer',
+        () async {
+      // Fetched a day ago (a negative lives 30 days).
+      final at = h.now.subtract(const Duration(days: 1));
+      final key = await _saved(h, status: 'not_published', at: at);
+      final id = h.add(_bigMac());
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      final block = h.analysisOf(id)['assist'] as Map;
+      expect(block['status'], 'not_published');
+      expect(block['fetched_on'], isoDate(at.toLocal()));
+      final entry = (await h.state.cachedLookup(key))!;
+      expect(entry.usedAt.isAtSameMomentAs(h.now), isTrue, reason: 'a use');
+      expect(entry.at.isAtSameMomentAs(at), isTrue);
+    });
+
     // PROBE3 kept: an answer that found nothing never answers the editor.
     test('a saved not_published answer is not used: the editor asks',
         () async {
@@ -2826,6 +2853,136 @@ void main() {
       expect(h.lookups.submits, hasLength(1));
       expect(h.analysisOf(id).containsKey('assist'), isFalse);
       expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+    });
+
+    // Claude Plan, the owner's setup: a saved found answer is a one-tap
+    // suggestion. Search again then gets not_published. A weaker answer
+    // never replaces a standing suggestion, as for applied numbers: the
+    // meal keeps "Use published numbers", and D2a keeps the found answer
+    // in the cache.
+    test('Search again that finds nothing keeps a saved suggestion',
+        () async {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      final key = await _saved(
+        h,
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+      );
+      final id = h.add(_bigMac());
+      h.inUse.add(id);
+      final reuse = await h.assist.lookupNow(id);
+      expect(reuse.fromCache, isTrue);
+      final suggested = h.analysisOf(id)['assist'] as Map;
+      expect(suggested['status'], AssistStatus.suggested);
+
+      h.lookups.onSubmit = (_) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      final again = await h.assist.lookupNow(id, fresh: true);
+      expect(h.lookups.submits, hasLength(1));
+      expect(again.wrote, isFalse, reason: 'nothing better was found');
+      expect(again.decision?.outcome, AssistOutcome.contextOnly);
+      expect(h.analysisOf(id)['assist'], suggested,
+          reason: 'Use published numbers stays on this meal');
+      expect((await h.state.cachedLookup(key))!.found, isTrue);
+    });
+
+    test('a pending Search again the sweep collects keeps the suggestion too',
+        () async {
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      await _saved(h, provider: LookupRecipient.claudePlan, verbatim: false);
+      final id = h.add(_bigMac());
+      h.inUse.add(id);
+      expect((await h.assist.lookupNow(id)).fromCache, isTrue);
+      final suggested = h.analysisOf(id)['assist'] as Map;
+      expect(suggested['status'], AssistStatus.suggested);
+
+      // Search again: the server takes a while.
+      h.lookups.onSubmit = (_) async => const LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job_abcdef12',
+      );
+      expect((await h.assist.lookupNow(id, fresh: true)).code,
+          AssistSkip.pending);
+      final job = (await h.state.jobs())[id]!;
+      expect((job.manual, job.fresh), (true, true));
+
+      // The editor is closed; the sweep collects the job: nothing found.
+      h.lookups.onPoll = (_) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      h.inUse.clear();
+      h.now = _now.add(kAssistPollInterval);
+      await h.assist.sweep();
+      expect(h.lookups.polls, ['job_abcdef12']);
+      expect((await h.state.jobs())[id], isNull);
+      expect(h.analysisOf(id)['assist'], suggested);
+    });
+
+    test('a plain Look up that finds nothing still replaces a suggestion',
+        () async {
+      // Only Search again keeps it: this rule is unchanged elsewhere.
+      h.lookups.support = _claudePlan;
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        consentAt: _consentAt,
+        consentRecipient: 'claude_plan:abcd1234',
+      );
+      final id = h.add(_bigMac());
+      h.inUse.add(id);
+      h.lookups.onSubmit = (_) async =>
+          _done(provider: LookupRecipient.claudePlan, verbatim: false);
+      await h.assist.lookupNow(id);
+      expect((h.analysisOf(id)['assist'] as Map)['status'],
+          AssistStatus.suggested);
+      h.lookups.onSubmit = (_) async => _done(
+        provider: LookupRecipient.claudePlan,
+        verbatim: false,
+        json: {..._found(), 'status': 'not_published', 'matches': <Object>[]},
+      );
+      final run = await h.assist.lookupNow(id);
+      expect(run.wrote, isTrue);
+      expect((h.analysisOf(id)['assist'] as Map)['status'], 'not_published');
+    });
+
+    // Android's "Clear saved lookup answers" (no places store) says it
+    // cleared them only when the answers and the waiting lookups are gone.
+    test('clearing says false when the answers or the jobs stay', () async {
+      await _saved(h);
+      await h.state.putJob(
+        1,
+        AssistJob(reqHash: '0123456789abcdef', at: h.now, nextAt: h.now),
+      );
+      h.store.failDeletes.add(assistCacheDocument);
+      expect(await h.assist.clearLearnedPlaces(), isFalse);
+      expect(await h.state.jobs(), isEmpty, reason: 'the rest still goes');
+      h.store.failDeletes
+        ..clear()
+        ..add(assistJobsDocument);
+      await h.state.putJob(
+        1,
+        AssistJob(reqHash: '0123456789abcdef', at: h.now, nextAt: h.now),
+      );
+      expect(await h.assist.clearLearnedPlaces(), isFalse);
+      expect(h.document(assistCacheDocument), isEmpty);
+      h.store.failDeletes.clear();
+      expect(await h.assist.clearLearnedPlaces(), isTrue);
+      expect(await h.state.jobs(), isEmpty);
     });
 
     // D10: at the cap the editor gets no saved answer either.

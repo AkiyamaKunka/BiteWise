@@ -516,16 +516,164 @@ void main() {
     });
 
     test('an added row gives set with qty 1', () {
+      // Updated on purpose: this row was a 5 kcal coffee, and a row under
+      // the 10 kcal minimum is no longer marked (the test below).
       final d = MealDraft.fromMeal(mealWith(analysisOf([aiRow()])));
       d.addItem()
-        ..name = 'Coffee'
-        ..calories = '5';
+        ..name = 'Latte'
+        ..calories = '190';
       final out = (d.toAnalysis(now: now)['food_items'] as List)[1] as Map;
       expect(out['user'], {
         'set': true,
         'at': stamp,
-        'n': [5, 0, 0, 0],
+        'n': [190, 0, 0, 0],
         'qty': 1,
+      });
+    });
+
+    test('an added row left blank, or under 10 kcal, gets no mark', () {
+      final d = MealDraft.fromMeal(mealWith(analysisOf([aiRow()])));
+      d.addItem().name = 'Toast';
+      d.addItem()
+        ..name = 'Black coffee'
+        ..calories = '5';
+      d.addItem()
+        ..name = 'Mints'
+        ..calories = '9.9'
+        ..carbs = '2';
+      final rows = (d.toAnalysis(now: now)['food_items'] as List).skip(1);
+      expect([for (final r in rows) (r as Map).containsKey('user')],
+          [false, false, false]);
+      expect([for (final r in rows) (r as Map)['estimated_calories']],
+          [0, 5, 9.9]);
+    });
+
+    test('a blank row added to a lunch is never re-logged as 0 kcal', () {
+      // Toast and eggs on two mornings (listed in My usual foods).
+      Meal breakfast(int id, String date) => Meal(
+            id: id,
+            date: date,
+            time: '08:00 AM',
+            timestamp: '${date}T08:00:00.000',
+            source: MealSource.appWatch,
+            analysis: {
+              'is_food': true,
+              'meal_description': 'Toast and eggs',
+              'total_calories': 320,
+              'food_items': [
+                {
+                  'name': 'Toast',
+                  'estimated_calories': 120,
+                  'protein_g': 4,
+                  'carbs_g': 20,
+                  'fat_g': 2,
+                },
+                {
+                  'name': 'Scrambled eggs',
+                  'estimated_calories': 200,
+                  'protein_g': 12,
+                  'carbs_g': 2,
+                  'fat_g': 15,
+                },
+              ],
+            },
+          );
+      // Today's lunch photo: the user adds a "Toast" row by name only.
+      final lunch = MealDraft.fromMeal(mealWith(analysisOf([aiRow()]),
+          date: '2026-11-07', time: '12:00 PM'))
+        ..items.add(MealItemDraft(name: 'Toast'));
+      expect(lunch.validate(), isEmpty, reason: 'blank numbers are allowed');
+      final saved = Meal(
+          id: 12,
+          date: '2026-11-07',
+          time: '12:00 PM',
+          timestamp: '2026-11-07T12:00:00.000',
+          source: MealSource.appPhoto,
+          corrected: true,
+          analysis: lunch.toAnalysis(now: now));
+      final at = DateTime(2026, 11, 7, 12, 30);
+      final index = buildUsualIndex(
+          [breakfast(10, '2026-11-03'), breakfast(11, '2026-11-05'), saved],
+          now: at);
+      expect(index.records['toast'], isNull);
+      final list =
+          usualMealList(index, now: at, choices: UsualChoicesView.empty);
+      final row = [...list.around, ...list.more]
+          .firstWhere((m) => m.title == 'Toast and eggs');
+      final relog = usualLogAnalysis(row, index, now: at);
+      expect((relog['food_items'] as List).first['estimated_calories'], 120);
+      expect(relog['total_calories'], 320);
+    });
+
+    group('the first row "Add item" seeds from the totals', () {
+      // A photo meal the AI gave totals only (no rows).
+      Meal pho() => mealWith({
+            'is_food': true,
+            'meal_description': 'Beef pho',
+            'total_calories': 640,
+            'total_protein_g': 30,
+            'total_carbs_g': 70,
+            'total_fat_g': 25,
+          });
+
+      test('on a stored meal it is not yours while it holds the meal\'s '
+          'totals', () {
+        final d = MealDraft.fromMeal(pho());
+        d.addItem().name = 'Pho';
+        final saved = d.toAnalysis(now: now);
+        final row = (saved['food_items'] as List).single as Map;
+        expect(row['estimated_calories'], 640);
+        expect(row.containsKey('user'), isFalse,
+            reason: 'the AI\'s 640 was seeded, never typed: ${row['user']}');
+        final edited = Meal(
+            id: 7,
+            date: '2026-11-06',
+            time: '12:10 PM',
+            timestamp: '2026-11-06T12:10:00.000',
+            source: MealSource.appPhoto,
+            corrected: true,
+            analysis: saved);
+        expect(
+            buildUsualIndex([edited], now: DateTime(2026, 11, 7, 12))
+                .records['pho'],
+            isNull);
+      });
+
+      test('on a stored meal it is yours once one of its numbers differs',
+          () {
+        final d = MealDraft.fromMeal(pho());
+        d.addItem()
+          ..name = 'Pho'
+          ..fat = '20';
+        final row = (d.toAnalysis(now: now)['food_items'] as List).single;
+        expect(row['user'], {
+          'set': true,
+          'at': stamp,
+          'n': [640, 30, 70, 20],
+          'qty': 1,
+        });
+        // Totals the user typed before the tap differ from the meal's too.
+        final typed = MealDraft.fromMeal(pho())..calories = '700';
+        typed.addItem().name = 'Pho';
+        final row2 =
+            (typed.toAnalysis(now: now)['food_items'] as List).single as Map;
+        expect((row2['user'] as Map)['n'], [700, 30, 70, 25]);
+      });
+
+      test('on a new hand-typed meal it is yours', () {
+        final d = MealDraft.blank(DateTime(2026, 11, 6, 12))
+          ..calories = '450'
+          ..protein = '20'
+          ..carbs = '50'
+          ..fat = '18';
+        d.addItem().name = 'Toast and eggs';
+        final row = (d.toAnalysis(now: now)['food_items'] as List).single;
+        expect(row['user'], {
+          'set': true,
+          'at': stamp,
+          'n': [450, 20, 50, 18],
+          'qty': 1,
+        });
       });
     });
 
