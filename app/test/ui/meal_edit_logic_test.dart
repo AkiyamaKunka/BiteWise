@@ -529,6 +529,78 @@ void main() {
       });
     });
 
+    group('the first row "Add item" seeds from the totals', () {
+      // A photo meal the AI gave totals only (no rows).
+      Meal pho() => mealWith({
+            'is_food': true,
+            'meal_description': 'Beef pho',
+            'total_calories': 640,
+            'total_protein_g': 30,
+            'total_carbs_g': 70,
+            'total_fat_g': 25,
+          });
+
+      test('on a stored meal it is not yours while it holds the meal\'s '
+          'totals', () {
+        final d = MealDraft.fromMeal(pho());
+        d.addItem().name = 'Pho';
+        final saved = d.toAnalysis(now: now);
+        final row = (saved['food_items'] as List).single as Map;
+        expect(row['estimated_calories'], 640);
+        expect(row.containsKey('user'), isFalse,
+            reason: 'the AI\'s 640 was seeded, never typed: ${row['user']}');
+        final edited = Meal(
+            id: 7,
+            date: '2026-11-06',
+            time: '12:10 PM',
+            timestamp: '2026-11-06T12:10:00.000',
+            source: MealSource.appPhoto,
+            corrected: true,
+            analysis: saved);
+        expect(
+            buildUsualIndex([edited], now: DateTime(2026, 11, 7, 12))
+                .records['pho'],
+            isNull);
+      });
+
+      test('on a stored meal it is yours once one of its numbers differs',
+          () {
+        final d = MealDraft.fromMeal(pho());
+        d.addItem()
+          ..name = 'Pho'
+          ..fat = '20';
+        final row = (d.toAnalysis(now: now)['food_items'] as List).single;
+        expect(row['user'], {
+          'set': true,
+          'at': stamp,
+          'n': [640, 30, 70, 20],
+          'qty': 1,
+        });
+        // Totals the user typed before the tap differ from the meal's too.
+        final typed = MealDraft.fromMeal(pho())..calories = '700';
+        typed.addItem().name = 'Pho';
+        final row2 =
+            (typed.toAnalysis(now: now)['food_items'] as List).single as Map;
+        expect((row2['user'] as Map)['n'], [700, 30, 70, 25]);
+      });
+
+      test('on a new hand-typed meal it is yours', () {
+        final d = MealDraft.blank(DateTime(2026, 11, 6, 12))
+          ..calories = '450'
+          ..protein = '20'
+          ..carbs = '50'
+          ..fat = '18';
+        d.addItem().name = 'Toast and eggs';
+        final row = (d.toAnalysis(now: now)['food_items'] as List).single;
+        expect(row['user'], {
+          'set': true,
+          'at': stamp,
+          'n': [450, 20, 50, 18],
+          'qty': 1,
+        });
+      });
+    });
+
     test('a stored qty-2 row edited twice keeps qty: 2', () {
       final once = saveRow(aiRow(qty: 2), (it) => it.calories = '400');
       final twice = saveRow(once, (it) => it.calories = '420',
