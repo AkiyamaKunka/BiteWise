@@ -909,20 +909,24 @@ class MealAssist {
   /// saved lookup answers (a year for the ones that found published
   /// numbers, with the answers the user turned down) and the
   /// pending jobs and retries with what their location path found (the
-  /// next sweep asks again). True when the places are gone (none were ever
-  /// kept without a store). Never throws.
+  /// next sweep asks again). True only when all of them are gone: the
+  /// saved answers, the jobs and the places (none were ever kept without a
+  /// store), so the screen never says "cleared" over a failed delete.
+  /// Every part is tried even when another failed. Never throws.
   Future<bool> clearLearnedPlaces() async {
-    try {
-      await _state.clearCache();
-      await _state.clearJobs();
-    } catch (_) {}
-    final store = _placesStore;
-    if (store == null) return true;
-    try {
-      return await store.clear();
-    } catch (_) {
-      return false;
+    Future<bool> attempt(Future<bool> Function() clear) async {
+      try {
+        return await clear();
+      } catch (_) {
+        return false;
+      }
     }
+
+    final cacheOk = await attempt(_state.clearCache);
+    final jobsOk = await attempt(_state.clearJobs);
+    final store = _placesStore;
+    final placesOk = store == null || await attempt(store.clear);
+    return cacheOk && jobsOk && placesOk;
   }
 
   /// Starts listening: meals-changed (a sweep 5 s later), settings (Off

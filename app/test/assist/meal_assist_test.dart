@@ -255,6 +255,13 @@ class _HookStore extends LocalNoBackupStore {
     return super.read(name, version: version);
   }
 
+  /// Documents whose delete fails (a disk error), leaving them in place.
+  final Set<String> failDeletes = {};
+
+  @override
+  Future<bool> delete(String name) async =>
+      failDeletes.contains(name) ? false : super.delete(name);
+
   @override
   Future<bool> write(
     String name,
@@ -2951,6 +2958,31 @@ void main() {
       final run = await h.assist.lookupNow(id);
       expect(run.wrote, isTrue);
       expect((h.analysisOf(id)['assist'] as Map)['status'], 'not_published');
+    });
+
+    // Android's "Clear saved lookup answers" (no places store) says it
+    // cleared them only when the answers and the waiting lookups are gone.
+    test('clearing says false when the answers or the jobs stay', () async {
+      await _saved(h);
+      await h.state.putJob(
+        1,
+        AssistJob(reqHash: '0123456789abcdef', at: h.now, nextAt: h.now),
+      );
+      h.store.failDeletes.add(assistCacheDocument);
+      expect(await h.assist.clearLearnedPlaces(), isFalse);
+      expect(await h.state.jobs(), isEmpty, reason: 'the rest still goes');
+      h.store.failDeletes
+        ..clear()
+        ..add(assistJobsDocument);
+      await h.state.putJob(
+        1,
+        AssistJob(reqHash: '0123456789abcdef', at: h.now, nextAt: h.now),
+      );
+      expect(await h.assist.clearLearnedPlaces(), isFalse);
+      expect(h.document(assistCacheDocument), isEmpty);
+      h.store.failDeletes.clear();
+      expect(await h.assist.clearLearnedPlaces(), isTrue);
+      expect(await h.state.jobs(), isEmpty);
     });
 
     // D10: at the cap the editor gets no saved answer either.
