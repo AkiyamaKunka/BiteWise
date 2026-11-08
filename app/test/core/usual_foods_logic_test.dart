@@ -811,7 +811,11 @@ void main() {
           reason: 'the input is never edited in place');
     });
 
-    test('a kcal-only record changes only kcal', () {
+    test('a kcal-only record changes only kcal, and writes no set mark', () {
+      // Updated on purpose (fix D2): a set mark here vouched for the AI's
+      // macros as the user's, so the next record was no longer kcal-only
+      // and those macros were offered later. Like the kcal-only re-log,
+      // Use keeps only what vouches for no number.
       final m = photo();
       final o = offer([learned(it: mine('Oatmeal (~250 g)', [350, 0, 0, 0])), m],
           m)!;
@@ -819,8 +823,22 @@ void main() {
       final it = (out['food_items'] as List).single as Map;
       expect(it['estimated_calories'], 350);
       expect([it['protein_g'], it['carbs_g'], it['fat_g']], [10, 54, 6]);
-      expect((it['user'] as Map)['n'], [350, 10, 54, 6]);
+      expect(it.containsKey('user'), isFalse);
       expect(out['total_protein_g'], 10);
+      final undo = UsualUndo(before: m.analysis, after: out, indices: [0]);
+      expect(revertUsualOffer(out, undo), m.analysis);
+    });
+
+    test('a kcal-only Use keeps the AI\'s old name, with no set', () {
+      final m = mismatched();
+      final o = offer([learned(it: mine('Oatmeal (~250 g)', [350, 0, 0, 0])), m],
+          m)!;
+      expect(o.items.single.kcalOnly, isTrue);
+      final out = applyUsualOffer(m.analysis, o, now: at)!;
+      final it = (out['food_items'] as List)[0] as Map;
+      expect(it['estimated_calories'], 350);
+      expect(it['user'], {'qty': 1, 'ai_name': 'Porridge'});
+      expect(usualMarkValid(it, at), isFalse);
     });
 
     test('null on a leftover meal, or once the shown AI numbers moved', () {

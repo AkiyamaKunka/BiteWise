@@ -229,6 +229,30 @@ void main() {
       expect(dao.updates, hasLength(1));
     });
 
+    test('Use of a kcal-only offer does not make the AI macros yours',
+        () async {
+      // A hand-typed latte, kcal only (macros left blank): a kcal-only
+      // record.
+      final typed = seed([item('Oat milk latte', 190, p: 0, c: 0, f: 0)],
+          date: '2026-11-03', source: MealSource.appManual);
+      // Photo A: AI 120 kcal, 4/15/5. Use.
+      final a = seed([item('Oat milk latte', 120, p: 4, c: 15, f: 5)],
+          time: '08:00 AM');
+      final offerA = (await usual.offerFor(dao.byId(a)))!;
+      expect(offerA.items.single.kcalOnly, isTrue);
+      expect((await usual.accept(a, shown: offerA)).status,
+          UsualAcceptStatus.written);
+      // Photo B: AI 185 kcal, 7/22/7. Against the kcal-only record the kcal
+      // differs by 5 (< 20) and macros are ignored: no offer.
+      final b = seed([item('Oat milk latte', 185, p: 7, c: 22, f: 7)],
+          time: '03:00 PM');
+      final rec = (await usual.index()).records['latte milk oat']!;
+      expect((rec.mealId, rec.kcalOnly), (typed, true),
+          reason: 'still the hand-typed record, not photo A\'s AI macros '
+              '(${rec.numbers})');
+      expect(await usual.offerFor(dao.byId(b)), isNull);
+    });
+
     test('a deleted meal is gone', () async {
       final id = learnedAndPhoto();
       final shown = (await usual.offerFor(dao.byId(id)))!;

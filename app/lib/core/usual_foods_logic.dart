@@ -957,10 +957,12 @@ void _moveTotals(Map<String, dynamic> out, List<num> delta) {
 }
 
 /// [analysis] with [offer] used (spec §3.5): every offered item's numbers
-/// become `mine` (only kcal for a kcal-only record) and gain `user {set,
-/// at: now, n: the written numbers, qty: 1}`, keeping an existing
-/// `ai_name`; the totals move by the delta. Names, the description and
-/// every other key stay. Null — write nothing — on a meal with a leftover
+/// become `mine` and gain `user {set, at: now, n: the written numbers,
+/// qty: 1}`, keeping an existing `ai_name`; for a kcal-only record only
+/// kcal changes and no `set` is written (the AI's macros are not the
+/// user's): `user` is then `{qty: 1, ai_name}`, or none without an old
+/// name. The totals move by the delta. Names, the description and every
+/// other key stay. Null — write nothing — on a meal with a leftover
 /// block, or unless every offered item still holds the AI numbers shown.
 Map<String, dynamic>? applyUsualOffer(
     Map<String, dynamic> analysis, UsualOffer offer,
@@ -990,13 +992,25 @@ Map<String, dynamic>? applyUsualOffer(
     }
     final old = item['user'];
     final aiName = old is Map ? old['ai_name'] : null;
-    item['user'] = {
-      'set': true,
-      'at': usualStamp(now),
-      'n': [written.kcal, written.p, written.c, written.f],
-      'qty': 1,
-      if (aiName is String && aiName.trim().isNotEmpty) 'ai_name': aiName,
-    };
+    final keepName = aiName is String && aiName.trim().isNotEmpty;
+    if (it.kcalOnly) {
+      // Mixed numbers (the user's kcal, the AI's macros): no `set` mark
+      // vouches for them, as for the kcal-only re-log. Only the parts that
+      // vouch for no number stay.
+      if (keepName) {
+        item['user'] = {'qty': 1, 'ai_name': aiName};
+      } else {
+        item.remove('user');
+      }
+    } else {
+      item['user'] = {
+        'set': true,
+        'at': usualStamp(now),
+        'n': [written.kcal, written.p, written.c, written.f],
+        'qty': 1,
+        if (keepName) 'ai_name': aiName,
+      };
+    }
     delta[0] += written.kcal - cur.kcal;
     delta[1] += written.p - cur.p;
     delta[2] += written.c - cur.c;
