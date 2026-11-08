@@ -347,7 +347,14 @@ class UsualFoods {
 
   Future<void> hide(UsualMeal m) => _choices.hide(m.hideId);
 
-  Future<void> unhide(UsualMeal m) => _choices.unhide(m.hideId);
+  /// Show again: clears the row's own hide id and the ones of the meal
+  /// keys an alias merged into it ([UsualMeal.mergedHideIds]), so a meal
+  /// hidden before the alias is listed again.
+  Future<void> unhide(UsualMeal m) async {
+    for (final id in {m.hideId, ...m.mergedHideIds}) {
+      await _choices.unhide(id);
+    }
+  }
 
   /// A food meal logged within [kUsualAgainWindow] of now (across
   /// midnight) that loosely shares a food with [m] ([usualLooselyShares]),

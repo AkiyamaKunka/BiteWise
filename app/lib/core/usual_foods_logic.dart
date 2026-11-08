@@ -1169,11 +1169,23 @@ final class UsualMeal {
     required this.lastTime,
     required this.loggedTodayTime,
     required this.numbers,
+    this.mergedHideIds = const {},
   });
 
   /// [usualMealKey].
   final String key;
   String get hideId => usualHideId(key);
+
+  /// The hide ids of the meal keys a confirmed alias merged into this row
+  /// (its meals' keys read without aliases, other than [key]): a meal the
+  /// user hid before the alias was confirmed stays hidden after it, and
+  /// Show again clears these too.
+  final Set<String> mergedHideIds;
+
+  /// Hidden by [choices]: its own hide id, or one of [mergedHideIds].
+  bool hiddenIn(UsualChoicesView choices) =>
+      choices.isHidden(hideId) || mergedHideIds.any(choices.isHidden);
+
   final String title;
 
   /// The meal a log copies (the most recent without a leftover block).
@@ -1258,6 +1270,14 @@ List<UsualMeal> _listable(UsualIndex index, DateTime now) {
     }
     if (dates.length < kUsualListMinDays) continue;
     final written = _logAnalysis(template, index, now);
+    final merged = index.aliases.isEmpty
+        ? const <String>{}
+        : {
+            for (final m in g.meals)
+              if (_mealKey(m.analysis, const {}) case final k?
+                  when k != g.key)
+                usualHideId(k),
+          };
     out.add(UsualMeal(
       key: g.key,
       title: usualMealTitle(template.analysis),
@@ -1274,6 +1294,7 @@ List<UsualMeal> _listable(UsualIndex index, DateTime now) {
         c: written['total_carbs_g'] as num,
         f: written['total_fat_g'] as num,
       ),
+      mergedHideIds: merged,
     ));
   }
   return out;
@@ -1281,17 +1302,17 @@ List<UsualMeal> _listable(UsualIndex index, DateTime now) {
 
 /// My usual foods (spec §4.2): food meals of any source logged on at
 /// least [kUsualListMinDays] distinct days of the last 90, hidden ones
-/// left out, then at most [kUsualListMax]. "Around this time" (within
-/// ±2 h of now's clock, circular, on 2 or more of the last 30 days) comes
-/// first, by that day count; the rest by days in 30, days in 90, recency
-/// and title.
+/// ([UsualMeal.hiddenIn]) left out, then at most [kUsualListMax].
+/// "Around this time" (within ±2 h of now's clock, circular, on 2 or more
+/// of the last 30 days) comes first, by that day count; the rest by days
+/// in 30, days in 90, recency and title.
 UsualList usualMealList(UsualIndex index,
     {required DateTime now, required UsualChoicesView choices}) {
   var hidden = 0;
   final around = <UsualMeal>[];
   final more = <UsualMeal>[];
   for (final m in _listable(index, now)) {
-    if (choices.isHidden(m.hideId)) {
+    if (m.hiddenIn(choices)) {
       hidden++;
     } else if (m.aroundDays >= kUsualAroundMinDays) {
       around.add(m);
@@ -1314,7 +1335,7 @@ List<UsualMeal> usualHiddenMeals(UsualIndex index,
         {required DateTime now, required UsualChoicesView choices}) =>
     [
       for (final m in _listable(index, now))
-        if (choices.isHidden(m.hideId)) m,
+        if (m.hiddenIn(choices)) m,
     ]..sort((a, b) => a.title.compareTo(b.title));
 
 // ─── Log again: the analysis written (spec §4.4) ───────────────────────

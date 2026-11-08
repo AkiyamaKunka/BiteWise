@@ -1094,6 +1094,50 @@ void main() {
       expect(hide.hideId, matches(RegExp(r'^[0-9a-f]{16}$')));
     });
 
+    test('a hidden meal stays hidden when an alias is confirmed later', () {
+      Meal oats(int id, String date) => meal(
+          id, [item('Oatmeal (~260 g)', 300)],
+          date: date, description: 'Oatmeal');
+      Meal renamed(int id, String date) => meal(
+          id,
+          [
+            mine('Overnight oats', [350, 12, 50, 14],
+                at: '${date}T14:00:00.000Z', aiName: 'Oatmeal (~250 g)')
+          ],
+          date: date,
+          time: '08:00 AM',
+          source: MealSource.appPhoto,
+          corrected: true,
+          description: 'Overnight oats');
+      final before = [oats(1, '2026-11-01'), oats(2, '2026-11-05')];
+      final i1 = buildUsualIndex(before, now: now);
+      final row = usualMealList(i1, now: now, choices: UsualChoicesView.empty)
+          .more
+          .single;
+      final hidden = UsualChoicesView(hidden: {row.hideId});
+      expect(usualMealList(i1, now: now, choices: hidden).isEmpty, isTrue);
+      // Later the same rename on two meals confirms oatmeal -> overnight
+      // oats, and the hidden group merges into a new meal key.
+      final after = [
+        ...before,
+        renamed(3, '2026-11-02'),
+        renamed(4, '2026-11-03'),
+      ];
+      final i2 = buildUsualIndex(after, now: now);
+      expect(i2.aliases, {'oatmeal': 'oat overnight'});
+      final list = usualMealList(i2, now: now, choices: hidden);
+      final sheet = usualHiddenMeals(i2, now: now, choices: hidden);
+      expect([for (final m in [...list.around, ...list.more]) m.title],
+          isEmpty,
+          reason: 'the hidden Oatmeal row came back under a new key');
+      expect((hiddenCount: list.hiddenCount, sheet: sheet.length),
+          (hiddenCount: 1, sheet: 1),
+          reason: 'the count and the Hidden foods sheet agree');
+      expect(sheet.single.mergedHideIds, {row.hideId});
+      // With no alias a row merges nothing.
+      expect(row.mergedHideIds, isEmpty);
+    });
+
     test('"Logged today at" comes from today\'s latest log', () {
       final meals = [
         logged(1, 'Latte', 'Latte', '2026-11-05', '08:00 AM'),

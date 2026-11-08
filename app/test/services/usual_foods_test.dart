@@ -472,6 +472,34 @@ void main() {
       expect((await usual.frequentMeals()).hiddenCount, 0);
     });
 
+    test('Show again shows a hidden meal an alias merged since', () async {
+      seed([item('Oatmeal (~260 g)', 300)],
+          date: '2026-11-01', desc: 'Oatmeal');
+      seed([item('Oatmeal (~260 g)', 300)],
+          date: '2026-11-05', desc: 'Oatmeal');
+      await usual.hide((await usual.frequentMeals()).more.single);
+      // The same rename on two meals: oatmeal is now overnight oats.
+      for (final date in ['2026-11-02', '2026-11-03']) {
+        seed([
+          item('Overnight oats', 350, p: 12, c: 50, f: 14, user: {
+            ...mark([350, 12, 50, 14], at: '${date}T14:00:00.000Z'),
+            'ai_name': 'Oatmeal (~250 g)',
+          })
+        ], date: date, source: MealSource.appPhoto, corrected: true,
+            desc: 'Overnight oats');
+      }
+      signal.value++;
+      final list = await usual.frequentMeals();
+      expect((list.isEmpty, list.hiddenCount), (true, 1));
+      final merged = (await usual.hiddenMeals()).single;
+      await usual.unhide(merged);
+      final shown = await usual.frequentMeals();
+      expect([for (final m in [...shown.around, ...shown.more]) m.key],
+          ['oat overnight']);
+      expect(shown.hiddenCount, 0);
+      expect(await usual.hiddenMeals(), isEmpty);
+    });
+
     test('logAgain saves one app_repeat meal now, with no photo and no '
         'ledger row, and signals', () async {
       seed([item('Oat milk latte', 190, p: 6, c: 24, f: 7)],
