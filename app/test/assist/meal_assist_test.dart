@@ -2747,6 +2747,26 @@ void main() {
       );
     });
 
+    // Usual foods D2 / spec §1: an answer that found nothing is still kept
+    // 30 days, and it answers the next automatic lookup of the same items
+    // with no call.
+    test('an automatic lookup is answered by a saved negative answer',
+        () async {
+      // Fetched a day ago (a negative lives 30 days).
+      final at = h.now.subtract(const Duration(days: 1));
+      final key = await _saved(h, status: 'not_published', at: at);
+      final id = h.add(_bigMac());
+      await h.assist.sweep();
+      expect(h.lookups.submits, isEmpty);
+      expect(h.lookups.polls, isEmpty);
+      final block = h.analysisOf(id)['assist'] as Map;
+      expect(block['status'], 'not_published');
+      expect(block['fetched_on'], isoDate(at.toLocal()));
+      final entry = (await h.state.cachedLookup(key))!;
+      expect(entry.usedAt.isAtSameMomentAs(h.now), isTrue, reason: 'a use');
+      expect(entry.at.isAtSameMomentAs(at), isTrue);
+    });
+
     // PROBE3 kept: an answer that found nothing never answers the editor.
     test('a saved not_published answer is not used: the editor asks',
         () async {
