@@ -808,6 +808,29 @@ void main() {
           reason: 'a 10 kcal difference, and the macro trigger is off');
     });
 
+    test('macroOnly: offered on a macro difference alone, kcal under the '
+        'threshold', () {
+      // 305 vs 300 kcal is under max(20, 10 %); protein 25 vs 10 g is not.
+      final macro = offer([
+        learned(it: mine('Oatmeal (~250 g)', [305, 25, 30, 6])),
+        photo(),
+      ], photo())!;
+      expect(macro.items.single.macroOnly, isTrue);
+      expect(offer([learned(), photo()], photo())!.items.single.macroOnly,
+          isFalse);
+      // The kcal threshold is the gate's own: 30 kcal on a 300 kcal item.
+      final edge = offer([
+        learned(it: mine('Oatmeal (~250 g)', [330, 25, 30, 6])),
+        photo(),
+      ], photo())!;
+      expect(edge.items.single.macroOnly, isFalse);
+      final under = offer([
+        learned(it: mine('Oatmeal (~250 g)', [329, 25, 30, 6])),
+        photo(),
+      ], photo())!;
+      expect(under.items.single.macroOnly, isTrue);
+    });
+
     test('several items are offered together, indices from safeFoodItems', () {
       final both = meal(1, [
         mine('Oatmeal (~250 g)', [350, 12, 50, 14]),

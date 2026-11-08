@@ -798,7 +798,19 @@ final class UsualOfferItem {
   final DateTime mineAt;
   final int fromMealId;
   final String fromDate;
+
+  /// Offered for a macro difference alone: [mine]'s kcal is within the
+  /// offer's kcal threshold of [ai]'s (the same rule the offer gate uses),
+  /// so a line that names only kcal would read "350 → 350". Never true for
+  /// a kcal-only record (macros are ignored there).
+  bool get macroOnly => !usualKcalDiffWorthIt(ai.kcal, mine.kcal);
 }
+
+/// Whether [mine] kcal differs from the AI's [ai] kcal by enough to offer
+/// (spec §3.3 item gate 9): by at least max([kUsualMinDiffKcal],
+/// [kUsualMinDiffShare] of the AI's).
+bool usualKcalDiffWorthIt(num ai, num mine) =>
+    (mine - ai).abs() >= _max(kUsualMinDiffKcal, kUsualMinDiffShare * ai);
 
 /// The user's numbers offered for one meal ([usualOfferFor]). Never stored.
 final class UsualOffer {
@@ -893,8 +905,7 @@ UsualOffer? usualOfferFor(Meal meal, UsualIndex index,
     if (ai.kcal < kUsualMinKcal || mine.kcal < kUsualMinKcal) continue;
     final ratio = mine.kcal / ai.kcal;
     if (ratio < kUsualRatioMin || ratio > kUsualRatioMax) continue;
-    final kcalDiff = (mine.kcal - ai.kcal).abs() >=
-        _max(kUsualMinDiffKcal, kUsualMinDiffShare * ai.kcal);
+    final kcalDiff = usualKcalDiffWorthIt(ai.kcal, mine.kcal);
     final macroDiff = !r.kcalOnly &&
         ((mine.p - ai.p).abs() >= kUsualMinMacroDiffG ||
             (mine.c - ai.c).abs() >= kUsualMinMacroDiffG ||
