@@ -93,7 +93,10 @@ class UsualChip extends StatelessWidget {
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Padding(padding: const EdgeInsets.only(top: 6), child: lead),
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, right: 8),
+                  child: lead,
+                ),
                 button,
               ],
             )
@@ -101,7 +104,9 @@ class UsualChip extends StatelessWidget {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  // The right gap keeps the words off the border when Use
+                  // sits under them.
+                  padding: const EdgeInsets.only(top: 6, bottom: 6, right: 8),
                   child: lead,
                 ),
                 button,
