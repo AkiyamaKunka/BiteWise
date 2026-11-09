@@ -62,9 +62,17 @@ String displayTotalCalories(Map<String, dynamic> analysis) {
 }
 
 /// Card macro grams: raw value `or 0` (spec §3.5 display fallbacks).
+///
+/// A whole double prints without its ".0" (12.0 → "12"): a lookup that was
+/// applied, or a model reply, can store one, and the card would otherwise
+/// show "12.0g" beside "9g".
 String displayMacro(Map<String, dynamic> analysis, String key) {
   final v = analysis[key];
-  return isFoodTruthy(v) ? '$v' : '0';
+  if (!isFoodTruthy(v)) return '0';
+  if (v is double && v.isFinite && v == v.roundToDouble()) {
+    return '${v.round()}';
+  }
+  return '$v';
 }
 
 /// Meals in the order the user experienced them: by the DISPLAY clock, not

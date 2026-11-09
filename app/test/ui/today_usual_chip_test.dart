@@ -13,6 +13,8 @@ import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:calorie_tracker/ui/widgets/usual_chip.dart';
+import 'package:calorie_tracker/ui/widgets/usual_offer_card.dart'
+    show kUsualUndoSnackDuration;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -192,6 +194,33 @@ void main() {
     expect(find.text('~420 kcal'), findsOneWidget);
     // Corrected stays (as the leftover undo): never offered again.
     expect(find.byKey(const Key('usualChip')), findsNothing);
+  });
+
+  testWidgets('Use writes whole totals as whole numbers, and its snackbar '
+      'leaves by itself', (tester) async {
+    final dao = FakeDao()
+      ..seed(learned())
+      ..seed(photo([aiOatmeal()]));
+    final usual = await makeUsualFoods(dao, clock: DateTime.now);
+    await pump(tester, dao, usual: usual);
+    await tester.tap(find.byKey(const Key('usualChipUse')));
+    await tester.pumpAndSettle();
+    // 10 + (12 - 10) g of protein is 12, not 12.0: the card prints the
+    // stored total as it is.
+    final a = dao.byId(1).analysis;
+    for (final key in ['total_protein_g', 'total_carbs_g', 'total_fat_g']) {
+      expect(a[key], isA<int>(), reason: key);
+    }
+    expect(find.text('P: 12g'), findsOneWidget);
+    expect(find.textContaining('.0g'), findsNothing);
+    // A snackbar with an action never times out unless it says so; this
+    // one stayed over Today, and over every later screen, until a tap.
+    expect(find.byKey(const Key('usualUsedSnack')), findsOneWidget);
+    await tester.pump(kUsualUndoSnackDuration + const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('usualUsedSnack')), findsNothing);
+    expect(dao.byId(1).analysis['total_calories'], 350,
+        reason: 'the numbers stay; only the snackbar left');
   });
 
   testWidgets('an offer on the macros alone names the macros, and its '

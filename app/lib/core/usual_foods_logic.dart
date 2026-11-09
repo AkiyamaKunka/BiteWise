@@ -938,7 +938,13 @@ UsualOffer? usualOfferFor(Meal meal, UsualIndex index,
 
 // ─── Use and its undo (spec §3.5) ──────────────────────────────────────
 
-num _round1(num v) => (v * 10).round() / 10;
+/// [v] to 0.1, a whole value as an int: the meal card prints a stored
+/// total as it is, and "12.0g" next to "9g" reads as a different kind of
+/// number.
+num _round1(num v) {
+  final r = (v * 10).round() / 10;
+  return r == r.roundToDouble() ? r.round() : r;
+}
 
 /// The raw positions of the maps in [raw]: safeFoodItems index → index.
 List<int> _mapPositions(List raw) => [
