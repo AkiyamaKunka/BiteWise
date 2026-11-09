@@ -138,6 +138,21 @@ class UsualOfferCard extends StatelessWidget {
 /// numbers back while the meal still holds exactly what Use wrote, and
 /// otherwise says nothing was undone; [onUndone] runs after an Undo that
 /// wrote.
+/// How long a usual-foods snackbar with Undo stays up. A snackbar with an
+/// action never times out by default (SnackBar.persist), so each one says
+/// `persist: false` and this duration; with a screen reader on, the
+/// framework still keeps it up until it is dismissed.
+const Duration kUsualUndoSnackDuration = Duration(seconds: 6);
+
+/// Shows [bar] now, in place of a snackbar that is still up: the newest
+/// result (and its Undo) is the one on screen, never queued behind an
+/// older one.
+void showUsualSnack(ScaffoldMessengerState messenger, SnackBar bar) {
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(bar);
+}
+
 void showUsualUsedSnack(
   ScaffoldMessengerState messenger,
   AppLocalizations l,
@@ -147,9 +162,12 @@ void showUsualUsedSnack(
 }) {
   final before = formatKcal(result.beforeKcal);
   final after = formatKcal(result.afterKcal);
-  messenger.showSnackBar(
+  showUsualSnack(
+    messenger,
     SnackBar(
       key: const Key('usualUsedSnack'),
+      duration: kUsualUndoSnackDuration,
+      persist: false,
       content: Text(
         before == after
             ? l.usualUsedSnackSame
@@ -165,7 +183,8 @@ void showUsualUsedSnack(
           if (undone) {
             onUndone?.call();
           } else {
-            messenger.showSnackBar(
+            showUsualSnack(
+              messenger,
               SnackBar(
                 key: const Key('usualUndoStale'),
                 content: Text(l.usualUndoStale),

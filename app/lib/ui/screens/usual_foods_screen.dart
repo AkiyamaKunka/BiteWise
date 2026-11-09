@@ -22,6 +22,8 @@ import '../l10n.dart';
 import '../large_text.dart';
 import '../widgets/grouped.dart';
 import '../widgets/small_spinner.dart';
+import '../widgets/usual_offer_card.dart'
+    show kUsualUndoSnackDuration, showUsualSnack;
 
 /// The Log sheet's row for this screen (in the first section, right after
 /// Add from photos); the sheet pops 'usual'.
@@ -124,15 +126,19 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
       try {
         done = await usual.logAgain(m);
       } catch (_) {
-        messenger.showSnackBar(SnackBar(
-            key: const Key('usualLogFailed'),
-            content: Text(l.usualLogFailed)));
+        showUsualSnack(
+            messenger,
+            SnackBar(
+                key: const Key('usualLogFailed'),
+                content: Text(l.usualLogFailed)));
         return;
       }
       if (done == null) return; // another log was still running
       if (mounted) setState(() => _logged.add(m.key));
-      messenger.showSnackBar(SnackBar(
+      showUsualSnack(messenger, SnackBar(
         key: const Key('usualLoggedSnack'),
+        duration: kUsualUndoSnackDuration,
+        persist: false,
         content: Text(l.usualLoggedSnack(done.title, formatKcal(done.kcal))),
         action: SnackBarAction(
           label: l.assistUndo,
@@ -144,9 +150,11 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
             if (undone) {
               if (mounted) setState(() => _logged.remove(m.key));
             } else {
-              messenger.showSnackBar(SnackBar(
-                  key: const Key('usualUndoStale'),
-                  content: Text(l.usualUndoStale)));
+              showUsualSnack(
+                  messenger,
+                  SnackBar(
+                      key: const Key('usualUndoStale'),
+                      content: Text(l.usualUndoStale)));
             }
           },
         ),
@@ -193,8 +201,10 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
     setState(() {
       if (_hidden.add(m.key)) _hiddenCount++;
     });
-    messenger.showSnackBar(SnackBar(
+    showUsualSnack(messenger, SnackBar(
       key: const Key('usualHiddenSnack'),
+      duration: kUsualUndoSnackDuration,
+      persist: false,
       content: Text(l.usualHiddenSnack),
       action: SnackBarAction(
         label: l.assistUndo,

@@ -27,7 +27,8 @@ import '../restaurant_assist_controls.dart';
 import '../services.dart' show SettingsStore;
 import '../../services/usual/usual_foods.dart';
 import '../widgets/usual_chip.dart';
-import '../widgets/usual_offer_card.dart' show showUsualUsedSnack;
+import '../widgets/usual_offer_card.dart'
+    show showUsualSnack, showUsualUsedSnack;
 import '../widgets/meal_card.dart';
 import '../widgets/small_spinner.dart';
 import 'meal_editor_screen.dart';
@@ -218,9 +219,11 @@ class TodayScreenState extends State<TodayScreen> {
       case UsualAcceptStatus.conflict:
       case UsualAcceptStatus.gone:
       case null:
-        messenger.showSnackBar(SnackBar(
-            key: const Key('usualConflict'),
-            content: Text(l.editorSaveConflict)));
+        showUsualSnack(
+            messenger,
+            SnackBar(
+                key: const Key('usualConflict'),
+                content: Text(l.editorSaveConflict)));
     }
     if (mounted) await reload();
   }

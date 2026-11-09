@@ -9,6 +9,8 @@ import 'package:calorie_tracker/services/usual/usual_foods.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/l10n.dart';
 import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
+import 'package:calorie_tracker/ui/widgets/usual_offer_card.dart'
+    show kUsualUndoSnackDuration;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -206,6 +208,44 @@ void main() {
     expect(relogs(dao), isEmpty);
     expect(dao.meals, hasLength(before));
     expect(find.byKey(const Key('usualLoggedCheck')), findsNothing);
+  });
+
+  testWidgets('the newest result is the snackbar on screen, with its own '
+      'Undo, and it leaves by itself', (tester) async {
+    final dao = usualDao();
+    await pump(tester, await makeUsualFoods(dao, clock: clock));
+    Future<void> hideSalad() async {
+      await tester.tap(find.descendant(
+          of: row('Chicken salad'),
+          matching: find.byTooltip('More actions')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Hide from this list'));
+      await tester.pumpAndSettle();
+    }
+
+    await tester.tap(row('Oatmeal with blueberries'));
+    await tester.pumpAndSettle();
+    const logged = 'Logged Oatmeal with blueberries · 320 kcal';
+    expect(find.text(logged), findsOneWidget);
+    // A second action while that snackbar is still up: its own snackbar
+    // shows now. Queued behind the first (which never timed out), it was
+    // never seen, and the Undo on screen undid the older action.
+    await hideSalad();
+    expect(find.text('Hidden from My usual foods.'), findsOneWidget);
+    expect(find.text(logged), findsNothing);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chicken salad'), findsOneWidget,
+        reason: 'Undo is the hide\'s');
+    expect(relogs(dao), hasLength(1), reason: 'the logged meal stays');
+
+    // Left alone, a snackbar with Undo goes after a few seconds.
+    await hideSalad();
+    expect(find.byKey(const Key('usualHiddenSnack')), findsOneWidget);
+    await tester.pump(kUsualUndoSnackDuration + const Duration(seconds: 1));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('usualHiddenSnack')), findsNothing);
+    expect(find.text('Chicken salad'), findsNothing, reason: 'still hidden');
   });
 
   testWidgets('"Log it again?" only when a similar meal was logged in the '
