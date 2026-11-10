@@ -140,9 +140,18 @@ class UsualOfferCard extends StatelessWidget {
 /// wrote.
 /// How long a usual-foods snackbar with Undo stays up. A snackbar with an
 /// action never times out by default (SnackBar.persist), so each one says
-/// `persist: false` and this duration; with a screen reader on, the
-/// framework still keeps it up until it is dismissed.
+/// this duration and [usualUndoPersists].
 const Duration kUsualUndoSnackDuration = Duration(seconds: 8);
+
+/// `SnackBar.persist` for a usual-foods snackbar with Undo on [messenger].
+///
+/// Only with a screen reader on (VoiceOver / TalkBack), where reaching
+/// Undo takes longer than [kUsualUndoSnackDuration]. The framework does
+/// not hold an action snackbar there by itself any more: its timer looks
+/// at `persist` alone, so a flat `persist: false` took Undo away from
+/// exactly the users who need the time.
+bool usualUndoPersists(ScaffoldMessengerState messenger) =>
+    messenger.mounted && MediaQuery.accessibleNavigationOf(messenger.context);
 
 /// Shows [bar] now, in place of a snackbar that is still up: the newest
 /// result (and its Undo) is the one on screen, never queued behind an
@@ -167,7 +176,7 @@ void showUsualUsedSnack(
     SnackBar(
       key: const Key('usualUsedSnack'),
       duration: kUsualUndoSnackDuration,
-      persist: false,
+      persist: usualUndoPersists(messenger),
       content: Text(
         before == after
             ? l.usualUsedSnackSame

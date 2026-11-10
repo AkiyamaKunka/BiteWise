@@ -23,7 +23,7 @@ import '../large_text.dart';
 import '../widgets/grouped.dart';
 import '../widgets/small_spinner.dart';
 import '../widgets/usual_offer_card.dart'
-    show kUsualUndoSnackDuration, showUsualSnack;
+    show kUsualUndoSnackDuration, showUsualSnack, usualUndoPersists;
 
 /// The Log sheet's row for this screen (in the first section, right after
 /// Add from photos); the sheet pops 'usual'.
@@ -138,7 +138,7 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
       showUsualSnack(messenger, SnackBar(
         key: const Key('usualLoggedSnack'),
         duration: kUsualUndoSnackDuration,
-        persist: false,
+        persist: usualUndoPersists(messenger),
         content: Text(l.usualLoggedSnack(done.title, formatKcal(done.kcal))),
         action: SnackBarAction(
           label: l.assistUndo,
@@ -204,7 +204,7 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
     showUsualSnack(messenger, SnackBar(
       key: const Key('usualHiddenSnack'),
       duration: kUsualUndoSnackDuration,
-      persist: false,
+      persist: usualUndoPersists(messenger),
       content: Text(l.usualHiddenSnack),
       action: SnackBarAction(
         label: l.assistUndo,

@@ -41,6 +41,20 @@ import 'settings/restaurant_section.dart';
 final Uri privacyPolicyUri = Uri.parse(
     'https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/PRIVACY.md');
 
+/// How long a snackbar that carries an action stays up.
+const _actionSnackBarDuration = Duration(seconds: 8);
+
+/// `SnackBar.persist` for a snackbar that may carry an action.
+///
+/// Left unset it is `action != null` (Flutter 3.44): the snackbar ignores
+/// its `duration`, stays until it is pressed or swiped, and every later
+/// snackbar queues unseen behind it. A flat `false` goes too far the other
+/// way — it also times out under VoiceOver / TalkBack, where a screen
+/// reader user needs longer than that to reach the button. So: hold it
+/// only there, and only when there is a button to reach.
+bool _holdForScreenReader(BuildContext context, {required bool hasAction}) =>
+    hasAction && MediaQuery.accessibleNavigationOf(context);
+
 class SettingsScreen extends StatefulWidget {
   final SettingsStore settings;
   final AnalyzerService analyzer;
@@ -306,6 +320,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (!mounted) return;
         final open = widget.openSystemSettings;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            persist: _holdForScreenReader(context, hasAction: open != null),
+            duration: _actionSnackBarDuration,
             content: Text(l10n.watcherPermissionDenied),
             // Once the OS stops re-prompting, the in-app request above is
             // a silent no-op — without this action the toggle is a
@@ -341,7 +357,8 @@ class _SettingsScreenState extends State<SettingsScreen>
         if (!mounted) return;
         final open = widget.openSystemSettings;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            duration: const Duration(seconds: 8),
+            persist: _holdForScreenReader(context, hasAction: open != null),
+            duration: _actionSnackBarDuration,
             content: Text(l10n.watcherLimitedAccess),
             action: open == null
                 ? null
@@ -1093,9 +1110,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     if (opened || !mounted) return;
     // No browser, or the launch was refused: the address itself keeps the
     // policy reachable — and copyable, since a snackbar's text cannot be
-    // selected (with an action it also stays up under VoiceOver).
+    // selected. It leaves after its duration, except under VoiceOver.
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        duration: const Duration(seconds: 8),
+        persist: _holdForScreenReader(context, hasAction: true),
+        duration: _actionSnackBarDuration,
         content: Text(
             context.l10n.privacyOpenFailed(privacyPolicyUri.toString())),
         action: SnackBarAction(
