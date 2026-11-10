@@ -194,6 +194,11 @@ class TodayScreenState extends State<TodayScreen> {
       await reload();
       return;
     }
+    // A second tap that lands after the write but before the frame that
+    // removes the chip still carries the used offer: it is not this
+    // meal's offer any more, so it does nothing (it used to say "This
+    // meal was just updated" over the "Used your usual numbers" line).
+    if (!identical(_usualOffers[meal.id], offer)) return;
     if (!_usualUsing.add(meal.id)) return;
     setState(() {});
     final messenger = ScaffoldMessenger.of(context);

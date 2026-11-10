@@ -223,6 +223,27 @@ void main() {
         reason: 'the numbers stay; only the snackbar left');
   });
 
+  testWidgets('a second tap on Use before the chip is gone says nothing: '
+      'one write, and the "Used" line stays', (tester) async {
+    final dao = FakeDao()
+      ..seed(learned())
+      ..seed(photo([aiOatmeal()]));
+    final usual = await makeUsualFoods(dao, clock: DateTime.now);
+    await pump(tester, dao, usual: usual);
+    final writes = dao.updates.length;
+    // No frame between the taps: the first write is done, the chip is
+    // still on screen with the offer it was built with.
+    await tester.tap(find.byKey(const Key('usualChipUse')));
+    await tester.tap(find.byKey(const Key('usualChipUse')),
+        warnIfMissed: false);
+    await tester.pumpAndSettle();
+    expect(dao.updates, hasLength(writes + 1));
+    expect(find.byKey(const Key('usualUsedSnack')), findsOneWidget);
+    expect(find.byKey(const Key('usualConflict')), findsNothing,
+        reason: 'the meal did not change under the user');
+    expect(dao.byId(1).analysis['total_calories'], 350);
+  });
+
   testWidgets('an offer on the macros alone names the macros, and its '
       'snackbar does not read the same kcal twice', (tester) async {
     final dao = FakeDao()

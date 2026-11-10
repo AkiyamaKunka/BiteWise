@@ -812,6 +812,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     if (!mounted) return;
     switch (status) {
       case UsualAcceptStatus.written:
+        // The offer is used: the card goes now, not when the form has
+        // reloaded, so a second tap in between has nothing to use.
+        setState(() {
+          _usualOffer = null;
+          _usualGen++;
+        });
         await _refreshBasis();
         showUsualUsedSnack(messenger, l, usual, result!, onUndone: () {
           if (mounted) _refreshBasis();
