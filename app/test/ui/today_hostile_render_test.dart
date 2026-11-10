@@ -109,15 +109,21 @@ void main() {
       'total_calories': 400,
     }));
     // Two prior days → median available (spec §5.1); negative clamps apply.
-    dao.seed(_meal(_iso(now.subtract(const Duration(days: 1))), {
+    // CALENDAR days through the constructor: `now.subtract(Duration(days:
+    // n))` is n x 24 elapsed hours, and at 23:xx on the day DST ends and
+    // the day after it left ONE prior day (the first meal on today, or both
+    // on yesterday) — no median, no line.
+    final oneDayAgo = _iso(DateTime(now.year, now.month, now.day - 1));
+    final twoDaysAgo = _iso(DateTime(now.year, now.month, now.day - 2));
+    dao.seed(_meal(oneDayAgo, {
       'is_food': true,
       'total_calories': 2000,
     }));
-    dao.seed(_meal(_iso(now.subtract(const Duration(days: 2))), {
+    dao.seed(_meal(twoDaysAgo, {
       'is_food': true,
       'total_calories': 1000,
     }));
-    dao.seed(_meal(_iso(now.subtract(const Duration(days: 2))), {
+    dao.seed(_meal(twoDaysAgo, {
       'is_food': true,
       'total_calories': -500, // clamped to 0, spec §5.1
     }));

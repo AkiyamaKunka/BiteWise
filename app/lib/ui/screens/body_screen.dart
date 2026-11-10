@@ -12,7 +12,7 @@ library;
 
 import 'package:flutter/material.dart';
 
-import '../../core/coerce.dart' show isoDate;
+import '../../core/coerce.dart' show addCalendarDays, isoDate;
 import '../../core/contracts.dart';
 import '../l10n.dart';
 import '../services.dart' show SettingsStore;
@@ -56,7 +56,9 @@ class BodyScreenState extends State<BodyScreen> {
   /// same as the other data tabs (IndexedStack keeps stale state alive).
   Future<void> reload() async {
     final now = _now;
-    final start = isoDate(now.subtract(const Duration(days: kBodyWindowDays)));
+    // Calendar days, not 365 x 24 h: the two differ in the hour next to
+    // midnight whenever DST changed on a different date the year before.
+    final start = isoDate(addCalendarDays(now, -kBodyWindowDays));
     final end = isoDate(now);
     final weights = await widget.dao.listBodyWeights(start, end);
     final measurements = await widget.dao.listBodyMeasurements(start, end);

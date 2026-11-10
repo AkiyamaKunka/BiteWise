@@ -31,7 +31,10 @@ void main() {
   testWidgets('History day labels speak the app language '
       '(user-reported: weekdays stayed English in zh)', (tester) async {
     final dao = FakeDao();
-    final day = DateTime.now().subtract(const Duration(days: 3));
+    // Three CALENDAR days back (the constructor) — 72 elapsed hours is a
+    // different day in the hour around a DST change.
+    final now = DateTime.now();
+    final day = DateTime(now.year, now.month, now.day - 3);
     dao.put(Meal(
       id: 1,
       date: isoDate(day),
