@@ -1,0 +1,66 @@
+{
+ "id": "gen-1761234567-AbCdEfGhIjKlMnOpQrSt",
+ "provider": "Google",
+ "model": "google/gemini-3.8-flash",
+ "object": "chat.completion",
+ "created": 1761234567,
+ "choices": [
+  {
+   "logprobs": null,
+   "finish_reason": "stop",
+   "native_finish_reason": "STOP",
+   "index": 0,
+   "message": {
+    "role": "assistant",
+    "content": "```json\n{\"status\": \"found\", \"chain_key\": \"mcdonalds\", \"restaurant_name\": \"McDonald's\", \"matches\": [{\"item_index\": 0, \"menu_item\": \"Big Mac\", \"match_type\": \"exact_item\", \"is_drink\": false, \"components\": [], \"options\": [{\"label\": \"Big Mac\", \"serving\": \"1 sandwich (219 g)\", \"unit\": \"sandwich\", \"calories\": 590, \"calories_range\": null, \"protein_g\": 25, \"carbs_g\": 46, \"fat_g\": 34}]}], \"source_url\": \"https://www.mcdonalds.com/us/en-us/product/big-mac.html\", \"source_title\": \"Big Mac®\", \"source_type\": \"official_site\", \"source_year\": 2026, \"match_confidence\": 0.93, \"notes\": \"\"}\n```",
+    "refusal": null,
+    "reasoning": null,
+    "annotations": [
+     {
+      "type": "url_citation",
+      "url_citation": {
+       "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html",
+       "title": "Big Mac®: McDonald's Iconic Burger | McDonald's",
+       "start_index": 0,
+       "end_index": 0,
+       "content": "Big Mac® 590 Cal. Two 100% pure all beef patties, Big Mac sauce... Nutrition: Calories 590 | Total Fat 34g | Carbs 46g | Protein 25g"
+      }
+     },
+     {
+      "type": "url_citation",
+      "url_citation": {
+       "url": "https://www.mcdonalds.com/us/en-us/about-our-food/nutrition-calculator.html",
+       "title": "Nutrition Calculator | McDonald's",
+       "start_index": 0,
+       "end_index": 0,
+       "content": "Build your meal and see calories for every item."
+      }
+     },
+     {
+      "type": "url_citation",
+      "url_citation": {
+       "url": "https://www.fastfoodnutrition.org/mcdonalds/big-mac",
+       "title": "McDonald's Big Mac Nutrition Facts",
+       "start_index": 0,
+       "end_index": 0,
+       "content": "Big Mac: 563 calories"
+      }
+     }
+    ]
+   }
+  }
+ ],
+ "usage": {
+  "prompt_tokens": 3120,
+  "completion_tokens": 380,
+  "total_tokens": 3500,
+  "cost": 0.00912,
+  "is_byok": false,
+  "prompt_tokens_details": {
+   "cached_tokens": 0
+  },
+  "completion_tokens_details": {
+   "reasoning_tokens": 0
+  }
+ }
+}

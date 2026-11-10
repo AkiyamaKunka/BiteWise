@@ -260,3 +260,29 @@ def test_block_format_matches_the_dart_side_byte_for_byte():
     assert block == ("\nRECENT MEALS (today, for the leftover check):\n"
                      "[0] 08:05 AM — Soy milk (~110 kcal): "
                      "Soy milk (~250 mL) (~110 kcal)")
+
+
+def test_compact_recent_meals_never_forwards_capture():
+    # Design G2a: a meal's analysis.capture (how its photo was taken —
+    # device, GPS presence and accuracy, a shutter hash) stays on the phone
+    # and in its export. The recent-meals whitelist rebuilds each meal from
+    # its own keys, so neither the block nor the payload carries it, at the
+    # meal level or smuggled into an item.
+    capture = {"device": "meta_glasses", "signal": "filename",
+               "has_gps": True, "gps_acc_m": 12, "gps_fix_delta_s": -40,
+               "shutter_key": "0123456789abcdef"}
+    compact = utils.compact_recent_meals([{
+        "time": "12:30 PM", "meal_description": "Burrito bowl",
+        "total_calories": 720, "capture": capture,
+        "food_items": [{"name": "Burrito bowl", "estimated_calories": 720,
+                        "capture": capture}],
+    }])
+    assert compact == [{
+        "time": "12:30 PM", "meal_description": "Burrito bowl",
+        "total_calories": 720,
+        "food_items": [{"name": "Burrito bowl", "estimated_calories": 720}],
+    }]
+    text = json.dumps(compact) + utils.build_recent_meals_block(compact)
+    for leak in ("capture", "meta_glasses", "shutter_key",
+                 "0123456789abcdef", "gps"):
+        assert leak not in text, leak

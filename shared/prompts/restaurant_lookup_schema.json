@@ -1,0 +1,156 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "chain_key",
+    "restaurant_name",
+    "matches",
+    "source_url",
+    "source_title",
+    "source_type",
+    "source_year",
+    "match_confidence",
+    "notes"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["found", "not_published", "no_match", "ambiguous"]
+    },
+    "chain_key": {
+      "description": "The key of the chosen chain, copied from the request's chains; null when none.",
+      "anyOf": [{"type": "string"}, {"type": "null"}]
+    },
+    "restaurant_name": {
+      "description": "The chosen chain's name as listed in the request, at most 60 characters; empty when none.",
+      "type": "string"
+    },
+    "matches": {
+      "description": "One entry per request item that matches a menu item; empty unless status is found.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "item_index",
+          "menu_item",
+          "match_type",
+          "is_drink",
+          "components",
+          "options"
+        ],
+        "properties": {
+          "item_index": {
+            "description": "0-based position of the item in the request's items.",
+            "type": "integer"
+          },
+          "menu_item": {
+            "description": "The menu item's name exactly as the chain publishes it, at most 60 characters.",
+            "type": "string"
+          },
+          "match_type": {
+            "type": "string",
+            "enum": ["exact_item", "closest_item", "components_sum"]
+          },
+          "is_drink": {"type": "boolean"},
+          "components": {
+            "description": "For components_sum: each published component with its own published numbers.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["name", "calories", "protein_g", "carbs_g", "fat_g"],
+              "properties": {
+                "name": {
+                  "description": "At most 60 characters.",
+                  "type": "string"
+                },
+                "calories": {"anyOf": [{"type": "integer"}, {"type": "null"}]},
+                "protein_g": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "carbs_g": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "fat_g": {"anyOf": [{"type": "number"}, {"type": "null"}]}
+              }
+            }
+          },
+          "options": {
+            "description": "Every published size or variant of the menu item, one entry each.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "label",
+                "serving",
+                "unit",
+                "calories",
+                "calories_range",
+                "protein_g",
+                "carbs_g",
+                "fat_g"
+              ],
+              "properties": {
+                "label": {
+                  "description": "The size or variant name, at most 40 characters.",
+                  "type": "string"
+                },
+                "serving": {
+                  "description": "The serving as published, at most 40 characters.",
+                  "type": "string"
+                },
+                "unit": {
+                  "description": "What one serving is counted in (slice, cup, piece), at most 20 characters.",
+                  "type": "string"
+                },
+                "calories": {
+                  "description": "A single published value; null when the source publishes a range.",
+                  "anyOf": [{"type": "integer"}, {"type": "null"}]
+                },
+                "calories_range": {
+                  "description": "A published range as [low, high]; null for a single value.",
+                  "anyOf": [
+                    {"type": "array", "items": {"type": "integer"}},
+                    {"type": "null"}
+                  ]
+                },
+                "protein_g": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "carbs_g": {"anyOf": [{"type": "number"}, {"type": "null"}]},
+                "fat_g": {"anyOf": [{"type": "number"}, {"type": "null"}]}
+              }
+            }
+          }
+        }
+      }
+    },
+    "source_url": {
+      "description": "The exact address of the page or PDF the numbers came from, copied from the search results.",
+      "anyOf": [{"type": "string"}, {"type": "null"}]
+    },
+    "source_title": {
+      "description": "The source's title, at most 120 characters.",
+      "anyOf": [{"type": "string"}, {"type": "null"}]
+    },
+    "source_type": {
+      "type": "string",
+      "enum": [
+        "official_site",
+        "official_pdf",
+        "official_app",
+        "third_party_db",
+        "other"
+      ]
+    },
+    "source_year": {
+      "description": "The year the source was published or last updated, when it shows one.",
+      "anyOf": [{"type": "integer"}, {"type": "null"}]
+    },
+    "match_confidence": {
+      "description": "From 0 to 1.",
+      "type": "number"
+    },
+    "notes": {
+      "description": "At most 200 characters of plain text.",
+      "type": "string"
+    }
+  }
+}

@@ -483,7 +483,15 @@ void main() {
     final policy = _readRepo('docs/PRIVACY.md');
 
     test('in English and 中文, with the new effective date', () {
-      expect(policy, contains('Effective date: 2026-10-29'));
+      // The merge of PR #19 (restaurant lookup) changed the policy again,
+      // and so did its "Which meals" bullet, rewritten on 2026-11-05 for
+      // the auto_branding trigger, and the usual-foods PR on 2026-11-07
+      // (saved lookup answers kept up to a year; My usual foods). The date
+      // and this pin are set by hand, and again to the merge date when PR
+      // #19 merges, when the usual-foods PR merges and when PR #22 merges
+      // (docs/RELEASING.md): a 3-way merge keeps the older date without a
+      // conflict. PR #19 and the usual-foods PR both merged on 2026-11-09.
+      expect(policy, contains('Effective date: 2026-11-09'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));

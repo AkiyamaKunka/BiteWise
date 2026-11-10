@@ -15,6 +15,7 @@ import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import '../../core/contracts.dart';
 import '../settings/app_settings.dart' show AppSettings;
 import 'filename_dates.dart';
+import 'glasses.dart' show captureMetaFor;
 import 'photo_library.dart';
 
 /// Spec §6.1: SUPPORTED_QUEUE_EXTENSIONS ∪ server-side .tiff. Content is
@@ -165,8 +166,12 @@ class ShareIntake {
       // (§6.3 fallback = intake-time dating, expressed as capturedAt null).
       final capturedAt = deriveCapturedAt(
           fileName: name, now: _clock(), maxAgeDays: _capturedAtMaxAgeDays);
+      // How it was taken, from its own bytes (design G2a): no asset, so no
+      // creation date and no album.
       return IntakePhoto(bytes, '', name,
-          capturedAt: capturedAt, deliberate: true);
+          capturedAt: capturedAt,
+          deliberate: true,
+          capture: captureMetaFor(bytes, name));
     } finally {
       // Always remove the plugin's container copy — accepted, rejected, or
       // unreadable, it has served its purpose once we've looked at it (the
@@ -194,7 +199,10 @@ class ShareIntake {
           now: _clock(),
           maxAgeDays: _capturedAtMaxAgeDays);
       out.add(IntakePhoto(bytes, asset.id, name,
-          capturedAt: capturedAt, deliberate: true));
+          capturedAt: capturedAt,
+          deliberate: true,
+          capture: captureMetaFor(bytes, name,
+              createDate: asset.createDateTime)));
     }
     return out;
   }

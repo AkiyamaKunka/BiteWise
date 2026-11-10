@@ -18,6 +18,8 @@ import 'dart:typed_data';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -690,4 +692,49 @@ void main() {
       }
     });
   }
+  // RESTAURANT LOOKUPS (design R5a, D18): one row per provider through the
+  // app's own seam. Providers without a lookup answer unsupported and make
+  // ZERO HTTP calls — submit and poll alike, with a key configured, so
+  // "unsupported" can never be a missing key.
+  group('restaurant lookup coverage', () {
+    final request = LookupRequest.compose({
+      'items': [
+        {'name': 'Big Mac', 'qty': 1, 'brand': "McDonald's"}
+      ],
+      'chains': ['mcdonalds'],
+    });
+    const supported = {
+      AiProvider.anthropic: LookupRecipient.anthropic,
+      AiProvider.openrouter: LookupRecipient.openrouter,
+      AiProvider.server: LookupRecipient.claudePlan,
+    };
+    for (final p in AiProvider.values) {
+      test('${p.name}: ${supported.containsKey(p) ? 'supported' : 'unsupported, no HTTP call'}',
+          () async {
+        final s = await _settingsFor(p);
+        var calls = 0;
+        final multi = MultiProviderAnalyzer(s, client: MockClient((_) async {
+          calls++;
+          return http.Response('{}', 500);
+        }));
+        final support = multi.lookupSupport();
+        if (supported.containsKey(p)) {
+          expect(support.supported, isTrue);
+          expect(support.recipient, supported[p]);
+          // The owner's server here is plain http: brand-only.
+          expect(support.locationAllowed, p != AiProvider.server);
+          return;
+        }
+        expect(support.supported, isFalse);
+        expect(support.recipient, LookupRecipient.none);
+        final o = await multi.submit(request,
+            expectedRecipient: support.recipient,
+            expectedRecipientStamp: support.recipientStamp);
+        expect(o.kind, LookupOutcomeKind.unsupported);
+        expect((await multi.poll('job_abcdefgh01')).kind,
+            LookupOutcomeKind.unsupported);
+        expect(calls, 0);
+      });
+    }
+  });
 }

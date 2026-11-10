@@ -13,10 +13,27 @@
 ///     user is explicitly curating should read 0 g in totals, and the
 ///     display helpers render a stored 0 as 0 (calories included — see
 ///     format.displayTotalCalories), so card and day total agree.
+///   - an item row the user did not touch keeps every key it was stored
+///     with (design R6a): the printed brand, qty and unit the photo model
+///     read, a restaurant lookup's `published` flag, a leftover fraction.
+///     Fixing a meal's date or name must not strip what the row says about
+///     itself. A row the user changed is rebuilt from what the editor shows
+///     — a user-curated row makes no printed-brand claim, and its numbers
+///     are no longer anyone's published ones.
+///   - a draft of a STORED meal carries [MealDraft.expectedRaw], the
+///     analysis text it was loaded from: the save is a compare-and-set
+///     against it (MealsDao.updateMealFieldsIfUnchanged).
+///   - the save is the one moment that knows which rows the USER set, so
+///     it writes the usual-foods mark there (usual-foods spec §3.1): a row
+///     added here, or a stored row whose numbers the user changed, gains
+///     `user {set, at, n, qty}`; a rename keeps the AI's old name as
+///     `user.ai_name`. The mark is self-validating (usualMarkValid): it
+///     counts only while the row's numbers still equal `n`.
 library;
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
+import '../core/usual_foods_logic.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 
@@ -64,7 +81,34 @@ class MealItemDraft {
     this.protein = '',
     this.carbs = '',
     this.fat = '',
-  });
+  })  : stored = null,
+        _seed = null,
+        _loaded = null;
+
+  /// The first row "Add item" adds to a stored meal with no rows
+  /// ([MealDraft.addItem]): its fields are the totals above it, and [_seed]
+  /// holds the meal's stored totals.
+  MealItemDraft._seeded(
+    List<num> this._seed, {
+    required this.calories,
+    required this.protein,
+    required this.carbs,
+    required this.fat,
+  })  : name = '',
+        stored = null,
+        _loaded = null;
+
+  MealItemDraft._fromStored(Map<String, dynamic> m)
+      : name = (m['name'] ?? '').toString(),
+        calories = _numText(m['estimated_calories']),
+        protein = _numText(m['protein_g']),
+        carbs = _numText(m['carbs_g']),
+        fat = _numText(m['fat_g']),
+        stored = m,
+        _seed = null,
+        _loaded = null {
+    _loaded = (name, calories, protein, carbs, fat);
+  }
 
   String name;
   String calories;
@@ -72,13 +116,25 @@ class MealItemDraft {
   String carbs;
   String fat;
 
-  static MealItemDraft fromMap(Map<String, dynamic> m) => MealItemDraft(
-        name: (m['name'] ?? '').toString(),
-        calories: _numText(m['estimated_calories']),
-        protein: _numText(m['protein_g']),
-        carbs: _numText(m['carbs_g']),
-        fat: _numText(m['fat_g']),
-      );
+  /// The stored item this row was loaded from; null for a row the user
+  /// added.
+  final Map<String, dynamic>? stored;
+
+  /// For the first row added to a STORED meal with no rows: the meal's
+  /// stored totals (kcal, protein, carbs, fat) the row was seeded with —
+  /// the AI's, not the user's. The row is the user's only once one of its
+  /// numbers differs from them. Null for every other row.
+  final List<num>? _seed;
+
+  /// The five field texts as loaded, to tell an untouched row.
+  (String, String, String, String, String)? _loaded;
+
+  static MealItemDraft fromMap(Map<String, dynamic> m) =>
+      MealItemDraft._fromStored(m);
+
+  /// A stored row whose five fields still read exactly as loaded.
+  bool get untouched =>
+      stored != null && _loaded == (name, calories, protein, carbs, fat);
 
   bool get isBlank =>
       name.trim().isEmpty &&
@@ -105,6 +161,114 @@ class MealItemDraft {
                 .value ??
             0,
       };
+
+  /// The item to persist (usual-foods spec §3.1 for `user`):
+  ///   * an [untouched] stored row keeps every key it was stored with,
+  ///     `user` included byte for byte, its name and four numbers
+  ///     normalized exactly as [toMap] writes them (a numeric string
+  ///     becomes the number it already read as);
+  ///   * a row the user ADDED is [toMap] plus `user {set: true, at: now,
+  ///     n: its four numbers, qty: 1}`: every number on it is the user's —
+  ///     except the first row seeded from a loaded meal's totals
+  ///     ([MealDraft.addItem]) while it still holds them, and a row under
+  ///     [kUsualMinKcal] kcal (one left blank reads 0), which get no
+  ///     `user`;
+  ///   * a stored row the user TOUCHED is [toMap] plus a `user` map: a new
+  ///     `set`/`at`/`n` when any number differs numerically from the
+  ///     stored row ("450" equals 450), else the stored ones while they
+  ///     are still valid ([usualMarkValid]); `qty` from the stored mark or
+  ///     the stored row (toMap drops `qty`); `ai_name` from the stored
+  ///     mark, else the stored name when the name changed. `user` is
+  ///     written only when it says something: `set`, `ai_name`, or a
+  ///     count other than 1.
+  /// [now] stamps `at` (UTC, ms); null reads the device clock.
+  Map<String, dynamic> toStoredMap([DateTime? now]) {
+    final src = stored;
+    if (src != null && untouched) {
+      return {
+        for (final e in src.entries) e.key: e.value,
+        ...toMap(),
+      };
+    }
+    final out = toMap();
+    final when = now ?? DateTime.now();
+    final numbers = [
+      out['estimated_calories'] as num,
+      out['protein_g'] as num,
+      out['carbs_g'] as num,
+      out['fat_g'] as num,
+    ];
+    if (src == null) {
+      final seed = _seed;
+      // A row seeded from a stored meal's totals and never changed holds
+      // the meal's numbers, not the user's.
+      if (seed != null && !_differs(numbers, seed)) return out;
+      // A row whose numbers were left blank (all four read 0), or that is
+      // under the usual-foods minimum, says no number of the user's: a
+      // name-only "Toast" row must never teach 0 kcal toast.
+      if (numbers[0] < kUsualMinKcal) return out;
+      out['user'] = {
+        'set': true,
+        'at': usualStamp(when),
+        'n': numbers,
+        'qty': 1,
+      };
+      return out;
+    }
+    final user = <String, dynamic>{};
+    final storedNumbers = [
+      _storedNumber(src['estimated_calories']),
+      _storedNumber(src['protein_g']),
+      _storedNumber(src['carbs_g']),
+      _storedNumber(src['fat_g']),
+    ];
+    final changed = _differs(numbers, storedNumbers);
+    final storedUser = src['user'];
+    if (changed) {
+      user['set'] = true;
+      user['at'] = usualStamp(when);
+      user['n'] = numbers;
+    } else if (storedUser is Map && usualMarkValid(src, when)) {
+      user['set'] = true;
+      user['at'] = storedUser['at'];
+      user['n'] = List<Object?>.from(storedUser['n'] as List);
+    }
+    final qty = usualItemQty(src);
+    user['qty'] = qty;
+    final storedAiName = storedUser is Map ? storedUser['ai_name'] : null;
+    if (storedAiName is String && storedAiName.trim().isNotEmpty) {
+      user['ai_name'] = storedAiName;
+    } else {
+      final storedName = src['name'] is String ? src['name'] as String : '';
+      final aiName = cleanShortText(storedName, kUsualAiNameMax);
+      if (name.trim() != storedName.trim() && aiName.isNotEmpty) {
+        user['ai_name'] = aiName;
+      }
+    }
+    if (user.containsKey('set') || user.containsKey('ai_name') || qty != 1) {
+      out['user'] = user;
+    }
+    return out;
+  }
+}
+
+/// Longest kept `user.ai_name`, in code points.
+const int kUsualAiNameMax = 80;
+
+/// Some of the four numbers differ numerically ("450" equals 450).
+bool _differs(List<num> a, List<num> b) {
+  for (var i = 0; i < 4; i++) {
+    if ((a[i] - b[i]).abs() > 1e-9) return true;
+  }
+  return false;
+}
+
+/// A stored number as the editor loaded it ([_numText]): a number, or a
+/// numeric string; anything else is 0, like a blank field.
+num _storedNumber(dynamic v) {
+  var n = safeNumberOr(v, null);
+  if (n == null && v is String) n = safeNumberOr(num.tryParse(v.trim()), null);
+  return n ?? 0;
 }
 
 /// Field text for a stored value. Numeric STRINGS must parse: the analyzer
@@ -151,6 +315,18 @@ class MealDraft {
   /// The analysis map this draft started from; unknown keys survive the save.
   final Map<String, dynamic> base;
 
+  /// The stored analysis TEXT [base] was decoded from (MealSnapshot
+  /// .rawAnalysis), once the editor has read it: what the save of an
+  /// existing meal compares against, so a meal that changed while it was
+  /// open is never overwritten with this older copy. Null for a new meal,
+  /// and until the read confirmed the row still matches this draft.
+  String? expectedRaw;
+
+  /// The totals the meal was loaded with ([fromMeal]: a stored meal, or the
+  /// describe preview's model estimate), as the editor reads them; null for
+  /// a new hand-typed meal ([blank]), whose totals are all the user's.
+  List<num>? _loadedTotals;
+
   static MealDraft fromMeal(Meal meal) => MealDraft(
         description: mealDescriptionRaw(meal.analysis),
         dateIso: meal.date,
@@ -163,7 +339,15 @@ class MealDraft {
           for (final m in safeFoodItems(meal.analysis)) MealItemDraft.fromMap(m)
         ],
         base: Map<String, dynamic>.from(meal.analysis),
-      );
+      ).._loadedTotals = [
+          for (final k in const [
+            'total_calories',
+            'total_protein_g',
+            'total_carbs_g',
+            'total_fat_g',
+          ])
+            _storedNumber(meal.analysis[k]),
+        ];
 
   static MealDraft blank(DateTime now) => MealDraft(
         description: '',
@@ -183,11 +367,20 @@ class MealDraft {
   /// 2026-10-07: a hand-entered 450 kcal meal read 0 right after the tap).
   /// Later rows start blank — by then the totals belong to the rows, and a
   /// seeded row would double them.
+  ///
+  /// The seeded row is the user's (a usual-foods mark at save) on a new
+  /// hand-typed meal; on a loaded meal only once one of its numbers
+  /// differs from the totals the meal was loaded with, which are the AI's
+  /// (or the stored meal's), never typed in this session.
   MealItemDraft addItem() {
-    final it = items.isEmpty
-        ? MealItemDraft(
-            calories: calories, protein: protein, carbs: carbs, fat: fat)
-        : MealItemDraft();
+    final loaded = _loadedTotals;
+    final it = items.isNotEmpty
+        ? MealItemDraft()
+        : loaded != null
+            ? MealItemDraft._seeded(loaded,
+                calories: calories, protein: protein, carbs: carbs, fat: fat)
+            : MealItemDraft(
+                calories: calories, protein: protein, carbs: carbs, fat: fat);
     items.add(it);
     return it;
   }
@@ -256,7 +449,10 @@ class MealDraft {
   }
 
   /// The analysis map to persist. Call only when [validate] is empty.
-  Map<String, dynamic> toAnalysis() {
+  /// [now] stamps the usual-foods marks of the rows the user set
+  /// ([MealItemDraft.toStoredMap]); null reads the device clock.
+  Map<String, dynamic> toAnalysis({DateTime? now}) {
+    final when = now ?? DateTime.now();
     final out = Map<String, dynamic>.from(base);
     num field(String raw, num max) =>
         parseNumberField(raw, label: 'x', max: max).value ?? 0;
@@ -269,7 +465,7 @@ class MealDraft {
     // A hand-curated meal is food by definition — see the library note.
     out['is_food'] = true;
     out['food_items'] = [
-      for (final it in items.where((i) => !i.isBlank)) it.toMap()
+      for (final it in items.where((i) => !i.isBlank)) it.toStoredMap(when)
     ];
     return out;
   }

@@ -744,10 +744,10 @@ class _FailingDeductionDao extends SqfliteMealsDao {
   _FailingDeductionDao(super.db, {super.clock});
 
   @override
-  Future<void> applyLeftoverVerdict(
+  Future<bool> applyLeftoverVerdict(
           String imageHash, int mealId, Map<String, dynamic> analysis,
-          {String? ownerStamp}) =>
+          {String? ownerStamp, String? expectedRaw}) =>
       super.applyLeftoverVerdict(
           imageHash, mealId, {...analysis, 'poison': Object()},
-          ownerStamp: ownerStamp);
+          ownerStamp: ownerStamp, expectedRaw: expectedRaw);
 }

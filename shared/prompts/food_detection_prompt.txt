@@ -77,19 +77,62 @@ estimating calories:
     a visible wrong assumption gets fixed, an invisible one becomes a
     silently wrong day.
 
+MEAL CONTEXT — describe the meal with these fields as well. They record
+what the photo shows; they never change how you estimate calories.
+  - estimate_confidence: how well the photo supports YOUR calorie
+    numbers, judged by the items that carry most of the calories.
+      "high": the numbers come from printed evidence: a nutrition label
+        or panel, a printed weight, or a known packaged product
+        (Priority 1-3).
+      "medium": a clear, ordinary dish with a scale reference in frame,
+        or a standard single serving.
+      "low": no scale reference AND hidden parts (sauce, oil, fillings,
+        a mixed bowl, fried food), or the food is partly hidden.
+  - restaurant_context: where the meal came from, judged only from what
+    is visible. "restaurant" (restaurant plating, a tray, a restaurant
+    table), "takeout" (a branded bag, clamshell or delivery container,
+    or a delivery order screen), "packaged" (a retail package), "home"
+    (home dishware and setting), "unknown" when the photo does not show
+    it.
+  - portion_state: "whole" (one complete serving as served), "partial"
+    (part of a serving: some already eaten, or taken from a larger
+    dish), "shared" (dishes shared by several people), "buffet" (a
+    self-serve buffet plate).
+  - order_merchant: ONLY when a receipt or order screen in the photo
+    names the merchant or restaurant: the merchant's name only, spelled
+    as printed, without store number, address or city; otherwise "".
+  - For each food item:
+      brand: the brand printed on THAT item's own cup, wrapper, bag or
+        box, copied exactly as printed. A brand counts only on that
+        item's own packaging, never from menus, signs, adverts or
+        another item in the photo. On a receipt or order screen, the
+        restaurant or merchant name goes only in order_merchant, never
+        in an item's brand; a receipt line gives an item a brand only
+        when it prints a product brand other than the merchant (such as
+        "Coca-Cola"). Never guess a brand from how the food looks; use
+        "" when none is printed.
+      qty: how many of that item were eaten (a number; 1 by default).
+        estimated_calories and the macros stay the TOTAL for all of them.
+      unit: what one of them is, in a word or two ("cup", "slice",
+        "piece", "bowl"), or "".
+
 If the image DOES contain food, respond with a JSON object like this:
 {
   "is_food": true,
   "food_items": [
-    {"name": "Grilled chicken breast (~140 g)", "estimated_calories": 280, "protein_g": 43, "carbs_g": 0, "fat_g": 12},
-    {"name": "Caesar salad (~180 g)", "estimated_calories": 170, "protein_g": 7, "carbs_g": 12, "fat_g": 10}
+    {"name": "Grilled chicken breast (~140 g)", "estimated_calories": 280, "protein_g": 43, "carbs_g": 0, "fat_g": 12, "brand": "", "qty": 1, "unit": "piece"},
+    {"name": "Caesar salad (~180 g)", "estimated_calories": 170, "protein_g": 7, "carbs_g": 12, "fat_g": 10, "brand": "", "qty": 1, "unit": "bowl"}
   ],
   "total_calories": 450,
   "total_protein_g": 50,
   "total_carbs_g": 12,
   "total_fat_g": 22,
   "meal_description": "Grilled chicken breast with Caesar salad",
-  "confidence_note": "Calibrated against the chopsticks next to the plate; moderate confidence"
+  "confidence_note": "Calibrated against the chopsticks next to the plate; moderate confidence",
+  "estimate_confidence": "medium",
+  "restaurant_context": "unknown",
+  "portion_state": "whole",
+  "order_merchant": ""
 }
 
 Rules:
@@ -101,3 +144,7 @@ Rules:
 - If you can see the portion size, adjust your estimate accordingly
 - Include a brief confidence note: name the scale reference you calibrated
   against, or say no reference was visible and standard portions were assumed
+- Always include estimate_confidence, restaurant_context and portion_state,
+  each with exactly one of the values listed under MEAL CONTEXT
+- Give every food item brand, qty and unit; brand and order_merchant are
+  "" unless the photo prints them as described above

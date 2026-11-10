@@ -27,6 +27,7 @@ import '../widgets/states.dart';
 import 'fix_meal_screen.dart';
 import 'leftover_flow.dart';
 import 'meal_editor_screen.dart';
+import 'usual_foods_screen.dart';
 import '../services.dart';
 import '../widgets/small_spinner.dart';
 
@@ -59,6 +60,7 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
               title: ctx.l10n.addFromPhotos,
               onTap: () => Navigator.of(ctx).pop('photos'),
             ),
+            if (services.usualFoods != null) usualFoodsRow(ctx),
             GroupedRow(
               key: const Key('addLeftover'),
               icon: Icons.restaurant_outlined,
@@ -120,6 +122,10 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
             executor: services.executor,
             dao: services.dao,
             settings: services.settings)));
+  } else if (choice == 'usual') {
+    // Logged again with saved numbers: no model, so no AI consent.
+    await Navigator.of(context).push(MaterialPageRoute<void>(
+        builder: (_) => UsualFoodsScreen(usual: services.usualFoods!)));
   } else if (choice == 'manual') {
     // Defaults to today/now inside the editor (MealDraft.blank).
     await Navigator.of(context).push(MaterialPageRoute<void>(
@@ -127,7 +133,9 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   } else if (choice == 'fix') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => FixMealScreen(
-            executor: services.executor, settings: services.settings)));
+            executor: services.executor,
+            settings: services.settings,
+            inUse: services.mealInUse)));
   } else {
     return;
   }
@@ -441,24 +449,22 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
 
   /// Puts the cut meal back as it was before THIS deduction. Re-reads the
   /// row first and writes only while it still shows that deduction
-  /// (revertedLeftover) — a deleted meal or a later fix is left alone.
-  /// updateMealAnalysis keeps corrected=1 (spec §2.4); the photo's ledger
+  /// (revertedLeftover) — a deleted meal or a later fix is left alone —
+  /// and compare-and-set against the text it read (design R6a), so a write
+  /// landing in between (a restaurant lookup, a chat fix) is never undone
+  /// with it. The write keeps corrected=1 (spec §2.4); the photo's ledger
   /// row stays 'skipped', which the editor's photo save turns into
   /// 'saved'.
   Future<bool> _undoLeftover(PhotoOutcome outcome) async {
     final dao = widget.services.dao;
     final id = outcome.mealId!;
-    final date = outcome.mealDate;
-    final rows = date == null
-        ? const <Meal>[]
-        : await dao.mealsBetween(date, date);
-    final current = rows.where((m) => m.id == id).firstOrNull;
+    final current = await dao.mealSnapshot(id);
     if (current == null) return false;
-    final restored = revertedLeftover(current.analysis,
+    final restored = revertedLeftover(current.meal.analysis,
         applied: outcome.analysis!, before: outcome.previousAnalysis!);
     if (restored == null) return false;
-    await dao.updateMealAnalysis(id, restored);
-    return true;
+    return dao.updateMealAnalysisIfUnchanged(id,
+        expectedRaw: current.rawAnalysis, analysis: restored);
   }
 
   @override

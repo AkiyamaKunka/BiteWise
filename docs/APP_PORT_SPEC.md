@@ -528,6 +528,22 @@ protein_g, carbs_g, fat_g}`), `total_calories`, `total_protein_g`, `total_carbs_
 `meal_description`, `confidence_note`. **Gemini's JSON mode guarantees syntax, not schema** — the
 consumers never trust shapes:
 
+- **Meal context (2026-10, restaurant assist R1), optional and additive.** Meal level:
+  `estimate_confidence` (`low`/`medium`/`high`), `restaurant_context`
+  (`restaurant`/`takeout`/`packaged`/`home`/`unknown`), `portion_state`
+  (`whole`/`partial`/`shared`/`buffet`), `order_merchant` (≤60, receipt/order screen only, the
+  merchant's name without store number, address or city);
+  per item: `brand` (printed on that item's own packaging only, never the receipt merchant,
+  ≤60), `qty` (0<q≤20, default 1;
+  the item's calories stay the line total), `unit` (≤20). Read ONLY through
+  `core/coerce.dart` (`coerceEstimateConfidence`, `coerceRestaurantContext`,
+  `coercePortionState`, `cleanBrand`, `cleanOrderMerchant`, `coerceQty`, `cleanUnit`): a missing
+  or invalid value is unknown (null / "" / 1) and unknown never triggers anything. The
+  recent-meal, leftover and chat whitelists never forward them. `confidence` stays the
+  leftover verdict's key. A restaurant lookup request (R2a) never carries `brand` or
+  `order_merchant` as printed: only the canonical name of the chain table entry the text
+  names, or "" (`chainNameOnly` / `chain_name_only`).
+
 - **`safe_number(value, default=0)`** (`utils.py:39-57`): returns the value only if it is an
   `int`/`double` that is **not a bool** and lies **strictly** inside `(-1e9, 1e9)` (this also
   rejects NaN and ±Infinity); anything else → default. Used for every arithmetic read of calories/
@@ -1085,7 +1101,7 @@ one SQLite file). Each is pinned by tests named alongside.
 
 ### §9.1 `source` vocabulary (app)
 
-FIVE wire values, defined once in `core/contracts.dart` as `MealSource` and
+SIX wire values, defined once in `core/contracts.dart` as `MealSource` and
 never spelled as literals at call sites — the reclaim sweep MATCHES on
 `app_watch` in SQL, so a drifting literal silently changes intake policy
 instead of failing.
@@ -1097,5 +1113,6 @@ instead of failing.
 | `manual_text` | describe-a-meal screen, NL `new_meal` | n/a (no photo); server parity, `telegram_bot` writes the same string |
 | `app_manual` | meal editor, numbers typed by hand | n/a; distinct from `manual_text` to record that NO model produced the values |
 | `app_manual_photo` | meal editor reached from the coverage screen's "log it yourself" | a photo EXISTS and its md5 is ledgered, but every number came from the user |
+| `app_repeat` | `UsualFoods.logAgain` (Log › My usual foods) | n/a (no photo, no ledger row, empty `image_hash` and `file_id`); numbers copied on the phone from earlier meals, the user's own where they set them; no model call |
 
 Pinned by `test/core/meal_source_test.dart` (frozen strings + distinctness).

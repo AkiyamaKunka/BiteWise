@@ -21,5 +21,5 @@
   "gemini_analysis_max_attempts": 3,
   "gemini_retry_delay_cap_seconds": 60,
   "api_leftover_max_chars": 4000,
-  "reply_language_directive_zh": "Write meal_description, every food item name and every free-text field (confidence_note, note, reason, reply) in Simplified Chinese (简体中文), except that an item name referring back to a listed meal must be copied exactly as written there; keep every JSON key and fixed value (such as intent) in English and keep numbers as numbers."
+  "reply_language_directive_zh": "Write meal_description, every food item name and every free-text field (confidence_note, note, reason, reply) in Simplified Chinese (简体中文), except that an item name referring back to a listed meal must be copied exactly as written there, and brand and order_merchant are copied exactly as printed, never translated; keep every JSON key and fixed value (such as intent, estimate_confidence, restaurant_context and portion_state) in English and keep numbers as numbers."
 }
