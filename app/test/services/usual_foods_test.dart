@@ -351,9 +351,13 @@ void main() {
           reason: 'one decline does not mute');
       await usual.decline((await usual.offerFor(dao.byId(b)))!);
       expect(await usual.offerFor(dao.byId(c)), isNull, reason: 'muted');
-      // The user sets new numbers for the food after the declines.
+      // The user sets new numbers for the food after the declines: half an
+      // hour after the clock, in every time zone (a fixed "19:00Z" was
+      // before the 12:30 local clock west of UTC-6:30, e.g. in California).
+      final later =
+          clock.add(const Duration(minutes: 30)).toUtc().toIso8601String();
       seed([item('Oatmeal', 380, p: 12, c: 50, f: 14,
-          user: mark([380, 12, 50, 14], at: '2026-11-07T19:00:00.000Z'))],
+          user: mark([380, 12, 50, 14], at: later))],
           date: today, time: '11:00 AM', source: MealSource.appManual);
       signal.value++;
       final lifted = await usual.offerFor(dao.byId(c));
