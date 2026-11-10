@@ -128,8 +128,7 @@ void main() {
         expect(find.byType(MealEditorScreen), findsNothing);
       }
 
-      String todayTotal() =>
-          tester.widget<Text>(find.byKey(const Key('todayTotalKcal'))).data!;
+      String todayTotal() => todayEaten(tester);
 
       await pumpApp(tester, phone, locale: w.locale);
       expect(find.text(l.todayEmptyTitle), findsOneWidget);
@@ -140,7 +139,13 @@ void main() {
       expect(phone.ai.photoCalls, 1);
       expect(card(day1), findsOneWidget);
       expect(find.byKey(const Key('usualChip')), findsNothing);
-      expect(todayTotal(), l.kcalAmount('300'));
+      expect(todayTotal(), '300');
+      // The number's unit is the caption under it, in the ring.
+      expect(
+          find.descendant(
+              of: find.byKey(const Key('todayHero')),
+              matching: find.text(l.ringKcalToday)),
+          findsOneWidget);
       expect((await phone.row(day1))['source'], MealSource.appWatch);
       expect(await phone.corrected(day1), isFalse);
       expect((await phone.item(day1)).containsKey('user'), isFalse);
@@ -153,7 +158,7 @@ void main() {
       await tester.tap(find.byKey(const Key('saveMealButton')));
       await tester.pumpAndSettle();
       expect(find.byType(MealEditorScreen), findsNothing);
-      expect(todayTotal(), l.kcalAmount('350'));
+      expect(todayTotal(), '350');
       final fixedAt = usualStamp(phone.now);
       expect(await phone.item(day1), {
         'name': w.aiName,
@@ -188,13 +193,13 @@ void main() {
       // Nothing changes without the tap.
       final asLogged = await phone.raw(day2);
       expect(await phone.corrected(day2), isFalse);
-      expect(todayTotal(), l.kcalAmount('310'));
+      expect(todayTotal(), '310');
 
       await tester.tap(find.byKey(const Key('usualChipUse')));
       await tester.pumpAndSettle();
       expect(find.text(l.usualUsedSnack('310', '350')), findsOneWidget);
       expect(find.text(l.assistUndo), findsOneWidget);
-      expect(todayTotal(), l.kcalAmount('350'));
+      expect(todayTotal(), '350');
       expect(chipOf(day2), findsNothing);
       final used = await phone.analysis(day2);
       expect((used['food_items'] as List).single, {
@@ -221,7 +226,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(await phone.raw(day2), asLogged);
       expect(await phone.corrected(day2), isTrue);
-      expect(todayTotal(), l.kcalAmount('310'));
+      expect(todayTotal(), '310');
       expect(chipOf(day2), findsNothing);
       expect(find.text(l.usualUndoStale), findsNothing);
 
@@ -457,7 +462,7 @@ void main() {
       // offer (they are not photos).
       await dismissSnackBar(tester);
       await goBack(tester);
-      expect(todayTotal(), l.kcalAmount('720'));
+      expect(todayTotal(), '720');
       expect(find.byKey(const Key('usualChip')), findsNothing);
 
       // ── Day 14, Sunday 1 November 07:40 (the morning US clocks went
@@ -490,7 +495,7 @@ void main() {
       expect(fieldText('editorCalories'), '300');
       expect(find.byKey(const Key('usualOfferCard')), findsNothing);
       await goBack(tester);
-      expect(todayTotal(), l.kcalAmount('300'));
+      expect(todayTotal(), '300');
 
       // My usual foods now says the oatmeal was logged this morning, and a
       // tap asks before logging it a second time.
