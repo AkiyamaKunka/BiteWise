@@ -56,6 +56,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/held_timers.dart';
 import '../ui/fakes.dart';
 
 final DateTime _now = DateTime(2026, 10, 24, 13, 0);
@@ -467,44 +468,6 @@ class _Harness {
     return jsonDecode(f.readAsStringSync()) as Map<String, Object?>;
   }
 }
-
-/// A timer the test holds instead of the event loop ([_holdingTimers]), so
-/// nothing waits on the real clock: [fire] runs it once, as the loop would
-/// after [wait].
-class _HeldTimer implements Timer {
-  _HeldTimer(this.wait, this._run);
-
-  final Duration wait;
-  final void Function() _run;
-  bool _active = true;
-
-  @override
-  bool get isActive => _active;
-
-  @override
-  int get tick => 0;
-
-  @override
-  void cancel() => _active = false;
-
-  void fire() {
-    if (!_active) return;
-    _active = false;
-    _run();
-  }
-}
-
-/// A zone in which every new timer goes to [held] instead of the event
-/// loop: a test reads the timers the engine arms and fires them itself.
-Zone _holdingTimers(List<_HeldTimer> held) => Zone.current.fork(
-  specification: ZoneSpecification(
-    createTimer: (self, parent, zone, wait, run) {
-      final timer = _HeldTimer(wait, run);
-      held.add(timer);
-      return timer;
-    },
-  ),
-);
 
 /// A saved lookup answer (usual foods §2.1) for [analysis]'s items at
 /// [chain], fetched at [at] (default: now). Its key.
@@ -2549,10 +2512,10 @@ void main() {
       const window = Duration(milliseconds: 300);
       final assist = h.build(pollInterval: interval, pollWindow: window);
       addTearDown(assist.dispose);
-      final timers = <_HeldTimer>[];
-      final zone = _holdingTimers(timers);
+      final timers = <HeldTimer>[];
+      final zone = holdingTimers(timers);
       Future<void> sweep() => zone.run(assist.sweep);
-      List<_HeldTimer> armed() => [
+      List<HeldTimer> armed() => [
         for (final t in timers)
           if (t.isActive) t,
       ];
@@ -2607,10 +2570,10 @@ void main() {
         'submitted; after that only a sweep polls it', () async {
       // The engine's timers are held by the test and its clock is the
       // harness's: the minutes pass by setting it, nothing waits.
-      final timers = <_HeldTimer>[];
-      final zone = _holdingTimers(timers);
+      final timers = <HeldTimer>[];
+      final zone = holdingTimers(timers);
       Future<void> sweep() => zone.run(h.assist.sweep);
-      List<_HeldTimer> armed() => [
+      List<HeldTimer> armed() => [
         for (final t in timers)
           if (t.isActive) t,
       ];
@@ -2690,10 +2653,10 @@ void main() {
     // left unpolled until after midnight: the cap held the timer's sweep.
     test('the day\'s last lookup came back as a job: the window still polls '
         'it by itself past the daily cap, reading nothing again', () async {
-      final timers = <_HeldTimer>[];
-      final zone = _holdingTimers(timers);
+      final timers = <HeldTimer>[];
+      final zone = holdingTimers(timers);
       Future<void> sweep() => zone.run(h.assist.sweep);
-      List<_HeldTimer> armed() => [
+      List<HeldTimer> armed() => [
         for (final t in timers)
           if (t.isActive) t,
       ];
