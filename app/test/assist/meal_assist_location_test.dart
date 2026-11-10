@@ -468,14 +468,6 @@ class _Harness {
   }
 }
 
-Future<void> _until(bool Function() done, {int ms = 3000}) async {
-  final end = DateTime.now().add(Duration(milliseconds: ms));
-  while (!done()) {
-    if (DateTime.now().isAfter(end)) fail('timed out');
-    await Future<void>.delayed(const Duration(milliseconds: 5));
-  }
-}
-
 /// A timer the test holds instead of the event loop ([_holdingTimers]), so
 /// nothing waits on the real clock: [fire] runs it once, as the loop would
 /// after [wait].
@@ -2548,25 +2540,66 @@ void main() {
 
     test('in the foreground a pending job is polled by itself every '
         'interval, for the window only', () async {
-      final start = DateTime.now();
-      final assist = h.build(
-        clock: () => _now.add(DateTime.now().difference(start)),
-        pollInterval: const Duration(milliseconds: 40),
-        pollWindow: const Duration(milliseconds: 300),
-      );
+      // An engine with an interval and a window of its own, not the
+      // defaults. Its timers are held by the test and its clock is the
+      // harness's: the milliseconds pass by setting it, nothing waits (on
+      // the real clock a stalled machine used the window up before the
+      // polls the test waited for).
+      const interval = Duration(milliseconds: 40);
+      const window = Duration(milliseconds: 300);
+      final assist = h.build(pollInterval: interval, pollWindow: window);
       addTearDown(assist.dispose);
+      final timers = <_HeldTimer>[];
+      final zone = _holdingTimers(timers);
+      Future<void> sweep() => zone.run(assist.sweep);
+      List<_HeldTimer> armed() => [
+        for (final t in timers)
+          if (t.isActive) t,
+      ];
+      // Completed by the next poll: the poll a round waits for was started
+      // by the timer it fired, not by the test.
+      Completer<void>? polled;
+
       h.add(_bigMac());
       h.lookups.onSubmit = (_) async => _pending('job_abcdef12');
-      h.lookups.onPoll = (_) async => _pending('job_abcdef12');
-      await assist.sweep();
-      await _until(() => h.lookups.polls.length >= 3);
-      // Past the window: no more polls until the next sweep.
-      await Future<void>.delayed(const Duration(milliseconds: 400));
-      final polled = h.lookups.polls.length;
-      expect(polled, lessThanOrEqualTo(9));
-      await Future<void>.delayed(const Duration(milliseconds: 200));
-      expect(h.lookups.polls.length, polled);
+      h.lookups.onPoll = (_) async {
+        polled?.complete();
+        polled = null;
+        return _pending('job_abcdef12');
+      };
+      await sweep();
       expect(h.lookups.submits, hasLength(1));
+      expect(h.lookups.polls, isEmpty);
+
+      // One poll an interval, each arming the next while the job is younger
+      // than the window: the 7th, 280 ms in, arms the 8th and last.
+      var after = Duration.zero;
+      var count = 0;
+      while (after < window) {
+        expect(armed(), hasLength(1), reason: 'the poll after $after is armed');
+        final timer = armed().single;
+        expect(timer.wait, interval);
+        h.now = _now.add(after += interval);
+        final poll = polled = Completer<void>();
+        timer.fire();
+        await poll.future;
+        // The sweep the timer started is joined (sweep() is single-flight;
+        // the pass the call adds finds nothing due).
+        await sweep();
+        expect(h.lookups.polls, hasLength(++count), reason: 'one at $after');
+      }
+      expect(count, 8);
+
+      // Past the window nothing is armed, however long it lasts: no more
+      // polls until the next sweep, which polls once and arms nothing
+      // either.
+      expect(armed(), isEmpty);
+      h.now = _now.add(window * 2);
+      expect(h.lookups.polls, hasLength(8));
+      await sweep();
+      expect(h.lookups.polls, hasLength(9));
+      expect(armed(), isEmpty);
+      expect(h.lookups.submits, hasLength(1), reason: 'polled, not resent');
     });
 
     test('a job still pending after 2 minutes is polled again by itself, in '
