@@ -13,6 +13,7 @@
 //     preview                            an unedited describe-preview row
 //   a meal typed in by hand              a correction on the Fix screen
 //   Use                                  a model reply that claims a mark
+//                                        a name given to the model's totals
 //                                        Use on a kcal-only record
 //                                        a re-log of a meal that was never
 //                                          the owner's
@@ -330,6 +331,27 @@ void main() {
     expect(await phone.corrected(bagel), isTrue);
     expect(await phone.item(bagel), foodItem('Bagel', 300, p: 10, c: 56, f: 4));
 
+    // 20:00 A smoothie photo the model gives only totals for. The owner
+    // adds a row to give it a name. The row starts with the model's
+    // totals, and naming it sets no number.
+    await at(DateTime(2026, 10, 5, 20, 0));
+    final smoothie = await photoLands({
+      ...aiSays(const [], description: 'A smoothie'),
+      'total_calories': 280,
+      'total_protein_g': 6,
+      'total_carbs_g': 52,
+      'total_fat_g': 4,
+    });
+    await openEditor(smoothie, 'A smoothie');
+    await tester.tap(find.byKey(const Key('addItemRow')));
+    await tester.pump();
+    await tester.enterText(find.byKey(const Key('itemName0')), 'Berry smoothie');
+    await tester.pump();
+    await save();
+    expect(await phone.item(smoothie),
+        foodItem('Berry smoothie', 280, p: 6, c: 52, f: 4));
+    expect(await phone.corrected(smoothie), isTrue);
+
     // ═══ Day 2, Tuesday 6 October ══════════════════════════════════════
 
     // 08:00 Breakfast again, as the model names things.
@@ -408,7 +430,13 @@ void main() {
         [foodItem('Bagel', 250, p: 9, c: 48, f: 3)],
         description: 'Bagel'));
     expect(chipOf(bagel2), findsNothing);
-    // Exactly the three offers above are on Today.
+    // 20:00 A smoothie again: the row the owner only named taught nothing.
+    await at(DateTime(2026, 10, 6, 20, 0));
+    final smoothie2 = await photoLands(aiSays(
+        [foodItem('Berry smoothie', 200, p: 4, c: 40, f: 2)],
+        description: 'A smoothie'));
+    expect(chipOf(smoothie2), findsNothing);
+    // Of the day's offers, two are still on Today.
     expect(find.byKey(const Key('usualChip')), findsNWidgets(2),
         reason: 'pho and shake (the cold brew was used, breakfast saved)');
 

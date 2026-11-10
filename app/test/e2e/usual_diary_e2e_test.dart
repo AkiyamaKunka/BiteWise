@@ -459,6 +459,63 @@ void main() {
       await goBack(tester);
       expect(todayTotal(), l.kcalAmount('720'));
       expect(find.byKey(const Key('usualChip')), findsNothing);
+
+      // ── Day 14, Sunday 1 November 07:40 (the morning US clocks went
+      // back). A photo again; this time the owner takes the offer in the
+      // editor, and undoes it there. ──
+      await newDay(DateTime(2026, 11, 1, 7, 40));
+      final day14 = await photoLands(300);
+      expect(inChip(day14, l.usualItemLine(w.shown, '300', '360')),
+          findsOneWidget);
+      final day14Raw = await phone.raw(day14);
+      await openEditor(day14);
+      // The numbers came from the last time they were set: Saturday's Use
+      // (Sunday's re-logs carry that same mark).
+      expect(find.text(l.usualCardFrom(w.shown, '2026-10-25')), findsOneWidget);
+      String fieldText(String key) =>
+          tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+      expect(fieldText('itemCal0'), '300');
+      await tester.tap(find.byKey(const Key('usualUseMine')));
+      await tester.pumpAndSettle();
+      expect(find.text(l.usualUsedSnack('300', '360')), findsOneWidget);
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+      expect(fieldText('itemCal0'), '360', reason: 'the form shows the write');
+      expect(fieldText('editorCalories'), '360');
+      expect((await phone.item(day14))['estimated_calories'], 360);
+      expect(await phone.corrected(day14), isTrue);
+      await tester.tap(find.text(l.assistUndo));
+      await tester.pumpAndSettle();
+      expect(await phone.raw(day14), day14Raw);
+      expect(fieldText('itemCal0'), '300');
+      expect(fieldText('editorCalories'), '300');
+      expect(find.byKey(const Key('usualOfferCard')), findsNothing);
+      await goBack(tester);
+      expect(todayTotal(), l.kcalAmount('300'));
+
+      // My usual foods now says the oatmeal was logged this morning, and a
+      // tap asks before logging it a second time.
+      await tester.tap(find.byKey(const Key('addMealFab')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('addUsual')));
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(
+              of: row,
+              matching: find.text(
+                  l.usualLoggedToday(shownClock(l, '07:40 AM')))),
+          findsOneWidget);
+      final countNow = await phone.mealCount();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(
+          find.text(l.usualAgainBody(
+              w.description, shownClock(l, '07:40 AM'))),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('usualAgainCancel')));
+      await tester.pumpAndSettle();
+      expect(await phone.mealCount(), countNow);
+      expect(phone.ai.photoCalls, 8);
+      expect(phone.ai.textCalls, 0);
     });
   }
 }

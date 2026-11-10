@@ -14,7 +14,7 @@
 ///   * `MealAssist` with its `AssistLocalState`, `AssistDailyBudget` and
 ///     the `RestaurantAssistControls` the screens get;
 ///   * the screens: Today, the meal editor, the Log sheet, My usual foods,
-///     Fix a meal.
+///     Fix a meal, Settings (for Stop Sharing).
 ///
 /// The seams that are faked, and why:
 ///   * [StubAi] (AnalyzerService): the model. Every photo and sentence that
@@ -32,6 +32,10 @@
 ///   * [StoryShell] stands in for HomeShell (lib/ui/app.dart), which builds
 ///     Today with the device clock: it repeats HomeShell's wiring for
 ///     Today, the + button and the meals signal, with the story's clock.
+///   * the consent sheet for turning lookups on is not shown:
+///     [Phone.turnLookupsOn] writes what its answer writes, through the
+///     real settings adapter. Twenty lookups in a day (the daily cap) are
+///     written to the real ledger directly.
 ///
 /// Two things inside real parts read the device clock and take no other:
 ///   * the pipeline stamps a photo meal's `timestamp` column with it.
@@ -39,8 +43,9 @@
 ///     the save, which is what the owner's phone would have written;
 ///   * the screens the Log sheet pushes label days with it. The stories
 ///     are dated before any day a test can run on, so a label never reads
-///     "Today" by accident; where a story needs the screen's own clock it
-///     pushes the screen itself ([pushFromLog]).
+///     "Today" by accident. Enter manually and the describe preview date
+///     the new meal with it, so a story pushes that editor itself with its
+///     own clock ([pushFromLog]) instead of going through the sheet.
 library;
 
 import 'dart:async';

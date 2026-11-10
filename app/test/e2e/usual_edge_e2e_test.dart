@@ -21,6 +21,7 @@ import 'package:calorie_tracker/core/usual_foods_logic.dart';
 import 'package:calorie_tracker/services/usual/usual_foods.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/meal_edit_logic.dart' show formatClock;
+import 'package:calorie_tracker/ui/refresh_signal.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
 import 'package:flutter/material.dart';
@@ -258,6 +259,32 @@ void main() {
           'n': [999, '1', null, {}],
         },
       },
+      // The right length, the wrong things in it.
+      {
+        ...{'name': 'Oatmeal', 'estimated_calories': 999},
+        'protein_g': 10,
+        'carbs_g': 50,
+        'fat_g': 6,
+        'user': {
+          'set': true,
+          'at': '2026-10-29T00:00:00.000Z',
+          'n': [999, '10', null, {}],
+          'qty': 1,
+        },
+      },
+      // One number short.
+      {
+        ...{'name': 'Oatmeal', 'estimated_calories': 999},
+        'protein_g': 10,
+        'carbs_g': 50,
+        'fat_g': 6,
+        'user': {
+          'set': true,
+          'at': '2026-10-29T00:00:00.000Z',
+          'n': [999, 10, 50],
+          'qty': 1,
+        },
+      },
       {
         'name': 'Oatmeal',
         'estimated_calories': -50,
@@ -328,6 +355,25 @@ void main() {
         }
       }
     }
+    // A plate of 41 foods and one of 40, each on two days: the editor
+    // holds 40, so only the second can be logged again.
+    for (final (count, hour) in [(41, 18), (40, 19)]) {
+      for (final back in [1, 2]) {
+        final when = day(back, hour);
+        await phone.dao.saveMeal(Meal(
+          id: 0,
+          date: isoDate(when),
+          time: formatClock(when),
+          timestamp: when.toIso8601String(),
+          source: MealSource.appWatch,
+          imageHash: 'plate-$count-$back',
+          analysis: aiSays([
+            for (var i = 1; i <= count; i++) foodItem('Dumpling $i', 40),
+          ], description: '$count dumplings'),
+        ));
+      }
+    }
+
     // And rows whose columns themselves are wrong: analysis text that is
     // not JSON, or not an object; an impossible date; no clock; no source.
     final texts = ['not json at all', '[1, 2, 3]', '"a string"', 'null', '42',
@@ -406,6 +452,11 @@ void main() {
     // each log writes is a clean meal: finite numbers within the editor's
     // bounds, at most 40 foods, names at most 300 characters.
     final list = await phone.usual.frequentMeals();
+    // The real foods, and the one oversized meal that is a food meal all
+    // the same (a 5,000-character name: its title is cut to 80, and a log
+    // of it writes the name cut to 300). Never the 41-food plate.
+    expect([...list.around, ...list.more].map((m) => m.title).toSet(),
+        {'Oatmeal', 'Granola bar', '40 dumplings', 'Z' * 80});
     for (final m in [...list.around, ...list.more]) {
       final a = usualLogAnalysis(m, await phone.usual.index(), now: phone.now);
       expect(jsonEncode(a), isNotEmpty);
@@ -423,12 +474,20 @@ void main() {
     }
   });
 
-  for (final (name, value) in const [
-    ('cut off in the middle', '{"v":1,"hidden":[{"h":"0123456789abcdef","at":"2026-10-0'),
+  // What a hidden oatmeal and two declines of it would look like, to show
+  // that a value this build does not understand is not half-read.
+  final oatmealId = usualHideId('oatmeal');
+  final entries = '"hidden":[{"h":"$oatmealId","at":"2026-10-29T10:00:00.000Z"}],'
+      '"declined":[{"m":901,"h":"$oatmealId","at":"2026-10-29T10:00:00.000Z"},'
+      '{"m":902,"h":"$oatmealId","at":"2026-10-29T11:00:00.000Z"}]';
+  for (final (name, value) in [
+    ('cut off in the middle', '{"v":1,${entries.substring(0, entries.length - 9)}'),
     ('the wrong types', '{"v":1,"hidden":"all","declined":[{"m":"1"},7,null,'
-        '{"m":3,"h":"zz","at":"never"},{"m":-4,"h":"0123456789abcdef","at":5}]}'),
-    ('another version', '{"v":2,"hidden":[],"declined":[]}'),
-    ('not an object', '[1,2,3]'),
+        '{"m":3,"h":"zz","at":"never"},{"m":-4,"h":"$oatmealId","at":5},'
+        '{"m":901,"h":"$oatmealId","at":"never"},'
+        '{"m":"902","h":"$oatmealId","at":"2026-10-29T11:00:00.000Z"}]}'),
+    ('another version', '{"v":2,$entries}'),
+    ('not an object', '[{"v":1,$entries}]'),
   ]) {
     testWidgets('a corrupt choices preference ($name) reads as no choices, '
         'and the next choice writes a clean one', (tester) async {
@@ -474,6 +533,19 @@ void main() {
       expect(find.text(l.usualHiddenRow(1)), findsOneWidget);
       expect((phone.storedChoices()['hidden'] as List).single,
           {'h': usualHideId('oatmeal'), 'at': usualStamp(now)});
+
+      // Hidden foods (1) › Show again brings it back.
+      await dismissSnackBar(tester);
+      await tester.tap(find.byKey(const Key('usualHiddenRow')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualHiddenSheet')), findsOneWidget);
+      expect(find.text(l.usualUnhide), findsOneWidget);
+      await tester.tap(find.byKey(const Key('usualUnhide')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('usualHiddenSheet')), findsNothing);
+      expect(_row('Oatmeal'), findsOneWidget);
+      expect(find.byKey(const Key('usualHiddenRow')), findsNothing);
+      expect(phone.storedChoices()['hidden'], isEmpty);
       expect(tester.takeException(), isNull);
     });
   }
@@ -533,6 +605,21 @@ void main() {
     expect(both.map((r) => r.status).toSet(),
         {UsualAcceptStatus.written, UsualAcceptStatus.busy});
     expect(await _changes(phone), changes + 1);
+    // A Use of numbers that are no longer the owner's latest: between the
+    // offer and the tap the owner set 400 on another meal. Nothing is
+    // written; the next offer says 400.
+    final stale = await phone.photo(_one('Oatmeal', 275));
+    final staleMeal = (await phone.dao.mealSnapshot(stale))!.meal;
+    final staleOffer = (await phone.usual.offerFor(staleMeal))!;
+    expect(staleOffer.items.single.mine.kcal, 350);
+    phone.now = now.add(const Duration(minutes: 5));
+    await _seed(phone, phone.now, 'Oatmeal', 400, mine: true);
+    signalMealsChanged();
+    changes = await _changes(phone);
+    final outdated = await phone.usual.accept(stale, shown: staleOffer);
+    expect(outdated.status, UsualAcceptStatus.conflict);
+    expect(await _changes(phone), changes);
+    expect((await phone.usual.offerFor(staleMeal))!.items.single.mine.kcal, 400);
     // And a Use that lost to another writer: the meal changed between the
     // offer and the tap.
     final late = await phone.photo(_one('Oatmeal', 270));
@@ -587,6 +674,11 @@ void main() {
           for (final p in paragraphs) {
             expect(p.didExceedMaxLines, isFalse,
                 reason: '"${p.text.toPlainText()}" is cut');
+            // Every line of it is laid out: a paragraph squeezed into less
+            // height than its text needs is cut off at the bottom.
+            expect(p.size.height,
+                greaterThanOrEqualTo(p.getMaxIntrinsicHeight(p.size.width) - 0.5),
+                reason: '"${p.text.toPlainText()}" loses its last lines');
             final box = p.localToGlobal(Offset.zero) & p.size;
             expect(box.left, greaterThanOrEqualTo(0));
             expect(box.right, lessThanOrEqualTo(320),
