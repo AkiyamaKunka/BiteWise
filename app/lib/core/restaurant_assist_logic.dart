@@ -579,8 +579,15 @@ num? _publishedGrams(dynamic v) {
 /// added to a name ("Big Mac (220 g)", "Fries (约117克)", "Nuggets [6 pc]").
 /// The on-device lookup cache's item names drop it (`assistCacheItemName`),
 /// and usual_foods_logic.dart reuses it for the usual-foods name keys.
+///
+/// Each bracket's text is read as "no digit, then the first digit, then
+/// the rest": the same matches as "anything, a digit, anything", but with
+/// one way to match, so an unclosed bracket followed by many digits costs
+/// one pass and not one pass per digit (a 96 KB name took 20 s).
 final RegExp assistMeasureRe = RegExp(
-  r'\([^()]*[0-9][^()]*\)|\[[^\[\]]*[0-9][^\[\]]*\]|【[^【】]*[0-9][^【】]*】',
+  r'\([^()0-9]*[0-9][^()]*\)'
+  r'|\[[^\[\]0-9]*[0-9][^\[\]]*\]'
+  r'|【[^【】0-9]*[0-9][^【】]*】',
 );
 
 /// [t]'s singular form by the plain English suffix rules ("fries" → fry,
