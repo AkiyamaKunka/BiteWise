@@ -43,6 +43,14 @@ Map<String, dynamic> _withSource(
   return Map<String, dynamic>.from(analysis)..['assist'] = block;
 }
 
+/// [analysis] as decided on a saved lookup answer fetched on [on] (usual
+/// foods D11: the block's `fetched_on`).
+Map<String, dynamic> _saved(Map<String, dynamic> analysis, Object? on) {
+  final block = Map<String, dynamic>.from(analysis['assist'] as Map)
+    ..['fetched_on'] = on;
+  return Map<String, dynamic>.from(analysis)..['assist'] = block;
+}
+
 void main() {
   group('AssistView', () {
     test('applied, suggested, stale and context-only, read from the block', () {
@@ -236,6 +244,28 @@ void main() {
       expect(v.items.single.fatG, isNull);
       expect(AssistView.of({'assist': 'applied'}).kind, AssistViewKind.none);
       expect(AssistView.of('junk').kind, AssistViewKind.none);
+    });
+
+    test('the day a saved answer was fetched, read as untrusted', () {
+      expect(AssistView.of(appliedBigMac()).fetchedOn, isEmpty);
+      for (final a in [
+        appliedBigMac(),
+        suggestedBigMac(),
+        editedFirstItem(suggestedBigMac(), 600),
+        contextOnlyBigMac(),
+      ]) {
+        final view = AssistView.of(_saved(a, '2026-03-02'));
+        expect(view.fetchedOn, '2026-03-02', reason: '${view.kind}');
+        for (final junk in ['March 2', 20260302, '2026-03-02T00:00', null]) {
+          expect(AssistView.of(_saved(a, junk)).fetchedOn, isEmpty,
+              reason: '$junk');
+        }
+      }
+      expect(
+        AssistView.of(_saved(contextOnlyBigMac(), '2026-03-02')).brandName,
+        isEmpty,
+        reason: 'a context-only record still names no restaurant',
+      );
     });
 
     test('provider labels as Settings names them', () {
@@ -493,6 +523,199 @@ void main() {
         await tester.tap(notes);
       }
       expect(opened, isEmpty);
+    });
+
+    // Usual foods §2.4 / D12 / D14: a block decided on a saved answer says
+    // when it was fetched and offers Search again.
+    testWidgets('a saved answer: the via line names the day it was fetched '
+        '(en, zh); Search again on applied and suggested cards', (
+      tester,
+    ) async {
+      for (final (lang, via) in [
+        ('en', 'via Claude · saved answer from 2026-03-02'),
+        ('zh', '通过 Claude · 2026-03-02 保存的结果'),
+      ]) {
+        var again = 0;
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(_saved(appliedBigMac(), '2026-03-02')),
+              onUseEstimate: () {},
+              onWrongRestaurant: () {},
+              onNotRestaurant: () {},
+              onSearchAgain: () => again++,
+            ),
+            lang: lang,
+          ),
+        );
+        expect(find.text(via), findsOneWidget, reason: lang);
+        expect(find.textContaining('2026-10-24'), findsNothing, reason: lang);
+        final button = find.byKey(const Key('assistSearchAgain'));
+        expect(button, findsOneWidget, reason: lang);
+        expect(
+          find.descendant(of: button, matching: find.byIcon(Icons.refresh)),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: button,
+            matching: find.text(lang == 'en' ? 'Search again' : '重新查找'),
+          ),
+          findsOneWidget,
+        );
+        expect(find.byKey(const Key('assistUseEstimate')), findsOneWidget);
+        await tester.tap(button);
+        expect(again, 1);
+      }
+
+      await tester.pumpWidget(
+        _app(
+          AssistSourceCard(
+            view: AssistView.of(_saved(suggestedBigMac(), '2026-03-02')),
+            onAccept: () {},
+            onSearchAgain: () {},
+          ),
+        ),
+      );
+      expect(
+        find.text('via Claude (server) · saved answer from 2026-03-02'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('assistUsePublished')), findsOneWidget);
+      expect(find.byKey(const Key('assistSearchAgain')), findsOneWidget);
+
+      // No callback, or a lookup running: no Search again.
+      await tester.pumpWidget(
+        _app(
+          AssistSourceCard(
+            view: AssistView.of(_saved(appliedBigMac(), '2026-03-02')),
+            onUseEstimate: () {},
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('assistSearchAgain')), findsNothing);
+      await tester.pumpWidget(
+        _app(
+          AssistSourceCard(
+            view: AssistView.of(_saved(appliedBigMac(), '2026-03-02')),
+            lookingUp: true,
+            onSearchAgain: () {},
+          ),
+        ),
+      );
+      expect(find.byKey(const Key('assistSearchAgain')), findsNothing);
+      expect(find.byKey(const Key('assistLookingUp')), findsOneWidget);
+
+      // Unsaved typing: it waits like every answer.
+      await tester.pumpWidget(
+        _app(
+          AssistSourceCard(
+            view: AssistView.of(_saved(appliedBigMac(), '2026-03-02')),
+            editFirst: true,
+            onSearchAgain: () {},
+          ),
+        ),
+      );
+      expect(
+        tester
+            .widget<ButtonStyleButton>(
+              find.byKey(const Key('assistSearchAgain')),
+            )
+            .onPressed,
+        isNull,
+      );
+    });
+
+    testWidgets('a stale suggestion and a context-only record: Search again '
+        'replaces Look up; exactly one shows', (tester) async {
+      for (final a in [
+        editedFirstItem(suggestedBigMac(), 600),
+        contextOnlyBigMac(),
+      ]) {
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(_saved(a, '2026-03-02')),
+              onLookUp: () {},
+              onSearchAgain: () {},
+            ),
+          ),
+        );
+        expect(find.byKey(const Key('assistSearchAgain')), findsOneWidget);
+        expect(find.byKey(const Key('assistLookUp')), findsNothing);
+
+        // Not a saved answer: Look up, as before.
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(a),
+              onLookUp: () {},
+              onSearchAgain: () {},
+            ),
+          ),
+        );
+        expect(find.byKey(const Key('assistSearchAgain')), findsNothing);
+        expect(find.byKey(const Key('assistLookUp')), findsOneWidget);
+
+        // A saved answer without the callback: Look up stays.
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(_saved(a, '2026-03-02')),
+              onLookUp: () {},
+            ),
+          ),
+        );
+        expect(find.byKey(const Key('assistSearchAgain')), findsNothing);
+        expect(find.byKey(const Key('assistLookUp')), findsOneWidget);
+      }
+    });
+
+    testWidgets('a context-only record from a saved answer says so (en, zh)', (
+      tester,
+    ) async {
+      for (final (lang, contextOnly, saved) in [
+        (
+          'en',
+          'No published nutrition found — AI estimate kept',
+          'Saved answer from 2026-03-02.',
+        ),
+        ('zh', '未找到公布的营养信息 — 保留 AI 估算', '2026-03-02 保存的结果。'),
+      ]) {
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(_saved(contextOnlyBigMac(), '2026-03-02')),
+              onSearchAgain: () {},
+            ),
+            lang: lang,
+          ),
+        );
+        expect(find.text(contextOnly), findsOneWidget, reason: lang);
+        expect(find.text(saved), findsOneWidget, reason: lang);
+        expect(find.textContaining('McDonald'), findsNothing);
+        expect(find.byKey(const Key('assistSearchAgain')), findsOneWidget);
+      }
+      // Not a saved answer: no such line.
+      await tester.pumpWidget(
+        _app(AssistSourceCard(view: AssistView.of(contextOnlyBigMac()))),
+      );
+      expect(find.byKey(const Key('assistContextSaved')), findsNothing);
+    });
+
+    testWidgets('without fetched_on nothing changes: the decision day, and no '
+        'Search again even with the callback', (tester) async {
+      await tester.pumpWidget(
+        _app(
+          AssistSourceCard(
+            view: AssistView.of(appliedBigMac()),
+            onUseEstimate: () {},
+            onSearchAgain: () {},
+          ),
+        ),
+      );
+      expect(find.text('via Claude · 2026-10-24'), findsOneWidget);
+      expect(find.byKey(const Key('assistSearchAgain')), findsNothing);
     });
 
     testWidgets('busy or unsaved typing: every answer waits', (tester) async {

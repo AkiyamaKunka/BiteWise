@@ -37,6 +37,11 @@ abstract final class MealSource {
   /// screen's "log it yourself" path): a photo exists and its md5 is
   /// ledgered, but every number came from the user.
   static const String appManualPhoto = 'app_manual_photo';
+
+  /// Logged again from My usual foods: numbers copied on the phone from
+  /// earlier meals (your own where you set them). No model, no photo, no
+  /// ledger row.
+  static const String appRepeat = 'app_repeat';
 }
 
 /// A logged meal row (spec §2: meals table).

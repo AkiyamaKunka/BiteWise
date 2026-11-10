@@ -587,6 +587,81 @@ void main() {
         expect((saved['food_items'] as List).single.containsKey('published'),
             isFalse);
       });
+
+      // Usual foods D25/D26: a `user` mark says the user set an item's
+      // numbers. The chat model never sees item numbers (buildMealsList),
+      // so whatever marks its reply carries are forged, and a correction
+      // re-estimates every item: the meal's marks are reset.
+      group('user marks', () {
+        Map<String, dynamic> mark(List<num> n) => {
+              'set': true,
+              'at': '2026-11-06T13:40:12.345Z',
+              'n': n,
+              'qty': 1,
+            };
+        final marked = {
+          ...roastDuckAnalysis,
+          'food_items': [
+            {
+              'name': '烧鸭饭',
+              'estimated_calories': 780,
+              'protein_g': 35,
+              'carbs_g': 90,
+              'fat_g': 28,
+              'user': mark([780, 35, 90, 28]),
+            },
+            {
+              'name': '例汤',
+              'estimated_calories': 60,
+              'user': {'ai_name': 'Soup'},
+            },
+          ],
+        };
+
+        test('a new_meal is saved without any', () async {
+          await exec.executeParsed({
+            'intent': 'new_meal',
+            'analysis': marked,
+          }, 'I had roast duck rice and soup', const []);
+          final items = dao.saved.single.analysis['food_items'] as List;
+          expect(items, hasLength(2));
+          for (final item in items) {
+            expect((item as Map).containsKey('user'), isFalse,
+                reason: '${item['name']}');
+          }
+        });
+
+        test('a correction drops every one from its rewrite, and the '
+            "row's own marks are not carried", () async {
+          final id = dao.seed('面条', 550, time: '12:30 PM', analysis: {
+            'is_food': true,
+            'meal_description': '面条',
+            'total_calories': 550,
+            'food_items': [
+              {
+                'name': '面条',
+                'estimated_calories': 550,
+                'protein_g': 18,
+                'carbs_g': 90,
+                'fat_g': 12,
+                'user': mark([550, 18, 90, 12]),
+              },
+            ],
+          });
+          final replies = await exec.executeParsed({
+            'intent': 'correction',
+            'meal_index': 0,
+            'analysis': marked,
+          }, '改成烧鸭饭和例汤', await dao.recentMeals());
+          expect(replies.single.applied, isTrue);
+          final items = dao.byId(id).analysis['food_items'] as List;
+          expect(items.map((e) => (e as Map)['name']), ['烧鸭饭', '例汤']);
+          for (final item in items) {
+            expect((item as Map).containsKey('user'), isFalse,
+                reason: '${item['name']}');
+          }
+        });
+      });
     });
 
     test('reply names the rewritten row\'s day when the dish recurs', () async {

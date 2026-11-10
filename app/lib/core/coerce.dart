@@ -285,8 +285,13 @@ String cleanUnit(dynamic value) => _cleanShortText(value, kUnitMaxChars);
 
 /// Any short text cleaned exactly like [cleanBrand], at most [maxChars]
 /// code points (the restaurant-lookup composer caps item names at 80).
-String cleanShortText(dynamic value, int maxChars) =>
-    _cleanShortText(value, maxChars);
+///
+/// [keepWidth] leaves out the [nfkcLite] folding: full-width punctuation
+/// and letters (，：（） as a Chinese reply writes them) stay as written.
+/// For text that is copied or shown as the user's own, not compared: the
+/// folding exists so two spellings of a brand compare equal.
+String cleanShortText(dynamic value, int maxChars, {bool keepWidth = false}) =>
+    _cleanShortText(value, maxChars, fold: !keepWidth);
 
 /// An item's count: a finite number in (0, [kQtyMax]], else 1 (the
 /// prompt's default). Bools and numeric strings are not counts.
@@ -325,11 +330,11 @@ num coerceQty(dynamic value) {
   );
 }
 
-String _cleanShortText(dynamic value, int maxChars) {
+String _cleanShortText(dynamic value, int maxChars, {bool fold = true}) {
   if (value is! String) return '';
   final out = StringBuffer();
   var pendingSpace = false;
-  for (final rune in nfkcLite(value).runes) {
+  for (final rune in (fold ? nfkcLite(value) : value).runes) {
     if (_isSpaceRune(rune)) {
       pendingSpace = out.isNotEmpty;
       continue;

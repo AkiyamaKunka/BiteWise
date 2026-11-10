@@ -320,8 +320,8 @@ void main() {
   });
 
   group('the Off dialog', () {
-    testWidgets('Also clear learned places clears them; Cancel keeps it on',
-        (tester) async {
+    testWidgets('Also clear learned places and saved lookup answers clears '
+        'them; Cancel keeps it on', (tester) async {
       final settings = _planSettings()
         ..restaurantAssist = 'auto'
         ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
@@ -338,6 +338,18 @@ void main() {
       expect(c.clears, 0);
 
       await pickMode(tester, 'off');
+      // The box names everything that one clear deletes on iOS: the
+      // places, and the saved answers (with the lookups still waiting).
+      expect(find.text('Also clear learned places and saved lookup answers'),
+          findsOneWidget);
+      expect(find.byKey(const Key('restaurantOffClearAnswers')), findsNothing);
+      expect(
+          tester
+              .widget<CheckboxListTile>(
+                  find.byKey(const Key('restaurantOffClearPlaces')))
+              .value,
+          isFalse,
+          reason: 'unticked: the saved answers stay unless cleared');
       await tester.tap(find.byKey(const Key('restaurantOffClearPlaces')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('restaurantOffConfirm')));
@@ -346,10 +358,26 @@ void main() {
       expect(c.clears, 1);
     });
 
+    testWidgets('Off without the box keeps what was learned', (tester) async {
+      final settings = _planSettings()
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'claude_plan:0a1b2c3d';
+      final c = _Controls(_plan);
+      await pump(tester, settings, c);
+      await pickMode(tester, 'off');
+      await tester.tap(find.byKey(const Key('restaurantOffConfirm')));
+      await tester.pumpAndSettle();
+      expect(settings.restaurantAssist, 'off');
+      expect(c.clears, 0);
+    });
+
     testWidgets('Clear learned places asks first', (tester) async {
       final settings = _planSettings();
       final c = _Controls(_plan);
       await pump(tester, settings, c);
+      expect(find.byKey(const Key('clearSavedAnswersRow')), findsNothing,
+          reason: 'iOS: Clear learned places clears the answers too');
       final row = find.byKey(const Key('clearLearnedPlacesRow'));
       await tester.ensureVisible(row);
       await tester.tap(row);
@@ -605,11 +633,12 @@ void main() {
     });
 
     testWidgets('Android: no Apple Maps bullet, Use location disabled, no '
-        'learned places', (tester) async {
+        'learned places; the saved answers can be cleared', (tester) async {
       final settings = _planSettings()..provider = 'anthropic';
       final c = _Controls(_anthropic, location: false);
       await pump(tester, settings, c);
       expect(find.byKey(const Key('clearLearnedPlacesRow')), findsNothing);
+      expect(find.byKey(const Key('clearSavedAnswersRow')), findsOneWidget);
       await pickMode(tester, 'auto');
       expect(inSheet('Apple Maps'), findsNothing);
       expect(inSheet('does not read where the photo was taken'),
@@ -632,8 +661,84 @@ void main() {
       await pickMode(tester, 'off');
       expect(find.byKey(const Key('restaurantOffClearPlaces')), findsNothing,
           reason: 'nothing is learned without a location');
+      // Usual foods D16: the saved lookup answers can go with Off.
+      final box = find.byKey(const Key('restaurantOffClearAnswers'));
+      expect(box, findsOneWidget);
+      expect(find.text('Also clear saved lookup answers'), findsOneWidget);
+      expect(tester.widget<CheckboxListTile>(box).value, isFalse);
       await tester.tap(find.byKey(const Key('restaurantOffConfirm')));
       await tester.pumpAndSettle();
+      expect(c.clears, 0, reason: 'unticked');
+    });
+
+    testWidgets('Android: Off with Also clear saved lookup answers clears '
+        'them', (tester) async {
+      final settings = FakeSettings()
+        ..provider = 'anthropic'
+        ..apiKey = 'k'
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      final c = _Controls(_anthropic, location: false);
+      await pump(tester, settings, c);
+      await pickMode(tester, 'off');
+      await tester.tap(find.byKey(const Key('restaurantOffClearAnswers')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('restaurantOffConfirm')));
+      await tester.pumpAndSettle();
+      expect(settings.restaurantAssist, 'off');
+      expect(c.clears, 1);
+    });
+
+    testWidgets('Android: Clear saved lookup answers asks first, then '
+        'clears through the same clear (en, zh)', (tester) async {
+      for (final (locale, title, body, done) in const [
+        (
+          Locale('en'),
+          'Clear saved lookup answers?',
+          'Chopstats forgets the restaurant nutrition it looked up and the '
+              'lookups still waiting.',
+          'Saved lookup answers cleared.',
+        ),
+        (
+          Locale('zh'),
+          '清除保存的查询结果？',
+          '筷拍会忘记查到的餐厅营养信息和还在等待的查询。',
+          '已清除保存的查询结果。',
+        ),
+      ]) {
+        final settings = FakeSettings()
+          ..provider = 'anthropic'
+          ..apiKey = 'k';
+        final c = _Controls(_anthropic, location: false);
+        await pump(tester, settings, c, locale: locale);
+        final row = find.byKey(const Key('clearSavedAnswersRow'));
+        expect(
+            find.descendant(
+                of: row,
+                matching: find.text(locale.languageCode == 'en'
+                    ? 'Clear saved lookup answers'
+                    : '清除保存的查询结果')),
+            findsOneWidget);
+        await tester.ensureVisible(row);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('clearAnswersDialog')), findsOneWidget);
+        expect(find.text(title), findsOneWidget);
+        expect(find.textContaining(body), findsOneWidget);
+        await tester.tap(find.text(locale.languageCode == 'en' ? 'Cancel' : '取消'));
+        await tester.pumpAndSettle();
+        expect(c.clears, 0);
+        await tester.tap(row);
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('clearAnswersConfirm')));
+        await tester.pumpAndSettle();
+        expect(c.clears, 1);
+        expect(find.text(done), findsOneWidget);
+        // Let the snackbar go before the next locale.
+        await tester.pumpWidget(const SizedBox());
+        await tester.pumpAndSettle();
+      }
     });
   });
 
@@ -752,6 +857,47 @@ void main() {
       await pump(tester, settings, c);
       expect(footer(tester), contains('On Android, lookups use printed brands'));
       expect(footer(tester), contains("Your phone's region is not the US"));
+    });
+
+    // Usual foods D16: while a mode is on, the footer says found chain
+    // answers are kept up to a year, right after who receives lookups.
+    testWidgets('the saved answers line follows the recipient footnote while '
+        'on, and is gone when Off or unsupported', (tester) async {
+      final en = lookupAppLocalizations(const Locale('en'));
+      final hint = en.restaurantSavedAnswersHint;
+      for (final (support, android) in const [
+        (_plan, false),
+        (_anthropic, true),
+      ]) {
+        final settings = _planSettings()
+          ..restaurantAssist = 'always'
+          ..restaurantAssistLocation = true
+          ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+          ..restaurantAssistConsentRecipient = support.recipientStamp;
+        if (support == _anthropic) settings.provider = 'anthropic';
+        final c = _Controls(support,
+            location: !android, server: AssistServerState.ready);
+        await pump(tester, settings, c);
+        final lines = footer(tester).split('\n');
+        final note = restaurantRecipientCopy(en, support.recipient)!.footnote;
+        final at = lines.indexOf(note);
+        expect(at, isNot(-1), reason: '$lines');
+        expect(lines[at + 1], hint, reason: '$lines');
+        expect(lines.where((l) => l == hint), hasLength(1));
+
+        settings.restaurantAssist = 'off';
+        settings.notifyListeners();
+        await tester.pumpAndSettle();
+        expect(footer(tester), isNot(contains(hint)), reason: 'Off');
+      }
+
+      final unsupported = FakeSettings()
+        ..provider = 'gemini'
+        ..apiKey = 'k'
+        ..restaurantAssist = 'auto';
+      await pump(tester, unsupported,
+          _Controls(const LookupSupport.unsupported('needs_l1')));
+      expect(footer(tester), isNot(contains(hint)), reason: 'unsupported');
     });
 
     testWidgets('a ready server adds no hint', (tester) async {
@@ -1383,7 +1529,7 @@ void main() {
       expect(find.text('使用照片位置'), findsOneWidget);
       await pickMode(tester, 'off');
       expect(find.text('关闭餐厅查询？'), findsOneWidget);
-      expect(find.text('同时清除已记住的地点'), findsOneWidget);
+      expect(find.text('同时清除已记住的地点和保存的查询结果'), findsOneWidget);
       await tester.tap(find.byKey(const Key('restaurantOffConfirm')));
       await tester.pumpAndSettle();
       expect(settings.restaurantAssist, 'off');

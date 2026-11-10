@@ -110,11 +110,14 @@ class RestaurantAssistControls {
 
   /// The editor's 'Look up restaurant nutrition', and the lookup of the
   /// chain the user picked after 'Wrong restaurant' (MealAssist.lookupNow;
-  /// R7b). Null hides the editor's lookup.
+  /// R7b). [fresh] is Search again (and the press right after a saved
+  /// answer): the provider is asked, never the saved answers. Null hides
+  /// the editor's lookup.
   final Future<AssistRun> Function(
     int mealId, {
     bool useLocation,
     String? chainKey,
+    bool fresh,
   })?
   lookupNow;
 

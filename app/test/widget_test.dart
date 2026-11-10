@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/ui/app.dart';
+import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
 
 import 'ui/fakes.dart';
 
@@ -72,6 +73,39 @@ void main() {
     expect(find.byKey(const Key('addFromText')), findsOneWidget);
     expect(find.byKey(const Key('addManually')), findsOneWidget);
     expect(find.byKey(const Key('addFixMeal')), findsOneWidget);
+    // Without usual foods the sheet is as it was.
+    expect(find.byKey(const Key('addUsual')), findsNothing);
+  });
+
+  testWidgets('My usual foods is the second row of the Meals sheet and '
+      'opens its screen (usual foods §4.1)', (tester) async {
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final dao = FakeDao();
+    final services = makeServices(
+      dao: dao,
+      settings: FakeSettings(),
+      usualFoods: await makeUsualFoods(dao, clock: DateTime.now),
+    );
+    await tester.pumpWidget(CalorieTrackerApp(services: services));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('addMealFab')));
+    await tester.pumpAndSettle();
+    final usual = find.byKey(const Key('addUsual'));
+    expect(usual, findsOneWidget);
+    expect(find.descendant(of: usual, matching: find.text('My usual foods')),
+        findsOneWidget);
+    expect(find.descendant(of: usual, matching: find.text('no AI')),
+        findsOneWidget);
+    double top(String key) => tester.getTopLeft(find.byKey(Key(key))).dy;
+    expect(top('addFromPhotos'), lessThan(top('addUsual')));
+    expect(top('addUsual'), lessThan(top('addLeftover')));
+
+    await tester.tap(usual);
+    await tester.pumpAndSettle();
+    expect(find.byType(UsualFoodsScreen), findsOneWidget);
+    expect(find.byKey(const Key('usualEmpty')), findsOneWidget);
   });
 
   testWidgets('every Meals-sheet tile actually ROUTES somewhere',

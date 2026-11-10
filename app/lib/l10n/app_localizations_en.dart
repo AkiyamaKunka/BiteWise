@@ -2571,7 +2571,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get clearPlacesBody =>
-      'Chopstats forgets the restaurants you confirmed or marked as wrong, and the spots you marked as not a restaurant. They are kept only on this phone.';
+      'Chopstats forgets the restaurants you confirmed or marked as wrong, the spots you marked as not a restaurant, the saved lookup answers and the lookups still waiting. They are kept only on this phone.';
 
   @override
   String get clearPlacesConfirm => 'Clear';
@@ -2586,7 +2586,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get restaurantOffBody => 'Pending lookups are cancelled.';
 
   @override
-  String get restaurantOffClearPlaces => 'Also clear learned places';
+  String get restaurantOffClearPlaces =>
+      'Also clear learned places and saved lookup answers';
 
   @override
   String get restaurantOffConfirm => 'Turn off';
@@ -2840,4 +2841,178 @@ class AppLocalizationsEn extends AppLocalizations {
   String diagConfidenceLine(int low, int medium, int high, int unknown) {
     return 'Low $low · Medium $medium · High $high · Not given $unknown';
   }
+
+  @override
+  String assistViaSaved(String provider, String date) {
+    return 'via $provider · saved answer from $date';
+  }
+
+  @override
+  String assistContextSaved(String date) {
+    return 'Saved answer from $date.';
+  }
+
+  @override
+  String get assistSearchAgain => 'Search again';
+
+  @override
+  String assistFoundSaved(String date) {
+    return 'Found a saved answer from $date. Tap Search again for a new search.';
+  }
+
+  @override
+  String get assistSearchAgainNoChange =>
+      'The new search found nothing better. These numbers stay.';
+
+  @override
+  String get assistSearchAgainSame => 'The new search found the same numbers.';
+
+  @override
+  String assistSearchAgainDiffers(String kcal) {
+    return 'The new search found $kcal kcal for these items. To use it, tap Use AI estimate, then look up again.';
+  }
+
+  @override
+  String get restaurantSavedAnswersHint =>
+      'Chain nutrition that was found is kept on this phone for up to a year and used again, so the same food is not searched again.';
+
+  @override
+  String get settingsRowClearSavedAnswers => 'Clear saved lookup answers';
+
+  @override
+  String get clearAnswersTitle => 'Clear saved lookup answers?';
+
+  @override
+  String get clearAnswersBody =>
+      'Chopstats forgets the restaurant nutrition it looked up and the lookups still waiting. Your meals keep their numbers. These answers are kept only on this phone.';
+
+  @override
+  String get clearAnswersDone => 'Saved lookup answers cleared.';
+
+  @override
+  String get restaurantOffClearAnswers => 'Also clear saved lookup answers';
+
+  @override
+  String usualItemLine(String name, String ai, String mine) {
+    return '$name: AI $ai → your usual $mine kcal';
+  }
+
+  @override
+  String usualChipMany(int count) {
+    return 'Your usual numbers for $count items';
+  }
+
+  @override
+  String get usualChipUse => 'Use';
+
+  @override
+  String get usualChipReview => 'Review';
+
+  @override
+  String usualChipUseLabel(String name) {
+    return 'Use your usual numbers for $name';
+  }
+
+  @override
+  String get usualCardTitle => 'Your usual numbers';
+
+  @override
+  String usualCardFrom(String name, String date) {
+    return 'From your $name on $date.';
+  }
+
+  @override
+  String get usualUseMine => 'Use my numbers';
+
+  @override
+  String get usualKeepAi => 'Keep AI estimate';
+
+  @override
+  String usualUsedSnack(String before, String after) {
+    return 'Used your usual numbers: $before → $after kcal';
+  }
+
+  @override
+  String get usualUndoStale =>
+      'This meal changed since, so nothing was undone.';
+
+  @override
+  String get addUsual => 'My usual foods';
+
+  @override
+  String get usualNowHeader => 'Around this time';
+
+  @override
+  String get usualMoreHeader => 'More';
+
+  @override
+  String usualRowStats(int days, String day) {
+    return '$days of the last 90 days · last logged $day';
+  }
+
+  @override
+  String usualLoggedToday(String time) {
+    return 'Logged today at $time';
+  }
+
+  @override
+  String get usualScreenHint =>
+      'Tap a food to log it now with these numbers. No photo, no AI.';
+
+  @override
+  String usualLoggedSnack(String name, String kcal) {
+    return 'Logged $name · $kcal kcal';
+  }
+
+  @override
+  String get usualLogFailed => 'Couldn\'t log it. Try again.';
+
+  @override
+  String get usualListFailed => 'Couldn\'t load your usual foods.';
+
+  @override
+  String get usualMoreActions => 'More actions';
+
+  @override
+  String get usualHide => 'Hide from this list';
+
+  @override
+  String get usualHiddenSnack => 'Hidden from My usual foods.';
+
+  @override
+  String usualHiddenRow(int count) {
+    return 'Hidden foods ($count)';
+  }
+
+  @override
+  String get usualUnhide => 'Show again';
+
+  @override
+  String get usualEmpty =>
+      'Foods you log on at least 2 of the last 90 days show up here. Keep logging as usual.';
+
+  @override
+  String get usualAllHidden => 'All your usual foods are hidden.';
+
+  @override
+  String get usualAgainTitle => 'Log it again?';
+
+  @override
+  String usualAgainBody(String name, String time) {
+    return 'You logged $name at $time.';
+  }
+
+  @override
+  String get usualAgainConfirm => 'Log again';
+
+  @override
+  String usualItemLineMacros(String name, String ai, String mine) {
+    return '$name: AI $ai → your usual $mine';
+  }
+
+  @override
+  String get usualUsedSnackSame => 'Used your usual numbers.';
+
+  @override
+  String get usualLoggedLabel => 'Logged';
 }

@@ -13,6 +13,7 @@ import '../core/contracts.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/coverage.dart';
 import '../services/photo/photo_library.dart';
+import '../services/usual/usual_foods.dart' show UsualFoods;
 import 'ai_consent.dart' show SharedPhotoConsentGate;
 import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
@@ -279,6 +280,11 @@ class UiServices {
   /// (design R7a). Null hides the Settings group (most tests).
   final RestaurantAssistControls? restaurantAssist;
 
+  /// Usual foods (worked out on the phone from the meals table, nothing
+  /// sent): Today's "your usual numbers" offers and Log › My usual foods.
+  /// Null hides both (most tests).
+  final UsualFoods? usualFoods;
+
   const UiServices({
     required this.dao,
     required this.analyzer,
@@ -310,5 +316,6 @@ class UiServices {
     this.backgroundScanStuck,
     this.mealInUse,
     this.restaurantAssist,
+    this.usualFoods,
   });
 }

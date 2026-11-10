@@ -575,7 +575,25 @@ num? _publishedGrams(dynamic v) {
 
 // ─── Tokens and word lists ─────────────────────────────────────────────
 
-String _singular(String t) {
+/// A parenthetical holding a digit: an assumed weight or count the model
+/// added to a name ("Big Mac (220 g)", "Fries (约117克)", "Nuggets [6 pc]").
+/// The on-device lookup cache's item names drop it (`assistCacheItemName`),
+/// and usual_foods_logic.dart reuses it for the usual-foods name keys.
+///
+/// Each bracket's text is read as "no digit, then the first digit, then
+/// the rest": the same matches as "anything, a digit, anything", but with
+/// one way to match, so an unclosed bracket followed by many digits costs
+/// one pass and not one pass per digit (a 96 KB name took 20 s).
+final RegExp assistMeasureRe = RegExp(
+  r'\([^()0-9]*[0-9][^()]*\)'
+  r'|\[[^\[\]0-9]*[0-9][^\[\]]*\]'
+  r'|【[^【】0-9]*[0-9][^【】]*】',
+);
+
+/// [t]'s singular form by the plain English suffix rules ("fries" → fry,
+/// "lunches" → lunch, "eggs" → egg; "glass" stays). usual_foods_logic.dart
+/// reuses it for the usual-foods name keys.
+String assistSingular(String t) {
   if (t.length > 3 && t.endsWith('ies')) {
     return '${t.substring(0, t.length - 3)}y';
   }
@@ -604,7 +622,7 @@ String _unitKey(dynamic unit) {
   if (tokens.isEmpty) return '';
   final key = [
     ...tokens.take(tokens.length - 1),
-    _singular(tokens.last),
+    assistSingular(tokens.last),
   ].join(' ');
   return _unitSynonyms[key] ?? key;
 }
@@ -612,7 +630,7 @@ String _unitKey(dynamic unit) {
 /// Each token and its singular ("Smoothies" → smoothies, smoothy …), so a
 /// word list can name either form.
 Set<String> _wordSet(String? text) => {
-  for (final t in chainTokens(text)) ...[t, _singular(t)],
+  for (final t in chainTokens(text)) ...[t, assistSingular(t)],
 };
 
 /// Words that make a menu item a set of several items (a combo meal,
@@ -714,7 +732,7 @@ Set<String> _nameWords(dynamic name) {
   return {
     for (final t in chainTokens(name.replaceAll(_parenRe, ' ')))
       if (!_nameStopWords.contains(t) && !RegExp(r'^[0-9]+$').hasMatch(t))
-        _singular(t),
+        assistSingular(t),
   };
 }
 
@@ -750,7 +768,7 @@ bool _packagedItem(dynamic item) {
     if (tokens[i] != 'can' && _packagedWords.contains(tokens[i])) return true;
     if (i + 1 < tokens.length &&
         tokens[i] == 'k' &&
-        _singular(tokens[i + 1]) == 'cup') {
+        assistSingular(tokens[i + 1]) == 'cup') {
       return true;
     }
   }
@@ -1396,6 +1414,7 @@ final class AssistDecision {
     this.sourceYear,
     this.grounded = false,
     this.notes = '',
+    this.fetchedOn,
   });
 
   final AssistOutcome outcome;
@@ -1430,6 +1449,31 @@ final class AssistDecision {
   /// Every covered figure was found on the source page.
   final bool grounded;
   final String notes;
+
+  /// YYYY-MM-DD (local) the answer was fetched, for a saved lookup answer
+  /// (usual foods D11), written as the block's `fetched_on`; null for an
+  /// answer fetched for this decision.
+  final String? fetchedOn;
+
+  /// This decision with [fetchedOn] set to [on]; every other field kept.
+  AssistDecision withFetchedOn(String? on) => AssistDecision(
+    outcome: outcome,
+    status: status,
+    reason: reason,
+    trigger: trigger,
+    provider: provider,
+    decidedOn: decidedOn,
+    evidence: evidence,
+    chainKey: chainKey,
+    brandName: brandName,
+    items: items,
+    source: source,
+    sourceType: sourceType,
+    sourceYear: sourceYear,
+    grounded: grounded,
+    notes: notes,
+    fetchedOn: on,
+  );
 
   /// For the decision log (codes and kcal only).
   int get oldKcal =>
@@ -2126,7 +2170,60 @@ Map<String, Object?> _header(AssistDecision d, String status) => {
   'status': status,
   'trigger': d.trigger.wire,
   if (d.evidence != null) 'evidence': d.evidence!.wire,
+  // A saved lookup answer: the day it was fetched (usual foods D11). The
+  // key is additive; kAssistVersion is unchanged.
+  if (d.fetchedOn case final on? when _isoDateRe.hasMatch(on))
+    'fetched_on': on,
 };
+
+/// The four numbers [applyAssist] writes onto the covered item of [d].
+AssistNumbers _appliedNumbers(AssistItemDecision d) => d.proposed;
+
+/// The sum of the kcal [applyAssist] would write for [d]'s covered items
+/// (usual foods §2.4: the editor's "found {kcal} kcal for these items").
+num assistDecisionItemsKcal(AssistDecision d) =>
+    d.items.fold<num>(0, (s, i) => s + (_appliedNumbers(i).calories ?? 0));
+
+/// True when [analysis]'s APPLIED block covers exactly [d]'s item indices
+/// and each covered item holds the four numbers [applyAssist] would write
+/// for [d], within 0.5 kcal and 0.05 g: a fresh search over an applied
+/// block found the same numbers (usual foods §2.4).
+bool assistSameNumbers(Map<String, dynamic> analysis, AssistDecision d) {
+  final block = _block(analysis);
+  if (block == null || block['status'] != AssistStatus.applied) return false;
+  if (d.items.isEmpty) return false;
+  final matches = block['matches'];
+  final raw = analysis['food_items'];
+  if (matches is! List || raw is! List) return false;
+  final covered = <int>{};
+  for (final m in matches) {
+    final idx = m is Map ? m['item_index'] : null;
+    if (idx is! int || !covered.add(idx)) return false;
+  }
+  final wanted = {for (final i in d.items) i.itemIndex};
+  if (wanted.length != d.items.length ||
+      covered.length != wanted.length ||
+      !covered.containsAll(wanted)) {
+    return false;
+  }
+  bool near(num? a, num? b, double tolerance) {
+    if (a == null || b == null) return a == null && b == null;
+    return (a - b).abs() <= tolerance;
+  }
+
+  for (final i in d.items) {
+    if (i.itemIndex < 0 || i.itemIndex >= raw.length) return false;
+    final now = AssistNumbers.ofItem(raw[i.itemIndex]);
+    final want = _appliedNumbers(i);
+    if (!near(now.calories, want.calories, 0.5) ||
+        !near(now.proteinG, want.proteinG, 0.05) ||
+        !near(now.carbsG, want.carbsG, 0.05) ||
+        !near(now.fatG, want.fatG, 0.05)) {
+      return false;
+    }
+  }
+  return true;
+}
 
 Map<String, Object?> _sourceJson(AssistDecision d) => {
   'url': d.source?.url,
@@ -2176,12 +2273,13 @@ Map<String, dynamic>? applyAssist(
   num dk = 0, dp = 0, dc = 0, df = 0;
   for (final d in decision.items) {
     final item = items[d.itemIndex] as Map<String, dynamic>;
-    _writeNumbers(item, d.proposed.toItemJson());
+    final applied = _appliedNumbers(d);
+    _writeNumbers(item, applied.toItemJson());
     item['published'] = true;
-    dk += (d.proposed.calories ?? 0) - (d.before.calories ?? 0);
-    dp += (d.proposed.proteinG ?? 0) - (d.before.proteinG ?? 0);
-    dc += (d.proposed.carbsG ?? 0) - (d.before.carbsG ?? 0);
-    df += (d.proposed.fatG ?? 0) - (d.before.fatG ?? 0);
+    dk += (applied.calories ?? 0) - (d.before.calories ?? 0);
+    dp += (applied.proteinG ?? 0) - (d.before.proteinG ?? 0);
+    dc += (applied.carbsG ?? 0) - (d.before.carbsG ?? 0);
+    df += (applied.fatG ?? 0) - (d.before.fatG ?? 0);
   }
   final before = AssistNumbers.ofTotals(base);
   num? moved(num? total, num delta, {bool whole = false}) {
@@ -2230,12 +2328,23 @@ Map<String, dynamic>? applyAssist(
 /// match, and for a suggestion or context-only result on a meal whose
 /// earlier application still stands: a weaker answer never silently
 /// undoes published numbers (the caller reverts first if the user asks).
+/// With [keepSuggested] (the editor's Search again) a context-only result
+/// also writes nothing over a suggestion that still stands: a search that
+/// found nothing never takes "Use published numbers" off the meal.
 Map<String, dynamic>? recordAssistDecision(
   Map<String, dynamic> analysis,
-  AssistDecision decision,
-) {
+  AssistDecision decision, {
+  bool keepSuggested = false,
+}) {
+  final standing = _block(analysis)?['status'];
   if (decision.outcome != AssistOutcome.apply &&
-      _block(analysis)?['status'] == AssistStatus.applied &&
+      standing == AssistStatus.applied &&
+      assistStampValid(analysis)) {
+    return null;
+  }
+  if (keepSuggested &&
+      decision.outcome == AssistOutcome.contextOnly &&
+      standing == AssistStatus.suggested &&
       assistStampValid(analysis)) {
     return null;
   }
@@ -2432,6 +2541,7 @@ Map<String, dynamic>? acceptAssistSuggestion(
   final host = url?.substring(8).split('/').first;
   final kind = source is Map ? source['type'] : null;
   final year = source is Map ? source['year'] : null;
+  final fetched = block['fetched_on'];
   return applyAssist(
     analysis,
     AssistDecision(
@@ -2462,6 +2572,10 @@ Map<String, dynamic>? acceptAssistSuggestion(
           : null,
       grounded: grounded && items.length == (block['matches'] as List).length,
       notes: sanitizeAssistText(block['notes'], kAssistNotesMax),
+      // A saved answer stays one once accepted (usual foods §2.4).
+      fetchedOn: fetched is String && _isoDateRe.hasMatch(fetched)
+          ? fetched
+          : null,
     ),
   );
 }
@@ -2487,25 +2601,36 @@ Map<String, Object?>? supersedeAssist(dynamic assist) {
 }
 
 /// Drops, in place, every assist claim a MODEL wrote into [analysis]
-/// (design R6a, "Write safety"): the `assist` block and the items'
-/// `published` flags. Only [applyAssist], [recordAssistDecision],
-/// [revertAssist] and [supersedeAssist] write those, from a verified
-/// lookup; a photo, chat or describe reply carrying them is not evidence
-/// that any chain published anything (the stored-prompt-injection item).
-/// Item maps are copied before a flag is removed, never edited in place.
-void dropAssistClaims(Map<String, dynamic> analysis) {
+/// (design R6a, "Write safety"): the `assist` block, the items'
+/// `published` flags and, unless [keepUserMarks], the items' `user` marks
+/// ("these numbers are the user's", usual foods D25). Only [applyAssist],
+/// [recordAssistDecision], [revertAssist] and [supersedeAssist] write the
+/// first two, from a verified lookup, and only the meal editor and the
+/// usual-foods writers write a `user` mark; a photo, chat or describe
+/// reply carrying them is not evidence that any chain published anything,
+/// or that the user set any number (the stored-prompt-injection item).
+/// The editor's new-meal save passes [keepUserMarks] true: its describe
+/// prefill was stripped when the editor opened, so the marks left at save
+/// are that session's own.
+/// Item maps are copied before a key is removed, never edited in place.
+void dropAssistClaims(
+  Map<String, dynamic> analysis, {
+  bool keepUserMarks = false,
+}) {
   analysis.remove('assist');
   final items = analysis['food_items'];
+  bool claim(Object? k) =>
+      k == 'published' || (!keepUserMarks && k == 'user');
   if (items is! List ||
-      !items.any((e) => e is Map && e.containsKey('published'))) {
+      !items.any((e) => e is Map && e.keys.any(claim))) {
     return;
   }
   analysis['food_items'] = [
     for (final e in items)
-      e is Map && e.containsKey('published')
+      e is Map && e.keys.any(claim)
           ? <String, dynamic>{
               for (final kv in e.entries)
-                if (kv.key != 'published') '${kv.key}': kv.value,
+                if (!claim(kv.key)) '${kv.key}': kv.value,
             }
           : e,
   ];

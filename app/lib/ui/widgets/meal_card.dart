@@ -7,6 +7,9 @@
 /// numbers, '{brand} publishes {kcal} kcal — tap to review' for a
 /// suggestion; {brand} is the chain's name from the app's own table. A dot
 /// beside it marks an automatic change the user has not opened yet.
+///
+/// In the same slot, only when the assist shows no chip: Today's "your
+/// usual numbers" chip (widgets/usual_chip.dart), handed in ready-made.
 library;
 
 import 'package:flutter/material.dart';
@@ -40,13 +43,19 @@ class MealCard extends StatelessWidget {
   /// An automatic restaurant lookup changed this meal and it was not
   /// opened since (design R7b): a dot beside the assist chip.
   final bool assistUnseen;
+
+  /// Today's usual-numbers chip for this meal (usual foods §3.4), shown in
+  /// the assist chip's slot only when the assist has none: one chip per
+  /// card, and the assist's always wins.
+  final Widget? usualChip;
   const MealCard(
       {super.key,
       required this.meal,
       this.showItems = true,
       this.onTap,
       this.thumb,
-      this.assistUnseen = false});
+      this.assistUnseen = false,
+      this.usualChip});
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +141,9 @@ class MealCard extends StatelessWidget {
             if (assistChip != null) ...[
               const SizedBox(height: 6),
               _AssistChip(text: assistChip, unseen: assistUnseen),
+            ] else if (usualChip != null) ...[
+              const SizedBox(height: 6),
+              usualChip!,
             ],
             if (showItems && items.isNotEmpty) ...[
               const SizedBox(height: 8),

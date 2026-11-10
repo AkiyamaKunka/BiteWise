@@ -30,6 +30,14 @@
 /// updated — please review." and shows the newer meal. The buttons wait
 /// while the form has unsaved typing, so a write never lands under it.
 /// Opening a meal clears its 'updated' dot.
+///
+/// Usual foods (opened from Today only): a photo meal of today whose foods
+/// the user set numbers for before gets a "Your usual numbers" card
+/// (widgets/usual_offer_card.dart) under the source card. Use my numbers
+/// writes them through the same compare-and-set as a save (UsualFoods
+/// .accept); Keep AI estimate writes nothing. Saving marks the rows whose
+/// numbers the user changed as theirs (meal_edit_logic.dart), and a
+/// describe preview starts without any mark its model wrote.
 library;
 
 import 'dart:convert' show jsonEncode;
@@ -44,7 +52,13 @@ import '../../core/coerce.dart'
     show finiteAnalysis, isFoodTruthy, normalizeImageHash;
 import '../../core/contracts.dart';
 import '../../core/restaurant_assist_logic.dart'
-    show acceptAssistSuggestion, dropAssistClaims, normalizeSourceUrl;
+    show
+        AssistOutcome,
+        acceptAssistSuggestion,
+        assistDecisionItemsKcal,
+        assistSameNumbers,
+        dropAssistClaims,
+        normalizeSourceUrl;
 import '../../services/assist/meal_assist.dart'
     show
         AssistActionResult,
@@ -58,6 +72,7 @@ import '../../services/photo/filename_dates.dart'
     show captureWallClock, exifWallAndOffset;
 import '../../services/photo/glasses.dart'
     show captureAnalysis, isMetaGlassesAnalysis;
+import '../../services/usual/usual_foods.dart';
 import '../assist_view.dart';
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
@@ -69,6 +84,7 @@ import '../services.dart' show SettingsStore;
 import '../widgets/assist_source_card.dart';
 import '../widgets/chain_picker_sheet.dart';
 import '../widgets/glasses_badge.dart';
+import '../widgets/usual_offer_card.dart';
 import '../widgets/restaurant_consent_sheet.dart'
     show restaurantManualLookupChoice;
 import '../widgets/macro_chart.dart';
@@ -90,9 +106,14 @@ class MealEditorScreen extends StatefulWidget {
     this.settings,
     this.openUrl,
     this.assistPollInterval = kAssistPollInterval,
+    this.usual,
   });
 
   final MealsDao dao;
+
+  /// Usual foods (D31: passed by Today only): the card offering the numbers
+  /// the user set for a food before. Null shows none.
+  final UsualFoods? usual;
 
   /// The restaurant assist (design R7b): the source card's answers, the
   /// manual lookup, the card's dot. Null (tests, a new meal) shows none of
@@ -189,9 +210,26 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// A manual restaurant lookup is running (polled while a server job).
   bool _lookingUp = false;
 
+  /// The last lookup was answered by a saved lookup answer (usual foods
+  /// D9): the next press asks the provider, whatever the button.
+  bool _freshNext = false;
+
   /// [_load] is setting the fields one by one: their listener must not copy
   /// a half-updated form into the draft.
   bool _loading = false;
+
+  /// Whether the last build showed the form as having unsaved typing: a
+  /// text edit that changes it rebuilds, so the cards' buttons wait.
+  bool _shownDirty = false;
+
+  /// The usual numbers offered for [_meal] (never stored), the meal they
+  /// were worked out for, and the reply that may still set them.
+  UsualOffer? _usualOffer;
+  Meal? _usualFor;
+  int _usualGen = 0;
+
+  /// Use my numbers or Keep AI estimate is being written.
+  bool _usualBusy = false;
 
   @override
   void initState() {
@@ -199,7 +237,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     final clock = widget.now ?? DateTime.now;
     final meal = widget.meal;
     final photo = widget.fromPhoto;
-    final prefill = widget.initialAnalysis;
+    // A describe preview's reply is no evidence that a chain published
+    // anything or that the user set a number (design R6a, usual foods
+    // D25): its claims go before the form is built, so the only marks a
+    // new meal is saved with are this session's own.
+    final prefill = _withoutClaims(widget.initialAnalysis);
     // The photo's capture moment in the zone it was TAKEN in — the same
     // clock the automatic pipeline dates by, so a manual log of a photo
     // from before a flight agrees with an automatic one.
@@ -231,7 +273,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               ..time = shot != null
                   ? formatClock(shot)
                   : MealDraft.blank(clock()).time));
-    _desc = TextEditingController(text: _draft.description);
+    _desc = TextEditingController(text: _draft.description)
+      ..addListener(_watchDirty);
     _cal = TextEditingController(text: _draft.calories);
     _pro = TextEditingController(text: _draft.protein);
     _carb = TextEditingController(text: _draft.carbs);
@@ -253,7 +296,24 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       if (seen != null) {
         seen(meal.id).then((_) {}, onError: (Object _) {});
       }
+      _refreshUsual();
     }
+  }
+
+  /// A text edit that makes the form dirty (or clean again) rebuilds it:
+  /// the cards' buttons wait while there is unsaved typing.
+  void _watchDirty() {
+    if (_loading || !mounted) return;
+    if (_dirty != _shownDirty) setState(() {});
+  }
+
+  /// A copy of [analysis] without the assist block, published flags and
+  /// user marks a model may have written ([dropAssistClaims]).
+  static Map<String, dynamic>? _withoutClaims(Map<String, dynamic>? analysis) {
+    if (analysis == null) return null;
+    final copy = Map<String, dynamic>.from(analysis);
+    dropAssistClaims(copy);
+    return copy;
   }
 
   /// Everything the form shows, as one string: unchanged while the user has
@@ -357,13 +417,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     }
     _basisStale = false;
     _loadedSignature = _signature();
+    _refreshUsual();
   }
 
   ({TextEditingController name, TextEditingController cal,
       TextEditingController pro, TextEditingController carb,
       TextEditingController fat}) _controllersFor(MealItemDraft it) {
     final row = (
-      name: TextEditingController(text: it.name),
+      name: TextEditingController(text: it.name)..addListener(_watchDirty),
       cal: TextEditingController(text: it.calories),
       pro: TextEditingController(text: it.protein),
       carb: TextEditingController(text: it.carbs),
@@ -500,16 +561,20 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       _saving = true;
     });
     try {
-      final analysis = _draft.toAnalysis();
+      // The marks of the rows changed here (usual foods §3.1) carry the
+      // editor's clock.
+      final analysis = _draft.toAnalysis(now: (widget.now ?? DateTime.now)());
       if (widget.isNew) {
         final photo = widget.fromPhoto;
         // How the photo was taken (design G2a), from the intake's reading
         // of its bytes — never from a model's preview — as the automatic
         // pipeline stores it. Nor an assist block or a published flag a
         // describe preview's model wrote (design R6a): only a verified
-        // restaurant lookup writes those.
+        // restaurant lookup writes those. The rows' user marks stay: the
+        // prefill lost the model's when the editor opened, so these are
+        // the numbers the user set in this session (usual foods D25).
         analysis.remove('capture');
-        dropAssistClaims(analysis);
+        dropAssistClaims(analysis, keepUserMarks: true);
         final capture = photo?.capture;
         if (capture != null) analysis['capture'] = captureAnalysis(capture);
         // md5 of the ORIGINAL bytes: the same identity the watcher uses, so
@@ -670,6 +735,132 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     _basisRead = read;
     await read;
     if (mounted) setState(() {});
+    _refreshUsual();
+  }
+
+  // ── Your usual numbers (usual foods §3.4-§3.6) ──
+
+  /// Works the offer out again for the meal the form shows. Fire and
+  /// forget: a reply for an older meal is dropped, and a failure shows no
+  /// card. A different meal hides the old card at once.
+  void _refreshUsual() {
+    final usual = widget.usual;
+    final meal = _meal;
+    if (usual == null || meal == null) return;
+    final gen = ++_usualGen;
+    if (!identical(meal, _usualFor)) {
+      _usualOffer = null;
+      _usualFor = meal;
+    }
+    Future<UsualOffer?> offer;
+    try {
+      offer = usual.offerFor(meal);
+    } catch (_) {
+      return;
+    }
+    offer.then((o) {
+      if (!mounted || gen != _usualGen || !identical(meal, _meal)) return;
+      setState(() => _usualOffer = o);
+    }, onError: (Object _) {
+      if (!mounted || gen != _usualGen) return;
+      setState(() => _usualOffer = null);
+    });
+  }
+
+  /// Use my numbers: every offered food at once, through the compare-and-
+  /// set against the stored text the form shows (nothing changes without
+  /// this tap). The snackbar says the meal's totals and has Undo. Past
+  /// midnight the card goes quietly.
+  Future<void> _useUsual() async {
+    final usual = widget.usual;
+    final meal = _meal;
+    final offer = _usualOffer;
+    if (usual == null || meal == null || offer == null) return;
+    if (_usualBusy || _assistBusy || _saving || _lookingUp) return;
+    final l = context.l10n;
+    if (_dirty) {
+      _say(l.assistEditFirst, key: const Key('assistEditFirstSnack'));
+      return;
+    }
+    // Past midnight the meal is no longer today's and is offered nothing:
+    // the card goes, and nothing is said (the meal did not change).
+    if (meal.date != isoDate((widget.now ?? DateTime.now)())) {
+      setState(() {
+        _usualOffer = null;
+        _usualGen++; // a reply still on its way must not bring it back
+      });
+      return;
+    }
+    final messenger = ScaffoldMessenger.of(context);
+    setState(() => _usualBusy = true);
+    UsualAcceptStatus status = UsualAcceptStatus.conflict;
+    UsualAcceptResult? result;
+    try {
+      final basis = _basisRead;
+      if (basis != null) await basis;
+      final raw = _draft.expectedRaw;
+      if (!mounted) return;
+      if (raw != null && !_basisStale && identical(meal, _meal)) {
+        result = await usual.accept(meal.id, shown: offer, expectedRaw: raw);
+        status = result.status;
+      }
+    } catch (_) {
+      status = UsualAcceptStatus.conflict;
+    } finally {
+      if (mounted) setState(() => _usualBusy = false);
+    }
+    if (!mounted) return;
+    switch (status) {
+      case UsualAcceptStatus.written:
+        // The offer is used: the card goes now, not when the form has
+        // reloaded, so a second tap in between has nothing to use.
+        setState(() {
+          _usualOffer = null;
+          _usualGen++;
+        });
+        await _refreshBasis();
+        showUsualUsedSnack(messenger, l, usual, result!, onUndone: () {
+          if (mounted) _refreshBasis();
+        });
+      case UsualAcceptStatus.busy:
+        return;
+      case UsualAcceptStatus.conflict:
+      case UsualAcceptStatus.gone:
+        await _assistConflict();
+    }
+  }
+
+  /// Keep AI estimate: the offer is turned down for this meal (two on
+  /// different meals mute the food). The meal is not written.
+  Future<void> _keepAi() async {
+    final usual = widget.usual;
+    final offer = _usualOffer;
+    if (usual == null || offer == null || _usualBusy) return;
+    setState(() => _usualBusy = true);
+    try {
+      await usual.decline(offer);
+    } catch (_) {
+      // The card goes either way: the user chose the AI estimate.
+    }
+    if (!mounted) return;
+    setState(() {
+      _usualBusy = false;
+      _usualOffer = null;
+      _usualGen++; // a reply still on its way must not bring it back
+    });
+  }
+
+  /// The usual-numbers card, or null when nothing is offered.
+  Widget? _usualSection(bool dirty) {
+    final offer = _usualOffer;
+    if (offer == null || widget.usual == null || _meal == null) return null;
+    return UsualOfferCard(
+      offer: offer,
+      busy: _usualBusy || _assistBusy || _saving || _lookingUp,
+      editFirst: dirty,
+      onUse: _useUsual,
+      onKeepAi: _keepAi,
+    );
   }
 
   /// The meal changed under an answer: say so, show the meal as it is now.
@@ -808,7 +999,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// recipient, then MealAssist.lookupNow — asked again every
   /// [MealEditorScreen.assistPollInterval] while the owner's server still
   /// runs it, for up to [kAssistPollWindow] (later, the sweep collects it).
-  Future<void> _lookUp({String? chainKey}) async {
+  ///
+  /// [fresh] is Search again (usual foods §2.4): the provider is asked,
+  /// never a saved lookup answer. The press right after a saved answer
+  /// was used is fresh too ([_freshNext], D9).
+  Future<void> _lookUp({String? chainKey, bool fresh = false}) async {
     final meal = _meal;
     final assist = widget.assist;
     final settings = widget.settings;
@@ -824,6 +1019,13 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
         settings: settings, controls: assist);
     if (choice == null || !mounted) return;
     final useLocation = chainKey == null && choice.useLocation;
+    // One answer for every poll of this press: a pending fresh search is
+    // never answered by the saved answer it is replacing.
+    final f = fresh || _freshNext;
+    // The block before this lookup, for what a fresh search over applied
+    // numbers or a suggestion says when it writes nothing.
+    final before = meal.analysis;
+    final beforeKind = AssistView.of(before).kind;
     setState(() => _lookingUp = true);
     var run = const AssistRun(AssistSkip.error);
     try {
@@ -842,7 +1044,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           }
         }
         run = await lookupNow(meal.id,
-            useLocation: useLocation, chainKey: chainKey);
+            useLocation: useLocation, chainKey: chainKey, fresh: f);
         if (!mounted) return;
         // Pending on the server, or the automatic lookup of this meal
         // still running here (its result is dropped: the editor holds the
@@ -854,9 +1056,17 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     } finally {
       if (mounted) setState(() => _lookingUp = false);
     }
+    _freshNext = run.fromCache;
     if (!mounted) return;
     if (run.wrote) {
       await _refreshBasis();
+      if (!mounted) return;
+      if (run.fromCache) {
+        // Never "used": on Claude Plan a saved answer is a suggestion.
+        final on = run.decision?.fetchedOn ??
+            AssistView.of((_meal ?? meal).analysis).fetchedOn;
+        _say(l.assistFoundSaved(on), key: const Key('assistFoundSavedSnack'));
+      }
       return;
     }
     if (run.code == AssistSkip.casMiss) {
@@ -864,19 +1074,63 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       await _refreshBasis();
       return;
     }
-    final message = run.code == AssistSkip.pending ||
-            run.code == AssistSkip.working ||
-            run.code == AssistSkip.background
+    final stillRunning = run.code == AssistSkip.pending ||
+        run.code == AssistSkip.working ||
+        run.code == AssistSkip.background;
+    final message = stillRunning
         ? l.assistLookupStillRunning
-        : run.decision != null
-            // Answered, but nothing usable to write (another chain, items
-            // that changed meanwhile, a malformed answer).
-            ? l.assistContextOnly
-            : _lookupFailureText(l, run.code);
+        : f &&
+                (beforeKind == AssistViewKind.applied ||
+                    beforeKind == AssistViewKind.suggested)
+            ? _searchAgainText(l, run, before)
+            : run.decision != null
+                // Answered, but nothing usable to write (another chain,
+                // items that changed meanwhile, a malformed answer).
+                ? l.assistContextOnly
+                : _lookupFailureText(l, run.code);
     if (message != null) {
       _say(message, key: const Key('assistLookupSnack'));
     }
   }
+
+  /// A fresh search over published numbers that stand on the meal, or
+  /// over a suggestion it can still take, wrote nothing (usual foods §2.4;
+  /// an answer that found nothing never replaces either): what it found. A
+  /// search that could not run says why instead.
+  static String? _searchAgainText(
+      AppLocalizations l, AssistRun run, Map<String, dynamic> before) {
+    final d = run.decision;
+    if (d == null && _lookupFailed(run.code)) {
+      return _lookupFailureText(l, run.code);
+    }
+    if (d == null ||
+        d.outcome == AssistOutcome.reject ||
+        d.outcome == AssistOutcome.contextOnly ||
+        d.items.isEmpty) {
+      return l.assistSearchAgainNoChange;
+    }
+    if (assistSameNumbers(before, d)) return l.assistSearchAgainSame;
+    return l.assistSearchAgainDiffers(formatKcal(assistDecisionItemsKcal(d)));
+  }
+
+  /// [code] says the lookup got no answer (not started, refused, or
+  /// failed): a code [_lookupFailureText] names, not its "no chain"
+  /// fallback.
+  static bool _lookupFailed(String code) =>
+      code.startsWith('lookup_') ||
+      const {
+        AssistSkip.consentNeeded,
+        AssistSkip.off,
+        AssistSkip.cancelled,
+        AssistSkip.pickNeedsHttps,
+        AssistSkip.outsideUs,
+        AssistSkip.regionUnknown,
+        AssistSkip.dailyCap,
+        AssistSkip.placeThrottled,
+        AssistSkip.placeError,
+        AssistSkip.error,
+        AssistSkip.unsupported,
+      }.contains(code);
 
   /// Why a manual lookup wrote nothing, or null when there is nothing to
   /// say (it was not started, or already runs).
@@ -978,6 +1232,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           ? answer(AssistUserAction.correct)
           : null,
       onLookUp: canLookUp ? () => _lookUp() : null,
+      // On a block decided on a saved lookup answer (the card shows it
+      // only there): a fresh lookup.
+      onSearchAgain: canLookUp ? () => _lookUp(fresh: true) : null,
       onOpenSource: _openSource,
     );
   }
@@ -1080,6 +1337,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                 .value ??
             0;
     final assistCard = _assistSection();
+    _shownDirty = _dirty;
+    final usualCard = _usualSection(_shownDirty);
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isNew
@@ -1128,6 +1387,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: assistCard,
+            ),
+          if (usualCard != null)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: usualCard,
             ),
           TextField(
             key: const Key('editorDescription'),

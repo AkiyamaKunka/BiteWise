@@ -2,6 +2,7 @@
 // parsing/bounds, item sums, and the analysis merge that decides what is
 // persisted — the merge is where a bug silently corrupts a meal row.
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/usual_foods_logic.dart';
 import 'package:calorie_tracker/ui/meal_edit_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -173,12 +174,14 @@ void main() {
     });
 
     test('items are normalized with numeric fields', () {
+      // Usual-foods spec §3.1: an added row's numbers are the user's, so it
+      // carries the mark (updated on purpose for that change).
       final out = (MealDraft.blank(DateTime(2026, 7, 24))
             ..items = [
               MealItemDraft(name: ' Toast ', calories: '90', fat: '2'),
               MealItemDraft(), // dropped
             ])
-          .toAnalysis();
+          .toAnalysis(now: DateTime.utc(2026, 7, 24, 12));
       final items = out['food_items'] as List;
       expect(items, hasLength(1));
       expect(items.single, {
@@ -187,6 +190,12 @@ void main() {
         'protein_g': 0,
         'carbs_g': 0,
         'fat_g': 2,
+        'user': {
+          'set': true,
+          'at': '2026-07-24T12:00:00.000Z',
+          'n': [90, 0, 0, 2],
+          'qty': 1,
+        },
       });
     });
   });
@@ -329,16 +338,28 @@ void main() {
       final d = MealDraft.fromMeal(mealWith(stored));
       d.items[0].calories = '980';
       d.items[1].name = 'Tortilla chips';
-      final items = d.toAnalysis()['food_items'] as List;
+      final items =
+          d.toAnalysis(now: DateTime.utc(2026, 7, 24, 13, 30))['food_items']
+              as List;
+      // Updated on purpose for the usual-foods mark (spec §3.1): the user's
+      // new numbers are marked as theirs.
       expect(items[0], {
         'name': 'Burrito bowl',
         'estimated_calories': 980,
         'protein_g': 50,
         'carbs_g': 110,
         'fat_g': 40,
+        'user': {
+          'set': true,
+          'at': '2026-07-24T13:30:00.000Z',
+          'n': [980, 50, 110, 40],
+          'qty': 1,
+        },
       }, reason: 'no longer the published numbers, nor a printed-brand claim');
       expect((items[1] as Map).containsKey('brand'), isFalse);
       expect((items[1] as Map).containsKey('leftover_left_fraction'), isFalse);
+      expect(items[1]['user'], {'qty': 1, 'ai_name': 'Chips'},
+          reason: 'a rename alone marks no numbers, only the old name');
     });
 
     test('a row typed back to its loaded text counts as untouched; added '
@@ -349,14 +370,25 @@ void main() {
       d.addItem()
         ..name = 'Salsa'
         ..calories = '25';
-      final items = d.toAnalysis()['food_items'] as List;
+      final items =
+          d.toAnalysis(now: DateTime.utc(2026, 7, 24, 13, 30))['food_items']
+              as List;
       expect(items[0]['published'], isTrue);
+      expect((items[0] as Map).containsKey('user'), isFalse);
+      // Updated on purpose (usual-foods spec §3.1): an added row's numbers
+      // are the user's.
       expect(items[2], {
         'name': 'Salsa',
         'estimated_calories': 25,
         'protein_g': 0,
         'carbs_g': 0,
         'fat_g': 0,
+        'user': {
+          'set': true,
+          'at': '2026-07-24T13:30:00.000Z',
+          'n': [25, 0, 0, 0],
+          'qty': 1,
+        },
       });
     });
 
@@ -364,6 +396,307 @@ void main() {
       // The editor sets expectedRaw once the stored row confirmed it.
       expect(MealDraft.fromMeal(mealWith(stored)).expectedRaw, isNull);
       expect(MealDraft.blank(DateTime(2026, 7, 24)).expectedRaw, isNull);
+    });
+  });
+  // Usual-foods spec §3.1 (T25): the editor's save is the one writer that
+  // knows which numbers are the user's.
+  group('usual-foods marks', () {
+    final now = DateTime.utc(2026, 11, 6, 13, 40, 12, 345);
+    const stamp = '2026-11-06T13:40:12.345Z';
+    Map<String, dynamic> aiRow({Object? qty, Object? kcal = 300}) => {
+          'name': 'Oatmeal (~250 g)',
+          'estimated_calories': kcal,
+          'protein_g': 10,
+          'carbs_g': 54,
+          'fat_g': 6,
+          'qty': ?qty,
+        };
+    Map<String, dynamic> analysisOf(List<Map<String, dynamic>> items) => {
+          'is_food': true,
+          'meal_description': 'Breakfast',
+          'total_calories': 300,
+          'food_items': items,
+        };
+    Map<String, dynamic> saveRow(Map<String, dynamic> row,
+        void Function(MealItemDraft it) edit,
+        {DateTime? at}) {
+      final d = MealDraft.fromMeal(mealWith(analysisOf([row])));
+      edit(d.items.single);
+      return (d.toAnalysis(now: at ?? now)['food_items'] as List).single
+          as Map<String, dynamic>;
+    }
+
+    test('changed numbers give set, at, n, and qty from the stored row', () {
+      final out = saveRow(aiRow(qty: 2), (it) => it.calories = '350');
+      expect(out['user'], {
+        'set': true,
+        'at': stamp,
+        'n': [350, 10, 54, 6],
+        'qty': 2,
+      });
+      expect(out.containsKey('qty'), isFalse,
+          reason: 'toMap drops qty; the mark keeps it');
+      expect(usualMarkValid(out, now), isTrue);
+    });
+
+    test('at is the injected clock, in UTC with milliseconds', () {
+      final out = saveRow(aiRow(), (it) => it.fat = '8',
+          at: DateTime.utc(2026, 1, 2, 3, 4, 5, 6));
+      expect((out['user'] as Map)['at'], '2026-01-02T03:04:05.006Z');
+    });
+
+    test('"450" saved as 450 is no change', () {
+      final out = saveRow(aiRow(kcal: '450'), (it) {
+        it.calories = '451';
+        it.calories = '450.0';
+      });
+      expect(out['estimated_calories'], 450);
+      expect(out.containsKey('user'), isFalse,
+          reason: 'the same number, so nothing is the user\'s yet');
+    });
+
+    test('a name-only edit of an AI row gives ai_name only', () {
+      final out = saveRow(aiRow(), (it) => it.name = 'Overnight oats');
+      expect(out['name'], 'Overnight oats');
+      expect(out['user'], {'qty': 1, 'ai_name': 'Oatmeal (~250 g)'});
+    });
+
+    test('a name-only edit of a validly set row keeps set, at and n', () {
+      final row = {
+        ...aiRow(kcal: 350),
+        'user': {
+          'set': true,
+          'at': '2026-11-01T08:00:00.000Z',
+          'n': [350, 10, 54, 6],
+          'qty': 1,
+        },
+      };
+      final out = saveRow(row, (it) => it.name = 'Overnight oats');
+      expect(out['user'], {
+        'set': true,
+        'at': '2026-11-01T08:00:00.000Z',
+        'n': [350, 10, 54, 6],
+        'qty': 1,
+        'ai_name': 'Oatmeal (~250 g)',
+      });
+    });
+
+    test('a touched row whose stored mark is void gets no set', () {
+      // The numbers moved under the mark (a lookup or a deduction).
+      final row = {
+        ...aiRow(kcal: 590),
+        'user': {
+          'set': true,
+          'at': '2026-11-01T08:00:00.000Z',
+          'n': [350, 10, 54, 6],
+          'qty': 1,
+          'ai_name': 'Oatmeal',
+        },
+      };
+      final out = saveRow(row, (it) => it.name = 'Porridge');
+      expect(out['user'], {'qty': 1, 'ai_name': 'Oatmeal'},
+          reason: 'the stored ai_name wins over the stored name');
+    });
+
+    test('an untouched row keeps user byte for byte', () {
+      final user = {
+        'set': true,
+        'at': '2020-01-01T00:00:00Z',
+        'n': [1, 2, 3, 4],
+        'qty': 1,
+        'extra': 'kept',
+      };
+      final d = MealDraft.fromMeal(mealWith(analysisOf([
+        {...aiRow(), 'user': user},
+      ])))
+        ..description = 'Renamed meal';
+      final out =
+          (d.toAnalysis(now: now)['food_items'] as List).single as Map;
+      expect(out['user'], user);
+    });
+
+    test('an added row gives set with qty 1', () {
+      // Updated on purpose: this row was a 5 kcal coffee, and a row under
+      // the 10 kcal minimum is no longer marked (the test below).
+      final d = MealDraft.fromMeal(mealWith(analysisOf([aiRow()])));
+      d.addItem()
+        ..name = 'Latte'
+        ..calories = '190';
+      final out = (d.toAnalysis(now: now)['food_items'] as List)[1] as Map;
+      expect(out['user'], {
+        'set': true,
+        'at': stamp,
+        'n': [190, 0, 0, 0],
+        'qty': 1,
+      });
+    });
+
+    test('an added row left blank, or under 10 kcal, gets no mark', () {
+      final d = MealDraft.fromMeal(mealWith(analysisOf([aiRow()])));
+      d.addItem().name = 'Toast';
+      d.addItem()
+        ..name = 'Black coffee'
+        ..calories = '5';
+      d.addItem()
+        ..name = 'Mints'
+        ..calories = '9.9'
+        ..carbs = '2';
+      final rows = (d.toAnalysis(now: now)['food_items'] as List).skip(1);
+      expect([for (final r in rows) (r as Map).containsKey('user')],
+          [false, false, false]);
+      expect([for (final r in rows) (r as Map)['estimated_calories']],
+          [0, 5, 9.9]);
+    });
+
+    test('a blank row added to a lunch is never re-logged as 0 kcal', () {
+      // Toast and eggs on two mornings (listed in My usual foods).
+      Meal breakfast(int id, String date) => Meal(
+            id: id,
+            date: date,
+            time: '08:00 AM',
+            timestamp: '${date}T08:00:00.000',
+            source: MealSource.appWatch,
+            analysis: {
+              'is_food': true,
+              'meal_description': 'Toast and eggs',
+              'total_calories': 320,
+              'food_items': [
+                {
+                  'name': 'Toast',
+                  'estimated_calories': 120,
+                  'protein_g': 4,
+                  'carbs_g': 20,
+                  'fat_g': 2,
+                },
+                {
+                  'name': 'Scrambled eggs',
+                  'estimated_calories': 200,
+                  'protein_g': 12,
+                  'carbs_g': 2,
+                  'fat_g': 15,
+                },
+              ],
+            },
+          );
+      // Today's lunch photo: the user adds a "Toast" row by name only.
+      final lunch = MealDraft.fromMeal(mealWith(analysisOf([aiRow()]),
+          date: '2026-11-07', time: '12:00 PM'))
+        ..items.add(MealItemDraft(name: 'Toast'));
+      expect(lunch.validate(), isEmpty, reason: 'blank numbers are allowed');
+      final saved = Meal(
+          id: 12,
+          date: '2026-11-07',
+          time: '12:00 PM',
+          timestamp: '2026-11-07T12:00:00.000',
+          source: MealSource.appPhoto,
+          corrected: true,
+          analysis: lunch.toAnalysis(now: now));
+      final at = DateTime(2026, 11, 7, 12, 30);
+      final index = buildUsualIndex(
+          [breakfast(10, '2026-11-03'), breakfast(11, '2026-11-05'), saved],
+          now: at);
+      expect(index.records['toast'], isNull);
+      final list =
+          usualMealList(index, now: at, choices: UsualChoicesView.empty);
+      final row = [...list.around, ...list.more]
+          .firstWhere((m) => m.title == 'Toast and eggs');
+      final relog = usualLogAnalysis(row, index, now: at);
+      expect((relog['food_items'] as List).first['estimated_calories'], 120);
+      expect(relog['total_calories'], 320);
+    });
+
+    group('the first row "Add item" seeds from the totals', () {
+      // A photo meal the AI gave totals only (no rows).
+      Meal pho() => mealWith({
+            'is_food': true,
+            'meal_description': 'Beef pho',
+            'total_calories': 640,
+            'total_protein_g': 30,
+            'total_carbs_g': 70,
+            'total_fat_g': 25,
+          });
+
+      test('on a stored meal it is not yours while it holds the meal\'s '
+          'totals', () {
+        final d = MealDraft.fromMeal(pho());
+        d.addItem().name = 'Pho';
+        final saved = d.toAnalysis(now: now);
+        final row = (saved['food_items'] as List).single as Map;
+        expect(row['estimated_calories'], 640);
+        expect(row.containsKey('user'), isFalse,
+            reason: 'the AI\'s 640 was seeded, never typed: ${row['user']}');
+        final edited = Meal(
+            id: 7,
+            date: '2026-11-06',
+            time: '12:10 PM',
+            timestamp: '2026-11-06T12:10:00.000',
+            source: MealSource.appPhoto,
+            corrected: true,
+            analysis: saved);
+        expect(
+            buildUsualIndex([edited], now: DateTime(2026, 11, 7, 12))
+                .records['pho'],
+            isNull);
+      });
+
+      test('on a stored meal it is yours once one of its numbers differs',
+          () {
+        final d = MealDraft.fromMeal(pho());
+        d.addItem()
+          ..name = 'Pho'
+          ..fat = '20';
+        final row = (d.toAnalysis(now: now)['food_items'] as List).single;
+        expect(row['user'], {
+          'set': true,
+          'at': stamp,
+          'n': [640, 30, 70, 20],
+          'qty': 1,
+        });
+        // Totals the user typed before the tap differ from the meal's too.
+        final typed = MealDraft.fromMeal(pho())..calories = '700';
+        typed.addItem().name = 'Pho';
+        final row2 =
+            (typed.toAnalysis(now: now)['food_items'] as List).single as Map;
+        expect((row2['user'] as Map)['n'], [700, 30, 70, 25]);
+      });
+
+      test('on a new hand-typed meal it is yours', () {
+        final d = MealDraft.blank(DateTime(2026, 11, 6, 12))
+          ..calories = '450'
+          ..protein = '20'
+          ..carbs = '50'
+          ..fat = '18';
+        d.addItem().name = 'Toast and eggs';
+        final row = (d.toAnalysis(now: now)['food_items'] as List).single;
+        expect(row['user'], {
+          'set': true,
+          'at': stamp,
+          'n': [450, 20, 50, 18],
+          'qty': 1,
+        });
+      });
+    });
+
+    test('a stored qty-2 row edited twice keeps qty: 2', () {
+      final once = saveRow(aiRow(qty: 2), (it) => it.calories = '400');
+      final twice = saveRow(once, (it) => it.calories = '420',
+          at: DateTime.utc(2026, 11, 7));
+      expect(twice['user'], {
+        'set': true,
+        'at': '2026-11-07T00:00:00.000Z',
+        'n': [420, 10, 54, 6],
+        'qty': 2,
+      });
+      expect(usualItemQty(twice), 2);
+    });
+
+    test('a qty-only row says its count, a qty-1 row with nothing says '
+        'nothing', () {
+      // '300.0' touches the row without changing its number.
+      final counted = saveRow(aiRow(qty: 3), (it) => it.calories = '300.0');
+      expect(counted['user'], {'qty': 3});
+      final plain = saveRow(aiRow(qty: 1), (it) => it.calories = '300.0');
+      expect(plain.containsKey('user'), isFalse);
     });
   });
 }

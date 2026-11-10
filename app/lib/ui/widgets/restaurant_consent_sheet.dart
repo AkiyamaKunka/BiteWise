@@ -285,12 +285,20 @@ Future<({bool useLocation})?> restaurantManualLookupChoice(
   return (useLocation: choice == RestaurantConsentChoice.useLocation);
 }
 
-/// The Off dialog: 'Pending lookups are cancelled.' with 'Also clear
-/// learned places' (offered only where places are learned at all). Null:
+/// The Off dialog: 'Pending lookups are cancelled.' with a box, unticked,
+/// to clear what the lookups kept on this phone at the same time:
+/// 'Also clear learned places and saved lookup answers' where places are
+/// learned ([placesKept], iOS: the places, the saved lookup answers and the
+/// waiting lookups), else
+/// 'Also clear saved lookup answers' (Android: no places are kept). Either
+/// way, the answer's clearPlaces asks for that one clear
+/// (RestaurantAssistControls.clearLearnedPlaces).
+/// Without the box the saved answers stay, as the policy says. Null:
 /// Cancel (the mode stays on).
 Future<({bool clearPlaces})?> confirmRestaurantAssistOff(
   BuildContext context, {
   required bool offerClearPlaces,
+  required bool placesKept,
 }) async {
   var clear = false;
   final go = await showDialog<bool>(
@@ -307,12 +315,20 @@ Future<({bool clearPlaces})?> confirmRestaurantAssistOff(
               Text(ctx.l10n.restaurantOffBody),
               if (offerClearPlaces)
                 CheckboxListTile(
-                  key: const Key('restaurantOffClearPlaces'),
+                  key: Key(
+                    placesKept
+                        ? 'restaurantOffClearPlaces'
+                        : 'restaurantOffClearAnswers',
+                  ),
                   contentPadding: EdgeInsets.zero,
                   controlAffinity: ListTileControlAffinity.leading,
                   value: clear,
                   onChanged: (v) => setDialog(() => clear = v ?? false),
-                  title: Text(ctx.l10n.restaurantOffClearPlaces),
+                  title: Text(
+                    placesKept
+                        ? ctx.l10n.restaurantOffClearPlaces
+                        : ctx.l10n.restaurantOffClearAnswers,
+                  ),
                 ),
             ],
           ),

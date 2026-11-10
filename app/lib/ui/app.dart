@@ -443,7 +443,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
               garminDaily: s.garminDaily,
               mealInUse: s.mealInUse,
               restaurantAssist: s.restaurantAssist,
-              settings: s.settings),
+              settings: s.settings,
+              usual: s.usualFoods),
           HistoryScreen(
               key: _historyKey,
               dao: s.dao,

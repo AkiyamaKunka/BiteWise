@@ -310,7 +310,8 @@ class FakeAssist {
   Set<int> unseenIds = {};
 
   final List<({int id, AssistUserAction action, String expectedRaw})> acts = [];
-  final List<({int id, bool useLocation, String? chainKey})> lookups = [];
+  final List<({int id, bool useLocation, String? chainKey, bool fresh})>
+  lookups = [];
   final List<int> seen = [];
 
   /// Overrides an answer's result (default: [defaultAct]).
@@ -328,13 +329,24 @@ class FakeAssist {
   RestaurantAssistControls controls() => RestaurantAssistControls(
     lookupSupport: () => support,
     clearLearnedPlaces: () async => true,
-    lookupNow: (id, {bool useLocation = false, String? chainKey}) async {
-      lookups.add((id: id, useLocation: useLocation, chainKey: chainKey));
-      final f = onLookup;
-      return f == null
-          ? const AssistRun(AssistSkip.noBrand)
-          : f(id, useLocation, chainKey);
-    },
+    lookupNow:
+        (
+          id, {
+          bool useLocation = false,
+          String? chainKey,
+          bool fresh = false,
+        }) async {
+          lookups.add((
+            id: id,
+            useLocation: useLocation,
+            chainKey: chainKey,
+            fresh: fresh,
+          ));
+          final f = onLookup;
+          return f == null
+              ? const AssistRun(AssistSkip.noBrand)
+              : f(id, useLocation, chainKey);
+        },
     act: (id, action, {required String expectedRaw}) async {
       acts.add((id: id, action: action, expectedRaw: expectedRaw));
       final f = onAct;

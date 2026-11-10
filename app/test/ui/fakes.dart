@@ -5,11 +5,14 @@ library;
 import 'dart:async';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show ChangeNotifier;
+import 'package:flutter/foundation.dart' show ChangeNotifier, ValueNotifier;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:calorie_tracker/core/ai_consent.dart' show allAiConsentRoutes;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
+import 'package:calorie_tracker/services/usual/usual_foods.dart'
+    show UsualChoices, UsualFoods;
 import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
@@ -420,6 +423,7 @@ UiServices makeServices({
   PhotoLibrary? photoLibrary,
   MealInUseRegistry? mealInUse,
   RestaurantAssistControls? restaurantAssist,
+  UsualFoods? usualFoods,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -440,5 +444,77 @@ UiServices makeServices({
     photoLibrary: photoLibrary,
     mealInUse: mealInUse,
     restaurantAssist: restaurantAssist,
+    usualFoods: usualFoods,
+  );
+}
+
+// ─── Usual foods (usual-foods spec §3-§4) ─────────────────────────────
+
+/// The real usual-foods service over [dao] at [clock], with its choices on
+/// fresh mocked preferences; the restaurant lookup takes no meal unless
+/// [lookupTakesIt] says so. [signal] is the meals signal it bumps.
+Future<UsualFoods> makeUsualFoods(
+  BaseFakeDao dao, {
+  required DateTime Function() clock,
+  bool Function(Map<String, dynamic> analysis)? lookupTakesIt,
+  ValueNotifier<int>? signal,
+}) async {
+  SharedPreferences.setMockInitialValues({});
+  final prefs = await SharedPreferences.getInstance();
+  final changed = signal ?? ValueNotifier<int>(0);
+  return UsualFoods(
+    dao: dao,
+    choices: UsualChoices(prefs, clock: clock),
+    mealsChanged: changed,
+    onMealsChanged: () => changed.value++,
+    lookupTakesIt: lookupTakesIt ?? (_) => false,
+    clock: clock,
+  );
+}
+
+/// One food with its four numbers.
+Map<String, dynamic> foodItem(String name, num kcal,
+        {num p = 10, num c = 50, num f = 6}) =>
+    {
+      'name': name,
+      'estimated_calories': kcal,
+      'protein_g': p,
+      'carbs_g': c,
+      'fat_g': f,
+    };
+
+/// A food meal of [items], its totals their sums (an AI estimate of medium
+/// confidence, eaten at home).
+Meal foodMeal({
+  required int id,
+  required String date,
+  required List<Map<String, dynamic>> items,
+  String time = '07:40 AM',
+  String source = MealSource.appPhoto,
+  String? description,
+  bool corrected = false,
+}) {
+  num sum(String key) =>
+      items.fold<num>(0, (s, i) => s + (i[key] as num? ?? 0));
+  return Meal(
+    id: id,
+    date: date,
+    time: time,
+    timestamp: '${date}T08:00:00.000',
+    source: source,
+    imageHash: source == MealSource.appPhoto ? 'h$id' : '',
+    corrected: corrected,
+    analysis: {
+      'is_food': true,
+      'meal_description':
+          description ?? items.map((i) => i['name']).join(', '),
+      'total_calories': sum('estimated_calories'),
+      'total_protein_g': sum('protein_g'),
+      'total_carbs_g': sum('carbs_g'),
+      'total_fat_g': sum('fat_g'),
+      'estimate_confidence': 'medium',
+      'restaurant_context': 'home',
+      'food_items': items,
+    },
   );
 }

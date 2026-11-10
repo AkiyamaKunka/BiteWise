@@ -185,8 +185,8 @@ def test_policy_and_consent_say_what_the_review_found_unsaid():
     """Review 2026-10-25: the editor's answers read the photo's location to
     keep a ~100 m cell (only with 'Use photo location' on); the meal's
     record keeps the lookup's notes and how the chain was found; 'Clear
-    learned places' also drops recent answers; the consent names the region
-    code and reply language a lookup sends."""
+    learned places' also drops the saved answers; the consent names the
+    region code and reply language a lookup sends."""
     en, zh = _policy_halves()
     en_lookup = _lookup_section(en, "### Restaurant nutrition lookup")
     zh_lookup = _lookup_section(zh, "### 餐厅营养查询")
@@ -199,9 +199,9 @@ def test_policy_and_consent_say_what_the_review_found_unsaid():
     assert "查询的备注（最多 200 个字符" in zh_lookup
     assert "照片的拍摄位置，或你自己选的" in zh_lookup
     en_flat, zh_flat = _flat(en), _flat(zh)
-    assert ("deletes the places, the recent lookup answers and the lookups "
+    assert ("deletes the places, the saved lookup answers and the lookups "
             "still waiting") in en_flat
-    assert "会删除这些地点、最近的查询结果和还在等待的查询" in zh_flat
+    assert "会删除这些地点、保存的查询结果和还在等待的查询" in zh_flat
     ena, zha = _arb("en"), _arb("zh")
     for k in ("restaurantConsentSent", "restaurantConsentSentAndroid"):
         assert "reply language" in ena[k], k
@@ -419,3 +419,111 @@ def test_stop_sharing_also_stops_restaurant_lookups_to_that_recipient():
     support = _flat(_read("docs", "SUPPORT.md"))
     assert ("turns off Watch Camera Roll (and restaurant lookups that go to "
             "it)") in support
+
+
+def test_policy_usual_foods_and_saved_answers():
+    """Usual foods (spec section 7): a lookup answer that found a chain's
+    published numbers is kept up to a year, any other up to 30 days, each
+    with when it was last used; Android gets its own clear row; My usual
+    foods and your usual numbers are worked out on the phone and send
+    nothing; a meal changed or logged with them is sent like any other
+    meal; the hidden foods and turned-down offers are stored as codes, not
+    food names; turning lookups off keeps the answers unless cleared. The
+    policy names the controls as the app shows them."""
+    en, zh = _policy_halves()
+    en_phone = _lookup_section(en, "### What stays on your phone")
+    zh_phone = _lookup_section(zh, "### 留在你手机上的数据")
+    en_lookup = _lookup_section(en, "### Restaurant nutrition lookup")
+    zh_lookup = _lookup_section(zh, "### 餐厅营养查询")
+    en_delete = _lookup_section(en, "### Deleting your data")
+    zh_delete = _lookup_section(zh, "### 删除数据")
+    ena, zha = _arb("en"), _arb("zh")
+
+    # How long the saved answers are kept, and that the last use is kept.
+    assert ("saved lookup answers (an answer that found a chain's published "
+            "numbers for up to a year, any other for up to 30 days;") \
+        in en_phone
+    assert "for up to a year" in en_phone
+    assert "any other for up to 30 days" in en_phone
+    assert ("each with when it was last used, so the one used longest ago "
+            "goes first when space runs out") in en_phone
+    assert ("保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；"
+            ) in zh_phone
+    assert "最长保存一年" in zh_phone
+    assert "其他的最长 30 天" in zh_phone
+    assert "每条都记录最后一次使用的时间" in zh_phone
+    assert "最后一次使用的时间" in zh_phone
+    # The old wording is gone (a 3-way merge could bring it back silently).
+    for stale in ("recent lookup answers", "recent answers",
+                  "up to 30 days, each marked"):
+        assert stale not in _flat(en), stale
+    for stale in ("最近的查询结果", "（最长 30 天；"):
+        assert stale not in _flat(zh), stale
+
+    # Android's clear row, named as Settings shows it.
+    row_en = "**%s**" % ena["settingsRowClearSavedAnswers"]
+    row_zh = "**「%s」**" % zha["settingsRowClearSavedAnswers"]
+    assert ("On Android, where no places are kept, %s deletes the saved "
+            "lookup answers and the lookups still waiting." % row_en) \
+        in en_phone
+    assert ("在不保存地点的 Android 上，%s会删除保存的查询结果和还在等待的查询。"
+            % row_zh) in zh_phone
+    assert ("(Settings › Restaurant nutrition; on Android %s)" % row_en) \
+        in en_delete
+    assert "learned and its saved answers" in en_delete
+    assert ("（设置 › 餐厅营养；Android 上是%s）" % row_zh) in zh_delete
+    assert "删除餐厅查询记住的地点和保存的查询结果" in zh_delete
+
+    # My usual foods and your usual numbers: worked out on the phone,
+    # nothing sent, the changed meal is like any other, codes not names.
+    usual_en = "**%s**" % ena["addUsual"]
+    usual_zh = "**「%s」**" % zha["addUsual"]
+    assert ("- %s and **your usual numbers** are worked out on the phone "
+            "from the meals you logged in the last 90 days" % usual_en) \
+        in en_phone
+    assert ("- %s和**「%s」**都是在手机上根据你最近 90 天记录的餐食算出来的"
+            % (usual_zh, zha["usualCardTitle"])) in zh_phone
+    assert "or by tapping **%s**" % ena["usualChipUse"] in en_phone
+    assert "或点按**「%s」**" % zha["usualChipUse"] in zh_phone
+    # What the mark holds: that you set the numbers and, for a food you
+    # renamed, the AI's first name for it (user.ai_name).
+    assert ("The meal keeps a small mark on that food saying you set them "
+            "and, for a food you renamed, the name the AI first gave it.") \
+        in en_phone
+    assert ("这一餐会在该食物上保存一个小标记，说明数值是你设定的，"
+            "以及你改过名的食物最初由 AI 给出的名称。") in zh_phone
+    assert "Working them out sends nothing: no AI call, no lookup." \
+        in en_phone
+    assert "算出这些内容不会发送任何东西：不调用 AI，也不查询。" in zh_phone
+    assert ("A meal you log or change with them is then like any other "
+            "meal") in en_phone
+    assert "is then like any other meal" in en_phone
+    assert "用它们记录或修改的餐食之后和其他餐食一样" in zh_phone
+    assert "之后和其他餐食一样" in zh_phone
+    assert ("Which foods you hid from %s and which offers you turned down "
+            "are kept with the app's settings as short codes, not food "
+            "names." % usual_en) in en_phone
+    assert "as short codes, not food names" in en_phone
+    assert ("你在「%s」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码"
+            "（不是食物名称）和设置一起保存。" % zha["addUsual"]) in zh_phone
+    assert "简短代码（不是食物名称）" in zh_phone
+    assert ("Delete meals inside the app (%s and your usual numbers are "
+            "worked out from them, so they change with them)"
+            % ena["addUsual"]) in en_delete
+    assert ("在应用内删除餐食（「%s」和你平时的数值都根据餐食算出，会随之改变）"
+            % zha["addUsual"]) in zh_delete
+
+    # The meal's lookup record: the day a saved answer was looked up.
+    assert ("the date (and, for a saved answer, the day it was looked up),"
+            ) in en_lookup
+    assert "日期（使用保存的结果时，还有当初查询的日期）、" in zh_lookup
+
+    # Turning lookups off keeps the saved answers unless they are cleared.
+    assert ("can clear learned places and the saved lookup answers at the "
+            "same time (on Android, the saved lookup answers). If you do "
+            "not clear them, they are kept as described above.") in en_lookup
+    assert "If you do not clear them, they are kept as described above." \
+        in en_lookup
+    assert ("并可同时清除已记住的地点和保存的查询结果（Android 上是保存的查询结果）。"
+            "如果不清除，它们会按上文所述保存。") in zh_lookup
+    assert "如果不清除，它们会按上文所述保存。" in zh_lookup
