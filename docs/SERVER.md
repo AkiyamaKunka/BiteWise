@@ -1,4 +1,4 @@
-# The CalorieTracker server (Telegram bot + upload API)
+# The Chopstats server (Telegram bot + upload API)
 
 The original CalorieTracker: a Python service that accepts food photos
 from Telegram or phone clients, analyzes them, stores meals in SQLite,
@@ -6,7 +6,7 @@ and reports back through Telegram. It predates the Flutter app and now
 plays two roles:
 
 1. **The subscription analysis backend for the app** — the app's
-   "My server" provider posts photos to this service's `/api/*`
+   "Your own server" provider posts photos to this service's `/api/*`
    endpoints, and analysis runs under a Claude, GLM Coding Plan, or
    Doubao Agent Plan subscription instead of a metered API key.
 2. **A complete chat-based alternative interface** — everything the app
@@ -360,6 +360,40 @@ Ignored local data:
 
 Keep backups of `meals.db`, `logs/failed_uploads/`, and reports separately if you care about the data. The app exports its own database to a JSON file (Settings → Export) and can merge one back (Settings → Import), which is how you move to a new phone.
 
+
+## How the app uses this server
+
+This section moved here from the README in November 2026.
+
+*Skip this unless you already pay for a Claude, GLM Coding Plan, or Doubao Agent Plan subscription and are comfortable running a small server.*
+
+With "Your own server" selected in the app, the phone posts the photo to your machine, which runs the analysis through the Claude Code CLI under your plan. There is no per-call API spend. Check your plan's acceptable-use terms before routing app traffic through it.
+
+```mermaid
+sequenceDiagram
+    participant App as App<br/>(holds ONE upload key)
+    participant Server as Your server<br/>(holds the plan keys)
+    participant CLI as Claude Code CLI
+    participant Plan as Claude / GLM / Doubao plan
+    App->>Server: photo + X-API-Key (+ backend choice)
+    Note over App,Server: for a photo, no prompt from the caller.<br/>The server composes its own
+    Server->>CLI: single-flight run, plan credentials injected
+    CLI->>Plan: analysis under the flat-rate subscription
+    Plan-->>CLI: meal estimate
+    CLI-->>Server: JSON
+    Server-->>App: analysis + analyzed_by receipt
+    Note over App: refuses a receipt that names<br/>the wrong paying plan
+```
+
+The security shape is deliberate:
+
+- Plan credentials live only in the server's `.env`. The phone holds one upload key and nothing else. An app build is a shipping container, and nothing subscription-shaped is ever baked into it.
+- For a photo, the phone cannot supply the analysis prompt. The server composes its own. The phone supplies only data for it: a bounded dietary-profile appendix, that day's meal summaries, and the choice of plan, model, effort and reply language. A caller-authored prompt would be an instruction channel into a CLI.
+- A text request (Describe a meal, Fix or delete a meal) does carry its prompt from the phone. That endpoint runs the CLI with tools off.
+- Replies carry an `analyzed_by` receipt and the app refuses a mismatch, so the wrong plan can never silently pay.
+- When the subscription token expires, the app drives the server's official OAuth re-connect from the phone. The secret never travels.
+
+For the Claude route you can pick the analysis model (fable, opus, sonnet or haiku) and the thinking effort (low, medium or high) per request, from the phone.
 
 ## The app-facing API
 

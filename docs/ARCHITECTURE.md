@@ -1,12 +1,161 @@
-# CalorieTracker — Architecture & Ops Runbook
+# Chopstats: Architecture & Ops Runbook
 
 A reference for how the system fits together, why the tricky parts work the
 way they do, and how to operate it. Distilled from the code; verify against
 the source before relying on any specific number.
 
+The first section covers the Flutter app and how it is kept in step with the
+server. Sections 1 to 5 cover the self-hosted server, the original
+CalorieTracker, which still installs under `~/CalorieTracker`.
+
+## The app, and how it stays in step with the server
+
+This section moved here from the README in November 2026. Its counts were
+taken on `main` on 2026-11-10.
+
+```mermaid
+flowchart LR
+    subgraph Phone["Your phone"]
+        direction TB
+        Intake["Camera-roll watcher<br/>share sheet · photo picker<br/>text description · manual entry"]
+        Pipeline["Photo pipeline<br/>hash → dedup ledger → normalize → analyze"]
+        DB[("Local SQLite<br/>meals · photos · history")]
+        UI["Today · History · charts<br/>plain-language corrections"]
+    end
+    Provider["AI provider of your choice<br/>Gemini · OpenAI · Claude · Grok<br/>DeepSeek · Qwen · Doubao · GLM<br/>or any model via OpenRouter"]
+    Server["Optional: your own server"]
+    Intake --> Pipeline
+    Pipeline <--> Provider
+    Pipeline <-.-> Server
+    Pipeline --> DB --> UI
+```
+
+### Two implementations, kept in step
+
+The part of this codebase most worth reviewing is how two full
+implementations of the same product are kept in step: a Python server and a
+Dart app, with no shared runtime code.
+
+1. **A spec with line-number citations.** [APP_PORT_SPEC.md](APP_PORT_SPEC.md)
+   extracts every behavioral rule from the production Python with `file:line`
+   evidence, and §9 is a table of deliberate divergences. Each row says what
+   differs, why, and which test pins it.
+2. **Shared constants and prompts, generated for both runtimes.**
+   [shared/](../shared/) holds 22 behavior constants (normalization size,
+   dedup windows, validation bounds and more) and the prompts verbatim.
+   `scripts/sync_shared.py --check` is a drift gate run in CI.
+3. **379 golden vectors, replayed by both suites.** Python is the oracle. Its
+   real functions generate the 8 files in [shared/vectors/](../shared/vectors/)
+   (coercion of hostile model output, capture-time dating, NL normalization,
+   report formulas and more), and the Dart suite must match byte for byte,
+   including NaN, Infinity and expected-throw cases. Cross-language drift is a
+   failing test, not a field bug.
+
+```mermaid
+flowchart TB
+    Spec["docs/APP_PORT_SPEC.md<br/>every rule cites file:line · §9 lists deliberate divergences"]
+    Shared["shared/<br/>22 constants · prompts verbatim"]
+    Oracle["Python reference implementation"]
+    Vectors["shared/vectors/: 379 golden cases<br/>generated FROM the real Python functions"]
+    GenPy["shared_generated.py"]
+    GenDart["shared_generated.dart"]
+    PyTests["pytest suite<br/>replays vectors + rebuilds them to diff"]
+    DartTests["Dart suite<br/>replays the same cases byte for byte"]
+    Shared -- "sync_shared.py<br/>(drift gate in CI)" --> GenPy & GenDart
+    Oracle -- generate_shared_vectors.py --> Vectors
+    Vectors --> PyTests & DartTests
+    Spec -.-> Oracle
+    Spec -.-> DartTests
+```
+
+### The order of evidence
+
+The analysis follows a strict evidence ladder, kept in
+[`shared/prompts/estimation_priority.txt`](../shared/prompts/estimation_priority.txt).
+A nutrition label in the photo beats everything, including the Chinese
+kJ-per-100 g conversion. Then comes a printed weight (scale sticker, package,
+receipt). Then brand-published data for recognized chains and packaged goods.
+Visual estimation comes last, calibrated against real-size references
+(chopsticks, bowls, hands), with the assumed grams stated in every item name
+so a wrong assumption can be seen and fixed.
+
+The ladder is an instruction to the model, not a guarantee, and the app does
+not show which step the model used. A developer can change it by editing that
+file and running `python3 scripts/sync_shared.py`, which regenerates the
+bindings for both the app and the server.
+
+### A provider conformance matrix
+
+[provider_feedback_matrix_test.dart](../app/test/analyzer/provider_feedback_matrix_test.dart)
+tests ten analyzers (the nine key providers and the self-hosted server)
+against a shared vocabulary of eight failure classes: auth, rate limit,
+billing, model not found, overloaded, content filter, junk reply and daily
+quota. It holds 57 fixtures, with bodies taken verbatim from provider docs or
+live probes.
+
+"Out of money" alone arrives in seven shapes: OpenAI `429 insufficient_quota`,
+GLM `429` code 1113, Doubao `403 AccountOverdueError`, Qwen `400 Arrearage`,
+Anthropic `400` credit balance, DeepSeek `402 Insufficient Balance` and
+OpenRouter `402 Insufficient credits`. All seven map to one verdict for the
+user: recharge, do not regenerate the key.
+
+### A photo pipeline built around one identity
+
+The md5 of a photo's original bytes drives a five-state reservation ledger:
+`processing`, `saved`, `skipped`, `failed`, `deleted`.
+
+- The pipeline reserves the hash before it analyzes, so the same photo file
+  is not analyzed twice.
+- The meal insert and the `saved` mark happen in one transaction.
+- Tombstones keep a deleted meal from coming back on the next scan.
+- There is a strict path and a deliberate path. The automated watcher never
+  reclaims a failed row. A person who adds the photo again may.
+- All intake is serialized through one FIFO tail, so one photo's bytes are in
+  memory at a time and the app does not rate-limit itself.
+
+Identity is byte-exact. The same picture saved again or re-compressed by
+another app has different bytes and counts as a new photo.
+
+### Capture dating with a trust boundary
+
+A meal lands on the day its photo was taken. The app tries, in order: the
+filename timestamp, the library asset date, the EXIF `DateTimeOriginal`, and
+last the intake time. Every candidate passes the same validation window. A
+time more than 1 hour in the future or more than 45 days old is rejected,
+because EXIF is untrusted input until it passes.
+
+This is what puts a 23:50 dinner that was shared after midnight on yesterday's
+total. Meta glasses photos have an extra dating guard in
+`app/lib/services/photo/capture_dating.dart`.
+
+### Leftover arithmetic stays in code
+
+When a photo shows the remains of a meal logged earlier that day, the model
+supplies fractions only. All arithmetic runs in deterministic, clamped code
+against the local database. The automatic path applies a leftover only when
+the model's confidence is at least 0.75. The manual Leftovers flow is the
+fallback and the repair path.
+
+### Today and History
+
+Today compares the running total with a typical day, which is the median of
+the previous 7 days, so under-logged days do not drag it down. History covers
+30 days, and a day with nothing logged is shown dimmed as "no meals logged"
+and does not vanish, so a broken watcher looks broken. The meal screen draws
+protein, carbs and fat as shares of energy (4, 4 and 9 kcal per gram) and
+updates as you edit.
+
+### Tests and CI
+
+Both suites run in CI on every push: more than 3,500 Dart tests and more than
+2,300 Python tests on 2026-11-10. CI runs the Python suite on 3.9 and 3.10
+with `ruff` and a coverage floor, the Flutter suite, the parity drift gate and
+the public-safety gate. The suites are reviewed for their capacity to fail.
+Several were rewritten after being caught passing while broken.
+
 ## 1. System overview
 
-CalorieTracker is a single-user pipeline that turns food photos into logged
+The server is a single-user pipeline that turns food photos into logged
 meals and a nightly report. Three ingress paths feed one analysis-and-storage
 core.
 
@@ -153,7 +302,7 @@ the full list and defaults). The most operationally relevant:
 
 Phone-side knobs (`PING_INTERVAL_SECONDS`, `SEED_FRESH_MINUTES`,
 `CALORIE_RECOMPRESS_MAX_EDGE`, `CAMERA_DIR`, `SYNC_LOOKBACK_DAYS`, …) are
-documented in the README's Android section.
+documented in [SERVER.md](SERVER.md#android), under Mobile Uploads.
 
 ## 5. Ops runbook
 
