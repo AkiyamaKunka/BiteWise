@@ -1,4 +1,4 @@
-# BiteWise release lane: signed iOS build to TestFlight, signed Android app
+# Chopstats release lane: signed iOS build to TestFlight, signed Android app
 # bundle to the Google Play internal track, and a GitHub Release carrying the
 # arm64 APK for the friends who sideload. The owner's step-by-step (enrolment,
 # certificates, how to make every secret below) is docs/RELEASING.md. The

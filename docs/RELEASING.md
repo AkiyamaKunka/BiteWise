@@ -120,7 +120,7 @@ steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
      only; what the app does, where each provider's key comes from (a
      sentence each), the own-server option, troubleshooting, export /
      delete / stop sharing, GitHub Issues. Both listings' `support_url.txt`
-     point at https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/SUPPORT.md
+     point at https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/SUPPORT.md
      (404 until this branch is on `main`, step 3). Public contact address
      chosen 2026-10-29: junjia.wang.me@gmail.com (also usable as the App
      Review contact).
@@ -517,7 +517,7 @@ All done; this is what each one is and where it lives.
    iPad layout is built.
 3. **Privacy policy URL** (guideline 5.1.1) — **done.** The policy is
    `docs/PRIVACY.md` (English + 中文) at
-   https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md (live,
+   https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/PRIVACY.md (live,
    HTTP 200), linked in the app at Settings › Your Data › *Privacy Policy*
    (`privacyPolicyUri` in `settings_screen.dart`). Keep the file in step with
    what the code sends. The "Third parties and your consent" section
@@ -597,8 +597,8 @@ base64 -i ~/Downloads/BiteWise-dist.p12 | pbcopy        # then ⌘V into the sec
 or, without the clipboard, straight from the file with the GitHub CLI:
 
 ```bash
-gh secret set IOS_DIST_P12_BASE64 --repo AkiyamaKunka/BiteWise < <(base64 -i ~/Downloads/BiteWise-dist.p12)
-gh secret set PLAY_SERVICE_ACCOUNT_JSON --repo AkiyamaKunka/BiteWise < ~/Downloads/play-service-account.json
+gh secret set IOS_DIST_P12_BASE64 --repo AkiyamaKunka/Chopstats < <(base64 -i ~/Downloads/BiteWise-dist.p12)
+gh secret set PLAY_SERVICE_ACCOUNT_JSON --repo AkiyamaKunka/Chopstats < ~/Downloads/play-service-account.json
 ```
 
 Never put a value in a chat, a commit, an issue, a `.env` checked into git,
@@ -728,7 +728,7 @@ console moves things around, so match the wording, not the position):
 1. App Store Connect → **Apps** → *Chopstats · 筷拍* → sidebar → **App
    Privacy**.
 2. **Privacy Policy** → *Edit* → Privacy Policy URL
-   `https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md`;
+   `https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/PRIVACY.md`;
    leave *User Privacy Choices URL* empty → **Save**.
 3. **Data Collection** → *Get Started* → "Do you or your third-party
    partners collect data from this app?" → **Yes, we collect data from this
@@ -821,7 +821,7 @@ step. Revisit if the app is ever published with a developer-run service.
 
 - **Metadata**: name, subtitle (30), promotional text, description,
   keywords (100), **support URL**
-  https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/SUPPORT.md (R-F14:
+  https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/SUPPORT.md (R-F14:
   `docs/SUPPORT.md`, iPhone only, with GitHub Issues and the email line the
   owner still fills in — guideline 1.5 wants an easy way to reach you, and
   the README talks about Android and the APK), marketing URL (optional),
@@ -1024,7 +1024,7 @@ roll out.
    Signing* later, once § 6.1's closed-test rule is satisfied) → Invite.
    Permissions can take a while to propagate; a `403 The caller does not
    have permission` on the first CI run usually means "wait an hour".
-4. `gh secret set PLAY_SERVICE_ACCOUNT_JSON --repo AkiyamaKunka/BiteWise < ~/Downloads/<file>.json`,
+4. `gh secret set PLAY_SERVICE_ACCOUNT_JSON --repo AkiyamaKunka/Chopstats < ~/Downloads/<file>.json`,
    then delete the download.
 
 From then on every tag / `play` lane run creates a completed internal-track

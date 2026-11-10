@@ -5,12 +5,13 @@
 **You eat. It notices.** Take photos the way you already do — the app finds the food ones, an AI model reads them like a nutritionist (labels first, estimates last), and your calorie log writes itself. Even leftovers deduct themselves. **Your data stays on your phone; only the photo being analyzed ever leaves it.**
 
 <p>
-  <a href="https://github.com/AkiyamaKunka/CalorieTracker/actions/workflows/python-tests.yml"><img alt="CI" src="https://github.com/AkiyamaKunka/CalorieTracker/actions/workflows/python-tests.yml/badge.svg"></a>
+  <a href="https://github.com/AkiyamaKunka/Chopstats/actions/workflows/python-tests.yml"><img alt="CI" src="https://github.com/AkiyamaKunka/Chopstats/actions/workflows/python-tests.yml/badge.svg"></a>
+  <a href="https://apps.apple.com/us/app/id6828989410"><img alt="Download on the App Store" src="https://img.shields.io/badge/App%20Store-iPhone-0D96F6?style=flat-square&logo=apple&logoColor=white"></a>
   <img alt="Flutter" src="https://img.shields.io/badge/Flutter-iOS%20%2B%20Android-111111?style=flat-square&logo=flutter">
   <img alt="License" src="https://img.shields.io/badge/license-MIT-f2f2f2?style=flat-square">
 </p>
 
-*Formerly CalorieTracker. A Flutter app for iOS and Android — plus an optional self-hosted server that lets an existing AI subscription pay for analysis instead of metered API keys.*
+*Formerly BiteWise and, before that, CalorieTracker. A Flutter app for iOS and Android — plus an optional self-hosted server that lets an existing AI subscription pay for analysis instead of metered API keys.*
 
 </div>
 
@@ -90,13 +91,13 @@ flowchart LR
 
 ## Getting started
 
-**Android — just install it:** grab the APK from the [latest release](https://github.com/AkiyamaKunka/CalorieTracker/releases/latest), open it on your phone (allow "install unknown apps" if asked), then pick a provider and paste a key in Settings. **iPhone:** no prebuilt binary — sideloading requires a signature, so installing currently means building from source on a Mac with Xcode.
+**Android — just install it:** grab the APK from the [latest release](https://github.com/AkiyamaKunka/Chopstats/releases/latest), open it on your phone (allow "install unknown apps" if asked), then pick a provider and paste a key in Settings. **iPhone:** get [Chopstats · 筷拍 on the App Store](https://apps.apple.com/us/app/id6828989410) (free; not offered in mainland China), then pick a provider and paste a key in Settings.
 
 **Developers** need Flutter (Dart SDK ≥ 3.12.2):
 
 ```bash
-git clone https://github.com/AkiyamaKunka/CalorieTracker.git
-cd CalorieTracker/app
+git clone https://github.com/AkiyamaKunka/Chopstats.git
+cd Chopstats/app
 flutter pub get
 flutter run
 ```
