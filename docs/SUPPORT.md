@@ -86,7 +86,8 @@ people who run the open-source server from the app's GitHub repository
   weight, body measurements, workouts, fitness profile and the list of
   processed photos to a file you can share or keep (API keys are not
   included).
-  **Import Data…** restores it, from a file or from the clipboard.
+  **Import Data…** restores it: paste the file's text, or tap **Import
+  from clipboard**.
 - **Delete a meal**: open it and tap the delete button.
 - **Delete everything**: uninstall Chopstats; that removes everything it
   stored on the phone. Your iCloud or computer backups and exported files
