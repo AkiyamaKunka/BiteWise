@@ -39,7 +39,7 @@ import 'settings/restaurant_section.dart';
 /// App Store guideline 5.1.1(i) and Google Play both want it reachable
 /// from inside the app, not only on the store listing.
 final Uri privacyPolicyUri = Uri.parse(
-    'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
+    'https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/PRIVACY.md');
 
 class SettingsScreen extends StatefulWidget {
   final SettingsStore settings;

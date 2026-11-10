@@ -28,7 +28,7 @@ void main() {
     final req = s.requests.single;
     expect(req.url.toString(), 'https://openrouter.ai/api/v1/chat/completions');
     expect(req.headers['authorization'], 'Bearer test-key');
-    expect(req.headers['http-referer'], 'https://github.com/AkiyamaKunka/BiteWise');
+    expect(req.headers['http-referer'], 'https://github.com/AkiyamaKunka/Chopstats');
     expect(req.headers['x-openrouter-title'], 'Chopstats');
     final body = s.bodies.single;
     expect(body.keys.toSet(), {'model', 'messages', 'plugins', 'max_tokens'});

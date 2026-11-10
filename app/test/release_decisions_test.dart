@@ -334,7 +334,7 @@ void main() {
       expect(support, isNot(contains('owner to choose')));
       expect(
         support,
-        contains('https://github.com/AkiyamaKunka/BiteWise/issues'),
+        contains('https://github.com/AkiyamaKunka/Chopstats/issues'),
       );
     });
 
@@ -342,7 +342,7 @@ void main() {
       for (final locale in ['en-US', 'zh-Hans']) {
         expect(
           _read('ios/store/metadata/$locale/support_url.txt').trim(),
-          'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/'
+          'https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/'
           'SUPPORT.md',
           reason: locale,
         );
@@ -421,8 +421,10 @@ void main() {
   group('R-F9: Chopstats', () {
     // 2026-10-29: "BiteWise" is shared by a dozen live US App Store apps,
     // so the English name became Chopstats (no same-name US app, no live
-    // USPTO mark); 筷拍 stays. The repository URL keeps its old name.
-    const repoUrl = 'github.com/AkiyamaKunka/BiteWise';
+    // USPTO mark); 筷拍 stays. The repository kept its old name until
+    // 2026-11-09, when it became AkiyamaKunka/Chopstats too (GitHub
+    // redirects the old links, which the 1.5.0 build still opens).
+    const repoUrl = 'github.com/AkiyamaKunka/Chopstats';
     void expectNoOldName(String text, {String? reason}) {
       final rest = text.replaceAll(repoUrl, '');
       expect(rest, isNot(contains('BiteWise')), reason: reason);

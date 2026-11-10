@@ -395,7 +395,7 @@ a network tool, so it is fenced separately from the photo and text paths:
 
 - **Inputs are structured only**: item names, quantities and units, the
   chain a printed item brand or the receipt merchant names (sent only as
-  that chain's canonical name from BiteWise's own US chain table, never
+  that chain's canonical name from Chopstats' own US chain table, never
   as the printed text), up to 3 chain KEYS from that table (the server
   substitutes its own canonical name; the chains a brand or the merchant
   names are always among them, first, because the model may choose only
