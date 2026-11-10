@@ -248,6 +248,42 @@ void main() {
     expect(find.text('Chicken salad'), findsNothing, reason: 'still hidden');
   });
 
+  testWidgets('with a screen reader on, a snackbar with Undo waits for the '
+      'user: the logged one and the hidden one', (tester) async {
+    // VoiceOver / TalkBack: reaching Undo takes longer than a few seconds.
+    // The framework no longer holds an action snackbar there by itself, so
+    // a flat `persist: false` took Undo away after the duration.
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(accessibleNavigation: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final dao = usualDao();
+    await pump(tester, await makeUsualFoods(dao, clock: clock));
+
+    await tester.tap(row('Oatmeal with blueberries'));
+    await tester.pumpAndSettle();
+    await tester.pump(kUsualUndoSnackDuration * 3);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('usualLoggedSnack')), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(relogs(dao), isEmpty, reason: 'Undo still undoes the log');
+    expect(find.byKey(const Key('usualLoggedSnack')), findsNothing);
+
+    await tester.tap(find.descendant(
+        of: row('Chicken salad'), matching: find.byTooltip('More actions')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hide from this list'));
+    await tester.pumpAndSettle();
+    await tester.pump(kUsualUndoSnackDuration * 3);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('usualHiddenSnack')), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chicken salad'), findsOneWidget,
+        reason: 'Undo still undoes the hide');
+    expect(find.byKey(const Key('usualHiddenSnack')), findsNothing);
+  });
+
   testWidgets('"Log it again?" only when a similar meal was logged in the '
       'last 3 h; Cancel logs nothing', (tester) async {
     final dao = usualDao();

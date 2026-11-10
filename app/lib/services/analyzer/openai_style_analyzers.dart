@@ -324,7 +324,7 @@ OpenAiCompatAnalyzer createOpenRouterAnalyzer(AppSettings settings,
         supportsJsonMode: false,
         // Optional attribution headers from OpenRouter's quickstart.
         extraHeaders: const {
-          'HTTP-Referer': 'https://github.com/AkiyamaKunka/BiteWise',
+          'HTTP-Referer': 'https://github.com/AkiyamaKunka/Chopstats',
           'X-OpenRouter-Title': 'Chopstats',
         },
         notFoundHint: 'OpenRouter model not found — use the full slug from '

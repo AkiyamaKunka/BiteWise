@@ -346,7 +346,11 @@ void main() {
     // A backfilled / re-scanned photo from yesterday used to be offered
     // TODAY's meals as leftover candidates and could deduct from the wrong
     // one. The HEIC repair re-offered ~70 old photos exactly this way.
-    final yesterday = DateTime.now().subtract(const Duration(days: 1));
+    // Yesterday as a CALENDAR day (the constructor): 24 elapsed hours back
+    // is still today at 23:xx on the 25-hour day DST ends, and then both
+    // meals sit on one day and both ride along.
+    final now = DateTime.now();
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
     final today = _meal(1, '01:34 PM', 965);
     final old = Meal(
       id: 2,

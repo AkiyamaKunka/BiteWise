@@ -483,7 +483,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(opened, [privacyPolicyUri]);
     expect(privacyPolicyUri.toString(),
-        'https://github.com/AkiyamaKunka/BiteWise/blob/main/docs/PRIVACY.md');
+        'https://github.com/AkiyamaKunka/Chopstats/blob/main/docs/PRIVACY.md');
   });
 
   // GroupedRow was a bare InkWell: VoiceOver read every navigation row,

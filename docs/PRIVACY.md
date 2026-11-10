@@ -292,7 +292,7 @@ and Zhipu process data in mainland China, as the consent dialog says.
 
 Changes to this policy are published in this file, with a new effective
 date. Questions: open an issue at
-<https://github.com/AkiyamaKunka/BiteWise/issues>.
+<https://github.com/AkiyamaKunka/Chopstats/issues>.
 
 ---
 
@@ -389,4 +389,4 @@ date. Questions: open an issue at
 
 ### 变更与联系
 
-本政策的变更会发布在此文件中，并更新生效日期。如有问题，请在 <https://github.com/AkiyamaKunka/BiteWise/issues> 提交 issue。
+本政策的变更会发布在此文件中，并更新生效日期。如有问题，请在 <https://github.com/AkiyamaKunka/Chopstats/issues> 提交 issue。

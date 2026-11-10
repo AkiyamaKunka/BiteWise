@@ -90,7 +90,11 @@ List<String> _ellipsised(WidgetTester tester, Finder row) => [
 void main() {
   group('leftover meal picker: the description owns the row', () {
     final now = DateTime.now();
-    final yesterday = now.subtract(const Duration(days: 1));
+    // The calendar day before, through the constructor: `now.subtract(
+    // Duration(days: 1))` is 24 ELAPSED hours, which is still TODAY at 23:xx
+    // on the 25-hour day DST ends (and two days back at 00:xx on the day
+    // after it starts) — the row would then read "Today".
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
     const copy = {
       'zh': (today: '番茄炒蛋盖饭和一碗汤', older: '牛肉面配煎蛋',
           kcal: '千卡', todayWord: '今天', olderWord: '昨天'),

@@ -85,7 +85,7 @@ class OpenRouterLookupClient extends HttpLookupClient {
       _maxSearches * kOpenRouterExaRequestUsd + policy.unknownModelAllowanceUsd;
 
   Map<String, String> _headers(String key) => {
-        'HTTP-Referer': 'https://github.com/AkiyamaKunka/BiteWise',
+        'HTTP-Referer': 'https://github.com/AkiyamaKunka/Chopstats',
         'X-OpenRouter-Title': 'Chopstats',
         'Authorization': 'Bearer $key',
       };

@@ -582,7 +582,10 @@ void main() {
 
     group('dating (the import-time guard)', () {
       // Relative to today: the guard validates the shutter against now.
-      final day = DateTime.now().subtract(const Duration(days: 1));
+      // Yesterday as a CALENDAR day (the constructor) — 24 elapsed hours
+      // back is a different day in the hour around a DST change.
+      final now = DateTime.now();
+      final day = DateTime(now.year, now.month, now.day - 1);
       final imported = DateTime(day.year, day.month, day.day, 22, 0);
       final lunch = DateTime(day.year, day.month, day.day, 12, 37);
       String isoDay(DateTime d) => '${d.year}-'

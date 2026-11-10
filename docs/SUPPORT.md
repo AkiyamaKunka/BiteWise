@@ -55,7 +55,7 @@ Where each provider's key comes from:
 
 **Your own server** (Settings › AI Provider › Your own server) is for
 people who run the open-source server from the app's GitHub repository
-(<https://github.com/AkiyamaKunka/BiteWise>) with an AI plan signed in on it: enter the server's address and upload key there.
+(<https://github.com/AkiyamaKunka/Chopstats>) with an AI plan signed in on it: enter the server's address and upload key there.
 
 ## Troubleshooting
 
@@ -99,7 +99,7 @@ people who run the open-source server from the app's GitHub repository
 ## Contact
 
 - **Questions and bug reports**: open an issue at
-  <https://github.com/AkiyamaKunka/BiteWise/issues>. Issues are public, so
+  <https://github.com/AkiyamaKunka/Chopstats/issues>. Issues are public, so
   never post an API key, your photos or personal data there.
 - **Email**: <junjia.wang.me@gmail.com> for anything you would rather not
   post publicly.

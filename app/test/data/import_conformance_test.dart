@@ -533,7 +533,11 @@ void main() {
   group('a large export (a year of meals)', () {
     test('decodes off the UI isolate and imports every row', () async {
       for (var d = 0; d < 365; d++) {
-        final date = DateTime(2025, 8, 1).add(Duration(days: d));
+        // Day d through the CONSTRUCTOR: adding d x 24 h from local midnight
+        // repeats the day DST ends and skips the day it starts, so a "year
+        // of meals" was 364 distinct dates on a US or EU machine and 365 in
+        // UTC (CI).
+        final date = DateTime(2025, 8, 1 + d);
         final iso = '${date.year.toString().padLeft(4, '0')}-'
             '${date.month.toString().padLeft(2, '0')}-'
             '${date.day.toString().padLeft(2, '0')}';

@@ -113,7 +113,7 @@ void main() {
     expect(req.url.toString(), 'https://openrouter.ai/api/v1/chat/completions');
     expect(req.headers['Authorization'], 'Bearer sk-or');
     expect(req.headers['X-OpenRouter-Title'], 'Chopstats');
-    expect(req.headers['HTTP-Referer'], contains('BiteWise'));
+    expect(req.headers['HTTP-Referer'], contains('Chopstats'));
     expect(body['model'], 'x-ai/grok-4.7');
     expect(body.containsKey('response_format'), isFalse,
         reason: 'one key fronts hundreds of models; json_object is not '

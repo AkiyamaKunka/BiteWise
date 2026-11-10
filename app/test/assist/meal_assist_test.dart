@@ -28,6 +28,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../support/held_timers.dart';
 import '../ui/fakes.dart';
 
 final DateTime _now = DateTime(2026, 10, 24, 13, 0);
@@ -600,13 +601,28 @@ void main() {
 
   group('preconditions', () {
     test('Off: zero calls, not even a read', () async {
+      // The engine's timers are held by the test (support/held_timers.dart):
+      // the sweep a signal arms is run by firing it, nothing waits for it.
+      final timers = <HeldTimer>[];
+      final zone = holdingTimers(timers);
+      Future<void> sweep() => zone.run(h.assist.sweep);
+      List<HeldTimer> armed() => [
+        for (final t in timers)
+          if (t.isActive) t,
+      ];
       h.settings = const AssistSettingsView();
       h.add(_bigMac());
       h.assist.start(observeLifecycle: false);
-      h.settingsChanges.value++; // e.g. the language
-      h.mealsChanged.value++;
-      await h.assist.sweep();
-      await Future<void>.delayed(const Duration(milliseconds: 40));
+      zone.run(() {
+        h.settingsChanges.value++; // e.g. the language
+        h.mealsChanged.value++;
+      });
+      await sweep();
+      // The sweep the meals-changed signal armed runs too, and is joined.
+      expect(armed().single.wait, h.assist.settleDelay);
+      armed().single.fire();
+      await sweep();
+      expect(armed(), isEmpty);
       expect(h.lookups.submits, isEmpty);
       expect(h.lookups.polls, isEmpty);
       expect(
@@ -2563,14 +2579,36 @@ void main() {
 
     test('a meals-changed signal sweeps after the settle delay; the '
         "assist's own write does not", () async {
+      // The engine's timers are held by the test (support/held_timers.dart):
+      // the settle delay passes by firing its timer, and a sweep the
+      // assist's own write armed would be a timer to see, not to wait for.
+      final timers = <HeldTimer>[];
+      final zone = holdingTimers(timers);
+      List<HeldTimer> armed() => [
+        for (final t in timers)
+          if (t.isActive) t,
+      ];
+      // Completed by the submit: the lookup was started by the timer the
+      // test fired, not by a sweep of the test's own.
+      final submitted = Completer<void>();
+      h.lookups.onSubmit = (_) async {
+        submitted.complete();
+        return _done();
+      };
       h.assist.start(observeLifecycle: false);
       h.add(_bigMac());
-      h.mealsChanged.value++;
-      await _until(() => h.lookups.submits.isNotEmpty);
-      await _until(() => h.notices.isNotEmpty);
-      final listings = h.dao.listings;
-      await Future<void>.delayed(const Duration(milliseconds: 60));
-      expect(h.dao.listings, listings);
+      zone.run(() => h.mealsChanged.value++);
+      expect(armed().single.wait, h.assist.settleDelay);
+      expect(h.dao.listings, 0, reason: 'not before the settle delay');
+      armed().single.fire();
+      await submitted.future;
+      // The sweep is joined (sweep() is single-flight; the pass the call
+      // adds finds the meal looked up).
+      await zone.run(h.assist.sweep);
+      expect(h.lookups.submits, hasLength(1));
+      expect(h.notices, hasLength(1));
+      expect(h.signals, 1, reason: 'the write was signalled');
+      expect(armed(), isEmpty, reason: 'and its signal armed no sweep');
     });
 
     test('a resume sweeps after the settle delay', () async {

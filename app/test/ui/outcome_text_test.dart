@@ -435,4 +435,47 @@ void main() {
           en.timeToday('09:05'));
     });
   });
+
+  // 2026-11-06: the label counted the HOURS between two local midnights and
+  // divided by 24. On the day DST starts those are 23, which is "0 days":
+  // the next summary read "Today 21:30" all that day once its slot had
+  // passed, and the last background run read "Today 14:02" all the next.
+  // Teeth under a US or EU zone; in UTC (CI) these days are ordinary.
+  test('the day label counts CALENDAR days, also across a DST change', () {
+    final now = DateTime(2026, 7, 17, 9);
+    expect(dayTimeLabel(en, DateTime(2026, 7, 17, 21, 30), now: now),
+        'Today 21:30');
+    expect(dayTimeLabel(en, DateTime(2026, 7, 18, 7), now: now),
+        'Tomorrow 07:00');
+    expect(dayTimeLabel(en, DateTime(2026, 7, 16, 14, 2), now: now),
+        'Yesterday 14:02');
+    expect(dayTimeLabel(en, DateTime(2026, 7, 15, 14, 2), now: now),
+        '07-15 14:02');
+    expect(dayTimeLabel(en, DateTime(2026, 7, 19, 7), now: now), '07-19 07:00');
+    expect(dayTimeLabel(zh, DateTime(2026, 7, 18, 7), now: now), '明天 07:00');
+    // 23:59 to 00:01 is tomorrow, two minutes away.
+    expect(
+        dayTimeLabel(en, DateTime(2026, 7, 18, 0, 1),
+            now: DateTime(2026, 7, 17, 23, 59)),
+        'Tomorrow 00:01');
+
+    for (final (starts, next) in [
+      (DateTime(2026, 3, 8), DateTime(2026, 3, 9)), // US: the 23-hour day
+      (DateTime(2026, 3, 29), DateTime(2026, 3, 30)), // EU
+      (DateTime(2026, 11, 1), DateTime(2026, 11, 2)), // US: the 25-hour day
+    ]) {
+      DateTime at(DateTime day, int h, int m) =>
+          DateTime(day.year, day.month, day.day, h, m);
+      for (final hour in const [0, 3, 12, 22, 23]) {
+        expect(dayTimeLabel(en, at(next, 21, 30), now: at(starts, hour, 40)),
+            'Tomorrow 21:30',
+            reason: 'from $starts at $hour:40');
+        expect(dayTimeLabel(en, at(starts, 14, 2), now: at(next, hour, 40)),
+            'Yesterday 14:02',
+            reason: 'from $next at $hour:40');
+        expect(dayTimeLabel(en, at(starts, 21, 30), now: at(starts, hour, 40)),
+            'Today 21:30');
+      }
+    }
+  });
 }

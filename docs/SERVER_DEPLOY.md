@@ -224,7 +224,7 @@ before (a running lookup always yields the CLI to them).
 
 What switching it on means: for a meal from a chain restaurant, the app
 sends item names, quantities, the brand printed on an item or receipt
-and up to 3 chain names from BiteWise's own US chain table — never
+and up to 3 chain names from Chopstats' own US chain table — never
 coordinates, street, city, the photo or your meal history. Your server
 then runs the Claude CLI on your plan with **WebSearch only** (no
 WebFetch, no MCP, no plugins, `--safe-mode`, a minimal environment

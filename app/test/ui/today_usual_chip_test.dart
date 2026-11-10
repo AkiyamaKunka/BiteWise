@@ -223,6 +223,31 @@ void main() {
         reason: 'the numbers stay; only the snackbar left');
   });
 
+  testWidgets('with a screen reader on, the "Used your usual numbers" '
+      'snackbar waits for the user', (tester) async {
+    // VoiceOver / TalkBack: reaching Undo takes longer than a few seconds,
+    // and the framework no longer holds an action snackbar there by itself.
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(accessibleNavigation: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    final dao = FakeDao()
+      ..seed(learned())
+      ..seed(photo([aiOatmeal()]));
+    final usual = await makeUsualFoods(dao, clock: DateTime.now);
+    await pump(tester, dao, usual: usual);
+    await tester.tap(find.byKey(const Key('usualChipUse')));
+    await tester.pumpAndSettle();
+    expect(dao.byId(1).analysis['total_calories'], 350);
+    await tester.pump(kUsualUndoSnackDuration * 3);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('usualUsedSnack')), findsOneWidget);
+    await tester.tap(find.text('Undo'));
+    await tester.pumpAndSettle();
+    expect(dao.byId(1).analysis['total_calories'], 300,
+        reason: 'Undo still puts the AI numbers back');
+    expect(find.byKey(const Key('usualUsedSnack')), findsNothing);
+  });
+
   testWidgets('a second tap on Use before the chip is gone says nothing: '
       'one write, and the "Used" line stays', (tester) async {
     final dao = FakeDao()

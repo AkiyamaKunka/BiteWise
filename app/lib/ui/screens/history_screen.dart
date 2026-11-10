@@ -4,6 +4,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../core/coerce.dart' show addCalendarDays;
 import '../../core/contracts.dart';
 import '../format.dart';
 import '../meal_in_use.dart';
@@ -62,8 +63,11 @@ class HistoryScreenState extends State<HistoryScreen> {
   Future<void> reload() async {
     final now = DateTime.now();
     try {
+      // [today - (days - 1), today] by CALENDAR days. A Duration here
+      // started the window a day late at 23:xx for four weeks from the day
+      // DST ends, and a day early at 00:xx for four weeks after it starts.
       final meals = await widget.dao.mealsBetween(
-        isoDate(now.subtract(Duration(days: widget.days - 1))),
+        isoDate(addCalendarDays(now, -(widget.days - 1))),
         isoDate(now),
       );
       if (!mounted) return;

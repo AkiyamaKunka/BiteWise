@@ -26,7 +26,8 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 
-import '../../core/coerce.dart' show normalizeImageHash, safeNumber;
+import '../../core/coerce.dart'
+    show addCalendarDays, normalizeImageHash, safeNumber;
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart';
 import '../../services/photo/photo_hash.dart' show originalBytesMd5;
@@ -73,7 +74,10 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   Future<void> _load() async {
     final now = DateTime.now();
     final today = isoDate(now);
-    final yesterday = isoDate(now.subtract(const Duration(days: 1)));
+    // Yesterday as a CALENDAR day: 24 hours back is still today at 23:xx on
+    // the day DST ends (yesterday's meals were not offered for that hour),
+    // and two days back at 00:xx on the day after it starts.
+    final yesterday = isoDate(addCalendarDays(now, -1));
     final meals = await widget.services.dao.mealsBetween(yesterday, today);
     if (!mounted) return;
     // Newest first: leftovers are almost always from the LAST meal.
@@ -221,7 +225,7 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
         // (pressure-test find).
         final now = DateTime.now();
         final rows = await services.dao.mealsBetween(
-            isoDate(now.subtract(const Duration(days: 30))), isoDate(now));
+            isoDate(addCalendarDays(now, -30)), isoDate(now));
         for (final m in rows) {
           if (m.id == dupId) {
             duplicateKcal = safeCal(m);

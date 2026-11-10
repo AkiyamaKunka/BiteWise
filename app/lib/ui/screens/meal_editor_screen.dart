@@ -49,7 +49,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../../core/coerce.dart'
-    show finiteAnalysis, isFoodTruthy, normalizeImageHash;
+    show addCalendarDays, finiteAnalysis, isFoodTruthy, normalizeImageHash;
 import '../../core/contracts.dart';
 import '../../core/restaurant_assist_logic.dart'
     show
@@ -1284,7 +1284,10 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       context: context,
       initialDate: current,
       firstDate: DateTime(2020),
-      lastDate: (widget.now ?? DateTime.now)().add(const Duration(days: 1)),
+      // Tomorrow as a CALENDAR day: now + 24 h is still today at 00:xx on
+      // the day DST ends (tomorrow could not be picked), and the day after
+      // tomorrow at 23:xx on the eve of its start.
+      lastDate: addCalendarDays((widget.now ?? DateTime.now)(), 1),
     );
     if (picked == null || !mounted) return;
     setState(() => _draft.dateIso = isoDate(picked));
