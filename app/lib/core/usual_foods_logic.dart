@@ -1163,7 +1163,10 @@ const num kUsualMaxGrams = 2000;
 /// (cleaned, at most 80 characters), else — empty, or the editor's
 /// "Meal" placeholder — its items' display names joined by ", ".
 String usualMealTitle(Map<String, dynamic> analysis) {
-  final desc = cleanShortText(analysis['meal_description'], 80);
+  // As written (full-width punctuation kept): the meal card shows the
+  // same description unfolded.
+  final desc =
+      cleanShortText(analysis['meal_description'], 80, keepWidth: true);
   if (desc.isNotEmpty && desc != 'Meal') return desc;
   final names = [
     for (final it in safeFoodItems(analysis))
@@ -1432,7 +1435,9 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
       }
     }
     items.add({
-      'name': cleanShortText(item['name'], 300),
+      // The name as the template has it: a copy keeps full-width
+      // punctuation (（约250克）), it does not fold it to ASCII.
+      'name': cleanShortText(item['name'], 300, keepWidth: true),
       'estimated_calories': _clamp(numbers.kcal, kUsualMaxKcal),
       'protein_g': _clamp(numbers.p, kUsualMaxGrams),
       'carbs_g': _clamp(numbers.c, kUsualMaxGrams),
@@ -1442,7 +1447,7 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
       'user': ?user,
     });
   }
-  final desc = cleanShortText(a['meal_description'], 300);
+  final desc = cleanShortText(a['meal_description'], 300, keepWidth: true);
   final out = <String, dynamic>{
     'is_food': true,
     'meal_description': desc.isEmpty ? 'Meal' : desc,
