@@ -1007,6 +1007,31 @@ void main() {
     expect(find.widgetWithText(OutlinedButton, '2026-07-19'), findsOneWidget);
   });
 
+  testWidgets('the date picker ends TOMORROW by the calendar, also in the '
+      'hour next to midnight around a DST change', (tester) async {
+    // The last date was now + 24 h. At 00:30 on the day DST ends (a 25-hour
+    // day) that is 23:30 the SAME day, so tomorrow could not be picked; at
+    // 23:30 on the eve of its start it is the day AFTER tomorrow. Teeth
+    // under a US zone; in UTC (CI) these are ordinary days.
+    useTallSurface(tester);
+    for (final (now, last) in [
+      (DateTime(2026, 7, 24, 19, 5), DateTime(2026, 7, 25)),
+      (DateTime(2026, 11, 1, 0, 30), DateTime(2026, 11, 2)),
+      (DateTime(2027, 3, 13, 23, 30), DateTime(2027, 3, 14)),
+    ]) {
+      final dao = FakeDao()..seed(meal());
+      await tester.pumpWidget(host(MealEditorScreen(
+          key: UniqueKey(), dao: dao, meal: dao.meals.first, now: () => now)));
+      await tester.tap(find.byKey(const Key('editorDateButton')));
+      await tester.pumpAndSettle();
+      final picker =
+          tester.widget<DatePickerDialog>(find.byType(DatePickerDialog));
+      expect(picker.lastDate, last, reason: 'opened at $now');
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+  });
+
   group('the restaurant source card (design R7b)', () {
     FakeSettings assistSettings({String mode = 'auto', bool consent = true}) =>
         FakeSettings()

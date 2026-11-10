@@ -9,6 +9,7 @@
 library;
 
 import '../core/chain_match.dart' show chainByKey;
+import '../core/coerce.dart' show calendarDaysBetween;
 import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
 import '../services/assist/meal_assist.dart' show AssistAppliedNotice;
@@ -275,10 +276,11 @@ String badModelText(AppLocalizations l, String? message) {
 String dayTimeLabel(AppLocalizations l, DateTime when, {DateTime? now}) {
   final hhmm = '${when.hour.toString().padLeft(2, '0')}:'
       '${when.minute.toString().padLeft(2, '0')}';
-  final n = now ?? DateTime.now();
-  final today = DateTime(n.year, n.month, n.day);
-  final day = DateTime(when.year, when.month, when.day);
-  final diff = day.difference(today).inDays;
+  // CALENDAR days apart (calendarDaysBetween), not the hours between two
+  // local midnights: those are 23 on the day DST starts, which read as 0
+  // days — tomorrow's slot said "Today" all that day, and yesterday's run
+  // said "Today" all the next.
+  final diff = calendarDaysBetween(now ?? DateTime.now(), when);
   if (diff == 0) return l.timeToday(hhmm);
   if (diff == 1) return l.timeTomorrow(hhmm);
   if (diff == -1) return l.timeYesterday(hhmm);

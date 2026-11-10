@@ -2329,7 +2329,11 @@ void main() {
 
     test('the watermark a run leaves is the same with or without them',
         () async {
-      final t1 = DateTime.utc(2026, 10, 23, 10);
+      // The frontier sits two hours BEFORE the clock in every zone. A fixed
+      // 10:00Z was in the clock's future wherever local noon comes earlier
+      // than that (east of UTC+2: Moscow, India, China, Japan, Sydney), and
+      // the run clamped its watermark to the clock instead of leaving t1.
+      final t1 = noon.subtract(const Duration(hours: 2)).toUtc();
       Future<String?> runWith(List<IntakePhoto> late) async {
         final settings = await settingsWith(key: 'k');
         final p = await SharedPreferences.getInstance();
@@ -2538,7 +2542,7 @@ void main() {
 
     test('the app\'s catch-up takes them after the window, and not once the '
         'user has left', () async {
-      final t1 = DateTime.utc(2026, 10, 23, 10);
+      final t1 = noon.subtract(const Duration(hours: 2)).toUtc();
       final intake = EmittingIntake()
         ..batch = [photo(1)]
         ..safeFrontiers = [t1]

@@ -11,6 +11,7 @@ the real shape.
 import json
 import os
 import sys
+import time
 from pathlib import Path
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
@@ -91,6 +92,19 @@ def configure(monkeypatch, cli_path):
 
 def read_record(record):
     return json.loads(Path(record).read_text())
+
+
+def wait_for_file(path, seconds=30.0):
+    """Block until the fake CLI has written [path] (its record or a
+    pidfile). It writes each one whole, so a path that exists is complete
+    and stays readable after the process is killed. The limit is only a
+    backstop for a child that never started; nothing is timed against it."""
+    end = time.monotonic() + seconds
+    while not Path(path).exists():
+        if time.monotonic() >= end:
+            raise AssertionError(
+                f"the fake CLI never wrote {Path(path).name}")
+        time.sleep(0.02)
 
 
 def pid_alive(pid):
