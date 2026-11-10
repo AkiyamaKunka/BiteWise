@@ -1332,6 +1332,44 @@ void main() {
       expect(it['estimated_calories'], 190);
     });
 
+    // Found by test/fuzz/usual_logic_fuzz_test.dart (seed 20281134): a
+    // `user` map without `set` was copied whole, and a valid one with
+    // every extra key, so a re-log could carry a published flag, an
+    // assist block or any text a model or an import had put there.
+    test('only a mark\'s own parts are copied out of a row\'s user map', () {
+      const junk = {
+        'fetched_on': '2026-01-01',
+        'assist': {'status': 'applied'},
+        'published': true,
+      };
+      // A map that sets nothing, on a photo meal nobody edited: its
+      // count and the AI's old name.
+      final loose = item('Latte', 190,
+          p: 8,
+          c: 18,
+          f: 9,
+          user: {'set': false, 'qty': 2, 'ai_name': 'Coffee', ...junk});
+      final plain = logOf([
+        meal(1, [loose], date: '2026-11-04'),
+        meal(2, [loose], date: '2026-11-05'),
+      ]);
+      expect(((plain['food_items'] as List).single as Map)['user'],
+          {'qty': 2, 'ai_name': 'Coffee'});
+      // The user's own valid mark (a count of 2, so no record replaces
+      // it): its five keys.
+      final set2 = item('Tacos', 680,
+          p: 28,
+          c: 60,
+          f: 36,
+          user: {...mark([680, 28, 60, 36], qty: 2, aiName: 'Wraps'), ...junk});
+      final vouched = logOf([
+        meal(1, [set2], date: '2026-11-04', corrected: true),
+        meal(2, [set2], date: '2026-11-05', corrected: true),
+      ]);
+      expect(((vouched['food_items'] as List).single as Map)['user'],
+          mark([680, 28, 60, 36], qty: 2, aiName: 'Wraps'));
+    });
+
     test('a kcal-only substitution writes no set', () {
       final out = logOf([
         meal(1, [mine('Cola', [140, 0, 0, 0])],

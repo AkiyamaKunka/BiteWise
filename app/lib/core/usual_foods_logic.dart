@@ -1359,9 +1359,11 @@ String? _aiNameOf(Map item) {
   return v is String && v.trim().isNotEmpty ? v : null;
 }
 
-/// What is left of a mark that may not vouch for its numbers (void, or
-/// on an untrusted meal): its count when not 1 and the AI's old name, as
-/// the editor writes a mark without `set`. Null when it says neither.
+/// What a re-log keeps of a `user` map that vouches for no number (one
+/// without `set`, a void mark, or a mark on an untrusted meal): its count
+/// when not 1 and the AI's old name, as the editor writes a mark without
+/// `set`. Null when it says neither. No other key is read: whatever else
+/// a model or an import put in `user` stays behind.
 Map<String, dynamic>? _noSetMark(Map user) {
   final q = user['qty'];
   final aiName = user['ai_name'];
@@ -1370,6 +1372,20 @@ Map<String, dynamic>? _noSetMark(Map user) {
     if (aiName is String && aiName.trim().isNotEmpty) 'ai_name': aiName,
   };
   return out.isEmpty ? null : out;
+}
+
+/// A valid mark as a re-log copies it: its own five keys and no other
+/// (the whitelist of [usualLogAnalysis] reaches inside `user`).
+Map<String, dynamic> _ownMark(Map user) {
+  final q = user['qty'];
+  final aiName = user['ai_name'];
+  return {
+    'set': true,
+    'at': user['at'],
+    'n': List<Object?>.of(user['n'] as List),
+    if (q is num) 'qty': q,
+    if (aiName is String && aiName.trim().isNotEmpty) 'ai_name': aiName,
+  };
 }
 
 Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
@@ -1418,11 +1434,9 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
     } else {
       final mark = item['user'];
       if (mark is Map) {
-        user = mark['set'] == true
-            ? (trusted && usualMarkValid(item, now)
-                ? _copyMap(mark)
-                : _noSetMark(mark))
-            : _copyMap(mark);
+        user = trusted && usualMarkValid(item, now)
+            ? _ownMark(mark)
+            : _noSetMark(mark);
       }
     }
     items.add({
@@ -1474,9 +1488,11 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
 /// and `logged_again` (now, so two same-minute re-logs stay two meals on
 /// import). An item whose canonical key has a record takes the user's
 /// numbers when its count is 1 and the portions agree; otherwise it keeps
-/// the template's, with its own mark only from a trusted meal. Never a
-/// photo hash, a capture, an assist block, a published flag, a leftover
-/// block, a brand or any other key.
+/// the template's, with its own mark only from a trusted meal. Of a row's
+/// `user` map only a mark's own parts are copied (set, at, n, qty,
+/// ai_name), whatever else it held. Never a photo hash, a capture, an
+/// assist block, a published flag, a leftover block, a brand or any other
+/// key.
 Map<String, dynamic> usualLogAnalysis(UsualMeal m, UsualIndex index,
         {required DateTime now}) =>
     _logAnalysis(m.template, index, now);
