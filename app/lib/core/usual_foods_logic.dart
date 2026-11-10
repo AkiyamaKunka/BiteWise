@@ -1388,6 +1388,15 @@ Map<String, dynamic> _ownMark(Map user) {
   };
 }
 
+/// An item's four numbers as a re-log writes them: inside the editor's
+/// bounds.
+Map<String, dynamic> _logNumbers(UsualNumbers n) => {
+      'estimated_calories': _clamp(n.kcal, kUsualMaxKcal),
+      'protein_g': _clamp(n.p, kUsualMaxGrams),
+      'carbs_g': _clamp(n.c, kUsualMaxGrams),
+      'fat_g': _clamp(n.f, kUsualMaxGrams),
+    };
+
 Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
     DateTime now) {
   final a = template.analysis;
@@ -1434,17 +1443,18 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
     } else {
       final mark = item['user'];
       if (mark is Map) {
-        user = trusted && usualMarkValid(item, now)
+        // The row's own mark stays a mark only on a trusted meal, and only
+        // while it vouches for the numbers WRITTEN: the editor's bounds
+        // may have moved them, and a mark over other numbers is void.
+        user = trusted &&
+                usualMarkValid({..._logNumbers(own), 'user': mark}, now)
             ? _ownMark(mark)
             : _noSetMark(mark);
       }
     }
     items.add({
       'name': cleanShortText(item['name'], 300),
-      'estimated_calories': _clamp(numbers.kcal, kUsualMaxKcal),
-      'protein_g': _clamp(numbers.p, kUsualMaxGrams),
-      'carbs_g': _clamp(numbers.c, kUsualMaxGrams),
-      'fat_g': _clamp(numbers.f, kUsualMaxGrams),
+      ..._logNumbers(numbers),
       if (q != 1) 'qty': q,
       if (unit.isNotEmpty) 'unit': unit,
       'user': ?user,
@@ -1488,11 +1498,12 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
 /// and `logged_again` (now, so two same-minute re-logs stay two meals on
 /// import). An item whose canonical key has a record takes the user's
 /// numbers when its count is 1 and the portions agree; otherwise it keeps
-/// the template's, with its own mark only from a trusted meal. Of a row's
-/// `user` map only a mark's own parts are copied (set, at, n, qty,
-/// ai_name), whatever else it held. Never a photo hash, a capture, an
-/// assist block, a published flag, a leftover block, a brand or any other
-/// key.
+/// the template's, with its own mark only from a trusted meal and only
+/// while the mark vouches for the numbers as written (the editor's bounds
+/// may move them). Of a row's `user` map only a mark's own parts are
+/// copied (set, at, n, qty, ai_name), whatever else it held. Never a
+/// photo hash, a capture, an assist block, a published flag, a leftover
+/// block, a brand or any other key.
 Map<String, dynamic> usualLogAnalysis(UsualMeal m, UsualIndex index,
         {required DateTime now}) =>
     _logAnalysis(m.template, index, now);

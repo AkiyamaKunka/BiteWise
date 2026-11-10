@@ -1370,6 +1370,39 @@ void main() {
           mark([680, 28, 60, 36], qty: 2, aiName: 'Wraps'));
     });
 
+    // Found by test/fuzz/usual_logic_fuzz_test.dart (seed 20281138): the
+    // re-log clamps numbers to the editor's bounds, and the row's mark
+    // was copied over the clamped numbers, void from the start.
+    test('a mark is not copied over numbers the editor\'s bounds moved', () {
+      // 25000 kcal with a valid mark and a count of 2: written as 20000.
+      final big = item('Party platter', 25000,
+          p: 300,
+          c: 900,
+          f: 800,
+          user: mark([25000, 300, 900, 800], qty: 2, aiName: 'Platter'));
+      final out = logOf([
+        meal(1, [big], date: '2026-11-04', corrected: true),
+        meal(2, [big], date: '2026-11-05', corrected: true),
+      ]);
+      final it = (out['food_items'] as List).single as Map;
+      expect(it['estimated_calories'], 20000);
+      expect(it['user'], {'qty': 2, 'ai_name': 'Platter'},
+          reason: 'no set over numbers the mark does not vouch for');
+      // Inside the bounds the same mark is copied as it is.
+      final fits = item('Party platter', 5000,
+          p: 300,
+          c: 900,
+          f: 800,
+          user: mark([5000, 300, 900, 800], qty: 2, aiName: 'Platter'));
+      final kept = logOf([
+        meal(1, [fits], date: '2026-11-04', corrected: true),
+        meal(2, [fits], date: '2026-11-05', corrected: true),
+      ]);
+      final same = (kept['food_items'] as List).single as Map;
+      expect(same['user'], fits['user']);
+      expect(usualMarkValid(same, now), isTrue);
+    });
+
     test('a kcal-only substitution writes no set', () {
       final out = logOf([
         meal(1, [mine('Cola', [140, 0, 0, 0])],
