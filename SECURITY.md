@@ -45,6 +45,6 @@ A normal commit that deletes secrets from the current tree does not remove them 
 
 Phone upload endpoints use `X-API-Key` authentication. Prefer HTTPS or a trusted VPN in front of the server whenever possible; plain HTTP exposes metadata and the upload key to networks between the phone and server.
 
-Set `TRUSTED_PROXY_ENABLED=1` only when a trusted reverse proxy actually sits in front of the upload API; otherwise clients can spoof `X-Forwarded-For` to fake VPN evidence. The bot redacts the Telegram token from its logs and error messages, but treat log files as sensitive anyway.
+Set `TRUSTED_PROXY_ENABLED=1` only when a trusted reverse proxy is the only way to reach the upload API (Flask bound to `127.0.0.1`; see [docs/SERVER_TLS.md](docs/SERVER_TLS.md#6-close-plain-http)). While the API can still be reached directly, for example on port 5000 next to the proxy, clients can spoof `X-Forwarded-For` to fake VPN evidence. The bot redacts the Telegram token from its logs and error messages, but treat log files as sensitive anyway.
 
 The legacy `meal_relay.py` binds to `127.0.0.1` by default (override with `MEAL_RELAY_HOST`), requires `X-API-Key` (`MEAL_RELAY_API_KEY`, falling back to `ANDROID_API_KEY`), and rejects request bodies over 2 MB. Do not expose it publicly without a reverse proxy, TLS, and authentication.

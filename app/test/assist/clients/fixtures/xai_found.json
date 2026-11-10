@@ -1,0 +1,65 @@
+{
+ "id": "a4d1f7c2-3b0e-4c7e-9a52-7f0b6c1d2e3f",
+ "object": "response",
+ "created_at": 1761234567,
+ "completed_at": 1761234579,
+ "model": "grok-4.7",
+ "status": "completed",
+ "error": null,
+ "incomplete_details": null,
+ "output": [
+  {
+   "type": "web_search_call",
+   "id": "ws_9f1c",
+   "status": "completed",
+   "action": {
+    "type": "search",
+    "query": "Big Mac calories"
+   }
+  },
+  {
+   "type": "message",
+   "id": "msg_2b7e",
+   "role": "assistant",
+   "status": "completed",
+   "content": [
+    {
+     "type": "output_text",
+     "text": "{\"status\": \"found\", \"chain_key\": \"mcdonalds\", \"restaurant_name\": \"McDonald's\", \"matches\": [{\"item_index\": 0, \"menu_item\": \"Big Mac\", \"match_type\": \"exact_item\", \"is_drink\": false, \"components\": [], \"options\": [{\"label\": \"Big Mac\", \"serving\": \"1 sandwich (219 g)\", \"unit\": \"sandwich\", \"calories\": 590 [[1]](https://www.mcdonalds.com/us/en-us/product/big-mac.html), \"calories_range\": null, \"protein_g\": 25, \"carbs_g\": 46, \"fat_g\": 34}]}], \"source_url\": \"https://www.mcdonalds.com/us/en-us/product/big-mac.html\", \"source_title\": \"Big Mac®\", \"source_type\": \"official_site\", \"source_year\": 2026, \"match_confidence\": 0.93, \"notes\": \"\"}",
+     "annotations": [
+      {
+       "type": "url_citation",
+       "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html",
+       "start_index": 300,
+       "end_index": 362,
+       "title": "1"
+      }
+     ],
+     "logprobs": null
+    }
+   ]
+  }
+ ],
+ "citations": [
+  "https://www.mcdonalds.com/us/en-us/product/big-mac.html",
+  "https://www.fastfoodnutrition.org/mcdonalds/big-mac"
+ ],
+ "store": false,
+ "usage": {
+  "input_tokens": 6230,
+  "output_tokens": 455,
+  "total_tokens": 6685,
+  "input_tokens_details": {
+   "cached_tokens": 0
+  },
+  "output_tokens_details": {
+   "reasoning_tokens": 210
+  },
+  "num_sources_used": 0,
+  "num_server_side_tools_used": 1,
+  "server_side_tool_usage_details": {
+   "web_search_calls": 1
+  },
+  "cost_in_usd_ticks": 196700000
+ }
+}

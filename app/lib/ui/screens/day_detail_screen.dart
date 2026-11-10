@@ -11,7 +11,10 @@ import '../../core/contracts.dart';
 import '../format.dart';
 import '../l10n.dart';
 import '../large_text.dart';
+import '../meal_in_use.dart';
 import '../meal_thumbs.dart';
+import '../restaurant_assist_controls.dart';
+import '../services.dart' show SettingsStore;
 import '../widgets/macro_chart.dart';
 import '../widgets/meal_thumb.dart';
 import 'meal_editor_screen.dart';
@@ -23,6 +26,9 @@ class DayDetailScreen extends StatefulWidget {
     required this.date,
     this.now,
     this.thumbs,
+    this.mealInUse,
+    this.restaurantAssist,
+    this.settings,
   });
 
   final MealsDao dao;
@@ -31,6 +37,14 @@ class DayDetailScreen extends StatefulWidget {
 
   /// Photo thumbnails for the rows; null (tests) renders placeholders.
   final MealThumbResolver? thumbs;
+
+  /// Held while a meal's editor is open (design R6a); null in tests.
+  final MealInUseRegistry? mealInUse;
+
+  /// The restaurant assist for the editor's source card (design R7b), and
+  /// its mode and consent; null in tests.
+  final RestaurantAssistControls? restaurantAssist;
+  final SettingsStore? settings;
 
   @override
   State<DayDetailScreen> createState() => _DayDetailScreenState();
@@ -75,12 +89,18 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
         meal: meal,
         initialDate: widget.date,
         now: widget.now,
+        inUse: widget.mealInUse,
+        assist: widget.restaurantAssist,
+        settings: widget.settings,
       ),
     ));
     if (saved == true) {
       // The editor may have deleted the meal (SQLite can reuse a rowid
       // later) or re-dated it; drop any cached thumb for this id.
       if (meal != null) widget.thumbs?.evict(meal.id);
+      await _load();
+    } else if (meal != null && mounted) {
+      // The source card's answers (design R7b) write without a Save.
       await _load();
     }
   }

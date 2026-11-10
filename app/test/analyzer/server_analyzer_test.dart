@@ -777,6 +777,101 @@ void main() {
     expect(await validate(500), contains('500'));
   });
 
+  group('serverFeatures (restaurant assist R1)', () {
+    Future<(ServerFeatures?, List<http.BaseRequest>)> probe(
+        http.Response Function() reply,
+        {String? url = 'http://10.0.0.5', String? key = 'upload-key'}) async {
+      final s = await serverSettings(url: url, key: key);
+      final seen = <http.BaseRequest>[];
+      final analyzer = ServerAnalyzer(s, client: MockClient((req) async {
+        seen.add(req);
+        return reply();
+      }));
+      return (await analyzer.serverFeatures(), seen);
+    }
+
+    test('reads the features map from the FREE auth_check', () async {
+      final (f, seen) = await probe(() => http.Response(
+          jsonEncode({
+            'ok': true,
+            'backends': {'claude': 'enabled'},
+            'features': {
+              'estimate_confidence': true,
+              'restaurant_lookup': true,
+              'lookup_jobs': false,
+            },
+          }),
+          200));
+      expect(seen.single.url.path, '/api/auth_check');
+      expect(seen.single.headers['X-API-Key'], 'upload-key');
+      expect(
+          f,
+          const ServerFeatures(
+              reported: true,
+              estimateConfidence: true,
+              restaurantLookup: true));
+    });
+
+    test('an OLD server (a 200 without the map) has every capability off',
+        () async {
+      // Exactly what the VM answers until its next deploy.
+      final (f, _) = await probe(() => http.Response(
+          jsonEncode({
+            'ok': true,
+            'analyzer': 'enabled',
+            'backends': {'claude': 'enabled'},
+            'claude_login': 'token',
+          }),
+          200));
+      expect(f, ServerFeatures.oldServer);
+      expect(f!.reported, isFalse);
+      expect(f.estimateConfidence, isFalse);
+      expect(f.restaurantLookup, isFalse);
+      expect(f.lookupJobs, isFalse);
+    });
+
+    test('only a literal true switches a capability on', () async {
+      final (f, _) = await probe(() => http.Response(
+          jsonEncode({
+            'ok': true,
+            'features': {
+              'estimate_confidence': 'true',
+              'restaurant_lookup': 1,
+              'lookup_jobs': null,
+            },
+          }),
+          200));
+      expect(f, const ServerFeatures(reported: true));
+      final (g, _) = await probe(() =>
+          http.Response(jsonEncode({'ok': true, 'features': 'all'}), 200));
+      expect(g, ServerFeatures.oldServer,
+          reason: 'a features value that is not a map is no promise');
+    });
+
+    test('null when the server could not be asked', () async {
+      for (final reply in [
+        () => http.Response(jsonEncode({'error': 'Unauthorized'}), 401),
+        () => http.Response('<html>Wi-Fi login</html>', 200),
+        () => http.Response('[1, 2]', 200),
+        () => http.Response('{}', 500),
+        () => http.Response('', 302),
+        () => throw http.ClientException('offline'),
+      ]) {
+        final (f, _) = await probe(reply);
+        expect(f, isNull);
+      }
+    });
+
+    test('no address or no key: null, and no network call', () async {
+      final (a, seenA) = await probe(() => fail('no call'), url: null);
+      final (b, seenB) = await probe(() => fail('no call'), key: null);
+      expect(a, isNull);
+      expect(b, isNull);
+      expect(seenA, isEmpty);
+      expect(seenB, isEmpty);
+    });
+  });
+
   test('validateKey refuses before an address is set', () async {
     final s = await serverSettings(url: null);
     final analyzer = ServerAnalyzer(s, client: MockClient((_) async {

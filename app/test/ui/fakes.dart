@@ -10,7 +10,9 @@ import 'package:flutter/foundation.dart' show ChangeNotifier;
 import 'package:calorie_tracker/core/ai_consent.dart' show allAiConsentRoutes;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
+import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/services.dart';
 
 import '../support/fake_meals_dao.dart';
@@ -183,6 +185,8 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   @override
   bool watcherDisclosureSeen;
   @override
+  bool watchGlasses;
+  @override
   String dietaryProfile;
   @override
   String serverBaseUrl = '';
@@ -200,6 +204,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     this.summaryEnabled = true,
     this.watcherEnabled = false,
     this.watcherDisclosureSeen = false,
+    this.watchGlasses = true,
     this.dietaryProfile = '',
   })  : keysByProvider = keys ?? {'gemini': apiKey},
         modelsByProvider = models ??
@@ -229,6 +234,39 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   int calorieGoal = 0;
 
   @override
+  String restaurantAssist = 'off';
+  @override
+  bool restaurantAssistLocation = false;
+  @override
+  DateTime? restaurantAssistConsentAt;
+  @override
+  String? restaurantAssistConsentRecipient;
+  int restaurantAssistUpdates = 0;
+
+  @override
+  Future<void> updateRestaurantAssist({
+    String? mode,
+    bool? location,
+    DateTime? consentAt,
+    String? consentRecipient,
+    bool clearConsent = false,
+  }) async {
+    restaurantAssistUpdates++;
+    if (mode != null) restaurantAssist = mode;
+    if (location != null) restaurantAssistLocation = location;
+    if (clearConsent) {
+      restaurantAssistConsentAt = null;
+      restaurantAssistConsentRecipient = null;
+    } else {
+      if (consentAt != null) restaurantAssistConsentAt = consentAt;
+      if (consentRecipient != null) {
+        restaurantAssistConsentRecipient = consentRecipient;
+      }
+    }
+    notifyListeners(); // one signal, as AppSettings.setRestaurantAssist
+  }
+
+  @override
   Future<void> update({
     String? apiKey,
     String? provider,
@@ -238,6 +276,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     bool? summaryEnabled,
     bool? watcherEnabled,
     bool? watcherDisclosureSeen,
+    bool? watchGlasses,
     String? dietaryProfile,
     String? serverBaseUrl,
     String? serverBackend,
@@ -263,6 +302,7 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
     if (watcherDisclosureSeen != null) {
       this.watcherDisclosureSeen = watcherDisclosureSeen;
     }
+    if (watchGlasses != null) this.watchGlasses = watchGlasses;
     if (dietaryProfile != null) this.dietaryProfile = dietaryProfile;
     if (serverBaseUrl != null) this.serverBaseUrl = serverBaseUrl;
     if (serverBackend != null) this.serverBackend = serverBackend;
@@ -341,6 +381,13 @@ class FakeIntake implements PhotoIntake {
     return null;
   }
 
+  /// Late-import passes asked for (design G1b).
+  int lateImportScans = 0;
+
+  @override
+  Future<void> lateImportScan({bool Function()? shouldContinue}) async =>
+      lateImportScans++;
+
   @override
   Future<void> start() async => started = true;
 
@@ -371,6 +418,8 @@ UiServices makeServices({
   void Function(PhotoOutcome outcome)? announceOutcome,
   Future<void> Function()? openSystemSettings,
   PhotoLibrary? photoLibrary,
+  MealInUseRegistry? mealInUse,
+  RestaurantAssistControls? restaurantAssist,
 }) {
   final s = settings ?? FakeSettings();
   return UiServices(
@@ -389,5 +438,7 @@ UiServices makeServices({
     announceOutcome: announceOutcome,
     openSystemSettings: openSystemSettings,
     photoLibrary: photoLibrary,
+    mealInUse: mealInUse,
+    restaurantAssist: restaurantAssist,
   );
 }

@@ -272,4 +272,98 @@ void main() {
       expect(d.itemTotals().calories, 0);
     });
   });
+
+  // Design R6a (and the R1 note "R6a decides any finer rule"): an item row
+  // the user did not touch keeps what it says about itself.
+  group('untouched item rows', () {
+    final stored = <String, dynamic>{
+      'is_food': true,
+      'meal_description': 'Burrito bowl',
+      'total_calories': 1150,
+      'food_items': [
+        {
+          'name': 'Burrito bowl',
+          'estimated_calories': 1050,
+          'protein_g': 50,
+          'carbs_g': 110,
+          'fat_g': 40,
+          'brand': 'Chipotle',
+          'qty': 1,
+          'unit': 'bowl',
+          'published': true,
+        },
+        {
+          'name': 'Chips',
+          'estimated_calories': '100', // a raw model string
+          'brand': 'Chipotle',
+          'leftover_left_fraction': 0.5,
+        },
+      ],
+      'assist': {'v': 2, 'status': 'applied', 'chain_key': 'chipotle'},
+    };
+
+    test('keep every stored key when only the date or name changed', () {
+      final d = MealDraft.fromMeal(mealWith(stored))
+        ..dateIso = '2026-07-23'
+        ..description = 'Lunch bowl';
+      final items = d.toAnalysis()['food_items'] as List;
+      expect(items[0], {
+        'name': 'Burrito bowl',
+        'estimated_calories': 1050,
+        'protein_g': 50,
+        'carbs_g': 110,
+        'fat_g': 40,
+        'brand': 'Chipotle',
+        'qty': 1,
+        'unit': 'bowl',
+        'published': true,
+      });
+      expect(items[1]['brand'], 'Chipotle');
+      expect(items[1]['leftover_left_fraction'], 0.5);
+      expect(items[1]['estimated_calories'], 100,
+          reason: 'the numbers are still normalized as the row read them');
+      expect(items[1]['protein_g'], 0);
+    });
+
+    test('a row the user changed is rebuilt from what the editor shows', () {
+      final d = MealDraft.fromMeal(mealWith(stored));
+      d.items[0].calories = '980';
+      d.items[1].name = 'Tortilla chips';
+      final items = d.toAnalysis()['food_items'] as List;
+      expect(items[0], {
+        'name': 'Burrito bowl',
+        'estimated_calories': 980,
+        'protein_g': 50,
+        'carbs_g': 110,
+        'fat_g': 40,
+      }, reason: 'no longer the published numbers, nor a printed-brand claim');
+      expect((items[1] as Map).containsKey('brand'), isFalse);
+      expect((items[1] as Map).containsKey('leftover_left_fraction'), isFalse);
+    });
+
+    test('a row typed back to its loaded text counts as untouched; added '
+        'rows carry nothing', () {
+      final d = MealDraft.fromMeal(mealWith(stored));
+      d.items[0].calories = '980';
+      d.items[0].calories = '1050';
+      d.addItem()
+        ..name = 'Salsa'
+        ..calories = '25';
+      final items = d.toAnalysis()['food_items'] as List;
+      expect(items[0]['published'], isTrue);
+      expect(items[2], {
+        'name': 'Salsa',
+        'estimated_calories': 25,
+        'protein_g': 0,
+        'carbs_g': 0,
+        'fat_g': 0,
+      });
+    });
+
+    test('a stored draft starts with no compare-and-set basis', () {
+      // The editor sets expectedRaw once the stored row confirmed it.
+      expect(MealDraft.fromMeal(mealWith(stored)).expectedRaw, isNull);
+      expect(MealDraft.blank(DateTime(2026, 7, 24)).expectedRaw, isNull);
+    });
+  });
 }

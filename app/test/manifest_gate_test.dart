@@ -2,8 +2,14 @@ import 'dart:io';
 
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
     show imageIOChannelName;
+import 'package:calorie_tracker/services/local_store.dart'
+    show localStoreDirName;
 import 'package:calorie_tracker/services/photo/background_time.dart'
     show backgroundTimeChannelName;
+import 'package:calorie_tracker/services/photo/photo_changes.dart'
+    show photoChangesChannelName;
+import 'package:calorie_tracker/services/places/places.dart'
+    show placesChannelName;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:calorie_tracker/ui/background_glue.dart'
     show backgroundNativeLaunchPrefsKey;
@@ -329,6 +335,210 @@ void main() {
     expect(register, contains('BackgroundTimePlugin.register(with:'));
   });
 
+  // The photo library's change history (PhotoChangesPlugin.swift, design
+  // G1a, 2026-10-23) is how photos another app imports late — glasses
+  // photos the Meta AI app copies in hours later, keeping their capture
+  // time — are found at all. A Swift file missing from Runner, or a
+  // registration only one engine gets, answers MissingPluginException,
+  // which the Dart side turns into a quiet 'error' by design; so the wiring
+  // is pinned here. The background run reads the history too, hence both
+  // engines (registerAppPlugins; its two callers are pinned above). And it
+  // stays read-only: it never writes to the library, and never asks for
+  // access, which from a background run would be a prompt nobody sees.
+  test('the photo-changes plugin is built into Runner, registered for both '
+      'engines, and read-only', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/PhotoChangesPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$photoChangesChannelName"'));
+    for (final write in [
+      'performChanges',
+      'ChangeRequest',
+      'requestAuthorization',
+      'presentLimitedLibraryPicker',
+    ]) {
+      expect(source, isNot(contains(write)),
+          reason: 'PhotoChangesPlugin must stay read-only and never prompt');
+    }
+    expect(source, contains('PHPhotoLibrary.authorizationStatus(for: '
+        '.readWrite)'));
+
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* PhotoChangesPlugin.swift '
+            r'\*/ = \{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* PhotoChangesPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* PhotoChangesPlugin.swift '
+            'in Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* PhotoChangesPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('PhotoChangesPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('registrar(forPlugin: "PhotoChangesPlugin")'));
+    expect(register, contains('PhotoChangesPlugin.register(with:'));
+  });
+
+  // Restaurant assist's places (PlacesPlugin.swift, design R4,
+  // 2026-10-24): Apple Maps on the phone lists the food places around a
+  // photo's position. A Swift file missing from Runner answers
+  // MissingPluginException, which the Dart side turns into a quiet 'error'
+  // by design, so the wiring is pinned here. And it must never need a
+  // location permission: no CLLocationManager (the prompt), no geocoder
+  // (no city or street, ever), no NSLocation* key in either Info.plist —
+  // and on Android no location permission at all, ACCESS_MEDIA_LOCATION
+  // included (v1 reads no photo location there).
+  test('the places plugin is built into Runner, registered, and needs no '
+      'location permission on either platform', () {
+    final ios = '${_appRoot().path}/ios';
+    final swift = File('$ios/Runner/PlacesPlugin.swift');
+    expect(swift.existsSync(), isTrue, reason: '${swift.path} missing');
+    final source = swift.readAsStringSync();
+    expect(source, contains('"$placesChannelName"'));
+    expect(source, contains('MKLocalPointsOfInterestRequest'));
+    // The code, without its comments (which name what it never does).
+    final full = source
+        .split('\n')
+        .map((line) => line.replaceFirst(RegExp(r'//.*'), ''))
+        .join('\n');
+    // The one part of an address it reads (run 6, the meal country): each
+    // place's ISO country — the region of addressRepresentations on iOS
+    // 26+, the placemark's isoCountryCode before — exactly here, once.
+    const countryReads = [
+      'let address: MKAddressRepresentations? = item.addressRepresentations',
+      'let region: Locale.Region? = address?.region',
+      'country = region?.identifier',
+      'country = item.placemark.isoCountryCode',
+    ];
+    var code = full;
+    for (final read in countryReads) {
+      expect(read.allMatches(full), hasLength(1), reason: read);
+      code = code.replaceFirst(read, '');
+    }
+    // Of a placemark, only its position and that country.
+    expect(
+        RegExp(r'placemark\.(?!location\b|isoCountryCode\b)').hasMatch(code),
+        isFalse,
+        reason: 'PlacesPlugin.swift reads more of a placemark');
+    for (final banned in [
+      'isoCountryCode',
+      'fullAddress',
+      'cityName',
+      'cityWithContext',
+      'regionName',
+      'regionCode',
+      'locality',
+      'postalCode',
+      'administrativeArea',
+      'CLLocationManager',
+      'CLGeocoder',
+      'requestWhenInUseAuthorization',
+      'requestAlwaysAuthorization',
+      'requestLocation',
+      'startUpdatingLocation',
+      'MKReverseGeocodingRequest',
+      'MKGeocodingRequest',
+      'reverseGeocode',
+      // Nothing that identifies or addresses a place goes back to Dart.
+      'phoneNumber',
+      '.identifier',
+      'thoroughfare',
+      'postalAddress',
+      'addressRepresentations',
+      'UserDefaults',
+      'FileManager',
+    ]) {
+      expect(code, isNot(contains(banned)),
+          reason: 'PlacesPlugin.swift must not use $banned');
+    }
+
+    final pbxproj =
+        File('$ios/Runner.xcodeproj/project.pbxproj').readAsStringSync();
+    final fileRef = RegExp(r'([0-9A-F]{24}) /\* PlacesPlugin.swift \*/ = '
+            r'\{isa = PBXFileReference;')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(fileRef, isNotNull, reason: 'no PBXFileReference');
+    expect(_pbxObject(pbxproj, comment: 'Runner', isa: 'PBXGroup'),
+        contains('$fileRef /* PlacesPlugin.swift */'),
+        reason: 'not in the Runner group, so its path resolves elsewhere');
+    final buildFile = RegExp(r'([0-9A-F]{24}) /\* PlacesPlugin.swift in '
+            'Sources \\*/ = \\{isa = PBXBuildFile; fileRef = $fileRef')
+        .firstMatch(pbxproj)
+        ?.group(1);
+    expect(buildFile, isNotNull, reason: 'no PBXBuildFile');
+    String sourcesOf(String target) {
+      final phaseId = RegExp(r'([0-9A-F]{24}) /\* Sources \*/')
+          .firstMatch(_pbxObject(pbxproj,
+              comment: target, isa: 'PBXNativeTarget'))
+          ?.group(1);
+      expect(phaseId, isNotNull, reason: '$target has no Sources phase');
+      return _pbxObject(pbxproj,
+          id: phaseId!, comment: 'Sources', isa: 'PBXSourcesBuildPhase');
+    }
+
+    expect(sourcesOf('Runner'),
+        contains('$buildFile /* PlacesPlugin.swift in Sources */'));
+    expect(sourcesOf('ShareExtension'), isNot(contains('PlacesPlugin')));
+
+    final delegate =
+        File('$ios/Runner/AppDelegate.swift').readAsStringSync();
+    final register = RegExp(
+            r'static func registerAppPlugins\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(register, contains('registrar(forPlugin: "PlacesPlugin")'));
+    expect(register, contains('PlacesPlugin.register(with:'));
+
+    for (final target in ['Runner', 'ShareExtension']) {
+      final plist =
+          File('$ios/$target/Info.plist').readAsStringSync();
+      expect(RegExp(r'<key>NSLocation[A-Za-z]*</key>').hasMatch(plist),
+          isFalse,
+          reason: '$target/Info.plist declares a location key: places need '
+              'no location permission, and none may be asked for');
+    }
+
+    final manifest = File('${_appRoot().path}/android/app/src/main/'
+            'AndroidManifest.xml')
+        .readAsStringSync();
+    for (final permission in [
+      'ACCESS_MEDIA_LOCATION',
+      'ACCESS_FINE_LOCATION',
+      'ACCESS_COARSE_LOCATION',
+      'ACCESS_BACKGROUND_LOCATION',
+    ]) {
+      expect(manifest, isNot(contains(permission)),
+          reason: 'v1 reads no location on Android');
+    }
+  });
+
   // The iOS background run counts its time budgets from the moment
   // workmanager started its engine (2026-10-19): the AppDelegate stamps it
   // in the registrant callback, which runs right after the engine is
@@ -345,5 +555,180 @@ void main() {
             r'setPluginRegistrantCallback \{ registry in\s*\n(\s*)(\S[^\n]*)')
         .firstMatch(delegate);
     expect(callback?.group(2), 'AppDelegate.stampBackgroundLaunch()');
+  });
+
+  // The backup-excluded local store (lib/services/local_store.dart, design
+  // F1, 2026-10-23) holds state that hints at location or only works on
+  // this device. Nothing at runtime notices a backup rule that went
+  // missing — the app works the same, and the documents just start riding
+  // along to iCloud, a computer or a new phone — so the wiring is pinned
+  // here. iOS: AppDelegate makes the directory and flags it before
+  // anything else at launch (Dart never creates it there).
+  test('iOS excludes the local store directory from backup at launch', () {
+    final delegate = File('${_appRoot().path}/ios/Runner/AppDelegate.swift')
+        .readAsStringSync();
+    expect(delegate,
+        contains('static let localStoreDirectoryName = "$localStoreDirName"'));
+    final prepare = RegExp(r'static func prepareLocalStore\(.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(prepare, isNotNull, reason: 'AppDelegate.prepareLocalStore missing');
+    expect(prepare, contains('.applicationSupportDirectory'));
+    expect(prepare, contains('appendingPathComponent(\n      '
+        'localStoreDirectoryName, isDirectory: true)'));
+    expect(prepare, contains('createDirectory('));
+    expect(prepare, contains('values.isExcludedFromBackup = true'));
+    expect(prepare, contains('directory.setResourceValues(values)'));
+
+    final launch = RegExp(
+            r'didFinishLaunchingWithOptions launchOptions.*?\n  \}',
+            dotAll: true)
+        .firstMatch(delegate)
+        ?.group(0);
+    expect(launch, isNotNull);
+    final call = launch!.indexOf('AppDelegate.prepareLocalStore()');
+    expect(call, greaterThanOrEqualTo(0),
+        reason: 'didFinishLaunching never prepares the local store');
+    for (final later in [
+      'WorkmanagerPlugin.setPluginRegistrantCallback',
+      'WorkmanagerPlugin.registerPeriodicTask',
+      'super.application(',
+    ]) {
+      expect(launch.indexOf(later), greaterThan(call),
+          reason: 'the local store must be flagged before $later — before '
+              'either engine can write into it');
+    }
+  });
+
+  // Android: exclusion rules by path for both backup schemes, referenced
+  // from <application>. Exclude-only: an <include> would silently stop
+  // backing up everything else the app keeps.
+  test('Android excludes the local store from cloud backup and device '
+      'transfer, and nothing else', () {
+    final main = '${_appRoot().path}/android/app/src/main';
+    final manifest = File('$main/AndroidManifest.xml').readAsStringSync();
+    final application =
+        RegExp(r'<application\b[^>]*>').firstMatch(manifest)?.group(0);
+    expect(application, isNotNull);
+    expect(application,
+        contains('android:dataExtractionRules="@xml/data_extraction_rules"'));
+    expect(application,
+        contains('android:fullBackupContent="@xml/backup_rules"'));
+    expect(application, isNot(contains('android:allowBackup="false"')),
+        reason: 'F1 only excludes the local store; backup stays on');
+
+    final exclude = RegExp('<exclude\\s+domain="file"\\s+'
+        'path="${RegExp.escape(localStoreDirName)}/"\\s*/>');
+    String section(String xml, String tag) {
+      final body = RegExp('<$tag(?:\\s[^>]*)?>(.*?)</$tag>', dotAll: true)
+          .firstMatch(xml)
+          ?.group(1);
+      expect(body, isNotNull, reason: '<$tag> missing');
+      return body!;
+    }
+
+    final extraction = File('$main/res/xml/data_extraction_rules.xml');
+    expect(extraction.existsSync(), isTrue, reason: extraction.path);
+    final rules = section(
+        extraction.readAsStringSync(), 'data-extraction-rules');
+    for (final scheme in ['cloud-backup', 'device-transfer']) {
+      final body = section(rules, scheme);
+      expect(exclude.hasMatch(body), isTrue,
+          reason: '$scheme does not exclude $localStoreDirName/');
+      expect(body, isNot(contains('<include')), reason: scheme);
+    }
+
+    final legacy = File('$main/res/xml/backup_rules.xml');
+    expect(legacy.existsSync(), isTrue, reason: legacy.path);
+    final full = section(legacy.readAsStringSync(), 'full-backup-content');
+    expect(exclude.hasMatch(full), isTrue,
+        reason: 'fullBackupContent does not exclude $localStoreDirName/');
+    expect(full, isNot(contains('<include')));
+  });
+
+  // Design R7a: while restaurant lookup uses the photo location, the app
+  // reads where a meal photo was taken. iOS shows NSPhotoLibraryUsageDescription
+  // in the permission prompt, from Info.plist and from each InfoPlist.strings
+  // (which wins for its language) — so all three must say it, in step: the
+  // English pair identical, the Chinese one saying the same. Neither may
+  // suggest the location leaves for anyone but Apple Maps.
+  test('the photo-library usage string says when the photo location is read, '
+      'in Info.plist and both InfoPlist.strings', () {
+    final ios = '${_appRoot().path}/ios/Runner';
+    final plist = File('$ios/Info.plist').readAsStringSync();
+    final fromPlist = RegExp(
+            r'<key>NSPhotoLibraryUsageDescription</key>\s*<string>([^<]*)</string>')
+        .firstMatch(plist)
+        ?.group(1);
+    String fromStrings(String lproj) {
+      final file = File('$ios/$lproj/InfoPlist.strings');
+      expect(file.existsSync(), isTrue, reason: file.path);
+      final value = RegExp(r'"NSPhotoLibraryUsageDescription" = "([^"]*)";')
+          .firstMatch(file.readAsStringSync())
+          ?.group(1);
+      expect(value, isNotNull, reason: '$lproj has no usage string');
+      return value!;
+    }
+
+    expect(fromPlist, isNotNull);
+    final en = fromStrings('en.lproj');
+    final zh = fromStrings('zh-Hans.lproj');
+    expect(en, fromPlist, reason: 'en.lproj mirrors Info.plist');
+    // The photo prompt's first purpose is unchanged.
+    expect(en, contains('AI service you choose in Settings'));
+    expect(zh, contains('AI 服务'));
+    // R7a: the photo's location, read only for restaurant lookup, and only
+    // to ask Apple Maps — and (run 6) to check on the phone whether a
+    // restaurant or takeout photo was taken in the US.
+    expect(en, contains('restaurant lookup with photo location'));
+    expect(en, contains('where a restaurant or takeout meal photo was taken'));
+    expect(en, contains('only to check on this phone whether it was taken in '
+        'the US, to ask Apple Maps'));
+    expect(zh, contains('使用照片位置的餐厅查询'));
+    expect(zh, contains('餐厅餐或外卖照片的拍摄位置'));
+    expect(zh, contains('仅用于在本机判断照片是否在美国拍摄、向 Apple 地图查询'));
+    // The editor's answers keep a ~100 m cell on the phone (review
+    // 2026-10-25): the prompt says so too.
+    expect(en, contains('to remember, on this phone, the restaurants you '
+        'confirm or rule out'));
+    expect(zh, contains('在本机记住你在那里确认或排除的餐厅'));
+  });
+
+  // App Store Connect's App Privacy answer is B (docs/RELEASING.md § 4.3,
+  // owner decision R-F8): the Runner manifest declares what leaves the
+  // phone (photos, health, other user content; release_decisions_test.dart
+  // pins the three entries). The restaurant lookup adds no data type: its
+  // chain and food names go to the same user-chosen recipient as the
+  // photos, and the photo location goes only to Apple's MapKit — so no
+  // location type, in either manifest. The share extension sends nothing
+  // itself and keeps an empty array.
+  test('the restaurant lookup adds no collected data type to either manifest',
+      () {
+    final ios = '${_appRoot().path}/ios';
+    for (final target in const ['Runner', 'ShareExtension']) {
+      final plist =
+          File('$ios/$target/PrivacyInfo.xcprivacy').readAsStringSync();
+      expect(plist, isNot(contains('NSPrivacyCollectedDataTypePreciseLocation')),
+          reason: target);
+      expect(plist, isNot(contains('NSPrivacyCollectedDataTypeCoarseLocation')),
+          reason: target);
+      expect(
+          RegExp(r'<key>NSPrivacyTracking</key>\s*<false\s*/>').hasMatch(plist),
+          isTrue,
+          reason: target);
+    }
+    final share = File('$ios/ShareExtension/PrivacyInfo.xcprivacy')
+        .readAsStringSync();
+    expect(
+        RegExp(r'<key>NSPrivacyCollectedDataTypes</key>\s*<array\s*/>')
+            .hasMatch(share),
+        isTrue,
+        reason: 'ShareExtension/PrivacyInfo.xcprivacy must keep '
+            'NSPrivacyCollectedDataTypes an empty array (RELEASING.md § 4.3)');
+    final releasing = File('${_appRoot().parent.path}/docs/RELEASING.md')
+        .readAsStringSync();
+    expect(releasing, contains('NSPrivacyCollectedDataTypes'));
+    expect(releasing, contains('the lookup adds no data type'));
   });
 }

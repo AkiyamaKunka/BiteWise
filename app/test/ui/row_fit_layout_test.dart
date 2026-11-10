@@ -31,6 +31,9 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
+    show LookupRecipient, LookupSupport;
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
@@ -39,7 +42,9 @@ import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
     show ProviderSettingsPage, kApiKeyChoices, kPlanChoices;
 import 'package:calorie_tracker/ui/screens/settings/subscription_page.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
+import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 
+import '../support/assist_fixtures.dart';
 import 'fakes.dart';
 
 Widget _app(Locale locale, Widget home, {ThemeData? theme}) => MaterialApp(
@@ -243,6 +248,81 @@ void main() {
           });
         }
 
+        // Design G3: the glasses switch shares its line with a Switch;
+        // 'Include Meta glasses photos' was cut here in English.
+        testWidgets('the Meta glasses switch row, $lang at $width pt',
+            (tester) async {
+          _phone(tester, width);
+          await tester.pumpWidget(_app(
+              Locale(lang),
+              SettingsScreen(
+                settings: FakeSettings(apiKey: 'k'),
+                analyzer: FakeAnalyzer(),
+                dao: FakeDao(),
+                requestPhotoPermission: () async => true,
+              ),
+              theme: iphoneTheme));
+          await tester.pumpAndSettle();
+          final row = find.byKey(const Key('watchGlassesRow'));
+          await tester.ensureVisible(row);
+          await tester.pumpAndSettle();
+          expect(_ellipsised(tester, row), isEmpty,
+              reason: 'the glasses switch title must read in full');
+          expect(tester.takeException(), isNull);
+        });
+
+        // Design R7a: the Restaurant nutrition rows. The mode row's title
+        // sits beside its value (Off / When unsure / Always), so the English
+        // title is the short 'Lookups' ('Nutrition lookup' was cut beside
+        // 'When unsure' at 375 pt); the group header says 'Restaurant'. The
+        // location row shares its line with a Switch; the paused row
+        // carries 'Review'.
+        for (final mode in const ['off', 'auto', 'always']) {
+          testWidgets('the Restaurant nutrition rows (mode $mode), $lang at '
+              '$width pt', (tester) async {
+            _phone(tester, width);
+            final settings = FakeSettings(apiKey: 'k')
+              ..provider = 'anthropic'
+              ..restaurantAssist = mode
+              ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+              // A consent for another recipient: the paused row shows.
+              ..restaurantAssistConsentRecipient = 'openrouter';
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                SettingsScreen(
+                  settings: settings,
+                  analyzer: FakeAnalyzer(),
+                  dao: FakeDao(),
+                  requestPhotoPermission: () async => true,
+                  restaurantAssist: RestaurantAssistControls(
+                    lookupSupport: () => const LookupSupport(
+                        supported: true,
+                        recipient: LookupRecipient.anthropic,
+                        locationAllowed: true),
+                    clearLearnedPlaces: () async => true,
+                    locationSupported: true,
+                  ),
+                ),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            for (final key in [
+              'restaurantModeRow',
+              if (mode != 'off') ...[
+                'restaurantLocationRow',
+                'restaurantPausedRow',
+              ],
+              'clearLearnedPlacesRow',
+            ]) {
+              final row = find.byKey(Key(key));
+              await tester.ensureVisible(row);
+              await tester.pumpAndSettle();
+              expect(_ellipsised(tester, row), isEmpty,
+                  reason: '$key must read in full');
+            }
+            expect(tester.takeException(), isNull);
+          });
+        }
+
         // Refresh on → the last-run time; off → the remedy, worded per
         // platform: 'Off' / '系统已关闭' on iOS (Background App Refresh),
         // 'Restricted' / '电池受限' on Android (App battery usage,
@@ -331,7 +411,60 @@ void main() {
           expect(_ellipsised(tester, calories), isEmpty);
           expect(tester.takeException(), isNull);
         });
+
+        // The restaurant assist (design R7b): the meal card's chip reads
+        // in full at the standard sizes — long chain names included — and
+        // the editor's answers wrap as buttons, never cut.
+        for (final scale in const [1.0, 1.35]) {
+          testWidgets('restaurant chip and source card, $lang at $width pt, '
+              '${scale}x', (tester) async {
+            _phone(tester, width, scale: scale);
+            for (final analysis in [
+              appliedBigMac(),
+              suggestedBigMac(),
+              _asChain(suggestedBigMac(), 'buffalo_wild_wings'),
+            ]) {
+              await tester.pumpWidget(_app(
+                  Locale(lang),
+                  Scaffold(
+                    key: UniqueKey(),
+                    body: ListView(children: [
+                      MealCard(meal: assistMeal(analysis), assistUnseen: true),
+                    ]),
+                  ),
+                  theme: iphoneTheme));
+              await tester.pumpAndSettle();
+              expect(_ellipsised(tester, find.byKey(const Key('assistChip'))),
+                  isEmpty,
+                  reason: 'the chip must read in full');
+              expect(tester.takeException(), isNull);
+            }
+            final dao = FakeDao()..seed(assistMeal(appliedBigMac()));
+            await tester.pumpWidget(_app(
+                Locale(lang),
+                MealEditorScreen(
+                  key: UniqueKey(),
+                  dao: dao,
+                  meal: dao.meals.first,
+                  assist: FakeAssist(dao).controls(),
+                ),
+                theme: iphoneTheme));
+            await tester.pumpAndSettle();
+            final card = find.byKey(const Key('assistSourceCard'));
+            expect(_ellipsised(tester, card), isEmpty);
+            expect(tester.getRect(card).right, lessThanOrEqualTo(width));
+            expect(tester.takeException(), isNull);
+          });
+        }
       }
     }
   }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');
 }
+
+/// [analysis] with its block naming another table chain (a longer name).
+Map<String, dynamic> _asChain(Map<String, dynamic> analysis, String key) =>
+    Map<String, dynamic>.from(analysis)
+      ..['assist'] = {
+        ...(analysis['assist'] as Map),
+        'chain_key': key,
+      };

@@ -371,6 +371,42 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     }
   }
 
+  /// What the server says it supports: the `features` map of the FREE
+  /// /api/auth_check (restaurant assist, R1). Null when the server could not
+  /// be asked — no address or key, unreachable, a rejected key, or a reply
+  /// that is not a JSON object (a captive portal, a proxy page). A JSON 200
+  /// WITHOUT the map is an older server: [ServerFeatures.oldServer], every
+  /// capability off, so nothing new is ever attempted against it.
+  Future<ServerFeatures?> serverFeatures() async {
+    final base = settings.serverBaseUrl;
+    final key = (settings.serverApiKey ?? '').trim();
+    if (base.isEmpty || key.isEmpty) return null;
+    try {
+      final req = http.Request('POST', _uri('/api/auth_check'))
+        ..headers['content-type'] = 'application/json'
+        ..headers['X-API-Key'] = key
+        ..headers['X-Client-Platform'] = 'app'
+        ..body = '{}';
+      // The same short cap as serverLoginState: a settings row reads this,
+      // and the 5-minute analysis deadline would leave it spinning.
+      final resp = await client
+          .send(req)
+          .then(http.Response.fromStream)
+          .timeout(const Duration(seconds: 8));
+      if (resp.statusCode != 200) return null;
+      final Object? decoded;
+      try {
+        decoded = jsonDecode(resp.body);
+      } on FormatException {
+        return null;
+      }
+      if (decoded is! Map) return null;
+      return ServerFeatures.fromAuthCheck(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// /api/auth_check proves "address reachable + key accepted" with no side
   /// effects and no CLI run. Deliberately NOT /ping: that is the Termux
   /// watcher's liveness channel, and stamping it from here would forge
@@ -450,4 +486,64 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       return 'Could not reach $base.';
     }
   }
+}
+
+/// The capabilities a server reports in /api/auth_check's `features` map
+/// (restaurant assist, R1). Read strictly: a capability is on only for a
+/// literal JSON `true` — "true", 1, null or a missing key are all off.
+class ServerFeatures {
+  const ServerFeatures({
+    required this.reported,
+    this.estimateConfidence = false,
+    this.restaurantLookup = false,
+    this.lookupJobs = false,
+  });
+
+  /// A server that predates the `features` map (the VM until its next
+  /// deploy). Its photo replies carry no estimate_confidence, so nothing
+  /// that waits on one can trigger.
+  static const ServerFeatures oldServer = ServerFeatures(reported: false);
+
+  /// False for an [oldServer]: the reply had no `features` map at all.
+  final bool reported;
+
+  /// Photo replies carry the meal-context fields (estimate_confidence,
+  /// restaurant_context, portion_state, order_merchant, item brand/qty/unit).
+  final bool estimateConfidence;
+
+  /// The server's restaurant-lookup knob is on.
+  final bool restaurantLookup;
+
+  /// The server runs lookups as async jobs (/api/restaurant_lookup/status).
+  final bool lookupJobs;
+
+  /// Parses an auth_check reply body. A body that is not a map, or whose
+  /// `features` is missing or not a map, is an [oldServer].
+  factory ServerFeatures.fromAuthCheck(Object? body) {
+    final f = body is Map ? body['features'] : null;
+    if (f is! Map) return oldServer;
+    return ServerFeatures(
+      reported: true,
+      estimateConfidence: f['estimate_confidence'] == true,
+      restaurantLookup: f['restaurant_lookup'] == true,
+      lookupJobs: f['lookup_jobs'] == true,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ServerFeatures &&
+      other.reported == reported &&
+      other.estimateConfidence == estimateConfidence &&
+      other.restaurantLookup == restaurantLookup &&
+      other.lookupJobs == lookupJobs;
+
+  @override
+  int get hashCode =>
+      Object.hash(reported, estimateConfidence, restaurantLookup, lookupJobs);
+
+  @override
+  String toString() => 'ServerFeatures(reported: $reported, '
+      'estimateConfidence: $estimateConfidence, '
+      'restaurantLookup: $restaurantLookup, lookupJobs: $lookupJobs)';
 }

@@ -1,0 +1,60 @@
+{
+ "id": "resp_68c9fa0502748190b7dd390736892e100be649c1a5ff9609",
+ "object": "response",
+ "created_at": 1761234567,
+ "status": "incomplete",
+ "background": false,
+ "error": null,
+ "incomplete_details": {
+  "reason": "max_output_tokens"
+ },
+ "instructions": null,
+ "max_output_tokens": 1500,
+ "max_tool_calls": 2,
+ "model": "gpt-4.1-mini-2025-04-14",
+ "output": [
+  {
+   "type": "web_search_call",
+   "id": "ws_68c9fa0574548190a0ad8d0e8b6a64b50be649c1a5ff9609",
+   "status": "completed",
+   "action": {
+    "type": "search",
+    "query": "McDonald's Big Mac calories",
+    "sources": [
+     {
+      "type": "url",
+      "url": "https://www.mcdonalds.com/us/en-us/product/big-mac.html"
+     },
+     {
+      "type": "url",
+      "url": "https://www.fastfoodnutrition.org/mcdonalds/big-mac"
+     }
+    ]
+   }
+  }
+ ],
+ "parallel_tool_calls": true,
+ "previous_response_id": null,
+ "store": false,
+ "tools": [
+  {
+   "type": "web_search",
+   "search_context_size": "low",
+   "user_location": {
+    "type": "approximate",
+    "country": "US"
+   }
+  }
+ ],
+ "usage": {
+  "input_tokens": 8721,
+  "input_tokens_details": {
+   "cached_tokens": 0
+  },
+  "output_tokens": 412,
+  "output_tokens_details": {
+   "reasoning_tokens": 0
+  },
+  "total_tokens": 9133
+ }
+}

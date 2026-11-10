@@ -37,6 +37,9 @@ VECTOR_FILES = [
     "mismatch.json",
     "report_formulas.json",
     "weight.json",
+    # Replayed case by case in tests/test_restaurant_lookup_compose.py.
+    "restaurant_lookup.json",
+    "lookup_sanitizer.json",
 ]
 
 
@@ -179,3 +182,16 @@ def test_weight_vectors(payload, case):
     assert case["fn"] == "parse_weight_kg"
     actual = nutrition.parse_weight_kg(gen.decode_value(case["input"]))
     assert actual == gen.decode_value(case["expected"])
+
+
+# ─── lookup_sanitizer.json ─────────────────────────────────────────
+
+@pytest.mark.parametrize("payload,case", _cases("lookup_sanitizer.json"))
+def test_lookup_sanitizer_vectors(payload, case):
+    """The server's version of each model answer. flutter test runs lane
+    B's decideAssist on both answers of every case and requires the same
+    outcome and reason (test/shared/lookup_sanitizer_parity_test.dart)."""
+    import lookup_contract
+
+    assert lookup_contract.sanitize_lookup(
+        copy.deepcopy(case["raw"]), case["request"]) == case["sanitized"]

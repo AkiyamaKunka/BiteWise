@@ -31,6 +31,8 @@ import '../services/analyzer/provider_analyzers.dart';
 import '../services/photo/background.dart';
 import '../services/photo/background_runs.dart';
 import '../services/photo/deferred_assets.dart';
+import '../services/photo/food_prefilter.dart' show foodScoreViaImageIO;
+import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
@@ -169,12 +171,19 @@ class BackfillDrain {
 /// that cannot finish is not started (an analysis cut off unsaved still
 /// costs the server, and the provider's quota). The first photo has no
 /// pace to go by: [deadline] alone admits it.
+///
+/// [lateImports] (design G1b): once the scan has completed, and only while
+/// the budget still has room, the intake's late-import pass
+/// ([PhotoIntake.lateImportScan]) goes through the same sink under the
+/// same budget. Its photos carry no safeFrontier, so the frontier and every
+/// checkpoint stay the scan's alone.
 Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
     {int lookbackDays = 0,
     DateTime? since,
     DateTime? deadline,
     DateTime? finishBy,
     DateTime Function() clock = DateTime.now,
+    bool lateImports = false,
     Future<void> Function(IntakePhoto photo)? onOffer,
     Future<void> Function(
             IntakePhoto photo, PhotoOutcome outcome, DateTime? safeFrontier)?
@@ -185,17 +194,19 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
   final timed = deadline != null || finishBy != null;
   // The longest one photo has taken in this drain.
   var slowest = Duration.zero;
-  // Once past the deadline, past it for good (a clock step backwards must
-  // not reopen the run), and every photo turned away is counted.
-  bool budgetLeft() {
+  // Whether another photo may start now. Once past the deadline, past it
+  // for good: a clock step backwards must not reopen the run.
+  bool roomLeft() {
     if (!timed) return true;
-    if (!cutShort) {
-      final now = clock();
-      if ((deadline == null || now.isBefore(deadline)) &&
-          (finishBy == null || !now.add(slowest).isAfter(finishBy))) {
-        return true;
-      }
-    }
+    if (cutShort) return false;
+    final now = clock();
+    return (deadline == null || now.isBefore(deadline)) &&
+        (finishBy == null || !now.add(slowest).isAfter(finishBy));
+  }
+
+  // [roomLeft], counting every photo turned away.
+  bool budgetLeft() {
+    if (roomLeft()) return true;
     cutShort = true;
     deadlineReleases++;
     return false;
@@ -223,6 +234,15 @@ Future<BackfillDrain> drainBackfill(PhotoIntake intake, PhotoPipeline pipeline,
         since: since,
         shouldContinue: timed ? budgetLeft : null);
     scanCompleted = true;
+    // Asked without counting: a pass that cannot start turns no photo
+    // away (they wait in its carry, or in the library's history).
+    if (lateImports && roomLeft()) {
+      try {
+        await intake.lateImportScan(shouldContinue: timed ? budgetLeft : null);
+      } catch (_) {
+        // Never the scan's failure: its frontier and photos stand.
+      }
+    }
   } catch (e) {
     // Library query died / window truncated. Photos delivered before the
     // throw are already fully processed (sink is awaited inline); the
@@ -295,7 +315,8 @@ Future<({DateTime? written, DateTime? stored})> _advanceWatermark(
 /// also moves the BACKGROUND watermark over what it covered. It used to
 /// leave it days behind: the next background run then spent its grant
 /// re-reading and re-hashing every photo the app had just logged before
-/// it reached a new one (2026-10-19).
+/// it reached a new one (2026-10-19). Then the intake's late-import pass
+/// ([PhotoIntake.lateImportScan], design G1b), which moves nothing.
 ///
 /// The newest day's photos go first, so a quick open logs today's meal
 /// before the rest of the week (PhotoIntake.backfillScan newestDayFirst);
@@ -338,12 +359,23 @@ Future<DateTime?> foregroundCatchUp(PhotoIntake intake,
     } catch (_) {}
   }
 
-  final frontier = await intake.backfillScan(
-      onCovered: checkpoint,
-      newestDayFirst: true,
-      shouldContinue: shouldContinue);
-  if (frontier != null) await checkpoint(frontier);
-  return frontier;
+  try {
+    final frontier = await intake.backfillScan(
+        onCovered: checkpoint,
+        newestDayFirst: true,
+        shouldContinue: shouldContinue);
+    if (frontier != null) await checkpoint(frontier);
+    return frontier;
+  } finally {
+    // Photos other apps imported late (design G1b): after the window, so
+    // today's photos still go first. Never a watermark; never a throw. A
+    // truncated window still gets it. Not once the user has left (iOS).
+    if (shouldContinue?.call() ?? true) {
+      try {
+        await intake.lateImportScan(shouldContinue: shouldContinue);
+      } catch (_) {}
+    }
+  }
 }
 
 /// Stamps "the OS launched a background run" for the Settings 后台扫描 row.
@@ -434,6 +466,8 @@ Future<bool> headlessBackfillWith({
     deadline: budget == null ? null : (startedAt ?? scanStart).add(budget),
     finishBy: finishBy,
     clock: clock,
+    // Photos imported late, with whatever budget the scan left (G1b).
+    lateImports: true,
     onOffer: (_) async {
       photoOffered?.call();
       await recorder?.offered();
@@ -663,6 +697,15 @@ class RunInFlight {
   /// (the background pipeline takes one photo at a time).
   void offered() => _offeredAt = _clock();
 
+  /// MealsDao.loggedAssetIds through the run's own database handle (the
+  /// pipeline's): the late-import pass opens no second one. Nothing is
+  /// known before the pipeline exists — the pass then reads, and the
+  /// ledger answers.
+  Future<Set<String>> loggedAssetIds(List<String> assetIds) async {
+    final dao = pipeline?.dao;
+    return dao == null ? const <String>{} : dao.loggedAssetIds(assetIds);
+  }
+
   /// Releases the photo in flight ([PhotoPipeline.abandon]). It stays
   /// eligible, and the next run offers it again. When it had at least
   /// [slowPhotoWindow] to itself, the cut also counts against it: after
@@ -739,11 +782,20 @@ Future<bool> _runAfterLaunch({
       settings: settings,
       prefs: prefs,
       intake: createPhotoIntake(settings,
-          onBackfillListed: recorder.listed, passOver: deferred.passOver),
+          onBackfillListed: recorder.listed,
+          passOver: deferred.passOver,
+          loggedAssetIds: inFlight.loggedAssetIds),
       pipeline: () async => inFlight.pipeline = PhotoPipeline(
           dao: await createMealsDao(),
           analyzer: createMultiProviderAnalyzer(settings),
           latch: autoScanLatchFor(settings),
+          // A glasses preview copy waits once for its full-size one (G2b).
+          previewHold: holdGlassesPreview,
+          // Design G3: the switch as this run loaded it, and on iOS the
+          // on-device food check — on the CPU, or deferred to the app.
+          includeGlasses: () => settings.watchGlasses,
+          foodCheck: ios ? foodScoreViaImageIO : null,
+          glassesCheckLog: recordGlassesCheckLocally,
           // iOS only: there dart:ui cannot decode (platform_decode.dart).
           deferUndecodable: ios),
       showMealCard: (title, body) async {

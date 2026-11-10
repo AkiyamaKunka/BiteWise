@@ -18,6 +18,8 @@ import 'package:flutter/material.dart';
 import '../../../core/contracts.dart';
 import '../../ai_consent.dart';
 import '../../diagnostics.dart';
+import '../../format.dart' show isoDate;
+import '../../restaurant_assist_controls.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
 import '../../provider_names.dart';
@@ -177,10 +179,18 @@ class ProviderSettingsPage extends StatefulWidget {
     this.completeClaudeAuth,
     this.serverLoginState,
     this.openUrl,
+    this.dao,
+    this.restaurantAssist,
   });
 
   final SettingsStore settings;
   final AnalyzerService analyzer;
+
+  /// For Diagnostics' AI-confidence counts (design R7b); null hides them.
+  final MealsDao? dao;
+
+  /// For Diagnostics' 'Restaurant lookups' (design R7b); null hides it.
+  final RestaurantAssistControls? restaurantAssist;
   final Future<({String? url, String? error})> Function()? startClaudeAuth;
   final Future<String?> Function(String code)? completeClaudeAuth;
   final Future<String?> Function()? serverLoginState;
@@ -299,6 +309,19 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
                       analyzer: widget.analyzer,
                       l10n: context.l10n,
                     ),
+                    loadRestaurantLookups:
+                        widget.restaurantAssist?.lookupsDiagnostics,
+                    loadConfidence: widget.dao == null
+                        ? null
+                        : () async {
+                            final now = DateTime.now();
+                            final meals = await widget.dao!.mealsBetween(
+                              isoDate(DateTime(now.year, now.month,
+                                  now.day - (diagConfidenceDays - 1))),
+                              isoDate(now),
+                            );
+                            return confidenceCounts(meals);
+                          },
                   ),
                 ));
                 if (mounted) setState(() {}); // the consent may have changed

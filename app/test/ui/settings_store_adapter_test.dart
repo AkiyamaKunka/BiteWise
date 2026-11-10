@@ -43,6 +43,27 @@ void main() {
         reason: "another provider's key must never be overwritten");
   });
 
+  // Design R7a: the restaurant assist's settings reach AppSettings in ONE
+  // write, so MealAssist never sees the mode before its consent.
+  test('the restaurant assist settings go through in one write', () async {
+    final (settings, store) = await build();
+    expect(store.restaurantAssist, 'off');
+    expect(store.restaurantAssistConsentAt, isNull);
+    var notified = 0;
+    settings.addListener(() => notified++);
+    final at = DateTime(2026, 10, 24, 12);
+    await store.updateRestaurantAssist(
+        mode: 'auto', consentAt: at, consentRecipient: 'openrouter');
+    expect(notified, 1);
+    expect(settings.restaurantAssist, 'auto');
+    expect(store.restaurantAssist, 'auto');
+    expect(store.restaurantAssistConsentAt, at);
+    expect(store.restaurantAssistConsentRecipient, 'openrouter');
+    await store.updateRestaurantAssist(mode: 'off', clearConsent: true);
+    expect(store.restaurantAssist, 'off');
+    expect(store.restaurantAssistConsentRecipient, isNull);
+  });
+
   test('the 监控相册 disclosure flag defaults off and survives a reload',
       () async {
     final (_, store) = await build();
