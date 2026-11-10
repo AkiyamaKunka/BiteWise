@@ -14,6 +14,9 @@ deliverable of R7a, so this pins it in both languages.
 
 import json
 import os
+import re
+import string
+import unicodedata
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
@@ -354,7 +357,7 @@ def test_stop_sharing_also_stops_restaurant_lookups_to_that_recipient():
     strings shown when the assist is not touched keep their wording."""
     en, zh = _policy_halves()
     en_p = _paragraph(en, "**Withdrawing consent.**")
-    zh_p = _paragraph(zh, "**撤回同意。**")
+    zh_p = _paragraph(zh, "**撤回同意**。")
     assert "Stop Sharing with …" in en_p
     assert "stops all sending to that recipient" in en_p
     assert "turns off Watch Camera Roll" in en_p
@@ -462,7 +465,7 @@ def test_policy_usual_foods_and_saved_answers():
 
     # Android's clear row, named as Settings shows it.
     row_en = "**%s**" % ena["settingsRowClearSavedAnswers"]
-    row_zh = "**「%s」**" % zha["settingsRowClearSavedAnswers"]
+    row_zh = "「**%s**」" % zha["settingsRowClearSavedAnswers"]
     assert ("On Android, where no places are kept, %s deletes the saved "
             "lookup answers and the lookups still waiting." % row_en) \
         in en_phone
@@ -477,14 +480,14 @@ def test_policy_usual_foods_and_saved_answers():
     # My usual foods and your usual numbers: worked out on the phone,
     # nothing sent, the changed meal is like any other, codes not names.
     usual_en = "**%s**" % ena["addUsual"]
-    usual_zh = "**「%s」**" % zha["addUsual"]
+    usual_zh = "「**%s**」" % zha["addUsual"]
     assert ("- %s and **your usual numbers** are worked out on the phone "
             "from the meals you logged in the last 90 days" % usual_en) \
         in en_phone
-    assert ("- %s和**「%s」**都是在手机上根据你最近 90 天记录的餐食算出来的"
+    assert ("- %s和「**%s**」都是在手机上根据你最近 90 天记录的餐食算出来的"
             % (usual_zh, zha["usualCardTitle"])) in zh_phone
     assert "or by tapping **%s**" % ena["usualChipUse"] in en_phone
-    assert "或点按**「%s」**" % zha["usualChipUse"] in zh_phone
+    assert "或点按「**%s**」" % zha["usualChipUse"] in zh_phone
     # What the mark holds: that you set the numbers and, for a food you
     # renamed, the AI's first name for it (user.ai_name).
     assert ("The meal keeps a small mark on that food saying you set them "
@@ -527,3 +530,62 @@ def test_policy_usual_foods_and_saved_answers():
     assert ("并可同时清除已记住的地点和保存的查询结果（Android 上是保存的查询结果）。"
             "如果不清除，它们会按上文所述保存。") in zh_lookup
     assert "如果不清除，它们会按上文所述保存。" in zh_lookup
+
+
+def _literal_bold_markers(text):
+    """Every ** in [text] that GitHub would show as two asterisks.
+
+    GitHub pairs emphasis markers by CommonMark's flanking rules: an opening
+    ** right before punctuation needs whitespace or punctuation before it,
+    and a closing ** right after punctuation needs whitespace, punctuation
+    or the end of the block after it. Chinese has no spaces, so
+    `打开**「名称」**时` and `**标题。**正文` stay literal. Checked block by
+    block, as a bold span may wrap across lines, and with both readings of
+    "punctuation" (Unicode P*, and P* plus S*)."""
+    def punct(ch, symbols):
+        kinds = "PS" if symbols else "P"
+        return ch in string.punctuation or unicodedata.category(ch)[0] in kinds
+
+    faults = []
+    for block in re.split(r"\n[ \t]*\n|\n(?=[ \t]*- )", text):
+        body = " ".join(re.sub(r"^\s*- ", "", block).split())
+        marks = [m.start() for m in re.finditer(r"\*\*", body)]
+        if len(marks) % 2:
+            faults.append("odd number of ** in: " + body[:40])
+        for n, at in enumerate(marks):
+            before = body[at - 1] if at else " "
+            after = body[at + 2] if at + 2 < len(body) else " "
+            # Odd markers open, even ones close: mirror images of one rule.
+            inner, outer = (after, before) if n % 2 == 0 else (before, after)
+            for symbols in (False, True):
+                if inner.isspace() or (punct(inner, symbols)
+                                       and not outer.isspace()
+                                       and not punct(outer, symbols)):
+                    faults.append(body[max(0, at - 8):at + 10])
+                    break
+    return faults
+
+
+def test_every_bold_marker_in_the_policy_renders_on_github():
+    """The policy is the page the App Store listing links to. Its Chinese
+    half showed literal ** in 12 lines (2026-11-10): bold that opened before
+    「 or closed after 。 ： 」 in the middle of a sentence. The control names
+    are now 「**名称**」 and the run-in titles **标题**。 with the punctuation
+    outside the bold."""
+    # The checker flags the forms that were broken, and passes the fixes.
+    for broken in ("仅当你打开**「监控相册」**时：相册里",
+                   "**先征得同意。**第一次向某个接收方",
+                   "- **使用 API Key 时：**该 AI 服务商",
+                   "- **「我常吃的」**和**「你平时的数值」**都是"):
+        assert _literal_bold_markers(broken), broken
+    for fine in ("仅当你打开「**监控相册**」时：相册里",
+                 "**先征得同意**。第一次向某个接收方",
+                 "- **使用 API Key 时**：该 AI 服务商",
+                 "- 「**我常吃的**」和「**你平时的数值**」都是",
+                 "- **哪些餐会被查询：** AI 标记为",
+                 "**哪些照片会被发送：**",
+                 "- **你自己的服务器**（设置 › AI 服务）会把",
+                 "bold that **wraps\nacross** lines, and **Label.** text"):
+        assert _literal_bold_markers(fine) == [], fine
+
+    assert _literal_bold_markers(_read("docs", "PRIVACY.md")) == []
