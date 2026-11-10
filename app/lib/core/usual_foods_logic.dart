@@ -544,7 +544,8 @@ String? _nonEmptyString(Object? v, int max) {
 /// "What counts as yours"): (a) a valid mark on a trusted meal, or (b) an
 /// unmarked item of a hand-typed meal never corrected since (a fix by
 /// chat keeps the source and drops every mark, and its model re-estimated
-/// every item); never published, never from a meal with a leftover block
+/// every item) whose timestamp is no more than a day ahead of [now];
+/// never published, never from a meal with a leftover block
 /// (the caller checks), qty exactly 1, and at least [kUsualMinKcal]
 /// kcal.
 UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
@@ -577,7 +578,14 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
       !m.corrected &&
       user is! Map) {
     final parsed = DateTime.tryParse(m.timestamp);
-    if (parsed == null) return null;
+    // A timestamp more than a day ahead (a clock set ahead when the meal
+    // was typed) teaches nothing yet, as a mark's `at` that far ahead is
+    // void ([usualMarkValid]): it would outrank every number the user set
+    // since, and a re-log would copy it into a mark that is void.
+    if (parsed == null ||
+        parsed.isAfter(now.add(const Duration(days: 1)))) {
+      return null;
+    }
     numbers = usualItemNumbers(item);
     at = parsed;
     atRaw = m.timestamp;

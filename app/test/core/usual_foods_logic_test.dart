@@ -428,6 +428,43 @@ void main() {
           reason: 'an unmarked hand-typed row dates from the meal');
     });
 
+    // Found by test/fuzz/usual_logic_fuzz_test.dart (seed 20291129): the
+    // timestamp of a hand-typed meal is its numbers' `at`. Stamped ahead
+    // of the clock it outranked every number the user set since, and a
+    // re-log copied it into a mark that was void.
+    test('a hand-typed meal stamped more than a day ahead teaches nothing '
+        'until the clock catches up', () {
+      Meal typed(String timestamp) => Meal(
+            id: 1,
+            date: '2026-11-05',
+            time: '08:00 AM',
+            timestamp: timestamp,
+            source: MealSource.appManual,
+            analysis: {
+              'is_food': true,
+              'meal_description': 'Toast',
+              'total_calories': 210,
+              'food_items': [item('Toast with jam', 210, p: 5, c: 38, f: 4)],
+            },
+          );
+      // The phone's clock was a week ahead when it was typed.
+      final ahead = typed('2026-11-14T08:00:00.000');
+      expect(buildUsualIndex([ahead], now: now).records, isEmpty);
+      // Within a day (a flight west): it teaches, like a mark that far
+      // ahead.
+      expect(
+          buildUsualIndex([typed('2026-11-08T08:00:00.000')], now: now)
+              .records
+              .keys,
+          ['jam toast']);
+      // And the week-ahead one does once the clock is there.
+      expect(
+          buildUsualIndex([ahead], now: DateTime(2026, 11, 13, 12))
+              .records
+              .keys,
+          ['jam toast']);
+    });
+
     test('a hand-typed meal fixed by chat teaches only its marked rows', () {
       // A chat fix keeps the source and drops every mark, and the text
       // model re-estimated every item: its unmarked rows are not yours.
