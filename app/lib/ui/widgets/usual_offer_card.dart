@@ -142,7 +142,7 @@ class UsualOfferCard extends StatelessWidget {
 /// action never times out by default (SnackBar.persist), so each one says
 /// `persist: false` and this duration; with a screen reader on, the
 /// framework still keeps it up until it is dismissed.
-const Duration kUsualUndoSnackDuration = Duration(seconds: 6);
+const Duration kUsualUndoSnackDuration = Duration(seconds: 8);
 
 /// Shows [bar] now, in place of a snackbar that is still up: the newest
 /// result (and its Undo) is the one on screen, never queued behind an
