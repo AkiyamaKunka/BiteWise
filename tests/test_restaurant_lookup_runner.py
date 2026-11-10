@@ -18,7 +18,7 @@ import pytest
 import claude_analyzer
 import lookup_contract
 from lookup_fakes import (DROP, FOUND, INIT_OK, configure, init_with, lines,
-                          make_cli, pid_alive, read_record)
+                          make_cli, pid_alive, read_record, wait_for_file)
 
 SCHEMA = lookup_contract.lookup_schema_json()
 PROMPT = "Look up SENTINEL_DISH_7731 at SENTINEL_CHAIN_4410.\n<data>{}</data>"
@@ -530,10 +530,7 @@ def _start_slow_lookup(monkeypatch, tmp_path):
     worker = threading.Thread(target=lambda: box.setdefault(
         "run", claude_analyzer.run_lookup_exclusive(PROMPT, SCHEMA)))
     worker.start()
-    end = time.monotonic() + 5
-    while not record.exists() and time.monotonic() < end:
-        time.sleep(0.02)
-    assert record.exists(), "the fake lookup never started"
+    wait_for_file(record)  # the fake lookup is up (and has recorded its pid)
     return worker, box, record
 
 
@@ -618,9 +615,7 @@ def test_a_read_error_fails_the_run_and_kills_the_child(monkeypatch, tmp_path):
     configure(monkeypatch, cli)
 
     def boom(self, deadline):
-        end = time.monotonic() + 5
-        while not record.exists() and time.monotonic() < end:
-            time.sleep(0.02)  # the child is up (and has recorded its pid)
+        wait_for_file(record)  # the child is up (and has recorded its pid)
         raise OSError("read failed")
 
     monkeypatch.setattr(claude_analyzer._LineReader, "readline", boom)
@@ -694,11 +689,7 @@ def test_preemption_does_not_wait_on_a_descendant_that_left_the_group(
         "run", claude_analyzer.run_lookup_exclusive(PROMPT, SCHEMA)))
     worker.start()
     try:
-        end = time.monotonic() + 5
-        while not pidfile.exists() and time.monotonic() < end:
-            time.sleep(0.02)
-        assert pidfile.exists(), "the escapee never started"
-        time.sleep(0.3)  # let it setsid()
+        wait_for_file(pidfile)  # written by the escapee after its setsid()
         start = time.monotonic()
         got = claude_analyzer._acquire_cli_for_foreground()
         waited = time.monotonic() - start
