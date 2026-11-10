@@ -34,6 +34,13 @@ def _run(monkeypatch, tmp_path, steps, **kw):
     return run, record
 
 
+# "The runner did not wait for the child": each fake that is killed would
+# otherwise sleep 30 s. The window includes the fake's own interpreter
+# start, which takes seconds on a busy machine, so it sits far from both
+# ends rather than close to a fast start.
+KILLED_AT_ONCE_SECONDS = 10.0
+
+
 def _wait_dead(pid, seconds=3.0):
     end = time.monotonic() + seconds
     while time.monotonic() < end:
@@ -194,7 +201,7 @@ def test_init_guard_kills_on_any_mismatch(monkeypatch, tmp_path, init, field):
     seen = []
     start = time.monotonic()
     run, record = _run(monkeypatch, tmp_path, steps, on_line=seen.append)
-    assert time.monotonic() - start < 2.0
+    assert time.monotonic() - start < KILLED_AT_ONCE_SECONDS
     assert (run.status, run.verdict) == ("guard_fail", f"guard_fail:{field}")
     # Nothing after the init line was consumed.
     assert run.lines_read == 1
@@ -244,7 +251,7 @@ def test_unexpected_tool_use_mid_stream_is_killed(monkeypatch, tmp_path,
              {"sleep": 30}]
     start = time.monotonic()
     run, record = _run(monkeypatch, tmp_path, steps)
-    assert time.monotonic() - start < 2.0
+    assert time.monotonic() - start < KILLED_AT_ONCE_SECONDS
     assert (run.status, run.verdict) == ("guard_fail", "guard_fail:tool_use")
     assert run.lines_read == 2
     assert _wait_dead(read_record(record)["pid"])
@@ -264,22 +271,42 @@ def test_the_api_search_tool_itself_is_not_a_kill(monkeypatch, tmp_path):
 
 def test_silent_child_fails_the_init_deadline(monkeypatch, tmp_path):
     monkeypatch.setattr(claude_analyzer, "LOOKUP_INIT_DEADLINE_SECONDS", 1)
+    procs = []
     start = time.monotonic()
-    run, record = _run(monkeypatch, tmp_path, [{"sleep": 30}])
+    run, _ = _run(monkeypatch, tmp_path, [{"sleep": 30}],
+                  on_proc=procs.append)
     assert time.monotonic() - start < 3.0
     assert (run.status, run.verdict) == ("guard_fail", "guard_fail:init_timeout")
-    assert _wait_dead(read_record(record)["pid"])
+    # Asked of the runner's own Popen, not of the fake's record: a child
+    # killed one second after the spawn may not have written it yet.
+    assert procs[0].returncode == -signal.SIGKILL
 
 
 def test_slow_run_hits_the_wall_clock_and_its_group_dies(monkeypatch, tmp_path):
-    monkeypatch.setattr(claude_analyzer, "lookup_timeout_seconds", lambda: 1)
     pidfile = tmp_path / "grandchild.pid"
     steps = [{"line": INIT_OK},
              {"grandchild": 30, "pidfile": str(pidfile)},
              {"sleep": 30}]
-    start = time.monotonic()
+    clock = {"began": time.monotonic()}
+
+    def one_second_past_the_grandchild():
+        # The runner reads its limit once, after the spawn. Answering only
+        # when the fake has printed init and started its grandchild puts
+        # the limit one second past that, mid-stream, however slowly the
+        # fake came up (a fixed second from the spawn could run out
+        # before init on a busy machine: an init_timeout, no grandchild).
+        wait_for_file(pidfile)
+        clock["set"] = time.monotonic()
+        return clock["set"] - clock["began"] + 1
+
+    monkeypatch.setattr(claude_analyzer, "lookup_timeout_seconds",
+                        one_second_past_the_grandchild)
+    # The init line is read after that wait: its own deadline must not
+    # have passed meanwhile.
+    monkeypatch.setattr(claude_analyzer, "lookup_init_deadline_seconds",
+                        lambda: 60)
     run, record = _run(monkeypatch, tmp_path, steps)
-    assert time.monotonic() - start < 4.0
+    assert time.monotonic() - clock["set"] < 4.0
     assert (run.status, run.verdict) == ("timeout", "timeout")
     assert _wait_dead(read_record(record)["pid"])
     # The whole process GROUP: a grandchild holding the pipe dies too.
