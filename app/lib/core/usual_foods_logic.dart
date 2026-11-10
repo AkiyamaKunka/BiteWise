@@ -544,7 +544,8 @@ String? _nonEmptyString(Object? v, int max) {
 /// "What counts as yours"): (a) a valid mark on a trusted meal, or (b) an
 /// unmarked item of a hand-typed meal never corrected since (a fix by
 /// chat keeps the source and drops every mark, and its model re-estimated
-/// every item); never published, never from a meal with a leftover block
+/// every item) whose timestamp is no more than a day ahead of [now];
+/// never published, never from a meal with a leftover block
 /// (the caller checks), qty exactly 1, and at least [kUsualMinKcal]
 /// kcal.
 UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
@@ -577,7 +578,14 @@ UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
       !m.corrected &&
       user is! Map) {
     final parsed = DateTime.tryParse(m.timestamp);
-    if (parsed == null) return null;
+    // A timestamp more than a day ahead (a clock set ahead when the meal
+    // was typed) teaches nothing yet, as a mark's `at` that far ahead is
+    // void ([usualMarkValid]): it would outrank every number the user set
+    // since, and a re-log would copy it into a mark that is void.
+    if (parsed == null ||
+        parsed.isAfter(now.add(const Duration(days: 1)))) {
+      return null;
+    }
     numbers = usualItemNumbers(item);
     at = parsed;
     atRaw = m.timestamp;
@@ -1368,9 +1376,11 @@ String? _aiNameOf(Map item) {
   return v is String && v.trim().isNotEmpty ? v : null;
 }
 
-/// What is left of a mark that may not vouch for its numbers (void, or
-/// on an untrusted meal): its count when not 1 and the AI's old name, as
-/// the editor writes a mark without `set`. Null when it says neither.
+/// What a re-log keeps of a `user` map that vouches for no number (one
+/// without `set`, a void mark, or a mark on an untrusted meal): its count
+/// when not 1 and the AI's old name, as the editor writes a mark without
+/// `set`. Null when it says neither. No other key is read: whatever else
+/// a model or an import put in `user` stays behind.
 Map<String, dynamic>? _noSetMark(Map user) {
   final q = user['qty'];
   final aiName = user['ai_name'];
@@ -1380,6 +1390,29 @@ Map<String, dynamic>? _noSetMark(Map user) {
   };
   return out.isEmpty ? null : out;
 }
+
+/// A valid mark as a re-log copies it: its own five keys and no other
+/// (the whitelist of [usualLogAnalysis] reaches inside `user`).
+Map<String, dynamic> _ownMark(Map user) {
+  final q = user['qty'];
+  final aiName = user['ai_name'];
+  return {
+    'set': true,
+    'at': user['at'],
+    'n': List<Object?>.of(user['n'] as List),
+    if (q is num) 'qty': q,
+    if (aiName is String && aiName.trim().isNotEmpty) 'ai_name': aiName,
+  };
+}
+
+/// An item's four numbers as a re-log writes them: inside the editor's
+/// bounds.
+Map<String, dynamic> _logNumbers(UsualNumbers n) => {
+      'estimated_calories': _clamp(n.kcal, kUsualMaxKcal),
+      'protein_g': _clamp(n.p, kUsualMaxGrams),
+      'carbs_g': _clamp(n.c, kUsualMaxGrams),
+      'fat_g': _clamp(n.f, kUsualMaxGrams),
+    };
 
 Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
     DateTime now) {
@@ -1427,21 +1460,20 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
     } else {
       final mark = item['user'];
       if (mark is Map) {
-        user = mark['set'] == true
-            ? (trusted && usualMarkValid(item, now)
-                ? _copyMap(mark)
-                : _noSetMark(mark))
-            : _copyMap(mark);
+        // The row's own mark stays a mark only on a trusted meal, and only
+        // while it vouches for the numbers WRITTEN: the editor's bounds
+        // may have moved them, and a mark over other numbers is void.
+        user = trusted &&
+                usualMarkValid({..._logNumbers(own), 'user': mark}, now)
+            ? _ownMark(mark)
+            : _noSetMark(mark);
       }
     }
     items.add({
       // The name as the template has it: a copy keeps full-width
       // punctuation (（约250克）), it does not fold it to ASCII.
       'name': cleanShortText(item['name'], 300, keepWidth: true),
-      'estimated_calories': _clamp(numbers.kcal, kUsualMaxKcal),
-      'protein_g': _clamp(numbers.p, kUsualMaxGrams),
-      'carbs_g': _clamp(numbers.c, kUsualMaxGrams),
-      'fat_g': _clamp(numbers.f, kUsualMaxGrams),
+      ..._logNumbers(numbers),
       if (q != 1) 'qty': q,
       if (unit.isNotEmpty) 'unit': unit,
       'user': ?user,
@@ -1485,7 +1517,10 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
 /// and `logged_again` (now, so two same-minute re-logs stay two meals on
 /// import). An item whose canonical key has a record takes the user's
 /// numbers when its count is 1 and the portions agree; otherwise it keeps
-/// the template's, with its own mark only from a trusted meal. Never a
+/// the template's, with its own mark only from a trusted meal and only
+/// while the mark vouches for the numbers as written (the editor's bounds
+/// may move them). Of a row's `user` map only a mark's own parts are
+/// copied (set, at, n, qty, ai_name), whatever else it held. Never a
 /// photo hash, a capture, an assist block, a published flag, a leftover
 /// block, a brand or any other key.
 Map<String, dynamic> usualLogAnalysis(UsualMeal m, UsualIndex index,

@@ -428,6 +428,43 @@ void main() {
           reason: 'an unmarked hand-typed row dates from the meal');
     });
 
+    // Found by test/fuzz/usual_logic_fuzz_test.dart (seed 20291129): the
+    // timestamp of a hand-typed meal is its numbers' `at`. Stamped ahead
+    // of the clock it outranked every number the user set since, and a
+    // re-log copied it into a mark that was void.
+    test('a hand-typed meal stamped more than a day ahead teaches nothing '
+        'until the clock catches up', () {
+      Meal typed(String timestamp) => Meal(
+            id: 1,
+            date: '2026-11-05',
+            time: '08:00 AM',
+            timestamp: timestamp,
+            source: MealSource.appManual,
+            analysis: {
+              'is_food': true,
+              'meal_description': 'Toast',
+              'total_calories': 210,
+              'food_items': [item('Toast with jam', 210, p: 5, c: 38, f: 4)],
+            },
+          );
+      // The phone's clock was a week ahead when it was typed.
+      final ahead = typed('2026-11-14T08:00:00.000');
+      expect(buildUsualIndex([ahead], now: now).records, isEmpty);
+      // Within a day (a flight west): it teaches, like a mark that far
+      // ahead.
+      expect(
+          buildUsualIndex([typed('2026-11-08T08:00:00.000')], now: now)
+              .records
+              .keys,
+          ['jam toast']);
+      // And the week-ahead one does once the clock is there.
+      expect(
+          buildUsualIndex([ahead], now: DateTime(2026, 11, 13, 12))
+              .records
+              .keys,
+          ['jam toast']);
+    });
+
     test('a hand-typed meal fixed by chat teaches only its marked rows', () {
       // A chat fix keeps the source and drops every mark, and the text
       // model re-estimated every item: its unmarked rows are not yours.
@@ -1330,6 +1367,77 @@ void main() {
       expect(it['user'], {'ai_name': 'Coffee'},
           reason: 'a photo meal never edited: only the no-number parts');
       expect(it['estimated_calories'], 190);
+    });
+
+    // Found by test/fuzz/usual_logic_fuzz_test.dart (seed 20281134): a
+    // `user` map without `set` was copied whole, and a valid one with
+    // every extra key, so a re-log could carry a published flag, an
+    // assist block or any text a model or an import had put there.
+    test('only a mark\'s own parts are copied out of a row\'s user map', () {
+      const junk = {
+        'fetched_on': '2026-01-01',
+        'assist': {'status': 'applied'},
+        'published': true,
+      };
+      // A map that sets nothing, on a photo meal nobody edited: its
+      // count and the AI's old name.
+      final loose = item('Latte', 190,
+          p: 8,
+          c: 18,
+          f: 9,
+          user: {'set': false, 'qty': 2, 'ai_name': 'Coffee', ...junk});
+      final plain = logOf([
+        meal(1, [loose], date: '2026-11-04'),
+        meal(2, [loose], date: '2026-11-05'),
+      ]);
+      expect(((plain['food_items'] as List).single as Map)['user'],
+          {'qty': 2, 'ai_name': 'Coffee'});
+      // The user's own valid mark (a count of 2, so no record replaces
+      // it): its five keys.
+      final set2 = item('Tacos', 680,
+          p: 28,
+          c: 60,
+          f: 36,
+          user: {...mark([680, 28, 60, 36], qty: 2, aiName: 'Wraps'), ...junk});
+      final vouched = logOf([
+        meal(1, [set2], date: '2026-11-04', corrected: true),
+        meal(2, [set2], date: '2026-11-05', corrected: true),
+      ]);
+      expect(((vouched['food_items'] as List).single as Map)['user'],
+          mark([680, 28, 60, 36], qty: 2, aiName: 'Wraps'));
+    });
+
+    // Found by test/fuzz/usual_logic_fuzz_test.dart (seed 20281138): the
+    // re-log clamps numbers to the editor's bounds, and the row's mark
+    // was copied over the clamped numbers, void from the start.
+    test('a mark is not copied over numbers the editor\'s bounds moved', () {
+      // 25000 kcal with a valid mark and a count of 2: written as 20000.
+      final big = item('Party platter', 25000,
+          p: 300,
+          c: 900,
+          f: 800,
+          user: mark([25000, 300, 900, 800], qty: 2, aiName: 'Platter'));
+      final out = logOf([
+        meal(1, [big], date: '2026-11-04', corrected: true),
+        meal(2, [big], date: '2026-11-05', corrected: true),
+      ]);
+      final it = (out['food_items'] as List).single as Map;
+      expect(it['estimated_calories'], 20000);
+      expect(it['user'], {'qty': 2, 'ai_name': 'Platter'},
+          reason: 'no set over numbers the mark does not vouch for');
+      // Inside the bounds the same mark is copied as it is.
+      final fits = item('Party platter', 5000,
+          p: 300,
+          c: 900,
+          f: 800,
+          user: mark([5000, 300, 900, 800], qty: 2, aiName: 'Platter'));
+      final kept = logOf([
+        meal(1, [fits], date: '2026-11-04', corrected: true),
+        meal(2, [fits], date: '2026-11-05', corrected: true),
+      ]);
+      final same = (kept['food_items'] as List).single as Map;
+      expect(same['user'], fits['user']);
+      expect(usualMarkValid(same, now), isTrue);
     });
 
     test('a kcal-only substitution writes no set', () {
