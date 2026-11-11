@@ -936,6 +936,27 @@ class BackupCoordinator {
     });
   }
 
+  /// Whether the app's photo catch-up should wait: a restore offer is open
+  /// or a restore is running (the headless run reads the same lease).
+  Future<bool> holdsCatchUp() async {
+    await _prefs.reload();
+    final until = _prefs.holdCatchUpUntil;
+    return until != null && until.isAfter(_now);
+  }
+
+  /// This install's id once it has one (an export's header uses it).
+  String? get installIdOrNull {
+    final id = _prefs.installId;
+    return isValidInstallId(id) ? id : null;
+  }
+
+  /// An import added rows: back up straight away (every guard still
+  /// applies, the 24 h first-write wait included).
+  void afterImport() {
+    if (!uiEngine) return;
+    unawaited(_run(const _Run(_Kind.now, force: true)));
+  }
+
   /// Back Up Now: no wait for a change or the 24 h (G4's query still
   /// counts).
   Future<BackupState> backUpNow() =>
@@ -1138,7 +1159,8 @@ class BackupCoordinator {
     if (_prefs.enabled && !_prefs.noticeSeen) {
       prompt.value = const NoticePrompt();
     } else {
-      unawaited(_run(const _Run(_Kind.now, force: true)));
+      // The user has seen the folder and chosen: no 24 h wait.
+      unawaited(_run(const _Run(_Kind.now, force: true, skipWait: true)));
     }
   }
 
@@ -1326,4 +1348,8 @@ class BackupCoordinator {
 
   @visibleForTesting
   Future<void> launchCheckForTest() => _launchCheck();
+
+  /// Test seam: the status the Settings rows render.
+  @visibleForTesting
+  void debugSetStatus(BackupStatus status) => _status.value = status;
 }

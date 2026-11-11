@@ -12,6 +12,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:app_links/app_links.dart';
 import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 
+import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -23,6 +24,8 @@ import '../services/analyzer/provider_analyzers.dart'
 import '../services/assist/assist_local_state.dart';
 import '../services/assist/assist_places_store.dart';
 import '../services/assist/meal_assist.dart';
+import '../services/backup/backup_coordinator.dart';
+import '../services/backup/cloud_backup_channel.dart';
 import '../services/nl/executor.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/background_restriction.dart'
@@ -385,6 +388,24 @@ class AppServices {
     // A shared photo waits for the AI consent (App Store 5.1.2(i)) until
     // the app shell can ask; an allowed recipient passes straight through.
     final shareConsent = SharedPhotoConsentGate(store);
+    final thumbs = MealThumbResolver(dao: dao, library: photoLibrary);
+    // iCloud Backup (iPhone, 1.7.0): the user's own iCloud Drive, ON by
+    // default, nothing uploaded before the notice is answered. The shell
+    // starts it after the first frame. Android has no automatic file.
+    final cloudBackup = Platform.isIOS
+        ? BackupCoordinator(
+            dao: dao,
+            transport: const ICloudTransport(),
+            prefs: await SharedPreferences.getInstance(),
+            tempDir: getTemporaryDirectory,
+            backgroundGuard: (name, body) =>
+                const BackgroundTime().guard<void>(name, body),
+            onDataImported: () {
+              thumbs.clear();
+              signalMealsChanged();
+            },
+          )
+        : null;
     final ui = UiServices(
       dao: dao,
       analyzer: analyzer,
@@ -397,7 +418,7 @@ class AppServices {
       garminDaily: makeGarminDailyFetch(settings),
       picker: _ShareIntakePicker(photoLibrary),
       requestPhotoPermission: requestPhotos,
-      thumbs: MealThumbResolver(dao: dao, library: photoLibrary),
+      thumbs: thumbs,
       coverage: CoverageAuditor(
           library: photoLibrary,
           dao: dao,
@@ -442,6 +463,7 @@ class AppServices {
       mealInUse: mealInUse,
       restaurantAssist: restaurantAssist,
       usualFoods: usualFoods,
+      cloudBackup: cloudBackup,
     );
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     // Share sheet (deliberate), each photo held until its AI recipient is
@@ -459,7 +481,10 @@ class AppServices {
       // (nor while a rejected key / blocked region latched the scan).
       // It also moves the background watermark over what it covers, so the
       // next background run starts from here (foregroundCatchUp).
-      if (settings.canAutoAnalyze) {
+      // iCloud Backup: held while a restore offer or a restore is open
+      // (a lease left by a crash lapses in 30 minutes).
+      if (settings.canAutoAnalyze &&
+          !(await cloudBackup?.holdsCatchUp() ?? false)) {
         catchingUp = true;
         // The assist looks once the catch-up's photos are in (design R6b).
         unawaited(foregroundCatchUp(photoIntake,

@@ -15,6 +15,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../../core/contracts.dart';
+import '../../services/backup/backup_coordinator.dart';
 
 import '../../services/analyzer/platform_decode.dart';
 import '../../services/photo/coverage.dart';
@@ -118,6 +119,15 @@ class SettingsScreen extends StatefulWidget {
   /// sheets. Null hides the group (most tests).
   final RestaurantAssistControls? restaurantAssist;
 
+  /// iCloud Backup's rows in Your Data (iPhone). Null hides them.
+  final BackupCoordinator? cloudBackup;
+
+  /// Android: Your Data's footer explains Android's own backup.
+  final bool androidBackupNote;
+
+  /// After an import added rows (the screens reload, thumbnails refetch).
+  final VoidCallback? onImported;
+
   const SettingsScreen({
     super.key,
     required this.settings,
@@ -140,6 +150,9 @@ class SettingsScreen extends StatefulWidget {
     this.backgroundScanStuck,
     this.changes,
     this.restaurantAssist,
+    this.cloudBackup,
+    this.androidBackupNote = false,
+    this.onImported,
   });
 
   @override
@@ -551,7 +564,13 @@ class _SettingsScreenState extends State<SettingsScreen>
             DataSection(
                 dao: widget.dao,
                 onOpenPrivacyPolicy: _openPrivacyPolicy,
-                privacyPolicyUrl: privacyPolicyUri),
+                privacyPolicyUrl: privacyPolicyUri,
+                backup: widget.cloudBackup,
+                platform: defaultTargetPlatform == TargetPlatform.android
+                    ? 'android'
+                    : 'ios',
+                androidBackupNote: widget.androidBackupNote,
+                onImported: widget.onImported),
             const SizedBox(height: 32),
           ]),
         ],

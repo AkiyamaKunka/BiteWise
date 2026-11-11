@@ -121,13 +121,19 @@ class BackupFileWriter {
     }
   }
 
+  /// The tables and month prints a full export starts from: read before
+  /// anything touches the disk, so a database failure is reported as such.
+  Future<FullSnapshot> snapshotFull() async => FullSnapshot(
+      await dao.backupRecordTables(), await dao.thumbMonthPrints());
+
   /// Settings › Export: the records and every picture, one month at a
   /// time, kind `full`, seq 0. [installId] is this install's when it has
   /// one; any valid id will do (the importer only reads the kind).
   Future<WrittenBackupFile> writeFull(String path,
-      {required String installId}) async {
-    final tables = await dao.backupRecordTables();
-    final prints = await dao.thumbMonthPrints();
+      {required String installId, FullSnapshot? snapshot}) async {
+    final snap = snapshot ?? await snapshotFull();
+    final tables = snap.tables;
+    final prints = snap.prints;
     final months = (prints.keys.toList()..sort());
     final out = _HashingFile(path);
     try {
@@ -222,6 +228,13 @@ class BackupFileWriter {
       'jpeg_b64': base64Encode(clean),
     });
   }
+}
+
+/// What [BackupFileWriter.snapshotFull] read.
+class FullSnapshot {
+  const FullSnapshot(this.tables, this.prints);
+  final Map<String, List<Map<String, Object?>>> tables;
+  final Map<String, ThumbMonthPrint> prints;
 }
 
 /// A file written through an IOSink with its SHA-256 and size kept along

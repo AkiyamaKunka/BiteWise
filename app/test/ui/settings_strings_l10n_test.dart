@@ -139,6 +139,11 @@ class _FailingDao extends FakeDao {
       throw StateError('disk full');
   @override
   Future<String> exportJson() async => throw StateError('disk full');
+  // 1.7.0: Export writes the full file (records and pictures) through
+  // the backup writer, which reads the tables here.
+  @override
+  Future<Map<String, List<Map<String, Object?>>>> backupRecordTables() async =>
+      throw StateError('disk full');
 }
 
 void main() {

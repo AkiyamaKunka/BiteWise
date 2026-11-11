@@ -20,6 +20,7 @@ import 'dart:async';
 import 'dart:io' show Platform;
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart';
 
@@ -28,6 +29,8 @@ import '../core/outcome_kind.dart';
 import '../data/meals_dao_impl.dart';
 import '../services/analyzer/platform_decode.dart' show isHeadlessEngine;
 import '../services/analyzer/provider_analyzers.dart';
+import '../services/backup/backup_coordinator.dart';
+import '../services/backup/backup_prefs.dart' show backupHoldsCatchUp;
 import '../services/photo/background.dart';
 import '../services/photo/background_runs.dart';
 import '../services/photo/deferred_assets.dart';
@@ -476,6 +479,14 @@ Future<bool> headlessBackfillWith({
         : BackgroundStop.paused);
     return true;
   }
+  // iCloud Backup (1.7.0): a restore offer is open or a restore is
+  // running in the app. Photos logged now would win over the backup's own
+  // (possibly corrected) meals for the same photos, so the scan waits for
+  // the answer (a 30-minute lease, renewed while a restore runs).
+  if (backupHoldsCatchUp(prefs, clock())) {
+    await recorder?.finish(BackgroundStop.paused);
+    return true;
+  }
 
   final scanStart = clock();
   final since = readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey));
@@ -860,6 +871,18 @@ Future<bool> _runAfterLaunch({
           dao: await createMealsDao(), settings: settings, notifier: notifier);
     } catch (_) {
       // The scan's work is saved either way; the card refreshes next open.
+    }
+    // iCloud Backup (1.7.0): only a backup this install already owns, only
+    // if something changed, with at least 8 s left before the deadline;
+    // never a first write, a download or a question here (G8).
+    try {
+      await BackupCoordinator.runHeadless(
+          dao: await createMealsDao(),
+          prefs: prefs,
+          left: startedAt.add(iosRunDeadline).difference(DateTime.now()),
+          tempDir: getTemporaryDirectory);
+    } catch (_) {
+      // The next run or the app's own triggers back up instead.
     }
   }
   return ok;

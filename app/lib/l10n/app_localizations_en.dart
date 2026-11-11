@@ -3206,4 +3206,323 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get usualLoggedLabel => 'Logged';
+
+  @override
+  String get backupRowICloud => 'iCloud Backup';
+
+  @override
+  String get backupRowBackUpNow => 'Back Up Now';
+
+  @override
+  String get backupRowRestore => 'Restore From iCloud…';
+
+  @override
+  String get backupRowTakeOver => 'Back Up From This iPhone…';
+
+  @override
+  String get backupRowCombine => 'Combine the Two Copies';
+
+  @override
+  String get backupRowBackUpAgain => 'Back Up Again';
+
+  @override
+  String get backupRowBackUpAnyway => 'Back Up Anyway';
+
+  @override
+  String get backupRowDelete => 'Delete iCloud Backup…';
+
+  @override
+  String get backupICloudFooterBefore =>
+      'Your meals, weight, measurements, workouts and meal pictures are copied to your own iCloud, so they come back if you reinstall Chopstats or move to a new iPhone. API keys are never included, and the developer receives nothing.';
+
+  @override
+  String get backupICloudFooter =>
+      'Your meals, weight, measurements, workouts and meal pictures are copied to iCloud Drive › Chopstats, which you can see, copy or delete in the Files app. API keys are never included, and the developer receives nothing.';
+
+  @override
+  String get backupAndroidFooter =>
+      'Android\'s own backup can keep this app\'s data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.';
+
+  @override
+  String get backupStatusOff => 'Off';
+
+  @override
+  String get backupStatusNotStarted => 'Not started yet';
+
+  @override
+  String get backupStatusChecking => 'Checking iCloud…';
+
+  @override
+  String get backupStatusNever => 'No backup yet';
+
+  @override
+  String backupStatusLast(String when, String size) {
+    return 'Last backup $when · $size';
+  }
+
+  @override
+  String get backupStatusUploading => 'Saved to iCloud Drive; uploading…';
+
+  @override
+  String get backupStatusQuota =>
+      'Your iCloud storage is full, so the backup cannot upload.';
+
+  @override
+  String get backupStatusNoAccount =>
+      'Sign in to iCloud in the Settings app to back up.';
+
+  @override
+  String get backupStatusUnavailable =>
+      'iCloud Drive is not available for Chopstats.';
+
+  @override
+  String backupStatusOtherDevice(String date) {
+    return 'The backup in iCloud is another iPhone\'s (from $date). This iPhone does not overwrite it.';
+  }
+
+  @override
+  String get backupStatusChangedElsewhere =>
+      'The backup was changed outside Chopstats, so it is not overwritten.';
+
+  @override
+  String get backupStatusUnknownFile =>
+      'The backup file in iCloud is not one Chopstats can read, so it is left alone.';
+
+  @override
+  String get backupStatusTwoCopies =>
+      'Two iPhones saved the backup at the same time.';
+
+  @override
+  String get backupStatusMissing =>
+      'The backup is gone from iCloud. Backups are paused.';
+
+  @override
+  String backupStatusShrink(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count meals',
+      one: '1 meal',
+    );
+    return 'Paused: this would replace a backup of $_temp0 with far fewer.';
+  }
+
+  @override
+  String backupStatusEmptyLog(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count meals',
+      one: '1 meal',
+    );
+    return 'This iPhone has no meals, so the backup of $_temp0 is kept as it is.';
+  }
+
+  @override
+  String get backupStatusFailed =>
+      'The last backup did not finish. It will try again.';
+
+  @override
+  String get backupNoticeTitle => 'iCloud Backup is on';
+
+  @override
+  String get backupNoticeBody =>
+      'Chopstats will copy your meals, weight, measurements, workouts and meal pictures to your own iCloud, so they come back if you reinstall the app or move to a new iPhone. API keys are never included, and the developer receives nothing. You can turn it off any time in Settings › Your Data.';
+
+  @override
+  String get backupNoticeKeep => 'Keep On';
+
+  @override
+  String get backupNoticeOff => 'Turn Off';
+
+  @override
+  String get backupRestoreTitle => 'Restore your meals?';
+
+  @override
+  String backupRestoreBody(int meals, String date) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'iCloud has a Chopstats backup with $_temp0, last saved $date.';
+  }
+
+  @override
+  String backupRestoreMergeNote(int meals) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'This iPhone already has $_temp0. Restoring adds the backup\'s meals to them; nothing here is removed.';
+  }
+
+  @override
+  String get backupRestoreNotIncluded =>
+      'Your goals, units and API keys are not in the backup.';
+
+  @override
+  String get backupRestoreAction => 'Restore';
+
+  @override
+  String get backupStartFresh => 'Start Fresh…';
+
+  @override
+  String get backupNotNow => 'Not Now';
+
+  @override
+  String get backupStartFreshTitle => 'Delete the old backup?';
+
+  @override
+  String backupStartFreshBody(int meals) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    return 'The backup of $_temp0 will be deleted from iCloud. This cannot be undone.';
+  }
+
+  @override
+  String get backupDeleteAction => 'Delete Backup';
+
+  @override
+  String backupRestoreDone(int meals, int pictures) {
+    String _temp0 = intl.Intl.pluralLogic(
+      meals,
+      locale: localeName,
+      other: '$meals meals',
+      one: '1 meal',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      pictures,
+      locale: localeName,
+      other: '$pictures pictures',
+      one: '1 picture',
+    );
+    return 'Restored $_temp0 and $_temp1.';
+  }
+
+  @override
+  String backupRestorePartial(int months) {
+    String _temp0 = intl.Intl.pluralLogic(
+      months,
+      locale: localeName,
+      other: '$months months',
+      one: '1 month',
+    );
+    return 'Some pictures ($_temp0) could not be read from iCloud; the rest came in.';
+  }
+
+  @override
+  String get backupRestoreFailed =>
+      'Could not read the backup from iCloud. Try again later.';
+
+  @override
+  String get backupTakeOverTitle => 'Back up from this iPhone?';
+
+  @override
+  String backupTakeOverBody(int theirs, int mine) {
+    String _temp0 = intl.Intl.pluralLogic(
+      theirs,
+      locale: localeName,
+      other: '$theirs meals',
+      one: '1 meal',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      mine,
+      locale: localeName,
+      other: '$mine meals',
+      one: '1 meal',
+    );
+    return 'The backup in iCloud has $_temp0; this iPhone has $_temp1.';
+  }
+
+  @override
+  String get backupTakeOverUnreadable =>
+      'The file in iCloud is not a backup Chopstats can read. Replacing it deletes what it holds.';
+
+  @override
+  String get backupTakeOverMerge => 'Combine, Then Back Up';
+
+  @override
+  String get backupTakeOverReplace => 'Replace the Backup…';
+
+  @override
+  String get backupReplaceTitle => 'Replace the backup?';
+
+  @override
+  String get backupReplaceBody =>
+      'Meals in the backup that are not on this iPhone will be lost. This cannot be undone.';
+
+  @override
+  String get backupReplaceAction => 'Replace';
+
+  @override
+  String get backupDone => 'Backed up.';
+
+  @override
+  String get backupActionFailed => 'That did not work. Try again later.';
+
+  @override
+  String get backupCombineDone => 'Combined the two copies and backed up.';
+
+  @override
+  String get backupTurnOffTitle => 'Turn off iCloud Backup?';
+
+  @override
+  String get backupTurnOffKeep => 'Keep the Backup in iCloud';
+
+  @override
+  String get backupTurnOffDelete => 'Delete It…';
+
+  @override
+  String get backupDeleteTitle => 'Delete the iCloud backup?';
+
+  @override
+  String get backupDeleteBody =>
+      'This iPhone\'s backup will be deleted from iCloud. The meals on this iPhone stay. This cannot be undone.';
+
+  @override
+  String get backupDeleted => 'The iCloud backup was deleted.';
+
+  @override
+  String get importChooseFile => 'Choose File…';
+
+  @override
+  String importPicturesAdded(int pictures) {
+    String _temp0 = intl.Intl.pluralLogic(
+      pictures,
+      locale: localeName,
+      other: '$pictures pictures',
+      one: '1 picture',
+    );
+    return 'Added $_temp0.';
+  }
+
+  @override
+  String get importNoMatchingMeals =>
+      'None of these pictures belong to a meal on this phone. Import the backup or export file first.';
+
+  @override
+  String get importTooBig => 'A file over 100 MB was not imported.';
+
+  @override
+  String get importPickUnavailable =>
+      'Files could not be opened here. Paste the file\'s contents with Import from clipboard instead.';
+
+  @override
+  String importDeletedLeftOut(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count meals you deleted on this phone were',
+      one: '1 meal you deleted on this phone was',
+    );
+    return '$_temp0 left out.';
+  }
 }
