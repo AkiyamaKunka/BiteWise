@@ -258,6 +258,13 @@ def test_single_token_variants_are_not_generic_words():
     ("Chick fil A", None, "chick_fil_a"),
     ("Chickfila", None, "chick_fil_a"),
     ("Wing Stop", None, "wingstop"),
+    # A trademark or service mark sign is a separator, like ®, not the
+    # letters TM / SM glued onto the brand
+    ("Whataburger™", None, "whataburger"),
+    ("Chick-fil-A™", None, "chick_fil_a"),
+    ("Raising Cane’s℠", None, "raising_canes"),
+    ("Whataburger™ (Main St)", None, "whataburger"),
+    ("Starbucks®", None, "starbucks"),
     # Branch suffixes
     ("McDonald's - Times Square", None, "mcdonalds"),
     ("Starbucks (Times Sq)", None, "starbucks"),

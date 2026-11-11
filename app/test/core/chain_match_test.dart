@@ -145,6 +145,13 @@ void main() {
       ('Chick fil A', null, 'chick_fil_a'),
       ('Chickfila', null, 'chick_fil_a'),
       ('Wing Stop', null, 'wingstop'),
+      // A trademark or service mark sign is a separator, like ®, not the
+      // letters TM / SM glued onto the brand
+      ('Whataburger™', null, 'whataburger'),
+      ('Chick-fil-A™', null, 'chick_fil_a'),
+      ('Raising Cane’s℠', null, 'raising_canes'),
+      ('Whataburger™ (Main St)', null, 'whataburger'),
+      ('Starbucks®', null, 'starbucks'),
       // Branch suffixes
       ("McDonald's - Times Square", null, 'mcdonalds'),
       ('Starbucks (Times Sq)', null, 'starbucks'),
@@ -210,6 +217,9 @@ void main() {
       expect(chainTokens('85°C Bakery Cafe'), ['85c', 'bakery', 'cafe']);
       expect(chainTokens('麦当劳'), ['麦', '当', '劳']);
       expect(chainTokens('The'), ['the']);
+      expect(chainTokens('Whataburger™'), ['whataburger']);
+      expect(chainTokens('Chick-fil-A™'), ['chick', 'fil', 'a']);
+      expect(chainTokens('Service℠ Plan'), ['service', 'plan']);
       expect(chainTokens(null), isEmpty);
     });
   });

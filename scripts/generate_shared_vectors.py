@@ -875,6 +875,10 @@ def build_restaurant_lookup():
         "order_merchant": "Joe's Pizza - 7 Carmine St, New York",
         "chains": ["chipotle"]})
     req("merchant_delivery_app", {"order_merchant": "Uber Eats"})
+    req("brand_and_merchant_with_mark_signs", {
+        "items": [{"name": "Chicken sandwich", "qty": 1,
+                   "brand": "Chick-fil-A™"}],
+        "order_merchant": "Whataburger™ #812"})
     req("drink_brand_names_no_chain", {
         "items": [{"name": "Brisket plate", "qty": 1, "unit": "plate",
                    "brand": ""},
@@ -972,6 +976,7 @@ def build_restaurant_lookup():
     tokens("leading_the", "The The Habit")
     tokens("only_the", "The")
     tokens("fullwidth_and_ligature", "ＫＦＣ ﬁve ﬂavors™")
+    tokens("trademark_signs", "Whataburger™ Chick-fil-A™ Raising Cane’s℠")
     tokens("digits_and_case", "7 BREW Hwy 55 99 Restaurant")
     tokens("not_a_string", None)
 
@@ -999,6 +1004,9 @@ def build_restaurant_lookup():
     match("latin_folding", "Café Rio")
     match("degree_sign", "85°C Bakery Cafe")
     match("ampersand", "Noodles and Company")
+    match("trademark_sign", "Whataburger™")
+    match("trademark_sign_before_a_suffix", "Whataburger™ (Main St)")
+    match("service_mark_sign", "Raising Cane’s℠")
     # A&W Root Beer is Keurig Dr Pepper's drink, not A&W Restaurants: the
     # printed drink brand names no chain; the restaurant's full name and
     # its own web host still do.

@@ -882,7 +882,7 @@
             "name": "spaced out",
             "qty": 1,
             "unit": "slice",
-            "brand": ""
+            "brand": "Ben & Jerry's"
           }
         ],
         "order_merchant": "McDonald's",
@@ -890,6 +890,11 @@
           {
             "key": "starbucks",
             "name": "Starbucks",
+            "size": "20_plus"
+          },
+          {
+            "key": "ben_and_jerrys",
+            "name": "Ben & Jerry's",
             "size": "20_plus"
           },
           {
@@ -1096,6 +1101,44 @@
         "items": [],
         "order_merchant": "",
         "chains": [],
+        "country": "US"
+      }
+    },
+    {
+      "id": "request_brand_and_merchant_with_mark_signs",
+      "fn": "compose_lookup_request",
+      "input": {
+        "items": [
+          {
+            "name": "Chicken sandwich",
+            "qty": 1,
+            "brand": "Chick-fil-A™"
+          }
+        ],
+        "order_merchant": "Whataburger™ #812"
+      },
+      "expected": {
+        "items": [
+          {
+            "name": "Chicken sandwich",
+            "qty": 1,
+            "unit": "",
+            "brand": "Chick-fil-A"
+          }
+        ],
+        "order_merchant": "Whataburger",
+        "chains": [
+          {
+            "key": "chick_fil_a",
+            "name": "Chick-fil-A",
+            "size": "20_plus"
+          },
+          {
+            "key": "whataburger",
+            "name": "Whataburger",
+            "size": "20_plus"
+          }
+        ],
         "country": "US"
       }
     },
@@ -1739,7 +1782,20 @@
       "expected": [
         "kfc",
         "five",
-        "flavorstm"
+        "flavors"
+      ]
+    },
+    {
+      "id": "tokens_trademark_signs",
+      "fn": "chain_tokens",
+      "input": "Whataburger™ Chick-fil-A™ Raising Cane’s℠",
+      "expected": [
+        "whataburger",
+        "chick",
+        "fil",
+        "a",
+        "raising",
+        "canes"
       ]
     },
     {
@@ -1906,6 +1962,24 @@
       "fn": "match_chain",
       "input": "Noodles and Company",
       "expected": "noodles"
+    },
+    {
+      "id": "match_trademark_sign",
+      "fn": "match_chain",
+      "input": "Whataburger™",
+      "expected": "whataburger"
+    },
+    {
+      "id": "match_trademark_sign_before_a_suffix",
+      "fn": "match_chain",
+      "input": "Whataburger™ (Main St)",
+      "expected": "whataburger"
+    },
+    {
+      "id": "match_service_mark_sign",
+      "fn": "match_chain",
+      "input": "Raising Cane’s℠",
+      "expected": "raising_canes"
     },
     {
       "id": "match_drink_brand_bare",
