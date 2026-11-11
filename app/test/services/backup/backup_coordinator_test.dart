@@ -173,6 +173,25 @@ void main() {
       expect(prefs.getBool(BackupPrefs.kNoticeSeen), isTrue);
       expect(await run(), BackupState.off);
     });
+
+    test('turned off in Settings while the notice waits to be asked (a '
+        'screen was on top): the notice is not asked', () async {
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<NoticePrompt>());
+      // "iCloud Backup is on" is no longer true, and its Keep On would turn
+      // the switch back on.
+      await c.turnOff(deleteFiles: false);
+      expect(c.prompt.value, isNull);
+    });
+
+    test('turned on while the notice waits to be asked: that answers it',
+        () async {
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<NoticePrompt>());
+      await c.setEnabled(true);
+      expect(prefs.getBool(BackupPrefs.kNoticeSeen), isTrue);
+      expect(c.prompt.value, isNull);
+    });
   });
 
   group('G4: the first write', () {

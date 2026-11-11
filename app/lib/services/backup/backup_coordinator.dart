@@ -1385,8 +1385,17 @@ class BackupCoordinator {
     await _prefs.setEnabled(on);
     if (on) await _prefs.setNoticeSeen(true);
     if (!on) await _dropUnwrittenAdoption();
+    _dropNotice();
     _status.value = _statusFromPrefs();
     if (on) unawaited(_run(const _Run(_Kind.foreground)));
+  }
+
+  /// The switch was set while the notice waited to be asked (the shell
+  /// asks only with nothing on top of it): turned on, the notice is
+  /// answered; turned off, "iCloud Backup is on" is no longer true, and
+  /// its Keep On would turn the switch back on.
+  void _dropNotice() {
+    if (prompt.value is NoticePrompt) prompt.value = null;
   }
 
   /// Turned off before this install's records file replaced the one a
@@ -1924,6 +1933,7 @@ class BackupCoordinator {
   Future<BackupDeleteResult?> turnOff({required bool deleteFiles}) async {
     await _prefs.setEnabled(false);
     await _dropUnwrittenAdoption();
+    _dropNotice();
     _status.value = _statusFromPrefs();
     if (!deleteFiles) return null;
     final result = await deleteBackup();

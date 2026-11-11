@@ -303,6 +303,29 @@ void main() {
     expect(cloud.log, isEmpty);
   });
 
+  testWidgets('the switch turned off while the notice waits to be asked '
+      'leaves no notice to ask over it', (tester) async {
+    // The launch raised the notice while a screen was on top of the shell,
+    // so it waits; meanwhile the user turns the switch off here.
+    final ok = FakeCloudTransport();
+    final b = BackupCoordinator(
+        dao: dao,
+        transport: ok,
+        prefs: prefs,
+        tempDir: () async => Directory.systemTemp,
+        gatherWait: Duration.zero);
+    addTearDown(b.stop);
+    await tester.runAsync(() => b.launchCheckForTest());
+    expect(b.prompt.value, isA<NoticePrompt>());
+    await pump(tester, b: b);
+    await tester.tap(find.byKey(const Key('backupSwitch')));
+    await tester.pumpAndSettle();
+    expect(prefs.getBool(BackupPrefs.kEnabled), isFalse);
+    expect(b.prompt.value, isNull,
+        reason: '"iCloud Backup is on" would show over a switch that is off, '
+            'and its Keep On turn it back on');
+  });
+
   testWidgets('switched off with this iPhone\'s backup still in iCloud: '
       'Delete iCloud Backup… is offered', (tester) async {
     await pump(tester, b: backup);
