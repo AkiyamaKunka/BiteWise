@@ -111,41 +111,49 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
     final picked = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      // Scrolls, and may grow past 9/16 of the screen up to the status
+      // bar: at the largest text sizes, on a 320-375 pt phone and in
+      // landscape the last rows were below the screen and out of reach.
+      useSafeArea: true,
+      isScrollControlled: true,
       backgroundColor: groupedBackground(Theme.of(context).colorScheme),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(ctx.l10n.restaurantModeSheetTitle,
-                    style: Theme.of(ctx)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(ctx.l10n.restaurantModeSheetTitle,
+                      style: Theme.of(ctx)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                ),
               ),
-            ),
-            GroupedSection(
-              separatorInset: 16,
-              children: [
-                for (final mode in const ['off', 'auto', 'always'])
-                  GroupedRow(
-                    key: Key('restaurantMode-$mode'),
-                    title: _modeLabel(ctx.l10n, mode),
-                    showChevron: false,
-                    trailing: current == mode
-                        ? Icon(Icons.check,
-                            size: 20,
-                            color: Theme.of(ctx).colorScheme.primary)
-                        : const SizedBox(width: 20),
-                    onTap: () => Navigator.pop(ctx, mode),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
+              GroupedSection(
+                separatorInset: 16,
+                children: [
+                  for (final mode in const ['off', 'auto', 'always'])
+                    GroupedRow(
+                      key: Key('restaurantMode-$mode'),
+                      title: _modeLabel(ctx.l10n, mode),
+                      showChevron: false,
+                      trailing: current == mode
+                          ? Icon(Icons.check,
+                              size: 20,
+                              color: Theme.of(ctx).colorScheme.primary)
+                          : const SizedBox(width: 20),
+                      onTap: () => Navigator.pop(ctx, mode),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );
@@ -215,8 +223,11 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('clearPlacesDialog'),
+        // Title and body scroll together: a fixed title overflowed at the
+        // largest text size on a 320 pt phone.
+        scrollable: true,
         title: Text(ctx.l10n.clearPlacesTitle),
-        content: SingleChildScrollView(child: Text(ctx.l10n.clearPlacesBody)),
+        content: Text(ctx.l10n.clearPlacesBody),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -240,8 +251,11 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('clearAnswersDialog'),
+        // Title and body scroll together: a fixed title overflowed at the
+        // largest text size on a 320 pt phone.
+        scrollable: true,
         title: Text(ctx.l10n.clearAnswersTitle),
-        content: SingleChildScrollView(child: Text(ctx.l10n.clearAnswersBody)),
+        content: Text(ctx.l10n.clearAnswersBody),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),

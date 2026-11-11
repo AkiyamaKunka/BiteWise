@@ -269,6 +269,12 @@ class LookupService:
     def _work(self) -> None:
         while not self._stop.is_set():
             with self._cond:
+                # Prune on every pass too, not only in submit()/status():
+                # with no further lookup call (lookups turned off, a week of
+                # home cooking) a finished job's dish names and answer would
+                # otherwise stay in memory past the 24 h docs/PRIVACY.md
+                # promises, until the next restart.
+                self._prune_locked()
                 job = None
                 while self._queue and job is None:
                     job = self._jobs.get(self._queue[0])
@@ -325,6 +331,14 @@ class LookupService:
                 job.updated = self._clock()
                 self._queue.appendleft(job.job_id)
                 return "preempted"
+            if run.verdict == "guard_fail:init_timeout":
+                # A CLI that printed nothing before the init deadline was
+                # slow to start (a cold or memory-starved Node next to a
+                # photo run), not a tool or plugin mismatch. The guard still
+                # killed it; the app is told "timeout", which it retries,
+                # because it never asks again about a "guard_fail" meal.
+                self._finish_locked(job, "failed", "timeout")
+                return "failed"
             if run.status != "ok":
                 self._finish_locked(job, "failed", run.status)
                 return "failed"

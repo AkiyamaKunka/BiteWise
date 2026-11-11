@@ -284,6 +284,27 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
       refresh: settings.reloadAnalysisBlock,
     );
 
+/// The pipeline's view of the AI consent at the send (photo_pipeline.dart
+/// [AiSendGate]) — one adapter for the foreground pipeline (di.dart) and
+/// the background run. Allowed: the recipient the current provider choice
+/// sends to has the consent — or no key is set for it, when nothing can
+/// leave the phone and the analyzer answers with its own 'no key' line
+/// (the same rule as ui/ai_consent.dart aiConsentNeeded).
+///
+/// [rereadFromDisk]: the background run, whose [AppSettings] is another
+/// isolate's snapshot — it re-reads the consent before each send, so a
+/// Stop Sharing confirmed in the open app holds for the photos that run
+/// has not sent yet. Never for the app's own engine
+/// ([AppSettings.reloadAiConsent]).
+AiSendGate aiSendGateFor(AppSettings settings,
+        {bool rereadFromDisk = false}) =>
+    AiSendGate(
+      allowed: () =>
+          (settings.activeApiKey ?? '').trim().isEmpty ||
+          settings.hasAiConsent(settings.activeAiConsentRoute),
+      refresh: rereadFromDisk ? settings.reloadAiConsent : null,
+    );
+
 /// Moves the background watermark forward to [mark], never past [cap] and
 /// never back over the value it reads; returns the value written, or null
 /// when it did not move.
@@ -802,6 +823,9 @@ Future<bool> _runAfterLaunch({
           previousDayContext: () => settings.previousDayLeftoverContext,
           analyzer: createMultiProviderAnalyzer(settings),
           latch: autoScanLatchFor(settings),
+          // The AI consent at each send, re-read from disk: the open app
+          // may have stopped sharing since this run loaded its settings.
+          sendGate: aiSendGateFor(settings, rereadFromDisk: true),
           // A glasses preview copy waits once for its full-size one (G2b).
           previewHold: holdGlassesPreview,
           // Design G3: the switch as this run loaded it, and on iOS the

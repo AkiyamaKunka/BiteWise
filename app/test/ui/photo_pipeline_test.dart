@@ -36,6 +36,14 @@ class _MemoryKeyStore implements SecureKeyStore {
   Future<void> delete(String key) async => data.remove(key);
 }
 
+/// A ledger whose read-only lookup fails (a locked database).
+class _BlindLedgerDao extends FakeDao {
+  @override
+  Future<({IngestionStatus status, int? mealId})?> photoStatus(
+          String imageHash) async =>
+      throw StateError('database is locked');
+}
+
 /// A REAL analyzer whose normalizer can read nothing — what the iOS
 /// background engine answered for every HEIC once dart:ui was ruled out —
 /// and whose HTTP client fails the test if a request is ever made.
@@ -404,21 +412,19 @@ void main() {
     late FakeDao dao;
     late FakeAnalyzer analyzer;
     late int analyses;
-    late int hashes;
-    PhotoPipeline pipeline({Future<bool> Function(String id)? hold}) =>
+    PhotoPipeline pipeline(
+            {Future<bool> Function(String id)? hold,
+            List<GlassesCheckEntry>? card}) =>
         PhotoPipeline(
             dao: dao,
             analyzer: analyzer,
             previewHold: hold,
-            hasher: (bytes) async {
-              hashes++;
-              return md5.convert(bytes).toString();
-            });
+            glassesCheckLog: card == null ? null : (e) async => card.add(e),
+            hasher: (bytes) async => md5.convert(bytes).toString());
 
     setUp(() {
       dao = FakeDao();
       analyses = 0;
-      hashes = 0;
       analyzer = FakeAnalyzer()
         ..nextPhotoOutcome = AnalysisOutcome(
             analysis: _foodAnalysis(), isFood: true, wall: Duration.zero)
@@ -529,14 +535,104 @@ void main() {
         expect(first.reason, glassesPreviewReason);
         expect(first.errorKind, isNot(AnalysisErrorKind.badPhoto),
             reason: 'never counted as a photo the run cannot decode');
-        expect(hashes, 0, reason: 'not even hashed');
-        expect(dao.ledger, isEmpty);
+        expect(dao.ledger, isEmpty, reason: 'no ledger row');
+        expect(analyses, 0, reason: 'nothing sent');
         t = t.add(const Duration(minutes: 9, seconds: 59));
         expect((await p.process(preview)).reason, glassesPreviewReason);
+        expect(dao.ledger, isEmpty);
         t = t.add(const Duration(seconds: 1));
         final later = await p.process(preview);
         expect(later.kind, PhotoOutcomeKind.saved);
         expect(analyses, 1);
+      });
+
+      // Every catch-up offers the photos of the lookback window again
+      // (after an update too), and the ledger answers "already logged".
+      // A preview was asked about its hold BEFORE the ledger was read: one
+      // settled weeks ago was released as retryable, which stops the
+      // frontier in front of it, and its Glasses check row was overwritten
+      // with "waiting for its full-size copy" — again each time the hold's
+      // note had been forgotten (2 days), for as long as the photo was in
+      // the window (2026-11-10).
+      for (final (what, status) in [
+        ('"not food", as 1.5.0 left it', IngestionStatus.skipped),
+        ('a meal with no shutter key, as 1.5.0 saved it',
+            IngestionStatus.saved),
+        ('a failure', IngestionStatus.failed),
+        ('a meal the user deleted', IngestionStatus.deleted),
+      ]) {
+        test('already settled ($what): "already logged" on every catch-up, '
+            'never held', () async {
+          final hash = hashOf([4, 5, 6]);
+          dao.ledger[hash] = status;
+          if (status == IngestionStatus.saved) {
+            dao.seed(Meal(
+                id: 0,
+                date: '2026-10-08',
+                time: '12:30 PM',
+                timestamp: '2026-10-08T12:31:00.000',
+                source: MealSource.appWatch,
+                imageHash: hash,
+                fileId: 'preview',
+                analysis: {'is_food': true, 'total_calories': 500}));
+          }
+          final card = <GlassesCheckEntry>[];
+          var asked = 0;
+          final p = pipeline(
+              hold: (id) {
+                asked++;
+                return hold(id);
+              },
+              card: card);
+          final preview =
+              photo([4, 5, 6], 'preview', meta: capture(w: 1600, h: 1187));
+          // At once, after the 10 minutes, and twice more once the hold's
+          // note would have been forgotten.
+          for (final step in const [
+            Duration.zero,
+            Duration(minutes: 11),
+            Duration(days: 2, minutes: 1),
+            Duration(minutes: 11),
+            Duration(days: 2, minutes: 1),
+          ]) {
+            t = t.add(step);
+            final out = await p.process(preview);
+            expect(out.kind, PhotoOutcomeKind.alreadyTracked,
+                reason: 'after $step: ${out.reason ?? out.kind.name}');
+            expect(out.retryable, isFalse,
+                reason: 'a verdict: the frontier passes it');
+          }
+          expect(asked, 0, reason: 'no hold, and no note written for it');
+          expect(card, isEmpty,
+              reason: 'its Glasses check row is left as it was');
+          expect(dao.ledger, {hash: status});
+          expect(analyses, 0);
+        });
+      }
+
+      test('one another run is analyzing right now is still held: only a '
+          'verdict lets it past the hold', () async {
+        dao.ledger[hashOf([4, 5, 6])] = IngestionStatus.processing;
+        final p = pipeline(hold: hold);
+        final preview =
+            photo([4, 5, 6], 'preview', meta: capture(w: 1600, h: 1187));
+        expect((await p.process(preview)).reason, glassesPreviewReason);
+        t = t.add(const Duration(minutes: 10));
+        expect((await p.process(preview)).kind, PhotoOutcomeKind.inFlight);
+        expect(analyses, 0);
+      });
+
+      test('a ledger that cannot answer holds the photo as before', () async {
+        dao = _BlindLedgerDao();
+        final p = pipeline(hold: hold);
+        final preview =
+            photo([4, 5, 6], 'preview', meta: capture(w: 1600, h: 1187));
+        final first = await p.process(preview);
+        expect(first.reason, glassesPreviewReason);
+        expect(first.retryable, isTrue);
+        expect(dao.ledger, isEmpty);
+        t = t.add(const Duration(minutes: 10));
+        expect((await p.process(preview)).kind, PhotoOutcomeKind.saved);
       });
 
       test('its full-size copy already logged: skipped at once, not held',

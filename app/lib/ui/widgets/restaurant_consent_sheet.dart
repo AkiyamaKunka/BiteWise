@@ -3,9 +3,10 @@
 /// 5.1.1, 5.1.2(i)).
 ///
 /// The sheet names the recipient chain — the user's own server (Claude web
-/// search), Anthropic, or OpenRouter and Exa — and says exactly what leaves
-/// the phone: on iPhone, the photo's location goes only to Apple Maps on
-/// the phone; the recipient gets the name of a chain from the app's own
+/// search), Anthropic, or OpenRouter, the maker of the model picked in
+/// Settings (OpenRouter passes the lookup on to it) and Exa — and says
+/// exactly what leaves the phone: on iPhone, the photo's location goes
+/// only to Apple Maps on the phone; the recipient gets the name of a chain from the app's own
 /// table and the food names and amounts, never the photo, its location,
 /// the city, the street or the distance. On Claude Plan it also says the
 /// https rule and that lookups there are suggestions only (amendment to
@@ -121,6 +122,10 @@ class RestaurantConsentSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final bullets = restaurantConsentBullets(l,
         support: support, locationSupported: locationSupported);
+    // Only the three buttons are pinned; the title scrolls with the
+    // bullets. A pinned title (four lines at the largest text size) left
+    // the disclosure 0-13 px on a 320-375 pt phone, under buttons that
+    // could still be tapped, and on 320x568 pushed Not now off the screen.
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
@@ -128,15 +133,16 @@ class RestaurantConsentSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l.restaurantConsentTitle,
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
             Flexible(
               child: SingleChildScrollView(
+                key: const Key('restaurantConsentScroll'),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(l.restaurantConsentTitle,
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
                     for (final b in bullets)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
@@ -227,10 +233,25 @@ Future<RestaurantConsentChoice?> showRestaurantConsentSheet(
 /// Asks for the restaurant assist's consent and, on an answer, stamps it
 /// with the CURRENT recipient (re-read after the sheet: a recipient that
 /// changed meanwhile is not the one the user agreed to, so nothing is
-/// stamped). [mode] is written with it (the first enable); for
-/// [RestaurantConsentKind.manual] the 'Use photo location' setting is left
-/// alone — the answer is for that one lookup — otherwise it follows the
-/// answer. Returns the answer, or null.
+/// stamped). [mode] is written with it (the first enable).
+///
+/// The 'Use photo location' setting is written in the same store call as
+/// the consent, so no lookup gate ever reads the new consent with the old
+/// setting:
+///
+///   * Brand only turns it off, under every kind. The stamp is a standing
+///     consent for this recipient — the editor's sheet
+///     ([RestaurantConsentKind.manual]) is only reachable while the mode is
+///     on and the consent names someone else, so its answer un-pauses the
+///     automatic lookups too — and the only answer the user gave about this
+///     recipient is "skip the location". Left on from the recipient before,
+///     the next sweep would read a photo's position, ask Apple Maps and send
+///     the chain found there.
+///   * Use location turns it on, except for the manual kind, where it is
+///     left as it was: that answer is used for the one lookup the editor
+///     starts, and never widens what the automatic lookups read.
+///
+/// Returns the answer, or null.
 Future<RestaurantConsentChoice?> askRestaurantConsent(
   BuildContext context, {
   required SettingsStore settings,
@@ -250,9 +271,11 @@ Future<RestaurantConsentChoice?> askRestaurantConsent(
   }
   await settings.updateRestaurantAssist(
     mode: mode,
-    location: kind == RestaurantConsentKind.manual
-        ? null
-        : choice == RestaurantConsentChoice.useLocation,
+    location: choice == RestaurantConsentChoice.brandOnly
+        ? false
+        : kind == RestaurantConsentKind.manual
+            ? null
+            : true,
     consentAt: controls.now(),
     consentRecipient: support.recipientStamp,
   );
@@ -306,32 +329,34 @@ Future<({bool clearPlaces})?> confirmRestaurantAssistOff(
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialog) => AlertDialog(
         key: const Key('restaurantOffDialog'),
+        // Title, body and the box scroll together above the buttons: with
+        // a fixed title, the largest text size on a 320 pt phone put the
+        // Turn off button below the screen.
+        scrollable: true,
         title: Text(ctx.l10n.restaurantOffTitle),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(ctx.l10n.restaurantOffBody),
-              if (offerClearPlaces)
-                CheckboxListTile(
-                  key: Key(
-                    placesKept
-                        ? 'restaurantOffClearPlaces'
-                        : 'restaurantOffClearAnswers',
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: clear,
-                  onChanged: (v) => setDialog(() => clear = v ?? false),
-                  title: Text(
-                    placesKept
-                        ? ctx.l10n.restaurantOffClearPlaces
-                        : ctx.l10n.restaurantOffClearAnswers,
-                  ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(ctx.l10n.restaurantOffBody),
+            if (offerClearPlaces)
+              CheckboxListTile(
+                key: Key(
+                  placesKept
+                      ? 'restaurantOffClearPlaces'
+                      : 'restaurantOffClearAnswers',
                 ),
-            ],
-          ),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: clear,
+                onChanged: (v) => setDialog(() => clear = v ?? false),
+                title: Text(
+                  placesKept
+                      ? ctx.l10n.restaurantOffClearPlaces
+                      : ctx.l10n.restaurantOffClearAnswers,
+                ),
+              ),
+          ],
         ),
         actions: [
           TextButton(

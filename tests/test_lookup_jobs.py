@@ -184,6 +184,79 @@ def test_unknown_job_and_ttl_expiry(services):
     assert service.submit(_request())[0] == "accepted"  # cache expired
 
 
+def test_a_finished_lookup_is_served_for_24_hours_and_not_a_second_more(
+        services):
+    """docs/PRIVACY.md promises the server keeps a lookup's request and
+    answer for up to 24 hours. The numbers are literal on purpose: the test
+    above moves the clock by CACHE_TTL_SECONDS, so it follows any value the
+    constant is given and would not notice the promise being broken."""
+    clock = Clock()
+    service = _service(ScriptedRunner([_ok_run]), clock=clock)
+    services.append(service)
+    _, body = service.submit(_request())
+    _wait_state(service, body["job_id"], {"done"})
+    clock.now += 24 * 3600 - 1
+    assert service.status(body["job_id"])["state"] == "done"
+    clock.now += 2  # one second past 24 hours after it finished
+    assert service.status(body["job_id"])["state"] == "unknown"
+    assert service.submit(_request())[0] == "accepted"  # not "cached"
+
+
+def test_a_slow_cli_start_is_reported_as_a_timeout_not_a_guard_failure(
+        services):
+    """guard_fail:init_timeout means the CLI printed nothing before the init
+    deadline: a slow start, not a guard mismatch. The app never asks again
+    about a meal whose job ended 'guard_fail', but retries a 'timeout'.
+    A real mismatch (guard_fail:tools, above/below) stays 'guard_fail'."""
+    runner = ScriptedRunner([LookupRun(status="guard_fail",
+                                       verdict="guard_fail:init_timeout")])
+    service = _service(runner)
+    services.append(service)
+    _, body = service.submit(_request())
+    failed = _wait_state(service, body["job_id"], {"failed"})
+    assert failed == {"state": "failed", "job_id": body["job_id"],
+                      "reason": "timeout"}
+
+
+def test_finished_jobs_leave_memory_after_the_ttl_without_another_call(
+        services):
+    """docs/PRIVACY.md: the server keeps a lookup's request and answer in
+    memory for up to 24 hours. With no later submit() or status() (both
+    prune on their own, so this test calls neither after the clock moves),
+    the idle worker must drop done AND failed jobs past the TTL."""
+    clock = Clock()
+    runner = ScriptedRunner([_ok_run, LookupRun(status="cli_error",
+                                                verdict="cli_error")])
+    service = _service(runner, clock=clock)
+    services.append(service)
+    _, done = service.submit(_request("Chicken burrito bowl"))
+    _wait_state(service, done["job_id"], {"done"})
+    _, failed = service.submit(_request("Steak quesadilla"))
+    _wait_state(service, failed["job_id"], {"failed"})
+
+    clock.now += lookup_jobs.CACHE_TTL_SECONDS + 1
+    end = time.monotonic() + 5
+    while True:
+        with service._cond:
+            left = (len(service._jobs), len(service._by_hash))
+        if left == (0, 0) or time.monotonic() > end:
+            break
+        time.sleep(0.01)
+    assert left == (0, 0), "requests and answers still in memory past the TTL"
+
+
+def test_the_worker_keeps_jobs_younger_than_the_ttl(services):
+    clock = Clock()
+    service = _service(ScriptedRunner([_ok_run]), clock=clock)
+    services.append(service)
+    _, body = service.submit(_request())
+    _wait_state(service, body["job_id"], {"done"})
+    clock.now += lookup_jobs.CACHE_TTL_SECONDS - 60
+    time.sleep(0.1)  # ten worker passes at poll_seconds=0.01
+    with service._cond:
+        assert list(service._jobs) == [body["job_id"]]
+
+
 def test_failed_run_reports_its_reason_and_a_resubmit_runs_again(services):
     runner = ScriptedRunner([LookupRun(status="guard_fail",
                                        verdict="guard_fail:tools")])

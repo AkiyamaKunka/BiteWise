@@ -275,6 +275,7 @@ class TodayScreenState extends State<TodayScreen> {
           assist: widget.restaurantAssist,
           settings: widget.settings,
           usual: widget.usual,
+          mealsChanged: mealsChangedSignal,
           now: widget.now),
     ));
     widget.thumbs?.evict(meal.id); // deleted/re-dated: cache must not lie

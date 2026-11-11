@@ -1278,14 +1278,51 @@ class MealAssist {
     if (gen != _generation) return;
     final misses = await _state.misses();
     final jobs = await _state.jobs();
+    // The editor's own lookups still running on the server for meals older
+    // than yesterday (the editor offers Look up on a meal of any day): kept
+    // and walked too, so the editor's next press polls its job instead of
+    // submitting (and counting) it again, and the sweep collects the answer
+    // once the editor is closed. Until the job's 24 h end, like any job.
+    final older = <Meal>[];
     if (jobs.isNotEmpty) {
-      await _state.retainJobs({for (final m in meals) m.id});
+      // Only these meals' jobs, and only those sent to the recipient a
+      // lookup reaches now (the consent covers it: the gate above). A
+      // record of another recipient — the user switched provider or server
+      // and agreed for the new one — answers nothing here and is forgotten
+      // before anything reads it: its job id is never polled at this
+      // recipient (a direct provider has no jobs, and its "unsupported"
+      // held the new recipient for an hour, again and again), its meal is
+      // not taken as the editor's pending lookup, and the place it kept —
+      // found under the old recipient's location answer — is never sent.
+      final stamp = support.recipientStamp;
+      final keep = {for (final m in meals) m.id};
+      for (final MapEntry(key: id, value: job) in jobs.entries) {
+        if (keep.contains(id) ||
+            !job.manual ||
+            !job.isPending ||
+            job.recipient != stamp) {
+          continue;
+        }
+        final snap = await _dao.mealSnapshot(id);
+        if (gen != _generation) return;
+        if (snap == null) continue; // the meal is gone: so is its job
+        keep.add(id);
+        older.add(snap.meal);
+      }
+      await _state.retainJobs(keep, recipient: stamp);
+      jobs.removeWhere(
+        (id, job) => job.recipient != stamp || !keep.contains(id),
+      );
     }
     final ordered = [
       for (final m in meals)
         if (_eligible(m, now, consentAt, misses) ||
             _manualPending(m, jobs[m.id]))
           m,
+      // Never eligible for an automatic lookup (older than the window):
+      // only polled, and only once the editor is closed.
+      for (final m in older)
+        if (_manualPending(m, jobs[m.id])) m,
     ]..sort((a, b) => _timeOf(b).compareTo(_timeOf(a)));
     for (final meal in ordered) {
       if (gen != _generation || _disposed) return;
@@ -1327,6 +1364,13 @@ class MealAssist {
       if (again != null && !capped) {
         _skip(again, support);
         return;
+      }
+      if (job != null && job.recipient != support.recipientStamp) {
+        // The recipient changed (and its consent was given) while this
+        // sweep ran: the record is another recipient's now. Forgotten; the
+        // next sweep looks at the meal afresh.
+        await _state.removeJob(meal.id);
+        continue;
       }
       if (capped) {
         _lastSkip = again;
@@ -1453,7 +1497,14 @@ class MealAssist {
         return const AssistRun(AssistSkip.consentNeeded);
       }
       final jobs = await _state.jobs();
-      final job = jobs[mealId];
+      var job = jobs[mealId];
+      if (job != null && job.recipient != support.recipientStamp) {
+        // Sent to another recipient (the provider or server changed since):
+        // never polled or resubmitted here, and what it kept is not used.
+        // Forgotten, so this press is an ordinary new lookup.
+        await _state.removeJob(mealId);
+        job = null;
+      }
       // A job the server runs for this meal, the editor's own or the
       // automatic lookup's, is polled past the cap too; anything new this
       // call would send waits for the cap ([_run]'s capped).
@@ -1687,6 +1738,7 @@ class MealAssist {
                   attempts: lost.attempts,
                   place: prepared.place,
                   country: prepared.country,
+                  recipient: support.recipientStamp,
                 ),
               );
             }
@@ -2146,6 +2198,7 @@ class MealAssist {
             fresh: manual && fresh,
             pick: prepared.pick,
             country: prepared.country,
+            recipient: support.recipientStamp,
           );
           await _state.putJob(mealId, next);
           _schedulePoll(next);
@@ -2157,6 +2210,14 @@ class MealAssist {
           // assist pauses until the new recipient is consented to.
           _consentNeeded.value = _support();
           return const _Run(AssistSkip.consentNeeded, stop: true);
+        }
+        if (polled) {
+          // The recipient has no such job (a direct provider has none at
+          // all): the record answers nothing, and says nothing about
+          // whether this recipient can look up. Forgotten, and the
+          // recipient is not held.
+          if (job != null) await _state.removeJob(mealId);
+          return const _Run(AssistSkip.unsupported);
         }
         await _logFailure('lookup_unsupported', provider);
         _holdRecipient(support, now);
@@ -2185,7 +2246,33 @@ class MealAssist {
     }
     if (failure?.code == LookupFailureCode.dailyCap) {
       // A day's cap (the app's or the server's): tomorrow. Not a try.
-      _backoffUntil = DateTime(now.year, now.month, now.day + 1);
+      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      _backoffUntil = tomorrow;
+      if (polled && job != null) {
+        // The server failed this job at its own cap and keeps it so for
+        // 24 h: polled again tomorrow it would answer the same and put
+        // everything off for one more day. The record stops being a job,
+        // as when the server lost it at the cap: an automatic lookup waits
+        // as a retry until midnight (also across a restart: the backoff is
+        // in memory only), its tries unspent; the editor's own lookup ends
+        // here, as a failed one does.
+        if (job.manual) {
+          await _state.removeJob(mealId);
+        } else {
+          await _state.putJob(
+            mealId,
+            AssistJob(
+              reqHash: prepared.hash,
+              at: job.at,
+              nextAt: tomorrow,
+              attempts: job.attempts,
+              place: prepared.place,
+              country: prepared.country,
+              recipient: support.recipientStamp,
+            ),
+          );
+        }
+      }
       return _Run(code, stop: true);
     }
     final transient =
@@ -2221,6 +2308,7 @@ class MealAssist {
             fresh: manual && fresh,
             pick: prepared.pick,
             country: prepared.country,
+            recipient: support.recipientStamp,
           ),
         );
       }
@@ -2254,6 +2342,7 @@ class MealAssist {
         attempts: attempts,
         place: prepared.place,
         country: prepared.country,
+        recipient: support.recipientStamp,
       ),
     );
     return _Run(code, stop: true);

@@ -1,6 +1,6 @@
 # Chopstats · 筷拍 — Privacy Policy
 
-Effective date: 2026-11-09
+Effective date: 2026-11-10
 
 [English](#english) · [中文](#中文)
 
@@ -191,7 +191,8 @@ service or server.
     server the app only *suggests* the chain's published numbers: a meal
     changes only when you accept.
   - **Anthropic** (your API key): Anthropic, which runs the web search.
-  - **OpenRouter** (your API key): OpenRouter and its search partner Exa.
+  - **OpenRouter** (your API key): OpenRouter (which passes the request on
+    to the company behind the model you picked) and its search partner Exa.
   - Any other AI service: no lookups are made at all.
 
   Their own privacy policies and terms govern what they do with what you
@@ -350,7 +351,7 @@ date. Questions: open an issue at
 - **由谁接收、由谁进行网页搜索：**
   - **你自己的服务器：** 你的服务器，它在你的套餐下使用 Anthropic 的 Claude 网页搜索。根据照片位置找到的连锁店名称，只有在服务器地址以 `https://` 开头时才会发送给你的服务器；地址是 `http://` 时，只按印出的品牌查询。你的服务器会在内存中保留一次查询的请求和结果，最长 24 小时。使用你自己的服务器时，应用只会*建议*连锁店公布的数值：只有你采用后，这一餐才会改变。
   - **Anthropic**（你的 API Key）：Anthropic，由它进行网页搜索。
-  - **OpenRouter**（你的 API Key）：OpenRouter 及其搜索合作方 Exa。
+  - **OpenRouter**（你的 API Key）：OpenRouter（它会把请求转交给你所选模型背后的公司）及其搜索合作方 Exa。
   - 其他任何 AI 服务：完全不会进行查询。
 
   它们如何处理你发送的内容，以它们各自的隐私政策和条款为准。

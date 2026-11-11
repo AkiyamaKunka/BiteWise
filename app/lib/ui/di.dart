@@ -51,7 +51,8 @@ import '../services/settings/app_settings.dart';
 import 'ai_consent.dart' show SharedPhotoConsentGate;
 import 'background_glue.dart';
 import 'migrations.dart';
-import 'outcome_text.dart' show assistAppliedSnackbar, outcomeSnackbar;
+import 'outcome_text.dart'
+    show assistAppliedSnackbar, assistUndoAction, outcomeSnackbar;
 import 'os_summary.dart';
 import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
@@ -239,6 +240,10 @@ class AppServices {
         latch: autoScanLatchFor(settings),
         // B14's previous-night candidates, under the consent that says so.
         previousDayContext: () => settings.previousDayLeftoverContext,
+        // The AI consent, read again at each send: a photo still queued
+        // when Stop Sharing is confirmed, or across a provider switch, is
+        // let go instead of uploaded.
+        sendGate: aiSendGateFor(settings),
         // iOS suspends the app seconds after the user leaves it: each photo
         // asks for the time to finish its upload and save first, and no
         // automatic photo starts once the app is in the background.
@@ -310,8 +315,14 @@ class AppServices {
           ? null
           : (n) {
               final l = localizationsFor(settings.appLanguage);
-              notifyAction(assistAppliedSnackbar(l, n), l.assistUndo,
-                  () => unawaited(n.undo()));
+              notifyAction(
+                  assistAppliedSnackbar(l, n),
+                  l.assistUndo,
+                  assistUndoAction(n,
+                      // In the language of the moment it is pressed.
+                      onNothingUndone: () => notify?.call(
+                          localizationsFor(settings.appLanguage)
+                              .usualUndoStale)));
             },
     );
 

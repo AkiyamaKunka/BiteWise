@@ -22,11 +22,16 @@
 ///         miss); at [assistMissesBeforeDenylist] the meal is skipped from
 ///         then on; 3 d, newest 200;
 ///       - 'assist_jobs'      {jobs: [{meal_id, job_id?, req_hash, attempts,
-///         next_at, at, place?, manual?, pick?}]}: Claude Plan lookups the owner's server is
+///         next_at, at, place?, manual?, pick?, recipient?}]}: Claude Plan
+///         lookups the owner's server is
 ///         still running (with a job_id), and meals waiting for their next
 ///         try after a transient failure (without one; design R6c: 5 min,
 ///         30 min, 2 h, at most [assistMaxRetries] retries); 24 h (the
-///         server keeps a job that long), newest 50. `place` is what the
+///         server keeps a job that long), newest 50. `recipient` is whom
+///         the lookup was sent to (the consent stamp: a provider id, for
+///         the own server with 8 hex characters of its host's hash, never
+///         the host): a record of another recipient, or without one, is
+///         forgotten before anything reads it. `place` is what the
 ///         location path found ([AssistPlaceContext]: chain keys and flags,
 ///         never a coordinate, cell or place name), so a poll, a resubmit
 ///         or a retry never reads the photo's position again. `pick` is
@@ -84,25 +89,44 @@ const double assistDailyMaxUsd = 0.50;
 /// The app's daily lookup ledger: [assistDailyCap] lookups and
 /// [assistDailyMaxUsd] dollars per local day, kept in `assist.daily.v1`
 /// so a restart does not reset it. A stored day other than today reads as
-/// a fresh day. Synchronous reads (the prefs cache); writes are fired and
-/// never throw.
+/// a fresh day. Synchronous reads; writes are fired and never throw.
+///
+/// The value is read from the preferences ONCE, here, and kept: every read
+/// and every count after that works on this copy, and each count writes
+/// the preference from it. The shared preferences cache is not read again,
+/// because other code reloads that instance while the app is in use (the
+/// late-import record, the background watermark, the deferred notes), and
+/// a reload whose reply was already on its way when a lookup was counted
+/// puts the older snapshot back over the cache: the lookup was uncounted
+/// and the cap let one more through (2026-11-10). Only the app engine
+/// writes this key, and it builds exactly one of these (di.dart), so the
+/// copy is the truth.
 class AssistDailyBudget implements LookupBudget {
   AssistDailyBudget(
     this._prefs, {
     this.cap = assistDailyCap,
     this.maxUsdPerDay = assistDailyMaxUsd,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now {
+    try {
+      _raw = _prefs.getString(assistDailyPrefsKey);
+    } catch (_) {
+      _raw = null; // a value of another type reads as a fresh day
+    }
+  }
 
   final SharedPreferences _prefs;
   final int cap;
   final double maxUsdPerDay;
   final DateTime Function() _clock;
 
+  /// The stored value as this instance last read or wrote it.
+  String? _raw;
+
   ({String date, int count, double usd}) _today() {
     final today = isoDate(_clock());
     try {
-      final raw = _prefs.getString(assistDailyPrefsKey);
+      final raw = _raw;
       if (raw != null) {
         final m = jsonDecode(raw);
         if (m is Map && m['date'] == today) {
@@ -121,12 +145,11 @@ class AssistDailyBudget implements LookupBudget {
 
   void _write(String date, int count, double usd) {
     try {
+      final raw = jsonEncode({'date': date, 'count': count, 'usd': usd});
+      _raw = raw;
       unawaited(
         _prefs
-            .setString(
-              assistDailyPrefsKey,
-              jsonEncode({'date': date, 'count': count, 'usd': usd}),
-            )
+            .setString(assistDailyPrefsKey, raw)
             .then((_) {}, onError: (Object _) {}),
       );
     } catch (_) {}
@@ -228,6 +251,11 @@ final RegExp _providerRe = RegExp(r'^[a-z0-9_]{0,20}$');
 final RegExp _jobIdRe = RegExp(r'^[A-Za-z0-9_-]{8,64}$');
 final RegExp _hashRe = RegExp(r'^[0-9a-f]{8,64}$');
 final RegExp _countryRe = RegExp(r'^[A-Z]{2}$');
+
+/// A job's recipient as stored: LookupSupport.recipientStamp — a provider
+/// id, plus `:` and 8 lowercase hex characters for the own server (the
+/// shape the consent recipient is stored in, app_settings.dart).
+final RegExp _recipientRe = RegExp(r'^[a-z_]{1,20}(?::[0-9a-f]{8})?$');
 final RegExp _cacheKeyRe = RegExp(r'^[0-9a-f]{32}$');
 
 /// A kcal value worth logging: a whole number 0..20000.
@@ -405,10 +433,19 @@ final class AssistJob {
     this.fresh = false,
     this.pick,
     this.country,
+    this.recipient,
   });
 
   /// The server's job id; null for a retry record.
   final String? jobId;
+
+  /// Whom the lookup was sent to: LookupSupport.recipientStamp at the
+  /// submit (a provider id; for the own server with the host's tag). A job
+  /// id means something to that recipient alone, and what the record kept
+  /// ([place], [pick], [manual]) was decided for it: MealAssist forgets a
+  /// record whose recipient is not the one a lookup reaches now — or that
+  /// has none — before it polls, resubmits or reads anything from it.
+  final String? recipient;
 
   /// The hash of the request the job was submitted for (meal_assist.dart
   /// lookupRequestHash): a meal whose request changed since is no longer
@@ -820,6 +857,7 @@ class AssistLocalState {
             : AssistPlaceContext.fromJson(rawPlace);
         final pick = e['pick'];
         final country = e['country'];
+        final recipient = e['recipient'];
         if (id == null ||
             (job != null && (job is! String || !_jobIdRe.hasMatch(job))) ||
             hash is! String ||
@@ -829,7 +867,10 @@ class AssistLocalState {
             (rawPlace != null && place == null) ||
             (pick != null && (pick is! String || chainByKey(pick) == null)) ||
             (country != null &&
-                (country is! String || !_countryRe.hasMatch(country)))) {
+                (country is! String || !_countryRe.hasMatch(country))) ||
+            (recipient != null &&
+                (recipient is! String ||
+                    !_recipientRe.hasMatch(recipient)))) {
           continue;
         }
         out[id] = AssistJob(
@@ -845,6 +886,7 @@ class AssistLocalState {
           fresh: e['manual'] == true && e['fresh'] == true,
           pick: pick as String?,
           country: country as String?,
+          recipient: recipient as String?,
         );
       }
       return out;
@@ -868,6 +910,7 @@ class AssistLocalState {
           if (e.value.manual && e.value.fresh) 'fresh': true,
           'pick': ?e.value.pick,
           'country': ?e.value.country,
+          'recipient': ?e.value.recipient,
         },
     ];
     if (entries.isEmpty) return _store.delete(assistJobsDocument);
@@ -879,9 +922,11 @@ class AssistLocalState {
   Future<bool> putJob(int mealId, AssistJob job) => _serial(() async {
     final id = job.jobId;
     final pick = job.pick;
+    final recipient = job.recipient;
     if ((id != null && !_jobIdRe.hasMatch(id)) ||
         !_hashRe.hasMatch(job.reqHash) ||
-        (pick != null && chainByKey(pick) == null)) {
+        (pick != null && chainByKey(pick) == null) ||
+        (recipient != null && !_recipientRe.hasMatch(recipient))) {
       return false;
     }
     final all = await jobs();
@@ -896,14 +941,23 @@ class AssistLocalState {
   }, false);
 
   /// Keeps only the jobs of [mealIds] (a job for a meal that is gone, or
-  /// out of the window, answers nothing anyone will read).
-  Future<bool> retainJobs(Set<int> mealIds) => _serial(() async {
-    final all = await jobs();
-    final before = all.length;
-    all.removeWhere((id, _) => !mealIds.contains(id));
-    if (all.length == before) return true;
-    return _writeJobs(all);
-  }, false);
+  /// out of the window, answers nothing anyone will read; the sweep passes
+  /// the window's meals and the older meals the editor still has a job
+  /// running for) and, with
+  /// [recipient], only those sent to it ([AssistJob.recipient]; a record
+  /// without one goes too).
+  Future<bool> retainJobs(Set<int> mealIds, {String? recipient}) =>
+      _serial(() async {
+        final all = await jobs();
+        final before = all.length;
+        all.removeWhere(
+          (id, job) =>
+              !mealIds.contains(id) ||
+              (recipient != null && job.recipient != recipient),
+        );
+        if (all.length == before) return true;
+        return _writeJobs(all);
+      }, false);
 
   /// Mode Off: every pending job and retry record is forgotten.
   Future<bool> clearJobs() =>

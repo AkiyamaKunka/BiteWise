@@ -28,7 +28,9 @@
 /// against the stored text the form was loaded from (MealAssist.act /
 /// lookupNow); a meal that changed meanwhile says "This meal was just
 /// updated — please review." and shows the newer meal. The buttons wait
-/// while the form has unsaved typing, so a write never lands under it.
+/// while the form has unsaved typing, and the form waits (read-only)
+/// while one of their writes runs — a lookup the owner's server runs can
+/// be polled for minutes — so a write never lands under typing.
 /// Opening a meal clears its 'updated' dot.
 ///
 /// Usual foods (opened from Today only): a photo meal of today whose foods
@@ -110,9 +112,17 @@ class MealEditorScreen extends StatefulWidget {
     this.openUrl,
     this.assistPollInterval = kAssistPollInterval,
     this.usual,
+    this.mealsChanged,
   });
 
   final MealsDao dao;
+
+  /// "The meal list changed" (refresh_signal.dart mealsChangedSignal): an
+  /// Undo on the app's snackbar (usual foods, the restaurant lookup) can
+  /// change the meal this editor shows while it is open. On a signal the
+  /// editor re-reads its row ([_MealEditorScreenState._onMealsChanged]).
+  /// Null: nothing to listen to (tests, a new meal).
+  final Listenable? mealsChanged;
 
   /// Usual foods (D31: passed by Today only): the card offering the numbers
   /// the user set for a food before. Null shows none.
@@ -192,7 +202,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// at first, the row as re-read after a reload. Null for a new meal.
   Meal? _meal;
 
-  /// The open-time re-read of the row ([_confirmBasis]) while it runs; a
+  /// A re-read of the row ([_confirmBasis], [_readBasis]) while it runs; a
   /// save of an existing meal waits for it. Never completes with an error.
   Future<void>? _basisRead;
 
@@ -293,7 +303,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     if (meal != null) {
       _hold = widget.inUse?.acquire(meal.id);
       _loadedSignature = _signature();
-      _basisRead = _confirmBasis();
+      _readBasis();
+      widget.mealsChanged?.addListener(_onMealsChanged);
       // Opened: the card's 'updated' dot goes (design R7b).
       final seen = widget.assist?.markSeen;
       if (seen != null) {
@@ -301,6 +312,40 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       }
       _refreshUsual();
     }
+  }
+
+  @override
+  void didUpdateWidget(MealEditorScreen old) {
+    super.didUpdateWidget(old);
+    if (old.mealsChanged != widget.mealsChanged && widget.meal != null) {
+      old.mealsChanged?.removeListener(_onMealsChanged);
+      widget.mealsChanged?.addListener(_onMealsChanged);
+    }
+  }
+
+  /// Some meal changed while the editor is open; it may be this one (an
+  /// Undo tapped on the snackbar over the editor). The row is read again
+  /// ([_refreshBasis]): an untouched form shows the meal as stored, a
+  /// typed-over one gets the save's conflict, an unchanged row only
+  /// renews the basis. Skipped while a save or one of the cards' writes
+  /// is under way: each reads the row again itself when it is done.
+  void _onMealsChanged() {
+    if (!mounted || _meal == null) return;
+    if (_saving || _usualBusy || _assistBusy || _lookingUp) return;
+    _refreshBasis();
+  }
+
+  /// Starts [_confirmBasis] as [_basisRead], the read a save waits for.
+  /// The handle is cleared only by the read it names: with two reads
+  /// under way, the first to finish must not leave a save waiting on
+  /// nothing while the newer one still runs.
+  Future<void> _readBasis() {
+    late final Future<void> read;
+    read = _confirmBasis().whenComplete(() {
+      if (identical(_basisRead, read)) _basisRead = null;
+    });
+    _basisRead = read;
+    return read;
   }
 
   /// A text edit that makes the form dirty (or clean again) rebuilds it:
@@ -363,26 +408,22 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   Future<void> _confirmBasis() async {
     final shown = _meal;
     if (shown == null) return;
+    final MealSnapshot? snap;
     try {
-      final MealSnapshot? snap;
-      try {
-        snap = await widget.dao.mealSnapshot(shown.id);
-      } catch (_) {
-        return;
-      }
-      if (!mounted || !identical(shown, _meal)) return;
-      if (snap == null) {
-        _basisStale = true;
-      } else if (_sameBasis(snap.meal, shown)) {
-        _draft.expectedRaw = snap.rawAnalysis;
-      } else if (!_saving && _signature() == _loadedSignature) {
-        _load(snap);
-        setState(() {});
-      } else {
-        _basisStale = true;
-      }
-    } finally {
-      _basisRead = null;
+      snap = await widget.dao.mealSnapshot(shown.id);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || !identical(shown, _meal)) return;
+    if (snap == null) {
+      _basisStale = true;
+    } else if (_sameBasis(snap.meal, shown)) {
+      _draft.expectedRaw = snap.rawAnalysis;
+    } else if (!_saving && _signature() == _loadedSignature) {
+      _load(snap);
+      setState(() {});
+    } else {
+      _basisStale = true;
     }
   }
 
@@ -484,6 +525,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   @override
   void dispose() {
+    widget.mealsChanged?.removeListener(_onMealsChanged);
     _hold?.release();
     _scroll.dispose();
     for (final c in [_desc, _cal, _pro, _carb, _fat]) {
@@ -715,6 +757,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// The form shows something the user typed since the last load.
   bool get _dirty => _meal != null && _signature() != _loadedSignature;
 
+  /// One of the cards' own writes is running: a lookup the user started
+  /// (polled for up to [kAssistPollWindow] on the owner's server), an
+  /// answer to the source card, or Use my numbers. The form is read-only
+  /// meanwhile. It was open before: typing during a lookup made the
+  /// lookup's write land under it, nothing was said or shown, and the
+  /// next Save answered "This meal was just updated" and threw the typing
+  /// away.
+  bool get _formLocked => _lookingUp || _assistBusy || _usualBusy;
+
   bool get _assistOn =>
       widget.settings != null && widget.settings!.restaurantAssist != 'off';
 
@@ -734,9 +785,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// form shows the newer meal; typing over an older copy becomes the
   /// save's conflict ([_confirmBasis]).
   Future<void> _refreshBasis() async {
-    final read = _confirmBasis();
-    _basisRead = read;
-    await read;
+    await _readBasis();
     if (mounted) setState(() {});
     _refreshUsual();
   }
@@ -972,6 +1021,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('assistAcceptConfirm'),
+        // The title, why and the new total scroll together above the
+        // buttons: not scrollable, from the third accessibility text size
+        // the total was cut off (or its box squeezed to nothing), and at
+        // the largest one on a 320 pt phone the confirm button was below
+        // the screen.
+        scrollable: true,
         title: Text(l.assistAcceptTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1029,6 +1084,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // numbers or a suggestion says when it writes nothing.
     final before = meal.analysis;
     final beforeKind = AssistView.of(before).kind;
+    // The form goes read-only; a field left focused would bring the
+    // keyboard back up when the lookup ends.
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _lookingUp = true);
     var run = const AssistRun(AssistSkip.error);
     try {
@@ -1346,6 +1404,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             0;
     final assistCard = _assistSection();
     _shownDirty = _dirty;
+    final locked = _formLocked;
     final usualCard = _usualSection(_shownDirty);
     return Scaffold(
       appBar: AppBar(
@@ -1406,6 +1465,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           TextField(
             key: const Key('editorDescription'),
             controller: _desc,
+            readOnly: locked,
             textCapitalization: TextCapitalization.sentences,
             // Wraps at large text ('Pan-fried du' at AX5); still one line
             // of content with a Done key.
@@ -1427,13 +1487,13 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             [
               OutlinedButton.icon(
                 key: const Key('editorDateButton'),
-                onPressed: _pickDate,
+                onPressed: locked ? null : _pickDate,
                 icon: const Icon(Icons.event_outlined, size: 18),
                 label: Text(_draft.dateIso),
               ),
               OutlinedButton.icon(
                 key: const Key('editorTimeButton'),
-                onPressed: _pickTime,
+                onPressed: locked ? null : _pickTime,
                 icon: const Icon(Icons.schedule_outlined, size: 18),
                 // Locale clock (24h in zh), like every other time in the UI.
                 label: Text(context.clock(_draft.time)),
@@ -1450,6 +1510,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           _NumberField(
             fieldKey: const Key('editorCalories'),
             controller: _cal,
+            readOnly: locked,
             label: context.l10n.editorCaloriesLabel,
             suffixText: context.l10n.editorKcalSuffix,
           ),
@@ -1470,16 +1531,19 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               _NumberField(
                   fieldKey: const Key('editorProtein'),
                   controller: _pro,
+                  readOnly: locked,
                   label: context.l10n.editorProteinLabel,
                   suffixText: context.l10n.editorGramsSuffix),
               _NumberField(
                   fieldKey: const Key('editorCarbs'),
                   controller: _carb,
+                  readOnly: locked,
                   label: context.l10n.editorCarbsLabel,
                   suffixText: context.l10n.editorGramsSuffix),
               _NumberField(
                   fieldKey: const Key('editorFat'),
                   controller: _fat,
+                  readOnly: locked,
                   label: context.l10n.editorFatLabel,
                   suffixText: context.l10n.editorGramsSuffix),
             ],
@@ -1523,13 +1587,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               key: ObjectKey(_draft.items[i]),
               index: i,
               ctrls: _itemCtrls[i],
+              locked: locked,
               onRemove: () => _removeItem(_draft.items[i]),
             ),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               key: const Key('addItemRow'),
-              onPressed: () {
+              onPressed: locked ? null : () {
                 _harvest();
                 setState(() {
                   // The first row is seeded from the hand-typed totals
@@ -1606,11 +1671,16 @@ class _NumberField extends StatelessWidget {
     required this.controller,
     required this.label,
     this.suffixText,
+    this.readOnly = false,
   });
 
   final Key fieldKey;
   final TextEditingController controller;
   final String label;
+
+  /// One of the editor's own writes is running ([_MealEditorScreenState
+  /// ._formLocked]).
+  final bool readOnly;
 
   /// The unit, kept out of [label] where a third of the row can't hold it.
   final String? suffixText;
@@ -1619,6 +1689,7 @@ class _NumberField extends StatelessWidget {
   Widget build(BuildContext context) => TextField(
         key: fieldKey,
         controller: controller,
+        readOnly: readOnly,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
           labelText: label,
@@ -1635,9 +1706,13 @@ class _ItemRow extends StatelessWidget {
     required this.index,
     required this.ctrls,
     required this.onRemove,
+    this.locked = false,
   });
 
   final int index;
+
+  /// The form is read-only ([_MealEditorScreenState._formLocked]).
+  final bool locked;
   final ({TextEditingController name, TextEditingController cal,
       TextEditingController pro, TextEditingController carb,
       TextEditingController fat}) ctrls;
@@ -1661,6 +1736,7 @@ class _ItemRow extends StatelessWidget {
                     inputFormatters: [
                       FilteringTextInputFormatter.singleLineFormatter
                     ],
+                    readOnly: locked,
                     decoration: InputDecoration(
                       labelText: context.l10n.editorItemLabel,
                       border: const OutlineInputBorder(),
@@ -1672,7 +1748,7 @@ class _ItemRow extends StatelessWidget {
                   key: Key('removeItem$index'),
                   tooltip: context.l10n.editorRemoveItemTooltip,
                   icon: const Icon(Icons.close),
-                  onPressed: onRemove,
+                  onPressed: locked ? null : onRemove,
                 ),
               ],
             ),
@@ -1687,18 +1763,22 @@ class _ItemRow extends StatelessWidget {
                 _NumberField(
                     fieldKey: Key('itemCal$index'),
                     controller: ctrls.cal,
+                    readOnly: locked,
                     label: context.l10n.editorItemKcalLabel),
                 _NumberField(
                     fieldKey: Key('itemPro$index'),
                     controller: ctrls.pro,
+                    readOnly: locked,
                     label: '${context.l10n.macroProteinShort} g'),
                 _NumberField(
                     fieldKey: Key('itemCarb$index'),
                     controller: ctrls.carb,
+                    readOnly: locked,
                     label: '${context.l10n.macroCarbsShort} g'),
                 _NumberField(
                     fieldKey: Key('itemFat$index'),
                     controller: ctrls.fat,
+                    readOnly: locked,
                     label: '${context.l10n.macroFatShort} g'),
               ],
             ),

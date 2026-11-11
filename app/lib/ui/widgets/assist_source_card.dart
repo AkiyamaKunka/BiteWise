@@ -107,14 +107,40 @@ class AssistSourceCard extends StatelessWidget {
   Widget _lookUpOnly(BuildContext context) {
     if (lookingUp) return _progress(context);
     if (onLookUp == null) return const SizedBox.shrink();
-    return Align(
-      alignment: AlignmentDirectional.centerStart,
-      child: OutlinedButton.icon(
-        key: const Key('assistLookUp'),
-        onPressed: _gate(onLookUp),
-        icon: const Icon(Icons.storefront_outlined, size: 18),
-        label: Text(context.l10n.assistLookUp),
+    return _withEditFirst(
+      context,
+      Align(
+        alignment: AlignmentDirectional.centerStart,
+        child: OutlinedButton.icon(
+          key: const Key('assistLookUp'),
+          onPressed: _gate(onLookUp),
+          icon: const Icon(Icons.storefront_outlined, size: 18),
+          label: Text(context.l10n.assistLookUp),
+        ),
       ),
+    );
+  }
+
+  /// [button], greyed while the form has unsaved typing, with the line
+  /// saying why under it, as the source card's buttons have: alone, it
+  /// was disabled with no reason given.
+  Widget _withEditFirst(BuildContext context, Widget button) {
+    if (!editFirst) return button;
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        button,
+        const SizedBox(height: 4),
+        Text(
+          context.l10n.assistEditFirst,
+          key: const Key('assistEditFirst'),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 
@@ -163,9 +189,12 @@ class AssistSourceCard extends StatelessWidget {
             // Search again replaces Look up on a saved answer's record.
             if (_searchAgain) ...[
               const SizedBox(height: 8),
-              Align(
-                alignment: AlignmentDirectional.centerStart,
-                child: _searchAgainButton(context),
+              _withEditFirst(
+                context,
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: _searchAgainButton(context),
+                ),
               ),
             ] else if (lookingUp || onLookUp != null) ...[
               const SizedBox(height: 8),

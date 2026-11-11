@@ -1,5 +1,11 @@
 # Security Notes
 
+## Reporting a security issue
+
+Do not open a public issue for anything security-sensitive. Use the email address in the [Contact section of the support page](docs/SUPPORT.md#contact).
+
+## Server and fork checklist
+
 This project is designed for a private personal deployment. Before publishing a fork or repository publicly, complete this checklist.
 
 ## Required Secrets

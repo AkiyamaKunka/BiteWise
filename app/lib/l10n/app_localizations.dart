@@ -3642,6 +3642,18 @@ abstract class AppLocalizations {
   /// **'no server address or upload key is set'**
   String get reasonNoServerKey;
 
+  /// No description provided for @reasonNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'this AI service is not allowed to receive your photos'**
+  String get reasonNotAllowed;
+
+  /// No description provided for @errNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing was sent: this AI service is not allowed to receive your photos. Chopstats asks first the next time you add one.'**
+  String get errNotAllowed;
+
   /// No description provided for @errRegionBlocked.
   ///
   /// In en, this message translates to:
@@ -4181,10 +4193,10 @@ abstract class AppLocalizations {
   /// **'Lookups go to Anthropic (Claude web search) with your key.'**
   String get restaurantRecipientAnthropic;
 
-  /// Footer line naming who receives lookups with an OpenRouter key.
+  /// Footer line naming who receives lookups with an OpenRouter key. A lookup is answered by the model picked in Settings (openrouter_lookup_client.dart), so OpenRouter passes it on to that model's maker, as aiConsentRelayRecipient says for photos.
   ///
   /// In en, this message translates to:
-  /// **'Lookups go to OpenRouter and its search partner Exa.'**
+  /// **'Lookups go to OpenRouter, which passes them on to the maker of the model you picked, and to its search partner Exa.'**
   String get restaurantRecipientOpenrouter;
 
   /// Footer line when the selected AI service has no lookup. provider is its display name.
@@ -4361,10 +4373,10 @@ abstract class AppLocalizations {
   /// **'Anthropic (Claude web search)'**
   String get restaurantRecipientNameAnthropic;
 
-  /// The recipient inside restaurantConsentSent with an OpenRouter key.
+  /// The recipient inside restaurantConsentSent with an OpenRouter key: OpenRouter, the maker of the model picked in Settings (which answers the lookup) and Exa (the web search). Exa stays last: the sentence goes on ', which searches the web'.
   ///
   /// In en, this message translates to:
-  /// **'OpenRouter and its search partner Exa'**
+  /// **'OpenRouter (which passes them on to the maker of the model you picked) and its search partner Exa'**
   String get restaurantRecipientNameOpenrouter;
 
   /// Consent button: lookups may use the photo's location (disabled on Android and for an http server).

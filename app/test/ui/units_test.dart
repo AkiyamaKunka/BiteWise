@@ -3,6 +3,7 @@
 // English UI can render/enter lb+in, the Chinese UI is ALWAYS metric and
 // never offers the choice, and an untouched prefill survives an imperial
 // round-trip without drift.
+import 'package:calorie_tracker/core/coerce.dart' show isoDate;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
@@ -148,8 +149,11 @@ void main() {
       ..appLanguage = 'zh'
       ..units = 'imperial';
     final dao = FakeDao();
-    dao.weightsByDate['2026-08-02'] =
-        WeightEntry('2026-08-02', 81.6, source: 'manual');
+    // CalorieTrackerApp has no clock seam: its Body tab reads the real clock
+    // and loads only the last kBodyWindowDays, so a fixed date here would
+    // drop out of the window (and the headline's 'kg' with it) a year on.
+    final today = isoDate(DateTime.now());
+    dao.weightsByDate[today] = WeightEntry(today, 81.6, source: 'manual');
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);

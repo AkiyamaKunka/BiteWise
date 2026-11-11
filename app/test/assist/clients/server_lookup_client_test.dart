@@ -483,6 +483,49 @@ void main() {
     });
   });
 
+  group("the server gate's coordinate reading", () {
+    // Meals the composer keeps whole but the server's gate refuses (full
+    // NFKC, names and units read as one line). tests/test_lookup_contract.py
+    // pins the same fixture: the composed request is a 400 there, and the
+    // body sent here passes unchanged.
+    final cases = (fixture('server_gate_coordinates.json')['cases'] as List)
+        .cast<Map<String, dynamic>>();
+
+    for (final c in cases) {
+      test('sends what the gate accepts: ${c['case']}', () async {
+        final (client, s, stamp) = await make([_accepted]);
+        final request = LookupRequest.compose(c['meal']);
+        final before = jsonEncode(request.body);
+        final o = await client.submit(request, expectedRecipientStamp: stamp);
+        expect(o.kind, LookupOutcomeKind.pending, reason: '${o.failure}');
+        expect(jsonDecode(s.requests.single.body), c['sent']);
+        expect(jsonEncode(request.body), before,
+            reason: "the app's own request (its hash, what decideAssist "
+                'compares) is never changed');
+      });
+    }
+
+    test('a request with nothing to blank is the same request', () {
+      expect(identical(_bowl.withoutGateCoordinates(), _bowl), isTrue);
+      expect(identical(_mixed.withoutGateCoordinates(), _mixed), isTrue);
+    });
+
+    test('a meal whose only name the gate refuses: zero calls', () async {
+      final (client, s, stamp) = await make([_accepted]);
+      final o = await client.submit(
+          LookupRequest.compose({
+            'items': [
+              {'name': 'Oolong tea S 85\u2103', 'unit': 'cup'}
+            ],
+            'chains': ['eighty_five_c'],
+          }),
+          expectedRecipientStamp: stamp);
+      expect(o.failure!.code, LookupFailureCode.badRequest);
+      expect(o.cost, LookupCost.zero);
+      expect(s.requests, isEmpty);
+    });
+  });
+
   group('consent is bound to the server host', () {
     test('no stamp, another recipient, or a stale stamp: zero calls',
         () async {

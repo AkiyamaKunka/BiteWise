@@ -1847,6 +1847,8 @@
   "reasonLeftoverConflict": "the meal it belongs to changed meanwhile",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
+  "reasonNotAllowed": "this AI service is not allowed to receive your photos",
+  "errNotAllowed": "Nothing was sent: this AI service is not allowed to receive your photos. Chopstats asks first the next time you add one.",
   "errRegionBlocked": "{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.",
   "@errRegionBlocked": {
     "placeholders": {
@@ -2307,9 +2309,9 @@
   "@restaurantRecipientAnthropic": {
     "description": "Footer line naming who receives lookups with an Anthropic key."
   },
-  "restaurantRecipientOpenrouter": "Lookups go to OpenRouter and its search partner Exa.",
+  "restaurantRecipientOpenrouter": "Lookups go to OpenRouter, which passes them on to the maker of the model you picked, and to its search partner Exa.",
   "@restaurantRecipientOpenrouter": {
-    "description": "Footer line naming who receives lookups with an OpenRouter key."
+    "description": "Footer line naming who receives lookups with an OpenRouter key. A lookup is answered by the model picked in Settings (openrouter_lookup_client.dart), so OpenRouter passes it on to that model's maker, as aiConsentRelayRecipient says for photos."
   },
   "restaurantUnsupported": "Not available with {provider} yet.",
   "@restaurantUnsupported": {
@@ -2442,9 +2444,9 @@
   "@restaurantRecipientNameAnthropic": {
     "description": "The recipient inside restaurantConsentSent with an Anthropic key."
   },
-  "restaurantRecipientNameOpenrouter": "OpenRouter and its search partner Exa",
+  "restaurantRecipientNameOpenrouter": "OpenRouter (which passes them on to the maker of the model you picked) and its search partner Exa",
   "@restaurantRecipientNameOpenrouter": {
-    "description": "The recipient inside restaurantConsentSent with an OpenRouter key."
+    "description": "The recipient inside restaurantConsentSent with an OpenRouter key: OpenRouter, the maker of the model picked in Settings (which answers the lookup) and Exa (the web search). Exa stays last: the sentence goes on ', which searches the web'."
   },
   "restaurantConsentUseLocation": "Use location",
   "@restaurantConsentUseLocation": {

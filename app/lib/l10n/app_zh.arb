@@ -651,6 +651,8 @@
   "reasonLeftoverConflict": "它所属的那一餐刚被修改",
   "reasonNoApiKey": "还没有设置 API Key",
   "reasonNoServerKey": "还没有设置服务器地址或上传密钥",
+  "reasonNotAllowed": "还没有允许把照片发送给这个 AI 服务",
+  "errNotAllowed": "没有发送任何内容：还没有允许把照片发送给这个 AI 服务。下次添加照片时，筷拍会先征求你的同意。",
   "errRegionBlocked": "{provider} 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。",
   "@errRegionBlocked": {
     "placeholders": {
@@ -795,7 +797,7 @@
   "restaurantRegionHint": "手机的地区不是美国，而这里不使用照片的位置，所以不会进行查询。公布的营养信息只适用于美国的餐厅。",
   "restaurantRecipientClaudePlan": "查询会发送到你自己的服务器，它使用 Anthropic 的 Claude 网页搜索。",
   "restaurantRecipientAnthropic": "查询会用你的密钥发送给 Anthropic（Claude 网页搜索）。",
-  "restaurantRecipientOpenrouter": "查询会发送给 OpenRouter 及其搜索合作方 Exa。",
+  "restaurantRecipientOpenrouter": "查询会发送给 OpenRouter（再由它转交给你所选模型的厂商）及其搜索合作方 Exa。",
   "restaurantUnsupported": "{provider} 暂不支持此功能。",
   "restaurantNeedsServerAddress": "先填写你的服务器地址才能使用。",
   "restaurantSuggestOnly": "使用你自己的服务器时，公布的数值只作为建议，由你决定是否采用。",
@@ -825,7 +827,7 @@
   "restaurantConsentOff": "可随时在设置中关闭。",
   "restaurantRecipientNameClaudePlan": "你自己的服务器（它使用 Anthropic 的 Claude 网页搜索）",
   "restaurantRecipientNameAnthropic": "Anthropic（Claude 网页搜索）",
-  "restaurantRecipientNameOpenrouter": "OpenRouter 及其搜索合作方 Exa",
+  "restaurantRecipientNameOpenrouter": "OpenRouter（再由它转交给你所选模型的厂商）及其搜索合作方 Exa",
   "restaurantConsentUseLocation": "使用位置",
   "restaurantConsentBrandOnlyButton": "仅按品牌",
   "restaurantConsentNotNow": "暂不",

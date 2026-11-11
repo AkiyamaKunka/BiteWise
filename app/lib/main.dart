@@ -34,13 +34,30 @@ void _holdSnackbar(String message, SnackBarAction? action) {
   }
 }
 
+/// How long a snackbar with an action (the lookup's Undo) stays up: the
+/// same 8 s as the usual-foods and Settings ones.
+const Duration kAppActionSnackDuration = Duration(seconds: 8);
+
 /// True once the messenger is mounted and everything pending was shown.
 /// Not mounted (startup error screen): kept for the next message or frame.
+///
+/// A snackbar with an action never times out by default (SnackBar.persist
+/// defaults to `action != null`): the lookup's Undo stayed up until tapped,
+/// and every later message queued unseen behind it. It times out after
+/// [kAppActionSnackDuration] and is held only with a screen reader on,
+/// where reaching Undo takes longer (the usual-foods rule).
 bool _flushSnackbars() {
   final messenger = messengerKey.currentState;
   if (messenger == null) return false;
   for (final s in _pendingSnackbars) {
-    messenger.showSnackBar(SnackBar(content: Text(s.message), action: s.action));
+    messenger.showSnackBar(s.action == null
+        ? SnackBar(content: Text(s.message))
+        : SnackBar(
+            content: Text(s.message),
+            action: s.action,
+            duration: kAppActionSnackDuration,
+            persist: MediaQuery.accessibleNavigationOf(messenger.context),
+          ));
   }
   _pendingSnackbars.clear();
   return true;
