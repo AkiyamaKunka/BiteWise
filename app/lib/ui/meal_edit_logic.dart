@@ -68,11 +68,15 @@ class FieldParse {
 /// language when the screen passes [l] (the zh UI showed English rejections;
 /// found 2026-10-07). The English default is byte-identical to the old
 /// literals, so callers and tests without a locale read exactly as before.
+///
+/// The text is read as the iOS decimal pad types it in the phone's region
+/// ([normalizeTypedNumber]): native digits, and a comma for the decimal
+/// point where the region writes one.
 FieldParse parseNumberField(String raw,
     {required String label, required num max, AppLocalizations? l}) {
   final t = raw.trim();
   if (t.isEmpty) return const FieldParse(null, null);
-  final v = num.tryParse(t);
+  final v = num.tryParse(normalizeTypedNumber(t));
   final msg = l ?? AppLocalizationsEn();
   if (v == null || v.isNaN || v.isInfinite) {
     return FieldParse(null, msg.editorErrNotNumber(label));
@@ -80,6 +84,49 @@ FieldParse parseNumberField(String raw,
   if (v < 0) return FieldParse(null, msg.editorErrNegative(label));
   if (v > max) return FieldParse(null, msg.editorErrTooLarge(label, '$max'));
   return FieldParse(v, null);
+}
+
+/// The zero of each run of ten decimal digits a phone's numbering system
+/// may type (Arabic-Indic, Extended Arabic-Indic, the Indic scripts, Thai,
+/// Lao, Tibetan, Myanmar, Khmer, full-width).
+const List<int> _digitZeros = [
+  0x0660, 0x06F0, 0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6, 0x0C66,
+  0x0CE6, 0x0D66, 0x0E50, 0x0ED0, 0x0F20, 0x1040, 0x17E0, 0xFF10,
+];
+
+/// [t] as `num.tryParse` reads it. The editor's fields open the decimal
+/// pad, which types the region's digits and decimal separator: a comma in
+/// most of Europe and Latin America (that pad has no '.'), '٫' in Arabic,
+/// native digits where the numbering system is not Latin. Those digits
+/// become ASCII, '٫' and '．' a '.', and a single ',' a '.' when the text
+/// has no '.' and the comma is not followed by exactly three digits:
+/// "1,200" stays an error (a thousands separator, not 1.2 kcal).
+String normalizeTypedNumber(String t) {
+  final b = StringBuffer();
+  for (final r in t.runes) {
+    var ascii = -1;
+    for (final z in _digitZeros) {
+      if (r >= z && r <= z + 9) {
+        ascii = 0x30 + r - z;
+        break;
+      }
+    }
+    if (ascii >= 0) {
+      b.writeCharCode(ascii);
+    } else if (r == 0x066B || r == 0xFF0E) {
+      b.write('.');
+    } else {
+      b.writeCharCode(r);
+    }
+  }
+  final s = b.toString();
+  final comma = s.indexOf(',');
+  if (comma < 0 || s.contains('.') || s.indexOf(',', comma + 1) >= 0) {
+    return s;
+  }
+  final after = s.substring(comma + 1);
+  if (RegExp(r'^\d{3}$').hasMatch(after)) return s;
+  return s.replaceFirst(',', '.');
 }
 
 /// A food item row in the editor.

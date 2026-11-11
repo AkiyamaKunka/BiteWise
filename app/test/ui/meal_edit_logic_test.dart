@@ -40,6 +40,49 @@ void main() {
           contains('too large'));
     });
 
+    // RC 1.6.0: the decimal pad types the phone region's separator and
+    // digits; "12,5" and "٣٥٠" were "not a number", so in a comma region
+    // no decimal could be typed and with native digits no number at all.
+    test('reads a decimal comma and native digits as the decimal pad types '
+        'them', () {
+      num? v(String s) =>
+          parseNumberField(s, label: 'x', max: maxMealCalories).value;
+      expect(v('12,5'), 12.5);
+      expect(v('0,25'), 0.25);
+      expect(v('12,'), 12);
+      expect(v('٣٥٠'), 350); // Arabic-Indic
+      expect(v('۳۵۰'), 350); // Extended Arabic-Indic (Persian)
+      expect(v('३५०'), 350); // Devanagari
+      expect(v('৩৫০'), 350); // Bengali
+      expect(v('３５０'), 350); // full-width
+      expect(v('١٢٫٥'), 12.5); // Arabic decimal separator
+      expect(v('١٢,٥'), 12.5);
+    });
+
+    test('a comma that may be a thousands separator stays an error', () {
+      for (final s in ['1,200', '1,234,567', '1.2,5', '1,2,3', '١,٢٠٠']) {
+        final p = parseNumberField(s, label: 'Calories', max: maxMealCalories);
+        expect(p.ok, isFalse, reason: '$s must never be read as a decimal');
+        expect(p.error, contains('number'));
+      }
+    });
+
+    test('a decimal comma is saved as the number it reads as', () {
+      final d = MealDraft.fromMeal(mealWith({
+        'meal_description': 'Lunch',
+        'total_calories': 300,
+        'food_items': [
+          {'name': 'Rice', 'estimated_calories': 300},
+        ],
+      }))
+        ..protein = '12,5';
+      d.items[0].protein = '٢,٥';
+      expect(d.validate(), isEmpty);
+      final a = d.toAnalysis(now: DateTime.utc(2026, 7, 24));
+      expect(a['total_protein_g'], 12.5);
+      expect(((a['food_items'] as List)[0] as Map)['protein_g'], 2.5);
+    });
+
     test('rejects NaN/Infinity spellings', () {
       for (final s in ['NaN', 'Infinity', '-Infinity']) {
         expect(parseNumberField(s, label: 'x', max: 1e6).ok, isFalse,
