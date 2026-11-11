@@ -201,6 +201,20 @@ void main() {
           OwnerVerdict.allowed);
     });
 
+    test('the adopted install only up to the seq it was adopted at', () {
+      WriteExpect upTo(int seq) => WriteExpect(
+          installId: _me, seqs: const [0], adoptFrom: _other, adoptMaxSeq: seq);
+      final seq = theirs.seq;
+      expect(checkOwner(exists: true, header: theirs, expect: upTo(seq)),
+          OwnerVerdict.allowed);
+      expect(checkOwner(exists: true, header: theirs, expect: upTo(seq - 1)),
+          OwnerVerdict.ownedByOther,
+          reason: 'it took the backup back: another install\'s again');
+      expect(checkOwner(exists: true, header: mine(5), expect: upTo(0)),
+          OwnerVerdict.changedElsewhere,
+          reason: 'this install\'s own file goes by its seqs alone');
+    });
+
     test('an unreadable header only on the explicit Replace', () {
       expect(
           checkOwner(

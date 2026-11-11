@@ -2331,6 +2331,19 @@ class CloudFilesTests: XCTestCase {
     XCTAssertEqual(
       CloudFiles.checkOwner(exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other)),
       .allowed)
+    // The adopted install's file only up to the seq it was adopted at.
+    XCTAssertEqual(
+      CloudFiles.checkOwner(
+        exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other, adoptMaxSeq: 9)),
+      .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(
+        exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other, adoptMaxSeq: 8)),
+      .ownedByOther)
+    XCTAssertTrue(E(installId: me, adoptFrom: other, adoptMaxSeq: 9).owns(theirs))
+    XCTAssertFalse(E(installId: me, adoptFrom: other, adoptMaxSeq: 8).owns(theirs))
+    XCTAssertTrue(E(installId: me, adoptFrom: other, adoptMaxSeq: 1).owns(mine))
+    XCTAssertFalse(E(installId: me, adoptFrom: other).owns(nil))
     XCTAssertEqual(
       CloudFiles.checkOwner(exists: true, header: nil, expect: E(installId: me, allowAbsent: true)), .unknownOwner)
     XCTAssertEqual(
@@ -2343,7 +2356,12 @@ class CloudFilesTests: XCTestCase {
     ])
     XCTAssertEqual(e?.seqs, [3])
     XCTAssertNil(e?.adoptFrom)
+    XCTAssertNil(e?.adoptMaxSeq)
     XCTAssertNil(CloudFiles.Expect(["installId": "short"]))
+    let bounded = CloudFiles.Expect([
+      "installId": me, "adoptFrom": other, "adoptMaxSeq": NSNumber(value: 7), "allowAbsent": false,
+    ])
+    XCTAssertEqual(bounded?.adoptMaxSeq, 7)
   }
 
   // MARK: - write

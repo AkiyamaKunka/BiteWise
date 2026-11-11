@@ -161,9 +161,14 @@ class FakeCloudTransport implements BackupTransport {
   void finishDownloads() => notDownloaded
       .removeAll(downloadsStarted.where((p) => !unreachable.contains(p)));
 
-  /// CloudFiles.Expect.owns: never true for a header that cannot be read.
-  static bool _owns(WriteExpect expect, String? id) =>
-      id != null && (id == expect.installId || id == expect.adoptFrom);
+  /// CloudFiles.Expect.owns: never true for a header that cannot be read;
+  /// the adopted install's only up to adoptMaxSeq.
+  static bool _owns(WriteExpect expect, BackupHeader? h) {
+    if (h == null) return false;
+    if (h.installId == expect.installId) return true;
+    final max = expect.adoptMaxSeq;
+    return h.installId == expect.adoptFrom && (max == null || h.seq <= max);
+  }
 
   @override
   Future<CloudResult> write({
@@ -199,7 +204,7 @@ class FakeCloudTransport implements BackupTransport {
         return const CloudResult(CloudResultKind.absentNotAllowed);
     }
     final foreign = (conflictVersions[path] ?? const <Uint8List>[])
-        .where((v) => !_owns(expect, parseBackupHeader(v)?.installId));
+        .where((v) => !_owns(expect, parseBackupHeader(v)));
     if (foreign.isNotEmpty) return const CloudResult(CloudResultKind.twoCopies);
     conflictVersions.remove(path);
     final src = await File(sourcePath).readAsBytes();
@@ -212,12 +217,12 @@ class FakeCloudTransport implements BackupTransport {
     }
     if (keepPreviousPath != null && exists) {
       final prev = files[keepPreviousPath];
-      final prevOwner = prev == null ? null : parseBackupHeader(prev)?.installId;
+      final prevHeader = prev == null ? null : parseBackupHeader(prev);
       // CloudFiles.rotatePrevious: only over a downloaded copy this install
       // (or the adopted one) owns.
       if (prev == null ||
           (!notDownloaded.contains(keepPreviousPath) &&
-              _owns(expect, prevOwner))) {
+              _owns(expect, prevHeader))) {
         files[keepPreviousPath] = files[path]!;
         log.add('rotate $keepPreviousPath');
       }
@@ -254,7 +259,9 @@ class FakeCloudTransport implements BackupTransport {
           exists: true,
           header: parseBackupHeader(b),
           expect: WriteExpect(
-              installId: expect.installId, adoptFrom: expect.adoptFrom));
+              installId: expect.installId,
+              adoptFrom: expect.adoptFrom,
+              adoptMaxSeq: expect.adoptMaxSeq));
       if (verdict != OwnerVerdict.allowed) {
         refused++;
         continue;
@@ -262,7 +269,7 @@ class FakeCloudTransport implements BackupTransport {
       // CloudFiles.performDelete: never with another install's unresolved
       // conflict version, which the removal would drop.
       if ((conflictVersions[p] ?? const <Uint8List>[])
-          .any((v) => !_owns(expect, parseBackupHeader(v)?.installId))) {
+          .any((v) => !_owns(expect, parseBackupHeader(v)))) {
         left++;
         continue;
       }

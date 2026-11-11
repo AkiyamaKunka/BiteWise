@@ -82,6 +82,7 @@ class BackupPrefs {
   static const String kPendingSeq = '${prefix}pending_seq';
   static const String kTopSeq = '${prefix}top_seq';
   static const String kAdoptedFrom = '${prefix}adopted_from';
+  static const String kAdoptedSeq = '${prefix}adopted_seq';
   static const String kOwnedPath = '${prefix}owned_path';
   static const String kFirstEmptyAt = '${prefix}first_empty_at';
   static const String kMonths = '${prefix}months';
@@ -101,7 +102,7 @@ class BackupPrefs {
   /// Every key this file owns (the reset paths and the privacy test).
   static const List<String> allKeys = [
     kEnabled, kNoticeSeen, kInstallId, kDeviceKey, kLastSeq, kPendingSeq,
-    kTopSeq, kAdoptedFrom, kOwnedPath, kFirstEmptyAt, kMonths,
+    kTopSeq, kAdoptedFrom, kAdoptedSeq, kOwnedPath, kFirstEmptyAt, kMonths,
     kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes, kLastError,
     kLastMeals, kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused,
     kPausedCount, kSkippedMonths,
@@ -141,7 +142,15 @@ class BackupPrefs {
 
   /// The install whose backup this one restored or took over.
   String get adoptedFrom => _p.getString(kAdoptedFrom) ?? '';
-  Future<void> setAdoptedFrom(String v) => _p.setString(kAdoptedFrom, v);
+
+  /// The seq of its records file then (WriteExpect.adoptMaxSeq): a later
+  /// file of that install is another install's again.
+  int? get adoptedSeq => _p.getInt(kAdoptedSeq);
+
+  Future<void> setAdopted(BackupHeader header) async {
+    await _p.setString(kAdoptedFrom, header.installId);
+    await _p.setInt(kAdoptedSeq, header.seq);
+  }
 
   String get ownedPath => _p.getString(kOwnedPath) ?? '';
   Future<void> setOwnedPath(String v) => _p.setString(kOwnedPath, v);
@@ -239,7 +248,8 @@ class BackupPrefs {
   /// account. [keepNotice]: the answer to the notice still holds.
   Future<void> forgetBackup({required bool keepNotice}) async {
     for (final k in [
-      kLastSeq, kPendingSeq, kAdoptedFrom, kOwnedPath, kFirstEmptyAt,
+      kLastSeq, kPendingSeq, kAdoptedFrom, kAdoptedSeq, kOwnedPath,
+      kFirstEmptyAt,
       kMonths, kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes,
       kLastError, kLastMeals, kPreviousDay, kPaused, kPausedCount,
       kHoldCatchUpUntil, kSkippedMonths,

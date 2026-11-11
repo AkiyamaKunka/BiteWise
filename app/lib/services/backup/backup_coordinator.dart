@@ -320,6 +320,15 @@ class BackupCoordinator {
       _prefs.adoptedFrom.isNotEmpty ||
       _prefs.months.values.any((m) => m.state != MonthState.foreign);
 
+  /// [h] is the adopted install's file as it was adopted
+  /// (WriteExpect.adoptMaxSeq), not one it wrote after taking it back.
+  bool _isAdopted(BackupHeader h) {
+    final max = _prefs.adoptedSeq;
+    return _prefs.adoptedFrom.isNotEmpty &&
+        h.installId == _prefs.adoptedFrom &&
+        (max == null || h.seq <= max);
+  }
+
   BackupStatus _statusFromPrefs() {
     // Off and paused keep what is known about the last backup: the
     // turn-off sheet and the Delete row go by it.
@@ -614,6 +623,7 @@ class BackupCoordinator {
 
     final adopted = _prefs.adoptedFrom;
     final adoptFrom = adopted.isEmpty ? null : adopted;
+    final adoptMax = _prefs.adoptedSeq;
     final firstWrite = lastSeq == 0;
     var allowAbsent = false;
     BackupHeader? current;
@@ -653,7 +663,8 @@ class BackupCoordinator {
             expect: WriteExpect(
                 installId: me,
                 seqs: [lastSeq, if (_prefs.pendingSeq > 0) _prefs.pendingSeq],
-                adoptFrom: adoptFrom));
+                adoptFrom: adoptFrom,
+                adoptMaxSeq: adoptMax));
         if (verdict == OwnerVerdict.ownedByOther) {
           return _set(BackupState.otherDevice, other: current);
         }
@@ -707,6 +718,7 @@ class BackupCoordinator {
         months: months,
         me: me,
         adoptFrom: adoptFrom,
+        adoptMax: adoptMax,
         seq: newSeq,
         r: r,
         addBytes: (n) => bytes += n);
@@ -740,6 +752,7 @@ class BackupCoordinator {
         installId: me,
         seqs: [lastSeq, if (oldPending > 0) oldPending],
         adoptFrom: adoptFrom,
+        adoptMaxSeq: adoptMax,
         allowAbsent: allowAbsent,
         replaceUnknown: r.replaceUnknown,
       ),
@@ -806,6 +819,7 @@ class BackupCoordinator {
     required Map<String, MonthRecord> months,
     required String me,
     required String? adoptFrom,
+    required int? adoptMax,
     required int seq,
     required _Run r,
     required void Function(int) addBytes,
@@ -837,7 +851,8 @@ class BackupCoordinator {
           }
           if (await _switchedOff()) return CloudResultKind.cancelled;
           final d = await _t.delete([path],
-              WriteExpect(installId: me, adoptFrom: adoptFrom),
+              WriteExpect(
+                  installId: me, adoptFrom: adoptFrom, adoptMaxSeq: adoptMax),
               timeout: r.timeout);
           if (d.ok && d.left == 0) {
             months.remove(m);
@@ -869,7 +884,9 @@ class BackupCoordinator {
             }
             final owner = h.header?.installId;
             if (h.kind != CloudResultKind.ok || owner == null) continue;
-            if (owner != me && owner != adoptFrom) {
+            final adoptedFile = owner == adoptFrom &&
+                (adoptMax == null || h.header!.seq <= adoptMax);
+            if (owner != me && !adoptedFile) {
               months[m] = const MonthRecord(MonthState.foreign);
               continue;
             }
@@ -897,7 +914,10 @@ class BackupCoordinator {
           bytes: file.bytes,
           sha256: file.sha256,
           expect: WriteExpect(
-              installId: me, adoptFrom: adoptFrom, allowAbsent: allowAbsent),
+              installId: me,
+              adoptFrom: adoptFrom,
+              adoptMaxSeq: adoptMax,
+              allowAbsent: allowAbsent),
           allowDownload: !bg,
           timeout: r.timeout,
         );
@@ -1201,10 +1221,10 @@ class BackupCoordinator {
     if (item != null && item.hasConflicts && s != BackupState.twoCopies) {
       final versions = await _t.conflicts(
           kRecordsFileName, await _tmpPath('conflict-check'));
-      final me = _prefs.installId, adopted = _prefs.adoptedFrom;
+      final me = _prefs.installId;
       final foreign = versions.any((v) =>
           v.header == null ||
-          (v.header!.installId != me && v.header!.installId != adopted));
+          (v.header!.installId != me && !_isAdopted(v.header!)));
       for (final v in versions) {
         await _deleteQuietly(v.tmpPath);
       }
@@ -1388,7 +1408,7 @@ class BackupCoordinator {
         if (!summary.ok || header == null) return summary;
         await _prefs.reload();
         if (restoreTakesOver(c)) {
-          await _prefs.setAdoptedFrom(header.installId);
+          await _prefs.setAdopted(header);
           await _adoptMonths(header, before: before, restored: done);
         }
         await _markAnswered(c.header.installId);
@@ -1522,7 +1542,7 @@ class BackupCoordinator {
             // Adopting its own id would accept any seq from now on.
             await _prefs.setLastSeq(header.seq);
           } else {
-            await _prefs.setAdoptedFrom(header.installId);
+            await _prefs.setAdopted(header);
             await _prefs.setLastSeq(0);
           }
           await _prefs.setPendingSeq(0);
@@ -1561,7 +1581,7 @@ class BackupCoordinator {
       final ok = await _locked(() async {
         await _prefs.reload();
         final me = _prefs.installId;
-        final ids = <String>{me, if (_prefs.adoptedFrom.isNotEmpty) _prefs.adoptedFrom};
+        final ids = <String>{me};
         final dir = (await _tmpPath('conflicts'));
         final versions = await _t.conflicts(kRecordsFileName, dir);
         var imported = false;
@@ -1569,7 +1589,9 @@ class BackupCoordinator {
           final h = v.header;
           try {
             if (h == null || h.kind != BackupKind.records) continue;
-            if (!ids.contains(h.installId)) {
+            // The adopted install's version as adopted is in already; a
+            // later one (it took the backup back) is merged like any other.
+            if (h.installId != me && !_isAdopted(h)) {
               await _dao.importJson(await File(v.tmpPath).readAsString());
               imported = true;
             }
@@ -1593,7 +1615,7 @@ class BackupCoordinator {
               await _importBackup(kRecordsFileName, curHeader.installId);
           if (summary.ok && fetched != null) {
             imported = true;
-            await _prefs.setAdoptedFrom(fetched.installId);
+            await _prefs.setAdopted(fetched);
             await _prefs.setLastSeq(0);
             await _prefs.setPendingSeq(0);
             await _adoptMonths(fetched, before: before, restored: done);
@@ -1656,7 +1678,10 @@ class BackupCoordinator {
           ],
           const [kPreviousFileName],
           const [kRecordsFileName],
-        ], WriteExpect(installId: me, adoptFrom: adopted.isEmpty ? null : adopted));
+        ], WriteExpect(
+            installId: me,
+            adoptFrom: adopted.isEmpty ? null : adopted,
+            adoptMaxSeq: _prefs.adoptedSeq));
         _headerCache.clear();
         _listing = null;
         if (result == BackupDeleteResult.deleted) {

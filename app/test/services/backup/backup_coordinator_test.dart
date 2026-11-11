@@ -1183,6 +1183,46 @@ void main() {
     expect(paused.status.value.ownsFiles, isTrue);
   });
 
+  test('the adopted install that takes its backup back is another install '
+      'again: nothing of its newer backup is written over or deleted',
+      () async {
+    await otherPhoneBackup(meals: 2); // seq 5, October
+    await c.launchCheckForTest();
+    final offer = c.prompt.value as RestoreOfferPrompt;
+    expect((await c.restore(offer.candidate)).ok, isTrue);
+    await c.answerNotice(keepOn: true);
+    await c.backUpNow();
+    final me = prefs.getString(BackupPrefs.kInstallId)!;
+    expect(cloud.headerOf(kRecordsFileName)!.installId, me);
+    expect(cloud.headerOf(picturesPath('2026-10'))!.installId, _other,
+        reason: 'restored and unchanged: still the adopted file');
+    // The old phone, still in use, chose Back Up From This iPhone (its
+    // next seq is above any it took before): October first...
+    final late = await seed(otherDao, '2026-10-25', hash: 'o-late');
+    await otherDao.saveMealThumb(late, _jpeg(6));
+    final w = BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+    final p = await w.writePictures('${tmp.path}/o9-oct.json',
+        installId: _other, seq: 9, month: '2026-10');
+    cloud.files[picturesPath('2026-10')] = await File(p.path).readAsBytes();
+    final mine = await seed(dao, '2026-10-26', hash: 'mine');
+    await dao.saveMealThumb(mine, _jpeg(7));
+    expect(await run(), BackupState.uploading);
+    expect(hashesIn('2026-10'), unorderedEquals(['o0', 'o1', 'o-late']),
+        reason: 'its newer October is not written over');
+    expect(BackupPrefs(prefs).months['2026-10']!.state, MonthState.foreign);
+    // ...then its records file, with a meal this phone never saw.
+    final f = await w.writeRecords('${tmp.path}/o9.json',
+        installId: _other, seq: 9, months: const {'2026-10': 3});
+    cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+    final theirs = Map.of(cloud.files);
+    await seed(dao, '2026-11-10');
+    expect(await run(), BackupState.otherDevice);
+    expect(c.status.value.other!.installId, _other);
+    expect(await c.backUpNow(), BackupState.otherDevice);
+    expect(await c.deleteBackup(), isNot(BackupDeleteResult.failed));
+    expect(cloud.files, theirs, reason: 'nothing of it written or deleted');
+  });
+
   test('a restored backup is this install\'s to delete', () async {
     await otherPhoneBackup(meals: 1);
     await c.launchCheckForTest();
