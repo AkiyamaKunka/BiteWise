@@ -603,3 +603,18 @@ def test_the_server_doc_says_a_photo_before_4am_carries_the_day_befores_meals():
                         releasing.index("**After #22, one restyle commit:**")]
     assert ("When run 7's build reaches the App Store, say the day before's "
             "meals in `README.md` and `README.zh-CN.md` too") in merging
+
+
+def test_icloud_backup_never_carries_the_lookup_files_or_the_keys():
+    """1.7.0 iCloud Backup: the restaurant lookup files stay out of the
+    backup as they stay out of the phone's own backups and exports, and
+    the keys and consents are never copied (both languages)."""
+    en, zh = _policy_halves()
+    en_sec = _lookup_section(en, "### iCloud Backup (iPhone)")
+    zh_sec = _lookup_section(zh, "### iCloud 备份（iPhone）")
+    assert "API keys, the key and address of your own server, setup links" in en_sec
+    assert "restaurant lookup files (learned places, saved lookup answers)" in en_sec
+    assert "API Key、你自己服务器的密钥和地址、设置链接" in zh_sec
+    assert "餐厅查询的文件（记住的地点、保存的查询结果）" in zh_sec
+    assert "Each iPhone only overwrites its own backup" in en_sec
+    assert "每台 iPhone 只会覆盖自己的备份" in zh_sec

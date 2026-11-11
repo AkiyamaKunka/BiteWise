@@ -3004,7 +3004,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupICloudFooter =>
-      '你的餐食、体重、身体围度、运动记录和餐食图片会复制到 iCloud 云盘 › 筷拍，你可以在「文件」App 里查看、复制或删除。API Key 绝不会包含在内，开发者也收不到任何内容。';
+      '你的餐食、体重、身体围度、运动记录和餐食图片会复制到 iCloud 云盘 › Chopstats，你可以在「文件」App 里查看、复制或删除。API Key 绝不会包含在内，开发者也收不到任何内容。';
 
   @override
   String get backupAndroidFooter =>
