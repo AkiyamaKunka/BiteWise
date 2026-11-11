@@ -1837,6 +1837,8 @@ void main() {
           at: _now,
           nextAt: _now,
           attempts: assistMaxRetries,
+          // The harness's recipient: a record of another one is forgotten.
+          recipient: 'anthropic',
         ),
       );
       h.lookups.onSubmit = (_) async => const LookupOutcome(

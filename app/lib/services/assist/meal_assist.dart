@@ -1279,7 +1279,18 @@ class MealAssist {
     final misses = await _state.misses();
     final jobs = await _state.jobs();
     if (jobs.isNotEmpty) {
-      await _state.retainJobs({for (final m in meals) m.id});
+      // Only these meals' jobs, and only those sent to the recipient a
+      // lookup reaches now (the consent covers it: the gate above). A
+      // record of another recipient — the user switched provider or server
+      // and agreed for the new one — answers nothing here and is forgotten
+      // before anything reads it: its job id is never polled at this
+      // recipient (a direct provider has no jobs, and its "unsupported"
+      // held the new recipient for an hour, again and again), its meal is
+      // not taken as the editor's pending lookup, and the place it kept —
+      // found under the old recipient's location answer — is never sent.
+      final stamp = support.recipientStamp;
+      await _state.retainJobs({for (final m in meals) m.id}, recipient: stamp);
+      jobs.removeWhere((_, job) => job.recipient != stamp);
     }
     final ordered = [
       for (final m in meals)
@@ -1327,6 +1338,13 @@ class MealAssist {
       if (again != null && !capped) {
         _skip(again, support);
         return;
+      }
+      if (job != null && job.recipient != support.recipientStamp) {
+        // The recipient changed (and its consent was given) while this
+        // sweep ran: the record is another recipient's now. Forgotten; the
+        // next sweep looks at the meal afresh.
+        await _state.removeJob(meal.id);
+        continue;
       }
       if (capped) {
         _lastSkip = again;
@@ -1453,7 +1471,14 @@ class MealAssist {
         return const AssistRun(AssistSkip.consentNeeded);
       }
       final jobs = await _state.jobs();
-      final job = jobs[mealId];
+      var job = jobs[mealId];
+      if (job != null && job.recipient != support.recipientStamp) {
+        // Sent to another recipient (the provider or server changed since):
+        // never polled or resubmitted here, and what it kept is not used.
+        // Forgotten, so this press is an ordinary new lookup.
+        await _state.removeJob(mealId);
+        job = null;
+      }
       // A job the server runs for this meal, the editor's own or the
       // automatic lookup's, is polled past the cap too; anything new this
       // call would send waits for the cap ([_run]'s capped).
@@ -1687,6 +1712,7 @@ class MealAssist {
                   attempts: lost.attempts,
                   place: prepared.place,
                   country: prepared.country,
+                  recipient: support.recipientStamp,
                 ),
               );
             }
@@ -2146,6 +2172,7 @@ class MealAssist {
             fresh: manual && fresh,
             pick: prepared.pick,
             country: prepared.country,
+            recipient: support.recipientStamp,
           );
           await _state.putJob(mealId, next);
           _schedulePoll(next);
@@ -2157,6 +2184,14 @@ class MealAssist {
           // assist pauses until the new recipient is consented to.
           _consentNeeded.value = _support();
           return const _Run(AssistSkip.consentNeeded, stop: true);
+        }
+        if (polled) {
+          // The recipient has no such job (a direct provider has none at
+          // all): the record answers nothing, and says nothing about
+          // whether this recipient can look up. Forgotten, and the
+          // recipient is not held.
+          if (job != null) await _state.removeJob(mealId);
+          return const _Run(AssistSkip.unsupported);
         }
         await _logFailure('lookup_unsupported', provider);
         _holdRecipient(support, now);
@@ -2221,6 +2256,7 @@ class MealAssist {
             fresh: manual && fresh,
             pick: prepared.pick,
             country: prepared.country,
+            recipient: support.recipientStamp,
           ),
         );
       }
@@ -2254,6 +2290,7 @@ class MealAssist {
         attempts: attempts,
         place: prepared.place,
         country: prepared.country,
+        recipient: support.recipientStamp,
       ),
     );
     return _Run(code, stop: true);
