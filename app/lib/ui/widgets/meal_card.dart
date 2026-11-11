@@ -27,6 +27,7 @@ import 'glasses_badge.dart';
 import 'grouped.dart' show GroupedCard;
 import 'macro_chart.dart' show MacroPalette;
 import 'meal_thumb.dart';
+import 'meal_parts.dart';
 
 class MealCard extends StatelessWidget {
   final Meal meal;
@@ -71,49 +72,23 @@ class MealCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                // Photo meals only: for text/manual meals the old
-                // placeholder block read as a failed image load (panel,
-                // cycle 1) — the title owns the width instead.
-                if (thumb != null && meal.imageHash.isNotEmpty) ...[
-                  MealThumbView(
-                      thumb: thumb,
-                      isPhotoMeal: true),
-                  const SizedBox(width: 10),
-                ],
-                Expanded(
-                  child: Text(
-                    mealDescription(a,
-                        fallback: context.l10n.nlUnnamedMeal),
-                    style: theme.textTheme.titleMedium,
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                ),
-                if (meal.corrected)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    // ✏️ corrected marker (spec §2.2 / §5.2).
-                    child: Tooltip(
-                      message: context.l10n.correctedBadge,
-                      child: Icon(Icons.edit,
-                          key: const Key('correctedBadge'),
-                          size: 16,
-                          color: theme.colorScheme.tertiary),
-                    ),
-                  ),
-                const SizedBox(width: 8),
-                Text(context.clock(meal.time),
-                    style: theme.textTheme.bodySmall),
-                if (onTap != null) ...[
-                  const SizedBox(width: 2),
-                  Icon(Icons.chevron_right,
-                      size: 16,
-                      color: theme.colorScheme.onSurfaceVariant
-                          .withValues(alpha: 0.6)),
-                ],
-              ],
+            MealHeader(
+              // Photo meals only: for text/manual meals the old
+              // placeholder block read as a failed image load (panel,
+              // cycle 1) — the title owns the width instead.
+              leading: thumb != null && meal.imageHash.isNotEmpty
+                  ? MealThumbView(thumb: thumb, isPhotoMeal: true)
+                  : null,
+              title: mealDescription(a, fallback: context.l10n.nlUnnamedMeal),
+              titleKey: const Key('mealCardTitle'),
+              time: context.clock(meal.time),
+              timeKey: const Key('mealCardTime'),
+              maxTitleLines: 2,
+              marker: meal.corrected
+                  ? const CorrectedMark(
+                      iconKey: Key('correctedBadge'), tooltip: true)
+                  : null,
+              showChevron: onTap != null,
             ),
             const SizedBox(height: 8),
             // Macro chips carry their FIXED identity hues (research: Apple's
@@ -152,8 +127,12 @@ class MealCard extends StatelessWidget {
                   padding: const EdgeInsets.only(top: 2),
                   child: Text(
                     // Item line per §5.4; name stringified, missing → '?'.
-                    '• ${item['name'] ?? '?'}: '
-                    '~${context.l10n.kcalAmount(displayItemCalories(item['estimated_calories']))}',
+                    // A template, so zh gets its full-width colon (L7).
+                    '• ${context.l10n.mealItemLine(
+                      '${item['name'] ?? '?'}',
+                      context.l10n.kcalAmount(
+                          displayItemCalories(item['estimated_calories'])),
+                    )}',
                     style: theme.textTheme.bodySmall,
                   ),
                 ),
@@ -164,33 +143,11 @@ class MealCard extends StatelessWidget {
     );
   }
 
+  /// Macro chips carry their FIXED identity hues; the total wears the
+  /// solid accent so it stays the first thing read (see [MealChip]).
   Widget _chip(BuildContext context, String label,
       {bool emphasized = false, Color? tint}) {
-    final scheme = Theme.of(context).colorScheme;
-    // Identity never rests on colour ALONE (chart rule): the P/C/F letter
-    // stays in the label; the tint is reinforcement.
-    // Tint alphas: a11y-measured — 0.14 was compliant but nearly invisible;
-    // 0.20 light / 0.25 dark actually reads while keeping >6:1 text headroom.
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    // The TOTAL wears solid primary — under the clay seed, primaryContainer
-    // and the carb tint became near-twins, dissolving the hierarchy the
-    // emphasized chip exists for.
-    final bg = emphasized
-        ? scheme.primary
-        : tint != null
-            ? tint.withValues(alpha: dark ? 0.25 : 0.20)
-            : scheme.surfaceContainerHighest;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(label,
-          style: Theme.of(context).textTheme.labelSmall?.copyWith(
-              color: emphasized ? scheme.onPrimary : null,
-              fontWeight: emphasized ? FontWeight.w600 : null)),
-    );
+    return MealChip(label: label, emphasized: emphasized, tint: tint);
   }
 }
 

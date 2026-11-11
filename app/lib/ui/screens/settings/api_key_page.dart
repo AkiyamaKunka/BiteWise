@@ -10,7 +10,9 @@ import 'package:flutter/services.dart' show HapticFeedback;
 import '../../ai_consent.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/grouped.dart';
+import 'settings_kit.dart';
 import 'provider_page.dart'
     show
         defaultModelFor,
@@ -34,6 +36,9 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
   late final TextEditingController _keyController;
   late final TextEditingController _modelController;
   late bool _customModel;
+
+  /// Show the key while checking a paste (U5); hidden by default.
+  bool _keyVisible = false;
 
   bool get _apiActive => widget.settings.provider != 'server';
 
@@ -112,7 +117,6 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
     final settings = widget.settings;
     return GroupedPage(
       title: context.l10n.apiPageTitle,
@@ -120,6 +124,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
         GroupedSection(
           header: context.l10n.apiProviderHeader,
           footer: context.l10n.apiProviderFooter,
+          separatorInset: AppSpace.separatorInset,
           children: [
             for (final (id, name, note) in kApiKeyChoices)
               GroupedRow(
@@ -128,7 +133,8 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                 value: noteLabel(context.l10n, note),
                 showChevron: false,
                 trailing: settings.provider == id
-                    ? Icon(Icons.check, size: 20, color: scheme.primary)
+                    ? Icon(Icons.check_rounded,
+                        size: 20, color: context.colors.accent)
                     : const SizedBox(width: 20),
                 onTap: () => _selectProvider(id),
               ),
@@ -142,18 +148,36 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
               _cellField(TextField(
                 key: const Key('apiKeyField'),
                 controller: _keyController,
-                obscureText: true,
+                obscureText: !_keyVisible,
                 autocorrect: false,
+                // Show key turns obscuring off, and with it Android's
+                // no-suggestions/password flags: the keyboard offered
+                // suggestions and could learn the secret into its
+                // dictionary. Off for good, shown or not.
+                enableSuggestions: false,
+                enableIMEPersonalizedLearning: false,
                 // Saves as you type — a paste-then-switch-tab can never
                 // lose the key.
                 onChanged: (v) => settings.update(apiKey: v.trim()),
                 onSubmitted: (v) => settings.update(apiKey: v.trim()),
                 onTapOutside: (_) =>
                     settings.update(apiKey: _keyController.text.trim()),
-                decoration: InputDecoration(
+                decoration: cellFieldDecoration(
+                  context,
                   labelText: context.l10n
                       .apiKeyLabel(providerLabel(settings.provider)),
-                  border: InputBorder.none,
+                ).copyWith(
+                  suffixIcon: IconButton(
+                    key: const Key('apiKeyVisibility'),
+                    tooltip: _keyVisible
+                        ? context.l10n.apiKeyHide
+                        : context.l10n.apiKeyShow,
+                    icon: Icon(_keyVisible
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined),
+                    onPressed: () =>
+                        setState(() => _keyVisible = !_keyVisible),
+                  ),
                 ),
               )),
             ],
@@ -161,17 +185,23 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
           GroupedSection(
             header: context.l10n.modelHeader,
             footer: _customModel ? _modelHelperText(context) : null,
+            separatorInset: AppSpace.separatorInset,
             children: [
               _cellField(KeyedSubtree(
                 key: ValueKey('modelPicker-${settings.provider}'),
                 child: DropdownButtonFormField<String>(
                   key: const Key('modelPicker'),
                   isExpanded: true,
+                  // Body text like every row: Material's titleMedium made
+                  // the model read as a heading and cut its label short.
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyLarge
+                      ?.copyWith(color: context.colors.label),
                   initialValue: _customModel
                       ? kCustomModelSentinel
                       : settings.model,
-                  decoration:
-                      const InputDecoration(border: InputBorder.none),
+                  decoration: cellFieldDecoration(context),
                   items: [
                     for (final (id, label)
                         in kKnownModels[settings.provider] ??
@@ -183,6 +213,17 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                     DropdownMenuItem(
                         value: kCustomModelSentinel,
                         child: Text(context.l10n.modelCustomRow)),
+                  ],
+                  // The closed picker shows the choice on one line,
+                  // ellipsised; the open menu keeps every label whole.
+                  selectedItemBuilder: (context) => [
+                    for (final (_, label)
+                        in kKnownModels[settings.provider] ??
+                            const <(String, String)>[])
+                      Text(modelChoiceLabel(context.l10n, label),
+                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(context.l10n.modelCustomRow,
+                        maxLines: 1, overflow: TextOverflow.ellipsis),
                   ],
                   onChanged: (v) async {
                     if (v == null) return;
@@ -207,9 +248,9 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                   onSubmitted: (v) => settings.update(model: v.trim()),
                   onTapOutside: (_) => settings.update(
                       model: _modelController.text.trim()),
-                  decoration: InputDecoration(
+                  decoration: cellFieldDecoration(
+                    context,
                     labelText: context.l10n.modelCustomLabel,
-                    border: InputBorder.none,
                   ),
                 )),
             ],
@@ -217,7 +258,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
         ] else
           GroupedSection(
             footer: context.l10n.apiInactiveFooter,
-            children: const [SizedBox(height: 1)],
+            children: const [],
           ),
       ],
     );

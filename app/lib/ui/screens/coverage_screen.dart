@@ -17,6 +17,10 @@ import '../../services/photo/photo_library.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
+import '../large_text.dart';
+import '../theme/app_dialog.dart';
+import '../theme/tokens.dart';
+import '../widgets/grouped.dart';
 
 bool _alwaysCan() => true;
 
@@ -147,7 +151,7 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final minutes = (items.length * 22 / 60).ceil();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => appAlertDialog(
         title: Text(ctx.l10n.covBulkTitle(verb, items.length)),
         content: Text(ctx.l10n.covBulkBody(minutes, items.length)),
         actions: [
@@ -231,8 +235,13 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final remaining = items.length - attempted;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(stopOutcome != null
-            ? l.covStoppedBecause(label, attempted, items.length,
-                outcomeBody(l, stopOutcome), remaining)
+            // Stopped on the LAST photo: nothing remains, so no "the
+            // remaining 0 photos … run this again later" (U13).
+            ? remaining == 0
+                ? l.covStoppedLast(label, attempted, items.length,
+                    outcomeBody(l, stopOutcome))
+                : l.covStoppedBecause(label, attempted, items.length,
+                    outcomeBody(l, stopOutcome), remaining)
             : stopped
                 ? l.covStopped(label, attempted, items.length, remaining)
                 : failures == 0
@@ -263,206 +272,257 @@ class _CoverageScreenState extends State<CoverageScreen> {
           () => widget.library?.thumbnailByAssetId(item.assetId) ??
               Future.value(null));
 
+  /// One list of photos (never scanned / judged not food / failed): a
+  /// header with its bulk action, the tiles in a grouped cell, the help
+  /// text and the "…and N more" line under it.
+  Widget _tileSection({
+    required String title,
+    required Widget action,
+    String? help,
+    required List<CoverageItem> items,
+    required bool busy,
+    required bool manual,
+    String Function(int more)? moreText,
+  }) {
+    final theme = Theme.of(context);
+    final colors = context.colors;
+    final shown = items.take(_maxTiles).toList();
+    final more = items.length - shown.length;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+          kGroupInset, AppSpace.sectionTop, kGroupInset, 0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(
+                left: AppSpace.rowH, bottom: AppSpace.headerToCells),
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpace.s8,
+              runSpacing: AppSpace.s4,
+              children: [
+                Semantics(
+                  header: true,
+                  child: Text(title,
+                      style: theme.textTheme.titleSmall
+                          ?.copyWith(color: colors.secondaryLabel)),
+                ),
+                action,
+              ],
+            ),
+          ),
+          Material(
+            color: colors.cell,
+            borderRadius: BorderRadius.circular(kCellRadius),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: [
+                for (var i = 0; i < shown.length; i++) ...[
+                  if (i > 0)
+                    Padding(
+                      // Past the 44-pt thumbnail: 16 + 44 + 16.
+                      padding: const EdgeInsets.only(left: 76),
+                      child: Divider(
+                          height: hairlineWidth(context),
+                          thickness: hairlineWidth(context),
+                          color: colors.separator),
+                    ),
+                  _PhotoTile(
+                    item: shown[i],
+                    thumb: _thumbFor(shown[i]),
+                    // Not while a bulk run is going: a manual save here
+                    // re-ran the audit mid-run and re-enabled Log all /
+                    // Retry all under it (B20).
+                    onTap: !manual || busy || widget.logManually == null
+                        ? null
+                        : () => _logManually(shown[i]),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          for (final line in [
+            ?help,
+            if (more > 0 && moreText != null) moreText(more),
+          ])
+            Padding(
+              padding: const EdgeInsets.fromLTRB(AppSpace.footerSide,
+                  AppSpace.cellsToFooter, AppSpace.footerSide, 0),
+              child: Text(line,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colors.secondaryLabel)),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.colors;
     final report = _report;
     final busy = _phase == _Phase.scanning || _phase == _Phase.acting;
     return Scaffold(
+      backgroundColor: pageColor(context),
       appBar: AppBar(title: Text(context.l10n.covTitle)),
       body: ListView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.only(bottom: AppSpace.s32),
         children: [
-          Text(
-            context.l10n.covIntro(_days),
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: Slider(
-                  key: const Key('coverageWindowSlider'),
-                  value: _days.toDouble(),
-                  min: 1,
-                  max: 30,
-                  divisions: 29,
-                  label: context.l10n.covDaysShort(_days),
-                  onChanged: busy
-                      ? null
-                      : (v) => setState(() => _days = v.round()),
-                ),
-              ),
-              Text(context.l10n.covDaysShort(_days)),
-            ],
-          ),
-          FilledButton.icon(
-            key: const Key('runCoverageCheck'),
-            onPressed: busy ? null : _runAudit,
-            icon: const Icon(Icons.fact_check_outlined),
-            label: Text(_phase == _Phase.scanning
-                ? context.l10n.covChecking
-                : _phase == _Phase.acting
-                    ? context.l10n.working
-                    : context.l10n.covRun),
-          ),
-          if (busy) ...[
-            const SizedBox(height: 12),
-            LinearProgressIndicator(
-              key: const Key('coverageProgress'),
-              value: _progressTotal == 0
-                  ? null
-                  : _progressDone / _progressTotal,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(kGroupInset + AppSpace.rowH,
+                AppSpace.s8, kGroupInset + AppSpace.rowH, 0),
+            child: Text(
+              context.l10n.covIntro(_days),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: colors.secondaryLabel),
             ),
-            const SizedBox(height: 4),
-            Text('$_progressDone / $_progressTotal',
-                style: theme.textTheme.bodySmall),
-          ],
+          ),
+          GroupedCard(
+            padding: const EdgeInsets.all(AppSpace.cardPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Slider.adaptive(
+                        key: const Key('coverageWindowSlider'),
+                        value: _days.toDouble(),
+                        min: 1,
+                        max: 30,
+                        divisions: 29,
+                        label: context.l10n.covDaysShort(_days),
+                        onChanged: busy
+                            ? null
+                            : (v) => setState(() => _days = v.round()),
+                      ),
+                    ),
+                    const SizedBox(width: AppSpace.s8),
+                    Text(context.l10n.covDaysShort(_days),
+                        style: context.nums.value
+                            .copyWith(color: colors.label)),
+                  ],
+                ),
+                const SizedBox(height: AppSpace.s12),
+                FilledButton.icon(
+                  key: const Key('runCoverageCheck'),
+                  onPressed: busy ? null : _runAudit,
+                  icon: const Icon(Icons.fact_check_outlined),
+                  label: Text(_phase == _Phase.scanning
+                      ? context.l10n.covChecking
+                      : _phase == _Phase.acting
+                          ? context.l10n.working
+                          : context.l10n.covRun),
+                ),
+                if (busy) ...[
+                  const SizedBox(height: AppSpace.s12),
+                  LinearProgressIndicator(
+                    key: const Key('coverageProgress'),
+                    value: _progressTotal == 0
+                        ? null
+                        : _progressDone / _progressTotal,
+                  ),
+                  const SizedBox(height: AppSpace.s4),
+                  Text('$_progressDone / $_progressTotal',
+                      style: context.nums.inline
+                          .copyWith(color: colors.secondaryLabel)),
+                ],
+              ],
+            ),
+          ),
           if (_error != null)
             Padding(
-              padding: const EdgeInsets.only(top: 12),
+              padding: const EdgeInsets.fromLTRB(kGroupInset + AppSpace.rowH,
+                  AppSpace.s12, kGroupInset + AppSpace.rowH, 0),
               child: Text(_error!,
                   key: const Key('coverageError'),
-                  style: TextStyle(color: theme.colorScheme.error)),
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: colors.danger)),
             ),
           if (report != null) ...[
-            const SizedBox(height: 16),
             _SummaryCard(report: report),
-            if (report.missing.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(context.l10n.covNeverScanned(report.missing.length),
-                        style: theme.textTheme.titleSmall),
-                  ),
-                  FilledButton.tonal(
-                    key: const Key('logAllMissing'),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            final l = context.l10n; // before the await
-                            if (await _confirmBulk(
-                                report.missing, l.covVerbLog)) {
-                              await _processAll(
-                                  report.missing, l.covProgLogging);
-                            }
-                          },
-                    child: Text(context.l10n.covLogAll),
-                  ),
-                ],
-              ),
-              for (final item in report.missing.take(_maxTiles))
-                _PhotoTile(item: item, thumb: _thumbFor(item)),
-              if (report.missing.length > _maxTiles)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                      context.l10n.covMoreLogAll(report.missing.length - _maxTiles),
-                      style: theme.textTheme.bodySmall),
-                ),
-            ],
-            if (report.skippedNonFood.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                        context.l10n.covJudgedNotFood(report.skippedNonFood.length),
-                        style: theme.textTheme.titleSmall),
-                  ),
-                  // A 'skipped' tombstone is permanent for the automated
-                  // path, so improved rules (e.g. now admitting takeout
-                  // order screenshots) would never revisit these on their
-                  // own. A DELIBERATE re-add reclaims skipped rows
-                  // (spec §2.3) — which is exactly what this does.
-                  FilledButton.tonal(
-                    key: const Key('reanalyzeAllSkipped'),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            final l = context.l10n; // before the await
-                            if (await _confirmBulk(
-                                report.skippedNonFood, l.covAnalyzeAgain)) {
-                              await _processAll(
-                                  report.skippedNonFood, l.covProgReanalyzing);
-                            }
-                          },
-                    child: Text(context.l10n.covAnalyzeAgain),
-                  ),
-                ],
-              ),
-              Text(
-                  context.l10n.covNotFoodHelp,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              for (final item in report.skippedNonFood.take(_maxTiles))
-                _PhotoTile(
-                  item: item,
-                  thumb: _thumbFor(item),
-                  onTap: widget.logManually == null
+            if (report.missing.isNotEmpty)
+              _tileSection(
+                title: context.l10n.covNeverScanned(report.missing.length),
+                action: FilledButton.tonal(
+                  key: const Key('logAllMissing'),
+                  onPressed: busy
                       ? null
-                      : () => _logManually(item),
+                      : () async {
+                          final l = context.l10n; // before the await
+                          if (await _confirmBulk(
+                              report.missing, l.covVerbLog)) {
+                            await _processAll(
+                                report.missing, l.covProgLogging);
+                          }
+                        },
+                  child: Text(context.l10n.covLogAll),
                 ),
-              if (report.skippedNonFood.length > _maxTiles)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                      context.l10n.covMoreNotFood(
-                          report.skippedNonFood.length - _maxTiles),
-                      style: theme.textTheme.bodySmall),
-                ),
-            ],
-            if (report.failed.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(context.l10n.covFailedEarlier(report.failed.length),
-                        style: theme.textTheme.titleSmall),
-                  ),
-                  FilledButton.tonal(
-                    key: const Key('retryAllFailed'),
-                    onPressed: busy
-                        ? null
-                        : () async {
-                            final l = context.l10n; // before the await
-                            if (await _confirmBulk(
-                                report.failed, l.covVerbRetry)) {
-                              await _processAll(
-                                  report.failed, l.covProgRetrying);
-                            }
-                          },
-                    child: Text(context.l10n.covRetryAll),
-                  ),
-                ],
+                items: report.missing,
+                busy: busy,
+                manual: false,
+                moreText: context.l10n.covMoreLogAll,
               ),
-              Text(
-                  context.l10n.covFailedHelp,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-              // A ledgered 'failed' is a NON-retryable verdict (decode
-              // failure, oversize, a coded 400, "no usable result"), so
-              // Retry all usually repeats it at another model call each
-              // time. Same escape hatch as the add flow's
-              // canLogManually = skipped || failed.
-              for (final item in report.failed.take(_maxTiles))
-                _PhotoTile(
-                  item: item,
-                  thumb: _thumbFor(item),
-                  onTap: widget.logManually == null
+            if (report.skippedNonFood.isNotEmpty)
+              _tileSection(
+                title: context.l10n
+                    .covJudgedNotFood(report.skippedNonFood.length),
+                // A 'skipped' tombstone is permanent for the automated
+                // path, so improved rules (e.g. now admitting takeout
+                // order screenshots) would never revisit these on their
+                // own. A DELIBERATE re-add reclaims skipped rows
+                // (spec §2.3) — which is exactly what this does.
+                action: FilledButton.tonal(
+                  key: const Key('reanalyzeAllSkipped'),
+                  onPressed: busy
                       ? null
-                      : () => _logManually(item),
+                      : () async {
+                          final l = context.l10n; // before the await
+                          if (await _confirmBulk(
+                              report.skippedNonFood, l.covAnalyzeAgain)) {
+                            await _processAll(
+                                report.skippedNonFood, l.covProgReanalyzing);
+                          }
+                        },
+                  child: Text(context.l10n.covAnalyzeAgain),
                 ),
-              if (report.failed.length > _maxTiles)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(
-                      context.l10n.covMoreRetryAll(report.failed.length - _maxTiles),
-                      style: theme.textTheme.bodySmall),
+                help: context.l10n.covNotFoodHelp,
+                items: report.skippedNonFood,
+                busy: busy,
+                manual: true,
+                moreText: context.l10n.covMoreNotFood,
+              ),
+            // A ledgered 'failed' is a NON-retryable verdict (decode
+            // failure, oversize, a coded 400, "no usable result"), so
+            // Retry all usually repeats it at another model call each
+            // time. Same escape hatch as the add flow's
+            // canLogManually = skipped || failed.
+            if (report.failed.isNotEmpty)
+              _tileSection(
+                title: context.l10n.covFailedEarlier(report.failed.length),
+                action: FilledButton.tonal(
+                  key: const Key('retryAllFailed'),
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          final l = context.l10n; // before the await
+                          if (await _confirmBulk(
+                              report.failed, l.covVerbRetry)) {
+                            await _processAll(
+                                report.failed, l.covProgRetrying);
+                          }
+                        },
+                  child: Text(context.l10n.covRetryAll),
                 ),
-            ],
+                help: context.l10n.covFailedHelp,
+                items: report.failed,
+                busy: busy,
+                manual: true,
+                moreText: context.l10n.covMoreRetryAll,
+              ),
           ],
         ],
       ),
@@ -477,78 +537,85 @@ class _SummaryCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final ok = report.fullyCovered;
-    return Card(
+    final colors = context.colors;
+    // A failed photo is not "accounted for": the success check over
+    // '… · 1 failed' contradicted itself (U13).
+    final ok = report.fullyCovered && report.failed.isEmpty;
+    final onlyFailed = report.fullyCovered && report.failed.isNotEmpty;
+    final warn = TextStyle(color: colors.danger);
+    return GroupedCard(
       key: const Key('coverageSummary'),
-      color: ok
-          ? theme.colorScheme.secondaryContainer
-          : theme.colorScheme.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(14),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(ok ? Icons.check_circle : Icons.info_outline,
-                    size: 20,
-                    color: ok
-                        ? theme.colorScheme.onSecondaryContainer
-                        : theme.colorScheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    ok
-                        ? context.l10n.covAllAccounted(report.scanned)
-                        : context.l10n.covSummary(
-                            report.scanned, report.missing.length),
-                    style: theme.textTheme.titleSmall,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              [
-                context.l10n.covLoggedAsMeals(report.logged.length),
-                context.l10n.covNotFoodCount(report.skippedNonFood.length),
-                // Read-only: the deduction already lives on the meal, and a
-                // re-analysis would log the remains as a second meal.
-                if (report.leftoverApplied > 0)
-                    context.l10n.covLeftoverCount(report.leftoverApplied),
-                if (report.failed.isNotEmpty)
-                    context.l10n.covFailedCount(report.failed.length),
-                if (report.deleted > 0)
-                    context.l10n.covDeletedCount(report.deleted),
-                if (report.inFlight > 0)
-                    context.l10n.covInFlightCount(report.inFlight),
-                if (report.unreadable > 0)
-                    context.l10n.covUnreadableCount(report.unreadable),
-                if (report.tooLargeToAnalyze > 0)
-                    context.l10n.covTooLargeCount(report.tooLargeToAnalyze),
-              ].join(' · '),
-              style: theme.textTheme.bodySmall,
-            ),
-            if (report.limitedAccess)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
+      margin: const EdgeInsets.fromLTRB(
+          kGroupInset, AppSpace.s16, kGroupInset, 0),
+      padding: const EdgeInsets.all(AppSpace.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Icon(
+                    ok ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+                    size: 22,
+                    color: ok ? colors.success : colors.secondaryLabel),
+              ),
+              const SizedBox(width: AppSpace.s8),
+              Expanded(
                 child: Text(
-                  context.l10n.covLimitedAccess,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
+                  ok
+                      ? context.l10n.covAllAccounted(report.scanned)
+                      : onlyFailed
+                          ? context.l10n.covSummaryFailed(
+                              report.scanned, report.failed.length)
+                          : context.l10n.covSummary(
+                              report.scanned, report.missing.length),
+                  style: theme.textTheme.titleSmall
+                      ?.copyWith(color: colors.label),
                 ),
               ),
-            if (report.truncated)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  context.l10n.covTruncated,
-                  style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
-                ),
+            ],
+          ),
+          const SizedBox(height: AppSpace.s8),
+          Text(
+            [
+              context.l10n.covLoggedAsMeals(report.logged.length),
+              context.l10n.covNotFoodCount(report.skippedNonFood.length),
+              // Read-only: the deduction already lives on the meal, and a
+              // re-analysis would log the remains as a second meal.
+              if (report.leftoverApplied > 0)
+                  context.l10n.covLeftoverCount(report.leftoverApplied),
+              if (report.failed.isNotEmpty)
+                  context.l10n.covFailedCount(report.failed.length),
+              if (report.deleted > 0)
+                  context.l10n.covDeletedCount(report.deleted),
+              if (report.inFlight > 0)
+                  context.l10n.covInFlightCount(report.inFlight),
+              if (report.unreadable > 0)
+                  context.l10n.covUnreadableCount(report.unreadable),
+              if (report.tooLargeToAnalyze > 0)
+                  context.l10n.covTooLargeCount(report.tooLargeToAnalyze),
+            ].join(' · '),
+            style: theme.textTheme.bodySmall
+                ?.copyWith(color: colors.secondaryLabel),
+          ),
+          if (report.limitedAccess)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpace.s8),
+              child: Text(
+                context.l10n.covLimitedAccess,
+                style: theme.textTheme.bodySmall?.merge(warn),
               ),
-          ],
-        ),
+            ),
+          if (report.truncated)
+            Padding(
+              padding: const EdgeInsets.only(top: AppSpace.s8),
+              child: Text(
+                context.l10n.covTruncated,
+                style: theme.textTheme.bodySmall?.merge(warn),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -563,12 +630,13 @@ class _PhotoTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = context.colors;
     return ListTile(
       onTap: onTap,
       trailing: onTap == null
           ? null
-          : const Icon(Icons.edit_outlined, size: 18),
-      contentPadding: EdgeInsets.zero,
+          : Icon(Icons.edit_outlined, size: 18, color: colors.accent),
+      contentPadding: const EdgeInsets.symmetric(horizontal: AppSpace.rowH),
       leading: FutureBuilder<Uint8List?>(
         future: thumb,
         builder: (context, snap) {
@@ -578,15 +646,15 @@ class _PhotoTile extends StatelessWidget {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: theme.colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(8),
+                color: colors.fill,
+                borderRadius: BorderRadius.circular(AppRadius.m),
               ),
               child: Icon(Icons.photo_outlined,
-                  size: 20, color: theme.colorScheme.onSurfaceVariant),
+                  size: 20, color: colors.secondaryLabel),
             );
           }
           return ClipRRect(
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: BorderRadius.circular(AppRadius.m),
             child: Image.memory(bytes,
                 width: 44, height: 44, fit: BoxFit.cover),
           );
@@ -594,14 +662,18 @@ class _PhotoTile extends StatelessWidget {
       ),
       title: Text(
           item.fileName.isEmpty ? context.l10n.covUnnamedPhoto : item.fileName,
-          style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis),
+          style: theme.textTheme.bodyLarge?.copyWith(color: colors.label),
+          // One line normally; at the accessibility sizes a name of a
+          // dozen characters was 'demo_p…', so it wraps there instead.
+          overflow: isLargeText(context) ? null : TextOverflow.ellipsis),
       subtitle: Text(
           '${item.createDate.year}-'
           '${item.createDate.month.toString().padLeft(2, '0')}-'
           '${item.createDate.day.toString().padLeft(2, '0')} '
           '${item.createDate.hour.toString().padLeft(2, '0')}:'
           '${item.createDate.minute.toString().padLeft(2, '0')}',
-          style: theme.textTheme.bodySmall),
+          style: theme.textTheme.bodySmall
+              ?.copyWith(color: colors.secondaryLabel)),
     );
   }
 }

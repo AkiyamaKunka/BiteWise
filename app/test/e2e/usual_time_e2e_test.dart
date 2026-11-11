@@ -128,8 +128,8 @@ void main() {
     expect((await phone.row(early))['date'], '2026-10-21');
     expect((await phone.row(early))['time'], '12:10 AM');
     expect(_chip(early), findsOneWidget);
-    expect(tester.widget<Text>(find.byKey(const Key('todayTotalKcal'))).data,
-        l.kcalAmount('480'), reason: "yesterday's bowl is not in today's total");
+    expect(todayEaten(tester), '480',
+        reason: "yesterday's bowl is not in today's total");
     await tester.tap(find.byKey(const Key('usualChipUse')));
     await tester.pumpAndSettle();
     expect(find.text(l.usualUsedSnack('480', '620')), findsOneWidget);

@@ -304,7 +304,7 @@ void main() {
           );
           final card = find.ancestor(
             of: find.byKey(const Key('mealRow1')),
-            matching: find.byType(Card),
+            matching: find.byType(GroupedCard),
           );
           final legend = find.descendant(
             of: card,
@@ -683,7 +683,7 @@ void main() {
           // stroke (simulator 2026-10-12). Every corner of both lines must
           // lie inside the inner circle (radius = size / 2 − stroke).
           for (final scale in const [1.0, 3.1]) {
-            for (final size in const [132.0, 116.0]) {
+            for (final size in const [144.0, 116.0]) {
               for (final kcal in const [0, 1240, 12345]) {
                 await pumpAt(
                   tester,
@@ -701,7 +701,7 @@ void main() {
                 );
                 expect(tester.takeException(), isNull);
                 final centre = tester.getCenter(find.byType(CalorieRing));
-                final innerR = size / 2 - 11;
+                final innerR = size / 2 - 12;
                 final texts = find.descendant(
                   of: find.byType(CalorieRing),
                   matching: find.byType(RichText),

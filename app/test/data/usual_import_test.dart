@@ -1,9 +1,16 @@
 // Two re-logs in the same minute survive export and import (usual-foods
-// spec §4.4, T40). A photoless meal's import identity is date + time +
-// analysis text (meals_dao_impl.dart _importRowExists), and a re-log
-// copies the same numbers into the same hh:mm: without the per-log
-// `logged_again` stamp the second latte of a minute would be dropped as
-// "already here" when the owner moves to a new phone.
+// spec §4.4, T40). A re-log copies the same numbers into the same hh:mm,
+// so date + time + analysis text alone would drop the second latte of a
+// minute as "already here" when the owner moves to a new phone.
+//
+// Two things keep them apart (meals_dao_impl.dart _importRowExists):
+//   * the per-log `logged_again` stamp, which makes the analysis text of
+//     each re-log its own (usual foods);
+//   * the ingestion timestamp, which run 7 (B15) made part of a photoless
+//     meal's import identity, and which a re-log writes with its own
+//     instant.
+// Either one is enough; with neither the second is a duplicate. Importing
+// the same file twice still adds nothing.
 import 'dart:convert';
 import 'dart:io';
 
@@ -25,6 +32,8 @@ void main() {
   late Database dbA;
   late Database dbB;
   late Database dbC;
+  late Database dbD;
+  late Database dbE;
   late DateTime clock;
 
   setUp(() async {
@@ -32,6 +41,8 @@ void main() {
     dbA = await openAppDatabase(path: '${tmp.path}/a.db');
     dbB = await openAppDatabase(path: '${tmp.path}/b.db');
     dbC = await openAppDatabase(path: '${tmp.path}/c.db');
+    dbD = await openAppDatabase(path: '${tmp.path}/d.db');
+    dbE = await openAppDatabase(path: '${tmp.path}/e.db');
     clock = DateTime(2026, 11, 7, 15, 10, 4, 321);
     SharedPreferences.setMockInitialValues({});
   });
@@ -39,6 +50,8 @@ void main() {
     await dbA.close();
     await dbB.close();
     await dbC.close();
+    await dbD.close();
+    await dbE.close();
     await tmp.delete(recursive: true);
   });
 
@@ -94,18 +107,54 @@ void main() {
         '2026-11-01', '2026-11-30');
     expect(moved.where((m) => m.source == MealSource.appRepeat), hasLength(2));
 
-    // The stamp is what keeps them apart: the same export without it
-    // imports one re-log, not two.
-    final envelope = jsonDecode(export) as Map<String, dynamic>;
-    final rows = (envelope['tables'] as Map)['meals'] as List;
-    for (final row in rows.cast<Map>()) {
-      final analysis = jsonDecode(row['analysis'] as String) as Map;
-      analysis.remove('logged_again');
-      row['analysis'] = jsonEncode(analysis);
+    // The same file a second time adds nothing: each re-log is found by
+    // its own text and its own instant.
+    final twice =
+        await SqfliteMealsDao(dbB, clock: () => clock).importJson(export);
+    expect(twice.added['meals'], 0);
+    expect(twice.skipped['meals'], 4);
+
+    // What keeps the two apart. The same export, with the stamp taken off
+    // every meal and/or the second re-log given the first one's instant.
+    String exportWith({required bool stamp, required bool instant}) {
+      final envelope = jsonDecode(export) as Map<String, dynamic>;
+      final rows =
+          ((envelope['tables'] as Map)['meals'] as List).cast<Map>();
+      final relogs = [
+        for (final row in rows)
+          if (row['source'] == MealSource.appRepeat) row,
+      ];
+      expect(relogs, hasLength(2));
+      expect(relogs[0]['timestamp'], isNot(relogs[1]['timestamp']),
+          reason: 'each re-log is saved with its own instant');
+      if (!instant) relogs[1]['timestamp'] = relogs[0]['timestamp'];
+      if (!stamp) {
+        for (final row in rows) {
+          final analysis = jsonDecode(row['analysis'] as String) as Map;
+          analysis.remove('logged_again');
+          row['analysis'] = jsonEncode(analysis);
+        }
+      }
+      return jsonEncode(envelope);
     }
-    final stripped =
-        await SqfliteMealsDao(dbC).importJson(jsonEncode(envelope));
-    expect(stripped.added['meals'], 3);
-    expect(stripped.skipped['meals'], 1);
+
+    // The stamp alone: two meals, though both rows carry one instant.
+    final byStamp = await SqfliteMealsDao(dbC)
+        .importJson(exportWith(stamp: true, instant: false));
+    expect(byStamp.added['meals'], 4);
+    expect(byStamp.skipped['meals'], 0);
+
+    // The instant alone (run 7, B15): two meals without the stamp. Before
+    // run 7 this export brought back one re-log, not two.
+    final byInstant = await SqfliteMealsDao(dbD)
+        .importJson(exportWith(stamp: false, instant: true));
+    expect(byInstant.added['meals'], 4);
+    expect(byInstant.skipped['meals'], 0);
+
+    // Neither: the second row is the first one over again, and is skipped.
+    final neither = await SqfliteMealsDao(dbE)
+        .importJson(exportWith(stamp: false, instant: false));
+    expect(neither.added['meals'], 3);
+    expect(neither.skipped['meals'], 1);
   });
 }

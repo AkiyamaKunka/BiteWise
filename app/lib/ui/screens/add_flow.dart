@@ -18,7 +18,12 @@ import '../ai_consent.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
 import '../l10n.dart';
+import '../large_text.dart';
+import '../theme/app_dialog.dart';
+import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
+import '../widgets/reply_note.dart';
+import '../widgets/states.dart';
 import 'fix_meal_screen.dart';
 import 'leftover_flow.dart';
 import 'meal_editor_screen.dart';
@@ -32,88 +37,76 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   // Native-ized in loop cycle 2 (interaction lens #1): drag handle, a
   // title, and the same grouped-row language as Settings — the sheet is
   // the app's single logging entry point and looked stock-Material.
-  final choice = await showModalBottomSheet<String>(
-    context: context,
-    showDragHandle: true,
-    useSafeArea: true,
-    backgroundColor: groupedBackground(Theme.of(context).colorScheme),
-    builder: (ctx) => SafeArea(
-      top: false,
-      // Scrollable since the 5th tile (leftovers, 2026-08-05): on a short
-      // viewport the fixed Column overflowed instead of scrolling.
-      child: SingleChildScrollView(
-          child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: Text(context.l10n.addSheetTitle,
-                  style: Theme.of(ctx)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.w600)),
+  // Run 7: the shared grouped sheet (title2 heading, #1C1C1E sheet with
+  // #2C2C2E cells in dark mode, where the hand-passed page colour put
+  // #1C1C1E cells on black) and badge roles that say what each row is:
+  // the brand for photos, grey for the plain ways in, indigo for Fix —
+  // fixing a meal is not a fault, so not red.
+  final choice = await showGroupedSheet<String>(
+    context,
+    title: context.l10n.addSheetTitle,
+    // Scrolls inside the sheet since the 5th tile (leftovers, 2026-08-05):
+    // on a short viewport the fixed Column overflowed instead of scrolling.
+    builder: (ctx) => Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        GroupedSection(
+          children: [
+            GroupedRow(
+              key: const Key('addFromPhotos'),
+              icon: Icons.photo_library_outlined,
+              iconColor: Theme.of(ctx).colorScheme.primary,
+              title: ctx.l10n.addFromPhotos,
+              onTap: () => Navigator.of(ctx).pop('photos'),
             ),
-          ),
-          GroupedSection(
-            children: [
-              GroupedRow(
-                key: const Key('addFromPhotos'),
-                icon: Icons.photo_library_outlined,
-                iconColor: Theme.of(ctx).colorScheme.primary,
-                title: ctx.l10n.addFromPhotos,
-                onTap: () => Navigator.of(ctx).pop('photos'),
-              ),
-              if (services.usualFoods != null) usualFoodsRow(ctx),
-              GroupedRow(
-                key: const Key('addLeftover'),
-                icon: Icons.restaurant_outlined,
-                iconColor: Theme.of(ctx).colorScheme.secondary,
-                title: ctx.l10n.addLeftover,
-                value: ctx.l10n.addLeftoverNote,
-                onTap: () => Navigator.of(ctx).pop('leftover'),
-              ),
-              GroupedRow(
-                key: const Key('addFromText'),
-                icon: Icons.edit_note,
-                iconColor: Theme.of(ctx).colorScheme.secondary,
-                title: ctx.l10n.addDescribe,
-                value: ctx.l10n.addDescribeNote,
-                onTap: () => Navigator.of(ctx).pop('text'),
-              ),
-              // The zero-dependency path: the other two options need a
-              // working AI key and spend a model call — with no key
-              // (first run), a quota pause, or offline, the + button was
-              // a dead end.
-              GroupedRow(
-                key: const Key('addManually'),
-                icon: Icons.keyboard_alt_outlined,
-                iconColor: Theme.of(ctx).colorScheme.tertiary,
-                title: ctx.l10n.addManual,
-                value: ctx.l10n.addManualNote,
-                onTap: () => Navigator.of(ctx).pop('manual'),
-              ),
-            ],
-          ),
-          // Corrections lived in a chat bar pinned to Today until
-          // 2026-07-31 — the user's verdict: one button owns ALL meal
-          // actions, adding and fixing alike.
-          GroupedSection(
-            footer: ctx.l10n.addFixFooter,
-            children: [
-              GroupedRow(
-                key: const Key('addFixMeal'),
-                icon: Icons.build_outlined,
-                iconColor: Theme.of(ctx).colorScheme.error,
-                title: ctx.l10n.addFix,
-                onTap: () => Navigator.of(ctx).pop('fix'),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-        ],
-      )),
+            if (services.usualFoods != null) usualFoodsRow(ctx),
+            GroupedRow(
+              key: const Key('addLeftover'),
+              icon: Icons.restaurant_outlined,
+              iconColor: Theme.of(ctx).colorScheme.secondary,
+              title: ctx.l10n.addLeftover,
+              value: ctx.l10n.addLeftoverNote,
+              onTap: () => Navigator.of(ctx).pop('leftover'),
+            ),
+            GroupedRow(
+              key: const Key('addFromText'),
+              icon: Icons.edit_note,
+              iconColor: Theme.of(ctx).colorScheme.secondary,
+              title: ctx.l10n.addDescribe,
+              value: ctx.l10n.addDescribeNote,
+              onTap: () => Navigator.of(ctx).pop('text'),
+            ),
+            // The zero-dependency path: the other two options need a
+            // working AI key and spend a model call — with no key
+            // (first run), a quota pause, or offline, the + button was
+            // a dead end.
+            GroupedRow(
+              key: const Key('addManually'),
+              icon: Icons.keyboard_alt_outlined,
+              iconColor: Theme.of(ctx).colorScheme.secondary,
+              title: ctx.l10n.addManual,
+              value: ctx.l10n.addManualNote,
+              onTap: () => Navigator.of(ctx).pop('manual'),
+            ),
+          ],
+        ),
+        // Corrections lived in a chat bar pinned to Today until
+        // 2026-07-31 — the user's verdict: one button owns ALL meal
+        // actions, adding and fixing alike.
+        GroupedSection(
+          footer: ctx.l10n.addFixFooter,
+          children: [
+            GroupedRow(
+              key: const Key('addFixMeal'),
+              icon: Icons.build_outlined,
+              iconColor: Theme.of(ctx).colorScheme.tertiary,
+              title: ctx.l10n.addFix,
+              onTap: () => Navigator.of(ctx).pop('fix'),
+            ),
+          ],
+        ),
+      ],
     ),
   );
   if (!context.mounted) return;
@@ -330,34 +323,71 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
             outcome.mealId != null &&
             outcome.previousAnalysis != null &&
             outcome.analysis != null;
+    final failed = outcome.kind == PhotoOutcomeKind.failed;
+    // No key (or no server) is setup that is missing, not an analysis that
+    // failed: the title said "Analysis failed" for a photo nothing ever
+    // looked at (U2). The body names where to add it.
+    // A saved server address that will not parse also reports noServerKey,
+    // but the server IS set up: "AI isn't set up yet" over a body saying
+    // the address has a typo contradicted itself. It is not retryable
+    // either: Retry fails again at once on the same address.
+    final badAddress = failed &&
+        outcome.errorKind == AnalysisErrorKind.noServerKey &&
+        isBadServerAddress(outcome.message);
+    final notSetUp = failed &&
+        !badAddress &&
+        (outcome.errorKind == AnalysisErrorKind.noApiKey ||
+            outcome.errorKind == AnalysisErrorKind.noServerKey);
+    // The daily-quota pause sends nothing until it lifts (up to 12 h):
+    // Retry got the same verdict at once, and the body said "tap Retry"
+    // (B8).
+    final quotaPaused =
+        failed && outcome.errorKind == AnalysisErrorKind.quotaPaused;
     // A transient failure RELEASED the photo, and nothing re-offers a
     // picked photo by itself (the automatic scan is off by default and
     // never looks past its window): the dialog offers the retry instead of
     // promising one. Not for a missing key — Settings is the fix there.
-    final canRetry = outcome.kind == PhotoOutcomeKind.failed &&
+    final canRetry = failed &&
         outcome.retryable &&
-        outcome.errorKind != AnalysisErrorKind.noApiKey &&
-        outcome.errorKind != AnalysisErrorKind.noServerKey;
+        !notSetUp &&
+        !quotaPaused &&
+        !badAddress;
     final l = context.l10n;
-    final body = outcomeBody(l, outcome, deliberate: true);
+    final String body;
+    if (quotaPaused) {
+      final until = widget.services.settings.quotaPauseUntil;
+      body = until == null
+          ? l.outcomeQuotaPausedPickMsgNoTime
+          : l.outcomeQuotaPausedPickMsg(dayTimeLabel(l, until.toLocal()));
+    } else {
+      body = outcomeBody(l, outcome, deliberate: true);
+    }
+    // "If this IS food" answers a not-food verdict only. A failed photo
+    // had no verdict (no key, network, rate limit…), and an in-flight one
+    // has not had it yet (U12). The quota body already says to log it.
+    final hint = switch (outcome.kind) {
+      PhotoOutcomeKind.skipped => l.outcomeLogManuallyHint,
+      PhotoOutcomeKind.failed when !quotaPaused =>
+        l.outcomeLogManuallyFailedHint,
+      _ => null,
+    };
     final choice = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      // Scrollable (A1): at the largest text sizes the title and the
+      // stacked actions left the body no room.
+      builder: (ctx) => appAlertDialog(
         title: Text(switch (outcome.kind) {
           PhotoOutcomeKind.saved => l.outcomeSaved,
           PhotoOutcomeKind.skipped => l.outcomeSkipped,
           PhotoOutcomeKind.duplicate => l.outcomeDuplicate,
           PhotoOutcomeKind.alreadyTracked => l.outcomeAlreadyTracked,
           PhotoOutcomeKind.inFlight => l.outcomeInFlight,
-          PhotoOutcomeKind.failed => l.outcomeFailed,
+          PhotoOutcomeKind.failed => badAddress
+              ? l.outcomeCheckServer
+              : (notSetUp ? l.outcomeNotSetUp : l.outcomeFailed),
           PhotoOutcomeKind.leftoverApplied => l.outcomeLeftoverApplied,
         }),
-        // The hint asks "if this IS food" — a verdict an in-flight photo
-        // has not had.
-        content: Text(canLogManually &&
-                outcome.kind != PhotoOutcomeKind.inFlight
-            ? '$body\n\n${l.outcomeLogManuallyHint}'
-            : body),
+        content: Text(hint == null ? body : '$body\n\n$hint'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop('ok'),
@@ -456,7 +486,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
             future: _assets,
             builder: (context, snap) {
               if (snap.connectionState != ConnectionState.done) {
-                return const Center(child: CircularProgressIndicator());
+                return const LoadingState();
               }
               if (snap.hasError) {
                 return Center(
@@ -498,8 +528,9 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                       alignment: Alignment.topCenter,
                       child: _limitedNote(context));
                 }
-                return Center(
-                    child: Text(context.l10n.addNoPhotos));
+                return EmptyState(
+                    icon: Icons.photo_library_rounded,
+                    title: context.l10n.addNoPhotos);
               }
               return Column(children: [
                 if (_limited) _limitedNote(context),
@@ -509,11 +540,18 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 12, 4),
                   child: Row(
                     key: const Key('scaleReferenceTip'),
+                    // Top-aligned: at large text the tip wraps to several
+                    // lines and a centred icon floated beside the middle.
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.straighten,
-                          size: 16,
-                          color:
-                              Theme.of(context).colorScheme.onSurfaceVariant),
+                      Padding(
+                        padding: const EdgeInsets.only(top: AppSpace.s2),
+                        child: Icon(Icons.straighten,
+                            size: 16,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant),
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -553,17 +591,19 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                         future: _thumbFor(assets[i].id),
                         builder: (context, snap) {
                           final bytes = snap.data;
+                          final placeholder =
+                              ColoredBox(color: context.colors.fill);
                           if (bytes == null || bytes.isEmpty) {
-                            return Container(
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest);
+                            return placeholder;
                           }
-                          // cacheWidth: decode at cell size, not 12 MP.
+                          // The bytes are already a bounded PhotoKit
+                          // thumbnail, never the 12 MP original: a
+                          // cacheWidth cap would only re-soften it (U28).
+                          // Bytes that do not decode keep the placeholder.
                           return Image.memory(bytes,
                               fit: BoxFit.cover,
-                              cacheWidth: 320,
-                              gaplessPlayback: true);
+                              gaplessPlayback: true,
+                              errorBuilder: (_, _, _) => placeholder);
                         },
                       ),
                     ),
@@ -574,32 +614,25 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
             },
           ),
           if (_analyzing)
-            Container(
-              color: Colors.black45,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(
-                        key: Key('photoAnalyzing')),
-                    const SizedBox(height: 12),
-                    // Live region: a slow round-trip is otherwise silent
-                    // to a screen reader until the outcome dialog.
-                    Semantics(
-                      liveRegion: true,
-                      child: Text(context.l10n.analyzing,
-                          key: const Key('photoAnalyzingText'),
-                          style: const TextStyle(color: Colors.white)),
-                    ),
-                  ],
-                ),
-              ),
+            // Live region inside: a slow round-trip is otherwise silent
+            // to a screen reader until the outcome dialog.
+            AnalyzingOverlay(
+              label: context.l10n.analyzing,
+              labelKey: const Key('photoAnalyzingText'),
+              spinnerKey: const Key('photoAnalyzing'),
             ),
         ],
       ),
     );
   }
 }
+
+/// Top padding for the Describe and Fix pages: a field's floating label
+/// sits on its top border, half above the field, and at the largest text
+/// sizes that half (about 20 pt at AX5) is more than the usual 16-pt
+/// padding, so the scroll view clipped the label's top.
+double _topInset(BuildContext context) =>
+    isLargeText(context) ? AppSpace.s24 : AppSpace.gutter;
 
 /// Describe-a-meal entry: free text (any language) → describeMeal's
 /// new-meal-only estimate → the meal editor as a PREVIEW → insert with
@@ -632,10 +665,28 @@ class _AddTextScreenState extends State<AddTextScreen> {
   bool _askingConsent = false;
   String? _error;
 
+  /// On the error note, to scroll it into view (A15).
+  final GlobalKey _errorKey = GlobalKey();
+
   @override
   void dispose() {
     _controller.dispose();
     super.dispose();
+  }
+
+  /// The error is inserted where the button was, which with the keyboard
+  /// up (and more so at large text) is under the keyboard: only its first
+  /// words showed (A15). Scroll its top into view; the scroll clamps, so a
+  /// short error on a page that fits moves nothing. Focus stays put — the
+  /// fix is often to edit the text.
+  void _revealError() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final target = _errorKey.currentContext;
+      if (!mounted || target == null) return;
+      Scrollable.ensureVisible(target,
+          duration: AppMotion.of(context, AppMotion.standard),
+          curve: AppMotion.curve);
+    });
   }
 
   /// Describe → PREVIEW → save. The analysis opens in the meal editor
@@ -662,6 +713,7 @@ class _AddTextScreenState extends State<AddTextScreen> {
     setState(() => _sending = false);
     if (!outcome.ok) {
       setState(() => _error = outcome.error);
+      _revealError();
       return;
     }
     final warning = outcome.warning;
@@ -682,6 +734,7 @@ class _AddTextScreenState extends State<AddTextScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final error = _error;
     return Scaffold(
       appBar: AppBar(title: Text(context.l10n.describeTitle)),
       // SCROLLABLE: the field is autofocused (keyboard up on entry) and the
@@ -690,7 +743,8 @@ class _AddTextScreenState extends State<AddTextScreen> {
       // off-screen, where it is not even hit-testable (measured at 390x844
       // and smaller by the review probes).
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: EdgeInsets.fromLTRB(AppSpace.gutter, _topInset(context),
+            AppSpace.gutter, AppSpace.gutter),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -703,22 +757,23 @@ class _AddTextScreenState extends State<AddTextScreen> {
               decoration: InputDecoration(
                 labelText: context.l10n.describeLabel,
                 hintText: context.l10n.describeHint,
-                border: const OutlineInputBorder(),
               ),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: AppSpace.s8),
             Text(
               context.l10n.describeHelp,
               style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  ?.copyWith(color: context.colors.secondaryLabel),
             ),
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Text(_error!,
-                  key: const Key('addTextError'),
-                  style: TextStyle(color: theme.colorScheme.error)),
+            if (error != null) ...[
+              const SizedBox(height: AppSpace.s12),
+              ReplyNote(
+                key: _errorKey,
+                message: error,
+                textKey: const Key('addTextError'),
+              ),
             ],
-            const SizedBox(height: 12),
+            const SizedBox(height: AppSpace.s16),
             FilledButton.icon(
               key: const Key('addTextSend'),
               onPressed: _sending ? null : _describe,
@@ -735,4 +790,3 @@ class _AddTextScreenState extends State<AddTextScreen> {
     );
   }
 }
-

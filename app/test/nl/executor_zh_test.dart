@@ -161,6 +161,59 @@ void main() {
     expect(chat.single.text, 'Sure thing!');
   });
 
+  // Run 7 (L5): the card under that header was English — '📊 This meal:
+  // ~780 kcal', 'P: | C: | F:' and a Telegram-era 'reply with a correction'.
+  test('the whole added-meal card is Chinese, not just its header', () async {
+    final added = await exec.executeParsed(
+        [{'intent': 'new_meal', 'analysis': roastDuckAnalysis}], 'x', const []);
+    final text = added.single.text;
+    expect(text, contains('  • 烧鸭饭：~780 千卡'));
+    expect(text, contains('📊 这一餐：~780 千卡'));
+    expect(text, contains('🥩 蛋 35g | 🍞 碳 90g | 🧈 脂 28g'));
+    expect(text, contains('    蛋 35g | 碳 90g | 脂 28g'));
+    for (final english in ['This meal', 'kcal', 'reply', 'P:', 'C:', 'F:']) {
+      expect(text, isNot(contains(english)), reason: english);
+    }
+  });
+
+  test('the added-meal item-sum warning is Chinese and asks for no reply',
+      () async {
+    final added = await exec.executeParsed([
+      {
+        'intent': 'new_meal',
+        'analysis': {
+          'is_food': true,
+          'meal_description': '苹果',
+          'total_calories': 300,
+          'food_items': [
+            {'name': '苹果', 'estimated_calories': 95},
+          ],
+        },
+      }
+    ], 'x', const []);
+    final text = added.single.text;
+    expect(text, contains('⚠️ 各项食物合计约 95 千卡，但这一餐总计约 300 千卡'));
+    expect(text, contains('「今天」'));
+    expect(text, isNot(contains('reply')));
+    expect(text, isNot(contains('kcal')));
+  });
+
+  test('the quota-pause refusal is Chinese in Describe and in Fix', () async {
+    await settings
+        .setQuotaPauseUntil(DateTime.now().add(const Duration(hours: 3)));
+    final described = (await exec.describeMeal('两个鸡蛋')).error!;
+    final fixed = (await exec.handleText('那碗面改成 500 千卡')).single.text;
+    for (final text in [described, fixed]) {
+      expect(text, startsWith('⏸️ Gemini 暂停中。'));
+      expect(text, contains('免费额度已用完'));
+      expect(text, contains('小时'));
+      expect(text, isNot(contains('Gemini is paused right now')));
+      expect(text, isNot(contains('so I did not send')));
+      expect(text, isNot(contains('T')), reason: 'no ISO "T" in the time');
+    }
+    expect(analyzer.lastPrompt, isNull); // still NO model call
+  });
+
   test('missing key refusal is Chinese and names Settings', () async {
     SharedPreferences.setMockInitialValues(const {});
     final keyless = await AppSettings.load(

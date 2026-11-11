@@ -19,7 +19,10 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
+import '../app_formats.dart';
+import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
+import '../theme/tokens.dart';
 
 /// Macro identity colours. Index order is the contract — callers must not
 /// reassign hues per screen (colour follows the entity, never its rank).
@@ -93,17 +96,20 @@ class MacroBreakdownBar extends StatelessWidget {
     required this.proteinG,
     required this.carbsG,
     required this.fatG,
-    this.height = 18,
+    this.height = 10,
   });
 
   final num proteinG;
   final num carbsG;
   final num fatG;
+
+  /// The bar's thickness; its ends are rounded to half of it (a capsule).
   final double height;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = AppColors.of(context);
     final l = context.l10n;
     final slices = macroSlices(
       labels: (l.macroProtein, l.macroCarbs, l.macroFat),
@@ -117,7 +123,7 @@ class MacroBreakdownBar extends StatelessWidget {
       return Text(context.l10n.macroNoBreakdown,
           key: const Key('macroBarEmpty'),
           style: theme.textTheme.bodySmall
-              ?.copyWith(color: theme.colorScheme.onSurfaceVariant));
+              ?.copyWith(color: colors.secondaryLabel));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -129,9 +135,9 @@ class MacroBreakdownBar extends StatelessWidget {
             key: const Key('macroBar'),
             painter: _StackedBarPainter(
               slices: slices,
-              gap: 2, // surface gap between fills
-              radius: 4, // rounded data ends
-              surface: theme.colorScheme.surface,
+              gap: 2, // the cell shows through between fills
+              radius: height / 2, // capsule ends
+              surface: colors.cell,
             ),
           ),
         ),
@@ -171,8 +177,8 @@ class _LegendEntry extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Container(
-          width: 10,
-          height: 10,
+          width: 8,
+          height: 8,
           decoration:
               BoxDecoration(color: color, borderRadius: BorderRadius.circular(2)),
         ),
@@ -184,7 +190,7 @@ class _LegendEntry extends StatelessWidget {
         Flexible(
           child: Text(text,
               style: theme.textTheme.bodySmall
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+                  ?.copyWith(color: AppColors.of(context).secondaryLabel)),
         ),
       ],
     );
@@ -242,9 +248,58 @@ class _StackedBarPainter extends CustomPainter {
           old.slices[i].color != slices[i].color);
 }
 
+
+/// The calorie trend chart's geometry, from its [size] and the height of
+/// one (scaled) value label:
+///
+///  * [labelBand] runs along the TOP: the value labels sit above their
+///    bars, and the tallest bar reaches up to the band's bottom edge, so a
+///    label always has room and never lands on a bar.
+///  * [plot] holds the bars, which rise from its bottom edge (the
+///    baseline).
+///  * [axisBand] under the baseline holds the date axis, or is empty
+///    (zero height) when [axisLabelHeight] is 0.
+///
+/// Nothing else is reserved. Before run 7 a 16-pt × text-scale strip under
+/// the bars stayed blank while the peak label was drawn over the tallest
+/// bar from about 1.3x text up (A12).
+typedef TrendChartLayout = ({Rect labelBand, Rect plot, Rect axisBand});
+
+/// The gap between a label and the bar or baseline it belongs to.
+const double kTrendLabelGap = 4;
+
+TrendChartLayout trendChartLayout(
+  Size size, {
+  required double labelHeight,
+  double axisLabelHeight = 0,
+}) {
+  final top = labelHeight + kTrendLabelGap;
+  final bottom = axisLabelHeight > 0 ? axisLabelHeight + kTrendLabelGap : 0.0;
+  final plotBottom = math.max(top + 1, size.height - bottom);
+  return (
+    labelBand: Rect.fromLTWH(0, 0, size.width, top),
+    plot: Rect.fromLTRB(0, top, size.width, plotBottom),
+    axisBand: Rect.fromLTRB(
+        0, plotBottom, size.width, math.max(plotBottom, size.height)),
+  );
+}
+
+/// The total height [trendChartLayout] needs for a [plotHeight]-tall plot.
+double trendChartHeight(
+  double plotHeight, {
+  required double labelHeight,
+  double axisLabelHeight = 0,
+}) =>
+    labelHeight +
+    kTrendLabelGap +
+    plotHeight +
+    (axisLabelHeight > 0 ? axisLabelHeight + kTrendLabelGap : 0);
+
 /// Daily calorie bars over a date window, newest at the right, with the
 /// average as a reference line. Single series → one hue, no legend (the
-/// title names it); labels only on the extremes and the latest day.
+/// title names it); value labels only on the peak and the latest day, and
+/// a quiet date axis: the first day at the left, Today (or the last day)
+/// at the right.
 class CalorieTrendChart extends StatelessWidget {
   const CalorieTrendChart({
     super.key,
@@ -258,6 +313,10 @@ class CalorieTrendChart extends StatelessWidget {
   /// equal slot per entry — a caller that wants calendar gaps visible
   /// passes them as 0 (an empty slot, no bar, no label).
   final Map<String, num> dayTotals;
+
+  /// The PLOT's height, where the bars are. The value labels get a band
+  /// above it and the date axis one below, both sized from the text scale
+  /// (clamped at 2x), so the bars keep their height at every text size.
   final double height;
   final void Function(String date)? onDayTap;
 
@@ -266,15 +325,43 @@ class CalorieTrendChart extends StatelessWidget {
   /// still matches the days-with-data average it prints.
   final num? average;
 
+  /// Chart labels follow Dynamic Type up to 2x; past that they would eat
+  /// the plot (design spec: text never shrinks except in the ring and
+  /// chart labels).
+  static const double maxLabelScale = 2.0;
+
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     if (dayTotals.isEmpty) return const SizedBox.shrink();
+    final colors = AppColors.of(context);
+    final l = context.l10n;
     final dates = dayTotals.keys.toList()..sort();
     final values = [for (final d in dates) math.max(0, dayTotals[d]!)];
     final maxV = values.fold<num>(0, math.max);
     final avg = average?.toDouble() ??
         values.fold<num>(0, (a, b) => a + b) / values.length;
+    final textDirection = Directionality.of(context);
+    final textScaler = MediaQuery.textScalerOf(context)
+        .clamp(maxScaleFactor: maxLabelScale);
+    final labelStyle = AppTypography.of(context)
+        .caption2
+        .copyWith(color: colors.secondaryLabel);
+    final probe = TextPainter(
+      text: TextSpan(text: '0', style: labelStyle),
+      textDirection: textDirection,
+      textScaler: textScaler,
+    )..layout();
+    final labelHeight = probe.height;
+    probe.dispose();
+    // The date axis: where the span starts, and where it ends — 'Today'
+    // when it ends today, as it always does on History.
+    final endLabel = dates.last == isoDate(DateTime.now())
+        ? l.tabToday
+        : AppFormats.shortDate(context, dates.last);
+    final startLabel =
+        dates.length > 1 ? AppFormats.shortDate(context, dates.first) : null;
+    final totalHeight = trendChartHeight(height,
+        labelHeight: labelHeight, axisLabelHeight: labelHeight);
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
@@ -293,7 +380,7 @@ class CalorieTrendChart extends StatelessWidget {
                   if (i != null) onDayTap!(dates[i]);
                 },
           child: SizedBox(
-            height: height,
+            height: totalHeight,
             width: width,
             child: CustomPaint(
               key: const Key('calorieTrendChart'),
@@ -301,14 +388,19 @@ class CalorieTrendChart extends StatelessWidget {
                 values: values,
                 maxValue: maxV,
                 average: avg,
-                // primary, NOT protein blue: colour follows the ENTITY
-                // (this file's own header rule) — day-kcal is primary on
-                // the ring, the day rows, and here.
-                bar: theme.colorScheme.primary,
-                axis: theme.colorScheme.outlineVariant,
-                label: theme.colorScheme.onSurfaceVariant,
-                textDirection: Directionality.of(context),
-                textScaler: MediaQuery.textScalerOf(context),
+                // The accent, NOT protein blue: colour follows the ENTITY
+                // (this file's own header rule) — day-kcal is the accent
+                // on the ring, the day rows, and here.
+                bar: colors.accent,
+                baseline: colors.separator,
+                averageLine: colors.tertiaryLabel,
+                labelStyle: labelStyle,
+                labelBacking: colors.cell,
+                labelHeight: labelHeight,
+                startLabel: startLabel,
+                endLabel: endLabel,
+                textDirection: textDirection,
+                textScaler: textScaler,
               ),
             ),
           ),
@@ -330,9 +422,14 @@ class _TrendPainter extends CustomPainter {
     required this.maxValue,
     required this.average,
     required this.bar,
-    required this.axis,
-    required this.label,
+    required this.baseline,
+    required this.averageLine,
+    required this.labelStyle,
+    required this.labelBacking,
+    required this.labelHeight,
     required this.textDirection,
+    this.startLabel,
+    this.endLabel,
     this.textScaler = TextScaler.noScaling,
   });
 
@@ -340,34 +437,57 @@ class _TrendPainter extends CustomPainter {
   final num maxValue;
   final double average;
   final Color bar;
-  final Color axis;
-  final Color label;
+  final Color baseline;
+  final Color averageLine;
+
+  /// caption2 in the secondary label colour.
+  final TextStyle labelStyle;
+
+  /// Painted behind a value label so the dashed average never runs
+  /// through its digits (the cell colour).
+  final Color labelBacking;
+
+  /// One scaled label's height: the bands [trendChartLayout] reserves.
+  final double labelHeight;
+  final String? startLabel;
+  final String? endLabel;
   final TextDirection textDirection;
   final TextScaler textScaler;
+
+  /// A slot's bar never gets wider than this: with only a few days in the
+  /// span, full-slot bars read as blocks, not a trend.
+  static const double maxBarWidth = 28;
 
   @override
   void paint(Canvas canvas, Size size) {
     if (values.isEmpty) return;
-    // Label band scales with the system font so 2x text doesn't overlap bars.
-    final labelBand = 16.0 * textScaler.scale(1.0);
-    final plotH = math.max(1.0, size.height - labelBand);
-    // Headroom so the tallest bar never touches the label band.
-    final scaleMax = math.max(1.0, maxValue.toDouble() * 1.12);
+    final layout = trendChartLayout(size,
+        labelHeight: labelHeight, axisLabelHeight: labelHeight);
+    final plot = layout.plot;
+    final scaleMax = math.max(1.0, maxValue.toDouble());
     final slot = size.width / values.length;
-    final barW = math.max(2.0, slot - 2); // 2px surface gap between bars
+    // 2-pt gap between bars, capped width for sparse spans.
+    final barW = math.min(maxBarWidth, math.max(2.0, slot - 2));
+    double barLeft(int i) => i * slot + (slot - barW) / 2;
+    double barHeight(int i) =>
+        math.max(0.0, values[i].toDouble()) / scaleMax * plot.height;
 
     // Baseline + average reference, both recessive.
-    final axisPaint = Paint()
-      ..color = axis
-      ..strokeWidth = 1;
-    canvas.drawLine(Offset(0, plotH), Offset(size.width, plotH), axisPaint);
+    canvas.drawLine(
+      Offset(0, plot.bottom - 0.5),
+      Offset(size.width, plot.bottom - 0.5),
+      Paint()
+        ..color = baseline
+        ..strokeWidth = 1,
+    );
     if (average > 0) {
-      final y = plotH - (average / scaleMax) * plotH;
+      final y = plot.bottom - (average / scaleMax) * plot.height;
       final dash = Paint()
-        ..color = axis
+        ..color = averageLine
         ..strokeWidth = 1;
       for (var x = 0.0; x < size.width; x += 6) {
-        canvas.drawLine(Offset(x, y), Offset(math.min(x + 3, size.width), y), dash);
+        canvas.drawLine(
+            Offset(x, y), Offset(math.min(x + 3, size.width), y), dash);
       }
     }
 
@@ -377,47 +497,97 @@ class _TrendPainter extends CustomPainter {
       if (values[i] > values[maxIndex]) maxIndex = i;
     }
     for (var i = 0; i < values.length; i++) {
-      final v = values[i].toDouble();
-      if (v <= 0) continue;
-      final h = (v / scaleMax) * plotH;
-      final x = i * slot + (slot - barW) / 2;
+      if (values[i] <= 0) continue;
+      final h = barHeight(i);
       canvas.drawRRect(
         RRect.fromRectAndCorners(
-          Rect.fromLTWH(x, plotH - h, barW, h),
-          // 4px rounded data end, anchored square to the baseline.
-          topLeft: const Radius.circular(4),
-          topRight: const Radius.circular(4),
+          Rect.fromLTWH(barLeft(i), plot.bottom - h, barW, h),
+          // Rounded data end, anchored square to the baseline.
+          topLeft: const Radius.circular(AppRadius.xs),
+          topRight: const Radius.circular(AppRadius.xs),
         ),
         fill,
       );
     }
+
     // Selective direct labels: the peak and the latest LOGGED day only —
     // with gap days padded as 0, an empty today must not hide the most
-    // recent value.
-    _label(canvas, values[maxIndex], maxIndex, slot, plotH, scaleMax, size);
-    final latest = values.lastIndexWhere((v) => v > 0);
-    if (latest >= 0 && latest != maxIndex) {
-      _label(canvas, values[latest], latest, slot, plotH, scaleMax, size);
+    // recent value. A label sits above the TALLEST bar under its own
+    // width, so it never covers a neighbouring bar either.
+    Rect placeLabel(int index, TextPainter tp) {
+      final cx = index * slot + slot / 2 - tp.width / 2;
+      final left =
+          cx.clamp(0.0, math.max(0.0, size.width - tp.width)).toDouble();
+      final span = Rect.fromLTWH(left - 2, 0, tp.width + 4, 0);
+      var top = plot.bottom;
+      for (var i = 0; i < values.length; i++) {
+        if (values[i] <= 0) continue;
+        final l = barLeft(i);
+        if (l < span.right && l + barW > span.left) {
+          top = math.min(top, plot.bottom - barHeight(i));
+        }
+      }
+      final y = math.max(0.0, top - tp.height - 2);
+      return Rect.fromLTWH(left, y, tp.width, tp.height);
+    }
+
+    void paintLabel(TextPainter tp, Rect at) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+            Rect.fromLTRB(at.left - 2, at.top, at.right + 2, at.bottom),
+            const Radius.circular(2)),
+        Paint()..color = labelBacking,
+      );
+      tp.paint(canvas, at.topLeft);
+    }
+
+    final painters = <TextPainter>[];
+    try {
+      Rect? peakRect;
+      if (values[maxIndex] > 0) {
+        final tp = _text(formatKcal(values[maxIndex]));
+        painters.add(tp);
+        peakRect = placeLabel(maxIndex, tp);
+        paintLabel(tp, peakRect);
+      }
+      final latest = values.lastIndexWhere((v) => v > 0);
+      if (latest >= 0 && latest != maxIndex) {
+        final tp = _text(formatKcal(values[latest]));
+        painters.add(tp);
+        final rect = placeLabel(latest, tp);
+        // Beside the peak's label there is no room for a second one: the
+        // day rows below carry every value anyway.
+        if (peakRect == null || !rect.inflate(2).overlaps(peakRect)) {
+          paintLabel(tp, rect);
+        }
+      }
+
+      // The date axis, under the baseline.
+      final axisY = layout.axisBand.top + kTrendLabelGap;
+      final end = endLabel == null ? null : _text(endLabel!);
+      final start = startLabel == null ? null : _text(startLabel!);
+      if (end != null) {
+        painters.add(end);
+        end.paint(canvas, Offset(math.max(0, size.width - end.width), axisY));
+      }
+      if (start != null) {
+        painters.add(start);
+        final room = size.width - (end?.width ?? 0) - 8;
+        if (start.width <= room) start.paint(canvas, Offset(0, axisY));
+      }
+    } finally {
+      for (final tp in painters) {
+        tp.dispose();
+      }
     }
   }
 
-  void _label(Canvas canvas, num value, int index, double slot, double plotH,
-      double scaleMax, Size size) {
-    if (value <= 0) return;
-    final tp = TextPainter(
-      text: TextSpan(
-        text: value.round().toString(),
-        style: TextStyle(fontSize: 10, color: label),
-      ),
-      textDirection: textDirection,
-      textScaler: textScaler,
-    )..layout();
-    final h = (value.toDouble() / scaleMax) * plotH;
-    final cx = index * slot + slot / 2 - tp.width / 2;
-    final clampedX =
-        cx.clamp(0.0, math.max(0.0, size.width - tp.width)).toDouble();
-    tp.paint(canvas, Offset(clampedX, math.max(0.0, plotH - h - tp.height - 2)));
-  }
+  TextPainter _text(String text) => TextPainter(
+        text: TextSpan(text: text, style: labelStyle),
+        textDirection: textDirection,
+        textScaler: textScaler,
+        maxLines: 1,
+      )..layout();
 
   @override
   bool shouldRepaint(_TrendPainter old) =>
@@ -427,7 +597,13 @@ class _TrendPainter extends CustomPainter {
       old.maxValue != maxValue ||
       old.average != average ||
       old.bar != bar ||
-      old.axis != axis ||
-      old.label != label ||
+      old.baseline != baseline ||
+      old.averageLine != averageLine ||
+      old.labelStyle != labelStyle ||
+      old.labelBacking != labelBacking ||
+      old.labelHeight != labelHeight ||
+      old.startLabel != startLabel ||
+      old.endLabel != endLabel ||
+      old.textDirection != textDirection ||
       old.textScaler != textScaler;
 }

@@ -106,6 +106,47 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
 
   Uri _uri(String path) => Uri.parse('${settings.serverBaseUrl}$path');
 
+  /// What an address that cannot become a URL says ('http://host:5OOO' —
+  /// a letter O in the port — throws FormatException in [_uri]). It names
+  /// the 'server address', so classifyAnalysisError reads it as
+  /// noServerKey: user state, the photo kept (run 7, B2).
+  static const String _badAddressMessage =
+      'Check your server address in Settings — it is not a valid web '
+      'address.';
+
+  /// Whether the saved address parses (an empty one is reported on its
+  /// own, by [buildRequest]).
+  bool get _addressParses {
+    try {
+      _uri('/api/auth_check');
+      return true;
+    } on FormatException {
+      return false;
+    }
+  }
+
+  /// An address that cannot become a URL used to throw out of analyzePhoto
+  /// (the pipeline then burned every automatic photo to 'failed'). Checked
+  /// before the photo is decoded: until the address is fixed, each scan
+  /// would otherwise decode every window photo only to fail on the URL.
+  @override
+  Future<AnalysisOutcome> analyzePhoto(Uint8List originalBytes,
+      {List<Map<String, dynamic>>? recentMeals}) async {
+    if (settings.serverBaseUrl.isNotEmpty && !_addressParses) {
+      return const AnalysisOutcome(
+          error: _badAddressMessage, retryable: true, wall: Duration.zero);
+    }
+    return super.analyzePhoto(originalBytes, recentMeals: recentMeals);
+  }
+
+  /// The `backend` each request carried. The analyzed_by receipt is
+  /// checked against THAT, not the live setting: a plan switched while a
+  /// 20-60 s photo run was in flight discarded the correct (already paid)
+  /// reply and failed the photo with "update the server" (run 7, B3).
+  /// Per request, not a field: the chat, diagnostics and leftover calls
+  /// share this instance with the photo in flight.
+  final Expando<String> _sentBackend = Expando<String>('sentBackend');
+
   /// The user's Claude-plan model/effort choice (2026-08-05). Sent ONLY
   /// on the claude backend ('' = omit = server default): the vendor plans
   /// map model names server-side and the API 400s overrides for them.
@@ -129,10 +170,11 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         unprocessedFallback(originalBytes,
             maxBytes: _HttpVisionAnalyzer.maxOriginalFallbackBytes);
     if (sendBytes == null) return null;
+    final sentBackend = settings.serverBackend;
     final body = jsonEncode({
       'image_b64': base64Encode(sendBytes),
       'original_analysis': originalCompact,
-      'backend': settings.serverBackend,
+      'backend': sentBackend,
       ..._planChoice(),
     });
     try {
@@ -170,9 +212,10 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         // Same receipt rule as the photo path: a pre-upgrade server
         // ignores the backend field and answers analyzed_by:'claude' —
         // accepting that reply silently bills the wrong plan forever
-        // (pressure-test find).
+        // (pressure-test find). Compared with the backend this request
+        // asked for: a plan switched meanwhile is not a wrong payer.
         final paidBy = decoded['analyzed_by'];
-        if (paidBy is String && paidBy != settings.serverBackend) {
+        if (paidBy is String && paidBy != sentBackend) {
           return null;
         }
         return (decoded['leftover'] as Map).cast<String, dynamic>();
@@ -185,7 +228,10 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
 
   @override
   http.Request buildRequest(String key,
-      {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
+      {required String prompt,
+      Uint8List? jpegBytes,
+      required int maxTokens,
+      List<Map<String, dynamic>> recentMeals = const []}) {
     if (settings.serverBaseUrl.isEmpty) {
       // Retryable at the OUTCOME level (the user may add the address later)
       // but nothing to retry in place.
@@ -196,8 +242,17 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           verbatimMessage: true);
     }
     final isPhoto = jpegBytes != null;
-    return http.Request(
-        'POST', _uri(isPhoto ? '/api/analyze_photo' : '/api/text_intent'))
+    final Uri url;
+    try {
+      url = _uri(isPhoto ? '/api/analyze_photo' : '/api/text_intent');
+    } on FormatException {
+      // Outside _post's transport try: anything but a _ProviderException
+      // here escaped the analyzer's "never throws" contract.
+      throw const _ProviderException(_badAddressMessage,
+          transient: true, retryInPlace: false, verbatimMessage: true);
+    }
+    final backend = settings.serverBackend;
+    final req = http.Request('POST', url)
       ..headers['content-type'] = 'application/json'
       ..headers['X-API-Key'] = key
       ..headers['X-Client-Platform'] = 'app'
@@ -214,22 +269,30 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
               // Whose subscription pays on the server: 'claude' (default),
               // 'glm' (coding plan) or 'doubao' (agent plan). The plan
               // keys live in the SERVER's .env — never on the phone.
-              'backend': settings.serverBackend,
-              if (recentMealsForRequest.isNotEmpty)
-                'recent_meals': recentMealsForRequest,
+              'backend': backend,
+              if (recentMeals.isNotEmpty) 'recent_meals': recentMeals,
               ..._planChoice(),
               ..._replyLanguage(),
             }
           : {
               'prompt': prompt,
-              'backend': settings.serverBackend,
+              'backend': backend,
               ..._planChoice(),
               ..._replyLanguage(),
             });
+    _sentBackend[req] = backend;
+    return req;
   }
 
   @override
-  String extractText(Map<String, dynamic> body) {
+  String extractTextFor(http.BaseRequest req, Map<String, dynamic> body) =>
+      _extractPaidBy(_sentBackend[req] ?? settings.serverBackend, body);
+
+  @override
+  String extractText(Map<String, dynamic> body) =>
+      _extractPaidBy(settings.serverBackend, body);
+
+  String _extractPaidBy(String sent, Map<String, dynamic> body) {
     // Photos answer {ok, analysis}, text answers {ok, result}. The base
     // layer wants TEXT to parseAiJson, so hand the payload back as JSON —
     // that keeps every downstream rule (coerceIsFood, bare-array handling)
@@ -242,10 +305,10 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     // only a server update fixes it (a retry would spend the WRONG plan
     // again and discard the result again).
     final by = body['analyzed_by'];
-    if (by is String && by.isNotEmpty && by != settings.serverBackend) {
+    if (by is String && by.isNotEmpty && by != sent) {
       throw _ProviderException(
           'The server analyzed with "$by", not the selected '
-          '"${settings.serverBackend}" — update the server so it '
+          '"$sent" — update the server so it '
           'understands backend selection.',
           transient: false,
           verbatimMessage: true);
@@ -417,7 +480,13 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     if (base.isEmpty) return 'Add your server address first.';
     final key = apiKey.trim();
     if (key.isEmpty) return 'Enter your server upload key.';
-    final req = http.Request('POST', _uri('/api/auth_check'))
+    final Uri url;
+    try {
+      url = _uri('/api/auth_check');
+    } on FormatException {
+      return _badAddressMessage; // used to throw out of validateKey
+    }
+    final req = http.Request('POST', url)
       ..headers['content-type'] = 'application/json'
       ..headers['X-API-Key'] = key
       ..headers['X-Client-Platform'] = 'app'

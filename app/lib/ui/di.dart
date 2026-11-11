@@ -10,7 +10,7 @@ import 'dart:typed_data';
 import 'dart:ui' show PlatformDispatcher;
 
 import 'package:app_links/app_links.dart';
-import 'package:flutter/foundation.dart' show compute;
+import 'package:flutter/foundation.dart' show compute, visibleForTesting;
 
 import 'package:permission_handler/permission_handler.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -36,6 +36,7 @@ import '../services/photo/food_prefilter.dart' show foodScoreViaImageIO;
 import '../services/photo/glasses.dart' show captureMetaFor;
 import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
+import '../services/photo/origin_cache.dart' show pruneOriginCacheAtLaunch;
 import '../services/photo/photo_library.dart';
 import '../services/photo/photo_location.dart';
 import '../services/photo/share_intake.dart';
@@ -97,6 +98,9 @@ class AppServices {
       // This engine's GPU goes off whenever the app is in the background:
       // no dart:ui decode may start there (platform_decode.dart).
       isEngineBackgrounded = appEngineBackgrounded;
+      // photo_manager keeps a full-size copy of every original it reads;
+      // drop the ones no automatic scan can reach (origin_cache.dart).
+      unawaited(pruneOriginCacheAtLaunch(settings.lookbackDays));
       try {
         // iPhone photos are HEIC; earlier builds showed them to the model
         // unreadable. Forget those verdicts once (migrations.dart).
@@ -234,6 +238,8 @@ class AppServices {
         onMealSaved: signalMealsChanged,
         // A rejected key / blocked region parks the automatic scan.
         latch: autoScanLatchFor(settings),
+        // B14's previous-night candidates, under the consent that says so.
+        previousDayContext: () => settings.previousDayLeftoverContext,
         // The AI consent, read again at each send: a photo still queued
         // when Stop Sharing is confirmed, or across a provider switch, is
         // let go instead of uploaded.
@@ -538,6 +544,18 @@ class _AppSettingsStore implements SettingsStore {
   Future<void> setAiConsent(String route, {required bool granted}) =>
       _s.setAiConsent(route, granted: granted);
   @override
+  int aiConsentVersion(String route) => _s.aiConsentVersion(route);
+  @override
+  bool aiConsentUpdateDeclined(String route) =>
+      _s.aiConsentUpdateDeclined(route);
+  @override
+  Future<void> declineAiConsentUpdate(String route) =>
+      _s.declineAiConsentUpdate(route);
+  @override
+  bool get mealLogged => _s.mealLogged;
+  @override
+  Future<void> markMealLogged() => _s.markMealLogged();
+  @override
   String get provider => _s.provider.name;
   @override
   bool get isQuotaPaused => _s.isQuotaPaused;
@@ -696,20 +714,43 @@ class _AppSettingsStore implements SettingsStore {
   }
 }
 
+/// The production [RecentPhotoPicker] over [library], for tests.
+@visibleForTesting
+RecentPhotoPicker recentPhotoPickerFor(PhotoLibrary library) =>
+    _ShareIntakePicker(library);
+
 /// The Add-flow grid source: list assets, thumbnail per visible cell,
-/// original bytes only for the photo the user taps.
+/// original bytes (and the file name) only for the photo the user taps.
 class _ShareIntakePicker implements RecentPhotoPicker {
   final PhotoLibrary _library;
   _ShareIntakePicker(this._library);
 
+  /// What the last listings returned, by id, so the one picked photo can
+  /// get its name. Never cleared: the add and leftover screens share this
+  /// picker, and a listing is 30 entries.
+  final Map<String, LibraryAsset> _listed = {};
+
+  /// [id]'s file name, '' when it is unknown or the look-up fails; the
+  /// dating then falls back to the asset's create date.
+  Future<String> _nameOf(String id) async {
+    try {
+      return await _listed[id]?.fileName() ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   @override
   Future<List<RecentAsset>> recentAssets({int limit = 30}) async {
     if (!await _library.requestPermission()) return const [];
-    final assets = await _library.recentImages(limit);
-    return [
-      for (final a in assets.take(limit))
-        RecentAsset(a.id, await a.fileName(), a.createDateTime),
-    ];
+    // Names are NOT fetched here (run 7, P6): each is a PhotoKit round
+    // trip, and 30 in a row held the grid's spinner 0.2-0.3 s for names
+    // only loadOriginal reads, for the one photo the user picks.
+    final assets = (await _library.recentImages(limit)).take(limit).toList();
+    for (final a in assets) {
+      _listed[a.id] = a;
+    }
+    return [for (final a in assets) RecentAsset(a.id, '', a.createDateTime)];
   }
 
   @override
@@ -717,7 +758,11 @@ class _ShareIntakePicker implements RecentPhotoPicker {
       _library.thumbnailByAssetId(assetId);
 
   @override
-  Future<IntakePhoto?> loadOriginal(RecentAsset asset) async {
+  Future<IntakePhoto?> loadOriginal(RecentAsset picked) async {
+    // The listing leaves names empty (recentAssets): look this one up now.
+    final asset = picked.fileName.isNotEmpty
+        ? picked
+        : RecentAsset(picked.id, await _nameOf(picked.id), picked.createdAt);
     final bytes = await _library.originBytesByAssetId(asset.id);
     if (bytes == null || bytes.isEmpty) return null;
     // §8 25 MB cap, as every other intake path enforces: the eager

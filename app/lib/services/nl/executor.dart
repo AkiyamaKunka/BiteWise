@@ -121,7 +121,7 @@ class DefaultNlExecutor implements NlExecutor {
     // Spec §4 step 2 (telegram_bot.py:4253-4261): during a daily-quota pause,
     // refuse with the pause summary and make NO model call.
     if (settings.isQuotaPaused) {
-      return [NlReply(_quotaPauseMessage(settings.quotaPauseUntil!))];
+      return [NlReply(_quotaPauseMessage(settings.quotaPauseUntil!, _l))];
     }
     final missingKey = _missingKeyMessage();
     if (missingKey != null) return [NlReply(missingKey)];
@@ -191,7 +191,7 @@ class DefaultNlExecutor implements NlExecutor {
     }
     if (settings.isQuotaPaused) {
       return DescribeOutcome(
-          error: _quotaPauseMessage(settings.quotaPauseUntil!));
+          error: _quotaPauseMessage(settings.quotaPauseUntil!, _l));
     }
     final missingKey = _missingKeyMessage();
     if (missingKey != null) return DescribeOutcome(error: missingKey);
@@ -516,7 +516,7 @@ class DefaultNlExecutor implements NlExecutor {
     ));
     return NlReply(
         '${_l.nlAddedManualMeal}\n\n'
-        '${formatFoodResult(sanitized, unnamed: _l.nlUnnamedMeal)}',
+        '${formatFoodResult(sanitized, _l)}',
         applied: true);
   }
 

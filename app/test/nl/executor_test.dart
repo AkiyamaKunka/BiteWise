@@ -775,6 +775,33 @@ void main() {
       expect(saved.analysis['meal_description'], '烧鸭饭');
       expect(replies.single.text, startsWith('✅ Added new manual meal:'));
       expect(replies.single.text, contains('~780 kcal'));
+      expect(replies.single.text, contains('  • 烧鸭饭: ~780 kcal\n'
+          '    P: 35g | C: 90g | F: 28g'));
+      expect(replies.single.text, contains('📊 This meal: ~780 kcal\n'
+          '🥩 P: 35g | 🍞 C: 90g | 🧈 F: 28g'));
+    });
+
+    test('an item sum that misses the total warns without Telegram wording',
+        () async {
+      final replies = await exec.executeParsed([
+        {
+          'intent': 'new_meal',
+          'analysis': {
+            'is_food': true,
+            'meal_description': 'apple',
+            'total_calories': 300,
+            'food_items': [
+              {'name': 'apple', 'estimated_calories': 95},
+            ],
+          },
+        }
+      ], 'x', const []);
+      expect(
+          replies.single.text,
+          contains('⚠️ Item calories sum to ~95 kcal but the meal total is '
+              '~300 kcal — if this looks wrong, open the meal on Today to '
+              'fix it.'));
+      expect(replies.single.text, isNot(contains('reply')));
     });
 
     test('non-food or missing analysis refuses', () async {
@@ -1010,6 +1037,8 @@ void main() {
       final replies = await exec.handleText('log my lunch');
       expect(replies.single.text, contains('Gemini is paused right now.'));
       expect(replies.single.text, contains('did not send this request'));
+      expect(replies.single.text, matches(RegExp(r'paused until '
+          r'\d{4}-\d\d-\d\d \d\d:\d\d \(about [56]h\d\dm remaining\)')));
       expect(analyzer.lastPrompt, isNull); // NO model call during the pause
     });
   });
