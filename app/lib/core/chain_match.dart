@@ -90,7 +90,9 @@ String chainMarksAsSpaces(String s) =>
     s.replaceAll('\u2122', ' ').replaceAll('\u2120', ' ');
 
 /// The match tokens of [value] (see the library doc). Non-strings have none.
-List<String> chainTokens(dynamic value) {
+/// [keepLeadingThe] keeps a leading "the" (the chain picker's search, where
+/// "The" is typed before the rest of the name); matching never sets it.
+List<String> chainTokens(dynamic value, {bool keepLeadingThe = false}) {
   if (value is! String) return const [];
   final buf = StringBuffer();
   for (final r in nfkcLite(chainMarksAsSpaces(value)).runes) {
@@ -113,7 +115,7 @@ List<String> chainTokens(dynamic value) {
     }
   }
   var tokens = buf.toString().split(' ').where((t) => t.isNotEmpty).toList();
-  if (tokens.length > 1 && tokens.first == 'the') {
+  if (!keepLeadingThe && tokens.length > 1 && tokens.first == 'the') {
     tokens = tokens.sublist(1);
   }
   return tokens;
