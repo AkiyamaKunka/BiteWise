@@ -1296,6 +1296,24 @@ void main() {
 
       // A printed brand counts only when it names a chain of OUR table…
       expect(auto(_bigMac(confidence: 'medium', brand: 'Coca-Cola')), isNull);
+      // A drink brand that shares a chain's name is not that chain: an A&W
+      // Root Beer can (Keurig Dr Pepper) does not name A&W Restaurants.
+      for (final can in [
+        'A&W',
+        'A&W Root Beer',
+        'A&W Cream Soda',
+        'A&W Zero Sugar Root Beer',
+      ]) {
+        expect(
+          auto(_bigMac(confidence: 'medium', brand: can)),
+          isNull,
+          reason: can,
+        );
+      }
+      expect(
+        auto(_bigMac(confidence: 'medium', brand: 'A&W Restaurant')),
+        AssistTrigger.autoBranding,
+      );
       expect(
         auto(_bigMac(confidence: 'medium', brand: '', merchant: "Joe's Diner")),
         isNull,

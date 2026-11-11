@@ -1100,6 +1100,58 @@
       }
     },
     {
+      "id": "request_drink_brand_names_no_chain",
+      "fn": "compose_lookup_request",
+      "input": {
+        "items": [
+          {
+            "name": "Brisket plate",
+            "qty": 1,
+            "unit": "plate",
+            "brand": ""
+          },
+          {
+            "name": "Root beer",
+            "qty": 1,
+            "unit": "can",
+            "brand": "A&W Root Beer"
+          },
+          {
+            "name": "Cream soda",
+            "qty": 1,
+            "unit": "can",
+            "brand": "A&W"
+          }
+        ],
+        "chains": []
+      },
+      "expected": {
+        "items": [
+          {
+            "name": "Brisket plate",
+            "qty": 1,
+            "unit": "plate",
+            "brand": ""
+          },
+          {
+            "name": "Root beer",
+            "qty": 1,
+            "unit": "can",
+            "brand": ""
+          },
+          {
+            "name": "Cream soda",
+            "qty": 1,
+            "unit": "can",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [],
+        "country": "US"
+      }
+    },
+    {
       "id": "request_merchant_numbered_chain_name",
       "fn": "compose_lookup_request",
       "input": {
@@ -1854,6 +1906,31 @@
       "fn": "match_chain",
       "input": "Noodles and Company",
       "expected": "noodles"
+    },
+    {
+      "id": "match_drink_brand_bare",
+      "fn": "match_chain",
+      "input": "A&W",
+      "expected": null
+    },
+    {
+      "id": "match_drink_brand_with_flavor",
+      "fn": "match_chain",
+      "input": "A&W Root Beer",
+      "expected": null
+    },
+    {
+      "id": "match_drink_brand_chain_full_name",
+      "fn": "match_chain",
+      "input": "A&W Restaurant",
+      "expected": "a_and_w"
+    },
+    {
+      "id": "match_drink_brand_chain_host",
+      "fn": "match_chain",
+      "input": "A&W",
+      "url_host": "www.awrestaurants.com",
+      "expected": "a_and_w"
     },
     {
       "id": "match_prefix_longest",
