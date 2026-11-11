@@ -14,6 +14,7 @@ deliverable of R7a, so this pins it in both languages.
 
 import json
 import os
+import re
 
 import lookup_jobs
 
@@ -603,3 +604,43 @@ def test_the_server_doc_says_a_photo_before_4am_carries_the_day_befores_meals():
                         releasing.index("**After #22, one restyle commit:**")]
     assert ("When run 7's build reaches the App Store, say the day before's "
             "meals in `README.md` and `README.zh-CN.md` too") in merging
+
+
+def test_policy_says_photo_meals_keep_a_capture_note_in_exports_and_backups():
+    """Since 1.6.0 every meal logged from a photo keeps analysis.capture
+    (app/lib/services/photo/glasses.dart captureAnalysis): Meta glasses or
+    not, how that was recognized, whether the photo has a location, its
+    accuracy, the fix's time from the photo's, and a hash of the shutter
+    time and camera. It is part of the meal, so exports and the phone's
+    backups carry it, unlike the Meta glasses record (review 2026-11-11,
+    round 2). The policy says so in both languages, and says the location
+    itself is never kept. The keys are pinned so a new one is described
+    before it ships."""
+    glasses = _read("app", "lib", "services", "photo", "glasses.dart")
+    body = glasses[glasses.index("Map<String, Object> captureAnalysis("):]
+    body = body[:body.index("\n}\n")]
+    assert set(re.findall(r"out\['(\w+)'\]", body)) == {
+        "device", "signal", "has_gps", "gps_acc_m", "gps_fix_delta_s",
+        "shutter_key"}
+    en, zh = _policy_halves()
+    en_stays = _lookup_section(en, "### What stays on your phone")
+    zh_stays = _lookup_section(zh, "### 留在你手机上的数据")
+    for needle in (
+            "Each meal logged from a photo keeps a short note of how the "
+            "photo was taken",
+            "whether it came from Meta glasses and how that was recognized",
+            "whether the photo carries a location, how precise that "
+            "location is and how far its time lies from the photo's — "
+            "never the location itself",
+            "a short code made from the shutter time and the camera",
+            "this note is part of the meal: it is in your exports and your "
+            "phone's backups"):
+        assert needle in en_stays, needle
+    for needle in (
+            "每一条用照片记录的餐食都会保存一条照片如何拍摄的简短说明",
+            "是否来自 Meta 眼镜、是怎样识别出来的",
+            "照片是否带有位置、位置的精度，以及定位时间与拍摄时间相差多久——"
+            "绝不记录位置本身",
+            "由拍摄时间和相机生成的简短代码",
+            "这条说明是餐食的一部分：会包含在导出文件和手机的备份中"):
+        assert needle in zh_stays, needle
