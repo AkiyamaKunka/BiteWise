@@ -229,27 +229,41 @@ class FakeCloudTransport implements BackupTransport {
 
   static String _sha(List<int> b) => sha256.convert(b).toString();
 
+  /// CloudFiles.deleteAll: another install's file is refused; one not on
+  /// this phone is left (its download started) and the rest go on.
   @override
   Future<CloudResult> delete(List<String> paths, WriteExpect expect,
       {Duration timeout = const Duration(seconds: 20)}) async {
-    var deleted = 0;
-    for (final p in paths) {
+    var deleted = 0, refused = 0, left = 0;
+    for (var i = 0; i < paths.length; i++) {
+      final p = paths[i];
+      if (!validPath(p)) {
+        return CloudResult(CloudResultKind.badArguments,
+            deleted: deleted, refused: refused, left: left + paths.length - i);
+      }
       final b = files[p];
       if (b == null) continue;
-      if (notDownloaded.contains(p)) {
-        return CloudResult(CloudResultKind.notDownloaded, deleted: deleted);
+      if (notDownloaded.contains(p) || unreachable.contains(p)) {
+        notDownloaded.add(p);
+        downloadsStarted.add(p);
+        left++;
+        continue;
       }
       final verdict = checkOwner(
           exists: true,
           header: parseBackupHeader(b),
           expect: WriteExpect(
               installId: expect.installId, adoptFrom: expect.adoptFrom));
-      if (verdict != OwnerVerdict.allowed) continue;
+      if (verdict != OwnerVerdict.allowed) {
+        refused++;
+        continue;
+      }
       files.remove(p);
       log.add('delete $p');
       deleted++;
     }
-    return CloudResult(CloudResultKind.ok, deleted: deleted);
+    return CloudResult(CloudResultKind.ok,
+        deleted: deleted, refused: refused, left: left);
   }
 
   @override

@@ -26,7 +26,8 @@ import UniformTypeIdentifiers
 ///          allowDownload, timeoutMs} → ok{bytes} | ownedByOther{header} |
 ///          changedElsewhere{header} | unknownOwner | absentNotAllowed |
 ///          notDownloaded | verifyFailed | twoCopies | timeout | …
-///   delete {paths, expect, timeoutMs} → ok{deleted, refused} | notDownloaded | …
+///   delete {paths, expect, timeoutMs} → ok{deleted, refused, left} |
+///          error{deleted, refused, left} | … (CloudFiles.deleteAll)
 ///   conflicts {path, destDir} → {status, versions: [{tmpPath, header?}]}
 ///   resolveConflicts {path, installIds} → {status}
 ///   pickFiles              → ok{paths} | cancelled | unavailable
@@ -486,35 +487,12 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
         reply(["status": "badArguments"])
         return
       }
-      let protected = self.protectedNow
-      let timeout = self.timeout(args)
-      var deleted = 0
-      var refused = 0
-      // One coordinated delete per file, one after another. A file that is
-      // not this install's (or the adopted one's) is left and counted; an
-      // error stops the rest.
-      func next(_ i: Int) {
-        guard i < paths.count else {
-          files.removeEmptyPicturesFolder()
-          reply(["status": "ok", "deleted": deleted, "refused": refused])
-          return
-        }
-        files.delete(paths[i], expect: expect, queue: self.fileQueue, timeout: timeout) { outcome in
-          switch outcome {
-          case .deleted(let n):
-            deleted += n
-            next(i + 1)
-          case .verdict:
-            refused += 1
-            next(i + 1)
-          default:
-            var r = CloudFiles.reply(outcome, protectedDataAvailable: protected)
-            r["deleted"] = deleted
-            reply(r)
-          }
-        }
+      files.deleteAll(
+        paths, expect: expect, queue: self.fileQueue, timeout: self.timeout(args),
+        protectedDataAvailable: self.protectedNow
+      ) { r in
+        reply(r)
       }
-      next(0)
     }
   }
 

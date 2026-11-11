@@ -113,6 +113,19 @@ void main() {
     expect(args['keepPreviousPath'], kPreviousFileName);
   });
 
+  test('a delete reads what it removed, refused and left', () async {
+    answer = (_) => {'status': 'ok', 'deleted': 2, 'refused': 1, 'left': 1};
+    final r = await t.delete(
+        const ['Meal Pictures/2026-09.json', kRecordsFileName],
+        const WriteExpect(installId: _me));
+    expect(r.ok, isTrue);
+    expect([r.deleted, r.refused, r.left], [2, 1, 1]);
+    answer = (_) => {'status': 'ok', 'deleted': 1};
+    final old = await t.delete(const [kRecordsFileName],
+        const WriteExpect(installId: _me));
+    expect([old.deleted, old.refused, old.left], [1, 0, 0]);
+  });
+
   test('error replies carry a code and nothing else', () async {
     answer = (_) => {'status': 'error', 'domain': 'NSCocoaErrorDomain', 'code': 4};
     final r = await t.readHeader(kRecordsFileName,

@@ -769,6 +769,8 @@ void main() {
         utf8.decode(jsonEncode({}).codeUnits));
     final theirs = BackupHeader(kind: BackupKind.pictures, installId: _other, seq: 1, month: '2026-02');
     cloud.put(picturesPath('2026-02'), '${theirs.envelopePrefix(now)}{}}');
+    // Another phone's month this phone never read is not even downloaded.
+    cloud.notDownloaded.add(picturesPath('2026-02'));
     expect(await c.turnOff(deleteFiles: true), isTrue);
     expect(cloud.files.keys,
         unorderedEquals(['Meal Pictures/2026-01.json', picturesPath('2026-02')]));
@@ -792,6 +794,42 @@ void main() {
     expect(cloud.log, ['write ${picturesPath('2026-01')}'],
         reason: 'the write in flight lands; nothing after it');
     expect(c.status.value.state, BackupState.off);
+  });
+
+  test('a month with no pictures left that is not on this phone yet is '
+      'deleted by a later run', () async {
+    final oct = await seed(dao, '2026-10-03', hash: 'h1');
+    await dao.saveMealThumb(oct, _jpeg(1));
+    await seed(dao, '2026-11-02');
+    await ready();
+    await run();
+    await dao.deleteMeal(oct);
+    cloud.notDownloaded.add(picturesPath('2026-10'));
+    await run();
+    expect(cloud.files.containsKey(picturesPath('2026-10')), isTrue);
+    expect(cloud.downloadsStarted, contains(picturesPath('2026-10')));
+    expect(BackupPrefs(prefs).months.keys, ['2026-10'],
+        reason: 'still to delete');
+    cloud.finishDownloads();
+    await run();
+    expect(cloud.files.containsKey(picturesPath('2026-10')), isFalse);
+    expect(BackupPrefs(prefs).months, isEmpty);
+  });
+
+  test('a delete that left one of this install\'s files keeps the backup '
+      'known, so it can be deleted again', () async {
+    final oct = await seed(dao, '2026-10-03', hash: 'h1');
+    await dao.saveMealThumb(oct, _jpeg(1));
+    await ready();
+    await run();
+    cloud.unreachable.add(picturesPath('2026-10'));
+    expect(await c.deleteBackup(), isFalse);
+    expect(prefs.getInt(BackupPrefs.kLastSeq), 1);
+    cloud.unreachable.clear();
+    cloud.notDownloaded.clear();
+    expect(await c.deleteBackup(), isTrue);
+    expect(cloud.files, isEmpty);
+    expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
   });
 
   group('the background', () {

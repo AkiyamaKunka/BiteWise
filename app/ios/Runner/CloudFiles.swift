@@ -374,10 +374,16 @@ final class CloudFiles {
 
   // MARK: - delete
 
-  /// The body of one delete, inside the coordinated access.
+  /// The body of one delete, inside the coordinated access. A file not on
+  /// this phone yet (dataless, or an `.icloud` placeholder before iOS 17)
+  /// has no owner to read: its download is started, so a later delete (or
+  /// a coordinated read, which waits for it) can tell, and it is left.
   func performDelete(at url: URL, expect: Expect) -> Outcome {
     guard CloudFiles.itemExists(url) else { return .deleted(0) }
-    guard CloudFiles.isDownloaded(url) else { return .notDownloaded }
+    guard CloudFiles.isDownloaded(url) else {
+      try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+      return .notDownloaded
+    }
     let header = CloudFiles.header(at: url)
     let anySeq = Expect(installId: expect.installId, adoptFrom: expect.adoptFrom)
     let verdict = CloudFiles.checkOwner(exists: true, header: header, expect: anySeq)
@@ -402,6 +408,51 @@ final class CloudFiles {
     coordinate([intent], queue: queue, timeout: timeout, completion: completion) {
       self.performDelete(at: intent.url, expect: expect)
     }
+  }
+
+  /// Deletes [paths] one after another, each in its own coordinated
+  /// delete, and answers once with the channel reply. A file that is not
+  /// this install's (or the adopted one's) is refused and counted. One
+  /// that is not on this phone yet (its download is started) or whose
+  /// coordination timed out is left and counted, and the rest go on: one
+  /// evicted month never keeps the others, or the records file after it.
+  /// Any other error stops the rest, which count as left.
+  func deleteAll(
+    _ paths: [String], expect: Expect, queue: OperationQueue, timeout: TimeInterval,
+    protectedDataAvailable: Bool, completion: @escaping ([String: Any]) -> Void
+  ) {
+    var deleted = 0
+    var refused = 0
+    var left = 0
+    // Each step starts only after the one before it answered: the counts
+    // are never touched from two threads at once.
+    func next(_ i: Int) {
+      guard i < paths.count else {
+        removeEmptyPicturesFolder()
+        completion(["status": "ok", "deleted": deleted, "refused": refused, "left": left])
+        return
+      }
+      delete(paths[i], expect: expect, queue: queue, timeout: timeout) { outcome in
+        switch outcome {
+        case .deleted(let n):
+          deleted += n
+          next(i + 1)
+        case .verdict:
+          refused += 1
+          next(i + 1)
+        case .notDownloaded, .timeout:
+          left += 1
+          next(i + 1)
+        default:
+          var r = CloudFiles.reply(outcome, protectedDataAvailable: protectedDataAvailable)
+          r["deleted"] = deleted
+          r["refused"] = refused
+          r["left"] = left + paths.count - i
+          completion(r)
+        }
+      }
+    }
+    next(0)
   }
 
   /// Removes `Meal Pictures` once nothing is left in it.

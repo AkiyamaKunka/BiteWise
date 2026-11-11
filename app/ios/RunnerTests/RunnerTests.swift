@@ -2301,6 +2301,50 @@ class CloudFilesTests: XCTestCase {
     XCTAssertEqual(r["deleted"] as? Int, 0, "nothing there is nothing to do")
   }
 
+  private func deleteAll(_ paths: [String], expect: CloudFiles.Expect) -> [String: Any] {
+    let done = expectation(description: "deleteAll")
+    var reply: [String: Any] = [:]
+    files.deleteAll(paths, expect: expect, queue: queue, timeout: 10, protectedDataAvailable: true) { r in
+      reply = r
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 30)
+    return reply
+  }
+
+  /// Before iOS 17 an evicted iCloud file is a hidden `.<name>.icloud`
+  /// placeholder: on a local folder it is the one way to have a file that
+  /// exists but is not downloaded.
+  private func putPlaceholder(for path: String) throws {
+    let url = files.url(for: path)!
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let placeholder = url.deletingLastPathComponent()
+      .appendingPathComponent(".\(url.lastPathComponent).icloud")
+    try Data("placeholder".utf8).write(to: placeholder)
+  }
+
+  func testAFileNotOnThisPhoneIsLeftAndTheBatchGoesOn() throws {
+    try put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-08.json")
+    try putPlaceholder(for: "Meal Pictures/2026-09.json")
+    try put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-10.json")
+    try put(body(id: me, seq: 1), at: "Chopstats Backup.json")
+    XCTAssertTrue(CloudFiles.itemExists(files.url(for: "Meal Pictures/2026-09.json")!))
+    XCTAssertFalse(CloudFiles.isDownloaded(files.url(for: "Meal Pictures/2026-09.json")!))
+    let r = deleteAll(
+      [
+        "Meal Pictures/2026-08.json", "Meal Pictures/2026-09.json", "Meal Pictures/2026-10.json",
+        "Chopstats Backup.json",
+      ], expect: .init(installId: me))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["deleted"] as? Int, 2)
+    XCTAssertEqual(r["refused"] as? Int, 1)
+    XCTAssertEqual(r["left"] as? Int, 1)
+    XCTAssertNil(read("Meal Pictures/2026-08.json"))
+    XCTAssertNil(read("Chopstats Backup.json"), "the batch went on past the evicted month")
+    XCTAssertNotNil(read("Meal Pictures/2026-10.json"), "another install's file stays")
+  }
+
   // MARK: - errors and the plugin's pure parts
 
   func testErrorsCarryCodesNeverText() {

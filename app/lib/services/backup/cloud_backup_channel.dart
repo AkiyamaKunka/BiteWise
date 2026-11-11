@@ -112,13 +112,25 @@ enum CloudResultKind {
 
 class CloudResult {
   const CloudResult(this.kind,
-      {this.header, this.bytes, this.deleted = 0, this.errorCode, this.paths = const []});
+      {this.header,
+      this.bytes,
+      this.deleted = 0,
+      this.refused = 0,
+      this.left = 0,
+      this.errorCode,
+      this.paths = const []});
   final CloudResultKind kind;
 
   /// The file's header, when the reply carried one.
   final BackupHeader? header;
   final int? bytes;
+
+  /// delete: the files removed; the files another install owns (never
+  /// removed); the files left for now (not on this phone yet, with their
+  /// download started, or busy), which a later delete may remove.
   final int deleted;
+  final int refused;
+  final int left;
 
   /// `domain:code` of an unmapped error.
   final String? errorCode;
@@ -210,6 +222,8 @@ CloudResult cloudResultFromReply(Object? reply) {
     header: header,
     bytes: (reply['bytes'] as num?)?.toInt(),
     deleted: (reply['deleted'] as num?)?.toInt() ?? 0,
+    refused: (reply['refused'] as num?)?.toInt() ?? 0,
+    left: (reply['left'] as num?)?.toInt() ?? 0,
     errorCode: domain is String && code is num ? '$domain:$code' : null,
     paths: [
       for (final p in (reply['paths'] as List?) ?? const [])

@@ -770,11 +770,13 @@ class BackupCoordinator {
           final d = await _t.delete([path],
               WriteExpect(installId: me, adoptFrom: adoptFrom),
               timeout: r.timeout);
-          if (d.ok) {
+          if (d.ok && d.left == 0) {
             months.remove(m);
-          } else if (!_transient(d.kind)) {
+          } else if (!d.ok && !_transient(d.kind)) {
             return d.kind;
           }
+          // Left (not on this phone yet: Swift started its download):
+          // deleted by a later run.
           continue;
         }
         if (rec != null &&
@@ -1305,7 +1307,7 @@ class BackupCoordinator {
         };
         final r = await _t.delete(paths.toList(),
             WriteExpect(installId: _prefs.installId, adoptFrom: c.header.installId));
-        if (!r.ok) return false;
+        if (!r.ok || r.left > 0) return false;
         await _markAnswered(c.header.installId);
         _headerCache.clear();
         await _prefs.setFirstEmptyAt(_now.subtract(firstWriteWait));
@@ -1462,8 +1464,11 @@ class BackupCoordinator {
   }
 
   /// Deletes this install's files (and the adopted install's) from the
-  /// folder; anything another install wrote stays. The switch is left as
-  /// it is.
+  /// folder; anything another install wrote stays. Only the paths this
+  /// install wrote or adopted are sent (its months, the records file and
+  /// the previous copy): another phone's months, never read here and
+  /// maybe not even downloaded, are none of its business. The switch is
+  /// left as it is.
   Future<bool> deleteBackup() async {
     _setBusy(true);
     try {
@@ -1472,17 +1477,15 @@ class BackupCoordinator {
         final me = _prefs.installId;
         if (!isValidInstallId(me)) return true;
         final adopted = _prefs.adoptedFrom;
-        final listing = _listing ?? await _t.list();
         final paths = <String>{
-          kRecordsFileName,
+          for (final e in _prefs.months.entries)
+            if (e.value.state != MonthState.foreign) picturesPath(e.key),
           kPreviousFileName,
-          for (final m in _prefs.months.keys) picturesPath(m),
-          for (final i in listing.items)
-            if (monthOfPicturesPath(i.path) != null) i.path,
+          kRecordsFileName,
         };
         final r = await _t.delete(paths.toList(),
             WriteExpect(installId: me, adoptFrom: adopted.isEmpty ? null : adopted));
-        if (!r.ok) return false;
+        if (!r.ok || r.left > 0) return false;
         await _prefs.forgetBackup(keepNotice: true);
         _headerCache.clear();
         _listing = null;
