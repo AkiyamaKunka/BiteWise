@@ -9,7 +9,7 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 809 keys, and the generated classes say what
+/// - Both files have the same 881 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
 /// - Keys added or changed after review (fix list U3, U5, C5) follow the
 ///   same rules; the iOS Off box names the saved answers it also clears.
@@ -151,8 +151,9 @@ final Map<String, String Function(AppLocalizations l)> _render = {
 final _cjk = RegExp(r'[⺀-鿿豈-﫿＀-￯　-〿]');
 final _placeholderRe = RegExp(r'\{(\w+)\}');
 
-/// The message keys in each ARB file once `main` (776) was merged into #22.
-const _keyCount = 809;
+/// The message keys in each ARB file: 809 on `main` once #22 merged, 72
+/// more with the 1.7.0 iCloud Backup branch (feat/icloud-backup).
+const _keyCount = 881;
 
 Directory _appRoot() {
   var dir = Directory.current;
@@ -191,20 +192,20 @@ void main() {
     expect(_render.keys.toSet(), {..._newKeys.keys, _changed, _changedOff});
   });
 
-  test('both files have the same 809 keys', () {
+  test('both files have the same 881 keys', () {
     expect(_messageKeys(en), hasLength(_keyCount));
     expect(_messageKeys(zh), hasLength(_keyCount));
     expect(_messageKeys(zh).toSet(), _messageKeys(en).toSet());
   });
 
-  // The #22 merge list in docs/RELEASING.md tells whoever merges which
-  // count to pin; a count changed here and not there sends them the wrong
-  // number (it said 807 after the merge pinned 809).
+  // docs/RELEASING.md tells whoever merges which count to pin; a count
+  // changed here and not there sends them the wrong number (it said 807
+  // after the merge pinned 809).
   test('docs/RELEASING.md gives the count this test pins', () {
     final releasing = File(
       '${_appRoot().parent.path}/docs/RELEASING.md',
     ).readAsStringSync().replaceAll(RegExp(r'\s+'), ' ');
-    expect(releasing, contains('$_keyCount on the merged #22 branch'));
+    expect(releasing, contains('$_keyCount on the iCloud Backup branch'));
   });
 
   test('every new key is in both files, after diagConfidenceLine', () {

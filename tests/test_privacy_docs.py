@@ -667,6 +667,32 @@ def test_the_server_doc_says_a_photo_before_4am_carries_the_day_befores_meals():
             "meals in `README.md` and `README.zh-CN.md` too") in merging
 
 
+def test_icloud_backup_never_carries_the_lookup_files_or_the_keys():
+    """1.7.0 iCloud Backup: the restaurant lookup files stay out of the
+    backup as they stay out of the phone's own backups and exports, and
+    the keys and consents are never copied (both languages)."""
+    en, zh = _policy_halves()
+    en_sec = _lookup_section(en, "### iCloud Backup (iPhone)")
+    zh_sec = _lookup_section(zh, "### iCloud 备份（iPhone）")
+    assert "API keys, the key and address of your own server, setup links" in en_sec
+    assert "restaurant lookup files (learned places, saved lookup answers)" in en_sec
+    assert "API Key、你自己服务器的密钥和地址、设置链接" in zh_sec
+    assert "餐厅查询的文件（记住的地点、保存的查询结果）" in zh_sec
+    # Restore, Combine and Replace make this iPhone take another
+    # iPhone's backup over (restore() adopts it, and the next run writes
+    # over it), so the policy never says "never another iPhone's".
+    flat_en, flat_zh = _flat(en_sec), _flat(zh_sec)
+    assert ("Each iPhone overwrites only its own backup, unless you choose "
+            "on it to restore, combine or replace another iPhone's backup: "
+            "then this iPhone takes that backup over") in flat_en
+    assert "never another iPhone's" not in flat_en
+    assert ("每台 iPhone 只会覆盖自己的备份；只有当你在这台 iPhone 上选择恢复、"
+            "合并或替换另一台 iPhone 的备份时，这台 iPhone 才会接管那份备份") in flat_zh
+    assert "绝不会覆盖另一台 iPhone 的" not in flat_zh
+
+
+
+
 def test_policy_says_photo_meals_keep_a_capture_note_in_exports_and_backups():
     """Since 1.6.0 every meal logged from a photo keeps analysis.capture
     (app/lib/services/photo/glasses.dart captureAnalysis): Meta glasses or

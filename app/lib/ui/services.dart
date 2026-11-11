@@ -10,6 +10,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show Listenable;
 
 import '../core/contracts.dart';
+import '../services/backup/backup_coordinator.dart';
 import '../services/garmin_client.dart';
 import '../services/photo/coverage.dart';
 import '../services/photo/photo_library.dart';
@@ -301,6 +302,11 @@ class UiServices {
   /// Null hides both (most tests).
   final UsualFoods? usualFoods;
 
+  /// iCloud Backup (iPhone, 1.7.0): Settings › Your Data's rows, and the
+  /// notice and restore offer the shell raises. Null on Android and in
+  /// most tests.
+  final BackupCoordinator? cloudBackup;
+
   const UiServices({
     required this.dao,
     required this.analyzer,
@@ -333,5 +339,6 @@ class UiServices {
     this.mealInUse,
     this.restaurantAssist,
     this.usualFoods,
+    this.cloudBackup,
   });
 }

@@ -495,9 +495,53 @@ class BaseFakeDao implements MealsDao {
     final parsed = parseExportEnvelope(json);
     imported.add(json);
     return ImportSummary(
-      {for (final e in parsed.tables.entries) e.key: e.value.length},
+      {
+        for (final e in parsed.tables.entries)
+          if (e.key != 'meal_thumbs') e.key: e.value.length,
+      },
       const {},
       exportedAt: parsed.exportedAt,
+      thumbsAdded: parsed.tables['meal_thumbs']?.length ?? 0,
     );
   }
+
+  // iCloud Backup (1.7.0): enough for the screens and the coordinator's
+  // fakes; the SQL is pinned by backup_dao_test.dart against real SQLite.
+  @override
+  Future<BackupCounts> backupCounts() async => BackupCounts(
+        meals: meals.length,
+        bodyWeight: savedWeights.length,
+        thumbs: thumbs.length,
+        firstDate: meals.isEmpty ? null : meals.map((m) => m.date).reduce(
+            (a, b) => a.compareTo(b) <= 0 ? a : b),
+        lastDate: meals.isEmpty ? null : meals.map((m) => m.date).reduce(
+            (a, b) => a.compareTo(b) >= 0 ? a : b),
+        recordsChange: meals.length + savedWeights.length + deletedIds.length,
+        thumbsChange: thumbs.length,
+      );
+
+  @override
+  Future<Map<String, List<Map<String, Object?>>>> backupRecordTables() async =>
+      {
+        'meals': [
+          for (final m in meals)
+            {
+              'id': m.id,
+              'chat_id': m.chatId,
+              'date': m.date,
+              'time': m.time,
+              'timestamp': m.timestamp,
+              'source': m.source,
+              'image_hash': m.imageHash,
+              'analysis': jsonEncode(m.analysis),
+              'corrected': m.corrected ? 1 : 0,
+            },
+        ],
+      };
+
+  @override
+  Future<Map<String, ThumbMonthPrint>> thumbMonthPrints() async => const {};
+
+  @override
+  Future<List<BackupThumb>> thumbsForMonth(String month) async => const [];
 }

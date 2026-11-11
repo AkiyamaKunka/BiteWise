@@ -496,7 +496,8 @@ void main() {
       // the 1.6.0 review fixes, which also name the maker of the OpenRouter
       // model a lookup goes to, merged on 2026-11-10; run 7 (PR #22: the
       // day before's meals with a photo taken before 4 a.m., under the
-      // consent text that says so) merged on 2026-11-11.
+      // consent text that says so) merged on 2026-11-11, and so did the
+      // 1.7.0 iCloud Backup (PR #36: the iCloud Backup section).
       expect(policy, contains('Effective date: 2026-11-11'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
@@ -509,6 +510,24 @@ void main() {
       for (final claim in ['equal protection', 'same protection', '同等保护']) {
         expect(policy, isNot(contains(claim)));
       }
+    });
+
+    // 1.7.0 iCloud Backup: the policy says where the copy lives, what is
+    // never in it, that the developer cannot see it, and how to delete it,
+    // in both languages.
+    test('iCloud Backup: own iCloud, never the keys, deletable', () {
+      final flat = policy.replaceAll(RegExp(r'\s+'), ' ');
+      expect(policy, contains('### iCloud Backup (iPhone)'));
+      expect(policy, contains('### iCloud 备份（iPhone）'));
+      expect(flat, contains('**What is never copied:** API keys'));
+      expect(flat, contains('**绝不会复制的内容**：API Key'));
+      expect(flat, contains('the developer cannot see them and runs no server'));
+      expect(flat, contains('开发者看不到它们'));
+      expect(flat, contains('nothing is uploaded until you answer it'));
+      expect(flat, contains('在你回答之前不会上传任何内容'));
+      expect(flat, contains('uninstalling the app does not delete it'));
+      expect(flat, contains('卸载应用不会删除它'));
+      expect(flat, contains('Apart from the copy **iCloud Backup** keeps'));
     });
 
     // The section names the recipient, so it must not open by saying the
