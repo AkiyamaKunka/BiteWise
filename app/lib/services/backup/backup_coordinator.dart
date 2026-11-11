@@ -250,6 +250,9 @@ class BackupCoordinator {
         _guard = backgroundGuard,
         _writer = BackupFileWriter(dao: dao, platform: platform, clock: clock) {
     _status = ValueNotifier(_statusFromPrefs());
+    // The launch's look for a backup to offer: the shell starts it after
+    // the first frame, and init asks about the photo catch-up before that.
+    if (uiEngine) _deciding = Completer<void>();
   }
 
   final MealsDao _dao;
@@ -284,6 +287,11 @@ class BackupCoordinator {
   static const Duration catchUpLease = Duration(minutes: 30);
   static const int shrinkFloor = 20;
 
+  /// How much longer than [gatherWait] [holdsCatchUp] waits, at most, for
+  /// a look for a backup to offer to decide (the status call, the query
+  /// starting, the headers read).
+  static const Duration lookSlack = Duration(seconds: 60);
+
   late final ValueNotifier<BackupStatus> _status;
   ValueListenable<BackupStatus> get status => _status;
 
@@ -299,6 +307,17 @@ class BackupCoordinator {
   Timer? _refreshTimer;
   int? _seenRecords;
   int? _seenThumbs;
+
+  /// The look for a backup to offer, until it has decided whether to offer
+  /// one (or ended without deciding): the photo catch-up waits for it
+  /// ([holdsCatchUp]). Pending from the start in the app's engine.
+  Completer<void>? _deciding;
+
+  void _endDeciding() {
+    final d = _deciding;
+    _deciding = null;
+    if (d != null && !d.isCompleted) d.complete();
+  }
 
   // ------------------------------------------------------------- the lock
 
@@ -1053,10 +1072,27 @@ class BackupCoordinator {
     _pollTimer?.cancel();
     _debounceTimer?.cancel();
     _refreshTimer?.cancel();
+    _endDeciding();
     await _t.stopWatching();
   }
 
   Future<void> _launchCheck({bool startWatching = false}) async {
+    _deciding ??= Completer<void>();
+    final bool nothingToAsk;
+    try {
+      nothingToAsk = await _lookForOffer(startWatching: startWatching);
+    } finally {
+      // Decided (an offer holds the catch-up from here), or ended without
+      // deciding: the catch-up waits no longer either way.
+      _endDeciding();
+    }
+    if (nothingToAsk) await _maybeLaunchRun();
+  }
+
+  /// The look for a backup to offer, or the notice to ask. True when it
+  /// found nothing to ask (the launch's run may go); false when it asks,
+  /// or ended before it could tell.
+  Future<bool> _lookForOffer({required bool startWatching}) async {
     final me = await _locked(() async {
       await _prefs.reload();
       return _identity(background: false);
@@ -1069,7 +1105,7 @@ class BackupCoordinator {
     // "no backup" evidence. Started whatever status said: the plugin
     // starts the query once there is a container (CloudQueryPlan).
     if (startWatching) await _t.startWatching();
-    if (me == null) return;
+    if (me == null) return false;
     // Wait for the query's first gathering (foreground only).
     final until = _now.add(gatherWait);
     var listing = await _t.list();
@@ -1077,7 +1113,7 @@ class BackupCoordinator {
       await Future<void>.delayed(gatherPoll);
       listing = await _t.list();
     }
-    if (!listing.gathered || !_foreground) return;
+    if (!listing.gathered || !_foreground) return false;
     _listing = listing;
     final files = await _recordsFiles(listing, allowDownload: true);
     final others = _restorable = _others(files, me);
@@ -1093,13 +1129,13 @@ class BackupCoordinator {
       await _holdCatchUp();
       final counts = await _dao.backupCounts();
       prompt.value = RestoreOfferPrompt(open.first, counts.meals);
-      return;
+      return false;
     }
     if (_prefs.enabled && !_prefs.noticeSeen) {
       prompt.value = const NoticePrompt();
-      return;
+      return false;
     }
-    await _maybeLaunchRun();
+    return true;
   }
 
   Future<void> _maybeLaunchRun() async {
@@ -1209,8 +1245,31 @@ class BackupCoordinator {
 
   /// Whether the app's photo catch-up should wait: a restore offer is open
   /// or a restore is running (the headless run reads the same lease).
+  ///
+  /// While the look for a backup to offer has not decided, the answer
+  /// waits for it ([gatherWait] + [lookSlack] at most): a catch-up started
+  /// before the offer exists would log the offered backup's photos afresh,
+  /// and the restore would keep those over the backup's own, maybe
+  /// corrected, meals (it merges photo meals by their photo). The launch's
+  /// look starts after the first frame: never awaited before runApp.
   Future<bool> holdsCatchUp() async {
+    final deciding = _deciding;
+    if (deciding != null) {
+      try {
+        await deciding.future.timeout(gatherWait + lookSlack);
+      } on TimeoutException {
+        // A look that never ends holds nothing.
+      }
+    }
     await _prefs.reload();
+    return holdsCatchUpNow;
+  }
+
+  /// [holdsCatchUp] without waiting or reading the store again (this
+  /// engine sets and lets go the lease itself): a catch-up already running
+  /// asks it before each photo, and stops before the next one once an
+  /// offer is raised or a restore starts.
+  bool get holdsCatchUpNow {
     final until = _prefs.holdCatchUpUntil;
     return until != null && until.isAfter(_now);
   }

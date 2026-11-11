@@ -670,6 +670,79 @@ void main() {
     });
   });
 
+  group('the photo catch-up and the look for a backup to offer', () {
+    Meal lunch(num kcal) => Meal(
+        id: 0,
+        date: '2026-11-11',
+        time: '12:00 PM',
+        timestamp: '2026-11-11T12:00:00.000',
+        source: MealSource.appWatch,
+        imageHash: 'h_lunch',
+        analysis: {'is_food': true, 'total_calories': kcal});
+
+    test('asked at init, before the shell starts the launch\'s look, it '
+        'answers once the look decided: the offer holds it, and the '
+        'backup\'s corrected meal is what the restore brings', () async {
+      // The old phone logged lunch at 900 kcal and corrected it to 650.
+      final id = await otherDao.saveMeal(lunch(900),
+          markStatus: IngestionStatus.saved);
+      await otherDao
+          .updateMealAnalysis(id, {'is_food': true, 'total_calories': 650});
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final f = await w.writeRecords('${tmp.path}/o.json',
+          installId: _other, seq: 4, months: const {});
+      cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+
+      // di.dart init asks before runApp; the catch-up would analyze the
+      // same photo afresh (900 kcal again).
+      var caughtUp = false;
+      final catchUp = () async {
+        if (await c.holdsCatchUp()) return;
+        caughtUp = true;
+        await dao.saveMeal(lunch(900), markStatus: IngestionStatus.saved);
+      }();
+      await c.start(); // the shell, after the first frame
+      await catchUp;
+      // Real SQLite answers from another isolate.
+      for (var i = 0; i < 400 && c.prompt.value == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      final s = await c.restore(offer.candidate);
+      final meals = await dao.mealsBetween('2026-11-11', '2026-11-11');
+      expect([for (final m in meals) m.analysis['total_calories']], [650],
+          reason: 'the correction survives');
+      expect(s.mealsAdded, 1);
+      expect(caughtUp, isFalse, reason: 'the offer holds the catch-up');
+    });
+
+    test('a look that ends without deciding (no iCloud) lets it go at once',
+        () async {
+      cloud.state = CloudState.unavailable;
+      final held = c.holdsCatchUp();
+      await c.start();
+      expect(await held.timeout(const Duration(seconds: 5)), isFalse);
+    });
+
+    test('a catch-up already running asks before each photo: held from the '
+        'moment the offer is raised until it is answered', () async {
+      await otherPhoneBackup();
+      expect(c.holdsCatchUpNow, isFalse);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      expect(c.holdsCatchUpNow, isTrue);
+      await c.declineOffer((c.prompt.value as RestoreOfferPrompt).candidate);
+      expect(c.holdsCatchUpNow, isFalse);
+    });
+
+    test('stopped before the look ran, it waits no longer', () async {
+      final held = c.holdsCatchUp();
+      await c.stop();
+      expect(await held.timeout(const Duration(seconds: 5)), isFalse);
+    });
+  });
+
   group('the restore offer', () {
     test('a fresh install is offered the backup, the catch-up is held, and '
         'Restore brings back meals and pictures, then adopts the file',
