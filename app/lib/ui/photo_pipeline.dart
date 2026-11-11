@@ -306,11 +306,12 @@ class PhotoPipeline {
   final void Function(IntakePhoto photo, PhotoOutcome outcome)? onOutcome;
 
   /// Asked for an AUTOMATIC Meta glasses photo below 2 MP (design G2b,
-  /// glasses.dart isGlassesPreview): true holds it back — released,
-  /// retryable, untouched — so its full-size version can arrive first.
-  /// Production: deferred_assets.dart holdGlassesPreview (once, for 10
-  /// minutes). Null (tests, the add flow's fallback instance): never held.
-  /// A throw counts as false.
+  /// glasses.dart isGlassesPreview) that the ledger holds no verdict for:
+  /// true holds it back — released, retryable, no ledger row, nothing
+  /// sent — so its full-size version can arrive first. Production:
+  /// deferred_assets.dart holdGlassesPreview (once, for 10 minutes). Null
+  /// (tests, the add flow's fallback instance): never held. A throw counts
+  /// as false.
   final Future<bool> Function(String assetId)? previewHold;
 
   /// Whether AUTOMATIC Meta glasses photos are logged at all (design G3,
@@ -596,16 +597,38 @@ class PhotoPipeline {
     }
   }
 
-  /// Whether [previewHold] holds the AUTOMATIC glasses preview [photo]
-  /// back now. A throwing hold lets it through.
+  /// Whether [photo] is one [previewHold] may hold back: an AUTOMATIC
+  /// glasses preview with an asset id to note it by.
+  bool _mayHoldPreview(IntakePhoto photo) =>
+      previewHold != null &&
+      !photo.deliberate &&
+      photo.assetId.isNotEmpty &&
+      isGlassesPreview(photo.capture);
+
+  /// Whether [previewHold] holds [photo] ([_mayHoldPreview]) back now. A
+  /// throwing hold lets it through.
   Future<bool> _holdsPreview(IntakePhoto photo) async {
-    final hold = previewHold;
-    if (hold == null || photo.deliberate || photo.assetId.isEmpty) {
+    try {
+      return await previewHold!(photo.assetId);
+    } catch (_) {
       return false;
     }
-    if (!isGlassesPreview(photo.capture)) return false;
+  }
+
+  /// Whether the ledger already holds a verdict for [hash]: a meal, 'not
+  /// food', a failure, a deletion — what the automatic reservation answers
+  /// "already logged" for. Read-only. A photo never seen, one another run
+  /// is analyzing, and a ledger that cannot answer are all not settled.
+  Future<bool> _settled(String hash) async {
     try {
-      return await hold(photo.assetId);
+      return switch ((await dao.photoStatus(hash))?.status) {
+        IngestionStatus.saved ||
+        IngestionStatus.skipped ||
+        IngestionStatus.failed ||
+        IngestionStatus.deleted =>
+          true,
+        IngestionStatus.processing || null => false,
+      };
     } catch (_) {
       return false;
     }
@@ -774,10 +797,23 @@ class PhotoPipeline {
       final shotClock = shotKey == null ? null : _mealClock(photo);
       final sameShot =
           shotKey != null && await _sameShotLogged(shotKey, shotClock!);
-      // A glasses preview copy (< 2 MP) waits once for its full-size
-      // version: released untouched, before it is even hashed.
-      if (!sameShot && await _holdsPreview(photo)) return _previewHeld;
       hash = normalizeImageHash(await _hash(photo.bytes));
+      // A glasses preview copy (< 2 MP) waits once for its full-size
+      // version: released with no ledger row and nothing sent. Only a
+      // photo no run has settled waits. Every catch-up offers the photos
+      // of the lookback window again, and one the ledger already holds a
+      // verdict for goes on to the reservation, which answers "already
+      // logged" as for any photo. Asked about its hold first, such a photo
+      // was released as retryable — the frontier stopped in front of a
+      // photo settled weeks ago — and its Glasses check row was
+      // overwritten with "waiting", again every time the hold's note had
+      // been forgotten (2026-11-10).
+      if (!sameShot &&
+          _mayHoldPreview(photo) &&
+          !await _settled(hash) &&
+          await _holdsPreview(photo)) {
+        return _previewHeld;
+      }
       // Pre-reservation 5-minute duplicate window — deliberate (user-facing)
       // path only, matching the server's chat-only check (spec §2.3).
       if (photo.deliberate && await dao.isDuplicatePhoto(hash)) {
