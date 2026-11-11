@@ -130,8 +130,9 @@ total. Meta glasses photos have an extra dating guard in
 
 ### Leftover arithmetic stays in code
 
-When a photo shows the remains of a meal logged earlier that day, the model
-supplies fractions only. All arithmetic runs in deterministic, clamped code
+When a photo shows the remains of a meal logged earlier that day (or, for a
+photo taken before 4 a.m., the day before, once the recipient was allowed
+under the consent text that says so), the model supplies fractions only. All arithmetic runs in deterministic, clamped code
 against the local database. The automatic path applies a leftover only when
 the model's confidence is at least 0.75. The manual Leftovers flow is the
 fallback and the repair path.
