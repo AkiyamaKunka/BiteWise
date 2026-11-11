@@ -88,8 +88,11 @@ void main() {
     expect(tester.takeException(), isNull);
     // Only the three truthy-is_food meals rendered.
     expect(find.text('Grilled chicken with salad'), findsOneWidget);
-    // Header totals: 450 + safeNumber('NaN')→0 + safeNumber(9e99)→0 = 450.
-    expect(find.text('450 kcal'), findsOneWidget);
+    // Header totals: 450 + safeNumber('NaN')→0 + safeNumber(9e99)→0 = 450,
+    // shown once, in the ring's centre (the 'N kcal' title line is gone).
+    expect(
+        tester.widget<Text>(find.byKey(const Key('ringCenterValue'))).data,
+        '450');
     // Corrected badge on the corrected meal only.
     expect(find.byKey(const Key('correctedBadge')), findsOneWidget);
     expect(find.byTooltip('Corrected'), findsOneWidget);

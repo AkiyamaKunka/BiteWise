@@ -28,6 +28,15 @@ import '../widgets/restaurant_consent_sheet.dart'
 import '../services.dart';
 import '../l10n.dart';
 import '../widgets/grouped.dart';
+import '../../services/settings/app_settings.dart' show maxDailyGoalKcal;
+import '../app_formats.dart';
+import '../format.dart' show formatKcal;
+import '../large_text.dart';
+import '../theme/app_dialog.dart';
+import '../theme/app_theme.dart' show AppButtonStyles;
+import '../theme/tokens.dart';
+import '../widgets/pickers.dart';
+import 'settings/settings_kit.dart' show showChoiceSheet;
 import 'coverage_screen.dart';
 import 'meal_editor_screen.dart';
 import 'settings/data_section.dart';
@@ -185,6 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen>
     _probeNotifications();
     _probeNextSummary();
     _probeBackgroundScan();
+    _probePhotoAccess();
   }
 
   Future<void> _probeBackgroundScan() async {
@@ -254,6 +264,7 @@ class _SettingsScreenState extends State<SettingsScreen>
       _probeNotifications();
       _probeNextSummary();
       _probeBackgroundScan();
+      _probePhotoAccess();
     }
   }
 
@@ -273,6 +284,28 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   void _onSettingsChanged() {
     if (mounted) setState(() {});
+  }
+
+  /// True when Photos access is not full (U7): "selected photos only", or
+  /// withdrawn in system settings. The watcher then sees at most that
+  /// selection, so a meal shot later is never logged — and after the one
+  /// warning snackbar Settings used to say nothing.
+  bool _photosLimited = false;
+
+  /// Reads the permission STATE only (hasFullAccess shows no prompt and
+  /// fetches no asset), so it cannot raise the iOS limited-library alert
+  /// or touch the logging path.
+  Future<void> _probePhotoAccess() async {
+    final lib = widget.photoLibrary;
+    if (lib == null) return;
+    bool limited;
+    try {
+      limited = !await lib.hasFullAccess();
+    } catch (_) {
+      return; // unknown: keep the footer as it was
+    }
+    if (!mounted || limited == _photosLimited) return;
+    setState(() => _photosLimited = limited);
   }
 
   @override
@@ -353,7 +386,9 @@ class _SettingsScreenState extends State<SettingsScreen>
       // shot later is invisible forever — and the toggle used to turn on
       // regardless, silently. Say so, with a path to fix it.
       final lib = widget.photoLibrary;
-      if (lib != null && !await lib.hasFullAccess()) {
+      final limited = lib != null && !await lib.hasFullAccess();
+      _photosLimited = limited; // the footer line; setState follows below
+      if (limited) {
         if (!mounted) return;
         final open = widget.openSystemSettings;
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -399,7 +434,10 @@ class _SettingsScreenState extends State<SettingsScreen>
         serverBackend: s.serverBackend,
         serverBaseUrl: s.serverBaseUrl,
         title: l.watcherDisclosureTitle,
+        // Shown in the other order (U26): what the camera roll adds leads,
+        // and the general text every other consent shows follows it.
         appendix: l.watcherDisclosureBody(provider, _lookbackDays),
+        leadWithAppendix: true,
         allowLabel: l.watcherDisclosureContinue,
         cancelLabel: l.cancel,
         dialogKey: const Key('watcherDisclosureDialog'),
@@ -424,7 +462,7 @@ class _SettingsScreenState extends State<SettingsScreen>
         .turnOff;
     final stop = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => appAlertDialog(
         key: const Key('aiStopSharingDialog'),
         title: Text(ctx.l10n.aiStopSharingTitle(provider)),
         content: SingleChildScrollView(
@@ -437,6 +475,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('aiStopSharingConfirm'),
+              style: AppButtonStyles.destructive(ctx),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(ctx.l10n.aiStopSharingConfirm)),
         ],
@@ -466,7 +505,8 @@ class _SettingsScreenState extends State<SettingsScreen>
       hour: int.tryParse(parts.first) ?? 21,
       minute: parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0,
     );
-    final picked = await showTimePicker(context: context, initialTime: initial);
+    final picked =
+        await showAppTimePicker(context: context, initialTime: initial);
     if (picked == null || !mounted) return;
     final formatted = '${picked.hour.toString().padLeft(2, '0')}:'
         '${picked.minute.toString().padLeft(2, '0')}';
@@ -492,10 +532,10 @@ class _SettingsScreenState extends State<SettingsScreen>
     // grouped background, disclosure to subpages, footers as helper text.
     // Section builders keep features findable — the wall is gone.
     return Container(
-      color: groupedBackground(theme.colorScheme),
+      color: pageColor(context),
       child: CustomScrollView(
         slivers: [
-          SliverAppBar.large(title: Text(context.l10n.tabSettings)),
+          appLargeTitleBar(context, title: context.l10n.tabSettings),
           SliverList.list(children: [
             ..._aiSection(theme),
             ..._photoSection(theme),
@@ -519,35 +559,85 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
+  /// The first-run card: what to do first, and a tap that goes there (the
+  /// AI Provider page, where the Test This Provider row is). Without a
+  /// button the card was a paragraph pointing at a row below it.
+  Widget _firstRunCard(ThemeData theme) {
+    final colors = context.colors;
+    final title = Text(context.l10n.settingsWelcomeTitle,
+        style: theme.textTheme.titleMedium?.copyWith(color: colors.label));
+    final body = Text(context.l10n.settingsWelcomeBody,
+        style: theme.textTheme.bodyMedium
+            ?.copyWith(color: colors.secondaryLabel));
+    final chevron = ExcludeSemantics(
+        child: Icon(Icons.chevron_right_rounded,
+            size: 20, color: colors.tertiaryLabel));
+    // At accessibility sizes the badge and chevron would leave the text a
+    // sliver of the width: the text takes the whole card instead.
+    final content = isLargeText(context)
+        ? Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [title, const SizedBox(height: AppSpace.s4), body],
+          )
+        : Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                      color: colors.accentSoft, shape: BoxShape.circle),
+                  child: Icon(Icons.auto_awesome_rounded,
+                      size: 22, color: colors.accent),
+                ),
+              ),
+              const SizedBox(width: AppSpace.s12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [title, const SizedBox(height: AppSpace.s4), body],
+                ),
+              ),
+              const SizedBox(width: AppSpace.s8),
+              Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: chevron,
+              ),
+            ],
+          );
+    return GroupedCard(
+      key: const Key('firstRunCard'),
+      margin: const EdgeInsets.fromLTRB(
+          kGroupInset, AppSpace.s16, kGroupInset, 0),
+      padding: const EdgeInsets.all(AppSpace.cardPadding),
+      onTap: _openProviderPage,
+      child: content,
+    );
+  }
+
+  /// The AI Provider page, as the AI Provider row opens it.
+  Future<void> _openProviderPage() async {
+    await Navigator.of(context).push(MaterialPageRoute(
+      builder: (_) => ProviderSettingsPage(
+        settings: widget.settings,
+        analyzer: widget.analyzer,
+        startClaudeAuth: widget.startClaudeAuth,
+        completeClaudeAuth: widget.completeClaudeAuth,
+        serverLoginState: widget.serverLoginState,
+        openUrl: widget.openUrl,
+      ),
+    ));
+    if (mounted) setState(() {}); // the card hides once a key is set
+  }
+
   /// One row of STATE (Apple progressive disclosure): choosing and
   /// configuring the provider lives on its own page.
   List<Widget> _aiSection(ThemeData theme) => [
         // First-run: the shell deliberately lands a key-less install here.
         // Everything a mainland user needs to know is one tap away on the
         // provider page; this card just points there.
-        if (widget.settings.apiKey.trim().isEmpty)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Card(
-              key: const Key('firstRunCard'),
-              color: theme.colorScheme.secondaryContainer,
-              child: Padding(
-                padding: const EdgeInsets.all(14),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(context.l10n.settingsWelcomeTitle,
-                        style: theme.textTheme.titleSmall),
-                    const SizedBox(height: 6),
-                    Text(
-                      context.l10n.settingsWelcomeBody,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
+        if (widget.settings.apiKey.trim().isEmpty) _firstRunCard(theme),
         GroupedSection(
           header: context.l10n.settingsSectionAi,
           footer: widget.settings.isQuotaPaused
@@ -615,7 +705,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// to do, and not on Android: WorkManager survives a swipe-away there.
   String _photosFooter() {
     final l10n = context.l10n;
-    final explainIos = widget.lastBackgroundScan != null &&
+    final explainIos = _showBackgroundScanRow &&
         !_backgroundRefreshOff &&
         defaultTargetPlatform == TargetPlatform.iOS;
     final footer = explainIos
@@ -635,8 +725,22 @@ class _SettingsScreenState extends State<SettingsScreen>
             widget.lastBackgroundScan != null
         ? l10n.backgroundScanStuck
         : null;
-    return [?paused, ?stuck, footer].join('\n');
+    // Not full access: the switch is on, but photos taken from now on are
+    // outside what the app may read, so they are never logged.
+    final limited =
+        _watcherEnabled && _photosLimited ? l10n.watcherLimitedFooter : null;
+    return [?limited, ?paused, ?stuck, footer].join('\n');
   }
+
+  /// Whether the 后台扫描 row (and its iOS footer line) shows. On iOS only
+  /// while Watch Camera Roll is on (U21): with it off the background job
+  /// still records its launches, so a fresh install showed 'Not run yet',
+  /// a time, or a red 'Off' for a scan it does not want — each read as a
+  /// fault. Android keeps the row: its Restricted remedy also covers the
+  /// nightly summary, which runs on the same job.
+  bool get _showBackgroundScanRow =>
+      widget.lastBackgroundScan != null &&
+      (_watcherEnabled || defaultTargetPlatform != TargetPlatform.iOS);
 
   /// Why the automatic scan is latched, with its next try; null when not.
   String? _autoScanPausedText() {
@@ -686,7 +790,7 @@ class _SettingsScreenState extends State<SettingsScreen>
             ),
             // The OS's last background launch — on iOS the only visible
             // proof that Background App Refresh runs for this app at all.
-            if (widget.lastBackgroundScan != null)
+            if (_showBackgroundScanRow)
               GroupedRow(
                 key: const Key('backgroundScanRow'),
                 icon: Icons.update,
@@ -757,37 +861,48 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// setting permanent screen space).
   Future<void> _pickLookback() async {
     var days = _lookbackDays;
-    final picked = await showModalBottomSheet<int>(
-      context: context,
+    final picked = await showGroupedSheet<int>(
+      context,
+      title: context.l10n.lookbackSheetTitle,
+      subtitle: context.l10n.lookbackSheetHint,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(ctx.l10n.lookbackSheetTitle,
-                  style: Theme.of(ctx).textTheme.titleMedium),
-              Text(ctx.l10n.lookbackSheetHint,
-                  style: Theme.of(ctx).textTheme.bodySmall),
-              Slider(
-                key: const Key('lookbackSlider'),
-                value: days.toDouble(),
-                min: 1,
-                max: 30, // spec §6.4 clamp 1–30
-                divisions: 29,
-                label: '$days',
-                onChanged: (v) => setSheet(() => days = v.round()),
+        builder: (ctx, setSheet) => Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GroupedCard(
+              padding: const EdgeInsets.fromLTRB(AppSpace.rowH, AppSpace.s12,
+                  AppSpace.rowH, AppSpace.s4),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // The Cupertino slider has no value bubble: the count
+                  // is spelled out above it.
+                  Text(ctx.l10n.lookbackDays(days),
+                      key: const Key('lookbackValue'),
+                      style: ctx.nums.value.copyWith(color: ctx.colors.label)),
+                  Slider.adaptive(
+                    key: const Key('lookbackSlider'),
+                    value: days.toDouble(),
+                    min: 1,
+                    max: 30, // spec §6.4 clamp 1–30
+                    divisions: 29,
+                    label: '$days',
+                    onChanged: (v) => setSheet(() => days = v.round()),
+                  ),
+                ],
               ),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton(
-                  onPressed: () => Navigator.pop(ctx, days),
-                  child: Text(ctx.l10n.lookbackSet(days)),
-                ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                  kGroupInset, AppSpace.s20, kGroupInset, 0),
+              child: FilledButton(
+                key: const Key('lookbackSetButton'),
+                onPressed: () => Navigator.pop(ctx, days),
+                child: Text(ctx.l10n.lookbackSet(days)),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -819,7 +934,9 @@ class _SettingsScreenState extends State<SettingsScreen>
                 icon: Icons.schedule,
                 iconColor: theme.colorScheme.primary,
                 title: context.l10n.settingsRowReportTime,
-                value: _reportTime,
+                // Display only: stored as 'HH:mm'. English follows the
+                // phone's 24-Hour Time switch ('9:00 PM').
+                value: AppFormats.hm(context, _reportTime),
                 onTap: _pickReportTime,
               ),
               if (_notificationsOff) _notificationsOffRow(theme),
@@ -842,7 +959,8 @@ class _SettingsScreenState extends State<SettingsScreen>
               iconColor: theme.colorScheme.secondary,
               title: context.l10n.settingsRowGoal,
               value: widget.settings.calorieGoal > 0
-                  ? context.l10n.kcalAmount('${widget.settings.calorieGoal}')
+                  ? context.l10n
+                      .kcalAmount(formatKcal(widget.settings.calorieGoal))
                   : context.l10n.goalNotSet,
               onTap: _pickCalorieGoal,
             ),
@@ -863,14 +981,14 @@ class _SettingsScreenState extends State<SettingsScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Icon(Icons.notifications_off_outlined,
-                  size: 18, color: theme.colorScheme.error),
+                  size: 18, color: context.colors.danger),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   context.l10n.notificationsOffHint,
                   key: const Key('notificationsOffHint'),
                   style: theme.textTheme.bodySmall
-                      ?.copyWith(color: theme.colorScheme.error),
+                      ?.copyWith(color: context.colors.danger),
                 ),
               ),
             ],
@@ -891,40 +1009,10 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// The daily goal the coach notification measures against; empty clears
   /// it and the summary falls back to the typical-day median.
   Future<void> _pickCalorieGoal() async {
-    final ctrl = TextEditingController(
-        text: widget.settings.calorieGoal > 0
-            ? '${widget.settings.calorieGoal}'
-            : '');
     final saved = await showDialog<int>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.l10n.goalSheetTitle),
-        content: TextField(
-          key: const Key('calorieGoalField'),
-          controller: ctrl,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(
-            labelText: ctx.l10n.goalFieldLabel,
-            border: const OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-              key: const Key('calorieGoalClear'),
-              onPressed: () => Navigator.pop(ctx, 0),
-              child: Text(ctx.l10n.goalClear)),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(ctx.l10n.cancel)),
-          FilledButton(
-            key: const Key('calorieGoalSave'),
-            onPressed: () => Navigator.pop(
-                ctx, int.tryParse(ctrl.text.trim()) ?? 0),
-            child: Text(ctx.l10n.save),
-          ),
-        ],
-      ),
+      builder: (_) =>
+          _CalorieGoalDialog(initialGoal: widget.settings.calorieGoal),
     );
     if (saved == null || !mounted) return;
     await widget.settings.update(calorieGoal: saved);
@@ -964,58 +1052,16 @@ class _SettingsScreenState extends State<SettingsScreen>
       };
 
   Future<void> _pickLanguage() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      // Scrolls, and may grow past 9/16 of the screen up to the status
-      // bar: at the largest text sizes, on a 320-375 pt phone and in
-      // landscape the last rows were below the screen and out of reach.
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: groupedBackground(Theme.of(context).colorScheme),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(ctx.l10n.languageSheetTitle,
-                      style: Theme.of(ctx)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ),
-              ),
-              GroupedSection(
-                separatorInset: 16,
-                children: [
-                  for (final (value, label) in [
-                    ('system', ctx.l10n.languageSystem),
-                    ('en', 'English'),
-                    ('zh', '中文'),
-                  ])
-                    GroupedRow(
-                      key: Key('language-$value'),
-                      title: label,
-                      showChevron: false,
-                      trailing: widget.settings.appLanguage == value
-                          ? Icon(Icons.check,
-                              size: 20,
-                              color: Theme.of(ctx).colorScheme.primary)
-                          : const SizedBox(width: 20),
-                      onTap: () => Navigator.pop(ctx, value),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
+    final picked = await showChoiceSheet(
+      context,
+      title: context.l10n.languageSheetTitle,
+      keyPrefix: 'language',
+      current: widget.settings.appLanguage,
+      options: [
+        ('system', context.l10n.languageSystem),
+        ('en', 'English'),
+        ('zh', '中文'),
+      ],
     );
     if (picked == null || !mounted) return;
     await widget.settings.update(appLanguage: picked);
@@ -1058,57 +1104,15 @@ class _SettingsScreenState extends State<SettingsScreen>
       Localizations.maybeLocaleOf(context)?.languageCode != 'zh';
 
   Future<void> _pickUnits() async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      // Scrolls, and may grow past 9/16 of the screen up to the status
-      // bar: at the largest text sizes, on a 320-375 pt phone and in
-      // landscape the last rows were below the screen and out of reach.
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: groupedBackground(Theme.of(context).colorScheme),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(ctx.l10n.unitsSheetTitle,
-                      style: Theme.of(ctx)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ),
-              ),
-              GroupedSection(
-                separatorInset: 16,
-                children: [
-                  for (final (value, label) in [
-                    ('metric', ctx.l10n.unitsMetricDetail),
-                    ('imperial', ctx.l10n.unitsImperialDetail),
-                  ])
-                    GroupedRow(
-                      key: Key('units-$value'),
-                      title: label,
-                      showChevron: false,
-                      trailing: widget.settings.units == value
-                          ? Icon(Icons.check,
-                              size: 20,
-                              color: Theme.of(ctx).colorScheme.primary)
-                          : const SizedBox(width: 20),
-                      onTap: () => Navigator.pop(ctx, value),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
+    final picked = await showChoiceSheet(
+      context,
+      title: context.l10n.unitsSheetTitle,
+      keyPrefix: 'units',
+      current: widget.settings.units,
+      options: [
+        ('metric', context.l10n.unitsMetricDetail),
+        ('imperial', context.l10n.unitsImperialDetail),
+      ],
     );
     if (picked == null || !mounted) return;
     await widget.settings.update(units: picked);
@@ -1140,3 +1144,91 @@ class _SettingsScreenState extends State<SettingsScreen>
   }
 }
 
+/// The daily-goal dialog. Save checks the number HERE, with the dialog
+/// still open (B19): '2,000' pasted or typed on an Android number pad
+/// used to fail int.tryParse and save 0, and anything over the store's
+/// cap was stored as 0 too — either way the goal silently read 'Not set'.
+/// Now grouping separators are ignored, anything that is not a whole
+/// number from 1 to [maxGoal] says so under the field, and only an empty
+/// field or Clear goal clears it. Pops the goal (0 = cleared), or null.
+class _CalorieGoalDialog extends StatefulWidget {
+  const _CalorieGoalDialog({required this.initialGoal});
+  final int initialGoal;
+
+  /// What AppSettings.setCalorieGoal stores; above it, it stored 0.
+  static const int maxGoal = maxDailyGoalKcal;
+
+  @override
+  State<_CalorieGoalDialog> createState() => _CalorieGoalDialogState();
+}
+
+class _CalorieGoalDialogState extends State<_CalorieGoalDialog> {
+  // Owned by the State: disposed after the dialog's exit animation, never
+  // while the closing field still builds with it.
+  late final TextEditingController _ctrl = TextEditingController(
+      text: widget.initialGoal > 0 ? '${widget.initialGoal}' : '');
+  String? _error;
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  /// The goal in the field: 0 for empty, null when it is not a whole
+  /// number in range.
+  static int? parse(String text, int max) {
+    final t = text.trim().replaceAll(RegExp(r'[,，\s]'), '');
+    if (t.isEmpty) return 0;
+    if (!RegExp(r'^[0-9]+$').hasMatch(t)) return null;
+    final n = int.tryParse(t);
+    return n == null || n < 1 || n > max ? null : n;
+  }
+
+  void _save() {
+    final goal = parse(_ctrl.text, _CalorieGoalDialog.maxGoal);
+    if (goal == null) {
+      setState(() => _error = context.l10n
+          .goalInvalid(formatKcal(_CalorieGoalDialog.maxGoal)));
+      return;
+    }
+    Navigator.pop(context, goal);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l = context.l10n;
+    return appAlertDialog(
+      title: Text(l.goalSheetTitle),
+      content: TextField(
+        key: const Key('calorieGoalField'),
+        controller: _ctrl,
+        autofocus: true,
+        keyboardType: TextInputType.number,
+        onChanged: (_) {
+          if (_error != null) setState(() => _error = null);
+        },
+        onSubmitted: (_) => _save(),
+        decoration: InputDecoration(
+          labelText: l.goalFieldLabel,
+          errorText: _error,
+          errorMaxLines: 3,
+        ),
+      ),
+      actions: [
+        TextButton(
+            key: const Key('calorieGoalClear'),
+            onPressed: () => Navigator.pop(context, 0),
+            child: Text(l.goalClear)),
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(l.cancel)),
+        FilledButton(
+          key: const Key('calorieGoalSave'),
+          onPressed: _save,
+          child: Text(l.save),
+        ),
+      ],
+    );
+  }
+}

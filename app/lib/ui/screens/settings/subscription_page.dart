@@ -17,6 +17,9 @@ import '../../l10n.dart';
 import '../../provider_names.dart' show serverPlanName;
 import '../../widgets/grouped.dart';
 import '../../widgets/small_spinner.dart';
+import '../../theme/app_dialog.dart';
+import '../../theme/tokens.dart';
+import 'settings_kit.dart';
 import 'provider_page.dart' show kPlanChoices, noteLabel;
 
 class SubscriptionProviderPage extends StatefulWidget {
@@ -124,6 +127,16 @@ class _SubscriptionProviderPageState
     final start = widget.startClaudeAuth;
     final complete = widget.completeClaudeAuth;
     if (start == null || complete == null) return;
+    // Nothing to sign in yet: the request needs the server's address and
+    // upload key, and without them it only came back with an English
+    // 'Set the server address and key first.' (U3). Said here instead,
+    // without calling anything.
+    if (widget.settings.serverBaseUrl.trim().isEmpty ||
+        widget.settings.apiKey.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.connectNeedsServer)));
+      return;
+    }
     setState(() => _authBusy = true);
     try {
       final started = await start();
@@ -149,7 +162,7 @@ class _SubscriptionProviderPageState
         barrierDismissible: false,
         builder: (ctx) {
           final ctrl = TextEditingController();
-          return AlertDialog(
+          return appAlertDialog(
             title: Text(ctx.l10n.connectDialogTitle),
             content: Column(
               mainAxisSize: MainAxisSize.min,
@@ -162,7 +175,6 @@ class _SubscriptionProviderPageState
                   autocorrect: false,
                   decoration: InputDecoration(
                     labelText: ctx.l10n.connectCodeLabel,
-                    border: const OutlineInputBorder(),
                   ),
                 ),
               ],
@@ -227,54 +239,13 @@ class _SubscriptionProviderPageState
     required List<(String, String)> options,
     required Future<void> Function(String) apply,
   }) async {
-    final picked = await showModalBottomSheet<String>(
-      context: context,
-      showDragHandle: true,
-      // Scrolls, and may grow past 9/16 of the screen up to the status
-      // bar: at the largest text sizes, on a 320-375 pt phone and in
-      // landscape the last rows were below the screen and out of reach.
-      useSafeArea: true,
-      isScrollControlled: true,
-      backgroundColor: groupedBackground(Theme.of(context).colorScheme),
-      builder: (ctx) => SafeArea(
-        top: false,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(title,
-                      style: Theme.of(ctx)
-                          .textTheme
-                          .titleLarge
-                          ?.copyWith(fontWeight: FontWeight.w600)),
-                ),
-              ),
-              GroupedSection(
-                separatorInset: 16,
-                children: [
-                  for (final (value, label) in options)
-                    GroupedRow(
-                      key: Key('plan-$key-${value.isEmpty ? 'default' : value}'),
-                      title: label,
-                      showChevron: false,
-                      trailing: current == value
-                          ? Icon(Icons.check,
-                              size: 20,
-                              color: Theme.of(ctx).colorScheme.primary)
-                          : const SizedBox(width: 20),
-                      onTap: () => Navigator.pop(ctx, value),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 16),
-            ],
-          ),
-        ),
-      ),
+    final picked = await showChoiceSheet(
+      context,
+      title: title,
+      keyPrefix: 'plan-$key',
+      keyOf: (value) => value.isEmpty ? 'default' : value,
+      current: current,
+      options: options,
     );
     if (picked == null || !mounted) return;
     await apply(picked);
@@ -291,6 +262,7 @@ class _SubscriptionProviderPageState
         GroupedSection(
           header: context.l10n.planHeader,
           footer: context.l10n.planFooter,
+          separatorInset: AppSpace.separatorInset,
           children: [
             for (final (backend, _, note) in kPlanChoices)
               GroupedRow(
@@ -300,7 +272,8 @@ class _SubscriptionProviderPageState
                 showChevron: false,
                 trailing: _planActive &&
                         settings.serverBackend == backend
-                    ? Icon(Icons.check, size: 20, color: scheme.primary)
+                    ? Icon(Icons.check_rounded,
+                        size: 20, color: context.colors.accent)
                     : const SizedBox(width: 20),
                 onTap: () => _selectPlan(backend),
               ),
@@ -310,17 +283,23 @@ class _SubscriptionProviderPageState
           GroupedSection(
             header: context.l10n.serverHeader,
             footer: context.l10n.serverFooter,
+            separatorInset: AppSpace.separatorInset,
             children: [
               _cellField(TextField(
                 key: const Key('serverUrlField'),
                 controller: _serverUrlController,
                 autocorrect: false,
                 keyboardType: TextInputType.url,
-                decoration: InputDecoration(
+                decoration: cellFieldDecoration(
+                  context,
                   labelText: context.l10n.serverAddressLabel,
                   hintText: 'http://your.server.ip',
-                  border: InputBorder.none,
                 ),
+                // Saved as typed, like the upload key under it: Done and a
+                // tap outside alone lost the address when the next tap was
+                // the upload key — Flutter does not count a tap into
+                // another text field as outside.
+                onChanged: (v) => settings.update(serverBaseUrl: v.trim()),
                 onSubmitted: (v) =>
                     settings.update(serverBaseUrl: v.trim()),
                 onTapOutside: (_) => settings.update(
@@ -335,9 +314,9 @@ class _SubscriptionProviderPageState
                 onSubmitted: (v) => settings.update(apiKey: v.trim()),
                 onTapOutside: (_) =>
                     settings.update(apiKey: _keyController.text.trim()),
-                decoration: InputDecoration(
+                decoration: cellFieldDecoration(
+                  context,
                   labelText: context.l10n.serverUploadKeyLabel,
-                  border: InputBorder.none,
                 ),
               )),
             ],
@@ -432,7 +411,7 @@ class _SubscriptionProviderPageState
         ] else
           GroupedSection(
             footer: context.l10n.subInactiveFooter,
-            children: const [SizedBox(height: 1)],
+            children: const [],
           ),
       ],
     );

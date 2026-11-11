@@ -187,14 +187,15 @@ void main() {
       await pumpUntilFound(tester, find.byType(MealCard),
           what: 'meal card on the Today screen',
           timeout: const Duration(seconds: 60));
+      // The day's total is the ring's centre: a bare number ('1,240').
       final totalText = tester
-              .widget<Text>(find.byKey(const Key('todayTotalKcal')))
+              .widget<Text>(find.byKey(const Key('ringCenterValue')))
               .data ??
           '';
       final kcal = int.tryParse(
-              RegExp(r'^([\d,]+) kcal$').firstMatch(totalText)?.group(1)?.replaceAll(',', '') ??
+              RegExp(r'^([\d,]+)$').firstMatch(totalText)?.group(1)?.replaceAll(',', '') ??
                   '');
-      expect(kcal, isNotNull, reason: 'totals header should read "<n> kcal"');
+      expect(kcal, isNotNull, reason: 'the ring centre should read "<n>"');
       expect(kcal! > 0, isTrue,
           reason: 'totals header should be nonzero after the photo meal');
       expect(find.byType(MealCard), findsOneWidget);
@@ -238,9 +239,9 @@ void main() {
           replyTexts.addAll(
               tester.widgetList<Text>(snack).map((t) => t.data ?? ''));
         }
-        final f = find.byKey(const Key('todayTotalKcal'));
+        final f = find.byKey(const Key('ringCenterValue'));
         if (f.evaluate().isNotEmpty &&
-            (tester.widget<Text>(f).data ?? '') == '500 kcal') {
+            (tester.widget<Text>(f).data ?? '') == '500') {
           updated = true;
           break;
         }

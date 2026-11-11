@@ -67,11 +67,20 @@ DateTime? readStoredInstant(String? stored) =>
 
 /// Re-scan overlap behind the watermark, absorbing camera write latency and
 /// photos created while the previous scan was running.
+///
+/// The watermark is the newest COVERED photo's createDate (the intake's
+/// frontier), not the scan start, so every run re-reads and re-hashes each
+/// original from this hour before it until a newer photo is covered; the
+/// ledger answers them with no model call. Typically well under a second,
+/// but a very dense hour (100+ photos) can spend iOS's offer budget before
+/// a newer photo is reached; the next app open's catch-up clears it (run 7,
+/// P5). Narrowing the overlap waits for the iOS late-import pass (photo
+/// change history), which catches late arrivals the hour exists for.
 const Duration backgroundScanOverlap = Duration(hours: 1);
 
 /// Periodic cadence. WorkManager's floor is 15 min; 30 keeps EMUI battery
-/// stats friendly while the watermark keeps each run nearly free when
-/// nothing new was shot.
+/// stats friendly while the watermark keeps each run cheap when nothing
+/// new was shot: no model call, only [backgroundScanOverlap]'s re-reads.
 const Duration backgroundScanFrequency = Duration(minutes: 30);
 
 /// iOS BGAppRefreshTask wall budget. The OS grants roughly 30 s and then
@@ -265,6 +274,7 @@ AutoScanLatch autoScanLatchFor(AppSettings settings) => AutoScanLatch(
       blockedKind: () => switch (settings.analysisBlockedKind) {
         'rejectedKey' => AnalysisErrorKind.rejectedKey,
         'regionBlocked' => AnalysisErrorKind.regionBlocked,
+        'billing' => AnalysisErrorKind.billing,
         _ => null,
       },
       revision: () => settings.credentialRevision,
@@ -535,8 +545,9 @@ Future<bool> headlessBackfillWith({
   // Final watermark: ONLY the intake's frontier — no scanStart fast path.
   // Outcomes can't see photos whose byte read failed (they never reach the
   // sink), so "no retryable outcomes" does NOT mean full coverage; the
-  // frontier is the single honest source. Cost: the next run re-offers at
-  // most the newest covered photo (ledger absorbs it without a model call).
+  // frontier is the single honest source. Cost: the next run re-offers
+  // every photo in the overlap hour before it (backgroundScanOverlap), not
+  // just the newest; the ledger absorbs them without a model call.
   if (drain.frontier != null) await checkpoint(drain.frontier!);
   await recorder?.releasedUnprocessed(drain.deadlineReleases);
   // This run ARMED the automatic-scan pause (it started unpaused — see the
@@ -808,6 +819,8 @@ Future<bool> _runAfterLaunch({
           loggedAssetIds: inFlight.loggedAssetIds),
       pipeline: () async => inFlight.pipeline = PhotoPipeline(
           dao: await createMealsDao(),
+          // B14's previous-night candidates, under the consent that says so.
+          previousDayContext: () => settings.previousDayLeftoverContext,
           analyzer: createMultiProviderAnalyzer(settings),
           latch: autoScanLatchFor(settings),
           // The AI consent at each send, re-read from disk: the open app

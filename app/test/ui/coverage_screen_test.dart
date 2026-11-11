@@ -80,6 +80,36 @@ void main() {
     expect(find.byKey(const Key('logAllMissing')), findsNothing);
   });
 
+  // Run 7 (L6): '1 photos checked', 'All 1 photos' and 'last 2 day(s)'.
+  testWidgets('the English counts are singular for one photo and one day',
+      (tester) async {
+    library.assets = [
+      FakeAsset('a2', 'IMG_2.jpg', DateTime(2026, 7, 26, 9), bytesOf(2)),
+    ];
+    await tester.pumpWidget(host());
+    expect(find.textContaining('of the last 2 days against the log'),
+        findsOneWidget);
+    expect(find.textContaining('day(s)'), findsNothing);
+    await tester.tap(find.byKey(const Key('runCoverageCheck')));
+    await tester.pumpAndSettle();
+    expect(find.text('1 photo checked — 1 never scanned.'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('logAllMissing')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmBulkAction')));
+    await tester.pumpAndSettle();
+    expect(find.text('The 1 photo is accounted for.'), findsOneWidget);
+
+    final l = lookupAppLocalizations(const Locale('en'));
+    expect(l.covIntro(1), startsWith('Checks every photo of the last day '));
+    expect(l.covAllAccounted(0), 'No photos to check in this window.');
+    expect(l.covAllAccounted(3), 'All 3 photos are accounted for.');
+    expect(l.covSummary(4, 2), '4 photos checked — 2 never scanned.');
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    expect(zh.covSummary(1, 1), '已检查 1 张 —— 1 张从未扫描。');
+    expect(zh.covAllAccounted(1), '全部 1 张照片都已记录。');
+  });
+
   testWidgets('a quota-paused bulk action is REFUSED, tombstones survive',
       (tester) async {
     // Without the gate this ran to "completion" in seconds with zero model
@@ -485,7 +515,7 @@ void main() {
     await tester.tap(find.byKey(const Key('runCoverageCheck')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('retryAllFailed')), findsOneWidget);
-    expect(find.text('"全部重试" 会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。'),
+    expect(find.text('「全部重试」会再问一次 AI（同样的错误多半会重现）；点某一行可以手动录入。'),
         findsOneWidget);
     final tile = find.ancestor(
         of: find.text('IMG_3.jpg'), matching: find.byType(ListTile));

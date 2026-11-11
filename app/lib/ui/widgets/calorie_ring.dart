@@ -7,8 +7,8 @@
 /// the rows beside the ring VISIBLY produce the center number (review panel:
 /// arithmetic that doesn't reconcile is worse than no arithmetic).
 ///
-/// Design rules: single hue for the intake arc (primary — macros keep their
-/// own fixed hues elsewhere), NO shame state (over renders in the same calm
+/// Design rules: single hue for the intake arc (the accent — macros keep
+/// their own fixed hues elsewhere), NO shame state (over renders in the same calm
 /// hue at full sweep, the "+over" stated in text; red guilt is the #1
 /// researched complaint driver), hand-drawn painter (no packages).
 library;
@@ -21,6 +21,7 @@ import 'package:flutter/rendering.dart';
 import '../format.dart';
 import '../l10n.dart';
 import '../large_text.dart';
+import '../theme/tokens.dart';
 
 class CalorieRing extends StatelessWidget {
   const CalorieRing({
@@ -28,7 +29,7 @@ class CalorieRing extends StatelessWidget {
     required this.eatenKcal,
     required this.typicalKcal,
     this.burnKcal = 0,
-    this.size = 132,
+    this.size = 144,
   });
 
   final num eatenKcal;
@@ -41,6 +42,10 @@ class CalorieRing extends StatelessWidget {
   /// calories back). Zero when absent; never shown as an operand elsewhere
   /// without also being folded in here.
   final num burnKcal;
+
+  /// 144 on Today (the report passes 116). A 4-digit day ('1,240') in the
+  /// 34-pt hero numerals plus its caption needs a 120-pt inner circle to
+  /// draw at full size; at 140 it was shrunk 3% at the default text size.
   final double size;
 
   /// One rounded integer per quantity: the ring, the rows and the caption
@@ -53,7 +58,7 @@ class CalorieRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final colors = AppColors.of(context);
     final budget = _budget;
     final frac = (budget == null || budget <= 0)
         ? null
@@ -81,48 +86,59 @@ class CalorieRing extends StatelessWidget {
                 formatKcal(typicalKcal!.round()), burnClause)
             : l.ringSemanticsTypical(formatKcal(_eaten),
                 formatKcal(typicalKcal!.round()), burnClause);
+    final centre = Center(
+      // The ring is a fixed box; large system font scales (or 5-digit
+      // values) must shrink to fit inside the stroke, never run over
+      // it. A square box let the two-line column use the full height,
+      // so at the largest size '千卡' sat on the bottom of the ring.
+      child: Semantics(
+        label: semantics,
+        excludeSemantics: true,
+        child: _FitInCircle(
+          diameter: size - 2 * _RingPainter.stroke,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(centerBig,
+                  key: const Key('ringCenterValue'),
+                  maxLines: 1,
+                  softWrap: false,
+                  style:
+                      AppNumerals.of(context).hero.copyWith(color: colors.label)),
+              Text(centerSmall,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: theme.textTheme.labelSmall
+                      ?.copyWith(color: colors.secondaryLabel)),
+            ],
+          ),
+        ),
+      ),
+    );
     return SizedBox(
       width: size,
       height: size,
-      child: CustomPaint(
-        painter: _RingPainter(
-          fraction: frac,
-          arc: scheme.primary,
-          // The track is the DENOMINATOR ("how much of a typical day") —
-          // a11y-measured: surfaceContainerHighest sits under 1.4:1 against
-          // the new card surface; a 20% onSurface blend clears 3:1 in both
-          // themes.
-          track: Color.alphaBlend(scheme.onSurface.withValues(alpha: 0.20),
-              scheme.surfaceContainerLow),
-        ),
-        child: Center(
-          // The ring is a fixed box; large system font scales (or 5-digit
-          // values) must shrink to fit inside the stroke, never run over
-          // it. A square box let the two-line column use the full height,
-          // so at the largest size '千卡' sat on the bottom of the ring.
-          child: Semantics(
-            label: semantics,
-            excludeSemantics: true,
-            child: _FitInCircle(
-              diameter: size - 2 * _RingPainter.stroke,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(centerBig,
-                      key: const Key('ringCenterValue'),
-                      maxLines: 1,
-                      softWrap: false,
-                      style: theme.textTheme.headlineMedium),
-                  Text(centerSmall,
-                      maxLines: 1,
-                      softWrap: false,
-                      style: theme.textTheme.labelSmall
-                          ?.copyWith(color: scheme.onSurfaceVariant)),
-                ],
-              ),
-            ),
+      // The arc eases to a new total (a meal logged, an edit) instead of
+      // jumping; the first build draws it in place, and Reduce Motion
+      // makes the change instant.
+      child: TweenAnimationBuilder<double>(
+        tween: Tween<double>(end: frac ?? 0),
+        duration: AppMotion.of(context, AppMotion.ring),
+        curve: AppMotion.curve,
+        builder: (context, sweep, child) => CustomPaint(
+          painter: _RingPainter(
+            fraction: frac == null ? null : sweep,
+            arc: colors.accent,
+            // The track is decorative: it shows the denominator ("how
+            // much of a typical day") but carries no contrast duty of its
+            // own. The ARC carries it, against the track: 4.57:1 light,
+            // 5.62:1 dark (the old comment's '3:1 track' was never true —
+            // the blended track sat near 1.7:1 on the card, A13).
+            track: colors.track,
           ),
+          child: child,
         ),
+        child: centre,
       ),
     );
   }
@@ -217,7 +233,7 @@ class _RingPainter extends CustomPainter {
   final Color arc;
   final Color track;
 
-  static const stroke = 11.0;
+  static const stroke = 12.0;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -267,19 +283,24 @@ class ArithmeticRow extends StatelessWidget {
   final String value;
   final Color dot;
 
-  /// The `=` result row: the number the ring's center restates.
+  /// The `=` result row: the number the ring's center restates. It reads
+  /// heavier (AppNumerals.value, 17 w600) than the context rows (inline,
+  /// 15 w400). The old pair, labelLarge vs titleSmall, resolved to the
+  /// same 14 w500, so the emphasis never reached the screen (U15).
   final bool emphasized;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colors = AppColors.of(context);
+    final nums = AppNumerals.of(context);
     final dotBox = Container(
       width: 8,
       height: 8,
       decoration: BoxDecoration(color: dot, shape: BoxShape.circle),
     );
-    final labelStyle = theme.textTheme.bodySmall
-        ?.copyWith(color: theme.colorScheme.onSurfaceVariant);
+    final labelStyle =
+        theme.textTheme.bodyMedium?.copyWith(color: colors.secondaryLabel);
     // FittedBox: at narrow widths × large font scale the number wins
     // over the label, shrinking instead of overflowing the row.
     final valueBox = FittedBox(
@@ -287,10 +308,8 @@ class ArithmeticRow extends StatelessWidget {
       child: Text(value,
           maxLines: 1,
           softWrap: false,
-          style: (emphasized
-                  ? theme.textTheme.titleSmall
-                  : theme.textTheme.labelLarge)
-              ?.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+          style: (emphasized ? nums.value : nums.inline)
+              .copyWith(color: colors.label)),
     );
     if (isLargeText(context)) {
       // At accessibility sizes the one-line label was cut to '已…', and
@@ -305,12 +324,12 @@ class ArithmeticRow extends StatelessWidget {
             Row(
               children: [
                 dotBox,
-                const SizedBox(width: 8),
+                const SizedBox(width: AppSpace.s8),
                 Flexible(child: Text(label, style: labelStyle)),
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(left: 16),
+              padding: const EdgeInsets.only(left: AppSpace.s16),
               child: valueBox,
             ),
           ],
@@ -322,7 +341,7 @@ class ArithmeticRow extends StatelessWidget {
       child: Row(
         children: [
           dotBox,
-          const SizedBox(width: 8),
+          const SizedBox(width: AppSpace.s8),
           Expanded(
             child: Text(label,
                 maxLines: 1,
@@ -368,47 +387,64 @@ class MacroTrio extends StatelessWidget {
     // hero and the cards agree.
     final l = context.l10n;
     final theme = Theme.of(context);
-    final trackColor = Color.alphaBlend(
-        theme.colorScheme.onSurface.withValues(alpha: 0.20),
-        theme.colorScheme.surfaceContainerLow);
+    final colors = AppColors.of(context);
+    // The track is decorative, like the ring's: the coloured fill is what
+    // carries the value.
     Widget bar(String label, num g, num kcal, Color color) {
       final frac =
           totalKcal <= 0 ? 0.0 : (kcal / totalKcal).clamp(0.0, 1.0).toDouble();
-      return Expanded(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$label ${g.round()}g',
-                style: theme.textTheme.labelSmall
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
-            const SizedBox(height: 4),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(3),
-              child: SizedBox(
-                height: 6,
-                child: LayoutBuilder(
-                  builder: (context, c) => Stack(children: [
-                    Container(width: c.maxWidth, color: trackColor),
-                    Container(
-                        width: math.max(frac * c.maxWidth, g > 0 ? 6.0 : 0.0),
-                        color: color),
-                  ]),
-                ),
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('$label ${g.round()}g',
+              style: theme.textTheme.labelSmall
+                  ?.copyWith(color: colors.secondaryLabel)),
+          const SizedBox(height: AppSpace.s4),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 6,
+              child: LayoutBuilder(
+                builder: (context, c) => Stack(children: [
+                  Container(width: c.maxWidth, color: colors.track),
+                  Container(
+                      width: math.max(frac * c.maxWidth, g > 0 ? 6.0 : 0.0),
+                      color: color),
+                ]),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       );
     }
 
+    final bars = [
+      bar(l.macroProteinShort, proteinG, pKcal, proteinColor),
+      bar(l.macroCarbsShort, carbsG, cKcal, carbsColor),
+      bar(l.macroFatShort, fatG, fKcal, fatColor),
+    ];
+    if (isLargeText(context)) {
+      // Three columns left each label a third of the card at 3x, so
+      // '蛋 104g' wrapped glyph by glyph: each macro takes a full-width
+      // row, its label above its bar.
+      return Column(
+        key: const Key('macroTrio'),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var i = 0; i < bars.length; i++) ...[
+            if (i > 0) const SizedBox(height: AppSpace.s12),
+            bars[i],
+          ],
+        ],
+      );
+    }
     return Row(
       key: const Key('macroTrio'),
       children: [
-        bar(l.macroProteinShort, proteinG, pKcal, proteinColor),
-        const SizedBox(width: 10),
-        bar(l.macroCarbsShort, carbsG, cKcal, carbsColor),
-        const SizedBox(width: 10),
-        bar(l.macroFatShort, fatG, fKcal, fatColor),
+        for (var i = 0; i < bars.length; i++) ...[
+          if (i > 0) const SizedBox(width: AppSpace.s12),
+          Expanded(child: bars[i]),
+        ],
       ],
     );
   }

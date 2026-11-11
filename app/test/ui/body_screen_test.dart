@@ -8,8 +8,12 @@ import 'dart:typed_data';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
+import 'package:calorie_tracker/ui/screens/log_body_sheet.dart';
+import 'package:calorie_tracker/ui/theme/tokens.dart';
+import 'package:calorie_tracker/ui/widgets/weight_trend_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 
@@ -39,10 +43,47 @@ void main() {
     return dao;
   }
 
-  testWidgets('empty state invites logging and mentions the chat path',
-      (tester) async {
-    await pump(tester);
-    expect(find.byKey(const Key('bodyEmpty')), findsOneWidget);
+  testWidgets('empty state invites logging and names no chat', (tester) async {
+    // The chat bar went on 2026-07-31; the hint still sent new users to it
+    // (U24). Both languages.
+    for (final lang in const ['en', 'zh']) {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+        key: UniqueKey(),
+        locale: Locale(lang),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: BodyScreen(dao: FakeDao(), clock: () => clock),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodyEmpty')), findsOneWidget);
+      expect(find.byKey(const Key('logBodyButton')), findsOneWidget);
+      final texts = tester
+          .widgetList<Text>(find.descendant(
+              of: find.byKey(const Key('bodyEmpty')),
+              matching: find.byType(Text)))
+          .map((t) => t.data!)
+          .join(' ');
+      expect(texts, isNot(matches(RegExp(r'\bchat\b', caseSensitive: false))),
+          reason: lang);
+      expect(texts, isNot(contains('对话')), reason: lang);
+      expect(texts, isNot(contains('聊天')), reason: lang);
+    }
+  });
+
+  testWidgets('no Log button until the page has loaded', (tester) async {
+    // The sheet prefills from the loaded day; one opened before the load
+    // would save today's measurements as a whole row with the untouched
+    // ones blank.
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(MaterialApp(
+        home: BodyScreen(dao: FakeDao(), clock: () => clock)));
+    expect(find.byKey(const Key('logBodyButton')), findsNothing);
+    await tester.pumpAndSettle();
     expect(find.byKey(const Key('logBodyButton')), findsOneWidget);
   });
 
@@ -184,7 +225,8 @@ void main() {
             .getTopLeft(find.byKey(const Key('bodyDay2026-07-28')))
             .dy),
         reason: 'newest first');
-    expect(find.textContaining('W 84'), findsOneWidget);
+    // A no-break space keeps the short label with its number.
+    expect(find.textContaining('W\u00A084'), findsOneWidget);
   });
 
   testWidgets('history row girth labels follow the app language (zh 腰/胸/臀)',
@@ -207,8 +249,238 @@ void main() {
       home: BodyScreen(dao: dao, clock: () => clock),
     ));
     await tester.pumpAndSettle();
-    expect(find.text('腰 84  ·  胸 100  ·  臀 98'), findsOneWidget);
-    expect(find.textContaining('W 84'), findsNothing);
+    expect(find.text('腰\u00A084  ·  胸\u00A0100  ·  臀\u00A098'), findsOneWidget);
+    expect(find.textContaining('W\u00A084'), findsNothing);
+  });
+
+  testWidgets('dates read short everywhere: card, rows, footnote, sheet and '
+      'confirm (no ISO dates on screen)', (tester) async {
+    await pump(tester,
+        weights: {'2026-07-28': 82.4, '2026-08-02': 81.6},
+        measurements: [
+          const BodyMeasurements('2026-07-28',
+              waistCm: 84, chestCm: 100, hipCm: 98),
+        ]);
+    expect(find.textContaining(RegExp(r'\d{4}-\d{2}-\d{2}')), findsNothing,
+        reason: 'storage keeps ISO; the screen does not');
+    expect(tester.widget<Text>(find.byKey(const Key('bodyWeightDate'))).data,
+        'on Aug 2');
+    expect(find.text('Aug 2'), findsOneWidget, reason: 'history row title');
+    expect(find.text('Jul 28'), findsOneWidget);
+    // All three girths share their date: one footnote, no per-row dates.
+    expect(
+        tester
+            .widget<Text>(find.byKey(const Key('bodyMeasurementsAsOf')))
+            .data,
+        'as of Jul 28');
+    expect(find.text('on Jul 28'), findsNothing);
+
+    // Today has data, so the Log button EDITS it — the title says so.
+    await tester.tap(find.byKey(const Key('logBodyButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Aug 2'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10)); // dismiss the sheet
+    await tester.pumpAndSettle();
+
+    await tester.drag(
+        find.byKey(const Key('bodyDay2026-07-28')), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    expect(find.text('Delete Jul 28?'), findsOneWidget);
+  });
+
+  testWidgets('a day without data opens as a new log', (tester) async {
+    await pump(tester);
+    await tester.tap(find.byKey(const Key('logBodyButton')));
+    await tester.pumpAndSettle();
+    expect(find.text('Log body · Aug 2'), findsOneWidget);
+    expect(find.byKey(const Key('bodySheetDelete')), findsNothing,
+        reason: 'nothing to delete on a new day');
+  });
+
+  testWidgets('girths taken on different days keep a date on each row',
+      (tester) async {
+    await pump(tester, measurements: [
+      const BodyMeasurements('2026-07-30', waistCm: 84, chestCm: 100),
+      const BodyMeasurements('2026-08-02', waistCm: 83.5),
+    ]);
+    expect(find.byKey(const Key('bodyMeasurementsAsOf')), findsNothing);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('bodyWaistRow')),
+            matching: find.text('on Aug 2')),
+        findsOneWidget);
+    expect(
+        find.descendant(
+            of: find.byKey(const Key('bodyChestRow')),
+            matching: find.text('on Jul 30')),
+        findsOneWidget);
+    expect(
+        tester.widget<Text>(find.byKey(const Key('bodyHipLatest'))).data, '—');
+  });
+
+  testWidgets('the swipe background is the danger fill under a white glyph',
+      (tester) async {
+    await pump(tester, weights: {'2026-08-02': 81.6});
+    final gesture = await tester.startGesture(
+        tester.getCenter(find.byKey(const Key('bodyDay2026-08-02'))));
+    await gesture.moveBy(const Offset(-20, 0));
+    await gesture.moveBy(const Offset(-80, 0));
+    await tester.pump();
+    final bg = tester
+        .widget<ColoredBox>(find.byKey(const Key('bodyDeleteBackground')));
+    expect(bg.color, AppColors.light.dangerFill);
+    final glyph = tester.widget<Icon>(find.descendant(
+        of: find.byKey(const Key('bodyDeleteBackground')),
+        matching: find.byType(Icon)));
+    expect(glyph.color, const Color(0xFFFFFFFF));
+    await gesture.up();
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the delete confirm uses the destructive button style',
+      (tester) async {
+    await pump(tester, weights: {'2026-08-02': 81.6});
+    await tester.drag(
+        find.byKey(const Key('bodyDay2026-08-02')), const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    final style = tester
+        .widget<FilledButton>(find.byKey(const Key('confirmDeleteBodyDay')))
+        .style!;
+    expect(style.backgroundColor!.resolve({}), AppColors.light.fill);
+    expect(style.foregroundColor!.resolve({}), AppColors.light.danger);
+  });
+
+  testWidgets('VoiceOver: a Body day is a button with a named Delete action '
+      'that asks first (A11)', (tester) async {
+    final handle = tester.ensureSemantics();
+    final dao = await pump(tester, weights: {'2026-08-02': 81.6});
+    final row = find.byKey(const Key('bodyDay2026-08-02'));
+    expect(
+        tester.getSemantics(row),
+        isSemantics(
+          isButton: true,
+          hasTapAction: true,
+          customActions: [const CustomSemanticsAction(label: 'Delete')],
+        ));
+    final node = tester.getSemantics(row);
+    node.owner!.performAction(
+        node.id,
+        SemanticsAction.customAction,
+        CustomSemanticsAction.getIdentifier(
+            const CustomSemanticsAction(label: 'Delete')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('confirmDeleteBodyDay')), findsOneWidget);
+    expect(dao.weightsByDate, isNotEmpty, reason: 'nothing until confirmed');
+    await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+    await tester.pumpAndSettle();
+    expect(dao.weightsByDate, isEmpty);
+    handle.dispose();
+  });
+
+  testWidgets('editing a day offers Delete in the sheet: it asks, removes '
+      'the day and closes the sheet', (tester) async {
+    final dao = await pump(tester,
+        weights: {'2026-07-28': 82.4, '2026-08-02': 81.6},
+        measurements: [const BodyMeasurements('2026-07-28', waistCm: 84)]);
+    await tester.tap(find.byKey(const Key('bodyDay2026-07-28')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bodySheetDelete')));
+    await tester.pumpAndSettle();
+    expect(find.text('Removes the weight and measurements recorded for '
+        'this day.'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+    await tester.pumpAndSettle();
+    expect(dao.weightsByDate.keys, ['2026-08-02']);
+    expect(dao.measurementsByDate, isEmpty);
+    expect(find.byType(LogBodySheet), findsNothing, reason: 'sheet closed');
+    expect(find.byKey(const Key('bodyDay2026-07-28')), findsNothing);
+  });
+
+  testWidgets('cancelling the sheet Delete keeps the day and the sheet',
+      (tester) async {
+    final dao = await pump(tester, weights: {'2026-08-02': 81.6});
+    await tester.tap(find.byKey(const Key('bodyDay2026-08-02')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('bodySheetDelete')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(dao.weightsByDate, isNotEmpty);
+    expect(find.byType(LogBodySheet), findsOneWidget);
+  });
+
+  testWidgets('editing an OLDER weigh-in redraws the chart (B11)',
+      (tester) async {
+    // shouldRepaint compared only the count and the last point, so this
+    // edit left the old line on screen while the row showed the new value.
+    await pump(tester, weights: {
+      '2026-07-20': 83.0,
+      '2026-07-23': 82.6,
+      '2026-07-26': 82.2,
+      '2026-07-29': 81.9,
+      '2026-08-02': 81.6,
+    });
+    WeightTrendPainter painter() => tester
+        .widget<CustomPaint>(find.byKey(const Key('weightTrendChart')))
+        .painter! as WeightTrendPainter;
+    final before = painter();
+    await tester.tap(find.byKey(const Key('bodyDay2026-07-20')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byKey(const Key('bodyWeightField')), '95');
+    await tester.tap(find.byKey(const Key('bodySheetSave')));
+    await tester.pumpAndSettle();
+    final after = painter();
+    expect(after.entries.first.kg, 95);
+    expect(after.shouldRepaint(before), isTrue);
+  });
+
+  testWidgets('a year of weigh-ins: one row per date, newest first, and an '
+      'older day edits and deletes only itself (P2)', (tester) async {
+    final weights = <String, double>{};
+    final measurements = <BodyMeasurements>[];
+    for (var i = 0; i < 365; i++) {
+      // UTC: a local-time subtraction crosses DST and repeats a date.
+      final d = DateTime.utc(2026, 8, 2).subtract(Duration(days: i));
+      final iso = '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+          '${d.day.toString().padLeft(2, '0')}';
+      weights[iso] = 80 + (i % 10) / 10;
+      if (i % 7 == 0) {
+        measurements.add(BodyMeasurements(iso, waistCm: 84 + i % 3, hipCm: 97));
+      }
+    }
+    final dao = await pump(tester,
+        weights: weights, measurements: measurements.reversed.toList());
+    final rows = find.byWidgetPredicate((w) =>
+        w.key is ValueKey<String> &&
+        (w.key! as ValueKey<String>).value.startsWith('bodyDay'));
+    expect(rows, findsNWidgets(365));
+    expect(tester.widget(rows.first).key, const Key('bodyDay2026-08-02'));
+    expect(tester.widget(rows.at(1)).key, const Key('bodyDay2026-08-01'));
+
+    final row = find.byKey(const Key('bodyDay2026-07-26')); // i = 7
+    await tester.ensureVisible(row);
+    await tester.pumpAndSettle();
+    await tester.tap(row);
+    await tester.pumpAndSettle();
+    String field(String key) => tester
+        .widget<TextField>(find.byKey(Key(key)))
+        .controller!
+        .text;
+    expect(field('bodyWeightField'), '80.7');
+    expect(field('bodyWaistField'), '85');
+    expect(field('bodyHipField'), '97');
+    await tester.tapAt(const Offset(10, 10)); // dismiss the sheet
+    await tester.pumpAndSettle();
+
+    await tester.drag(row, const Offset(-500, 0));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+    await tester.pumpAndSettle();
+    expect(dao.weightsByDate.containsKey('2026-07-26'), isFalse);
+    expect(dao.measurementsByDate.containsKey('2026-07-26'), isFalse);
+    expect(dao.weightsByDate, hasLength(364));
+    expect(dao.measurementsByDate, hasLength(measurements.length - 1));
+    expect(rows, findsNWidgets(364));
   });
 
   // ── Measurements rows at accessibility text sizes (2026-10-07) ────────
@@ -239,74 +511,83 @@ void main() {
 
     for (final lang in const ['en', 'zh']) {
       for (final width in const [375.0, 390.0]) {
-        for (final scale in const [1.64, 2.0]) {
-          testWidgets('$lang at ${scale}x on a $width pt phone',
-              (tester) async {
-            tester.view.physicalSize = Size(width, 2400);
-            tester.view.devicePixelRatio = 1.0;
-            addTearDown(tester.view.reset);
-            tester.platformDispatcher.textScaleFactorTestValue = scale;
-            addTearDown(
-                tester.platformDispatcher.clearTextScaleFactorTestValue);
-            final dao = FakeDao();
-            for (final m in const [
-              BodyMeasurements('2026-07-30',
-                  waistCm: 84, chestCm: 100, hipCm: 98),
-              BodyMeasurements('2026-08-02',
-                  waistCm: 83.5, chestCm: 101.5, hipCm: 97.5),
-            ]) {
-              dao.measurementsByDate[m.date] = m;
-            }
-            await tester.pumpWidget(MaterialApp(
-              locale: Locale(lang),
-              theme: ThemeData(
-                  fontFamily: 'BodySF',
-                  fontFamilyFallback: const ['BodyHiragino']),
-              localizationsDelegates: AppLocalizations.localizationsDelegates,
-              supportedLocales: AppLocalizations.supportedLocales,
-              home: BodyScreen(dao: dao, clock: () => clock),
-            ));
-            await tester.pumpAndSettle();
-            expect(tester.takeException(), isNull,
-                reason: 'the old row overflowed the card at this size');
-
-            final card = find.ancestor(
-                of: find.byKey(const Key('bodyWaistLatest')),
-                matching: find.byType(Card));
-            final cardRect = tester.getRect(card);
-            for (final (key, value, delta) in const [
-              ('bodyWaistLatest', '83.5 cm', '▼ 0.5'),
-              ('bodyChestLatest', '101.5 cm', '▲ +1.5'),
-              ('bodyHipLatest', '97.5 cm', '▼ 0.5'),
-            ]) {
-              final valueFinder = find.byKey(Key(key));
-              expect(tester.widget<Text>(valueFinder).data, value);
-              final row = find.ancestor(
-                      of: valueFinder, matching: find.byType(Row))
-                  .first;
-              final deltaFinder =
-                  find.descendant(of: row, matching: find.text(delta));
-              expect(deltaFinder, findsOneWidget,
-                  reason: '$key keeps its direction glyph');
-              final deltaRect = tester.getRect(deltaFinder);
-              expect(deltaRect.right, lessThanOrEqualTo(cardRect.right),
-                  reason: '$key: the delta stays inside the card');
-              // Only the date may give way; the label, value and delta
-              // read in full.
-              for (final p in tester.renderObjectList<RenderParagraph>(
-                  find.descendant(of: row, matching: find.byType(RichText)))) {
-                final text = p.text.toPlainText();
-                if (text.contains('2026')) continue;
-                expect(p.didExceedMaxLines, isFalse,
-                    reason: '"$text" must not be cut');
-                expect(p.size.width,
-                    greaterThanOrEqualTo(p.getMaxIntrinsicWidth(
-                            double.infinity) -
-                        0.5),
-                    reason: '"$text" must not wrap mid-word');
+        // 1.0 keeps the one-line rows; AX1 (1.64) and up stack the label
+        // over value, date and delta (A5: AX4/AX5 clipped the deltas).
+        for (final scale in const [1.0, 1.64, 2.0, 2.76, 3.12]) {
+          for (final sharedDate in const [true, false]) {
+            testWidgets(
+                '$lang at ${scale}x on a $width pt phone'
+                '${sharedDate ? '' : ', a date per row'}', (tester) async {
+              tester.view.physicalSize = Size(width, 2400);
+              tester.view.devicePixelRatio = 1.0;
+              addTearDown(tester.view.reset);
+              tester.platformDispatcher.textScaleFactorTestValue = scale;
+              addTearDown(
+                  tester.platformDispatcher.clearTextScaleFactorTestValue);
+              final dao = FakeDao();
+              for (final m in [
+                const BodyMeasurements('2026-07-30',
+                    waistCm: 84, chestCm: 100, hipCm: 98),
+                BodyMeasurements('2026-08-02',
+                    waistCm: 83.5,
+                    chestCm: 101.5,
+                    hipCm: sharedDate ? 97.5 : null),
+                if (!sharedDate)
+                  const BodyMeasurements('2026-08-01', hipCm: 97.5),
+              ]) {
+                dao.measurementsByDate[m.date] = m;
               }
-            }
-          });
+              await tester.pumpWidget(MaterialApp(
+                locale: Locale(lang),
+                theme: ThemeData(
+                    fontFamily: 'BodySF',
+                    fontFamilyFallback: const ['BodyHiragino']),
+                localizationsDelegates:
+                    AppLocalizations.localizationsDelegates,
+                supportedLocales: AppLocalizations.supportedLocales,
+                home: BodyScreen(dao: dao, clock: () => clock),
+              ));
+              await tester.pumpAndSettle();
+              expect(tester.takeException(), isNull,
+                  reason: 'the old row overflowed the card at this size');
+
+              final cardRect = tester
+                  .getRect(find.byKey(const Key('bodyMeasurementsCard')));
+              for (final (key, value, delta) in const [
+                ('bodyWaist', '83.5 cm', '▼ 0.5'),
+                ('bodyChest', '101.5 cm', '▲ +1.5'),
+                ('bodyHip', '97.5 cm', '▼ 0.5'),
+              ]) {
+                final valueFinder = find.byKey(Key('${key}Latest'));
+                expect(tester.widget<Text>(valueFinder).data, value);
+                final row = find.byKey(Key('${key}Row'));
+                final deltaFinder =
+                    find.descendant(of: row, matching: find.text(delta));
+                expect(deltaFinder, findsOneWidget,
+                    reason: '$key keeps its direction glyph');
+                for (final f in [valueFinder, deltaFinder]) {
+                  final r = tester.getRect(f);
+                  expect(r.right, lessThanOrEqualTo(cardRect.right),
+                      reason: '$key: value and delta stay inside the card');
+                  expect(r.left, greaterThanOrEqualTo(cardRect.left));
+                }
+                // Only a one-line row's date may give way; the label,
+                // value and delta read in full.
+                for (final p in tester.renderObjectList<RenderParagraph>(
+                    find.descendant(of: row, matching: find.byType(RichText)))) {
+                  final text = p.text.toPlainText();
+                  if (scale == 1.0 && text.startsWith('on ')) continue;
+                  expect(p.didExceedMaxLines, isFalse,
+                      reason: '"$text" must not be cut');
+                  expect(
+                      p.size.width,
+                      greaterThanOrEqualTo(
+                          p.getMaxIntrinsicWidth(double.infinity) - 0.5),
+                      reason: '"$text" must not wrap mid-word');
+                }
+              }
+            });
+          }
         }
       }
     }

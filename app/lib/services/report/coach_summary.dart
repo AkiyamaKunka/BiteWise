@@ -90,7 +90,7 @@ class CoachStrings {
   final String noReference;
 
   /// (meals, protein) → "4 meals · 118 g protein"
-  final String Function(String meals, String protein) detail;
+  final String Function(int meals, String protein) detail;
 }
 
 /// Anything inside this band reads as "on target" — a 40 kcal miss is
@@ -140,8 +140,8 @@ CoachSummary buildCoachSummary({
     );
   }
 
-  final detail = strings.detail(
-      '$mealCount', formatKcal(_finite(proteinG).round()));
+  final detail =
+      strings.detail(mealCount, formatKcal(_finite(proteinG).round()));
 
   if (reference == null) {
     return CoachSummary(

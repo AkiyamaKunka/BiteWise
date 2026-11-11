@@ -301,6 +301,11 @@ class AppSettings extends ChangeNotifier {
       'settings.analysis_blocked_provider';
   static const String _kCredentialRevision = 'settings.credential_revision';
   static const String _kAiConsentRoutes = 'settings.ai_consent_routes';
+  // `route=version` entries: the consent text each grant was given under,
+  // and the wording update the user answered Not now to.
+  static const String _kAiConsentVersions = 'settings.ai_consent_versions';
+  static const String _kAiConsentUpdateDeclined =
+      'settings.ai_consent_update_declined';
   static const String _kOpenaiModel = 'settings.openai_model';
   static const String _kAnthropicModel = 'settings.anthropic_model';
   static const String _kServerBaseUrl = 'settings.server_base_url';
@@ -311,6 +316,7 @@ class AppSettings extends ChangeNotifier {
   static const String _kDeepseekModel = 'settings.deepseek_model';
   static const String _kXaiModel = 'settings.xai_model';
   static const String _kOpenrouterModel = 'settings.openrouter_model';
+  static const String _kMealLogged = 'settings.meal_logged';
 
   /// Spec §8: Gemini model default (config.py:26), from shared/.
   static const String defaultModel = SharedConstants.geminiModelDefault;
@@ -393,6 +399,7 @@ class AppSettings extends ChangeNotifier {
   DateTime? _quotaPauseUntil;
   DateTime? _analysisBlockedUntil;
   String? _analysisBlockedKind;
+  bool _mealLogged = false;
 
   static Future<AppSettings> load(
       {SharedPreferences? prefs, SecureKeyStore? keyStore}) async {
@@ -480,6 +487,7 @@ class AppSettings extends ChangeNotifier {
     s._summaryEnabled = p.getBool(_kSummaryEnabled) ?? true;
     final profile = (p.getString(_kDietaryProfile) ?? '').trim();
     s._dietaryProfile = profile.isEmpty ? null : profile;
+    s._mealLogged = p.getBool(_kMealLogged) ?? false;
     // Written as UTC, read back local: a zone-less string would re-parse
     // in the zone the phone is in NOW, so a pause armed in Shanghai lasted
     // 13 hours longer after landing in Chicago. A pre-fix zone-less value
@@ -826,6 +834,18 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Whether a meal was ever saved in the app on this install. A key-less
+  /// install that logs by hand then opens on Today instead of the Settings
+  /// onboarding. A one-way preferences flag; nothing on screen listens, so
+  /// it notifies no one.
+  bool get mealLogged => _mealLogged;
+
+  Future<void> markMealLogged() async {
+    if (_mealLogged) return;
+    _mealLogged = true;
+    await _prefs.setBool(_kMealLogged, true);
+  }
+
   /// Watermark: the last date whose summary was already posted, so the
   /// Timer path and the WorkManager catch-up do not double-notify.
   ///
@@ -910,7 +930,7 @@ class AppSettings extends ChangeNotifier {
   /// change while it is on, and a setup link all ask first. The photo
   /// pipeline reads it once more at each send (AiSendGate), so a photo
   /// already queued never goes to a recipient stopped or switched to
-  /// meanwhile.
+  /// meanwhile; it also reads [previousDayLeftoverContext].
   Set<String> _aiConsentRoutes = const {};
 
   /// The route the current provider choice sends to.
@@ -919,17 +939,83 @@ class AppSettings extends ChangeNotifier {
 
   bool hasAiConsent(String route) => _aiConsentRoutes.contains(route);
 
-  /// Allow ([granted]) or stop sending to [route].
+  /// The consent text ([aiConsentWordingVersion]) each grant was given
+  /// under, and the wording update the user answered Not now to, by route.
+  Map<String, int> _aiConsentVersions = const {};
+  Map<String, int> _aiConsentUpdateDeclined = const {};
+
+  /// The consent text [route] was allowed under: 0 = not allowed; 1 = a
+  /// grant with no version recorded (every grant from before versions
+  /// existed, the one-time seed included — they never saw a later text).
+  int aiConsentVersion(String route) =>
+      hasAiConsent(route) ? (_aiConsentVersions[route] ?? 1) : 0;
+
+  /// Whether the user answered Not now when asked to allow [route] again
+  /// for the current text (ui/ai_consent.dart askAiConsentUpdate): it is
+  /// not asked again, and the older grant stands as it was.
+  bool aiConsentUpdateDeclined(String route) =>
+      (_aiConsentUpdateDeclined[route] ?? 0) >= aiConsentWordingVersion;
+
+  Future<void> declineAiConsentUpdate(String route) async {
+    _aiConsentUpdateDeclined = {
+      ..._aiConsentUpdateDeclined,
+      route: aiConsentWordingVersion,
+    };
+    await _prefs.setStringList(
+        _kAiConsentUpdateDeclined, _versionEntries(_aiConsentUpdateDeclined));
+    notifyListeners();
+  }
+
+  /// Whether a photo taken before 04:00 may also carry the previous day's
+  /// meals (B14): only when the CURRENT recipient was allowed under the
+  /// text that says so. An older grant keeps sending that day's meals
+  /// only, as it agreed to. Read per photo by PhotoPipeline in both
+  /// engines.
+  bool get previousDayLeftoverContext =>
+      aiConsentVersion(activeAiConsentRoute) >= aiConsentPreviousDayVersion;
+
+  /// Allow ([granted]) or stop sending to [route]. Every grant is given
+  /// under the text the dialogs show now, so it records
+  /// [aiConsentWordingVersion]; withdrawing forgets the version and any
+  /// answer to a wording update.
   Future<void> setAiConsent(String route, {required bool granted}) async {
     final next = {..._aiConsentRoutes};
+    final versions = {..._aiConsentVersions};
+    final declined = {..._aiConsentUpdateDeclined};
     if (granted) {
       next.add(route);
+      versions[route] = aiConsentWordingVersion;
     } else {
       next.remove(route);
+      versions.remove(route);
     }
+    declined.remove(route);
     _aiConsentRoutes = next;
+    _aiConsentVersions = versions;
+    _aiConsentUpdateDeclined = declined;
+    // The routes first: a grant interrupted before its version is written
+    // reads as version 1 — the narrower of the two.
     await _prefs.setStringList(_kAiConsentRoutes, next.toList()..sort());
+    await _prefs.setStringList(_kAiConsentVersions, _versionEntries(versions));
+    await _prefs.setStringList(
+        _kAiConsentUpdateDeclined, _versionEntries(declined));
     notifyListeners();
+  }
+
+  static List<String> _versionEntries(Map<String, int> m) =>
+      [for (final e in m.entries) '${e.key}=${e.value}']..sort();
+
+  /// `route=version` entries back into a map; a malformed one is dropped
+  /// (a grant without its version reads as version 1).
+  static Map<String, int> _readVersionEntries(List<String>? stored) {
+    final out = <String, int>{};
+    for (final entry in stored ?? const <String>[]) {
+      final at = entry.lastIndexOf('=');
+      if (at <= 0) continue;
+      final v = int.tryParse(entry.substring(at + 1));
+      if (v != null && v > 0) out[entry.substring(0, at)] = v;
+    }
+    return out;
   }
 
   /// Reads the routes, or — the first launch of a build that has them —
@@ -944,6 +1030,11 @@ class AppSettings extends ChangeNotifier {
   /// empty one needs no write: in this build the watcher switch and the
   /// notice flag only turn on together with a saved consent.
   Future<void> _loadAiConsent() async {
+    // A seed below writes no version: it is a version-1 grant.
+    _aiConsentVersions =
+        _readVersionEntries(_prefs.getStringList(_kAiConsentVersions));
+    _aiConsentUpdateDeclined =
+        _readVersionEntries(_prefs.getStringList(_kAiConsentUpdateDeclined));
     final stored = _prefs.getStringList(_kAiConsentRoutes);
     if (stored != null) {
       _aiConsentRoutes = stored.toSet();
@@ -965,11 +1056,16 @@ class AppSettings extends ChangeNotifier {
   /// (AiSendGate.refresh). The app's own engine never calls it: it is the
   /// one that writes the list, and a reload overlapping its own write
   /// could bring a consent just withdrawn back into memory. No stored
-  /// list: the copy in memory stands.
+  /// list: the copy in memory stands. The text each grant was given under
+  /// is re-read with it, so [previousDayLeftoverContext] follows an update
+  /// question answered in the open app as well.
   Future<void> reloadAiConsent() async {
     await _prefs.reload();
     final stored = _prefs.getStringList(_kAiConsentRoutes);
-    if (stored != null) _aiConsentRoutes = stored.toSet();
+    if (stored == null) return;
+    _aiConsentRoutes = stored.toSet();
+    _aiConsentVersions =
+        _readVersionEntries(_prefs.getStringList(_kAiConsentVersions));
   }
 
   /// Spec §6 auto intake toggle — defaults false until permissions granted.
@@ -1147,12 +1243,18 @@ class AppSettings extends ChangeNotifier {
 
   /// How long a refusal parks the automatic scan. A rejected key stays
   /// rejected until the user edits it (which clears the latch at once);
-  /// a region block lifts with the VPN node, so it is re-tried sooner.
+  /// a region block lifts with the VPN node, and an empty balance with a
+  /// top-up at the provider's console — neither edits anything here, so
+  /// both are re-tried sooner (a passing Test This Provider or a
+  /// deliberate add resumes them at once). Not shorter: each re-arm by a
+  /// background run posts the paused notice again.
   static const Duration rejectedKeyBlockTtl = Duration(hours: 24);
   static const Duration regionBlockTtl = Duration(hours: 2);
+  static const Duration billingBlockTtl = Duration(hours: 2);
 
   /// Automatic-analysis latch (2026-10-12): armed when an AUTOMATIC photo
-  /// came back 'rejectedKey' or 'regionBlocked'. Without it, every scan —
+  /// came back 'rejectedKey', 'regionBlocked' or (run 7) 'billing'.
+  /// Without it, every scan —
   /// Android's 30-minute job, each launch/resume/library change, iOS's
   /// refresh — re-uploaded the whole lookback window against a key or
   /// region that refuses each photo. Stores the KIND and the provider only,
@@ -1176,7 +1278,8 @@ class AppSettings extends ChangeNotifier {
     return owner != null && owner == _provider.name;
   }
 
-  /// 'rejectedKey' | 'regionBlocked' while [isAnalysisBlocked], else null.
+  /// 'rejectedKey' | 'regionBlocked' | 'billing' while [isAnalysisBlocked],
+  /// else null.
   String? get analysisBlockedKind =>
       isAnalysisBlocked ? _analysisBlockedKind : null;
 
@@ -1192,8 +1295,8 @@ class AppSettings extends ChangeNotifier {
   /// derived from a key is ever stored.
   int get credentialRevision => _prefs.getInt(_kCredentialRevision) ?? 0;
 
-  /// Arm the latch for [kind] ('rejectedKey' | 'regionBlocked'; anything
-  /// else is ignored). [revision] stale = dropped: compared against the
+  /// Arm the latch for [kind] ('rejectedKey' | 'regionBlocked' |
+  /// 'billing'; anything else is ignored). [revision] stale = dropped: compared against the
   /// revision ON DISK, before and after the write, because the edit that
   /// made it stale may have happened in the other isolate. [now] is a
   /// test seam.
@@ -1235,6 +1338,7 @@ class AppSettings extends ChangeNotifier {
   static Duration? _analysisBlockTtl(String? kind) => switch (kind) {
         'rejectedKey' => rejectedKeyBlockTtl,
         'regionBlocked' => regionBlockTtl,
+        'billing' => billingBlockTtl,
         _ => null,
       };
 
@@ -1299,7 +1403,9 @@ class AppSettings extends ChangeNotifier {
     final until = DateTime.tryParse(
             _prefs.getString(_kAnalysisBlockedUntil) ?? '')
         ?.toLocal();
-    final known = kind == 'rejectedKey' || kind == 'regionBlocked';
+    // Every kind _analysisBlockTtl knows: an arm of any other kind would
+    // be erased by blockAutomaticAnalysis's own trailing re-read.
+    final known = _analysisBlockTtl(kind) != null;
     _analysisBlockedUntil = known ? until : null;
     _analysisBlockedKind = known && until != null ? kind : null;
   }

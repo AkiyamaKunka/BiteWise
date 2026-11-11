@@ -126,6 +126,19 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     if (_busy) return;
     final meal = _selected;
     if (meal == null) return;
+    // No key, or the quota pause: nothing can be estimated, and "couldn't
+    // estimate the leftovers from that photo" sent the user trying other
+    // photos. Say which, before any photo is read (run 7, B7).
+    final settings = widget.services.settings;
+    if (!settings.canAnalyze) {
+      final l = context.l10n;
+      _snack(settings.isQuotaPaused
+          ? l.leftoverQuotaPaused
+          : settings.provider == 'server'
+              ? l.errNoServerKey
+              : l.errNoApiKey);
+      return;
+    }
     _busy = true;
     // App Store 5.1.2(i): the photo and this meal go to the AI — permission
     // for this recipient before the photo's bytes are read.
@@ -291,12 +304,16 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       // Removes the double-count AND tombstones the photo's ledger row so
       // the backfill scan can never resurrect it (deleteMeal contract).
       await services.dao.deleteMeal(duplicateId);
-    } else if (hash.isNotEmpty && status == null) {
-      // ONLY when the ledger has never seen this photo. Marking an
-      // existing row 'skipped' rewrote the SELECTED meal's own saved row
-      // (severing meal_id) when the user re-picked its before-photo, and
-      // stomped a live 'processing' reservation out from under the
-      // watcher (pressure-test finds).
+    } else if (hash.isNotEmpty &&
+        (status == null || status.status == IngestionStatus.failed)) {
+      // ONLY when the ledger has never seen this photo, or saw it fail.
+      // Marking an existing row 'skipped' rewrote the SELECTED meal's own
+      // saved row (severing meal_id) when the user re-picked its
+      // before-photo, and stomped a live 'processing' reservation out from
+      // under the watcher (pressure-test finds). A 'failed' row has
+      // neither: it is what an unsure automatic leftover verdict leaves
+      // behind, with "Use Leftovers" as the repair — left 'failed', Photo
+      // Coverage kept offering Retry on the photo just deducted.
       await services.dao.markPhotoHash(hash, IngestionStatus.skipped);
     }
     if (!mounted) return;

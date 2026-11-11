@@ -375,7 +375,7 @@ void main() {
             await tester.pumpWidget(_app(
                 Locale(lang),
                 SettingsScreen(
-                  settings: FakeSettings(apiKey: 'k'),
+                  settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
                   analyzer: FakeAnalyzer(),
                   dao: FakeDao(),
                   requestPhotoPermission: () async => true,

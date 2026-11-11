@@ -8,7 +8,8 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show ChangeNotifier, ValueNotifier;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'package:calorie_tracker/core/ai_consent.dart' show allAiConsentRoutes;
+import 'package:calorie_tracker/core/ai_consent.dart'
+    show aiConsentWordingVersion, allAiConsentRoutes;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/usual/usual_foods.dart'
@@ -167,7 +168,40 @@ class FakeSettings with ChangeNotifier implements SettingsStore {
   Future<void> setAiConsent(String route, {required bool granted}) async {
     aiConsentWrites.add((route, granted));
     aiConsent = granted ? {...aiConsent, route} : ({...aiConsent}..remove(route));
+    // As AppSettings: a grant is given under the current text.
+    aiConsentVersions = granted
+        ? {...aiConsentVersions, route: aiConsentWordingVersion}
+        : ({...aiConsentVersions}..remove(route));
+    aiConsentUpdateDeclines.remove(route);
     notifyListeners();
+  }
+
+  /// The consent text each grant was given under (aiConsentVersion). Every
+  /// default grant is at the current one, so suites about something else
+  /// see no wording-update question either; a missing entry is version 1.
+  Map<String, int> aiConsentVersions = {
+    for (final r in allAiConsentRoutes) r: aiConsentWordingVersion,
+  };
+  final Set<String> aiConsentUpdateDeclines = {};
+  @override
+  int aiConsentVersion(String route) =>
+      hasAiConsent(route) ? (aiConsentVersions[route] ?? 1) : 0;
+  @override
+  bool aiConsentUpdateDeclined(String route) =>
+      aiConsentUpdateDeclines.contains(route);
+  @override
+  Future<void> declineAiConsentUpdate(String route) async {
+    aiConsentUpdateDeclines.add(route);
+    notifyListeners();
+  }
+
+  @override
+  bool mealLogged = false;
+  int markMealLoggedCalls = 0;
+  @override
+  Future<void> markMealLogged() async {
+    markMealLoggedCalls++;
+    mealLogged = true;
   }
   /// Provider-scoped MODELS too — the real store keeps one per provider,
   /// and a shared field made provider-switch tests pass while production

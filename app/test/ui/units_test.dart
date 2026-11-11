@@ -104,10 +104,12 @@ void main() {
     expect(dao.weightsByDate['2026-08-02']!.kg, 30.0);
   });
 
-  testWidgets('the imperial empty state teaches an lb chat example',
-      (tester) async {
+  testWidgets('the imperial empty state names no chat (the chat bar '
+      'went 2026-07-31) and no kg example', (tester) async {
     await pump(tester);
-    expect(find.textContaining('180 lb'), findsOneWidget);
+    expect(find.textContaining('Tap Log to record your weight'),
+        findsOneWidget);
+    expect(find.textContaining('chat'), findsNothing);
     expect(find.textContaining('81.6 kg'), findsNothing);
   });
 
@@ -148,8 +150,10 @@ void main() {
       ..units = 'imperial';
     final dao = FakeDao();
     // CalorieTrackerApp has no clock seam: its Body tab reads the real clock
-    // and loads only the last kBodyWindowDays, so a fixed date here would
-    // drop out of the window (and the headline's 'kg' with it) a year on.
+    // and loads the weights up to today (all of them; it once loaded only
+    // the last 365 days, and a fixed date here then dropped out of the
+    // window a year on). Seeding today keeps the headline, and its 'kg', on
+    // screen whatever window the tab loads.
     final today = isoDate(DateTime.now());
     dao.weightsByDate[today] = WeightEntry(today, 81.6, source: 'manual');
     tester.view.physicalSize = const Size(800, 2400);
@@ -160,6 +164,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('身体'));
     await tester.pumpAndSettle();
+    // The 'kg' is the seeded weight's headline unit.
+    expect(
+        tester
+            .widget<Text>(find.byKey(const Key('bodyWeightHeadline')))
+            .data,
+        '81.6');
     expect(find.text('kg'), findsOneWidget);
     expect(find.text('lb'), findsNothing);
     await tester.tap(find.text('设置'));

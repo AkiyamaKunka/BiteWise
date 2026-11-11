@@ -232,7 +232,7 @@ void main() {
         DiagStatus.warn);
     final photo = results.firstWhere((r) => r.stage == 'Photo analysis');
     expect(photo.status, DiagStatus.fail);
-    expect(photo.summary, contains('retry will NOT fix'));
+    expect(photo.summary, contains('retrying will not fix'));
     expect(photo.detail, contains('EXACT versioned ID'),
         reason: 'the provider-specific message must reach the user');
   });
@@ -415,7 +415,7 @@ void main() {
     await tester.tap(find.byKey(const Key('runDiagnostics')));
     await tester.pumpAndSettle();
     expect(find.textContaining('1 problem'), findsOneWidget);
-    expect(find.textContaining('TEMPORARY'), findsOneWidget);
+    expect(find.textContaining('temporary problem'), findsOneWidget);
   });
 
   // 2026-10-18: what the background scans did, from their own record.

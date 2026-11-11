@@ -159,7 +159,10 @@ steps 1 and 2 on 2026-10-29 (the recommended answer each time) and they are
    installs over the dev build, keeps everything, and shows no consent
    dialog: an install with the watcher on keeps its current recipient (the
    one-time seed in `AppSettings._loadAiConsent`). After a Team ID change
-   it is the fresh install from step 4, which asks once.
+   it is the fresh install from step 4, which asks once. (A later build
+   that includes run 7 asks your install once more, "What Chopstats sends
+   has changed": the seeded grant is version 1 — § 1.7 item 4, *Wording
+   updates*.)
 7. **Demo key** (R-F6) — **still open** (being discussed with the owner,
    2026-10-29; the review notes keep the `<key>` placeholder until then).
    The recommendation so far: **a paid Gemini key in its own Google Cloud
@@ -328,14 +331,26 @@ prints is a conflict):
 When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
-- `app/test/ui/usual_copy_test.dart` pins 774 keys in each ARB file. #22
-  adds 33 (at 8e24932, none shared with this PR), so the merged files have
-  807 each. Change the number in that test to the merged count; both files
-  must still have the same keys. Do not drop the check.
+- `app/test/ui/usual_copy_test.dart` pins the number of keys in each ARB
+  file: 776 on `main` before #22; 810 on the merged #22 branch (#22 adds
+  33 at 8e24932, main's 1.6.0 review fixes added 2 and #33's source-link
+  label 1, none shared). If either
+  side adds keys before #22 merges, change the number in that test to the
+  merged count, and here too (the test checks this line); both files must
+  still have the same keys. Do not drop the check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
-  with "the next photo you log that day". #22 also sends the day before's
-  meals with a photo taken before 4 a.m., so say that in this bullet too,
-  in both languages, when you give #22 its merge date.
+  with "the next photo you log that day (and with one taken before 4 a.m.
+  the next day)", because #22 also sends the day before's meals with a
+  photo taken before 4 a.m. Both languages say so since the merge of `main`
+  into #22, and `tests/test_privacy_docs.py` pins it; keep it when you give
+  #22 its merge date.
+- When run 7's build reaches the App Store, say the day before's meals in
+  `README.md` and `README.zh-CN.md` too, in both languages. They describe
+  the App Store build, and three places in each name that day's meals
+  only: the Privacy paragraph (当天其他餐食), the "You log a photo" bullet
+  and the own-server bullet on what the phone supplies (当天的餐食摘要).
+  Use the wording `docs/SERVER.md` already has: "that day's meal
+  summaries, plus the day before's for a photo taken before 4 a.m.".
 
 **After #22, one restyle commit:**
 - Move the *My usual foods* screen, the usual-numbers card and the chip to
@@ -540,7 +555,8 @@ All done; this is what each one is and where it lives.
    id for an API key, `server:<plan>` for the user's own server (the plan is
    the AI company, so a plan switch asks again; a server address edit does
    not). The dialog names the company, lists what goes with a photo
-   (dietary profile, a summary of that day's other meals), with *Describe
+   (dietary profile, a summary of that day's other meals, plus the day
+   before's for a photo taken before 4 a.m.), with *Describe
    a meal* (the text only) and with *Fix or delete a meal* (the last 7
    days of meals), and says where DeepSeek, Qwen,
    Doubao, GLM and the GLM/Doubao plans process data (mainland China). It
@@ -564,6 +580,20 @@ All done; this is what each one is and where it lives.
    current recipient (not gated on a key: a watcher left on without a key
    must not start sending, unasked, once a key is pasted). The photo
    pipeline is unchanged: every automatic send already needs the watcher.
+   *Wording updates* (run 7): each grant records the consent text it was
+   given under (`settings.ai_consent_versions`, `aiConsentWordingVersion`
+   in `core/ai_consent.dart`; 2 = the before-4 a.m. previous-day context).
+   A grant from before — the one-time seed included, so your own install
+   too — is version 1: the photo pipeline keeps sending only that day's
+   meals for it, and on a launch or a return to the app the shell asks
+   once, "What Chopstats sends has changed" / 筷拍发送的内容有更新 (a line
+   saying what is new, then the camera-roll notice while the watcher is
+   on, then the full consent text; never over the setup-link or
+   shared-photo question or any other dialog or screen, and a setup link
+   waits for its answer). Allow records version 2 and the previous day is
+   sent from then on; Not now is remembered and changes nothing else (the
+   watcher keeps logging under the old grant). Any new grant (a new
+   recipient, or Allow after *Stop Sharing*) records version 2.
 5. **Share extension purpose string** — **done.** The extension links
    Photos.framework (`receive_sharing_intent`'s `PHAsset` lookup), and the
    ITMS-90683 scan runs per bundle, so its `Info.plist` and en/zh-Hans
@@ -697,7 +727,8 @@ or to a server the user runs. What leaves the phone, and to whom:
 
 - **every photo** (picked, shared or found by *Watch Camera Roll*) goes to
   the AI provider with the dietary profile and a short summary of the other
-  meals logged that day (up to five);
+  meals logged that day, plus the day before's for a photo taken before
+  4 a.m. (up to five);
 - ***Fix or delete a meal*** sends the typed text with the last 7 days of
   meals; ***Describe a meal*** sends only the text and today's date; a
   leftover photo goes with the meal it belongs to;
@@ -720,7 +751,7 @@ defensible:
 | Photos or Videos | Yes — sent to the user-selected AI provider for analysis; not retained by the developer | No | No | App Functionality |
 | Health & Fitness → **Health** (meal calories and macros, and the dietary profile, which the app attaches itself) | Yes — with every photo and every Fix request, to the same provider | No | No | App Functionality |
 | User Content → **Other User Content** (what the user types into *Describe a meal* and *Fix or delete a meal*: meal descriptions and corrections, and also a weight or a workout typed into Fix, such as "I weigh 72 kg" or "burned 450 calories on my 5 km run", which the app then logs as a weight or an activity) | Yes — to the same provider | No | No | App Functionality |
-| Health & Fitness → Fitness | **No** — the app attaches no stored workout, step or weight record to any request (a photo carries that day's meals, Fix the last 7 days of meals); a workout the user types goes only as that typed text, declared above as Other User Content; the Garmin fetch from the user's own server sends only a date | | | |
+| Health & Fitness → Fitness | **No** — the app attaches no stored workout, step or weight record to any request (a photo carries that day's meals, plus the day before's when taken before 4 a.m.; Fix the last 7 days of meals); a workout the user types goes only as that typed text, declared above as Other User Content; the Garmin fetch from the user's own server sends only a date | | | |
 | Everything else (contacts, location, identifiers, diagnostics, usage) | No | | | |
 
 The rule behind the rows: what the app attaches by itself is declared as

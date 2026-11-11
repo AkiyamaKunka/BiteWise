@@ -43,3 +43,23 @@ const Set<String> aiRoutesInMainlandChina = {
   'server:glm',
   'server:doubao',
 };
+
+/// The version of the consent TEXT a grant was given under. Every new
+/// grant records the current one (AppSettings.setAiConsent); a grant with
+/// none recorded — every grant from before versions existed, the one-time
+/// seed of a pre-consent install included — is version 1.
+///
+/// - 1: the original text.
+/// - 2: a photo taken before 4 a.m. also carries the day before's meals
+///   (B14, run 7).
+///
+/// When the text changes what is sent, bump this: the app shell then asks
+/// once more for a grant from an older version (ui/ai_consent.dart
+/// askAiConsentUpdate), and the new data waits for that answer.
+const int aiConsentWordingVersion = 2;
+
+/// The first [aiConsentWordingVersion] that says a photo taken before
+/// 04:00 also carries the previous day's meals. A grant from before it
+/// keeps exactly what it agreed to: that day's meals only
+/// (AppSettings.previousDayLeftoverContext → PhotoPipeline).
+const int aiConsentPreviousDayVersion = 2;

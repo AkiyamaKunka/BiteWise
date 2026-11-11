@@ -144,7 +144,7 @@ void main() {
   testWidgets('a fetch that throws leaves the screen intact', (tester) async {
     await pump(tester,
         garmin: (date) async => throw Exception('server down'));
-    expect(find.byKey(const Key('todayTotalKcal')), findsOneWidget);
+    expect(find.byKey(const Key('ringCenterValue')), findsOneWidget);
     expect(find.byKey(const Key('garminBurnLine')), findsNothing);
   });
 
