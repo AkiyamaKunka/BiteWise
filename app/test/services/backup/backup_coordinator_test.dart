@@ -2,6 +2,7 @@
 // iCloud folder with the Swift owner rule (test/support/
 // fake_cloud_transport.dart): the guards G1–G10, the restore offer, the
 // takeover, combine, delete, and what the background run may not do.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -905,6 +906,29 @@ void main() {
     expect(cloud.headerOf(kRecordsFileName)!.meals, 4);
   });
 
+  test('a restore stays busy when the status is refreshed while it runs',
+      () async {
+    final gated = _FetchHeld();
+    cloud = gated;
+    c = make();
+    await seed(dao, '2026-11-10');
+    await ready();
+    expect(await run(), BackupState.uploading);
+    const path = 'Chopstats Backup 2.json';
+    await otherPhoneBackup(path: path);
+    gated.held = path;
+    final restoring =
+        c.restore(BackupCandidate(path, cloud.headerOf(path)!));
+    await gated.entered.future;
+    expect(c.status.value.busy, isTrue);
+    await c.refresh(); // Settings opened, a resume, the 30 s timer
+    expect(c.status.value.busy, isTrue,
+        reason: 'the rows stay disabled and the line says Checking iCloud…');
+    gated.gate.complete();
+    expect((await restoring).ok, isTrue);
+    expect(c.status.value.busy, isFalse);
+  });
+
   test('combine is not said as done when the backup after the merge did not '
       'land', () async {
     final failing = _WritesFail();
@@ -1357,6 +1381,24 @@ void main() {
     expect(backupHoldsCatchUp(prefs, now.add(const Duration(minutes: 31))),
         isFalse);
   });
+}
+
+/// An iCloud folder whose fetch of [held] waits for [gate] (a long
+/// download), [entered] once it does.
+class _FetchHeld extends FakeCloudTransport {
+  String? held;
+  final Completer<void> gate = Completer();
+  final Completer<void> entered = Completer();
+
+  @override
+  Future<CloudResult> fetch(String path, String destPath,
+      {required Duration timeout}) async {
+    if (path == held) {
+      if (!entered.isCompleted) entered.complete();
+      await gate.future;
+    }
+    return super.fetch(path, destPath, timeout: timeout);
+  }
 }
 
 /// An iCloud folder whose writes answer [fail] while it is set (a timeout,

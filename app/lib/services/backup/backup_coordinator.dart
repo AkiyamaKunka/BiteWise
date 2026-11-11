@@ -329,6 +329,11 @@ class BackupCoordinator {
         (max == null || h.seq <= max);
   }
 
+  /// Restores, takeovers, combines and deletes going on ([_setBusy]).
+  /// Every status set meanwhile says busy, whoever sets it: a refresh, a
+  /// run of their own, or a trigger outside the lock.
+  int _busy = 0;
+
   BackupStatus _statusFromPrefs() {
     // Off and paused keep what is known about the last backup: the
     // turn-off sheet and the Delete row go by it.
@@ -337,6 +342,7 @@ class BackupCoordinator {
         lastOkAt: _prefs.lastOkAt,
         bytes: _prefs.lastBytes,
         count: count,
+        busy: _busy > 0,
         ownsFiles: _ownsFiles);
     if (!_prefs.enabled) return known(BackupState.off);
     if (!_prefs.noticeSeen) return known(BackupState.needsNotice);
@@ -355,6 +361,7 @@ class BackupCoordinator {
     return BackupStatus(BackupState.ok,
         lastOkAt: ok,
         bytes: _prefs.lastBytes,
+        busy: _busy > 0,
         skippedMonths: _prefs.skippedMonths,
         ownsFiles: _ownsFiles);
   }
@@ -367,6 +374,7 @@ class BackupCoordinator {
         bytes: _prefs.lastBytes,
         other: other,
         count: count,
+        busy: _busy > 0,
         restorable: _restorable,
         skippedMonths: _prefs.skippedMonths,
         ownsFiles: _ownsFiles);
@@ -392,8 +400,12 @@ class BackupCoordinator {
       },
       remember: true);
 
-  void _setBusy(bool busy) =>
-      _status.value = _status.value.copyWith(busy: busy);
+  /// One such action starts (true) or ends (false); each start has its end
+  /// in a finally.
+  void _setBusy(bool busy) {
+    _busy = max(0, _busy + (busy ? 1 : -1));
+    _status.value = _status.value.copyWith(busy: _busy > 0);
+  }
 
   DateTime get _now => _clock();
   String get _today {
