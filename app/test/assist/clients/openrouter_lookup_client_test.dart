@@ -41,7 +41,7 @@ void main() {
         'include_domains': ['mcdonalds.com'],
       }
     ]);
-    expect(body['max_tokens'], 1500);
+    expect(body['max_tokens'], 6000);
     final prompt = ((body['messages'] as List).single as Map)['content'];
     expect(prompt, bigMacRequest.prompt);
     expect(dataBlock(prompt as String), bigMacRequest.body);

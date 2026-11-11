@@ -37,7 +37,7 @@ void main() {
       ]);
       expect(body['include'], ['web_search_call.action.sources']);
       expect(body['max_tool_calls'], 2);
-      expect(body['max_output_tokens'], 1500);
+      expect(body['max_output_tokens'], 6000);
       expect(body['store'], false);
       expect(body['input'], bigMacRequest.prompt);
       expect(dataBlock(body['input'] as String), bigMacRequest.body);
@@ -216,7 +216,7 @@ void main() {
       expect(body['model'], 'grok-4.7');
       expect(body['max_turns'], 2);
       expect(body['store'], false);
-      expect(body['max_output_tokens'], 1500);
+      expect(body['max_output_tokens'], 6000);
       // Exact: country never rides along (xAI's tool has no user_location
       // here), and the filter is capped at xAI's 5 domains.
       expect(body['tools'], [

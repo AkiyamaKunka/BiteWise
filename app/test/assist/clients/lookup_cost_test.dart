@@ -1,7 +1,10 @@
 // Cost caps: the per-lookup ceiling (checked before EVERY request), the
 // daily budget (count and dollars), and spend recording even on failure.
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:calorie_tracker/core/restaurant_lookup_contract.dart'
+    show kLookupMaxItems;
 import 'package:calorie_tracker/services/assist/clients/anthropic_lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/http_lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
@@ -75,10 +78,65 @@ void main() {
     expect(r.reportedUsd, 0.005);
   });
 
-  test('Anthropic worst case for the design defaults is ~2.3¢', () {
+  test('the output cap holds the largest answer the prompt asks for', () {
+    // The shared prompt asks for EVERY published size of every matched
+    // item, up to kLookupMaxItems items, laid out like its example (one
+    // line per option). Haiku 5.5 thinks by default and an OpenRouter
+    // reasoning model reasons, both inside the same max_tokens; a cut
+    // answer is a permanent 'truncated' after the searches were paid.
+    String line(Map<String, Object?> m) =>
+        jsonEncode(m).replaceAll('":', '": ').replaceAll(',"', ', "');
+    String option(String size, int kcal) => line({
+          'label': size,
+          'serving': '1 $size fries (111 g)',
+          'unit': 'serving',
+          'calories': kcal,
+          'calories_range': null,
+          'protein_g': 3.5,
+          'carbs_g': 30.5,
+          'fat_g': 11.25,
+        });
+    const sizes = [('Small', 230), ('Medium', 320), ('Large', 480),
+        ('Extra Large', 560)];
+    String match(int i) => '    {\n'
+        '      "item_index": $i,\n'
+        '      "menu_item": "World Famous Fries",\n'
+        '      "match_type": "exact_item",\n'
+        '      "is_drink": false,\n'
+        '      "components": [],\n'
+        '      "options": [\n'
+        '${[for (final (s, k) in sizes) '        ${option(s, k)}'].join(',\n')}'
+        '\n      ]\n'
+        '    }';
+    final answer = '{\n'
+        '  "status": "found",\n'
+        '  "chain_key": "mcdonalds",\n'
+        '  "restaurant_name": "McDonald\'s",\n'
+        '  "matches": [\n'
+        '${[for (var i = 0; i < kLookupMaxItems; i++) match(i)].join(',\n')}'
+        '\n  ],\n'
+        '  "source_url": "https://www.mcdonalds.com/us/en-us/about-our-food/'
+        'nutrition-calculator.html",\n'
+        '  "source_title": "Nutrition Calculator",\n'
+        '  "source_type": "official_site",\n'
+        '  "source_year": 2026,\n'
+        '  "match_confidence": 0.9,\n'
+        '  "notes": ""\n'
+        '}';
+    expect(jsonDecode(answer), isA<Map>());
+    // JSON runs about 3.2–4 characters a token (an 8-item family order,
+    // 6,809 characters, measured 1,700–2,100): count at the dense end,
+    // and leave 2,000 tokens for thinking.
+    final answerTokens = (answer.length / 3.2).ceil();
+    expect(answerTokens, greaterThan(3000));
+    expect(const LookupCostPolicy().maxOutputTokens,
+        greaterThanOrEqualTo(answerTokens + 2000));
+  });
+
+  test('Anthropic worst case for the design defaults is ~2.5¢', () {
     final c = _anthropic(ScriptedClient([(_) => json200({})]));
     expect(c.worstCaseFirstRequestUsd(),
-        closeTo(0.02 + 24000 * 0.10 / 1e6 + 1500 * 0.50 / 1e6, 1e-12));
+        closeTo(0.02 + 24000 * 0.10 / 1e6 + 6000 * 0.50 / 1e6, 1e-12));
     expect(c.worstCaseFirstRequestUsd(), lessThan(0.05));
   });
 
@@ -103,10 +161,10 @@ void main() {
       (_) => fixture200('anthropic_pause_2.json'),
     ]);
     final budget = _RecordingBudget();
-    // First request worst case 2.305¢ fits; after it spent ~1.07¢, the
-    // continuation's worst case (~1.32¢) would reach ~2.4¢ > 2.35¢.
+    // First request worst case 2.54¢ fits; after it spent ~1.07¢, the
+    // continuation's worst case (1.6¢) would reach ~2.67¢ > 2.6¢.
     final o = await _anthropic(s,
-            policy: const LookupCostPolicy(maxUsdPerLookup: 0.0235),
+            policy: const LookupCostPolicy(maxUsdPerLookup: 0.026),
             budget: budget)
         .submit(bigMacRequest);
     expect(s.requests, hasLength(1));
@@ -246,7 +304,7 @@ void main() {
     });
 
     test('the daily dollar cap sees timed-out lookups', () async {
-      final budget = DailyLookupBudget(maxLookupsPerDay: 20, maxUsdPerDay: 0.05);
+      final budget = DailyLookupBudget(maxLookupsPerDay: 20, maxUsdPerDay: 0.06);
       final s = ScriptedClient([(_) => Completer<http.Response>().future]);
       final c = AnthropicLookupClient(
           apiKey: () => 'test-key',
@@ -257,7 +315,7 @@ void main() {
           LookupFailureCode.timeout);
       expect((await c.submit(bigMacRequest)).failure!.code,
           LookupFailureCode.timeout);
-      // 2 × 2.3¢ charged; a third worst case would pass 5¢.
+      // 2 × 2.54¢ charged; a third worst case would pass 6¢.
       final third = await c.submit(bigMacRequest);
       expect(third.failure!.code, LookupFailureCode.dailyCap);
       expect(s.requests, hasLength(2));
@@ -287,7 +345,7 @@ void main() {
       final s = ScriptedClient([(_) => fixture200('anthropic_found.json')]);
       final c = _anthropic(s, budget: budget);
       expect((await c.submit(bigMacRequest)).isDone, isTrue); // ~1.12¢ spent
-      final second = await c.submit(bigMacRequest); // +2.3¢ worst > 3¢
+      final second = await c.submit(bigMacRequest); // +2.54¢ worst > 3¢
       expect(second.failure!.code, LookupFailureCode.dailyCap);
       expect(s.requests, hasLength(1));
     });
