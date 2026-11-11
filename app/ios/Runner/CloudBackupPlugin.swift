@@ -14,6 +14,8 @@ import UniformTypeIdentifiers
 /// with a `status`; errors carry a domain and a code, never text or paths.
 ///
 ///   status                 → {status: ok|noAccount|unavailable, accountChanged}
+///                            (noAccount: no iCloud identity — signed out,
+///                            or iCloud Drive off; statusName)
 ///   deviceKey              → {status: ok, key: hex | null}
 ///   startWatching / stopWatching → {status}
 ///   list                   → {status, gathered, liveMs, items: [...]}
@@ -49,8 +51,9 @@ import UniformTypeIdentifiers
 /// query and the picker belong to the app's engine only.
 ///
 /// The container exists only once Runner.entitlements names it (docs/
-/// RELEASING.md § iCloud container). Without the entitlement the container
-/// URL is nil and every call reports `unavailable`.
+/// RELEASING.md § iCloud container). Without the entitlement (and Info.plist's
+/// NSUbiquitousContainers, which the same commit adds) the container URL is
+/// nil and every call reports `unavailable`.
 final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate {
   static let channelName = "dev.calorietracker/cloudbackup"
 
@@ -187,24 +190,47 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
   // MARK: - account and container
 
   private func status(_ reply: @escaping (Any?) -> Void) {
-    // main: the token, and whether it changed since the last call.
-    guard let token = FileManager.default.ubiquityIdentityToken else {
-      // No iCloud now: a query that is running is started again once
-      // there is a container.
-      follow(queryPlan.fetched(found: false))
-      reply(["status": "noAccount", "accountChanged": false])
-      return
-    }
-    let changed = CloudBackupPlugin.noteToken(token)
+    // main: the token, and whether it changed since the last call. No
+    // token is no proof of no account: iOS has none "if iCloud is
+    // unavailable or there is no logged-in user", so also while iCloud
+    // Drive is off, for the phone or for Chopstats (statusName).
+    let token = FileManager.default.ubiquityIdentityToken
+    let hasToken = token != nil
+    let changed = token.map { CloudBackupPlugin.noteToken($0) } ?? false
+    let iCloudBuild = CloudBackupPlugin.iCloudBuild()
     statusQueue.async {
       let docs = self.fetchDocuments()
       DispatchQueue.main.async {
         // Before the reply: once Dart hears of a new account, the query
-        // it lists is that account's.
-        self.follow(self.queryPlan.fetched(found: docs != nil, accountChanged: changed))
-        reply(["status": docs == nil ? "unavailable" : "ok", "accountChanged": changed])
+        // it lists is that account's. Without a token there is no iCloud
+        // now, and a query running is started again once there is.
+        self.follow(self.queryPlan.fetched(found: hasToken && docs != nil, accountChanged: changed))
+        reply([
+          "status": CloudBackupPlugin.statusName(
+            token: hasToken, container: docs != nil, iCloudBuild: iCloudBuild),
+          "accountChanged": changed,
+        ])
       }
     }
+  }
+
+  /// The status reply. `ok` with an identity and a container;
+  /// `unavailable` with an identity and no container, or on a build
+  /// without iCloud (nothing for the user to turn on); otherwise
+  /// `noAccount`: signed out, or iCloud Drive off for the phone or for
+  /// Chopstats. iOS gives no identity in any of these, so the status line
+  /// asks for both (backupStatusNoAccount).
+  static func statusName(token: Bool, container: Bool, iCloudBuild: Bool) -> String {
+    if token { return container ? "ok" : "unavailable" }
+    return iCloudBuild ? "noAccount" : "unavailable"
+  }
+
+  /// Whether this build has the container: Info.plist names it in
+  /// NSUbiquitousContainers, which comes with the iCloud entitlements in
+  /// one commit (docs/RELEASING.md § 11, Part B). Without them there is
+  /// never a container, and no sign-in would help.
+  static func iCloudBuild(_ info: [String: Any]? = Bundle.main.infoDictionary) -> Bool {
+    (info?["NSUbiquitousContainers"] as? [String: Any])?[containerIdentifier] != nil
   }
 
   /// On statusQueue: the container's Documents folder, nil while there is

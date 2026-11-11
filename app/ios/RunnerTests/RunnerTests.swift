@@ -2626,6 +2626,35 @@ class CloudFilesTests: XCTestCase {
   func testTheContainerIdIsTheOneDartUses() {
     XCTAssertEqual(CloudBackupPlugin.containerIdentifier, "iCloud.dev.calorietracker.calorieTracker")
   }
+
+  /// iOS gives no identity token when signed out AND while iCloud Drive is
+  /// off for the phone or for the app: noAccount stands for all of them
+  /// (its line asks for both), except on a build without iCloud.
+  func testNoIdentityIsNoAccountOnlyOnABuildWithICloud() {
+    XCTAssertEqual(CloudBackupPlugin.statusName(token: true, container: true, iCloudBuild: true), "ok")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: true, container: false, iCloudBuild: true), "unavailable")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: false, container: false, iCloudBuild: true), "noAccount")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: false, container: true, iCloudBuild: true), "noAccount",
+      "no identity: never ok")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: false, container: false, iCloudBuild: false), "unavailable",
+      "a build without iCloud: no sign-in would help")
+  }
+
+  func testTheBuildWithICloudNamesTheContainerInInfoPlist() {
+    XCTAssertTrue(CloudBackupPlugin.iCloudBuild(), "Runner's own Info.plist")
+    XCTAssertFalse(CloudBackupPlugin.iCloudBuild(nil))
+    XCTAssertFalse(CloudBackupPlugin.iCloudBuild([:]))
+    XCTAssertFalse(
+      CloudBackupPlugin.iCloudBuild(["NSUbiquitousContainers": ["iCloud.other": [String: Any]()]]))
+    XCTAssertTrue(
+      CloudBackupPlugin.iCloudBuild([
+        "NSUbiquitousContainers": [CloudBackupPlugin.containerIdentifier: [String: Any]()]
+      ]))
+  }
 }
 
 /// When the metadata query runs (CloudBackupPlugin.swift, CloudQueryPlan):

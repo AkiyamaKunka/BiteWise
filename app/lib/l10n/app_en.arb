@@ -3119,13 +3119,13 @@
   "@backupStatusQuota": {
     "description": "Status line under the iCloud Backup switch."
   },
-  "backupStatusNoAccount": "Sign in to iCloud in the Settings app to back up.",
+  "backupStatusNoAccount": "Sign in to iCloud and turn on iCloud Drive for Chopstats in the Settings app to back up.",
   "@backupStatusNoAccount": {
-    "description": "Status line under the iCloud Backup switch: no iCloud account."
+    "description": "Status line under the iCloud Backup switch: iOS gives no iCloud identity, which is the case when signed out and also while iCloud Drive is off for the phone or for the app (iOS does not say which)."
   },
   "backupStatusUnavailable": "iCloud Drive is not available for Chopstats.",
   "@backupStatusUnavailable": {
-    "description": "Status line under the iCloud Backup switch: iCloud Drive is off for the app, or the build has no iCloud container."
+    "description": "Status line under the iCloud Backup switch: iOS gives an iCloud identity but no container for the app, or the build has no iCloud container."
   },
   "backupStatusOtherDevice": "The backup in iCloud is another iPhone's (from {date}). This iPhone does not overwrite it.",
   "@backupStatusOtherDevice": {

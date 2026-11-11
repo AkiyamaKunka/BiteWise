@@ -5093,13 +5093,13 @@ abstract class AppLocalizations {
   /// **'Your iCloud storage is full, so the backup cannot upload.'**
   String get backupStatusQuota;
 
-  /// Status line under the iCloud Backup switch: no iCloud account.
+  /// Status line under the iCloud Backup switch: iOS gives no iCloud identity, which is the case when signed out and also while iCloud Drive is off for the phone or for the app (iOS does not say which).
   ///
   /// In en, this message translates to:
-  /// **'Sign in to iCloud in the Settings app to back up.'**
+  /// **'Sign in to iCloud and turn on iCloud Drive for Chopstats in the Settings app to back up.'**
   String get backupStatusNoAccount;
 
-  /// Status line under the iCloud Backup switch: iCloud Drive is off for the app, or the build has no iCloud container.
+  /// Status line under the iCloud Backup switch: iOS gives an iCloud identity but no container for the app, or the build has no iCloud container.
   ///
   /// In en, this message translates to:
   /// **'iCloud Drive is not available for Chopstats.'**

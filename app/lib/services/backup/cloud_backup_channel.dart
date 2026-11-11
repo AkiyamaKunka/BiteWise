@@ -17,6 +17,10 @@ import 'backup_format.dart';
 
 const String cloudBackupChannelName = 'dev.calorietracker/cloudbackup';
 
+/// noAccount: iOS gives no iCloud identity, which it does when signed out
+/// and also while iCloud Drive is off for the phone or for Chopstats,
+/// without saying which. unavailable: an identity but no container, or a
+/// build without iCloud (CloudBackupPlugin.statusName).
 enum CloudState { ok, noAccount, unavailable }
 
 class CloudStatus {

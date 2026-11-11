@@ -3278,7 +3278,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupStatusNoAccount =>
-      'Sign in to iCloud in the Settings app to back up.';
+      'Sign in to iCloud and turn on iCloud Drive for Chopstats in the Settings app to back up.';
 
   @override
   String get backupStatusUnavailable =>

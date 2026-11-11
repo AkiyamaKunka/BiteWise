@@ -155,6 +155,23 @@ void main() {
     expect(zh.backupICloudFooterOff, contains('导出'));
   });
 
+  testWidgets('no iCloud identity: the line asks to sign in AND to turn on '
+      'iCloud Drive for Chopstats, in English and Chinese', (tester) async {
+    // iOS gives no identity token when signed out and also while iCloud
+    // Drive is off for the phone or for the app, without saying which
+    // (CloudBackupPlugin.statusName): "sign in" alone tells a signed-in
+    // user to do what they did.
+    await pump(tester, b: backup);
+    backup.debugSetStatus(const BackupStatus(BackupState.noAccount));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupStatusNoAccount), findsOneWidget);
+    expect(_en.backupStatusNoAccount,
+        allOf(contains('Sign in to iCloud'),
+            contains('turn on iCloud Drive for Chopstats')));
+    expect(AppLocalizationsZh().backupStatusNoAccount,
+        allOf(contains('登录 iCloud'), contains('为筷拍打开 iCloud 云盘')));
+  });
+
   testWidgets('each state shows only its own rows', (tester) async {
     await pump(tester, b: backup);
     final other = BackupHeader(
