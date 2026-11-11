@@ -76,8 +76,14 @@ Future<int> _seed(Phone phone, DateTime when, String food, num kcal,
   return id;
 }
 
-Future<int> _changes(Phone phone) async =>
-    (await phone.db.rawQuery('SELECT total_changes() AS n')).single['n'] as int;
+/// Rows the app wrote. total_changes() also counts what triggers write, and
+/// since schema v4 (1.7.0 iCloud Backup) every write to a backed-up table
+/// bumps one data_changes counter by exactly one; subtracting the counters
+/// leaves the app's own writes.
+Future<int> _changes(Phone phone) async => (await phone.db.rawQuery(
+        'SELECT total_changes() - '
+        '(SELECT records + thumbs FROM data_changes WHERE id = 1) AS n'))
+    .single['n'] as int;
 
 // The iPhone's own fonts: whether text fits depends on the glyphs (the
 // test font is a full em per glyph). macOS only, as large_text_overflow_
