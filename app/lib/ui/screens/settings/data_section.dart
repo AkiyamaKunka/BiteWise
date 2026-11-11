@@ -97,12 +97,14 @@ class _DataSectionState extends State<DataSection> {
     super.dispose();
   }
 
-  /// Import via PASTE, deliberately: adding a file-picker plugin for a
-  /// once-a-year action costs a platform dependency on both OSes, while
-  /// every transfer route the owner actually uses (WeChat/AirDrop/email/
-  /// Termux) can put text on the clipboard. The parser refuses anything
-  /// that is not a CalorieTracker export, so a mis-paste is a message,
-  /// never a corrupted log.
+  /// Import by FILE or by PASTE. Choose File… (1.7.0) opens the system
+  /// picker through the app's own channels (no file-picker plugin: the
+  /// iCloud Backup plugin on iOS, MainActivity on Android), because a full
+  /// export with pictures is tens of MB and the clipboard cannot carry it.
+  /// Paste stays for every transfer route that puts text on the clipboard
+  /// (WeChat/AirDrop/email/Termux). The parser refuses anything that is
+  /// not a CalorieTracker export, so a mis-paste is a message, never a
+  /// corrupted log.
   ///
   /// A year of meals is 1–2 MB of JSON. Pasted into the field, that much
   /// text froze the first frame for a second or two and cost hundreds of
