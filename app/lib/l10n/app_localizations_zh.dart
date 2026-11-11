@@ -3108,6 +3108,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupRestoreNotIncluded => '目标、单位和 API Key 不在备份里。';
 
   @override
+  String get backupRestoreTakesOver =>
+      '恢复之后，这台 iPhone 会接管这份备份并保持更新；原来那台 iPhone 不再写入它。';
+
+  @override
   String get backupRestoreAction => '恢复';
 
   @override

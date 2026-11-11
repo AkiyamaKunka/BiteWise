@@ -965,6 +965,7 @@
   "backupRestoreBody": "iCloud 里有一份筷拍备份，共 {meals} 餐，最后保存于 {date}。",
   "backupRestoreMergeNote": "这台 iPhone 上已经有 {meals} 餐。恢复会把备份里的餐加进来，这里的记录都不会被删除。",
   "backupRestoreNotIncluded": "目标、单位和 API Key 不在备份里。",
+  "backupRestoreTakesOver": "恢复之后，这台 iPhone 会接管这份备份并保持更新；原来那台 iPhone 不再写入它。",
   "backupRestoreAction": "恢复",
   "backupStartFresh": "重新开始…",
   "backupNotNow": "以后再说",

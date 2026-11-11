@@ -168,8 +168,9 @@ Future<void> showBackupNotice(
 enum _OfferChoice { restore, fresh, notNow }
 
 /// The restore offer: Restore (default) / Start Fresh… / Not Now, with
-/// the backup's counts and date, and a merge note when this phone already
-/// has meals. Dismissing the sheet is Not Now for this launch only.
+/// the backup's counts and date, a merge note when this phone already has
+/// meals, and a note when restoring makes this iPhone take the backup
+/// over. Dismissing the sheet is Not Now for this launch only.
 Future<void> showRestoreOffer(BuildContext context, BackupCoordinator backup,
     BackupCandidate candidate, int localMeals) async {
   final l = context.l10n;
@@ -180,6 +181,7 @@ Future<void> showRestoreOffer(BuildContext context, BackupCoordinator backup,
     subtitle: [
       l.backupRestoreBody(h.meals, backupDateLabel(context, h)),
       if (localMeals > 0) l.backupRestoreMergeNote(localMeals),
+      if (backup.restoreTakesOver(candidate)) l.backupRestoreTakesOver,
       l.backupRestoreNotIncluded,
     ].join('\n\n'),
     builder: (ctx) => GroupedSection(

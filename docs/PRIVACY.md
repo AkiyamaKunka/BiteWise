@@ -236,8 +236,11 @@ server holding it, Chopstats copies it to **your own iCloud Drive**.
   file per month. Apple keeps them in your iCloud account under Apple's
   iCloud terms; the developer cannot see them and runs no server for them.
 - **When:** a while after you change something, when you leave the app,
-  and sometimes in the background. Each iPhone only overwrites its own
-  backup, never another iPhone's.
+  and sometimes in the background. Each iPhone overwrites only its own
+  backup, unless you choose on it to restore, combine or replace another
+  iPhone's backup: then this iPhone takes that backup over and keeps it up
+  to date, and the other iPhone no longer writes to it. Start Fresh
+  deletes the other iPhone's backup instead.
 - **Restoring:** after a reinstall, or on a new iPhone signed in to the
   same iCloud account, the app offers to restore. Restoring merges: nothing
   on the phone is removed, and a photo meal you deleted on that phone is
@@ -407,7 +410,7 @@ date. Questions: open an issue at
 - **会复制的内容：**你的餐食（和导出的内容相同）、已处理照片列表、体重、身体围度、运动记录、活动、健身档案，以及每餐的小图片（相机可能写入其中的数据，例如拍摄时间和地点，会被删除）。
 - **绝不会复制的内容：**API Key、你自己服务器的密钥和地址、设置链接、你的设置和各项同意、Meta 眼镜记录，以及餐厅查询的文件（记住的地点、保存的查询结果）。
 - **保存位置：**你 iCloud 云盘里的**「Chopstats」**文件夹，你可以在「文件」App 里查看、复制或删除：`Chopstats Backup.json`、一份较早的副本 `Chopstats Backup (previous).json`，以及每月一个文件的 `Meal Pictures` 文件夹。Apple 按 Apple 的 iCloud 条款把它们保存在你的 iCloud 账户里；开发者看不到它们，也不为它们运行任何服务器。
-- **备份时间：**你修改记录一段时间后、离开应用时，有时也会在后台进行。每台 iPhone 只会覆盖自己的备份，绝不会覆盖另一台 iPhone 的。
+- **备份时间：**你修改记录一段时间后、离开应用时，有时也会在后台进行。每台 iPhone 只会覆盖自己的备份；只有当你在这台 iPhone 上选择恢复、合并或替换另一台 iPhone 的备份时，这台 iPhone 才会接管那份备份并保持更新，另一台 iPhone 之后不再写入它。选择「重新开始」则会删除另一台 iPhone 的备份。
 - **恢复：**重新安装后，或在登录同一 iCloud 账户的新 iPhone 上，应用会询问是否恢复。恢复是合并：手机上的记录都不会被删除，你在这台手机上删除过的照片餐也不会被恢复。目标、单位和 API Key 不会被恢复。
 - **关闭时**会询问是保留 iCloud 里的备份还是删除它。
 - **Android** 没有自动备份文件：适用 Android 自带的系统备份（见下文），换手机之前也可以导出一个文件。

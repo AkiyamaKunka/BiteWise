@@ -3,6 +3,7 @@
 // Files app only once a backup landed, the turn-off choice, the notice,
 // the restore offer, Android's footer, and Import › Choose File… (records
 // before pictures; the picked copies deleted afterwards).
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -271,12 +272,31 @@ void main() {
     expect(find.textContaining('412 meals'), findsOneWidget);
     expect(find.textContaining('already has 5 meals'), findsOneWidget);
     expect(find.textContaining(_en.backupRestoreNotIncluded), findsOneWidget);
+    expect(find.textContaining(_en.backupRestoreTakesOver), findsOneWidget,
+        reason: 'no backup of its own yet: restoring takes this one over');
     expect(find.byKey(const Key('backupRestore')), findsOneWidget);
     expect(find.byKey(const Key('backupStartFresh')), findsOneWidget);
     await tester.tap(find.byKey(const Key('backupNotNow')));
     await tester.pumpAndSettle();
     await shown;
     expect(prefs.getStringList(BackupPrefs.kOffersAnswered), [_other]);
+  });
+
+  testWidgets('the restore offer says nothing about taking over when this '
+      'iPhone already has its own backup', (tester) async {
+    await prefs.setInt(BackupPrefs.kLastSeq, 4);
+    await pump(tester);
+    final ctx = tester.element(find.byType(DataSection));
+    final h = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 2,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    unawaited(showRestoreOffer(
+        ctx, backup, BackupCandidate('Chopstats Backup 2.json', h), 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 meals'), findsOneWidget);
+    expect(find.textContaining(_en.backupRestoreTakesOver), findsNothing);
+    await tester.tap(find.byKey(const Key('backupNotNow')));
+    await tester.pumpAndSettle();
   });
 
   testWidgets('Android: no iCloud rows, its own footer', (tester) async {

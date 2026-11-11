@@ -1304,7 +1304,7 @@ class BackupCoordinator {
         final (summary, done, before) = await _importBackup(c.path, c.header);
         if (!summary.ok) return summary;
         await _prefs.reload();
-        if (_prefs.lastSeq == 0 && c.path == kRecordsFileName) {
+        if (restoreTakesOver(c)) {
           await _prefs.setAdoptedFrom(c.header.installId);
           await _adoptMonths(c.header, before: before, restored: done);
         }
@@ -1319,6 +1319,12 @@ class BackupCoordinator {
       await _afterChoice();
     }
   }
+
+  /// Whether restoring [c] makes this install take its file over (the
+  /// restore sheet says so): this install has no backup of its own yet and
+  /// [c] is the canonical file, so the next run writes over it.
+  bool restoreTakesOver(BackupCandidate c) =>
+      _prefs.lastSeq == 0 && c.path == kRecordsFileName;
 
   /// Not Now: the offer is not raised again for that install (the Restore
   /// From iCloud… row still has it).

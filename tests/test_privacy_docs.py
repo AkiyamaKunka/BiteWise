@@ -616,5 +616,14 @@ def test_icloud_backup_never_carries_the_lookup_files_or_the_keys():
     assert "restaurant lookup files (learned places, saved lookup answers)" in en_sec
     assert "API Key、你自己服务器的密钥和地址、设置链接" in zh_sec
     assert "餐厅查询的文件（记住的地点、保存的查询结果）" in zh_sec
-    assert "Each iPhone only overwrites its own backup" in en_sec
-    assert "每台 iPhone 只会覆盖自己的备份" in zh_sec
+    # Restore, Combine and Replace make this iPhone take another
+    # iPhone's backup over (restore() adopts it, and the next run writes
+    # over it), so the policy never says "never another iPhone's".
+    flat_en, flat_zh = _flat(en_sec), _flat(zh_sec)
+    assert ("Each iPhone overwrites only its own backup, unless you choose "
+            "on it to restore, combine or replace another iPhone's backup: "
+            "then this iPhone takes that backup over") in flat_en
+    assert "never another iPhone's" not in flat_en
+    assert ("每台 iPhone 只会覆盖自己的备份；只有当你在这台 iPhone 上选择恢复、"
+            "合并或替换另一台 iPhone 的备份时，这台 iPhone 才会接管那份备份") in flat_zh
+    assert "绝不会覆盖另一台 iPhone 的" not in flat_zh

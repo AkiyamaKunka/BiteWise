@@ -3386,6 +3386,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your goals, units and API keys are not in the backup.';
 
   @override
+  String get backupRestoreTakesOver =>
+      'After restoring, this iPhone takes the backup over and keeps it up to date; the iPhone that made it no longer writes to it.';
+
+  @override
   String get backupRestoreAction => 'Restore';
 
   @override

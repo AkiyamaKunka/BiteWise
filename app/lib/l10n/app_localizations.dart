@@ -5201,6 +5201,12 @@ abstract class AppLocalizations {
   /// **'Your goals, units and API keys are not in the backup.'**
   String get backupRestoreNotIncluded;
 
+  /// Restore sheet (iPhone), shown when restoring makes this iPhone take over the backup file of the iPhone that wrote it (this iPhone has no backup of its own yet): it will write over that backup from now on.
+  ///
+  /// In en, this message translates to:
+  /// **'After restoring, this iPhone takes the backup over and keeps it up to date; the iPhone that made it no longer writes to it.'**
+  String get backupRestoreTakesOver;
+
   /// Restore sheet button (the default).
   ///
   /// In en, this message translates to:
