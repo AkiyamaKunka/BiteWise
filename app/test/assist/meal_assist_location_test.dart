@@ -2396,6 +2396,46 @@ void main() {
         ),
       );
     });
+
+    // Review r2 2026-11-11: only the location path's read and the next
+    // answer pruned the learned places, so with the mode Off or Brand only
+    // a spot the user taught stayed on the phone past its 180 days.
+    test('learned places past their 180 days leave the phone when the app '
+        'starts or comes back, Off and Brand only too, with no position '
+        'read', () async {
+      File placesFile() =>
+          File('${root.path}/$localStoreDirName/$assistPlacesDocument.json');
+      await h.placesStore.addZone(h.cell);
+      await h.placesStore.confirm('mcdonalds', h.cell);
+      expect(placesFile().existsSync(), isTrue);
+
+      // Off, launched 181 days on.
+      h.settings = AssistSettingsView(
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      h.now = _now.add(assistPlacesTtl + const Duration(days: 1));
+      h.assist.start(observeLifecycle: false);
+      await h.assist.placesPruned;
+      expect(placesFile().existsSync(), isFalse);
+
+      // Brand only, back in the foreground 181 days after the next answer.
+      await h.placesStore.block('mcdonalds', h.cell);
+      expect(placesFile().existsSync(), isTrue);
+      h.settings = AssistSettingsView(
+        mode: AssistMode.auto,
+        useLocation: false,
+        consentAt: _consentAt,
+        consentRecipient: 'anthropic',
+      );
+      h.now = h.now.add(assistPlacesTtl + const Duration(days: 1));
+      h.assist.onResumed();
+      await h.assist.placesPruned;
+      expect(placesFile().existsSync(), isFalse);
+
+      expect(h.source.asked, isEmpty, reason: 'no position read');
+      expect(h.places.radii, isEmpty, reason: 'no places query');
+    });
   });
 
   group('Claude Plan jobs', () {

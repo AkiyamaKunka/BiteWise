@@ -23,11 +23,16 @@
 /// the meal database, an export, a backup or a log (the cells' toString
 /// says nothing). Reads never throw and come back empty on a missing,
 /// corrupt or other-version document; entries past their TTL, with an
-/// unreadable cell or a chain key outside the app's table are dropped.
-/// Writes never throw either and say whether they landed. The app engine
-/// is the only writer (MealAssist and the editor's feedback actions);
-/// writes through one instance run one at a time.
+/// unreadable cell or a chain key outside the app's table are dropped —
+/// from the document too, not only from what the read returns ([prune]),
+/// so a spot stays on the phone no longer than its 180 days even when
+/// nothing is taught after it. Writes never throw either and say whether
+/// they landed. The app engine is the only writer (MealAssist and the
+/// editor's feedback actions); writes through one instance run one at a
+/// time.
 library;
+
+import 'dart:convert' show jsonEncode;
 
 import '../../core/chain_match.dart' show chainByKey;
 import '../../core/place_match.dart';
@@ -61,14 +66,37 @@ class AssistPlacesStore {
   Future<void> _tail = Future<void>.value();
 
   /// What the user taught, past-TTL entries left out; empty when there is
-  /// nothing or it cannot be read. Never throws.
+  /// nothing or it cannot be read. When the document still holds an entry
+  /// this leaves out, it is [prune]d before this returns. Never throws.
   Future<LearnedPlaces> read() async {
     try {
-      return (await _load(_clock())).toPlaces();
+      final raw = await _raw();
+      final doc = _Doc.decode(raw, _clock());
+      if (raw.isNotEmpty && doc.leavesOut(raw)) await prune();
+      return doc.toPlaces();
     } catch (_) {
       return LearnedPlaces.empty;
     }
   }
+
+  /// Takes what a read leaves out — entries past their TTL or over a cap,
+  /// and anything off the schema — out of the document itself, and
+  /// deletes the document when nothing is left. A document with nothing to
+  /// leave out is not rewritten; a missing, corrupt or other-version one
+  /// is not touched. Reads no location. True when the document holds
+  /// nothing a read leaves out. Never throws.
+  Future<bool> prune() => _serial(() async {
+    final raw = await _raw();
+    if (raw.isEmpty) return true;
+    final doc = _Doc.decode(raw, _clock());
+    if (doc.isEmpty) return _store.delete(assistPlacesDocument);
+    if (!doc.leavesOut(raw)) return true;
+    return _store.write(
+      assistPlacesDocument,
+      doc.toJson(),
+      version: assistPlacesVersion,
+    );
+  });
 
   /// 'Not from a restaurant' at [cell].
   Future<bool> addZone(PlaceCell cell) => _mutate((doc, at) {
@@ -142,10 +170,12 @@ class AssistPlacesStore {
     return run;
   }
 
-  Future<_Doc> _load(DateTime now) async => _Doc.decode(
-    await _store.read(assistPlacesDocument, version: assistPlacesVersion),
-    now,
-  );
+  Future<_Doc> _load(DateTime now) async => _Doc.decode(await _raw(), now);
+
+  /// The document as stored; {} when it is missing, corrupt or of another
+  /// version.
+  Future<Map<String, Object?>> _raw() =>
+      _store.read(assistPlacesDocument, version: assistPlacesVersion);
 }
 
 PlaceCell? _cellOf(Map<String, Object?> entry) =>
@@ -203,6 +233,22 @@ final class _Doc {
     'confirmed': capNewest(confirmed, assistPlacesConfirmedCap, field: 'last'),
     'blocked': capNewest(blocked, assistPlacesBlockedCap, field: 'at'),
   };
+
+  bool get isEmpty => zones.isEmpty && confirmed.isEmpty && blocked.isEmpty;
+
+  /// Whether the stored document [raw] (decoded into this) holds anything
+  /// this leaves out or writes differently: an entry past its TTL, over a
+  /// cap, off the schema or a duplicate, or a missing list.
+  bool leavesOut(Map<String, Object?> raw) {
+    final kept = toJson();
+    return kept.keys.any((list) {
+      try {
+        return jsonEncode(raw[list]) != jsonEncode(kept[list]);
+      } catch (_) {
+        return true;
+      }
+    });
+  }
 
   LearnedPlaces toPlaces() {
     final kept = toJson();

@@ -866,6 +866,13 @@ class MealAssist {
 
   /// Apple Maps throttled: no location is read before this.
   DateTime? _placesHoldUntil;
+
+  /// The last pass that took the learned places past their time off the
+  /// phone ([_pruneLearnedPlaces]).
+  Future<void> _placesPruned = Future<void>.value();
+
+  @visibleForTesting
+  Future<void> get placesPruned => _placesPruned;
   bool _started = false;
   bool _disposed = false;
   bool _ownSignal = false;
@@ -931,10 +938,12 @@ class MealAssist {
 
   /// Starts listening: meals-changed (a sweep 5 s later), settings (Off
   /// cancels, on sweeps), and — with [observeLifecycle] — the app coming
-  /// back to the foreground. Idempotent.
+  /// back to the foreground. Takes the learned places past their time off
+  /// the phone. Idempotent.
   void start({bool observeLifecycle = true}) {
     if (_started || _disposed) return;
     _started = true;
+    _pruneLearnedPlaces();
     final s = _readSettings();
     _lastMode = s.mode;
     _lastConsent = _consentKey(s);
@@ -975,7 +984,24 @@ class MealAssist {
   }
 
   /// The app came back to the foreground.
-  void onResumed() => _schedule(settleDelay);
+  void onResumed() {
+    _pruneLearnedPlaces();
+    _schedule(settleDelay);
+  }
+
+  /// Learned places past their 180 days (or over a cap) leave the
+  /// document itself (AssistPlacesStore.prune), in every mode: Off and
+  /// Brand only never run the location path, whose read would otherwise
+  /// be the only one, so docs/PRIVACY.md's "for up to 180 days" holds from
+  /// the next launch or return to the foreground. Reads no location and
+  /// sends nothing. Never throws.
+  void _pruneLearnedPlaces() {
+    final store = _placesStore;
+    if (store == null || _disposed) return;
+    try {
+      _placesPruned = store.prune().then<void>((_) {}, onError: (Object _) {});
+    } catch (_) {}
+  }
 
   /// The app left the foreground: a call failing from now on is not a try.
   void onBackgrounded() => _backgroundEpoch++;
