@@ -1,6 +1,6 @@
 # Chopstats · 筷拍 — Privacy Policy
 
-Effective date: 2026-11-09
+Effective date: 2026-11-10
 
 [English](#english) · [中文](#中文)
 
