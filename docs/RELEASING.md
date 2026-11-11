@@ -19,7 +19,7 @@ menu names as "as of this writing".
 
 ```mermaid
 flowchart LR
-    Tag["git tag v1.5.0<br/>or Run workflow"] --> Plan["plan<br/>build name = x.y.z<br/>build number = 100 + run_number"]
+    Tag["git tag v1.6.0<br/>or Run workflow"] --> Plan["plan<br/>build name = x.y.z<br/>build number = 100 + run_number"]
     Plan --> iOS["ios (macos-26)<br/>keychain + 2 profiles<br/>flutter build ipa<br/>xcodebuild -exportArchive destination=upload"]
     Plan --> And["android (ubuntu)<br/>key.properties<br/>flutter build appbundle + apk<br/>upload-google-play → internal"]
     iOS --> TF["TestFlight"]
@@ -37,7 +37,7 @@ Identifiers that must match everywhere:
 | Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` — the paid Apple Developer Program (Individual) since 2026-10-29; the Team ID did not change on enrolment (§ 1.2), so the keychain and the dev build carry over |
 | Android package / application id | `dev.calorietracker.calorie_tracker` (permanent after the first Play upload) |
 | Display name | `Chopstats` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `Chopstats · 筷拍` (owner decision R-F9, 2026-10-29; formerly BiteWise) |
-| Version | `app/pubspec.yaml` `version: 1.5.0+7` → `CFBundleShortVersionString` / `versionName` = `1.5.0`; the build number is stamped by CI (§ 5) |
+| Version | `app/pubspec.yaml` `version: 1.6.0+8` → `CFBundleShortVersionString` / `versionName` = `1.6.0`; the build number is stamped by CI (§ 5) |
 
 ---
 
@@ -478,7 +478,7 @@ All done; this is what each one is and where it lives.
 - `ITSAppUsesNonExemptEncryption = false` in `app/ios/Runner/Info.plist`
   (the app only uses OS TLS, the keychain and SHA hashing, which are exempt;
   without the key every build sits in "Missing Compliance" until answered).
-- `app/pubspec.yaml` is `1.5.0+7`; the ShareExtension takes its version from
+- `app/pubspec.yaml` is `1.6.0+8`; the ShareExtension takes its version from
   `$(FLUTTER_BUILD_NAME)` / `$(FLUTTER_BUILD_NUMBER)`.
 
 1. **Privacy manifests — done.** Both targets ship a
@@ -853,7 +853,14 @@ step. Revisit if the app is ever published with a developer-run service.
   the version page asks nothing. (Apple notes exempt apps may still owe a
   yearly self-classification report to the US government; see Apple's
   "Complying with Encryption Export Regulations".)
-- **Content rights**: no third-party content.
+- **Content rights** (App Information; owner's answer): App Store Connect
+  holds *does not use third-party content* (checked 2026-11-10). From 1.6.0,
+  once the user turns the restaurant lookup on, the app shows the nutrition
+  numbers a restaurant chain publishes, found on the web by the user's own AI
+  service and shown with a link to the page they came from. Whether that
+  counts is the owner's call: answering *Yes* then asks you to confirm you
+  have the rights or are otherwise permitted to use it (published nutrition
+  facts, shown with their source). 1.6.0 was submitted with the old answer.
 - **App Review Information → Sign-in**: not required. **Notes** (draft,
   mirrored in `app/ios/store/metadata/en-US/review_notes.txt`; re-check every
   label against the build actually submitted; the own-server paragraph
@@ -868,14 +875,14 @@ step. Revisit if the app is ever published with a developer-run service.
   > Before anything is sent to a provider for the first time, the app asks
   > for permission in a dialog that names the company and what is sent;
   > Settings › "Stop Sharing with …" withdraws it. Everything else stays on
-  > the phone in a local database.
+  > the phone in a local database, unless the restaurant lookup is on.
   >
   > To test: a fresh install opens on Settings. Tap AI Provider › API Key;
-  > Google Gemini is already selected — paste the key below into "Gemini
-  > API key". Go to Today › "+ Log" › "From recent photos", allow Photos
+  > Google Gemini is already selected; paste the key below into "Gemini
+  > API key". Go to Today › "Log" › "From recent photos", allow Photos
   > access, pick a food photo and tap Allow in the consent dialog; the
   > estimate appears after a few seconds. Without food photos on the test
-  > device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
+  > device, use "Log" › "Describe a meal" (e.g. "a bowl of beef noodle
   > soup"), or share a food image from Safari or Photos into Chopstats via
   > the share sheet. There is no in-app camera: photos come from the system
   > Camera app.
@@ -893,6 +900,33 @@ step. Revisit if the app is ever published with a developer-run service.
   > app: there are no in-app purchases, and this option unlocks nothing. The
   > bitewise://setup link fills in that server's address and key after a
   > confirmation dialog.
+  >
+  > New in 1.6.0
+  >
+  > "Log" › "My usual foods" lists meals logged on at least 2 of the last 90
+  > days; tapping one logs it again, with no AI and nothing sent. To see it:
+  > "Log" › "Enter manually", type Oatmeal in "What was it?" and 350 in
+  > "Calories", pick yesterday with the date button, tap "Add". Repeat for the
+  > day before, then open the list.
+  >
+  > Settings › Restaurant nutrition › "Lookups" (off by default) needs the
+  > user's own server or an Anthropic or OpenRouter key; with the demo key it
+  > is grayed out ("Not available with Gemini yet.") and no lookup can be
+  > tested. A consent sheet names the recipient first. For a photo meal from a
+  > US chain, the recipient gets chain and food names with amounts and
+  > searches the web for the chain's published nutrition. To see the sheet
+  > with no key: API Key › "Anthropic Claude", then "Lookups" › "When unsure".
+  > "Use location" there lets the app read a restaurant or takeout photo's
+  > location from the photo library, check on the phone that it is in the US
+  > and, for a restaurant meal, query Apple MapKit once per lookup. There is
+  > no location permission. Only Apple gets the coordinates; the AI service
+  > gets at most nearby chain names. Confirming or rejecting a result keeps
+  > that spot on the phone, rounded to about 100 m.
+  >
+  > "Meta glasses photos" (Settings › Photos, on by default): the app does not
+  > connect to glasses. With Watch Camera Roll on, a photo it recognizes as
+  > saved by the Meta AI app is checked for food on the phone and not sent if
+  > none is found.
   >
   > Demo key (Gemini, capped, revoked after review): <key>
 
@@ -921,7 +955,7 @@ step. Revisit if the app is ever published with a developer-run service.
   a version, Play wants it unique forever; `run_number` only grows and the
   `+100` keeps CI above the hand-built era. Never lower
   `BUILD_NUMBER_OFFSET` in `release.yml`. Hand builds on the Mac use the `+N`
-  from pubspec (currently 7); keep those below 100.
+  from pubspec (currently 8); keep those below 100.
 - A tag may be pushed again only after deleting it on both sides; prefer a
   patch bump instead.
 - Friends' sideloaded APKs: Android upgrades when `versionCode` grows **and**
@@ -1089,10 +1123,10 @@ GitHub release notes warn about it either way.
 ## 8. Running a release (cheat sheet)
 
 ```bash
-# 1. in the shipping PR: app/pubspec.yaml  version: 1.5.1+8   (the +N is for hand builds only)
+# 1. in the shipping PR: app/pubspec.yaml  version: 1.6.0+8   (the +N is for hand builds only)
 # 2. edit app/android/whatsnew/whatsnew-*.{en-US,zh-CN}
 # 3. merge to main, then
-git tag v1.5.1 && git push origin v1.5.1     # iOS + Android lanes, external-eligible TestFlight build, GitHub Release
+git tag v1.6.0 && git push origin v1.6.0     # iOS + Android lanes, external-eligible TestFlight build, GitHub Release
 # or: Actions → Release → Run workflow → lane testflight | play | both (internal-only TestFlight build)
 ```
 

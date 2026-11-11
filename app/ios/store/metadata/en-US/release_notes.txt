@@ -1,6 +1,6 @@
-The first App Store release of Chopstats · 筷拍.
+A new list of the foods you eat often.
 
-• Log a meal from a photo, from a description in any language, or by typing the numbers yourself
-• Watch Camera Roll: new food photos are logged automatically
-• Today, 30-day history, weight and body measurements
-• Bring your own AI key: no account, and your log stays on your phone
+• My usual foods, under Log: meals you logged on at least 2 of the last 90 days. Tap one to log it again. No photo, no AI.
+• If you set a food's numbers yourself, the app may offer them on later photos of it. Nothing changes until you accept.
+• Restaurant nutrition (off by default, US meals only): for photo meals, your AI service can look up the nutrition a chain publishes. Needs your own server or an Anthropic or OpenRouter key.
+• Fixes: Stop Sharing now also stops photos already waiting to be sent; some Settings messages close by themselves; dates no longer slip a day when clocks change.
