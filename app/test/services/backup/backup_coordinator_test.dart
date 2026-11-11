@@ -905,6 +905,30 @@ void main() {
     expect(cloud.headerOf(kRecordsFileName)!.meals, 4);
   });
 
+  test('combine is not said as done when the backup after the merge did not '
+      'land', () async {
+    final failing = _WritesFail();
+    cloud = failing;
+    c = make();
+    await seed(dao, '2026-11-10');
+    await ready();
+    await run();
+    await otherPhoneBackup(meals: 2, path: 'staging.json');
+    cloud.conflictVersions[kRecordsFileName] = [cloud.files.remove('staging.json')!];
+    await seed(dao, '2026-11-11');
+    expect(await run(), BackupState.twoCopies);
+    final seq = cloud.headerOf(kRecordsFileName)!.seq;
+    failing.fail = CloudResultKind.timeout;
+    expect(await c.combine(), isFalse,
+        reason: 'the row says "Combined the two copies and backed up." on true');
+    expect(c.status.value.state, BackupState.failed);
+    expect(cloud.headerOf(kRecordsFileName)!.seq, seq, reason: 'nothing landed');
+    expect((await dao.backupCounts()).meals, 4, reason: 'the merge is in');
+    failing.fail = null;
+    expect(await c.backUpNow(), BackupState.uploading);
+    expect(cloud.headerOf(kRecordsFileName)!.meals, 4);
+  });
+
   test('combine when iCloud kept the other phone\'s write as the current '
       'file: both merged, ours written over it', () async {
     await seed(dao, '2026-11-10');
@@ -1333,6 +1357,36 @@ void main() {
     expect(backupHoldsCatchUp(prefs, now.add(const Duration(minutes: 31))),
         isFalse);
   });
+}
+
+/// An iCloud folder whose writes answer [fail] while it is set (a timeout,
+/// a full iCloud): nothing lands.
+class _WritesFail extends FakeCloudTransport {
+  CloudResultKind? fail;
+
+  @override
+  Future<CloudResult> write({
+    required String path,
+    required String sourcePath,
+    required int bytes,
+    required String sha256,
+    required WriteExpect expect,
+    String? keepPreviousPath,
+    required bool allowDownload,
+    required Duration timeout,
+  }) async {
+    final kind = fail;
+    if (kind != null) return CloudResult(kind);
+    return super.write(
+        path: path,
+        sourcePath: sourcePath,
+        bytes: bytes,
+        sha256: sha256,
+        expect: expect,
+        keepPreviousPath: keepPreviousPath,
+        allowDownload: allowDownload,
+        timeout: timeout);
+  }
 }
 
 /// A database whose month of pictures cannot be read.

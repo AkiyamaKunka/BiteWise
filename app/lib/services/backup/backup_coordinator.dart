@@ -1581,7 +1581,8 @@ class BackupCoordinator {
 
   /// Combine the Two Copies: each conflict version another install wrote
   /// is merged in, marked resolved, and this phone's record written over
-  /// the file.
+  /// the file. True only once that write landed (the row says "backed
+  /// up"); the merge itself stays in either way.
   Future<bool> combine() async {
     _setBusy(true);
     try {
@@ -1633,8 +1634,9 @@ class BackupCoordinator {
         return _t.resolveConflicts(kRecordsFileName, ids.toList());
       });
       if (!ok) return false;
-      await _run(const _Run(_Kind.now, force: true, takeover: true));
-      return true;
+      final state =
+          await _run(const _Run(_Kind.now, force: true, takeover: true));
+      return state == BackupState.uploading || state == BackupState.ok;
     } finally {
       _setBusy(false);
     }
