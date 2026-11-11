@@ -82,14 +82,98 @@ Map<String, dynamic> redactRaw(Map<String, dynamic> body) {
   return Map<String, dynamic>.from(walk(body) as Map);
 }
 
+/// Citation links a model writes OUTSIDE the answer's JSON strings:
+/// `([text](url))`, xAI's `[[n]](url)` and a bare `[text](url)`.
+/// OpenRouter's default web-plugin prompt asks for the last kind ("cite them
+/// using markdown links named using the domain of the source"). The link
+/// text may hold no double quote, so a JSON array of strings never matches.
+final List<RegExp> _citationLinks = [
+  RegExp(r'\(\s*\[[^\]"\n]*\]\(https?://[^)\s"]*\)\s*\)'),
+  RegExp(r'\[\[\d+\]\]\(https?://[^)\s"]*\)'),
+  RegExp(r'\[[^\]"\n]*\]\(https?://[^)\s"]*\)'),
+];
+
 /// The JSON object inside a model's answer text: fences stripped, then the
-/// outermost `{…}` (parseAiJson's rules).
+/// outermost `{…}` (parseAiJson's rules). When that cut is not an object —
+/// a citation link before or after the JSON widens it, one inside breaks
+/// it — the first `{` whose brace-balanced object decodes once the citation
+/// links outside its strings are left out. A link INSIDE a string is that
+/// string's value and stays. Null when neither finds one.
 Object? decodeAnswerJson(String text) {
+  Object? cut;
   try {
-    return parseAiJson(text);
+    cut = parseAiJson(text);
+    if (cut is Map) return cut;
   } on FormatException {
-    return null;
+    cut = null;
   }
+  return _balancedJsonObject(text) ?? cut;
+}
+
+/// The first `{` in [text] whose balanced object decodes to a JSON object
+/// (at most [maxStarts] tries: prose before the JSON may hold braces too).
+Map<String, dynamic>? _balancedJsonObject(String text, {int maxStarts = 32}) {
+  var tries = 0;
+  for (var start = text.indexOf('{');
+      start != -1 && tries < maxStarts;
+      start = text.indexOf('{', start + 1), tries++) {
+    // An unclosed `{` in prose before the JSON swallows the rest: go on to
+    // the next `{`.
+    final candidate = _objectTextAt(text, start);
+    if (candidate == null) continue;
+    try {
+      final v = jsonDecode(candidate);
+      if (v is Map<String, dynamic>) return v;
+    } on FormatException {
+      continue;
+    }
+  }
+  return null;
+}
+
+/// The text of the object opening at [start], up to its matching `}`, with
+/// citation links outside its strings left out; null when it never closes.
+String? _objectTextAt(String text, int start) {
+  final out = StringBuffer();
+  var depth = 0;
+  var inString = false;
+  var i = start;
+  while (i < text.length) {
+    final c = text[i];
+    if (inString) {
+      out.write(c);
+      if (c == '\\' && i + 1 < text.length) {
+        out.write(text[i + 1]);
+        i += 2;
+        continue;
+      }
+      if (c == '"') inString = false;
+      i++;
+      continue;
+    }
+    if (c == '[' || c == '(') {
+      Match? link;
+      for (final re in _citationLinks) {
+        link = re.matchAsPrefix(text, i);
+        if (link != null) break;
+      }
+      if (link != null) {
+        i = link.end;
+        continue;
+      }
+    }
+    out.write(c);
+    if (c == '"') {
+      inString = true;
+    } else if (c == '{') {
+      depth++;
+    } else if (c == '}') {
+      depth--;
+      if (depth == 0) return out.toString();
+    }
+    i++;
+  }
+  return null;
 }
 
 abstract class HttpLookupClient implements LookupClient {

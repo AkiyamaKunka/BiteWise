@@ -157,6 +157,72 @@ void main() {
     expect(b.failure!.code, LookupFailureCode.refused);
   });
 
+  group('markdown links outside a JSON string do not lose the answer', () {
+    // OpenRouter's default web-plugin prompt tells the model to "cite them
+    // using markdown links": a link before, after or inside the JSON object
+    // (outside its strings) must not turn a paid lookup into a permanent
+    // malformed reply.
+    const page = 'https://www.mcdonalds.com/us/en-us/product/big-mac.html';
+    const link = '[mcdonalds.com]($page)';
+    String plainJson() {
+      final msg = ((fixture('openrouter_found.json')['choices'] as List).first
+          as Map)['message'] as Map;
+      return (msg['content'] as String)
+          .replaceFirst(RegExp(r'^```json\s*'), '')
+          .replaceFirst(RegExp(r'\s*```$'), '');
+    }
+
+    Future<LookupOutcome> answer(String content) {
+      final body = fixture('openrouter_found.json');
+      (((body['choices'] as List).first as Map)['message'] as Map)['content'] =
+          content;
+      return _client(ScriptedClient([(_) => json200(body)]))
+          .submit(bigMacRequest);
+    }
+
+    final json = plainJson();
+    final rows = <String, String>{
+      'a Sources line after': '$json\n\nSources: $link',
+      'a bare link after': '$json\n$link',
+      'a link before': 'From $link:\n\n$json',
+      'links before and after': 'Per $link:\n$json\nSee also $link.',
+      'a link after a value':
+          json.replaceFirst('"calories": 590', '"calories": 590 ($link)'),
+      'a bare link after a value':
+          json.replaceFirst('"calories": 590', '"calories": 590 $link'),
+      'a link between members':
+          json.replaceFirst('"source_type"', '$link "source_type"'),
+      'fenced, then a link': '```json\n$json\n```\nSource: $link',
+      'prose with braces and brackets first':
+          'Results [1] {see below} from $link:\n$json',
+      'an unclosed brace and a quote in the prose first':
+          'Note: { the "Big Mac from $link\n$json',
+    };
+    for (final MapEntry(key: label, value: content) in rows.entries) {
+      test(label, () async {
+        final o = await answer(content);
+        expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
+        expect(o.result!.matches.single.publishedCalories, 590);
+        expect(o.result!.sourceUrl, page);
+        expect(o.rawText, content, reason: 'the reply is kept as sent');
+      });
+    }
+
+    test('a link inside a string is the string\'s value, untouched',
+        () async {
+      final o =
+          await answer(json.replaceFirst('"notes": ""', '"notes": "$link"'));
+      expect(o.isDone, isTrue, reason: '${o.failure}');
+      expect(o.result!.notes, link);
+    });
+
+    test('prose with only a link is still malformed', () async {
+      final o = await answer('The Big Mac has 590 calories ($link).');
+      expect(o.failure!.code, LookupFailureCode.malformedReply);
+      expect(o.result, isNull);
+    });
+  });
+
   test('content as a parts list is read too', () async {
     final body = fixture('openrouter_found.json');
     final msg = ((body['choices'] as List).first as Map)['message'] as Map;
