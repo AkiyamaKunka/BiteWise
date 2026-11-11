@@ -8,6 +8,7 @@ library;
 import 'dart:async';
 
 import 'package:calorie_tracker/ui/app.dart';
+import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:calorie_tracker/ui/theme/app_dialog.dart';
 import 'package:flutter/gestures.dart' show HitTestResult;
@@ -135,6 +136,61 @@ void main() {
         reason: 'unscrollable, the field got 0 pt at AX4-AX5');
     expect(_hittable(tester, find.byKey(const Key('save'))), isTrue);
   });
+
+  // My usual foods' "Log it again?" (usual foods §4): a similar meal was
+  // logged in the last 3 h, and its long name is in the body.
+  for (final (locale, name) in const [
+    (Locale('en'), 'Grilled chicken salad with quinoa and avocado'),
+    (Locale('zh'), '牛油果藜麦烤鸡肉沙拉配溏心蛋'),
+  ]) {
+    testWidgets('${locale.languageCode}: "Log it again?" reads in full and '
+        'keeps its buttons', (tester) async {
+      DateTime now() => DateTime(2026, 11, 7, 12, 30);
+      final dao = FakeDao();
+      for (final (id, date, time) in const [
+        (10, '2026-11-04', '12:15 PM'),
+        (11, '2026-11-06', '12:40 PM'),
+        (12, '2026-11-07', '11:50 AM'),
+      ]) {
+        dao.seed(foodMeal(
+            id: id,
+            date: date,
+            time: time,
+            description: name,
+            items: [foodItem(name, 450, p: 40, c: 12, f: 22)]));
+      }
+      final usual = await makeUsualFoods(dao, clock: now);
+      await pumpApp(tester, UsualFoodsScreen(usual: usual, now: now),
+          size: const Size(375, 667), locale: locale, scale: _ax5);
+      final row = find.text(name);
+      await tester.ensureVisible(row);
+      await tester.pumpAndSettle();
+      await tester.tap(row);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final dialog = find.byKey(const Key('usualAgainDialog'));
+      expect(dialog, findsOneWidget);
+      expect(tester.widget<AlertDialog>(dialog).scrollable, isTrue);
+      for (final key in ['usualAgainConfirm', 'usualAgainCancel']) {
+        expect(_hittable(tester, find.byKey(Key(key))), isTrue,
+            reason: '$key stays pinned and visible');
+      }
+      // The whole sentence, the meal's name in it, is reachable by
+      // scrolling the dialog.
+      final body =
+          find.descendant(of: dialog, matching: find.textContaining(name));
+      final scrollable =
+          find.descendant(of: dialog, matching: find.byType(Scrollable));
+      await tester.dragUntilVisible(
+          body, scrollable.first, const Offset(0, -80));
+      expect(_hittable(tester, find.byKey(const Key('usualAgainConfirm'))),
+          isTrue);
+      // A style move changes no outcome: Cancel logs nothing.
+      await tester.tap(find.byKey(const Key('usualAgainCancel')));
+      await tester.pumpAndSettle();
+      expect(dao.meals, hasLength(3));
+    });
+  }
 
   testWidgets('the setup-link confirmation scrolls as a whole at AX5',
       (tester) async {
