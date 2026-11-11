@@ -7,14 +7,14 @@ a short summary of the day's meals) and returns a nutrition estimate.
 Before anything is sent to a provider for the first time, the app asks
 for permission in a dialog that names the company and what is sent;
 Settings › "Stop Sharing with …" withdraws it. Everything else stays on
-the phone in a local database.
+the phone in a local database, unless the restaurant lookup is on.
 
 To test: a fresh install opens on Settings. Tap AI Provider › API Key;
-Google Gemini is already selected — paste the key below into "Gemini
-API key". Go to Today › "+ Log" › "From recent photos", allow Photos
+Google Gemini is already selected; paste the key below into "Gemini
+API key". Go to Today › "Log" › "From recent photos", allow Photos
 access, pick a food photo and tap Allow in the consent dialog; the
 estimate appears after a few seconds. Without food photos on the test
-device, use "+ Log" › "Describe a meal" (e.g. "a bowl of beef noodle
+device, use "Log" › "Describe a meal" (e.g. "a bowl of beef noodle
 soup"), or share a food image from Safari or Photos into Chopstats via
 the share sheet. There is no in-app camera: photos come from the system
 Camera app.
@@ -32,5 +32,32 @@ there switches the app away from the Gemini key. Nothing is sold in the
 app: there are no in-app purchases, and this option unlocks nothing. The
 bitewise://setup link fills in that server's address and key after a
 confirmation dialog.
+
+New in 1.6.0
+
+"Log" › "My usual foods" lists meals logged on at least 2 of the last 90
+days; tapping one logs it again, with no AI and nothing sent. To see it:
+"Log" › "Enter manually", type Oatmeal in "What was it?" and 350 in
+"Calories", pick yesterday with the date button, tap "Add". Repeat for the
+day before, then open the list.
+
+Settings › Restaurant nutrition › "Lookups" (off by default) needs the
+user's own server or an Anthropic or OpenRouter key; with the demo key it
+is grayed out ("Not available with Gemini yet.") and no lookup can be
+tested. A consent sheet names the recipient first. For a photo meal from a
+US chain, the recipient gets chain and food names with amounts and
+searches the web for the chain's published nutrition. To see the sheet
+with no key: API Key › "Anthropic Claude", then "Lookups" › "When unsure".
+"Use location" there lets the app read a restaurant or takeout photo's
+location from the photo library, check on the phone that it is in the US
+and, for a restaurant meal, query Apple MapKit once per lookup. There is
+no location permission. Only Apple gets the coordinates; the AI service
+gets at most nearby chain names. Confirming or rejecting a result keeps
+that spot on the phone, rounded to about 100 m.
+
+"Meta glasses photos" (Settings › Photos, on by default): the app does not
+connect to glasses. With Watch Camera Roll on, a photo it recognizes as
+saved by the Meta AI app is checked for food on the phone and not sent if
+none is found.
 
 Demo key (Gemini, capped, revoked after review): <key>
