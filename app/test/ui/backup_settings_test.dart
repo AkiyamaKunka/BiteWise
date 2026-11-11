@@ -8,6 +8,7 @@ import 'dart:io';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
+import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/backup/backup_coordinator.dart';
 import 'package:calorie_tracker/services/backup/backup_format.dart';
 import 'package:calorie_tracker/services/backup/backup_prefs.dart';
@@ -103,6 +104,54 @@ void main() {
         lastOkAt: DateTime.now(), bytes: 1024));
     await tester.pumpAndSettle();
     expect(find.textContaining('months of pictures'), findsNothing);
+  });
+
+  testWidgets('off, no account or iCloud unavailable: the footer says '
+      'nothing is copied and points to an export, in English and Chinese',
+      (tester) async {
+    final zh = AppLocalizationsZh();
+    for (final locale in const [Locale('en'), Locale('zh')]) {
+      await pumpApp(
+          tester,
+          Scaffold(
+            body: ListView(children: [
+              DataSection(
+                dao: dao,
+                onOpenPrivacyPolicy: () {},
+                backup: backup,
+                filePicker: _Picker(const []),
+              ),
+            ]),
+          ),
+          locale: locale,
+          size: const Size(390, 1400));
+      final l = locale.languageCode == 'zh' ? zh : _en;
+      String footer() => tester
+          .widgetList<Text>(find.byType(Text))
+          .map((t) => t.data ?? '')
+          .where((s) => s.contains(l.settingsDataFooter))
+          .join();
+      for (final state in const [
+        BackupState.off,
+        BackupState.noAccount,
+        BackupState.unavailable,
+      ]) {
+        // A backup landed before: the footer still goes by the state.
+        backup.debugSetStatus(
+            BackupStatus(state, lastOkAt: DateTime.now(), bytes: 10));
+        await tester.pumpAndSettle();
+        expect(footer(), contains(l.backupICloudFooterOff),
+            reason: '$locale $state');
+        expect(footer(), isNot(contains(l.backupICloudFooterBefore)));
+        expect(footer(), isNot(contains(l.backupICloudFooter)));
+      }
+      backup.debugSetStatus(BackupStatus(BackupState.ok,
+          lastOkAt: DateTime.now(), bytes: 10));
+      await tester.pumpAndSettle();
+      expect(footer(), contains(l.backupICloudFooter), reason: '$locale ok');
+    }
+    expect(_en.backupICloudFooterOff, contains('export a file'));
+    expect(zh.backupICloudFooterOff, contains('导出'));
   });
 
   testWidgets('each state shows only its own rows', (tester) async {

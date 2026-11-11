@@ -396,9 +396,7 @@ class _DataSectionState extends State<DataSection> {
     final l = context.l10n;
     final backup = widget.backup;
     final footer = status != null
-        ? (backupHasWritten(status)
-            ? l.backupICloudFooter
-            : l.backupICloudFooterBefore)
+        ? backupFooter(l, status)
         : widget.androidBackupNote
             ? l.backupAndroidFooter
             : l.settingsDataFooter;

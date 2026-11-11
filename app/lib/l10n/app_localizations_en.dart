@@ -3240,6 +3240,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Your meals, weight, measurements, workouts and meal pictures are copied to iCloud Drive › Chopstats, which you can see, copy or delete in the Files app. API keys are never included, and the developer receives nothing.';
 
   @override
+  String get backupICloudFooterOff =>
+      'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.';
+
+  @override
   String get backupAndroidFooter =>
       'Android\'s own backup can keep this app\'s data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.';
 

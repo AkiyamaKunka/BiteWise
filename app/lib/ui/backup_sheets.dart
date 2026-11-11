@@ -80,6 +80,19 @@ String _statusLine(BuildContext context, BackupStatus s, {DateTime? now}) {
 /// Whether the footer may name the Files app: only once a backup landed.
 bool backupHasWritten(BackupStatus s) => s.lastOkAt != null;
 
+/// The Settings › Your Data footer on iPhone, by what iCloud Backup does
+/// now: while it is off, or iCloud has no account or is not available,
+/// nothing is copied, so the footer says so and points to an export
+/// (never "they come back if you reinstall"). Otherwise it names the Files
+/// app once a backup landed.
+String backupFooter(AppLocalizations l, BackupStatus s) => switch (s.state) {
+      BackupState.off ||
+      BackupState.noAccount ||
+      BackupState.unavailable =>
+        l.backupICloudFooterOff,
+      _ => backupHasWritten(s) ? l.backupICloudFooter : l.backupICloudFooterBefore,
+    };
+
 void _snack(BuildContext context, String text) {
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));

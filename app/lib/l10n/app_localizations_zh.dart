@@ -3007,6 +3007,10 @@ class AppLocalizationsZh extends AppLocalizations {
       '你的餐食、体重、身体围度、运动记录和餐食图片会复制到 iCloud 云盘 › Chopstats，你可以在「文件」App 里查看、复制或删除。API Key 绝不会包含在内，开发者也收不到任何内容。';
 
   @override
+  String get backupICloudFooterOff =>
+      '现在没有任何内容复制到 iCloud，所以重新安装筷拍或换新 iPhone 后，你的餐食不会回来。在那之前，请先导出一个文件，之后再导入。API Key 绝不会包含在内，开发者也收不到任何内容。';
+
+  @override
   String get backupAndroidFooter =>
       'Android 自带的备份可以把应用数据保存在你的 Google 账户里。换手机之前，请导出一个文件，再在新手机上导入。导入会合并：已有的餐不会被改动。';
 

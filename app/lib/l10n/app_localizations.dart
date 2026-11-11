@@ -5033,6 +5033,12 @@ abstract class AppLocalizations {
   /// **'Your meals, weight, measurements, workouts and meal pictures are copied to iCloud Drive › Chopstats, which you can see, copy or delete in the Files app. API keys are never included, and the developer receives nothing.'**
   String get backupICloudFooter;
 
+  /// Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, or iCloud Drive is not available for the app: nothing is copied, so it says to export a file before reinstalling or changing phones.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
+  String get backupICloudFooterOff;
+
   /// Footer of Settings › Your Data on Android (there is no automatic backup file on Android).
   ///
   /// In en, this message translates to:
