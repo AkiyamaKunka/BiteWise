@@ -309,10 +309,16 @@ enum _TurnOff { keep, delete }
 
 /// The switch turned off: Keep the Backup in iCloud (default) / Delete
 /// It… (red, confirmed; this install's files only) / Cancel (the switch
-/// stays on).
+/// stays on). With no backup of this iPhone's in iCloud there is nothing
+/// to keep or delete, so it turns off at once, like any switch.
 Future<void> showTurnOffSheet(
     BuildContext context, BackupCoordinator backup) async {
   final l = context.l10n;
+  final s = backup.status.value;
+  if (!backupHasWritten(s) && !s.ownsFiles) {
+    await backup.turnOff(deleteFiles: false);
+    return;
+  }
   final choice = await showGroupedSheet<_TurnOff>(
     context,
     title: l.backupTurnOffTitle,
@@ -324,15 +330,13 @@ Future<void> showTurnOffSheet(
           showChevron: false,
           onTap: () => Navigator.of(ctx).pop(_TurnOff.keep),
         ),
-        if (backupHasWritten(backup.status.value) ||
-            backup.status.value.ownsFiles)
-          GroupedRow(
-            key: const Key('backupTurnOffDelete'),
-            title: l.backupTurnOffDelete,
-            destructive: true,
-            showChevron: false,
-            onTap: () => Navigator.of(ctx).pop(_TurnOff.delete),
-          ),
+        GroupedRow(
+          key: const Key('backupTurnOffDelete'),
+          title: l.backupTurnOffDelete,
+          destructive: true,
+          showChevron: false,
+          onTap: () => Navigator.of(ctx).pop(_TurnOff.delete),
+        ),
         GroupedRow(
           key: const Key('backupTurnOffCancel'),
           title: l.cancel,

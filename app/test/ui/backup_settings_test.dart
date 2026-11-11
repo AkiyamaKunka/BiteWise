@@ -285,6 +285,24 @@ void main() {
     expect(find.text(_en.backupStatusOff), findsOneWidget);
   });
 
+  testWidgets('nothing of this iPhone\'s in iCloud: the switch turns off '
+      'without asking to keep a backup that is not there', (tester) async {
+    await prefs.setBool(BackupPrefs.kNoticeSeen, true);
+    await pump(tester, b: backup);
+    for (final state in const [BackupState.noAccount, BackupState.never]) {
+      await prefs.remove(BackupPrefs.kEnabled);
+      backup.debugSetStatus(BackupStatus(state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('backupSwitch')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backupTurnOffKeep')), findsNothing,
+          reason: '$state: "Keep the Backup in iCloud" with none there');
+      expect(prefs.getBool(BackupPrefs.kEnabled), isFalse, reason: '$state');
+      expect(find.text(_en.backupStatusOff), findsOneWidget);
+    }
+    expect(cloud.log, isEmpty);
+  });
+
   testWidgets('switched off with this iPhone\'s backup still in iCloud: '
       'Delete iCloud Backup… is offered', (tester) async {
     await pump(tester, b: backup);
