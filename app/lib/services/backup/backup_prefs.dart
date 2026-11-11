@@ -80,6 +80,7 @@ class BackupPrefs {
   static const String kDeviceKey = '${prefix}device_key';
   static const String kLastSeq = '${prefix}last_seq';
   static const String kPendingSeq = '${prefix}pending_seq';
+  static const String kTopSeq = '${prefix}top_seq';
   static const String kAdoptedFrom = '${prefix}adopted_from';
   static const String kOwnedPath = '${prefix}owned_path';
   static const String kFirstEmptyAt = '${prefix}first_empty_at';
@@ -100,10 +101,10 @@ class BackupPrefs {
   /// Every key this file owns (the reset paths and the privacy test).
   static const List<String> allKeys = [
     kEnabled, kNoticeSeen, kInstallId, kDeviceKey, kLastSeq, kPendingSeq,
-    kAdoptedFrom, kOwnedPath, kFirstEmptyAt, kMonths, kLastRecordsChange,
-    kLastOkAt, kLastAttemptAt, kLastBytes, kLastError, kLastMeals,
-    kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused, kPausedCount,
-    kSkippedMonths,
+    kTopSeq, kAdoptedFrom, kOwnedPath, kFirstEmptyAt, kMonths,
+    kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes, kLastError,
+    kLastMeals, kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused,
+    kPausedCount, kSkippedMonths,
   ];
 
   Future<void> reload() => _p.reload();
@@ -129,6 +130,14 @@ class BackupPrefs {
   /// after it landed, the file carries this seq and is still ours.
   int get pendingSeq => _p.getInt(kPendingSeq) ?? 0;
   Future<void> setPendingSeq(int v) => _p.setInt(kPendingSeq, v);
+
+  /// The highest seq this install id ever took, in any iCloud account.
+  /// Unlike [lastSeq], [forgetBackup] keeps it: after an account change
+  /// and back, the old account's file at a seq up to this one is still
+  /// this install's, and a seq is never taken twice. A new install id
+  /// starts again at 0.
+  int get topSeq => _p.getInt(kTopSeq) ?? 0;
+  Future<void> setTopSeq(int v) => _p.setInt(kTopSeq, v);
 
   /// The install whose backup this one restored or took over.
   String get adoptedFrom => _p.getString(kAdoptedFrom) ?? '';

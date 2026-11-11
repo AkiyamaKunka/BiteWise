@@ -447,6 +447,7 @@ class BackupCoordinator {
       }
       await _prefs.setDeviceKey(key);
       await _prefs.setInstallId(_newInstallId());
+      await _prefs.setTopSeq(0);
     }
     return _prefs.installId;
   }
@@ -631,15 +632,17 @@ class BackupCoordinator {
       case CloudResultKind.ok:
         current = h.header;
         // A write of this install's that landed but was never recorded
-        // (the app was killed first): the file is this install's at that
-        // seq, recorded now, before the next seq is taken. Otherwise one
-        // more run that fails after taking its seq would leave the file at
-        // a seq neither expected one names (changedElsewhere).
+        // (the app was killed first), or this install's file in an iCloud
+        // account it left and came back to (lastSeq was forgotten, not
+        // topSeq): the file is this install's at that seq, recorded now,
+        // before the next seq is taken. Otherwise one more run that fails
+        // after taking its seq, or the way back, would leave the file at a
+        // seq no expected one names (changedElsewhere).
         final pending = _prefs.pendingSeq;
         if (current != null &&
             current.installId == me &&
             current.seq > lastSeq &&
-            current.seq <= pending) {
+            current.seq <= max(pending, _prefs.topSeq)) {
           lastSeq = current.seq;
           await _prefs.setLastSeq(lastSeq);
           if (pending == lastSeq) await _prefs.setPendingSeq(0);
@@ -690,8 +693,11 @@ class BackupCoordinator {
       return _set(BackupState.shrink, count: replaced.meals);
     }
 
+    // Above every seq this install id ever took, in any account, and after
+    // a takeover too: a seq names one write.
     final oldPending = _prefs.pendingSeq;
-    final newSeq = max(lastSeq, oldPending) + 1;
+    final newSeq = max(max(lastSeq, oldPending), _prefs.topSeq) + 1;
+    await _prefs.setTopSeq(newSeq);
     await _prefs.setPendingSeq(newSeq);
     var bytes = 0;
 

@@ -565,6 +565,37 @@ void main() {
       expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
     });
 
+    test('signed in to another account and back: this install\'s own file '
+        'is still its own', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      expect(await run(), BackupState.uploading); // seq 1 in account A
+      await seed(dao, '2026-11-11');
+      expect(await run(), BackupState.uploading); // seq 2
+      final inA = Map.of(cloud.files);
+      // Account B: its own (empty) folder, the notice again, a backup.
+      cloud.accountChangedOnce = true;
+      expect(await run(), BackupState.needsNotice);
+      cloud.files.clear();
+      await noticeAnswered();
+      await seed(dao, '2026-11-12');
+      expect(await c.backUpNow(), BackupState.uploading);
+      // Back to account A, whose file this install wrote at seq 2.
+      cloud.accountChangedOnce = true;
+      expect(await run(), BackupState.needsNotice);
+      cloud.files
+        ..clear()
+        ..addAll(inA);
+      await noticeAnswered();
+      await seed(dao, '2026-11-13');
+      expect(await c.backUpNow(), BackupState.uploading);
+      final seq = cloud.headerOf(kRecordsFileName)!.seq;
+      expect(seq, greaterThan(3), reason: 'a seq is never taken twice');
+      await seed(dao, '2026-11-14');
+      expect(await run(), BackupState.uploading);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, seq + 1);
+    });
+
     test('no account / unavailable', () async {
       await seed(dao, '2026-11-10');
       await ready();
