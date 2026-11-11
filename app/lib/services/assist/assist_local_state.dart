@@ -84,25 +84,44 @@ const double assistDailyMaxUsd = 0.50;
 /// The app's daily lookup ledger: [assistDailyCap] lookups and
 /// [assistDailyMaxUsd] dollars per local day, kept in `assist.daily.v1`
 /// so a restart does not reset it. A stored day other than today reads as
-/// a fresh day. Synchronous reads (the prefs cache); writes are fired and
-/// never throw.
+/// a fresh day. Synchronous reads; writes are fired and never throw.
+///
+/// The value is read from the preferences ONCE, here, and kept: every read
+/// and every count after that works on this copy, and each count writes
+/// the preference from it. The shared preferences cache is not read again,
+/// because other code reloads that instance while the app is in use (the
+/// late-import record, the background watermark, the deferred notes), and
+/// a reload whose reply was already on its way when a lookup was counted
+/// puts the older snapshot back over the cache: the lookup was uncounted
+/// and the cap let one more through (2026-11-10). Only the app engine
+/// writes this key, and it builds exactly one of these (di.dart), so the
+/// copy is the truth.
 class AssistDailyBudget implements LookupBudget {
   AssistDailyBudget(
     this._prefs, {
     this.cap = assistDailyCap,
     this.maxUsdPerDay = assistDailyMaxUsd,
     DateTime Function()? clock,
-  }) : _clock = clock ?? DateTime.now;
+  }) : _clock = clock ?? DateTime.now {
+    try {
+      _raw = _prefs.getString(assistDailyPrefsKey);
+    } catch (_) {
+      _raw = null; // a value of another type reads as a fresh day
+    }
+  }
 
   final SharedPreferences _prefs;
   final int cap;
   final double maxUsdPerDay;
   final DateTime Function() _clock;
 
+  /// The stored value as this instance last read or wrote it.
+  String? _raw;
+
   ({String date, int count, double usd}) _today() {
     final today = isoDate(_clock());
     try {
-      final raw = _prefs.getString(assistDailyPrefsKey);
+      final raw = _raw;
       if (raw != null) {
         final m = jsonDecode(raw);
         if (m is Map && m['date'] == today) {
@@ -121,12 +140,11 @@ class AssistDailyBudget implements LookupBudget {
 
   void _write(String date, int count, double usd) {
     try {
+      final raw = jsonEncode({'date': date, 'count': count, 'usd': usd});
+      _raw = raw;
       unawaited(
         _prefs
-            .setString(
-              assistDailyPrefsKey,
-              jsonEncode({'date': date, 'count': count, 'usd': usd}),
-            )
+            .setString(assistDailyPrefsKey, raw)
             .then((_) {}, onError: (Object _) {}),
       );
     } catch (_) {}

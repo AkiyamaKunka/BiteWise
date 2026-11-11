@@ -31,15 +31,35 @@ const int kUsualChoicesCap = 200;
 final RegExp _hideIdRe = RegExp(r'^[0-9a-f]{16}$');
 
 /// Built once (di.dart) from the SharedPreferences instance the app
-/// already awaits. Reads are synchronous (the preferences cache); writes
-/// are serialized, so two quick taps never lose one another's entry.
+/// already awaits. Reads are synchronous; writes are serialized, so two
+/// quick taps never lose one another's entry.
+///
+/// The value is read from the preferences ONCE, here, and kept: every read
+/// and every change after that works on this copy, and each change writes
+/// the preference from it. The shared preferences cache is not read again,
+/// because other code reloads that instance while the app is in use (the
+/// late-import record, the background watermark, the deferred notes), and
+/// a reload whose reply was already on its way when a choice was written
+/// puts the older snapshot back over the cache: the choice came back
+/// undone, and the next one, built from that cache and written whole,
+/// erased it from storage (2026-11-10). Only the app engine writes this
+/// key, and it builds exactly one of these, so the copy is the truth.
 class UsualChoices {
   UsualChoices(this._prefs, {DateTime Function()? clock})
-      : _clock = clock ?? DateTime.now;
+      : _clock = clock ?? DateTime.now {
+    try {
+      _raw = _prefs.getString(usualChoicesPrefsKey);
+    } catch (_) {
+      _raw = null; // a value of another type reads as empty
+    }
+  }
 
   final SharedPreferences _prefs;
   final DateTime Function() _clock;
   Future<void> _tail = Future.value();
+
+  /// The stored value as this instance last read or wrote it.
+  String? _raw;
 
   /// The choices now, as an immutable snapshot for the pure rules.
   UsualChoicesView view() {
@@ -94,7 +114,7 @@ class UsualChoices {
     final hidden = <_Hidden>[];
     final declined = <_Declined>[];
     try {
-      final raw = _prefs.getString(usualChoicesPrefsKey);
+      final raw = _raw;
       if (raw == null) return (hidden, declined);
       final doc = jsonDecode(raw);
       if (doc is! Map || doc['v'] != 1) return (hidden, declined);
@@ -151,9 +171,11 @@ class UsualChoices {
           {'m': d.m, 'h': d.h, 'at': usualStamp(d.at)},
       ],
     };
-    // The cache updates at once; the platform write finishes later.
+    // Our copy updates at once; the platform write finishes later.
+    final raw = jsonEncode(doc);
+    _raw = raw;
     unawaited(_prefs
-        .setString(usualChoicesPrefsKey, jsonEncode(doc))
+        .setString(usualChoicesPrefsKey, raw)
         .then((_) {}, onError: (Object _) {}));
   }
 }

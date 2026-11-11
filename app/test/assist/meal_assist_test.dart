@@ -2303,8 +2303,9 @@ void main() {
       expect(h.lookups.polls, hasLength(1));
       expect(h.lookups.submits, hasLength(1));
 
-      // A new day.
-      await h.prefs.remove(assistDailyPrefsKey);
+      // A new day: the budget keeps its own count, so the clock says so
+      // (the stored value is no longer re-read under a live budget).
+      h.now = DateTime(_now.year, _now.month, _now.day + 1, 0, 5);
       await h.assist.sweep();
       expect(h.lookups.submits, hasLength(2));
       expect(h.lookups.submits.last.toJson(), h.lookups.submits.first.toJson());
