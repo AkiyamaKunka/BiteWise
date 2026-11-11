@@ -48,10 +48,10 @@ accounts, and receives none of your data.**
   you set them and, for a food you renamed, the name the AI first gave it.
   Working them out sends nothing: no AI call, no lookup. A meal you log or
   change with them is then like any other meal: its summary goes with the
-  next photo you log that day, as described under "What is sent, and to
-  whom". Which foods you hid from **My usual foods** and which offers you
-  turned down are kept with the app's settings as short codes, not food
-  names.
+  next photo you log that day (and with one taken before 4 a.m. the next
+  day), as described under "What is sent, and to whom". Which foods you hid
+  from **My usual foods** and which offers you turned down are kept with
+  the app's settings as short codes, not food names.
 
 The app contains no analytics, no crash reporting, no advertising and no
 tracking SDK, and it does not use your data to track you across apps or
@@ -309,7 +309,7 @@ date. Questions: open an issue at
 - 通知（餐食卡片、每日总结）在手机上生成。
 - 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
 - 仅当你开启**「餐厅营养」查询**时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；每条都记录最后一次使用的时间，空间不够时先删除最久没用的；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的**「清除已记住的地点」**会删除这些地点、保存的查询结果和还在等待的查询。在不保存地点的 Android 上，**「清除保存的查询结果」**会删除保存的查询结果和还在等待的查询。
-- **「我常吃的」**和**「你平时的数值」**都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按**「采用」**）。这一餐会在该食物上保存一个小标记，说明数值是你设定的，以及你改过名的食物最初由 AI 给出的名称。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时，它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
+- **「我常吃的」**和**「你平时的数值」**都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按**「采用」**）。这一餐会在该食物上保存一个小标记，说明数值是你设定的，以及你改过名的食物最初由 AI 给出的名称。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时（第二天凌晨 4 点前拍的照片也一样），它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
 
 应用不包含任何统计分析、崩溃上报、广告或追踪 SDK，也不会利用你的数据在其他应用或网站之间追踪你。
 

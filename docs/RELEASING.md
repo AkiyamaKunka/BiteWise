@@ -338,9 +338,11 @@ When merging #22 after this PR:
   merged count; both files must still have the same keys. Do not drop the
   check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
-  with "the next photo you log that day". #22 also sends the day before's
-  meals with a photo taken before 4 a.m., so say that in this bullet too,
-  in both languages, when you give #22 its merge date.
+  with "the next photo you log that day (and with one taken before 4 a.m.
+  the next day)", because #22 also sends the day before's meals with a
+  photo taken before 4 a.m. Both languages say so since the merge of `main`
+  into #22, and `tests/test_privacy_docs.py` pins it; keep it when you give
+  #22 its merge date.
 
 **After #22, one restyle commit:**
 - Move the *My usual foods* screen, the usual-numbers card and the chip to

@@ -527,6 +527,21 @@ def test_policy_usual_foods_and_saved_answers():
     assert "is then like any other meal" in en_phone
     assert "用它们记录或修改的餐食之后和其他餐食一样" in zh_phone
     assert "之后和其他餐食一样" in zh_phone
+    # Like any other meal, it also goes with a photo taken before 4 a.m. the
+    # next day (run 7's previous-day leftover context, photo_pipeline.dart),
+    # the same as the policy's "What is sent with a photo" and "What that
+    # recipient receives" bullets say (#22 merge step, docs/RELEASING.md).
+    assert ("its summary goes with the next photo you log that day (and "
+            "with one taken before 4 a.m. the next day), as described "
+            "under \"What is sent, and to whom\".") in en_phone
+    assert ("当天你再记录照片时（第二天凌晨 4 点前拍的照片也一样），它的简短摘要会"
+            "一起发送，见「发送了什么、发给谁」。") in zh_phone
+    for half, needle in ((_flat(en), "before 4 a.m."),
+                         (_flat(zh), "凌晨 4 点前")):
+        # The usual-foods bullet, "What is sent with a photo" and "What
+        # that recipient receives": every place that says which meals go
+        # with a photo names the day before too.
+        assert half.count(needle) >= 3, needle
     assert ("Which foods you hid from %s and which offers you turned down "
             "are kept with the app's settings as short codes, not food "
             "names." % usual_en) in en_phone
