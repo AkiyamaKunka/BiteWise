@@ -174,6 +174,37 @@ void main() {
     expect(zh.backupICloudFooterOff, contains('导出'));
   });
 
+  test('blocked or paused (nothing of this iPhone\'s is copied): the footer '
+      'says so too, in English and Chinese', () {
+    final other = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 40,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    for (final l in [_en, AppLocalizationsZh()]) {
+      for (final state in const [
+        BackupState.otherDevice,
+        BackupState.changedElsewhere,
+        BackupState.unknownFile,
+        BackupState.missing,
+        BackupState.shrink,
+      ]) {
+        for (final last in [null, DateTime.now()]) {
+          expect(
+              backupFooter(l,
+                  BackupStatus(state, lastOkAt: last, other: other, count: 40)),
+              l.backupICloudFooterOff,
+              reason: '${l.localeName} $state last=$last');
+        }
+      }
+      // Still backing up: the copy is promised.
+      expect(backupFooter(l, const BackupStatus(BackupState.never)),
+          l.backupICloudFooterBefore);
+      expect(
+          backupFooter(
+              l, BackupStatus(BackupState.ok, lastOkAt: DateTime.now())),
+          l.backupICloudFooter);
+    }
+  });
+
   testWidgets('no iCloud identity: the line asks to sign in AND to turn on '
       'iCloud Drive for Chopstats, in English and Chinese', (tester) async {
     // iOS gives no identity token when signed out and also while iCloud
