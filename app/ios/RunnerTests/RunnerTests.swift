@@ -2358,6 +2358,14 @@ class CloudFilesTests: XCTestCase {
     XCTAssertEqual(Set(other.keys), ["status", "domain", "code"])
   }
 
+  func testOneFileNotAvailableYetIsNotDownloadedNeverTheContainerUnavailable() {
+    let notYet = NSError(domain: NSCocoaErrorDomain, code: 4353)
+    XCTAssertEqual(
+      CloudFiles.errorReply(notYet, protectedDataAvailable: true)["status"] as? String, "notDownloaded")
+    XCTAssertEqual(
+      CloudFiles.reply(.failure(notYet), protectedDataAvailable: true)["status"] as? String, "notDownloaded")
+  }
+
   func testMetadataPathsAreRelativeToDocuments() {
     let docs = URL(fileURLWithPath: "/x/Mobile Documents/iCloud~dev/Documents", isDirectory: true)
     XCTAssertEqual(

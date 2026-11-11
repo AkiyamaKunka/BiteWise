@@ -533,13 +533,18 @@ final class CloudFiles {
 
   // MARK: - errors
 
-  /// Codes only: never the message or a path.
+  /// Codes only: never the message or a path. 4353
+  /// (NSUbiquitousFileUnavailableError) is about one file: another device
+  /// has not uploaded it yet, or it cannot be fetched now. It is answered
+  /// as notDownloaded, which Dart treats as "later", never as
+  /// `unavailable`, which means the container itself is missing (no
+  /// entitlement, iCloud Drive off for the app).
   static func errorReply(_ error: NSError, protectedDataAvailable: Bool) -> [String: Any] {
     if error.domain == NSCocoaErrorDomain {
       switch error.code {
       case 4354: return ["status": "quota"]
       case 4355: return ["status": "serverUnavailable"]
-      case 4353: return ["status": "unavailable"]
+      case 4353: return ["status": "notDownloaded"]
       case 640: return ["status": "diskFull"]
       // A `where` binds only the pattern it follows: one per code.
       case 513 where !protectedDataAvailable, 257 where !protectedDataAvailable:
