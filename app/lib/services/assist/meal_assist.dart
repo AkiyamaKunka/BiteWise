@@ -2246,7 +2246,33 @@ class MealAssist {
     }
     if (failure?.code == LookupFailureCode.dailyCap) {
       // A day's cap (the app's or the server's): tomorrow. Not a try.
-      _backoffUntil = DateTime(now.year, now.month, now.day + 1);
+      final tomorrow = DateTime(now.year, now.month, now.day + 1);
+      _backoffUntil = tomorrow;
+      if (polled && job != null) {
+        // The server failed this job at its own cap and keeps it so for
+        // 24 h: polled again tomorrow it would answer the same and put
+        // everything off for one more day. The record stops being a job,
+        // as when the server lost it at the cap: an automatic lookup waits
+        // as a retry until midnight (also across a restart: the backoff is
+        // in memory only), its tries unspent; the editor's own lookup ends
+        // here, as a failed one does.
+        if (job.manual) {
+          await _state.removeJob(mealId);
+        } else {
+          await _state.putJob(
+            mealId,
+            AssistJob(
+              reqHash: prepared.hash,
+              at: job.at,
+              nextAt: tomorrow,
+              attempts: job.attempts,
+              place: prepared.place,
+              country: prepared.country,
+              recipient: support.recipientStamp,
+            ),
+          );
+        }
+      }
       return _Run(code, stop: true);
     }
     final transient =
