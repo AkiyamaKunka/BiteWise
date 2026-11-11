@@ -690,8 +690,15 @@ jobs:
           "${tools}apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/apk-cert.txt"
           aab_sha=$(sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' "$RUNNER_TEMP/aab-cert.txt" | head -n 1 | tr -d ':[:space:]' | tr 'A-F' 'a-f')
           apk_sha=$(sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' "$RUNNER_TEMP/apk-cert.txt" | head -n 1 | tr -d '[:space:]')
-          [ -n "$apk_sha" ] && [ "$apk_sha" = "$aab_sha" ] \
-            || { echo "::error::app-release.apk is not signed with the same key as the bundle"; exit 1; }
+          # Certificate fingerprints are public (anyone can read them from
+          # the published APK), so both are printed.
+          echo "bundle signer SHA-256: ${aab_sha:-<none>}"
+          echo "APK signer SHA-256:    ${apk_sha:-<none>}"
+          if [ -z "$apk_sha" ] || [ "$apk_sha" != "$aab_sha" ]; then
+            grep -E '^Signer|DN:|WARNING|ERROR' "$RUNNER_TEMP/apk-cert.txt" | head -n 8 || true
+            echo "::error::app-release.apk is not signed with the same key as the bundle"
+            exit 1
+          fi
           badging=$("${tools}aapt2" dump badging "$apk")
           code=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$badging" | head -n 1)
           abis=$(sed -n "s/^native-code: //p" <<< "$badging" | tr -d "'")
