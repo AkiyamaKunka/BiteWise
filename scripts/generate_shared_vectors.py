@@ -1007,6 +1007,13 @@ def build_restaurant_lookup():
     match("trademark_sign", "Whataburger™")
     match("trademark_sign_before_a_suffix", "Whataburger™ (Main St)")
     match("service_mark_sign", "Raising Cane’s℠")
+    # Names as the chains print them: Gong cha's logo (Traditional),
+    # 85°C's cups, a receipt without periods, Traditional characters.
+    match("traditional_logo_with_latin", "貢茶 Gong cha")
+    match("degree_brand_alone", "85°C")
+    match("receipt_without_periods", "PF CHANGS #8812")
+    match("periods_in_an_initialism", "T.G.I. Friday's")
+    match("traditional_characters", "塔可貝爾")
     # A&W Root Beer is Keurig Dr Pepper's drink, not A&W Restaurants: the
     # printed drink brand names no chain; the restaurant's full name and
     # its own web host still do.

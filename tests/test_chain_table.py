@@ -307,6 +307,34 @@ NOT_THE_CHAINS_DOMAINS = (
 )
 
 
+# Names as the chains print them that no variant used to cover: Gong cha's
+# own logo is the Traditional 貢茶, 85°C's cups print just "85°C", and a
+# receipt drops the periods of P.F. Chang's and T.G.I. Friday's. Every
+# Chinese name the table lists also matches in Traditional characters.
+@pytest.mark.parametrize("printed,key", [
+    ("貢茶", "gong_cha"),
+    ("貢茶 Gong cha", "gong_cha"),
+    ("85°C", "eighty_five_c"),
+    ("85C", "eighty_five_c"),
+    ("PF Chang's", "pf_changs"),
+    ("PF CHANGS #8812", "pf_changs"),
+    ("T.G.I. Friday's", "tgi_fridays"),
+    ("芭斯羅繽", "baskin_robbins"),
+    ("香啡繽", "coffee_bean"),
+    ("酷聖石", "cold_stone"),
+    ("棒約翰", "papa_johns"),
+    ("巴黎貝甜", "paris_baguette"),
+    ("皮爺咖啡", "peets"),
+    ("塔可貝爾", "taco_bell"),
+    ("多樂之日", "tous_les_jours"),
+    ("溫蒂漢堡", "wendys"),
+])
+def test_names_as_printed_match_their_chain(printed, key):
+    assert rl.match_chain(printed) == key
+    assert rl.chain_name_only(printed, rl.LOOKUP_BRAND_MAX) == \
+        rl.chain_by_key(key)["name"]
+
+
 @pytest.mark.parametrize("domain", NOT_THE_CHAINS_DOMAINS)
 def test_lapsed_and_unrelated_domains_stay_out(domain):
     for c in CHAINS:
