@@ -2345,6 +2345,39 @@ class CloudFilesTests: XCTestCase {
     XCTAssertNotNil(read("Meal Pictures/2026-10.json"), "another install's file stays")
   }
 
+  func testTheFolderIsRemovedOnlyWhenNothingIsInIt() throws {
+    let folder = root.appendingPathComponent("Meal Pictures", isDirectory: true)
+    try put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-10.json")
+    XCTAssertFalse(CloudFiles.removeFolderIfEmpty(folder), "a month landed: the folder stays")
+    XCTAssertNotNil(read("Meal Pictures/2026-10.json"))
+    try FileManager.default.removeItem(at: files.url(for: "Meal Pictures/2026-10.json")!)
+    try putPlaceholder(for: "Meal Pictures/2026-11.json")
+    XCTAssertFalse(CloudFiles.removeFolderIfEmpty(folder), "a placeholder is something")
+    try FileManager.default.removeItem(
+      at: folder.appendingPathComponent(".2026-11.json.icloud"))
+    XCTAssertTrue(CloudFiles.removeFolderIfEmpty(folder))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+  }
+
+  func testDeletingTheLastMonthRemovesTheFolderAndOneLeftKeepsIt() throws {
+    let folder = root.appendingPathComponent("Meal Pictures", isDirectory: true)
+    try put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-09.json")
+    try put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-10.json")
+    _ = deleteAll(["Meal Pictures/2026-09.json"], expect: .init(installId: me))
+    // The removal is its own coordination after the reply: give it time.
+    for _ in 0..<20 { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+    XCTAssertNotNil(read("Meal Pictures/2026-10.json"), "another install's month stays")
+    try FileManager.default.removeItem(at: files.url(for: "Meal Pictures/2026-10.json")!)
+    try put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-11.json")
+    _ = deleteAll(["Meal Pictures/2026-11.json"], expect: .init(installId: me))
+    var gone = false
+    for _ in 0..<60 where !gone {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+      gone = !FileManager.default.fileExists(atPath: folder.path)
+    }
+    XCTAssertTrue(gone, "the empty folder is removed")
+  }
+
   // MARK: - errors and the plugin's pure parts
 
   func testErrorsCarryCodesNeverText() {

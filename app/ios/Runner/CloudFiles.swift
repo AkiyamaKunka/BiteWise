@@ -455,16 +455,29 @@ final class CloudFiles {
     next(0)
   }
 
-  /// Removes `Meal Pictures` once nothing is left in it.
+  /// Removes `Meal Pictures` once nothing is left in it. Whether it is
+  /// empty is decided inside the coordinated access, by rmdir, which never
+  /// removes a folder with anything in it: a month that landed after the
+  /// first look (another phone's file iCloud is downloading, a write from
+  /// the other engine) is never deleted with the folder, and never without
+  /// its owner being checked.
   func removeEmptyPicturesFolder() {
     let folder = root.appendingPathComponent(CloudFiles.picturesFolder, isDirectory: true)
-    let fm = FileManager.default
-    guard let left = try? fm.contentsOfDirectory(atPath: folder.path), left.isEmpty else { return }
+    // A cheap first look: nothing to coordinate while files are there.
+    guard let first = try? FileManager.default.contentsOfDirectory(atPath: folder.path),
+      first.isEmpty
+    else { return }
     let intent = NSFileAccessIntent.writingIntent(with: folder, options: .forDeleting)
     NSFileCoordinator(filePresenter: nil).coordinate(with: [intent], queue: OperationQueue()) { error in
       guard error == nil else { return }
-      try? fm.removeItem(at: intent.url)
+      _ = CloudFiles.removeFolderIfEmpty(intent.url)
     }
+  }
+
+  /// Removes [folder] only if it is empty (rmdir): a hidden `.icloud`
+  /// placeholder of a month not downloaded counts as something in it.
+  static func removeFolderIfEmpty(_ folder: URL) -> Bool {
+    rmdir(folder.path) == 0
   }
 
   // MARK: - read
