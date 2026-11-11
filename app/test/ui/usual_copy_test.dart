@@ -151,6 +151,9 @@ final Map<String, String Function(AppLocalizations l)> _render = {
 final _cjk = RegExp(r'[⺀-鿿豈-﫿＀-￯　-〿]');
 final _placeholderRe = RegExp(r'\{(\w+)\}');
 
+/// The message keys in each ARB file once `main` (776) was merged into #22.
+const _keyCount = 809;
+
 Directory _appRoot() {
   var dir = Directory.current;
   while (!File('${dir.path}/pubspec.yaml').existsSync()) {
@@ -189,9 +192,19 @@ void main() {
   });
 
   test('both files have the same 809 keys', () {
-    expect(_messageKeys(en), hasLength(809));
-    expect(_messageKeys(zh), hasLength(809));
+    expect(_messageKeys(en), hasLength(_keyCount));
+    expect(_messageKeys(zh), hasLength(_keyCount));
     expect(_messageKeys(zh).toSet(), _messageKeys(en).toSet());
+  });
+
+  // The #22 merge list in docs/RELEASING.md tells whoever merges which
+  // count to pin; a count changed here and not there sends them the wrong
+  // number (it said 807 after the merge pinned 809).
+  test('docs/RELEASING.md gives the count this test pins', () {
+    final releasing = File(
+      '${_appRoot().parent.path}/docs/RELEASING.md',
+    ).readAsStringSync().replaceAll(RegExp(r'\s+'), ' ');
+    expect(releasing, contains('$_keyCount on the merged #22 branch'));
   });
 
   test('every new key is in both files, after diagConfidenceLine', () {

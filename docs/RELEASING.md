@@ -332,11 +332,11 @@ When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
 - `app/test/ui/usual_copy_test.dart` pins the number of keys in each ARB
-  file: 774 on `main`, and 807 on #22's branch since `main` was merged
-  into it (#22 adds 33 at 8e24932, none shared with this PR). If either
+  file: 776 on `main`, 809 on the merged #22 branch (#22 adds 33 at
+  8e24932, main's 1.6.0 review fixes added 2, none shared). If either
   side adds keys before #22 merges, change the number in that test to the
-  merged count; both files must still have the same keys. Do not drop the
-  check.
+  merged count, and here too (the test checks this line); both files must
+  still have the same keys. Do not drop the check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
   with "the next photo you log that day (and with one taken before 4 a.m.
   the next day)", because #22 also sends the day before's meals with a
