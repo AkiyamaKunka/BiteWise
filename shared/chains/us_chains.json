@@ -1,5 +1,5 @@
 {
-  "_comment": "BiteWise's own table of US restaurant chains with 20 or more locations (the FDA menu-labeling threshold, 21 CFR 101.11). The restaurant assist matches nearby places and printed brands against THIS table on the device and sends only the canonical name of a matched chain; 'domains' are the chain's own registrable web domains that may serve as an official nutrition source. Edit here, then run scripts/sync_shared.py. Refresh yearly.",
+  "_comment": "BiteWise's own table of US restaurant chains with 20 or more locations (the FDA menu-labeling threshold, 21 CFR 101.11). The restaurant assist matches nearby places and printed brands against THIS table on the device and sends only the canonical name of a matched chain; 'domains' are the chain's own registrable web domains that may serve as an official nutrition source; where the registrable domain is a whole company's, only the chain's own host on it (cafe.hardrock.com: hardrock.com also serves Hard Rock's casinos, hotels and their other restaurants). Edit here, then run scripts/sync_shared.py. Refresh yearly.",
   "source": "Curated 2026-10-23 for BiteWise and audited 2026-10-24. Chains and US unit counts come from the public lists below. Each domain was checked live (HTTPS home page reachable with the chain's own name in its title, or a bot-protection page on a domain long known to be the chain's), scanned for parked-domain and hosting-placeholder pages, and compared with the website Apple Maps lists for the chain's own locations. Chains whose domain had lapsed, redirected to an unrelated site or could not be verified were left out, as were chains without a source showing 20+ US locations; the audit also removed chains that have since dropped below 20 US locations or closed.",
   "sources": [
     {
@@ -49,7 +49,7 @@
       "key": "a_and_w",
       "name": "A&W Restaurants",
       "aliases": [
-        "A&W",
+        "A&W Restaurant",
         "A&W All American Food"
       ],
       "domains": [
@@ -178,7 +178,9 @@
       "key": "baskin_robbins",
       "name": "Baskin-Robbins",
       "zh_name": "芭斯罗缤",
-      "aliases": [],
+      "aliases": [
+        "芭斯羅繽"
+      ],
       "domains": [
         "baskinrobbins.com"
       ],
@@ -801,7 +803,9 @@
       "key": "coffee_bean",
       "name": "The Coffee Bean & Tea Leaf",
       "zh_name": "香啡缤",
-      "aliases": [],
+      "aliases": [
+        "香啡繽"
+      ],
       "domains": [
         "coffeebean.com"
       ],
@@ -821,7 +825,8 @@
       "name": "Cold Stone Creamery",
       "zh_name": "酷圣石",
       "aliases": [
-        "Cold Stone"
+        "Cold Stone",
+        "酷聖石"
       ],
       "domains": [
         "coldstonecreamery.com"
@@ -1169,7 +1174,9 @@
       "key": "eighty_five_c",
       "name": "85°C Bakery Cafe",
       "zh_name": "85度C",
-      "aliases": [],
+      "aliases": [
+        "85°C"
+      ],
       "domains": [
         "85cbakerycafe.com"
       ],
@@ -1467,7 +1474,9 @@
       "key": "gong_cha",
       "name": "Gong cha",
       "zh_name": "贡茶",
-      "aliases": [],
+      "aliases": [
+        "貢茶"
+      ],
       "domains": [
         "gong-cha.com",
         "gongchausofficial.com"
@@ -1613,7 +1622,7 @@
       "aliases": [],
       "domains": [
         "hardrockcafe.com",
-        "hardrock.com"
+        "cafe.hardrock.com"
       ],
       "size": "20_plus"
     },
@@ -2694,7 +2703,9 @@
       "key": "papa_johns",
       "name": "Papa John's",
       "zh_name": "棒约翰",
-      "aliases": [],
+      "aliases": [
+        "棒約翰"
+      ],
       "domains": [
         "papajohns.com"
       ],
@@ -2733,7 +2744,9 @@
       "key": "paris_baguette",
       "name": "Paris Baguette",
       "zh_name": "巴黎贝甜",
-      "aliases": [],
+      "aliases": [
+        "巴黎貝甜"
+      ],
       "domains": [
         "parisbaguette.com"
       ],
@@ -2743,7 +2756,9 @@
       "key": "peets",
       "name": "Peet's Coffee",
       "zh_name": "皮爷咖啡",
-      "aliases": [],
+      "aliases": [
+        "皮爺咖啡"
+      ],
       "domains": [
         "peets.com"
       ],
@@ -2794,7 +2809,8 @@
       "key": "pf_changs",
       "name": "P.F. Chang's",
       "aliases": [
-        "P.F. Chang's China Bistro"
+        "P.F. Chang's China Bistro",
+        "PF Chang's"
       ],
       "domains": [
         "pfchangs.com"
@@ -3496,7 +3512,9 @@
       "key": "taco_bell",
       "name": "Taco Bell",
       "zh_name": "塔可贝尔",
-      "aliases": [],
+      "aliases": [
+        "塔可貝爾"
+      ],
       "domains": [
         "tacobell.com"
       ],
@@ -3613,7 +3631,9 @@
     {
       "key": "tgi_fridays",
       "name": "TGI Fridays",
-      "aliases": [],
+      "aliases": [
+        "T.G.I. Friday's"
+      ],
       "domains": [
         "tgifridays.com"
       ],
@@ -3678,7 +3698,9 @@
       "key": "tous_les_jours",
       "name": "Tous les Jours",
       "zh_name": "多乐之日",
-      "aliases": [],
+      "aliases": [
+        "多樂之日"
+      ],
       "domains": [
         "tljus.com"
       ],
@@ -3850,7 +3872,8 @@
       "name": "Wendy's",
       "zh_name": "温蒂汉堡",
       "aliases": [
-        "Wendy's Old Fashioned Hamburgers"
+        "Wendy's Old Fashioned Hamburgers",
+        "溫蒂漢堡"
       ],
       "domains": [
         "wendys.com"

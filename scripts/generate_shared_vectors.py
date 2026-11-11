@@ -875,6 +875,18 @@ def build_restaurant_lookup():
         "order_merchant": "Joe's Pizza - 7 Carmine St, New York",
         "chains": ["chipotle"]})
     req("merchant_delivery_app", {"order_merchant": "Uber Eats"})
+    req("brand_and_merchant_with_mark_signs", {
+        "items": [{"name": "Chicken sandwich", "qty": 1,
+                   "brand": "Chick-fil-A™"}],
+        "order_merchant": "Whataburger™ #812"})
+    req("drink_brand_names_no_chain", {
+        "items": [{"name": "Brisket plate", "qty": 1, "unit": "plate",
+                   "brand": ""},
+                  {"name": "Root beer", "qty": 1, "unit": "can",
+                   "brand": "A&W Root Beer"},
+                  {"name": "Cream soda", "qty": 1, "unit": "can",
+                   "brand": "A&W"}],
+        "chains": []})
     req("merchant_numbered_chain_name", {
         "order_merchant": "Seasons 52 #12, Chicago",
         "items": [{"name": "Burger", "brand": "Hwy 55 Burgers 1200 Main"}]})
@@ -964,6 +976,7 @@ def build_restaurant_lookup():
     tokens("leading_the", "The The Habit")
     tokens("only_the", "The")
     tokens("fullwidth_and_ligature", "ＫＦＣ ﬁve ﬂavors™")
+    tokens("trademark_signs", "Whataburger™ Chick-fil-A™ Raising Cane’s℠")
     tokens("digits_and_case", "7 BREW Hwy 55 99 Restaurant")
     tokens("not_a_string", None)
 
@@ -991,6 +1004,23 @@ def build_restaurant_lookup():
     match("latin_folding", "Café Rio")
     match("degree_sign", "85°C Bakery Cafe")
     match("ampersand", "Noodles and Company")
+    match("trademark_sign", "Whataburger™")
+    match("trademark_sign_before_a_suffix", "Whataburger™ (Main St)")
+    match("service_mark_sign", "Raising Cane’s℠")
+    # Names as the chains print them: Gong cha's logo (Traditional),
+    # 85°C's cups, a receipt without periods, Traditional characters.
+    match("traditional_logo_with_latin", "貢茶 Gong cha")
+    match("degree_brand_alone", "85°C")
+    match("receipt_without_periods", "PF CHANGS #8812")
+    match("periods_in_an_initialism", "T.G.I. Friday's")
+    match("traditional_characters", "塔可貝爾")
+    # A&W Root Beer is Keurig Dr Pepper's drink, not A&W Restaurants: the
+    # printed drink brand names no chain; the restaurant's full name and
+    # its own web host still do.
+    match("drink_brand_bare", "A&W")
+    match("drink_brand_with_flavor", "A&W Root Beer")
+    match("drink_brand_chain_full_name", "A&W Restaurant")
+    match("drink_brand_chain_host", "A&W", "www.awrestaurants.com")
     match("prefix_longest", "Taco Bell Cantina")
     match("independent", "Junior's Restaurant")
     match("receipt_store_number", "KWIK TRIP #1234")
@@ -999,6 +1029,14 @@ def build_restaurant_lookup():
     match("audited_domain", None, "locations.goldenkrust.com")
     match("lapsed_domain", None, "www.gongchausa.com")
     match("host_and_name_agree", "Chipotle", "www.chipotle.com")
+    # hardrock.com is Hard Rock International's; only cafe.hardrock.com
+    # (and hardrockcafe.com) is Hard Rock Cafe's.
+    match("company_host_other_restaurant", "Council Oak Steaks & Seafood",
+          "casino.hardrock.com")
+    match("company_host_alone", None, "hotel.hardrock.com")
+    match("company_host_the_chain_by_name", "Hard Rock Cafe",
+          "casino.hardrock.com")
+    match("host_scoped_domain", None, "cafe.hardrock.com")
     match("host_and_name_disagree", "Starbucks", "www.mcdonalds.com")
     match("host_only_subdomain", "", "locations.wendys.com")
     match("host_trailing_dot", None, "WWW.STARBUCKS.COM.")

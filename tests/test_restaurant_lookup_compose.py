@@ -188,6 +188,14 @@ def test_printed_brand_and_merchant_go_out_only_as_a_table_name():
     ("Uber Eats", ""),
     ("麦当劳（时代广场店）", "McDonald's"),
     ("Seasons 52 #12, Chicago", "Seasons 52"),
+    # Keurig Dr Pepper's root beer, not A&W Restaurants
+    ("A&W", ""),
+    ("A&W Root Beer", ""),
+    ("A&W RESTAURANT #4410", "A&W Restaurants"),
+    # ™ and ℠ as printed (the prompt asks for brands copied exactly)
+    ("Whataburger™", "Whataburger"),
+    ("Chick-fil-A™ #0421", "Chick-fil-A"),
+    ("Raising Cane’s℠", "Raising Cane's"),
     (None, ""),
     (42, ""),
 ])

@@ -28,6 +28,7 @@ import 'package:calorie_tracker/ui/widgets/pickers.dart';
 import 'package:calorie_tracker/ui/widgets/reply_note.dart';
 import 'package:calorie_tracker/ui/widgets/states.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/app_theme_harness.dart';
@@ -57,6 +58,16 @@ class _SheetHost extends StatelessWidget {
           ),
         ),
       );
+}
+
+/// Services with My usual foods on (the real service over an empty log),
+/// so the sheet shows its row as the app does.
+Future<UiServices> _withUsual() async {
+  final dao = FakeDao();
+  return makeServices(
+      dao: dao,
+      usualFoods: await makeUsualFoods(dao,
+          clock: () => DateTime(2026, 11, 7, 12, 30)));
 }
 
 Color _badgeFill(WidgetTester tester, String rowKey) {
@@ -113,9 +124,9 @@ void main() {
   setUpAll(loadIphoneFonts);
 
   group('the + Log sheet', () {
-    testWidgets('a title2 heading; badges by role: Fix is indigo, not red',
-        (tester) async {
-      await pumpApp(tester, _SheetHost(makeServices()));
+    testWidgets('a title2 heading; badges by role: Fix is indigo, not red, '
+        'My usual foods grey', (tester) async {
+      await pumpApp(tester, _SheetHost(await _withUsual()));
       await tester.tap(find.byKey(const Key('openSheet')));
       await tester.pumpAndSettle();
 
@@ -131,12 +142,13 @@ void main() {
       expect(_badgeFill(tester, 'addManually'), AppColors.light.badgeNeutral);
       expect(_badgeFill(tester, 'addFromText'), AppColors.light.badgeNeutral);
       expect(_badgeFill(tester, 'addLeftover'), AppColors.light.badgeNeutral);
+      expect(_badgeFill(tester, 'addUsual'), AppColors.light.badgeNeutral);
       expect(_badgeFill(tester, 'addFromPhotos'), AppColors.light.badgeBrand);
     });
 
     testWidgets('dark: a #1C1C1E sheet with #2C2C2E cells (not #1C1C1E cells '
         'on black)', (tester) async {
-      await pumpApp(tester, _SheetHost(makeServices()),
+      await pumpApp(tester, _SheetHost(await _withUsual()),
           brightness: Brightness.dark);
       await tester.tap(find.byKey(const Key('openSheet')));
       await tester.pumpAndSettle();
@@ -153,12 +165,14 @@ void main() {
           .first);
       expect(cells.color, const Color(0xFF2C2C2E));
       expect(_badgeFill(tester, 'addFixMeal'), AppColors.dark.badgeInfo);
+      expect(_badgeFill(tester, 'addUsual'), AppColors.dark.badgeNeutral);
     });
 
     for (final locale in [_en, _zh]) {
       testWidgets('AX5 on an SE (${locale.languageCode}): no overflow, and '
           'the last row scrolls into reach', (tester) async {
-        final services = makeServices();
+        // With My usual foods on: the sheet's tallest form.
+        final services = await _withUsual();
         await pumpApp(tester, _SheetHost(services),
             size: const Size(375, 667),
             scale: 53 / 17,
@@ -167,6 +181,21 @@ void main() {
         await tester.tap(find.byKey(const Key('openSheet')));
         await tester.pumpAndSettle();
         expect(tester.takeException(), isNull);
+
+        final usual = find.byKey(const Key('addUsual'));
+        expect(usual, findsOneWidget);
+        await tester.ensureVisible(usual);
+        await tester.pumpAndSettle();
+        final l = _l(locale);
+        for (final text in [l.addUsual, l.addManualNote]) {
+          expect(find.descendant(of: usual, matching: find.text(text)),
+              findsOneWidget, reason: text);
+        }
+        for (final p in tester.renderObjectList<RenderParagraph>(
+            find.descendant(of: usual, matching: find.byType(RichText)))) {
+          expect(p.didExceedMaxLines, isFalse,
+              reason: '"${p.text.toPlainText()}" was cut');
+        }
 
         await tester.ensureVisible(find.byKey(const Key('addFixMeal')));
         await tester.pumpAndSettle();

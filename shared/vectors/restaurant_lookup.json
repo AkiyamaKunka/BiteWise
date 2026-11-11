@@ -882,7 +882,7 @@
             "name": "spaced out",
             "qty": 1,
             "unit": "slice",
-            "brand": ""
+            "brand": "Ben & Jerry's"
           }
         ],
         "order_merchant": "McDonald's",
@@ -890,6 +890,11 @@
           {
             "key": "starbucks",
             "name": "Starbucks",
+            "size": "20_plus"
+          },
+          {
+            "key": "ben_and_jerrys",
+            "name": "Ben & Jerry's",
             "size": "20_plus"
           },
           {
@@ -1094,6 +1099,96 @@
       },
       "expected": {
         "items": [],
+        "order_merchant": "",
+        "chains": [],
+        "country": "US"
+      }
+    },
+    {
+      "id": "request_brand_and_merchant_with_mark_signs",
+      "fn": "compose_lookup_request",
+      "input": {
+        "items": [
+          {
+            "name": "Chicken sandwich",
+            "qty": 1,
+            "brand": "Chick-fil-A™"
+          }
+        ],
+        "order_merchant": "Whataburger™ #812"
+      },
+      "expected": {
+        "items": [
+          {
+            "name": "Chicken sandwich",
+            "qty": 1,
+            "unit": "",
+            "brand": "Chick-fil-A"
+          }
+        ],
+        "order_merchant": "Whataburger",
+        "chains": [
+          {
+            "key": "chick_fil_a",
+            "name": "Chick-fil-A",
+            "size": "20_plus"
+          },
+          {
+            "key": "whataburger",
+            "name": "Whataburger",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US"
+      }
+    },
+    {
+      "id": "request_drink_brand_names_no_chain",
+      "fn": "compose_lookup_request",
+      "input": {
+        "items": [
+          {
+            "name": "Brisket plate",
+            "qty": 1,
+            "unit": "plate",
+            "brand": ""
+          },
+          {
+            "name": "Root beer",
+            "qty": 1,
+            "unit": "can",
+            "brand": "A&W Root Beer"
+          },
+          {
+            "name": "Cream soda",
+            "qty": 1,
+            "unit": "can",
+            "brand": "A&W"
+          }
+        ],
+        "chains": []
+      },
+      "expected": {
+        "items": [
+          {
+            "name": "Brisket plate",
+            "qty": 1,
+            "unit": "plate",
+            "brand": ""
+          },
+          {
+            "name": "Root beer",
+            "qty": 1,
+            "unit": "can",
+            "brand": ""
+          },
+          {
+            "name": "Cream soda",
+            "qty": 1,
+            "unit": "can",
+            "brand": ""
+          }
+        ],
         "order_merchant": "",
         "chains": [],
         "country": "US"
@@ -1687,7 +1782,20 @@
       "expected": [
         "kfc",
         "five",
-        "flavorstm"
+        "flavors"
+      ]
+    },
+    {
+      "id": "tokens_trademark_signs",
+      "fn": "chain_tokens",
+      "input": "Whataburger™ Chick-fil-A™ Raising Cane’s℠",
+      "expected": [
+        "whataburger",
+        "chick",
+        "fil",
+        "a",
+        "raising",
+        "canes"
       ]
     },
     {
@@ -1856,6 +1964,79 @@
       "expected": "noodles"
     },
     {
+      "id": "match_trademark_sign",
+      "fn": "match_chain",
+      "input": "Whataburger™",
+      "expected": "whataburger"
+    },
+    {
+      "id": "match_trademark_sign_before_a_suffix",
+      "fn": "match_chain",
+      "input": "Whataburger™ (Main St)",
+      "expected": "whataburger"
+    },
+    {
+      "id": "match_service_mark_sign",
+      "fn": "match_chain",
+      "input": "Raising Cane’s℠",
+      "expected": "raising_canes"
+    },
+    {
+      "id": "match_traditional_logo_with_latin",
+      "fn": "match_chain",
+      "input": "貢茶 Gong cha",
+      "expected": "gong_cha"
+    },
+    {
+      "id": "match_degree_brand_alone",
+      "fn": "match_chain",
+      "input": "85°C",
+      "expected": "eighty_five_c"
+    },
+    {
+      "id": "match_receipt_without_periods",
+      "fn": "match_chain",
+      "input": "PF CHANGS #8812",
+      "expected": "pf_changs"
+    },
+    {
+      "id": "match_periods_in_an_initialism",
+      "fn": "match_chain",
+      "input": "T.G.I. Friday's",
+      "expected": "tgi_fridays"
+    },
+    {
+      "id": "match_traditional_characters",
+      "fn": "match_chain",
+      "input": "塔可貝爾",
+      "expected": "taco_bell"
+    },
+    {
+      "id": "match_drink_brand_bare",
+      "fn": "match_chain",
+      "input": "A&W",
+      "expected": null
+    },
+    {
+      "id": "match_drink_brand_with_flavor",
+      "fn": "match_chain",
+      "input": "A&W Root Beer",
+      "expected": null
+    },
+    {
+      "id": "match_drink_brand_chain_full_name",
+      "fn": "match_chain",
+      "input": "A&W Restaurant",
+      "expected": "a_and_w"
+    },
+    {
+      "id": "match_drink_brand_chain_host",
+      "fn": "match_chain",
+      "input": "A&W",
+      "url_host": "www.awrestaurants.com",
+      "expected": "a_and_w"
+    },
+    {
       "id": "match_prefix_longest",
       "fn": "match_chain",
       "input": "Taco Bell Cantina",
@@ -1905,6 +2086,34 @@
       "input": "Chipotle",
       "url_host": "www.chipotle.com",
       "expected": "chipotle"
+    },
+    {
+      "id": "match_company_host_other_restaurant",
+      "fn": "match_chain",
+      "input": "Council Oak Steaks & Seafood",
+      "url_host": "casino.hardrock.com",
+      "expected": null
+    },
+    {
+      "id": "match_company_host_alone",
+      "fn": "match_chain",
+      "input": null,
+      "url_host": "hotel.hardrock.com",
+      "expected": null
+    },
+    {
+      "id": "match_company_host_the_chain_by_name",
+      "fn": "match_chain",
+      "input": "Hard Rock Cafe",
+      "url_host": "casino.hardrock.com",
+      "expected": "hard_rock_cafe"
+    },
+    {
+      "id": "match_host_scoped_domain",
+      "fn": "match_chain",
+      "input": null,
+      "url_host": "cafe.hardrock.com",
+      "expected": "hard_rock_cafe"
     },
     {
       "id": "match_host_and_name_disagree",
