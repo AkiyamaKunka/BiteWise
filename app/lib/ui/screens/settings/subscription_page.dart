@@ -230,41 +230,49 @@ class _SubscriptionProviderPageState
     final picked = await showModalBottomSheet<String>(
       context: context,
       showDragHandle: true,
+      // Scrolls, and may grow past 9/16 of the screen up to the status
+      // bar: at the largest text sizes, on a 320-375 pt phone and in
+      // landscape the last rows were below the screen and out of reach.
+      useSafeArea: true,
+      isScrollControlled: true,
       backgroundColor: groupedBackground(Theme.of(context).colorScheme),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(title,
-                    style: Theme.of(ctx)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w600)),
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(title,
+                      style: Theme.of(ctx)
+                          .textTheme
+                          .titleLarge
+                          ?.copyWith(fontWeight: FontWeight.w600)),
+                ),
               ),
-            ),
-            GroupedSection(
-              separatorInset: 16,
-              children: [
-                for (final (value, label) in options)
-                  GroupedRow(
-                    key: Key('plan-$key-${value.isEmpty ? 'default' : value}'),
-                    title: label,
-                    showChevron: false,
-                    trailing: current == value
-                        ? Icon(Icons.check,
-                            size: 20,
-                            color: Theme.of(ctx).colorScheme.primary)
-                        : const SizedBox(width: 20),
-                    onTap: () => Navigator.pop(ctx, value),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 16),
-          ],
+              GroupedSection(
+                separatorInset: 16,
+                children: [
+                  for (final (value, label) in options)
+                    GroupedRow(
+                      key: Key('plan-$key-${value.isEmpty ? 'default' : value}'),
+                      title: label,
+                      showChevron: false,
+                      trailing: current == value
+                          ? Icon(Icons.check,
+                              size: 20,
+                              color: Theme.of(ctx).colorScheme.primary)
+                          : const SizedBox(width: 20),
+                      onTap: () => Navigator.pop(ctx, value),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
     );

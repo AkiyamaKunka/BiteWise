@@ -386,6 +386,15 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     );
     if (!mounted) return;
     if (choice == 'retry') {
+      // The consent first, as for the pick itself: the recipient may have
+      // been stopped or switched since (that is one reason a photo comes
+      // back unsent — photo_pipeline.dart AiSendGate), and a Retry that
+      // did not ask would only be refused again. Already allowed: no
+      // dialog.
+      if (!await ensureAiConsent(context, widget.services.settings) ||
+          !mounted) {
+        return;
+      }
       // Same photo, same shared FIFO: the hash was released, so this is a
       // fresh reservation, never a second one.
       await _analyze(deliberate);

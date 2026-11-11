@@ -905,9 +905,12 @@ class AppSettings extends ChangeNotifier {
   /// The AI recipients (aiConsentRoute: a provider id, or `server:<plan>`)
   /// the user allowed meal data to go to — App Store 5.1.2(i) asks for
   /// explicit permission per third party, before the first send. Not a
-  /// secret; device-local, never exported. Only the UI reads it: every
-  /// automatic path already needs [watcherEnabled], and the switch, a
-  /// provider/plan change while it is on, and a setup link all ask first.
+  /// secret; device-local, never exported. The UI asks: every automatic
+  /// path already needs [watcherEnabled], and the switch, a provider/plan
+  /// change while it is on, and a setup link all ask first. The photo
+  /// pipeline reads it once more at each send (AiSendGate), so a photo
+  /// already queued never goes to a recipient stopped or switched to
+  /// meanwhile.
   Set<String> _aiConsentRoutes = const {};
 
   /// The route the current provider choice sends to.
@@ -953,6 +956,20 @@ class AppSettings extends ChangeNotifier {
     _aiConsentRoutes = {activeAiConsentRoute};
     await _prefs.setStringList(
         _kAiConsentRoutes, _aiConsentRoutes.toList());
+  }
+
+  /// Re-reads the allowed recipients from disk. For the BACKGROUND run
+  /// only — another isolate with its own preferences cache: the open app
+  /// may have withdrawn a consent (Settings › Stop Sharing) since this
+  /// engine loaded, and its photo pipeline asks again at each send
+  /// (AiSendGate.refresh). The app's own engine never calls it: it is the
+  /// one that writes the list, and a reload overlapping its own write
+  /// could bring a consent just withdrawn back into memory. No stored
+  /// list: the copy in memory stands.
+  Future<void> reloadAiConsent() async {
+    await _prefs.reload();
+    final stored = _prefs.getStringList(_kAiConsentRoutes);
+    if (stored != null) _aiConsentRoutes = stored.toSet();
   }
 
   /// Spec §6 auto intake toggle — defaults false until permissions granted.

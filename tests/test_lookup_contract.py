@@ -181,6 +181,29 @@ def test_coordinate_shaped_text_is_refused_in_any_field(text):
     assert rejected(body(order_merchant=text)).field == "order_merchant"
 
 
+GATE_COORDINATES = json.loads(
+    (ROOT / "app" / "test" / "assist" / "clients" / "fixtures"
+     / "server_gate_coordinates.json").read_text(encoding="utf-8"))["cases"]
+
+
+@pytest.mark.parametrize("case", GATE_COORDINATES, ids=lambda c: c["case"])
+def test_the_app_client_blanks_what_this_gate_would_refuse(case):
+    """The app's composer keeps every field of these meals, and this gate
+    refuses the composed request (full NFKC, names and units read as one
+    line); a 400 makes the app write the meal's automatic lookup off for
+    good. So the app's server client sends "sent" instead
+    (server_lookup_client_test.dart pins that), and this gate must take it
+    unchanged. The refusal itself stays: it is the privacy backstop."""
+    composed = restaurant_lookup.compose_lookup_request(case["meal"])
+    assert [i["name"] for i in composed["items"]] == [
+        restaurant_lookup.clean_short_text(i["name"], 80)
+        for i in case["meal"]["items"]], "the composer blanked nothing"
+    rejected(dict(composed, backend="claude"))
+    sent = case["sent"]
+    assert sanitize_request(copy.deepcopy(sent)) == {
+        k: v for k, v in sent.items() if k != "backend"}
+
+
 def test_a_coordinate_split_across_items_is_refused():
     err = rejected(body(items=[{"name": "43.07", "brand": "Chipotle"},
                                {"name": "-89.40"}]))

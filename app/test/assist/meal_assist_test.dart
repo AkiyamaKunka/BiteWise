@@ -590,6 +590,34 @@ void main() {
       expect(h.lookups.submits, hasLength(1));
     });
 
+    for (final (what, merchant, brand, status, evidence) in const [
+      (
+        'a receipt merchant',
+        'MCDONALDS 2381',
+        '',
+        AssistStatus.suggested,
+        'order_merchant',
+      ),
+      (
+        'an item brand',
+        '',
+        'MCDONALDS 2381',
+        AssistStatus.applied,
+        'item_brand',
+      ),
+    ]) {
+      test('$what printed with a store number ("MCDONALDS 2381"): the lookup '
+          'it sends reaches the meal and adds no miss', () async {
+        final id = h.add(_bigMac(brand: brand, merchant: merchant));
+        await h.assist.sweep();
+        expect(h.lookups.submits.single.chainKeys, ['mcdonalds']);
+        final block = h.analysisOf(id)['assist'] as Map?;
+        expect(block?['status'], status);
+        expect(block?['evidence'], evidence);
+        expect(await h.state.misses(), isEmpty);
+      });
+    }
+
     test('a meal already looked up (any assist block) is never looked up '
         'again', () async {
       h.add(_bigMac());
@@ -1837,6 +1865,8 @@ void main() {
           at: _now,
           nextAt: _now,
           attempts: assistMaxRetries,
+          // The harness's recipient: a record of another one is forgotten.
+          recipient: 'anthropic',
         ),
       );
       h.lookups.onSubmit = (_) async => const LookupOutcome(
@@ -2202,6 +2232,213 @@ void main() {
       expect(h.lookups.submits, hasLength(2));
       expect((await h.state.jobs())[id]?.jobId, 'job_second_99');
     });
+
+    // The server accepted a job and refused to start it at its own daily
+    // cap (failed / daily_cap, kept 24 h). The job id stayed: the next
+    // morning's first sweep polled the same finished job and put every
+    // lookup and poll off until the following midnight.
+    group('a job the server failed with daily_cap', () {
+      const capped = LookupOutcome(
+        // ServerLookupClient._jobFailed('daily_cap'), word for word.
+        kind: LookupOutcomeKind.rateLimited,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job_abcdef12',
+        failure: LookupFailure(
+          LookupFailureCode.dailyCap,
+          transient: true,
+          message: "the server's daily lookup cap is reached",
+        ),
+      );
+      var n = 0;
+      LookupOutcome pending(String id) => LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: id,
+      );
+
+      setUp(() => n = 0);
+
+      test('is not polled again: the meal waits as a retry until midnight, '
+          'is sent once more the next day, and the morning\'s jobs are '
+          'collected', () async {
+        final id = h.add(_bigMac(), timestamp: '2026-10-24T12:59:00.000');
+        h.lookups.onSubmit = (_) async =>
+            pending(n++ == 0 ? 'job_abcdef12' : 'job_morning$n');
+        await h.assist.sweep();
+        h.lookups.onPoll = (_) async => capped;
+        h.now = _now.add(kAssistPollInterval);
+        await h.assist.sweep();
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect(h.assist.lastSkip, 'lookup_daily_cap');
+        final retry = (await h.state.jobs())[id]!;
+        expect(retry.jobId, isNull, reason: 'never polled again');
+        expect(retry.attempts, 0, reason: 'not a try');
+        expect(retry.nextAt.isAtSameMomentAs(DateTime(2026, 10, 25)), isTrue);
+
+        // The app restarted the same day (the backoff is in memory only):
+        // nothing is sent before midnight.
+        final restarted = MealAssist(
+          dao: h.dao,
+          lookups: h.lookups,
+          analyzerBusy: h.busy,
+          pipelineIdle: () => true,
+          inUse: (_) => false,
+          budget: h.budget,
+          state: h.state,
+          settings: () => h.settings,
+          country: () => 'US',
+          utcOffset: () => const Duration(hours: -5),
+          clock: () => h.now,
+        );
+        h.now = DateTime(2026, 10, 24, 15, 0);
+        await restarted.sweep();
+        restarted.dispose();
+        expect(h.lookups.submits, hasLength(1));
+        expect(h.lookups.polls, hasLength(1));
+
+        // The next morning: the server's cap is new, a meal is logged.
+        h.now = DateTime(2026, 10, 25, 8, 0);
+        final next = h.add(
+          _bigMac()..['food_items'] = [
+            {
+              'name': 'McChicken',
+              'estimated_calories': 400,
+              'protein_g': 14,
+              'carbs_g': 39,
+              'fat_g': 21,
+              'brand': "McDonald's",
+              'qty': 1,
+              'unit': 'sandwich',
+            },
+          ],
+          date: '2026-10-25',
+          timestamp: '2026-10-25T07:59:00.000',
+        );
+        await h.assist.sweep();
+        expect(h.lookups.submits, hasLength(3), reason: 'both meals sent');
+        expect(h.lookups.polls, ['job_abcdef12']);
+        final jobs = await h.state.jobs();
+        expect(jobs[id]?.jobId, isNotNull);
+        expect(jobs[next]?.jobId, isNotNull);
+
+        h.now = h.now.add(const Duration(minutes: 5));
+        h.lookups.onPoll = (_) async =>
+            _done(provider: LookupRecipient.claudePlan, verbatim: false);
+        await h.assist.sweep();
+        expect(h.assist.lastSkip, isNot(AssistSkip.backoff));
+        expect(h.lookups.polls.where((p) => p == 'job_abcdef12'), hasLength(1));
+        expect(h.analysisOf(next)['assist'], isA<Map>());
+        expect(h.analysisOf(id)['assist'], isA<Map>());
+      });
+
+      test("the editor's own job ends there, as a failed lookup does",
+          () async {
+        final id = h.add(_bigMac());
+        h.inUse.add(id);
+        h.lookups.onSubmit = (_) async => pending('job_abcdef12');
+        expect((await h.assist.lookupNow(id)).code, AssistSkip.pending);
+        h.lookups.onPoll = (_) async => capped;
+        h.now = _now.add(kAssistPollInterval);
+        expect((await h.assist.lookupNow(id)).code, 'lookup_daily_cap');
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect((await h.state.jobs())[id], isNull);
+      });
+    });
+
+    // The editor offers Look up on a photo meal of any day, but the sweep
+    // lists only yesterday's and today's meals: it dropped the editor's job
+    // for an older one, so every other press of the editor was a new
+    // counted submit, and once the editor was closed the answer was never
+    // collected.
+    group("the editor's lookup of a meal older than yesterday", () {
+      const pending = LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job_abcdef12',
+      );
+      late int id;
+
+      setUp(() async {
+        id = h.add(
+          _bigMac(),
+          date: '2026-10-21',
+          timestamp: '2026-10-21T12:30:00.000',
+        );
+        // As ServerLookupClient.submit: every submit counts a lookup.
+        h.lookups.onSubmit = (_) async {
+          h.budget.tryStartLookup(0);
+          return pending;
+        };
+        h.lookups.onPoll = (_) async => pending;
+        h.inUse.add(id); // the editor holds the meal
+        expect((await h.assist.lookupNow(id)).code, AssistSkip.pending);
+        expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+        expect(h.budget.lookupsToday, 1);
+      });
+
+      test('its job survives a sweep, and the next press polls it', () async {
+        await h.assist.sweep();
+        expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+        expect(h.lookups.polls, isEmpty, reason: 'the editor holds it');
+        h.now = _now.add(kAssistPollInterval);
+        expect((await h.assist.lookupNow(id)).code, AssistSkip.pending);
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect(h.lookups.submits, hasLength(1));
+        expect(h.budget.lookupsToday, 1);
+      });
+
+      test('the editor closed: the sweep collects the answer', () async {
+        h.inUse.clear();
+        h.now = _now.add(kAssistPollInterval);
+        h.lookups.onPoll = (_) async =>
+            _done(provider: LookupRecipient.claudePlan, verbatim: false);
+        await h.assist.sweep();
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect(h.lookups.submits, hasLength(1));
+        expect(
+          (h.analysisOf(id)['assist'] as Map)['status'],
+          AssistStatus.suggested,
+        );
+        expect(await h.state.jobs(), isEmpty);
+      });
+
+      test('the meal deleted: its job is dropped, nothing polled', () async {
+        h.inUse.clear();
+        await h.dao.deleteMeal(id);
+        h.now = _now.add(kAssistPollInterval);
+        await h.assist.sweep();
+        expect(h.lookups.polls, isEmpty);
+        expect(await h.state.jobs(), isEmpty);
+      });
+
+      test("an older meal's automatic job is still dropped", () async {
+        final auto = h.add(
+          _bigMac(),
+          date: '2026-10-20',
+          timestamp: '2026-10-20T12:30:00.000',
+        );
+        expect(
+          await h.state.putJob(
+            auto,
+            AssistJob(
+              jobId: 'job_automatic',
+              reqHash: lookupRequestHash(
+                composeAssistRequest(_bigMac(), country: 'US'),
+              ),
+              at: _now,
+              nextAt: _now,
+              recipient: 'claude_plan:abcd1234',
+            ),
+          ),
+          isTrue,
+        );
+        await h.assist.sweep();
+        final jobs = await h.state.jobs();
+        expect(jobs.containsKey(auto), isFalse);
+        expect(jobs[id]?.jobId, 'job_abcdef12');
+        expect(h.lookups.polls, isEmpty);
+      });
+    });
   });
 
   // Review 2026-11-06: a sweep at the daily cap polled nothing, so the day's
@@ -2303,8 +2540,9 @@ void main() {
       expect(h.lookups.polls, hasLength(1));
       expect(h.lookups.submits, hasLength(1));
 
-      // A new day.
-      await h.prefs.remove(assistDailyPrefsKey);
+      // A new day: the budget keeps its own count, so the clock says so
+      // (the stored value is no longer re-read under a live budget).
+      h.now = DateTime(_now.year, _now.month, _now.day + 1, 0, 5);
       await h.assist.sweep();
       expect(h.lookups.submits, hasLength(2));
       expect(h.lookups.submits.last.toJson(), h.lookups.submits.first.toJson());
@@ -3274,6 +3512,50 @@ void main() {
       );
       expect(en.assistUndo, 'Undo');
       expect(zh.assistUndo, '撤销');
+    });
+
+    // RC 1.6.0: the totals read "1250 → 1320" where every other line
+    // groups them.
+    test('totals of 1,000 kcal and more are grouped (en, zh)', () {
+      AssistAppliedNotice big(int before, int after) => AssistAppliedNotice(
+        mealId: 1,
+        chainKey: 'mcdonalds',
+        brandName: "McDonald's",
+        oldKcal: before,
+        newKcal: after,
+        undo: () async => true,
+      );
+      expect(
+        assistAppliedSnackbar(AppLocalizationsEn(), big(1250, 1320)),
+        "Used McDonald's published numbers: 1,250 → 1,320 kcal",
+      );
+      expect(
+        assistAppliedSnackbar(AppLocalizationsZh(), big(980, 1040)),
+        '已采用 麦当劳 公布的数值：980 → 1,040 千卡',
+      );
+    });
+
+    // RC 1.6.0: an Undo pressed after the meal changed did nothing and
+    // said nothing.
+    test('Undo that undid nothing says so; one that undid says nothing',
+        () async {
+      for (final undone in [true, false]) {
+        var said = 0;
+        final press = assistUndoAction(
+          AssistAppliedNotice(
+            mealId: 1,
+            chainKey: 'mcdonalds',
+            brandName: "McDonald's",
+            oldKcal: 540,
+            newKcal: 590,
+            undo: () async => undone,
+          ),
+          onNothingUndone: () => said++,
+        );
+        press();
+        await pumpEventQueue();
+        expect(said, undone ? 0 : 1, reason: 'undone=$undone');
+      }
     });
   });
 

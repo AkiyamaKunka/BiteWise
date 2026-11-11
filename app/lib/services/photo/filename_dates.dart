@@ -22,31 +22,72 @@ import '../../core/shared_generated.dart';
 /// name "123456789012__IMG_20260715_193042.jpg" still parses (spec §6.3).
 final RegExp _filenameTsRe = RegExp(r'(?:^|[^0-9])(\d{8})_(\d{6})');
 
-/// Device-local wall-clock capture time from a camera filename
-/// (IMG_YYYYMMDD_HHMMSS...), or null when absent/invalid. UNVALIDATED —
-/// callers apply [validateCapturedAt] before trusting it.
-DateTime? capturedAtFromFilename(String? name) {
-  final match = _filenameTsRe.firstMatch(name ?? '');
+/// The first filename timestamp's components, and whether it directly
+/// follows a 'PXL_' prefix (a Google Camera name, see
+/// [filenameCaptureInstant]); null when there is none.
+({int year, int month, int day, int hour, int minute, int second, bool pixel})?
+    _filenameStamp(String? name) {
+  final text = name ?? '';
+  final match = _filenameTsRe.firstMatch(text);
   if (match == null) return null;
   final d = match.group(1)!;
   final t = match.group(2)!;
-  final year = int.parse(d.substring(0, 4));
-  final month = int.parse(d.substring(4, 6));
-  final day = int.parse(d.substring(6, 8));
-  final hour = int.parse(t.substring(0, 2));
-  final minute = int.parse(t.substring(2, 4));
-  final second = int.parse(t.substring(4, 6));
-  final parsed = DateTime(year, month, day, hour, minute, second);
+  // The 15 characters 'YYYYMMDD_HHMMSS' end the match.
+  final digitsAt = match.end - 15;
+  return (
+    year: int.parse(d.substring(0, 4)),
+    month: int.parse(d.substring(4, 6)),
+    day: int.parse(d.substring(6, 8)),
+    hour: int.parse(t.substring(0, 2)),
+    minute: int.parse(t.substring(2, 4)),
+    second: int.parse(t.substring(4, 6)),
+    pixel: digitsAt >= 4 &&
+        text.substring(digitsAt - 4, digitsAt).toUpperCase() == 'PXL_',
+  );
+}
+
+/// Device-local wall-clock capture time from a camera filename
+/// (IMG_YYYYMMDD_HHMMSS...), or null when absent/invalid. UNVALIDATED —
+/// callers apply [validateCapturedAt] before trusting it. The parity port
+/// (shared/vectors/captured_at.json): every stamp is read as a local wall
+/// clock here, a Pixel's too; [deriveCapturedAt] reads the Pixel's as UTC.
+DateTime? capturedAtFromFilename(String? name) {
+  final s = _filenameStamp(name);
+  if (s == null) return null;
+  final parsed = DateTime(s.year, s.month, s.day, s.hour, s.minute, s.second);
   // strptime parity: Python rejects out-of-range components (month 13,
   // Feb 31); Dart's DateTime silently rolls them over, so require an exact
   // component round-trip instead.
-  final valid = parsed.year == year &&
-      parsed.month == month &&
-      parsed.day == day &&
-      parsed.hour == hour &&
-      parsed.minute == minute &&
-      parsed.second == second;
+  final valid = parsed.year == s.year &&
+      parsed.month == s.month &&
+      parsed.day == s.day &&
+      parsed.hour == s.hour &&
+      parsed.minute == s.minute &&
+      parsed.second == s.second;
   return valid ? parsed : null;
+}
+
+/// When the photo named [name] was taken, from its filename timestamp,
+/// shown in the phone's local zone; null when absent/invalid. UNVALIDATED.
+/// Google Camera (Pixel) names its files PXL_YYYYMMDD_HHMMSSmmm by the UTC
+/// clock, not the local one: read as a local wall clock, a 19:30 dinner in
+/// UTC+8 was logged at 11:30, and one in Chicago scanned the next morning
+/// at 01:30 the next day. A stamp right after 'PXL_' (also behind a
+/// `<hash>__` queue prefix) is that UTC instant; every other one is the
+/// camera's local wall clock, as [capturedAtFromFilename] reads it.
+DateTime? filenameCaptureInstant(String? name) {
+  final s = _filenameStamp(name);
+  if (s == null) return null;
+  if (!s.pixel) return capturedAtFromFilename(name);
+  final utc =
+      DateTime.utc(s.year, s.month, s.day, s.hour, s.minute, s.second);
+  final valid = utc.year == s.year &&
+      utc.month == s.month &&
+      utc.day == s.day &&
+      utc.hour == s.hour &&
+      utc.minute == s.minute &&
+      utc.second == s.second;
+  return valid ? utc.toLocal() : null;
 }
 
 /// Port of the string half of telegram_bot.py `_parse_captured_at`: strict
@@ -102,16 +143,18 @@ DateTime? validateCapturedAt(DateTime? captured,
   return captured;
 }
 
-/// Spec §6.3 priority order: (1) filename timestamp, (2) the library asset's
-/// own createDateTime — each under the same validation window — else null
-/// (callers then date the meal at intake time, the §6.3 fallback).
+/// Spec §6.3 priority order: (1) filename timestamp
+/// ([filenameCaptureInstant]: a Pixel's UTC stamp is read as UTC), (2) the
+/// library asset's own createDateTime — each under the same validation
+/// window — else null (callers then date the meal at intake time, the §6.3
+/// fallback).
 DateTime? deriveCapturedAt(
     {required String fileName,
     DateTime? assetCreateDate,
     DateTime? now,
     int maxAgeDays = SharedConstants.capturedAtMaxAgeDaysDefault}) {
   final clock = now ?? DateTime.now();
-  return validateCapturedAt(capturedAtFromFilename(fileName),
+  return validateCapturedAt(filenameCaptureInstant(fileName),
           now: clock, maxAgeDays: maxAgeDays) ??
       validateCapturedAt(assetCreateDate, now: clock, maxAgeDays: maxAgeDays);
 }

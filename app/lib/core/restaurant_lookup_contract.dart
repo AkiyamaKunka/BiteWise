@@ -150,21 +150,28 @@ String _nameHead(String text) {
   return head;
 }
 
-/// What a request carries for printed brand or merchant text: the
-/// canonical name of the table chain it names ([matchChain] on the cleaned
-/// text, then on its head before the first separator or standalone
-/// number), or "" — never the printed text itself, which can carry a store
-/// number, a street or a city. Identical to the Python composer's
-/// chain_name_only.
-String chainNameOnly(dynamic value, int maxChars) {
+/// The key of the table chain printed brand or merchant text names:
+/// [matchChain] on the cleaned text, then on its head before the first
+/// separator or standalone number ("CHIPOTLE 2381" → chipotle). Null when
+/// it names none. The one reading of printed text: the request
+/// ([chainNameOnly]), the trigger and the decision's evidence all use it.
+String? printedChainKey(dynamic value, int maxChars) {
   final text = cleanShortText(value, maxChars);
-  if (text.isEmpty) return '';
+  if (text.isEmpty) return null;
   var key = matchChain(text);
   if (key == null) {
     final head = _nameHead(text);
     if (head.isNotEmpty && head != text) key = matchChain(head);
   }
-  final chain = chainByKey(key);
+  return key;
+}
+
+/// What a request carries for printed brand or merchant text: the
+/// canonical name of the table chain it names ([printedChainKey]), or "" —
+/// never the printed text itself, which can carry a store number, a street
+/// or a city. Identical to the Python composer's chain_name_only.
+String chainNameOnly(dynamic value, int maxChars) {
+  final chain = chainByKey(printedChainKey(value, maxChars));
   return chain == null ? '' : cleanShortText(chain.name, maxChars);
 }
 

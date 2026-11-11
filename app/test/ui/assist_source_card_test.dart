@@ -626,6 +626,44 @@ void main() {
       );
     });
 
+    // RC 1.6.0: alone on the card, Look up (and a context-only record's
+    // Search again) was greyed on a typed-over form with no reason given.
+    testWidgets('a lone Look up or Search again waiting for unsaved typing '
+        'says why (en, zh)', (tester) async {
+      for (final (lang, line) in const [
+        ('en', 'Save your changes first to use these buttons.'),
+        ('zh', '请先保存修改，再使用这些按钮。'),
+      ]) {
+        for (final (analysis, button, search) in [
+          (bigMacAnalysis(), 'assistLookUp', false),
+          (_saved(contextOnlyBigMac(), '2026-03-02'), 'assistSearchAgain',
+              true),
+        ]) {
+          for (final editFirst in [true, false]) {
+            await tester.pumpWidget(
+              _app(
+                lang: lang,
+                AssistSourceCard(
+                  view: AssistView.of(analysis),
+                  editFirst: editFirst,
+                  onLookUp: () {},
+                  onSearchAgain: search ? () {} : null,
+                ),
+              ),
+            );
+            expect(
+              tester
+                  .widget<ButtonStyleButton>(find.byKey(Key(button)))
+                  .onPressed,
+              editFirst ? isNull : isNotNull,
+            );
+            expect(find.text(line), editFirst ? findsOneWidget : findsNothing,
+                reason: '$lang $button editFirst=$editFirst');
+          }
+        }
+      }
+    });
+
     testWidgets('a stale suggestion and a context-only record: Search again '
         'replaces Look up; exactly one shows', (tester) async {
       for (final a in [

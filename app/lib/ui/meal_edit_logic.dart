@@ -20,6 +20,11 @@
 ///     itself. A row the user changed is rebuilt from what the editor shows
 ///     — a user-curated row makes no printed-brand claim, and its numbers
 ///     are no longer anyone's published ones.
+///   - the rows of a leftover deduction 1.5.0 stored kept the whole
+///     plate's protein, carbs and fat (only their kcal was the eaten
+///     part); the form shows those rows' eaten part and the save writes
+///     it, so the totals derived from the rows never put the uneaten part
+///     back (leftover_logic.legacyLeftoverMacroScale).
 ///   - a draft of a STORED meal carries [MealDraft.expectedRaw], the
 ///     analysis text it was loaded from: the save is a compare-and-set
 ///     against it (MealsDao.updateMealFieldsIfUnchanged).
@@ -28,11 +33,15 @@
 ///     added here, or a stored row whose numbers the user changed, gains
 ///     `user {set, at, n, qty}`; a rename keeps the AI's old name as
 ///     `user.ai_name`. The mark is self-validating (usualMarkValid): it
-///     counts only while the row's numbers still equal `n`.
+///     counts only while the row's numbers still equal `n`. A meal typed
+///     by hand before 1.6.0 has no marks and taught only while it was
+///     never corrected; the save sets `corrected`, so its unchanged rows
+///     gain the mark at the meal's own `timestamp` and still teach.
 library;
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
+import '../core/leftover_logic.dart';
 import '../core/usual_foods_logic.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
@@ -59,11 +68,15 @@ class FieldParse {
 /// language when the screen passes [l] (the zh UI showed English rejections;
 /// found 2026-10-07). The English default is byte-identical to the old
 /// literals, so callers and tests without a locale read exactly as before.
+///
+/// The text is read as the iOS decimal pad types it in the phone's region
+/// ([normalizeTypedNumber]): native digits, and a comma for the decimal
+/// point where the region writes one.
 FieldParse parseNumberField(String raw,
     {required String label, required num max, AppLocalizations? l}) {
   final t = raw.trim();
   if (t.isEmpty) return const FieldParse(null, null);
-  final v = num.tryParse(t);
+  final v = num.tryParse(normalizeTypedNumber(t));
   final msg = l ?? AppLocalizationsEn();
   if (v == null || v.isNaN || v.isInfinite) {
     return FieldParse(null, msg.editorErrNotNumber(label));
@@ -71,6 +84,49 @@ FieldParse parseNumberField(String raw,
   if (v < 0) return FieldParse(null, msg.editorErrNegative(label));
   if (v > max) return FieldParse(null, msg.editorErrTooLarge(label, '$max'));
   return FieldParse(v, null);
+}
+
+/// The zero of each run of ten decimal digits a phone's numbering system
+/// may type (Arabic-Indic, Extended Arabic-Indic, the Indic scripts, Thai,
+/// Lao, Tibetan, Myanmar, Khmer, full-width).
+const List<int> _digitZeros = [
+  0x0660, 0x06F0, 0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6, 0x0C66,
+  0x0CE6, 0x0D66, 0x0E50, 0x0ED0, 0x0F20, 0x1040, 0x17E0, 0xFF10,
+];
+
+/// [t] as `num.tryParse` reads it. The editor's fields open the decimal
+/// pad, which types the region's digits and decimal separator: a comma in
+/// most of Europe and Latin America (that pad has no '.'), '٫' in Arabic,
+/// native digits where the numbering system is not Latin. Those digits
+/// become ASCII, '٫' and '．' a '.', and a single ',' a '.' when the text
+/// has no '.' and the comma is not followed by exactly three digits:
+/// "1,200" stays an error (a thousands separator, not 1.2 kcal).
+String normalizeTypedNumber(String t) {
+  final b = StringBuffer();
+  for (final r in t.runes) {
+    var ascii = -1;
+    for (final z in _digitZeros) {
+      if (r >= z && r <= z + 9) {
+        ascii = 0x30 + r - z;
+        break;
+      }
+    }
+    if (ascii >= 0) {
+      b.writeCharCode(ascii);
+    } else if (r == 0x066B || r == 0xFF0E) {
+      b.write('.');
+    } else {
+      b.writeCharCode(r);
+    }
+  }
+  final s = b.toString();
+  final comma = s.indexOf(',');
+  if (comma < 0 || s.contains('.') || s.indexOf(',', comma + 1) >= 0) {
+    return s;
+  }
+  final after = s.substring(comma + 1);
+  if (RegExp(r'^\d{3}$').hasMatch(after)) return s;
+  return s.replaceFirst(',', '.');
 }
 
 /// A food item row in the editor.
@@ -83,7 +139,8 @@ class MealItemDraft {
     this.fat = '',
   })  : stored = null,
         _seed = null,
-        _loaded = null;
+        _loaded = null,
+        _macroScale = null;
 
   /// The first row "Add item" adds to a stored meal with no rows
   /// ([MealDraft.addItem]): its fields are the totals above it, and [_seed]
@@ -96,14 +153,15 @@ class MealItemDraft {
     required this.fat,
   })  : name = '',
         stored = null,
-        _loaded = null;
+        _loaded = null,
+        _macroScale = null;
 
-  MealItemDraft._fromStored(Map<String, dynamic> m)
+  MealItemDraft._fromStored(Map<String, dynamic> m, [this._macroScale])
       : name = (m['name'] ?? '').toString(),
         calories = _numText(m['estimated_calories']),
-        protein = _numText(m['protein_g']),
-        carbs = _numText(m['carbs_g']),
-        fat = _numText(m['fat_g']),
+        protein = _macroText(m['protein_g'], _macroScale),
+        carbs = _macroText(m['carbs_g'], _macroScale),
+        fat = _macroText(m['fat_g'], _macroScale),
         stored = m,
         _seed = null,
         _loaded = null {
@@ -129,8 +187,16 @@ class MealItemDraft {
   /// The five field texts as loaded, to tell an untouched row.
   (String, String, String, String, String)? _loaded;
 
-  static MealItemDraft fromMap(Map<String, dynamic> m) =>
-      MealItemDraft._fromStored(m);
+  /// For a row of a leftover deduction 1.5.0 stored, whose protein, carbs
+  /// and fat are still the whole plate's (legacyLeftoverMacroScale): the
+  /// share eaten, which the macro fields show and the save writes (the
+  /// block is then stamped, [MealDraft.toAnalysis]). Null for every other
+  /// row.
+  final double? _macroScale;
+
+  /// [macroScale]: see [_macroScale].
+  static MealItemDraft fromMap(Map<String, dynamic> m, {double? macroScale}) =>
+      MealItemDraft._fromStored(m, macroScale);
 
   /// A stored row whose five fields still read exactly as loaded.
   bool get untouched =>
@@ -182,13 +248,30 @@ class MealItemDraft {
   ///     written only when it says something: `set`, `ai_name`, or a
   ///     count other than 1.
   /// [now] stamps `at` (UTC, ms); null reads the device clock.
-  Map<String, dynamic> toStoredMap([DateTime? now]) {
+  ///
+  /// [typedAt]: the row is of a meal typed by hand before 1.6.0 and never
+  /// corrected since ([MealDraft.fromMeal]); its unmarked rows taught
+  /// through that alone, and this save sets `corrected`. A stored row
+  /// with no `user` map whose numbers did not change gains
+  /// `user {set: true, at: typedAt, n, qty: 1}` when it taught that way
+  /// (qty 1, not published, at least [kUsualMinKcal] kcal), so a save
+  /// with the numbers as typed keeps them the user's.
+  Map<String, dynamic> toStoredMap([DateTime? now, String? typedAt]) {
     final src = stored;
     if (src != null && untouched) {
-      return {
+      final out = {
         for (final e in src.entries) e.key: e.value,
         ...toMap(),
       };
+      if (typedAt != null && _typedRowTaught(src, out)) {
+        out['user'] = {
+          'set': true,
+          'at': typedAt,
+          'n': _numbersOf(out),
+          'qty': 1,
+        };
+      }
+      return out;
     }
     final out = toMap();
     final when = now ?? DateTime.now();
@@ -216,11 +299,14 @@ class MealItemDraft {
       return out;
     }
     final user = <String, dynamic>{};
+    // A legacy leftover row is compared with the eaten macros it showed:
+    // a rename alone sets no number of the user's.
+    final scale = _macroScale;
     final storedNumbers = [
       _storedNumber(src['estimated_calories']),
-      _storedNumber(src['protein_g']),
-      _storedNumber(src['carbs_g']),
-      _storedNumber(src['fat_g']),
+      _scaledMacro(src['protein_g'], scale),
+      _scaledMacro(src['carbs_g'], scale),
+      _scaledMacro(src['fat_g'], scale),
     ];
     final changed = _differs(numbers, storedNumbers);
     final storedUser = src['user'];
@@ -232,6 +318,10 @@ class MealItemDraft {
       user['set'] = true;
       user['at'] = storedUser['at'];
       user['n'] = List<Object?>.from(storedUser['n'] as List);
+    } else if (typedAt != null && _typedRowTaught(src, out)) {
+      user['set'] = true;
+      user['at'] = typedAt;
+      user['n'] = numbers;
     }
     final qty = usualItemQty(src);
     user['qty'] = qty;
@@ -252,6 +342,24 @@ class MealItemDraft {
   }
 }
 
+/// The four numbers of a row as [MealItemDraft.toMap] writes them.
+List<num> _numbersOf(Map<String, dynamic> row) => [
+      row['estimated_calories'] as num,
+      row['protein_g'] as num,
+      row['carbs_g'] as num,
+      row['fat_g'] as num,
+    ];
+
+/// A stored row of a hand-typed meal that taught its numbers with no mark
+/// (usual_foods_logic _recordOf, the unmarked hand-typed path): no `user`
+/// map, not published, a count of exactly 1, and [written]'s kcal at
+/// least [kUsualMinKcal].
+bool _typedRowTaught(Map<String, dynamic> src, Map<String, dynamic> written) =>
+    src['user'] is! Map &&
+    src['published'] != true &&
+    coerceQty(src['qty']) == 1 &&
+    (written['estimated_calories'] as num) >= kUsualMinKcal;
+
 /// Longest kept `user.ai_name`, in code points.
 const int kUsualAiNameMax = 80;
 
@@ -269,6 +377,22 @@ num _storedNumber(dynamic v) {
   var n = safeNumberOr(v, null);
   if (n == null && v is String) n = safeNumberOr(num.tryParse(v.trim()), null);
   return n ?? 0;
+}
+
+/// A stored macro times [scale] (a legacy leftover row's eaten share) to
+/// 0.1 g, as its field shows it; [scale] null is [_storedNumber].
+num _scaledMacro(dynamic v, double? scale) {
+  final n = _storedNumber(v);
+  if (scale == null) return n;
+  return double.parse((n * scale).toStringAsFixed(1));
+}
+
+/// Field text for a stored macro, scaled as [_scaledMacro] says; a value
+/// the field would show blank stays blank.
+String _macroText(dynamic v, double? scale) {
+  final t = _numText(v);
+  if (scale == null || t.isEmpty) return t;
+  return _numText(_scaledMacro(v, scale));
 }
 
 /// Field text for a stored value. Numeric STRINGS must parse: the analyzer
@@ -327,6 +451,13 @@ class MealDraft {
   /// a new hand-typed meal ([blank]), whose totals are all the user's.
   List<num>? _loadedTotals;
 
+  /// For a stored meal typed by hand (app_manual / app_manual_photo),
+  /// never corrected, with no leftover block: its `timestamp`, the moment
+  /// its unmarked rows were the user's numbers ([MealItemDraft
+  /// .toStoredMap] `typedAt`). Null for every other draft, the describe
+  /// preview's (id 0, manual_text) included.
+  DateTime? _typedAt;
+
   static MealDraft fromMeal(Meal meal) => MealDraft(
         description: mealDescriptionRaw(meal.analysis),
         dateIso: meal.date,
@@ -336,10 +467,13 @@ class MealDraft {
         carbs: _numText(meal.analysis['total_carbs_g']),
         fat: _numText(meal.analysis['total_fat_g']),
         items: [
-          for (final m in safeFoodItems(meal.analysis)) MealItemDraft.fromMap(m)
+          for (final m in safeFoodItems(meal.analysis))
+            MealItemDraft.fromMap(m,
+                macroScale: legacyLeftoverMacroScale(meal.analysis, m))
         ],
         base: Map<String, dynamic>.from(meal.analysis),
-      ).._loadedTotals = [
+      )
+        .._loadedTotals = [
           for (final k in const [
             'total_calories',
             'total_protein_g',
@@ -347,7 +481,14 @@ class MealDraft {
             'total_fat_g',
           ])
             _storedNumber(meal.analysis[k]),
-        ];
+        ]
+        .._typedAt = meal.id > 0 &&
+                (meal.source == MealSource.appManual ||
+                    meal.source == MealSource.appManualPhoto) &&
+                !meal.corrected &&
+                meal.analysis['leftover'] is! Map
+            ? DateTime.tryParse(meal.timestamp)
+            : null;
 
   static MealDraft blank(DateTime now) => MealDraft(
         description: '',
@@ -464,9 +605,25 @@ class MealDraft {
     out['total_fat_g'] = field(fat, maxMacroGrams);
     // A hand-curated meal is food by definition — see the library note.
     out['is_food'] = true;
+    // A typed meal's moment, as a mark's `at`, unless it is more than a
+    // day ahead (it taught nothing yet: usualMarkValid would void it).
+    final typed = _typedAt;
+    final typedAt =
+        typed == null || typed.isAfter(when.add(const Duration(days: 1)))
+            ? null
+            : usualStamp(typed);
+    final kept = items.where((i) => !i.isBlank).toList();
     out['food_items'] = [
-      for (final it in items.where((i) => !i.isBlank)) it.toStoredMap(when)
+      for (final it in kept) it.toStoredMap(when, typedAt)
     ];
+    // A leftover deduction 1.5.0 stored kept the rows' macros whole; the
+    // form showed (and these rows now hold) the eaten part, so the block
+    // says so and the next load does not scale them again.
+    final leftover = out['leftover'];
+    if (leftover is Map && kept.any((i) => i._macroScale != null)) {
+      out['leftover'] = Map<String, dynamic>.from(leftover)
+        ..[kLeftoverItemMacrosScaled] = true;
+    }
     return out;
   }
 }

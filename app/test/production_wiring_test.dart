@@ -18,6 +18,7 @@ import 'package:calorie_tracker/services/photo/photo_changes.dart'
     show recordLateImportPass;
 import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -80,6 +81,21 @@ void main() {
       'static Future<AppServices> init(',
       indent: '  ',
     );
+
+    // RC 1.6.0: the lookup's Undo was `() => unawaited(n.undo())`, silent
+    // when the meal had changed since and nothing was undone.
+    test("the lookup snackbar's Undo says when it undid nothing", () {
+      expect(init(), isNot(contains('unawaited(n.undo())')));
+      expect(
+        init(),
+        _wired(
+          r'assistUndoAction\(n, '
+          r'(//[^\n]*\n\s*)?'
+          r'onNothingUndone: \(\) => notify\?\.call\( '
+          r'localizationsFor\(settings\.appLanguage\) \.usualUndoStale\)',
+        ),
+      );
+    });
 
     test('iOS gives each photo background time and holds automatic photos '
         'while the app is in the background', () {
@@ -573,6 +589,99 @@ void main() {
     });
   });
 
+  // Release-candidate review of 1.6.0: an admitted photo can still be
+  // queued when Stop Sharing is confirmed or the provider changes, so both
+  // engines' pipelines read the consent again at the send (AiSendGate;
+  // behaviour in test/ui/ai_send_gate_test.dart, which builds its own
+  // pipelines). Dropping either line below sends those photos again with
+  // every behavioural test still green.
+  group('the AI consent is read again at the send', () {
+    test('the app engine: over its own settings, never re-read from disk',
+        () {
+      final init = _body(
+        _source('lib/ui/di.dart'),
+        'static Future<AppServices> init(',
+        indent: '  ',
+      );
+      expect(init, _wired(r'\n\s*sendGate: aiSendGateFor\(settings\),'));
+    });
+
+    test('the background run: re-read from disk before each send', () {
+      final after = _body(
+        _source('lib/ui/background_glue.dart'),
+        'Future<bool> _runAfterLaunch({',
+      );
+      expect(
+        after,
+        _wired(
+          r'\n\s*sendGate: aiSendGateFor\(settings, rereadFromDisk: true\),',
+        ),
+      );
+    });
+
+    test('the adapter: the active recipient is allowed, or no key is set; '
+        'a disk re-read only on request', () {
+      // An expression-bodied function: from its name to its semicolon.
+      final glue = _source('lib/ui/background_glue.dart');
+      final from = glue.indexOf('AiSendGate aiSendGateFor(');
+      expect(from, isNot(-1));
+      final expr = glue.substring(from, glue.indexOf(';', from) + 1);
+      expect(
+        expr,
+        _wired(
+          r"allowed: \(\) => \(settings\.activeApiKey \?\? ''\)\.trim\(\)"
+          r'\.isEmpty \|\| settings\.hasAiConsent\('
+          r'settings\.activeAiConsentRoute\),',
+        ),
+      );
+      expect(
+        expr,
+        _wired(r'refresh: rereadFromDisk \? settings\.reloadAiConsent : null,'),
+      );
+    });
+
+    test('the pipeline: from the last check to the analyzer call nothing '
+        'awaits, and a held verdict is exempt at both checks', () {
+      final pipeline = _source('lib/ui/photo_pipeline.dart');
+      final process = _body(
+        pipeline,
+        'Future<PhotoOutcome> _process(IntakePhoto photo,',
+        indent: '  ',
+      );
+      // Early: before the photo is hashed or reserved.
+      final early = process.indexOf(
+        'if (held == null && !_sendAllowed()) return _notAllowed;',
+      );
+      expect(early, isNot(-1));
+      expect(early, lessThan(process.indexOf('await _hash(photo.bytes)')));
+      expect(early, lessThan(process.indexOf('dao.reservePhotoHash(')));
+      // At the send: the disk re-read, then the check, then the call.
+      final refresh = process.indexOf(
+        'if (held == null) await _refreshSendGate();',
+      );
+      final late = process.indexOf(
+        'if (held == null && !_sendAllowed()) {',
+      );
+      final send = process.indexOf('await analyzer.analyzePhoto(');
+      expect(refresh, isNot(-1));
+      expect(late, greaterThan(refresh));
+      expect(send, greaterThan(late));
+      expect(
+        process.indexOf('analyzer.analyzePhoto('),
+        process.lastIndexOf('analyzer.analyzePhoto('),
+        reason: 'one send in the pipeline',
+      );
+      final blocked = process.indexOf('return _notAllowed;', late);
+      final afterBranch = process.indexOf('}', blocked) + 1;
+      expect(blocked, inInclusiveRange(late, send));
+      expect(
+        process.substring(afterBranch, send),
+        isNot(contains('await')),
+        reason: 'a consent withdrawn in between would not be seen',
+      );
+    });
+  });
+
   group('lib/ui/background_glue.dart (the headless run)', () {
     String glue() => _source('lib/ui/background_glue.dart');
     String launch() => _body(glue(), 'Future<bool> runHeadlessBackfill({');
@@ -711,6 +820,15 @@ void main() {
       // G2a/G2b: the album lookup and the added dates ride the same channel.
       expect(ios.metaAlbumIds, isNotNull);
       expect(ios.assetAddedDate, isNotNull);
+      // RC 1.6.0: the live late-import pass reads a photo only while an
+      // automatic analysis could succeed (canAutoAnalyze), like every
+      // other automatic trigger.
+      final gate = ios.liveLateShouldContinue!;
+      expect(settings.canAutoAnalyze, isFalse, reason: 'no key yet');
+      expect(gate(), isFalse);
+      await settings.setGeminiApiKey('test-key');
+      expect(settings.canAutoAnalyze, isTrue);
+      expect(gate(), isTrue);
       final android =
           createPhotoIntake(settings, loggedAssetIds: logged, isIOS: false)
               as LibraryPhotoIntake;
@@ -718,6 +836,29 @@ void main() {
       expect(android.onLateImportPass, isNull);
       expect(android.metaAlbumIds, isNull);
       expect(android.assetAddedDate, isNull);
+      expect(android.liveLateShouldContinue, isNull);
+    },
+  );
+
+  testWidgets(
+    'the live late-import gate is closed while the app is in the '
+    'background, even with a key',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: _Keys(),
+      );
+      await settings.setGeminiApiKey('test-key');
+      final gate =
+          (createPhotoIntake(settings, isIOS: true) as LibraryPhotoIntake)
+              .liveLateShouldContinue!;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(gate(), isTrue);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      expect(gate(), isFalse);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(gate(), isTrue);
     },
   );
 }

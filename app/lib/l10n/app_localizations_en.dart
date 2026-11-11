@@ -2197,6 +2197,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reasonNoServerKey => 'no server address or upload key is set';
 
   @override
+  String get reasonNotAllowed =>
+      'this AI service is not allowed to receive your photos';
+
+  @override
+  String get errNotAllowed =>
+      'Nothing was sent: this AI service is not allowed to receive your photos. Chopstats asks first the next time you add one.';
+
+  @override
   String errRegionBlocked(String provider) {
     return '$provider is not available from your current network region. Check that the provider serves your region, or choose another provider.';
   }
@@ -2530,7 +2538,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantRecipientOpenrouter =>
-      'Lookups go to OpenRouter and its search partner Exa.';
+      'Lookups go to OpenRouter, which passes them on to the maker of the model you picked, and to its search partner Exa.';
 
   @override
   String restaurantUnsupported(String provider) {
@@ -2643,7 +2651,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get restaurantRecipientNameOpenrouter =>
-      'OpenRouter and its search partner Exa';
+      'OpenRouter (which passes them on to the maker of the model you picked) and its search partner Exa';
 
   @override
   String get restaurantConsentUseLocation => 'Use location';

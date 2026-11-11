@@ -2064,6 +2064,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reasonNoServerKey => '还没有设置服务器地址或上传密钥';
 
   @override
+  String get reasonNotAllowed => '还没有允许把照片发送给这个 AI 服务';
+
+  @override
+  String get errNotAllowed =>
+      '没有发送任何内容：还没有允许把照片发送给这个 AI 服务。下次添加照片时，筷拍会先征求你的同意。';
+
+  @override
   String errRegionBlocked(String provider) {
     return '$provider 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。';
   }
@@ -2363,7 +2370,8 @@ class AppLocalizationsZh extends AppLocalizations {
       '查询会用你的密钥发送给 Anthropic（Claude 网页搜索）。';
 
   @override
-  String get restaurantRecipientOpenrouter => '查询会发送给 OpenRouter 及其搜索合作方 Exa。';
+  String get restaurantRecipientOpenrouter =>
+      '查询会发送给 OpenRouter（再由它转交给你所选模型的厂商）及其搜索合作方 Exa。';
 
   @override
   String restaurantUnsupported(String provider) {
@@ -2465,7 +2473,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restaurantRecipientNameAnthropic => 'Anthropic（Claude 网页搜索）';
 
   @override
-  String get restaurantRecipientNameOpenrouter => 'OpenRouter 及其搜索合作方 Exa';
+  String get restaurantRecipientNameOpenrouter =>
+      'OpenRouter（再由它转交给你所选模型的厂商）及其搜索合作方 Exa';
 
   @override
   String get restaurantConsentUseLocation => '使用位置';

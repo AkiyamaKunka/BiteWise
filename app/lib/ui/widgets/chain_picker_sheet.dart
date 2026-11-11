@@ -85,6 +85,18 @@ class _ChainPickerSheetState extends State<ChainPickerSheet> {
     );
     final shown = rows.take(chainPickerMaxRows).toList();
     final height = MediaQuery.sizeOf(context).height * 0.75;
+    // The pinned search field covers the rows scrolled under it.
+    final sheetTheme = theme.bottomSheetTheme;
+    final background = sheetTheme.modalBackgroundColor ??
+        sheetTheme.backgroundColor ??
+        (theme.useMaterial3
+            ? theme.colorScheme.surfaceContainerLow
+            : theme.canvasColor);
+    // One scroll view: the title scrolls away and the search field stays
+    // pinned above the rows. With a fixed title and field over an
+    // Expanded list, the keyboard (the field autofocuses) left the list
+    // 0 px at the largest text size on a 320 pt phone, and 16 px on a
+    // phone in landscape.
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.only(
@@ -92,65 +104,71 @@ class _ChainPickerSheetState extends State<ChainPickerSheet> {
         ),
         child: SizedBox(
           height: height,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-                child: Text(
-                  l.assistPickerTitle,
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
+          child: CustomScrollView(
+            key: const Key('chainPickerList'),
+            slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+                  child: Text(
+                    l.assistPickerTitle,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ),
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  key: const Key('chainPickerSearch'),
-                  controller: _query,
-                  autofocus: true,
-                  textInputAction: TextInputAction.search,
-                  onChanged: (_) => setState(() {}),
-                  decoration: InputDecoration(
-                    hintText: l.assistPickerSearch,
-                    prefixIcon: const Icon(Icons.search),
-                    border: const OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: shown.isEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.all(24),
-                        child: Text(
-                          l.assistPickerNone,
-                          key: const Key('chainPickerNone'),
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        key: const Key('chainPickerList'),
-                        itemCount: shown.length,
-                        itemBuilder: (context, i) {
-                          final c = shown[i];
-                          final label = chainPickerLabel(c, zh: zh);
-                          return ListTile(
-                            key: Key('chainPick-${c.key}'),
-                            title: Text(label),
-                            // The English name under a Chinese one, so the
-                            // chain is never a guess.
-                            subtitle: label == c.name ? null : Text(c.name),
-                            onTap: () => Navigator.pop(context, c.key),
-                          );
-                        },
+              PinnedHeaderSliver(
+                child: ColoredBox(
+                  color: background,
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                    child: TextField(
+                      key: const Key('chainPickerSearch'),
+                      controller: _query,
+                      autofocus: true,
+                      textInputAction: TextInputAction.search,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: l.assistPickerSearch,
+                        prefixIcon: const Icon(Icons.search),
+                        border: const OutlineInputBorder(),
+                        isDense: true,
                       ),
+                    ),
+                  ),
+                ),
               ),
+              if (shown.isEmpty)
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Text(
+                      l.assistPickerNone,
+                      key: const Key('chainPickerNone'),
+                      textAlign: TextAlign.center,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverList.builder(
+                  itemCount: shown.length,
+                  itemBuilder: (context, i) {
+                    final c = shown[i];
+                    final label = chainPickerLabel(c, zh: zh);
+                    return ListTile(
+                      key: Key('chainPick-${c.key}'),
+                      title: Text(label),
+                      // The English name under a Chinese one, so the
+                      // chain is never a guess.
+                      subtitle: label == c.name ? null : Text(c.name),
+                      onTap: () => Navigator.pop(context, c.key),
+                    );
+                  },
+                ),
             ],
           ),
         ),

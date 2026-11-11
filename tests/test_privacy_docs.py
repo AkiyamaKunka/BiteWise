@@ -18,6 +18,8 @@ import re
 import string
 import unicodedata
 
+import lookup_jobs
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
@@ -145,6 +147,31 @@ def test_consent_copy_exists_in_both_languages_and_matches_the_policy():
     assert "only suggests" in en["restaurantConsentSuggestOnly"]
     assert "只会建议" in zh["restaurantConsentSuggestOnly"]
     assert "only suggested" in en["restaurantSuggestOnly"]
+
+
+def test_openrouter_lookups_also_name_the_maker_of_the_picked_model():
+    """An OpenRouter lookup is a chat completion for the model picked in
+    Settings (openrouter_lookup_client.dart sends `model: lookupModel`;
+    only the search engine is pinned), so OpenRouter passes it on to that
+    model's maker, exactly as the AI consent says for photos
+    (aiConsentRelayRecipient). The lookup has its own consent and never
+    reads the AI one, so its sheet, its Settings footer and the policy must
+    name that recipient too (RC 1.6.0 review, 2026-11-10)."""
+    en, zh = _arb("en"), _arb("zh")
+    for k in ("restaurantRecipientNameOpenrouter",
+              "restaurantRecipientOpenrouter"):
+        assert "maker of the model you picked" in en[k], k
+        assert "Exa" in en[k], k
+        assert "所选模型的厂商" in zh[k], k
+        assert "Exa" in zh[k], k
+    en_p, zh_p = _policy_halves()
+    en_lookup = _lookup_section(en_p, "### Restaurant nutrition lookup")
+    zh_lookup = _lookup_section(zh_p, "### 餐厅营养查询")
+    assert ("**OpenRouter** (your API key): OpenRouter (which passes the "
+            "request on to the company behind the model you picked) and its "
+            "search partner Exa.") in en_lookup
+    assert ("**OpenRouter**（你的 API Key）：OpenRouter（它会把请求转交给你所选"
+            "模型背后的公司）及其搜索合作方 Exa。") in zh_lookup
 
 
 def test_photo_permission_text_mentions_the_photo_location():
@@ -589,3 +616,18 @@ def test_every_bold_marker_in_the_policy_renders_on_github():
         assert _literal_bold_markers(fine) == [], fine
 
     assert _literal_bold_markers(_read("docs", "PRIVACY.md")) == []
+
+
+def test_the_policys_own_server_retention_is_the_servers_cache_ttl():
+    """The policy tells the user how long their own server keeps a lookup's
+    request and answer; lookup_jobs.CACHE_TTL_SECONDS is what makes it
+    true. The hours are built from the constant, so the code and the policy
+    (English and 中文) cannot move apart (RC 1.6.0 review, 2026-11-10)."""
+    ttl = lookup_jobs.CACHE_TTL_SECONDS
+    assert ttl % 3600 == 0, ttl
+    hours = ttl // 3600
+    en, zh = map(_flat, _policy_halves())
+    assert ("Your server keeps a lookup's request and answer in memory for "
+            "up to %d hours." % hours) in en
+    assert ("你的服务器会在内存中保留一次查询的请求和结果，最长 %d 小时。"
+            % hours) in zh

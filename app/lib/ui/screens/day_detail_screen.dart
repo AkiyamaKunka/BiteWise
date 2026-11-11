@@ -13,6 +13,7 @@ import '../l10n.dart';
 import '../large_text.dart';
 import '../meal_in_use.dart';
 import '../meal_thumbs.dart';
+import '../refresh_signal.dart';
 import '../restaurant_assist_controls.dart';
 import '../services.dart' show SettingsStore;
 import '../widgets/macro_chart.dart';
@@ -92,6 +93,7 @@ class _DayDetailScreenState extends State<DayDetailScreen> {
         inUse: widget.mealInUse,
         assist: widget.restaurantAssist,
         settings: widget.settings,
+        mealsChanged: mealsChangedSignal,
       ),
     ));
     if (saved == true) {

@@ -1,0 +1,260 @@
+{
+  "_about": "Meals whose composed lookup request the server gate (lookup_contract.py) refuses as coordinate-shaped although the composer kept every field, and the body ServerLookupClient sends for each instead. Pinned on both sides: app/test/assist/clients/server_lookup_client_test.dart (the client sends 'sent') and tests/test_lookup_contract.py (the gate refuses the composed request and accepts 'sent' unchanged).",
+  "cases": [
+    {
+      "case": "a name ending in degrees, then a numeric unit (15° 12 reads as degrees and minutes)",
+      "meal": {
+        "items": [
+          {
+            "name": "Junmai sake 15°",
+            "qty": 1,
+            "unit": "12 oz",
+            "brand": "Benihana"
+          }
+        ]
+      },
+      "sent": {
+        "items": [
+          {
+            "name": "Junmai sake 15°",
+            "qty": 1,
+            "unit": "",
+            "brand": "Benihana"
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "benihana",
+            "name": "Benihana",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US",
+        "backend": "claude"
+      }
+    },
+    {
+      "case": "a size letter, then an 85°C item (S 85° reads as a hemisphere)",
+      "meal": {
+        "items": [
+          {
+            "name": "Milk tea size S",
+            "qty": 1,
+            "unit": "cup",
+            "brand": "85°C Bakery Cafe"
+          },
+          {
+            "name": "85°C sea salt coffee",
+            "qty": 1,
+            "unit": "cup",
+            "brand": ""
+          }
+        ]
+      },
+      "sent": {
+        "items": [
+          {
+            "name": "Milk tea size S",
+            "qty": 1,
+            "unit": "cup",
+            "brand": "85°C Bakery Cafe"
+          },
+          {
+            "name": "",
+            "qty": 1,
+            "unit": "cup",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "eighty_five_c",
+            "name": "85°C Bakery Cafe",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US",
+        "backend": "claude"
+      }
+    },
+    {
+      "case": "a price-like decimal, then another (a coordinate pair)",
+      "meal": {
+        "items": [
+          {
+            "name": "Combo 12.99",
+            "qty": 1,
+            "unit": "",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "0.50 L lemonade",
+            "qty": 1,
+            "unit": "",
+            "brand": ""
+          }
+        ]
+      },
+      "sent": {
+        "items": [
+          {
+            "name": "Combo 12.99",
+            "qty": 1,
+            "unit": "",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "",
+            "qty": 1,
+            "unit": "",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US",
+        "backend": "claude"
+      }
+    },
+    {
+      "case": "the one-character Celsius sign, which full NFKC reads as °C",
+      "meal": {
+        "items": [
+          {
+            "name": "Oolong tea S 85℃",
+            "qty": 1,
+            "unit": "cup",
+            "brand": "85°C Bakery Cafe"
+          },
+          {
+            "name": "Pineapple bun",
+            "qty": 2,
+            "unit": "bun"
+          }
+        ]
+      },
+      "sent": {
+        "items": [
+          {
+            "name": "",
+            "qty": 1,
+            "unit": "cup",
+            "brand": "85°C Bakery Cafe"
+          },
+          {
+            "name": "Pineapple bun",
+            "qty": 2,
+            "unit": "bun",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "eighty_five_c",
+            "name": "85°C Bakery Cafe",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US",
+        "backend": "claude"
+      }
+    },
+    {
+      "case": "a soft hyphen, which the gate removes (15° 12 then reads as degrees and minutes)",
+      "meal": {
+        "items": [
+          {
+            "name": "Hot sake 15° ­ 12 oz",
+            "qty": 1,
+            "unit": "carafe",
+            "brand": "Benihana"
+          },
+          {
+            "name": "Edamame",
+            "qty": 1,
+            "unit": "bowl"
+          }
+        ]
+      },
+      "sent": {
+        "items": [
+          {
+            "name": "",
+            "qty": 1,
+            "unit": "carafe",
+            "brand": "Benihana"
+          },
+          {
+            "name": "Edamame",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "benihana",
+            "name": "Benihana",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US",
+        "backend": "claude"
+      }
+    },
+    {
+      "case": "Arabic-Indic digits, which the gate reads as ASCII digits",
+      "meal": {
+        "items": [
+          {
+            "name": "Bowl",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "Chips ٤٣.٠٧٣٠٥",
+            "qty": 1,
+            "unit": "bag"
+          }
+        ]
+      },
+      "sent": {
+        "items": [
+          {
+            "name": "Bowl",
+            "qty": 1,
+            "unit": "bowl",
+            "brand": "Chipotle"
+          },
+          {
+            "name": "",
+            "qty": 1,
+            "unit": "bag",
+            "brand": ""
+          }
+        ],
+        "order_merchant": "",
+        "chains": [
+          {
+            "key": "chipotle",
+            "name": "Chipotle",
+            "size": "20_plus"
+          }
+        ],
+        "country": "US",
+        "backend": "claude"
+      }
+    }
+  ]
+}
