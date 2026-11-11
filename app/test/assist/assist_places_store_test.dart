@@ -210,6 +210,75 @@ void main() {
     ]);
   });
 
+  // Review r2 2026-11-11: a read left an expired entry out of its answer
+  // but kept it in the document, so a spot the user taught stayed on the
+  // phone past its 180 days until the next zone, confirmation or block.
+  test('a read takes entries past their 180 days off the phone, not only '
+      'out of its answer; with nothing left the document is deleted', () async {
+    final s = places();
+    await s.addZone(_capitol);
+    await s.confirm('chipotle', _capitol);
+    now = now.add(const Duration(days: 100));
+    await s.block('qdoba', _timesSquare);
+    now = now.add(const Duration(days: 81));
+
+    final learned = await places().read(); // another instance, same file
+    expect(learned.zones, isEmpty);
+    expect(learned.confirmed, isEmpty);
+    expect(learned.blockedNear(_timesSquare), {'qdoba'});
+    final doc = document();
+    expect(doc['zones'], isEmpty);
+    expect(doc['confirmed'], isEmpty);
+    expect(doc['blocked'], [
+      {
+        'chain_key': 'qdoba',
+        'cell': _timesSquare.wire,
+        'at': ago(const Duration(days: 81)),
+      },
+    ]);
+    expect(file.readAsStringSync(), isNot(contains(_capitol.wire)));
+
+    now = now.add(const Duration(days: 100));
+    expect((await places().read()).isEmpty, isTrue);
+    expect(file.existsSync(), isFalse);
+  });
+
+  test('a read rewrites nothing when nothing is past its time, and leaves '
+      'a corrupt or other-version document as it is', () async {
+    var writes = 0;
+    final counting = AssistPlacesStore(
+      LocalNoBackupStore(
+        root: () async => root,
+        createMissingDirectory: true,
+        clock: () => now,
+        beforeRename: (_) async => writes++,
+      ),
+      clock: () => now,
+    );
+    await counting.addZone(_capitol);
+    await counting.confirm('chipotle', _timesSquare);
+    expect(writes, 2);
+    now = now.add(const Duration(days: 179));
+    expect((await counting.read()).zones, [_capitol]);
+    expect((await counting.read()).confirmedNear(_timesSquare), {'chipotle'});
+    expect(writes, 2, reason: 'nothing to drop: no write');
+
+    for (final raw in [
+      '{"v":1,"zones":[{"cell":"43.0',
+      jsonEncode({
+        'v': 2,
+        'zones': [
+          {'cell': '43.075,-89.384', 'at': ago(const Duration(days: 400))},
+        ],
+      }),
+    ]) {
+      writeRaw(raw);
+      expect((await counting.read()).isEmpty, isTrue, reason: raw);
+      expect(file.readAsStringSync(), raw, reason: raw);
+    }
+    expect(writes, 2);
+  });
+
   test('a confirmation in use lives on past 180 days from its first', () async {
     final s = places();
     await s.confirm('chipotle', _capitol);

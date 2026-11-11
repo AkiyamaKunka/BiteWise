@@ -21,7 +21,7 @@ import 'dart:async';
 
 import '../../core/contracts.dart';
 import '../local_store.dart';
-import 'capture_dating.dart' show glassesImportLag;
+import 'capture_dating.dart' show glassesImportLag, glassesRedatedShutter;
 import 'food_prefilter.dart';
 import 'glasses.dart' show captureAnalysis;
 
@@ -85,6 +85,11 @@ abstract final class GlassesCheckOutcome {
     retry,
     failed,
   };
+
+  /// What a look at the photo itself settled: a row with one of these is
+  /// never replaced by an entry that is not the photo's own verdict
+  /// ([GlassesCheckEntry.ownVerdict]).
+  static const verdicts = {logged, notFood, notFoodAi, duplicate, failed};
 }
 
 /// One photo's row.
@@ -100,6 +105,7 @@ class GlassesCheckEntry {
     this.hasGps = false,
     this.gpsFixDeltaSeconds,
     this.foodScore,
+    this.ownVerdict = true,
   });
 
   /// The library asset ('' for a shared file, which has none).
@@ -128,12 +134,26 @@ class GlassesCheckEntry {
   /// Whether its EXIF carries a GPS position (never the position itself).
   final bool hasGps;
 
-  /// The GPS fix time minus the shutter, in seconds (glasses.dart
-  /// captureAnalysis' gps_fix_delta_s); null without one.
+  /// The GPS fix time minus the shutter, in seconds; null without one.
+  /// Like [lagSeconds], the shutter is the creation date (glasses.dart
+  /// captureAnalysis' gps_fix_delta_s), or, where the dating guard dates
+  /// the photo by its EXIF shutter because createDate is only the import
+  /// time, that shutter (capture_dating.dart glassesRedatedShutter): a fix
+  /// 20 s after the shutter reads +0:20, not minus the import's 3 h.
+  /// analysis.capture keeps the creation date's difference.
   final int? gpsFixDeltaSeconds;
 
   /// The on-device food score, 0–1; null when no check ran.
   final double? foodScore;
+
+  /// Whether [outcome] is a verdict on the photo itself. False for a
+  /// refusal the pipeline reached before it even hashed the photo (Meta
+  /// glasses photos switched off, the consent, the paused automatic
+  /// analysis, the app in the background): every catch-up offers the
+  /// photos of its look-back window again, settled ones included, and such
+  /// a refusal never replaces a row with one of
+  /// [GlassesCheckOutcome.verdicts] ([recordGlassesCheck]). Not stored.
+  final bool ownVerdict;
 
   Map<String, Object?> toJson() => {
         'asset': assetId,
@@ -180,7 +200,10 @@ class GlassesCheckEntry {
   /// [photo]'s row: [outcome] reached [at], with the food check that ran
   /// on it ([check], null when none did). Never throws.
   static GlassesCheckEntry of(IntakePhoto photo,
-      {required String outcome, FoodCheck? check, required DateTime at}) {
+      {required String outcome,
+      FoodCheck? check,
+      required DateTime at,
+      bool ownVerdict = true}) {
     final capture = photo.capture;
     final exif = capture?.exif;
     int? lag;
@@ -190,10 +213,20 @@ class GlassesCheckEntry {
     }
     int? fixDelta;
     try {
-      final delta = capture == null
-          ? null
-          : captureAnalysis(capture)['gps_fix_delta_s'];
-      if (delta is int) fixDelta = delta;
+      final shutter = glassesRedatedShutter(capture, now: at);
+      final fix = exif?.gpsFixUtc;
+      if (shutter != null) {
+        // createDate is only the import time: measure from the shutter.
+        if (fix != null) {
+          final delta = fix.difference(shutter.toUtc()).inSeconds;
+          if (delta.abs() <= _maxSeconds) fixDelta = delta;
+        }
+      } else {
+        final delta = capture == null
+            ? null
+            : captureAnalysis(capture)['gps_fix_delta_s'];
+        if (delta is int) fixDelta = delta;
+      }
     } catch (_) {}
     final score = check?.status == FoodCheckStatus.ok ? check?.score : null;
     return GlassesCheckEntry(
@@ -207,6 +240,7 @@ class GlassesCheckEntry {
       hasGps: exif?.gpsPresent ?? false,
       gpsFixDeltaSeconds: fixDelta,
       foodScore: score,
+      ownVerdict: ownVerdict,
     );
   }
 }
@@ -232,7 +266,10 @@ String? _text(String? v) {
 /// same asset, then rows older than [glassesCheckWindow] and all but the
 /// newest [glassesCheckKept] go. The import lag is the photo's, not the
 /// verdict's: when [entry] does not know it (a deliberate re-add, whose
-/// intake never asks the library) the replaced row's is kept. Never throws.
+/// intake never asks the library) the replaced row's is kept. An [entry]
+/// that is not the photo's own verdict ([GlassesCheckEntry.ownVerdict])
+/// leaves a row with one of [GlassesCheckOutcome.verdicts] as it is, and
+/// the record unwritten. Never throws.
 Future<void> recordGlassesCheck(LocalNoBackupStore store,
     GlassesCheckEntry entry,
     {DateTime? now}) async {
@@ -247,6 +284,10 @@ Future<void> recordGlassesCheck(LocalNoBackupStore store,
       if (entry.assetId.isEmpty || row['asset'] != entry.assetId) {
         rows.add(row);
         continue;
+      }
+      if (!entry.ownVerdict &&
+          GlassesCheckOutcome.verdicts.contains(row['outcome'])) {
+        return;
       }
       final known = row['lag_s'];
       if (entry.lagSeconds == null &&

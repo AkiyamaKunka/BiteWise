@@ -1678,7 +1678,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fixIntro =>
-      '说出要改或要删的内容 —— 用你习惯的方式描述那一餐（\"那碗面\"、\"早餐\"、\"600 千卡那个\"），任何语言都可以。要把某餐挪到别的日期或时间，请在「今天」或「历史」里点开那一餐，修改日期或时间。';
+      '说出要改或要删的内容 —— 用你习惯的方式描述那一餐（「那碗面」、「早餐」、「600 千卡那个」），任何语言都可以。要把某餐挪到别的日期或时间，请在「今天」或「历史」里点开那一餐，修改日期或时间。';
 
   @override
   String get fixNamingTip => '最稳妥的是说出食物名 —— 餐次编号是按最近 7 天算的，不只是今天。';
@@ -1687,7 +1687,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fixLabel => '要改什么？';
 
   @override
-  String get fixHint => '例如：\"那碗面其实是烧鸭饭\"\n或 \"删除刚才那杯咖啡\"';
+  String get fixHint => '例如：「那碗面其实是烧鸭饭」\n或「删除刚才那杯咖啡」';
 
   @override
   String get working => '处理中…';
@@ -2594,7 +2594,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get restaurantConsentBrandOnly => '\"仅按品牌\"不使用位置，只用照片中杯子、袋子或小票上印的品牌名。';
+  String get restaurantConsentBrandOnly => '「仅按品牌」不使用位置，只用照片中杯子、袋子或小票上印的品牌名。';
 
   @override
   String get restaurantConsentHttps =>

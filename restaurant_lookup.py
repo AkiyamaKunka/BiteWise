@@ -245,8 +245,12 @@ def chain_name_only(value, max_chars):
     canonical name of the table chain it names (match_chain on the cleaned
     text, then on its head before the first separator or standalone
     number), or "" -- never the printed text itself, which can carry a
-    store number, a street or a city. Twin of the Dart chainNameOnly."""
-    text = clean_short_text(value, max_chars)
+    store number, a street or a city. A printed TM or SM sign is a
+    separator (chain_marks_as_spaces), read before the cleaner would spell
+    it out. Twin of the Dart chainNameOnly."""
+    text = clean_short_text(
+        chain_marks_as_spaces(value) if isinstance(value, str) else value,
+        max_chars)
     if not text:
         return ""
     key = match_chain(text)
@@ -390,15 +394,26 @@ def _ascii_lower(s):
     return "".join(chr(ord(c) + 32) if "A" <= c <= "Z" else c for c in s)
 
 
+def chain_marks_as_spaces(s):
+    """s with the trademark and service mark signs (U+2122, U+2120) as
+    spaces. nfkc_lite, and every cleaner built on it, spells them out as
+    the letters TM and SM, which would glue onto the brand in front
+    ("Whataburger\u2122" -> "whataburgertm"), so chain matching reads them
+    as the separators the registered sign already is, before any folding.
+    Twin of the Dart chainMarksAsSpaces."""
+    return s.replace("\u2122", " ").replace("\u2120", " ")
+
+
 def chain_tokens(value):
-    """Match tokens of a name: nfkc_lite, apostrophes dropped, Latin-1
+    """Match tokens of a name: the TM and SM signs read as separators
+    (chain_marks_as_spaces), then nfkc_lite, apostrophes dropped, Latin-1
     letters folded to ASCII, ASCII lowercased, "&" and "+" read as "and",
     each CJK character its own token, anything else a separator; a leading
     "the" is ignored when more follows."""
     if not isinstance(value, str):
         return []
     buf = []
-    for ch in nfkc_lite(value):
+    for ch in nfkc_lite(chain_marks_as_spaces(value)):
         r = ord(ch)
         if r in _DROPPED:
             continue
@@ -501,7 +516,11 @@ def _cut_name(value):
 def match_chain_name(name):
     """The chain a place or brand name belongs to, or None. A name that
     looks like a web address never matches by name."""
-    if not isinstance(name, str) or _is_host_like(name):
+    if not isinstance(name, str):
+        return None
+    # Before the suffix cut too: it folds with nfkc_lite.
+    name = chain_marks_as_spaces(name)
+    if _is_host_like(name):
         return None
     key, matched = _match_tokens(chain_tokens(name))
     if matched:

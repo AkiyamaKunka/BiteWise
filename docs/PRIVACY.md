@@ -27,6 +27,13 @@ accounts, and receives none of your data.**
   recognized, the camera model, whether it carries a location — never the
   location itself — its on-phone food score and what happened to it),
   shown on the diagnostics page. It is kept outside your phone's backups.
+- Each meal logged from a photo keeps a short note of how the photo was
+  taken: whether it came from Meta glasses and how that was recognized,
+  whether the photo carries a location, how precise that location is and
+  how far its time lies from the photo's — never the location itself —
+  and a short code made from the shutter time and the camera, used to
+  spot two copies of one shot. Unlike the Meta glasses record, this note
+  is part of the meal: it is in your exports and your phone's backups.
 - Only if you turn on **Restaurant nutrition** lookup: the restaurants you
   confirmed or marked as wrong and the spots you marked as "not a
   restaurant" (each kept as an area of roughly 100 m, for up to 180 days;
@@ -352,6 +359,7 @@ date. Questions: open an issue at
 - API Key（以及你自己服务器的密钥，如果你使用的话）保存在 iOS 钥匙串中；在 Android 上保存在由 Android Keystore 保护的加密存储中。
 - 通知（餐食卡片、每日总结）在手机上生成。
 - 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
+- 每一条用照片记录的餐食都会保存一条照片如何拍摄的简短说明：是否来自 Meta 眼镜、是怎样识别出来的，照片是否带有位置、位置的精度，以及定位时间与拍摄时间相差多久——绝不记录位置本身——还有一个由拍摄时间和相机生成的简短代码，用来识别同一次拍摄的两份副本。与上面的 Meta 眼镜记录不同，这条说明是餐食的一部分：会包含在导出文件和手机的备份中。
 - 仅当你开启**「餐厅营养」查询**时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；每条都记录最后一次使用的时间，空间不够时先删除最久没用的；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的**「清除已记住的地点」**会删除这些地点、保存的查询结果和还在等待的查询。在不保存地点的 Android 上，**「清除保存的查询结果」**会删除保存的查询结果和还在等待的查询。
 - **「我常吃的」**和**「你平时的数值」**都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按**「采用」**）。这一餐会在该食物上保存一个小标记，说明数值是你设定的，以及你改过名的食物最初由 AI 给出的名称。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时（第二天凌晨 4 点前拍的照片也一样），它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
 
