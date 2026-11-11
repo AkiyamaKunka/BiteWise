@@ -37,7 +37,6 @@ import 'package:calorie_tracker/services/photo/photo_location.dart';
 import 'package:calorie_tracker/services/places/places.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/widgets/restaurant_consent_sheet.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
