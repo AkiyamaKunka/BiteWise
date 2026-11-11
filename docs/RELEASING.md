@@ -351,18 +351,37 @@ When merging #22 after this PR:
   Use the wording `docs/SERVER.md` already has: "that day's meal
   summaries, plus the day before's for a photo taken before 4 a.m.".
 
-**After #22, one restyle commit:**
-- Move the *My usual foods* screen, the usual-numbers card and the chip to
-  run 7's kit: `context.colors/type/nums`, `GroupedRow.custom`,
-  `EmptyState` for the empty and all-hidden states, `LoadingState`, and
-  `appAlertDialog` for "Log it again?" and the Android clear dialog.
-- Re-add the Log sheet row with run 7's neutral badge role.
-- Tests: `add_flow_refresh_test` builds services with a fake `UsualFoods`
-  and asserts `_badgeFill(tester, 'addUsual') == badgeNeutral`, and its
-  AX5-on-SE loop (375×667, en and zh) runs with the row present;
-  `meal_editor_large_text_test` renders the usual card with two items;
-  `large_text_dialog_test` adds "Log it again?"; `theme_contrast_test`
-  still passes.
+**After #22, one restyle commit:** **done 2026-11-11** on branch
+`chore/usual-foods-run7-kit` (from `main` at 2b85014, a few small
+commits: cc26be4 to da80fa5). Where each item went:
+- *My usual foods* (`ui/screens/usual_foods_screen.dart`, cc26be4): rows
+  are `GroupedRow.custom` in `context.colors`; `LoadingState`, an
+  `InlineError` with Retry for a failed read, `EmptyState` for the empty
+  and all-hidden states; "Log it again?" is `appAlertDialog`; the hidden
+  row's badge is the neutral grey. The Hidden foods sheet is a
+  `GroupedSheet` built by its route, as Body's log sheet is, not
+  `showGroupedSheet`: its title counts the meals still hidden, and
+  `showGroupedSheet` fixes the title when the sheet opens.
+- The usual-numbers card (`ui/widgets/usual_offer_card.dart`) is a
+  `GroupedCard`, and the chip (`ui/widgets/usual_chip.dart`) uses the
+  tokens (0ded068). The card keeps its tonal and outlined buttons, which
+  the theme draws as the editor's other controls.
+- The Android clear dialog (`_confirmClearAnswers` in
+  `ui/screens/settings/restaurant_section.dart`) is `appAlertDialog`
+  (c27e551). Its Clear and that of #19's iOS "Clear learned places?"
+  beside it are `AppButtonStyles.destructive`, as Stop sharing and every
+  Delete are; the iOS dialog is otherwise unchanged.
+- The Log sheet row was already back after the #22 merge, on the neutral
+  role (`colorScheme.secondary`, painted `badgeNeutral`).
+- Tests: `add_flow_refresh_test` builds services with the usual-foods
+  service on (`makeUsualFoods` over a `FakeDao`) and pins
+  `_badgeFill(tester, 'addUsual')` to `badgeNeutral` in light and dark;
+  its AX5-on-SE loop (375×667, en and zh) runs with the row present
+  (9f1aa09). `meal_editor_large_text_test` renders the usual card with
+  two items (fe04d8f); it found the description's floated label covering
+  the card's bottom edge at AX5, so the card right above the description
+  now leaves `_gapAboveField(16)`. `large_text_dialog_test` adds "Log it
+  again?" in en and zh (da80fa5). `theme_contrast_test` still passes.
 
 **Check after any of these merges.** The #19 × #22 merge is textually
 clean but has never been compiled. On the merged tree run

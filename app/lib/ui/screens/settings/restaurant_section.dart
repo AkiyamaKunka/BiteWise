@@ -26,6 +26,8 @@ import '../../l10n.dart';
 import '../../provider_names.dart' show providerDisplayLabel;
 import '../../restaurant_assist_controls.dart';
 import '../../services.dart' show SettingsStore;
+import '../../theme/app_dialog.dart';
+import '../../theme/app_theme.dart' show AppButtonStyles;
 import '../../widgets/grouped.dart';
 import '../../widgets/restaurant_consent_sheet.dart';
 
@@ -234,6 +236,7 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
               child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('clearPlacesConfirm'),
+              style: AppButtonStyles.destructive(ctx),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(ctx.l10n.clearPlacesConfirm)),
         ],
@@ -249,11 +252,10 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
   Future<void> _confirmClearAnswers() async {
     final go = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      // The app's dialog: title and body scroll together (a fixed title
+      // overflowed at the largest text size on a 320 pt phone).
+      builder: (ctx) => appAlertDialog(
         key: const Key('clearAnswersDialog'),
-        // Title and body scroll together: a fixed title overflowed at the
-        // largest text size on a 320 pt phone.
-        scrollable: true,
         title: Text(ctx.l10n.clearAnswersTitle),
         content: Text(ctx.l10n.clearAnswersBody),
         actions: [
@@ -262,6 +264,7 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
               child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('clearAnswersConfirm'),
+              style: AppButtonStyles.destructive(ctx),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(ctx.l10n.clearPlacesConfirm)),
         ],
