@@ -2688,6 +2688,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String assistSourceLinkLabel(String host) {
+    return 'Source: $host, opens in your browser';
+  }
+
+  @override
   String get assistSourceNotOfficial => 'Not the chain\'s own website';
 
   @override

@@ -2510,6 +2510,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String assistSourceLinkLabel(String host) {
+    return '来源：$host，在浏览器中打开';
+  }
+
+  @override
   String get assistSourceNotOfficial => '不是该连锁店的官网';
 
   @override

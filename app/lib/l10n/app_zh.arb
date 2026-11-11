@@ -794,6 +794,7 @@
   "assistCardApplied": "已采用公布的数值",
   "assistCardSuggested": "建议：AI 的数值未改动",
   "assistSourceHost": "来源：{host}",
+  "assistSourceLinkLabel": "来源：{host}，在浏览器中打开",
   "assistSourceNotOfficial": "不是该连锁店的官网",
   "assistVia": "通过 {provider} · {date}",
   "assistGrounded": "数值见于来源页面",

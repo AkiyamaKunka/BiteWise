@@ -9,7 +9,7 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 776 keys, and the generated classes say what
+/// - Both files have the same 777 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
 /// - Keys added or changed after review (fix list U3, U5, C5) follow the
 ///   same rules; the iOS Off box names the saved answers it also clears.
@@ -188,9 +188,9 @@ void main() {
     expect(_render.keys.toSet(), {..._newKeys.keys, _changed, _changedOff});
   });
 
-  test('both files have the same 776 keys', () {
-    expect(_messageKeys(en), hasLength(776));
-    expect(_messageKeys(zh), hasLength(776));
+  test('both files have the same 777 keys', () {
+    expect(_messageKeys(en), hasLength(777));
+    expect(_messageKeys(zh), hasLength(777));
     expect(_messageKeys(zh).toSet(), _messageKeys(en).toSet());
   });
 
