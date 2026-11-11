@@ -492,8 +492,10 @@ void main() {
       // and this pin are set by hand, and again to the merge date when PR
       // #19 merges, when the usual-foods PR merges and when PR #22 merges
       // (docs/RELEASING.md): a 3-way merge keeps the older date without a
-      // conflict. PR #19 and the usual-foods PR both merged on 2026-11-09.
-      expect(policy, contains('Effective date: 2026-11-09'));
+      // conflict. PR #19 and the usual-foods PR both merged on 2026-11-09;
+      // the 1.6.0 review fixes, which also name the maker of the OpenRouter
+      // model a lookup goes to, merged on 2026-11-10.
+      expect(policy, contains('Effective date: 2026-11-10'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));

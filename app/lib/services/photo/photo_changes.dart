@@ -822,8 +822,9 @@ class LateImportHooks {
   /// The lookback window's images, no bytes read: the rescan's source.
   final Future<List<LibraryAsset>> Function(DateTime cutoff) listWindow;
 
-  /// The caller's time budget, asked once before a rescan batch (the
-  /// offers ask it per photo themselves).
+  /// The caller's time budget (or the live watcher's gate), asked once
+  /// before the carry is looked up and offered and once before a rescan
+  /// batch (the offers ask it per photo themselves).
   final bool Function()? shouldContinue;
 }
 
@@ -884,7 +885,13 @@ class LateImportCursor {
       final (status, offer) = await _begin(cutoff, hooks);
       if (offer == null) return LateImportReport(status);
       var caught = 0;
-      if (offer.isNotEmpty) caught += await _offerCarry(offer, cutoff, hooks);
+      // No budget at all: nothing would be read, so nothing is looked up
+      // either (a library call per carried photo, on every change event
+      // while the live pass waits). The token moved and the carry is kept.
+      final ask = hooks.shouldContinue;
+      if (offer.isNotEmpty && (ask == null || ask())) {
+        caught += await _offerCarry(offer, cutoff, hooks);
+      }
       if (windowCoveredFrom != null) {
         await _clearRescanCoveredBy(windowCoveredFrom);
       }

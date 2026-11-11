@@ -343,6 +343,64 @@ void main() {
       expect((await s.jobs())[3]!.fresh, isFalse);
     });
 
+    test('the recipient a job was sent to round-trips as its consent stamp; '
+        'anything else drops the entry, and retainJobs can keep one '
+        'recipient\'s only', () async {
+      final s = state();
+      AssistJob job(String? recipient) => AssistJob(
+        jobId: 'job_rcpt_0001',
+        reqHash: '0123456789abcdef',
+        at: now,
+        nextAt: now,
+        recipient: recipient,
+      );
+      expect(await s.putJob(1, job('anthropic')), isTrue);
+      expect(await s.putJob(2, job('claude_plan:0a1b2c3d')), isTrue);
+      expect(await s.putJob(3, job(null)), isTrue);
+      // Never a host, an address or free text.
+      expect(await s.putJob(4, job('bitewise.example.test')), isFalse);
+      expect(await s.putJob(4, job('claude_plan:https://10.0.0.5')), isFalse);
+      final jobs = await s.jobs();
+      expect(jobs[1]!.recipient, 'anthropic');
+      expect(jobs[2]!.recipient, 'claude_plan:0a1b2c3d');
+      expect(jobs[3]!.recipient, isNull);
+      final stored = {
+        for (final e in (doc(assistJobsDocument)['jobs'] as List).cast<Map>())
+          e['meal_id']: e,
+      };
+      expect(stored[2]!['recipient'], 'claude_plan:0a1b2c3d');
+      expect(stored[3]!.containsKey('recipient'), isFalse);
+
+      // One recipient's records only: another's and a record without one go.
+      expect(
+        await s.retainJobs({1, 2, 3}, recipient: 'claude_plan:0a1b2c3d'),
+        isTrue,
+      );
+      expect((await s.jobs()).keys, [2]);
+      // Without a recipient named, only the meals decide (as before).
+      await s.putJob(1, job('anthropic'));
+      expect(await s.retainJobs({1, 2}), isTrue);
+      expect((await s.jobs()).keys.toSet(), {1, 2});
+
+      file(assistJobsDocument).writeAsStringSync(
+        jsonEncode({
+          'v': assistLocalVersion,
+          'jobs': [
+            {
+              'meal_id': 1,
+              'job_id': 'job_rcpt_0001',
+              'req_hash': '0123456789abcdef',
+              'attempts': 0,
+              'next_at': now.toIso8601String(),
+              'at': now.toIso8601String(),
+              'recipient': 'https://bitewise.example.test',
+            },
+          ],
+        }),
+      );
+      expect(await s.jobs(), isEmpty);
+    });
+
     test('AssistPlaceContext.within keeps what the request carries', () {
       const place = AssistPlaceContext(
         chains: ['mcdonalds', 'starbucks'],

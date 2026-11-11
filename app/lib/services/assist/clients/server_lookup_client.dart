@@ -38,6 +38,10 @@
 /// is read ONCE per call, so the gate, the consent stamp and the URL all
 /// describe the same server.
 ///
+/// The server's own request gate is stricter about coordinate-shaped text
+/// than the composer (LookupRequestForClients.withoutGateCoordinates), so
+/// a name or unit it would refuse is sent as "" instead of earning a 400.
+///
 /// Evidence: the server's text for a URL is its WebSearch tool's summary
 /// of the whole search (lookup_jobs.EVIDENCE_PROVENANCE, `verbatim:
 /// false`), and only a literal `true` is read as verbatim. So on Claude
@@ -185,9 +189,13 @@ class ServerLookupClient implements LookupClient {
     }
     if (cancel?.isCancelled ?? false) return _local(_cancelled);
     // The https gate: over http, only chains that printed text names.
-    final outgoing = support.locationAllowed
-        ? request
-        : request.withoutLocationChains(request.chainKeys);
+    // Then the server gate's reading: a name or unit it would refuse as a
+    // coordinate (under full NFKC, or joined with its neighbours) goes out
+    // as "", so a request the composer accepted is never a 400.
+    final outgoing = (support.locationAllowed
+            ? request
+            : request.withoutLocationChains(request.chainKeys))
+        .withoutGateCoordinates();
     final unsendable = _unsendable(outgoing, brandOnly: !support.locationAllowed);
     if (unsendable != null) {
       return _local(LookupFailure(LookupFailureCode.badRequest,

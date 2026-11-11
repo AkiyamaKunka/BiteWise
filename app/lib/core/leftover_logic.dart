@@ -74,6 +74,38 @@ Map<String, dynamic> leftoverBase(Map<String, dynamic> analysis) {
 
 double _clamp01(num v) => v.toDouble().clamp(0.0, 1.0);
 
+const List<String> _itemMacroKeys = ['protein_g', 'carbs_g', 'fat_g'];
+const Map<String, String> _totalToItemMacro = {
+  'total_protein_g': 'protein_g',
+  'total_carbs_g': 'carbs_g',
+  'total_fat_g': 'fat_g',
+};
+
+/// Key in the `leftover` block: this application scaled the rows'
+/// protein / carbs / fat with their calories. Absent on a block 1.5.0
+/// wrote, whose rows kept the whole plate's macros.
+const String kLeftoverItemMacrosScaled = 'item_macros_scaled';
+
+/// A row number as the meal editor reads it: a finite number, or a
+/// numeric string (model output is stored raw); null otherwise.
+double? _rowNumber(dynamic v) {
+  var n = safeNumberOr(v, null);
+  if (n == null && v is String) n = safeNumberOr(num.tryParse(v.trim()), null);
+  return n?.toDouble();
+}
+
+/// The fraction of [item] the editor should show as eaten when it loads a
+/// meal: `1 - leftover_left_fraction` for a row of a leftover block 1.5.0
+/// wrote (its macros are the whole plate's), else null (nothing to scale).
+double? legacyLeftoverMacroScale(
+    Map<String, dynamic> analysis, Map<String, dynamic> item) {
+  final block = analysis['leftover'];
+  if (block is! Map || block[kLeftoverItemMacrosScaled] == true) return null;
+  final left = safeNumberOr(item['leftover_left_fraction'], null);
+  if (left == null) return null;
+  return 1 - _clamp01(left);
+}
+
 /// One item's surviving fraction from the model reply, by exact-then-
 /// case-insensitive name match; falls back to the overall fraction.
 double _leftFractionFor(
@@ -152,6 +184,11 @@ LeftoverResult? applyLeftover(
   final fallback = overall ?? 0.0;
   final adjustedItems = <Map<String, dynamic>>[];
   double eatenSum = 0, baseSum = 0;
+  // Per macro: the rows' sum before and after, and whether every row
+  // carries that macro (only then do the rows speak for the meal's total).
+  final macroBase = {for (final k in _itemMacroKeys) k: 0.0};
+  final macroEaten = {for (final k in _itemMacroKeys) k: 0.0};
+  final macroOnEveryRow = {for (final k in _itemMacroKeys) k: true};
   for (final it in baseItems) {
     final name = '${it['name'] ?? '?'}';
     final cal = safeNumber(it['estimated_calories']).toDouble();
@@ -159,11 +196,27 @@ LeftoverResult? applyLeftover(
     final eaten = cal * (1 - left);
     baseSum += cal;
     eatenSum += eaten;
-    adjustedItems.add({
+    final row = <String, dynamic>{
       ...it,
       'estimated_calories': eaten.round(),
       'leftover_left_fraction': double.parse(left.toStringAsFixed(2)),
-    });
+    };
+    // The row's protein / carbs / fat are the eaten part too. Left whole,
+    // the meal editor (whose totals are the rows' sums as soon as any row
+    // number changes) put the uneaten part's macros back on the meal.
+    // Only a macro the row has is scaled; a row never gains one.
+    for (final k in _itemMacroKeys) {
+      final v = _rowNumber(it[k]);
+      if (v == null) {
+        macroOnEveryRow[k] = false;
+        continue;
+      }
+      final scaled = v * (1 - left);
+      macroBase[k] = macroBase[k]! + v;
+      macroEaten[k] = macroEaten[k]! + scaled;
+      row[k] = double.parse(scaled.toStringAsFixed(1));
+    }
+    adjustedItems.add(row);
   }
 
   // Meal-level eaten fraction: from item math when items carry calories,
@@ -185,8 +238,18 @@ LeftoverResult? applyLeftover(
   final deducted = baseRounded <= 0
       ? 0
       : (baseRounded - newTotal).clamp(0, baseRounded);
+  // A meal macro scales by that macro's own eaten share when every row
+  // carries it (rice left, chicken eaten: the carbs follow the rice), so
+  // the total agrees with the scaled rows; else by the calories' share.
   num scaledMacro(String key) {
-    final v = safeNumber(base[key]).toDouble() * eatenFraction;
+    final itemKey = _totalToItemMacro[key]!;
+    final rowsBase = macroBase[itemKey]!;
+    final share = baseItems.isNotEmpty &&
+            macroOnEveryRow[itemKey]! &&
+            rowsBase > 0
+        ? (macroEaten[itemKey]! / rowsBase).clamp(0.0, 1.0)
+        : eatenFraction;
+    final v = safeNumber(base[key]).toDouble() * share;
     return double.parse(v.toStringAsFixed(1));
   }
 
@@ -204,6 +267,10 @@ LeftoverResult? applyLeftover(
       'applied_total': newTotal,
       'leftover_photo_md5': leftoverPhotoMd5,
       'eaten_fraction': double.parse(eatenFraction.toStringAsFixed(2)),
+      // The rows' protein / carbs / fat are the eaten part. Meals written
+      // before this (1.5.0) kept them whole; the editor scales those rows
+      // by their leftover_left_fraction when it loads them.
+      kLeftoverItemMacrosScaled: true,
       'note': modelOut['note'] is String ? modelOut['note'] : null,
       // The pre-deduction snapshot future applications re-base on. Taken
       // from the CURRENT base (not `current`) so a re-application keeps

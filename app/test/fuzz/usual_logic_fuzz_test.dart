@@ -626,7 +626,7 @@ void _checkLog(
             (usualNameKey(t['name']) == pick.key ? pick.aiName : null);
         wantUser = {
           'set': true,
-          'at': pick.atRaw,
+          'at': usualStamp(pick.at),
           'n': [want.kcal, want.p, want.c, want.f],
           'qty': 1,
           'ai_name': ?aiName,

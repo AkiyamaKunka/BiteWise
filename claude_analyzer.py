@@ -21,6 +21,10 @@ Dispatch modes (CLAUDE_ANALYZER_DISPATCH):
   file              Two model turns: the image is written to a temp file and
                     the model Reads it back. Forces the old path only —
                     a rollback knob, never combined with a stream attempt.
+                    It applies only to the server's own prompts (Telegram
+                    photos): a request whose prompt holds caller text (the
+                    app API, allow_file_fallback=False) always runs the
+                    no-tools stream dispatch and never the Read path.
 
 Configuration (env / .env):
   CLAUDE_ANALYZER_ENABLED           truthy to enable (default: off)
@@ -1015,7 +1019,10 @@ def analyze_food_photo(
                     raise
                 return None
             return analysis
-        if _dispatch_mode() == "stream":
+        # A caller-influenced prompt (allow_file_fallback=False) always takes
+        # the tools-off stream dispatch, even under the 'file' rollback knob:
+        # the Read-enabled path must never see network text.
+        if _dispatch_mode() == "stream" or not allow_file_fallback:
             try:
                 analysis, retry_via_file = _attempt_stream(
                     cli, image_bytes, env, start, prompt,

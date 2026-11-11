@@ -137,4 +137,69 @@ void main() {
       expect(deriveCapturedAt(fileName: 'meal.jpg', now: frozenNow), isNull);
     });
   });
+
+  // RC 1.6.0 (older than 1.6.0): Google Camera stamps PXL_ names by the
+  // UTC clock, and the stamp was read as the local wall clock: a 19:30
+  // dinner in UTC+8 was logged at 11:30, one in Chicago scanned the next
+  // morning at 01:30 the next day. TZ=UTC cannot see it; run this file
+  // under another zone too, e.g. TZ=America/Chicago and TZ=Asia/Shanghai.
+  group('a Pixel name (PXL_, a UTC stamp)', () {
+    String two(int n) => n.toString().padLeft(2, '0');
+    String stamp(DateTime local) {
+      final u = local.toUtc();
+      return '${u.year}${two(u.month)}${two(u.day)}_'
+          '${two(u.hour)}${two(u.minute)}${two(u.second)}';
+    }
+
+    final dinner = DateTime(2026, 7, 14, 19, 30, 42);
+    final breakfast = DateTime(2026, 7, 15, 7, 30, 42);
+
+    test('is that UTC instant, shown in the local zone', () {
+      expect(filenameCaptureInstant('PXL_20260714_193042123.jpg'),
+          DateTime.utc(2026, 7, 14, 19, 30, 42).toLocal());
+      expect(filenameCaptureInstant('a3f9c2d81b04__PXL_20260714_193042123.jpg'),
+          DateTime.utc(2026, 7, 14, 19, 30, 42).toLocal(),
+          reason: 'behind a queue prefix too');
+      expect(filenameCaptureInstant('PXL_20260714_193042123~2.jpg'),
+          DateTime.utc(2026, 7, 14, 19, 30, 42).toLocal(),
+          reason: 'an edited copy keeps the stamp');
+      expect(filenameCaptureInstant('PXL_20260231_120000000.jpg'), isNull,
+          reason: 'Feb 31 is no instant either');
+      // Every other name is the camera's local wall clock, as before.
+      expect(filenameCaptureInstant('IMG_20260714_193042.jpg'),
+          DateTime(2026, 7, 14, 19, 30, 42));
+      expect(filenameCaptureInstant('20260714_193042.jpg'),
+          DateTime(2026, 7, 14, 19, 30, 42));
+      // The parity port still reads every stamp as local
+      // (shared/vectors/captured_at.json).
+      expect(capturedAtFromFilename('PXL_20260714_193042123.jpg'),
+          DateTime(2026, 7, 14, 19, 30, 42));
+    });
+
+    test('dates the meal by when it was taken, scanned at once or the next '
+        'day, with or without the library date', () {
+      for (final taken in [dinner, breakfast]) {
+        final name = 'PXL_${stamp(taken)}123.jpg';
+        for (final later in [
+          const Duration(minutes: 1),
+          const Duration(hours: 14),
+        ]) {
+          final scannedAt = taken.add(later);
+          for (final assetDate in [taken, null]) {
+            final got = deriveCapturedAt(
+                fileName: name, assetCreateDate: assetDate, now: scannedAt);
+            expect(got, taken,
+                reason: '$name taken $taken (${taken.timeZoneName}), scanned '
+                    '$later later, asset date $assetDate: got $got');
+            // What PhotoPipeline._mealClock then does with the photo's EXIF
+            // (DateTimeOriginal + OffsetTimeOriginal, which a Pixel writes).
+            expect(
+                captureWallClock(
+                    got!, (wall: taken, offset: taken.timeZoneOffset)),
+                taken);
+          }
+        }
+      }
+    });
+  });
 }

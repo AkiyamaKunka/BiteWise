@@ -6104,24 +6104,69 @@ def test_parked_photo_kicks_immediate_drain_and_notes_caption(mock_db, monkeypat
     assert "caption will NOT be applied automatically" in queued
 
 
-def test_api_only_mode_skips_polling_but_keeps_stamping(monkeypatch):
+def _stub_main_boot(monkeypatch, bot_cls):
+    """main()'s boot helpers stubbed (as in the boot-order test below), so a
+    test can drive the real main loop without Telegram, systemd or Flask."""
+    monkeypatch.setattr(telegram_bot, "TelegramBot", bot_cls)
+    monkeypatch.setattr(telegram_bot, "BOT_TOKEN", "tok")
+    monkeypatch.setattr(telegram_bot, "GEMINI_API_KEY", "key")
+    monkeypatch.setattr(telegram_bot, "ALLOWED_CHAT_ID", 1)
+    monkeypatch.setattr(telegram_bot, "ANDROID_API_KEY", "android")
+    monkeypatch.setattr(telegram_bot.genai, "Client",
+                        lambda api_key: SimpleNamespace())
+    monkeypatch.setattr(telegram_bot, "_start_watchdog_heartbeat", lambda: None)
+    monkeypatch.setattr(telegram_bot, "_sd_notify", lambda state: None)
+    monkeypatch.setattr(telegram_bot, "_record_boot_and_maybe_alert",
+                        lambda bot: None)
+    monkeypatch.setattr(telegram_bot, "_sweep_stranded_pending_uploads",
+                        lambda bot: None)
+    monkeypatch.setattr(telegram_bot, "_failed_upload_items", lambda: [])
+    monkeypatch.setattr(telegram_bot, "_build_api_app",
+                        lambda bot, client: SimpleNamespace(run=lambda **kw: None))
+    monkeypatch.setattr(telegram_bot, "_record_clean_shutdown", lambda: None)
+
+
+def _run_main_for_ticks(monkeypatch, ticks):
+    """Run the real main() until its idle loop has slept [ticks] times.
+    The fake sleep is scoped to main() only: telegram_bot.time is the global
+    time module, and Popen.wait(timeout=) sleeps on it during teardown."""
+    sleeps = []
+
+    def fake_sleep(seconds):
+        sleeps.append(seconds)
+        if len(sleeps) >= ticks:
+            raise KeyboardInterrupt()
+
+    with monkeypatch.context() as m:
+        m.setattr(telegram_bot.time, "sleep", fake_sleep)
+        telegram_bot.main()
+    return sleeps
+
+
+def test_api_only_mode_skips_polling_but_keeps_stamping_and_reaping(
+        monkeypatch):
     """TELEGRAM_POLLING=0 retires the chat bot while the phone API keeps
     serving — they share ONE process, so `systemctl stop` would take the
     app's photo analysis down with the chat interface.
 
-    The idle loop MUST keep stamping progress: the watchdog kills a
-    process whose stamp goes stale, and "idle on purpose" must not look
-    like "hung".
+    Drives the real main(). The idle loop MUST keep stamping progress (the
+    watchdog kills a process whose stamp goes stale, and "idle on purpose"
+    must not look like "hung") and MUST reap an abandoned `claude
+    setup-token` consent: the app never calls /cancel, and without the
+    polling loop nothing else would kill that Node process.
     """
-    import telegram_bot as tb
-
     monkeypatch.setenv("TELEGRAM_POLLING", "0")
-    stamps = []
-    monkeypatch.setattr(tb, "_stamp_progress", lambda: stamps.append(1))
-
+    events = []
+    monkeypatch.setattr(telegram_bot, "_stamp_progress",
+                        lambda: events.append("stamp"))
+    monkeypatch.setattr(telegram_bot.claude_auth, "reap_expired_session",
+                        lambda: events.append("reap") or False)
     polled = []
 
     class FakeBot:
+        def __init__(self, token):
+            pass
+
         def get_updates(self, timeout=30):
             polled.append(1)
             return []
@@ -6129,28 +6174,76 @@ def test_api_only_mode_skips_polling_but_keeps_stamping(monkeypatch):
         def send_message(self, *a, **kw):
             return {"ok": True}
 
-    # Break out of the idle loop after two sleeps.
-    calls = {"n": 0}
-
-    def fake_sleep(seconds):
-        calls["n"] += 1
-        assert seconds == 30
-        if calls["n"] >= 2:
-            raise KeyboardInterrupt()
-
-    monkeypatch.setattr(tb.time, "sleep", fake_sleep)
-
-    # Drive only the tail of main(): the polling decision.
-    if tb.parse_boolish(os.environ.get("TELEGRAM_POLLING", "1")) is False:
-        try:
-            while True:
-                tb._stamp_progress()
-                tb.time.sleep(30)
-        except KeyboardInterrupt:
-            pass
+    _stub_main_boot(monkeypatch, FakeBot)
+    sleeps = _run_main_for_ticks(monkeypatch, 3)
 
     assert polled == [], "chat polling must not run in API-only mode"
-    assert len(stamps) == 2, "the idle loop must keep the watchdog fed"
+    assert sleeps == [30, 30, 30]
+    assert events == ["stamp", "reap"] * 3, \
+        "each tick stamps (first) and reaps"
+
+
+def test_api_only_mode_survives_a_failing_reaper(monkeypatch):
+    """An error inside the reaper must not end main(): that would take the
+    phone API down with it."""
+    monkeypatch.setenv("TELEGRAM_POLLING", "0")
+    stamps = []
+    monkeypatch.setattr(telegram_bot, "_stamp_progress",
+                        lambda: stamps.append(1))
+
+    def broken_reaper():
+        raise OSError("pty already closed")
+
+    monkeypatch.setattr(telegram_bot.claude_auth, "reap_expired_session",
+                        broken_reaper)
+
+    class FakeBot:
+        def __init__(self, token):
+            pass
+
+    _stub_main_boot(monkeypatch, FakeBot)
+    assert _run_main_for_ticks(monkeypatch, 2) == [30, 30]
+    assert len(stamps) == 2
+
+
+def test_api_only_mode_kills_an_abandoned_setup_token_process(
+        monkeypatch, tmp_path):
+    """End to end with a real child: a consent started and abandoned past
+    its TTL is killed by the API-only loop's first tick."""
+    import sys
+    import claude_auth
+
+    fake = tmp_path / "claude"
+    fake.write_text(
+        f"#!{sys.executable}\nimport sys, time\n"
+        "print('https://claude.ai/oauth/authorize?code=true', flush=True)\n"
+        "sys.stdin.readline()\ntime.sleep(60)\n")
+    fake.chmod(0o755)
+    out = claude_auth.start_session(str(fake), {"PATH": "/usr/bin:/bin"})
+    assert "url" in out, out
+    proc = claude_auth._session["proc"]
+    try:
+        real = claude_auth.time.monotonic
+        monkeypatch.setattr(
+            claude_auth.time, "monotonic",
+            lambda: real() + claude_auth.SESSION_TTL_SECONDS + 60)
+        monkeypatch.setenv("TELEGRAM_POLLING", "0")
+        monkeypatch.setattr(telegram_bot, "_stamp_progress", lambda: None)
+
+        class FakeBot:
+            def __init__(self, token):
+                pass
+
+        _stub_main_boot(monkeypatch, FakeBot)
+        _run_main_for_ticks(monkeypatch, 1)
+
+        assert claude_auth._session is None
+        proc.wait(timeout=10)
+        assert proc.poll() is not None
+    finally:
+        claude_auth.cancel_session()
+        if proc.poll() is None:
+            proc.kill()
 
 
 def test_polling_defaults_to_on(monkeypatch):

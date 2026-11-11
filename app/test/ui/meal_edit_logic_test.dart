@@ -40,6 +40,49 @@ void main() {
           contains('too large'));
     });
 
+    // RC 1.6.0: the decimal pad types the phone region's separator and
+    // digits; "12,5" and "٣٥٠" were "not a number", so in a comma region
+    // no decimal could be typed and with native digits no number at all.
+    test('reads a decimal comma and native digits as the decimal pad types '
+        'them', () {
+      num? v(String s) =>
+          parseNumberField(s, label: 'x', max: maxMealCalories).value;
+      expect(v('12,5'), 12.5);
+      expect(v('0,25'), 0.25);
+      expect(v('12,'), 12);
+      expect(v('٣٥٠'), 350); // Arabic-Indic
+      expect(v('۳۵۰'), 350); // Extended Arabic-Indic (Persian)
+      expect(v('३५०'), 350); // Devanagari
+      expect(v('৩৫০'), 350); // Bengali
+      expect(v('３５０'), 350); // full-width
+      expect(v('١٢٫٥'), 12.5); // Arabic decimal separator
+      expect(v('١٢,٥'), 12.5);
+    });
+
+    test('a comma that may be a thousands separator stays an error', () {
+      for (final s in ['1,200', '1,234,567', '1.2,5', '1,2,3', '١,٢٠٠']) {
+        final p = parseNumberField(s, label: 'Calories', max: maxMealCalories);
+        expect(p.ok, isFalse, reason: '$s must never be read as a decimal');
+        expect(p.error, contains('number'));
+      }
+    });
+
+    test('a decimal comma is saved as the number it reads as', () {
+      final d = MealDraft.fromMeal(mealWith({
+        'meal_description': 'Lunch',
+        'total_calories': 300,
+        'food_items': [
+          {'name': 'Rice', 'estimated_calories': 300},
+        ],
+      }))
+        ..protein = '12,5';
+      d.items[0].protein = '٢,٥';
+      expect(d.validate(), isEmpty);
+      final a = d.toAnalysis(now: DateTime.utc(2026, 7, 24));
+      expect(a['total_protein_g'], 12.5);
+      expect(((a['food_items'] as List)[0] as Map)['protein_g'], 2.5);
+    });
+
     test('rejects NaN/Infinity spellings', () {
       for (final s in ['NaN', 'Infinity', '-Infinity']) {
         expect(parseNumberField(s, label: 'x', max: 1e6).ok, isFalse,
@@ -697,6 +740,125 @@ void main() {
       expect(counted['user'], {'qty': 3});
       final plain = saveRow(aiRow(qty: 1), (it) => it.calories = '300.0');
       expect(plain.containsKey('user'), isFalse);
+    });
+  });
+
+  // RC 1.6.0: a meal typed by hand on 1.5.0 has no marks and taught only
+  // while never corrected; the editor's save sets corrected, so a save
+  // with the numbers as typed made the meal forget them.
+  group('a meal typed by hand before 1.6.0', () {
+    Meal typed({
+      String source = 'app_manual',
+      bool corrected = false,
+      int id = 7,
+      String timestamp = '2026-07-24T08:00:00.000Z',
+      List<Map<String, dynamic>>? items,
+      Map<String, dynamic>? extra,
+    }) =>
+        Meal(
+          id: id,
+          date: '2026-07-24',
+          time: '08:00 AM',
+          timestamp: timestamp,
+          source: source,
+          corrected: corrected,
+          analysis: {
+            'is_food': true,
+            'meal_description': 'Breakfast',
+            'total_calories': 355,
+            'food_items': items ??
+                [
+                  {
+                    'name': 'Oatmeal',
+                    'estimated_calories': 350,
+                    'protein_g': 12,
+                    'carbs_g': 55,
+                    'fat_g': 8,
+                  },
+                  {'name': 'Salt', 'estimated_calories': 5},
+                ],
+            ...?extra,
+          },
+        );
+    final now = DateTime.utc(2026, 7, 25, 9);
+
+    List<Map<String, dynamic>> save(MealDraft d) => [
+          for (final it in d.toAnalysis(now: now)['food_items'] as List)
+            (it as Map).cast<String, dynamic>()
+        ];
+
+    test('saved unchanged: each row it taught gains the mark at the meal\'s '
+        'own moment', () {
+      final d = MealDraft.fromMeal(typed())..description = 'Oats';
+      final items = save(d);
+      expect(items[0]['user'], {
+        'set': true,
+        'at': '2026-07-24T08:00:00.000Z',
+        'n': [350, 12, 55, 8],
+        'qty': 1,
+      });
+      expect(usualMarkValid(items[0], now), isTrue);
+      expect(items[1].containsKey('user'), isFalse,
+          reason: 'under the usual-foods minimum it taught nothing');
+    });
+
+    test('a rename keeps the numbers the user\'s, and the old name', () {
+      final d = MealDraft.fromMeal(typed());
+      d.items[0].name = 'Porridge';
+      final user = save(d)[0]['user'] as Map;
+      expect(user['set'], isTrue);
+      expect(user['at'], '2026-07-24T08:00:00.000Z');
+      expect(user['ai_name'], 'Oatmeal');
+    });
+
+    test('a changed number is stamped now, as on any meal', () {
+      final d = MealDraft.fromMeal(typed());
+      d.items[0].calories = '360';
+      expect((save(d)[0]['user'] as Map)['at'], usualStamp(now));
+    });
+
+    test('no mark where it taught nothing before', () {
+      for (final m in [
+        typed(corrected: true), // fixed by chat: re-estimated by a model
+        typed(source: 'app_photo'),
+        typed(source: 'manual_text'),
+        typed(id: 0), // the describe preview's synthetic row
+        typed(timestamp: 'not a time'),
+        typed(timestamp: '2026-07-27T08:00:00.000Z'), // days ahead
+        typed(extra: {'leftover': {}}),
+        typed(items: [
+          {'name': 'Eggs', 'estimated_calories': 140, 'qty': 2},
+          {'name': 'Fries', 'estimated_calories': 320, 'published': true},
+        ]),
+      ]) {
+        final items = save(MealDraft.fromMeal(m));
+        for (final it in items) {
+          final user = it['user'];
+          expect(user is Map && user['set'] == true, isFalse,
+              reason: '${m.source} corrected=${m.corrected} id=${m.id} '
+                  '${m.timestamp}: ${it['name']}');
+        }
+      }
+    });
+
+    test('a row that already has a mark keeps it byte for byte', () {
+      final mark = {
+        'set': true,
+        'at': '2026-07-24T08:01:00.000Z',
+        'n': [350, 12, 55, 8],
+        'qty': 1,
+      };
+      final d = MealDraft.fromMeal(typed(items: [
+        {
+          'name': 'Oatmeal',
+          'estimated_calories': 350,
+          'protein_g': 12,
+          'carbs_g': 55,
+          'fat_g': 8,
+          'user': mark,
+        },
+      ]));
+      expect(save(d)[0]['user'], mark);
     });
   });
 }

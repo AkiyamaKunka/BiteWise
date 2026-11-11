@@ -11,8 +11,11 @@
 /// - when Watch Camera Roll is turned on (settings_screen.dart), and when
 ///   the recipient changes while it is on ([confirmAiRecipientChange]).
 ///
-/// Nothing here touches the photo pipeline: every automatic send already
-/// needs the watcher, and the watcher only runs for a consented recipient.
+/// These are the questions. Every automatic send already needs the
+/// watcher, and the watcher only runs for a consented recipient; the photo
+/// pipeline reads the answer once more at each send (photo_pipeline.dart
+/// AiSendGate), because an admitted photo can still be waiting its turn
+/// when the consent is withdrawn or the provider changes.
 library;
 
 import 'dart:async';

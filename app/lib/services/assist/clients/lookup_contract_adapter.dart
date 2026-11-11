@@ -81,6 +81,91 @@ extension LookupRequestForClients on LookupRequest {
     });
   }
 
+  /// This request as the owner's server gate (lookup_contract.py) reads
+  /// it: every item name or unit that gate would refuse is sent as "" (the
+  /// item keeps its slot), so a request lane B's composer accepted is not
+  /// answered 400, which writes the meal's automatic lookup off for good.
+  /// The direct providers get the request unchanged; nothing here ever
+  /// adds text.
+  ///
+  /// The composer checks one field at a time as nfkcLite leaves it. The
+  /// gate is stricter in three ways:
+  ///   - it reads every Unicode decimal digit as its ASCII digit;
+  ///   - it also reads each field under full NFKC with format and private
+  ///     characters removed ("85℃" is "85°C" there, so "S 85℃" reads as a
+  ///     hemisphere and degrees, and "40° \u00ad W" as "40° W");
+  ///   - it reads the items' names and units as one line (name, unit, next
+  ///     name, …), the names alone and the units alone, so the name
+  ///     "Junmai sake 15°" with the unit "12 oz" reads as degrees and
+  ///     minutes, and "Combo 12.99" before "0.50 L lemonade" as a pair.
+  /// Here fields join each line in that order, under both readings, and
+  /// the field that first makes a line coordinate-shaped is blanked, until
+  /// no line is. A field the gate would read as empty is blanked too.
+  ///
+  /// Dart has no full NFKC: [_gateNfkc] covers the forms above plus º and
+  /// ˚, the superscript, subscript and enclosed numbers and the vulgar
+  /// fractions.
+  /// Rarer compatibility forms (squared units such as ㎖, parenthesized
+  /// ideographs such as ㈱, Roman numerals, mathematical letters) and
+  /// unassigned code points can still differ either way: the server then
+  /// refuses that request as before, or a field is blanked that it would
+  /// have taken.
+  LookupRequest withoutGateCoordinates() {
+    final copy = [
+      for (final i in items)
+        <String, Object?>{if (i is Map) ...i.cast<String, Object?>()},
+    ];
+    String text(int i, String key) {
+      final v = copy[i][key];
+      return v is String ? v : '';
+    }
+
+    final lines = [
+      [
+        for (var i = 0; i < copy.length; i++) ...[(i, 'name'), (i, 'unit')],
+      ],
+      [for (var i = 0; i < copy.length; i++) (i, 'name')],
+      [for (var i = 0; i < copy.length; i++) (i, 'unit')],
+    ];
+    var blanked = false;
+    var again = true;
+    while (again) {
+      again = false;
+      for (final line in lines) {
+        final nfkcParts = <String>[];
+        final digitParts = <String>[];
+        for (final (i, key) in line) {
+          final t = text(i, key);
+          if (t.isEmpty) continue;
+          final full = _gateNfkc(t);
+          if (full.isEmpty || coordinateShaped(full)) {
+            copy[i][key] = '';
+            blanked = true;
+            if (full.isEmpty) continue;
+            again = true;
+            break;
+          }
+          // The gate's line holds each field at its cap, in code points.
+          final cap = key == 'name' ? kLookupItemNameMax : kLookupUnitMax;
+          final runes = full.runes;
+          nfkcParts.add(runes.length <= cap
+              ? full
+              : String.fromCharCodes(runes.take(cap)));
+          digitParts.add(_gateDigits(t));
+          if (coordinateShaped(nfkcParts.join(' ')) ||
+              coordinateShaped(digitParts.join(' '))) {
+            copy[i][key] = '';
+            blanked = again = true;
+            break;
+          }
+        }
+        if (again) break;
+      }
+    }
+    if (!blanked) return this;
+    return LookupRequest.compose({...body, 'items': copy});
+  }
+
   /// The OFFICIAL domains (from our chain table) of every chain this
   /// request names — its chains, and the chains its printed brands and
   /// receipt merchant name — for a provider's domain filter and the source
@@ -103,6 +188,136 @@ extension LookupRequestForClients on LookupRequest {
     ];
   }
 }
+
+/// [text] (a composed name or unit) with every Unicode decimal digit read
+/// as its ASCII digit, as the gate reads the composer's own text.
+String _gateDigits(String text) {
+  final out = StringBuffer();
+  for (final r in text.runes) {
+    final digit = _unicodeDecimal(r);
+    out.writeCharCode(digit == null ? r : 0x30 + digit);
+  }
+  return out.toString();
+}
+
+/// [text] (a composed name or unit) as the gate's full-NFKC cleaner leaves
+/// it, for the forms that can make or break a coordinate shape: format,
+/// private-use and noncharacter code points removed (the composer keeps
+/// them), º and ˚ (degrees to the composer, not here), ℃ ℉, superscript
+/// and subscript digits, vulgar fractions and enclosed numbers and letters
+/// spelled out, every Unicode decimal digit as ASCII; spaces collapsed and
+/// trimmed.
+String _gateNfkc(String text) {
+  final out = StringBuffer();
+  for (final r in text.runes) {
+    if (_gateDrops(r)) continue;
+    final compat = _gateCompat(r);
+    if (compat != null) {
+      out.write(compat);
+      continue;
+    }
+    final digit = _unicodeDecimal(r);
+    out.writeCharCode(digit == null ? r : 0x30 + digit);
+  }
+  return out.toString().replaceAll(_spaces, ' ').trim();
+}
+
+final RegExp _spaces = RegExp(' {2,}');
+
+/// Category C code points the gate removes and the composer keeps.
+bool _gateDrops(int r) =>
+    r == 0x00AD ||
+    (r >= 0x0600 && r <= 0x0605) ||
+    r == 0x06DD ||
+    r == 0x070F ||
+    (r >= 0x0890 && r <= 0x0891) ||
+    r == 0x08E2 ||
+    r == 0x180E ||
+    r == 0x2065 ||
+    (r >= 0x206A && r <= 0x206F) ||
+    (r >= 0xE000 && r <= 0xF8FF) ||
+    (r >= 0xFFF9 && r <= 0xFFFB) ||
+    r == 0xFFFE ||
+    r == 0xFFFF ||
+    r == 0x110BD ||
+    r == 0x110CD ||
+    (r >= 0x13430 && r <= 0x1343F) ||
+    (r >= 0x1BCA0 && r <= 0x1BCA3) ||
+    (r >= 0x1D173 && r <= 0x1D17A) ||
+    r == 0xE0001 ||
+    (r >= 0xE0020 && r <= 0xE007F) ||
+    r >= 0xF0000;
+
+/// The NFKC of one code point, for the compatibility forms that read as
+/// digits, degrees or letters next to a number; null for any other.
+String? _gateCompat(int r) {
+  final listed = _gateCompatTable[r];
+  if (listed != null) return listed;
+  if (r >= 0x2460 && r <= 0x2473) return '${r - 0x245F}'; // ①
+  if (r >= 0x2474 && r <= 0x2487) return '(${r - 0x2473})'; // ⑴
+  if (r >= 0x2488 && r <= 0x249B) return '${r - 0x2487}.'; // ⒈
+  if (r >= 0x249C && r <= 0x24B5) {
+    return '(${String.fromCharCode(0x61 + r - 0x249C)})'; // ⒜
+  }
+  if (r >= 0x24B6 && r <= 0x24CF) {
+    return String.fromCharCode(0x41 + r - 0x24B6); // Ⓐ
+  }
+  if (r >= 0x24D0 && r <= 0x24E9) {
+    return String.fromCharCode(0x61 + r - 0x24D0); // ⓐ
+  }
+  if (r >= 0x3251 && r <= 0x325F) return '${r - 0x3251 + 21}'; // ㉑
+  if (r >= 0x32B1 && r <= 0x32BF) return '${r - 0x32B1 + 36}'; // ㊱
+  return null;
+}
+
+const String _fractionSlash = '\u2044';
+const Map<int, String> _gateCompatTable = {
+  0x00AA: 'a', // ª
+  0x00BA: 'o', // º: a degree only to the composer
+  0x02DA: ' \u030a', // ˚: likewise
+  0x2103: '\u00b0C', // ℃
+  0x2109: '\u00b0F', // ℉
+  0x24EA: '0', // ⓪
+  0x00B9: '1', 0x00B2: '2', 0x00B3: '3', 0x2070: '0', //
+  0x2074: '4', 0x2075: '5', 0x2076: '6', 0x2077: '7', 0x2078: '8', //
+  0x2079: '9', 0x207A: '+', //
+  0x2080: '0', 0x2081: '1', 0x2082: '2', 0x2083: '3', 0x2084: '4', //
+  0x2085: '5', 0x2086: '6', 0x2087: '7', 0x2088: '8', 0x2089: '9', //
+  0x208A: '+', //
+  0x00BC: '1${_fractionSlash}4', 0x00BD: '1${_fractionSlash}2', //
+  0x00BE: '3${_fractionSlash}4', 0x2150: '1${_fractionSlash}7', //
+  0x2151: '1${_fractionSlash}9', 0x2152: '1${_fractionSlash}10', //
+  0x2153: '1${_fractionSlash}3', 0x2154: '2${_fractionSlash}3', //
+  0x2155: '1${_fractionSlash}5', 0x2156: '2${_fractionSlash}5', //
+  0x2157: '3${_fractionSlash}5', 0x2158: '4${_fractionSlash}5', //
+  0x2159: '1${_fractionSlash}6', 0x215A: '5${_fractionSlash}6', //
+  0x215B: '1${_fractionSlash}8', 0x215C: '3${_fractionSlash}8', //
+  0x215D: '5${_fractionSlash}8', 0x215E: '7${_fractionSlash}8', //
+  0x215F: '1$_fractionSlash', 0x2189: '0${_fractionSlash}3', //
+};
+
+/// The value of a non-ASCII Unicode decimal digit (general category Nd),
+/// or null: Python's unicodedata.decimal, which the gate applies. Each
+/// entry is the zero of a block of ten (Unicode 15.0).
+int? _unicodeDecimal(int r) {
+  if (r < 0x0660) return null;
+  for (final zero in _decimalZeros) {
+    if (r >= zero && r < zero + 10) return r - zero;
+  }
+  return null;
+}
+
+const List<int> _decimalZeros = [
+  0x0660, 0x06F0, 0x07C0, 0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, //
+  0x0BE6, 0x0C66, 0x0CE6, 0x0D66, 0x0DE6, 0x0E50, 0x0ED0, 0x0F20, //
+  0x1040, 0x1090, 0x17E0, 0x1810, 0x1946, 0x19D0, 0x1A80, 0x1A90, //
+  0x1B50, 0x1BB0, 0x1C40, 0x1C50, 0xA620, 0xA8D0, 0xA900, 0xA9D0, //
+  0xA9F0, 0xAA50, 0xABF0, 0xFF10, 0x104A0, 0x10D30, 0x11066, 0x110F0, //
+  0x11136, 0x111D0, 0x112F0, 0x11450, 0x114D0, 0x11650, 0x116C0, //
+  0x11730, 0x118E0, 0x11950, 0x11C50, 0x11D50, 0x11DA0, 0x11F50, //
+  0x16A60, 0x16AC0, 0x16B50, 0x1D7CE, 0x1D7D8, 0x1D7E2, 0x1D7EC, //
+  0x1D7F6, 0x1E140, 0x1E2F0, 0x1E4F0, 0x1E950, 0x1FBF0,
+];
 
 // ---------------------------------------------------------------------------
 // §5 response

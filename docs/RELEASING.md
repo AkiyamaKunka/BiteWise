@@ -257,6 +257,18 @@ started (a paused turn) before its cancellation lands, which is up to
 three preference writes later (a few milliseconds by estimate); no new
 lookup, poll or retry starts.
 
+Photos are held to the same row. The AI consent is asked when a photo is
+admitted (the add flow, a shared photo's gate, the Watch Camera Roll
+switch), and the photo pipeline reads it again when the photo's turn
+comes and once more at the send (`AiSendGate` in ui/photo_pipeline.dart,
+built by `aiSendGateFor`; the background run re-reads it from disk): a
+photo still queued when *Stop Sharing with …* is confirmed, or queued
+across a provider switch, is let go unsent and its ledger row left as it
+was. The residual here is the photo already in flight: once the analyzer
+was called, that one request finishes (it resizes the photo for about a
+second and then uploads it to the recipient chosen at the call); nothing
+queued behind it is sent.
+
 **When the usual-foods PR is merged** (`feat/usual-foods`: lookup answers
 that found a chain's published numbers are kept a year, your usual
 numbers on a photo, *My usual foods*):
