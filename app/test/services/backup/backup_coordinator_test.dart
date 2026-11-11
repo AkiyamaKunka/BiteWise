@@ -504,6 +504,22 @@ void main() {
     expect(cloud.headerOf(kRecordsFileName)!.meals, 4);
   });
 
+  test('combine when iCloud kept the other phone\'s write as the current '
+      'file: both merged, ours written over it', () async {
+    await seed(dao, '2026-11-10');
+    await ready();
+    await run();
+    final mine = cloud.files[kRecordsFileName]!;
+    await otherPhoneBackup(meals: 2); // now the current file
+    cloud.conflictVersions[kRecordsFileName] = [mine];
+    expect(await c.combine(), isTrue);
+    expect((await dao.backupCounts()).meals, 3);
+    final h = cloud.headerOf(kRecordsFileName)!;
+    expect(h.installId, prefs.getString(BackupPrefs.kInstallId));
+    expect(h.meals, 3);
+    expect(cloud.conflictVersions, isEmpty);
+  });
+
   test('delete removes this install\'s files and leaves another\'s',
       () async {
     final oct = await seed(dao, '2026-10-03', hash: 'h1');

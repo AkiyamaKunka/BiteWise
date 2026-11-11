@@ -1243,11 +1243,31 @@ class BackupCoordinator {
             await _deleteQuietly(v.tmpPath);
           }
         }
+        // iCloud may have kept the OTHER phone's write as the current file
+        // (and ours as the conflict version): merge it too and adopt it, so
+        // the write below replaces it with the combined record.
+        final cur = await _t.readHeader(kRecordsFileName,
+            allowDownload: true, timeout: const Duration(seconds: 30));
+        final curHeader = cur.header;
+        if (cur.kind == CloudResultKind.ok &&
+            curHeader != null &&
+            curHeader.installId != me) {
+          final (summary, done) =
+              await _importBackup(kRecordsFileName, curHeader);
+          if (summary.ok) {
+            imported = true;
+            await _prefs.setAdoptedFrom(curHeader.installId);
+            await _prefs.setLastSeq(0);
+            await _prefs.setPendingSeq(0);
+            await _adoptMonths(curHeader, done);
+            ids.add(curHeader.installId);
+          }
+        }
         if (imported) onDataImported?.call();
         return _t.resolveConflicts(kRecordsFileName, ids.toList());
       });
       if (!ok) return false;
-      await _run(const _Run(_Kind.now, force: true));
+      await _run(const _Run(_Kind.now, force: true, takeover: true));
       return true;
     } finally {
       _setBusy(false);
