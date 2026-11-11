@@ -520,7 +520,7 @@ void main() {
       expect(policy, contains('### iCloud Backup (iPhone)'));
       expect(policy, contains('### iCloud 备份（iPhone）'));
       expect(flat, contains('**What is never copied:** API keys'));
-      expect(flat, contains('**绝不会复制的内容：**API Key'));
+      expect(flat, contains('**绝不会复制的内容**：API Key'));
       expect(flat, contains('the developer cannot see them and runs no server'));
       expect(flat, contains('开发者看不到它们'));
       expect(flat, contains('nothing is uploaded until you answer it'));
