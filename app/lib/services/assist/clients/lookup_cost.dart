@@ -83,7 +83,9 @@ class LookupCostPolicy {
   /// OpenRouter, whose model price is unknown before the call).
   final double maxUsdPerLookup;
 
-  /// Searches per request (Anthropic max_uses, OpenAI max_tool_calls).
+  /// Searches per lookup: Anthropic `max_uses` (counted over the whole
+  /// turn, its pause_turn continuations included), OpenAI
+  /// `max_tool_calls`.
   final int maxSearches;
 
   /// pause_turn continuations (Anthropic only).
