@@ -168,7 +168,12 @@ void main() {
           await tester.scrollUntilVisible(more, 200,
               scrollable: find.byType(Scrollable).first);
           await tester.pumpAndSettle();
-          if (locale.languageCode == 'en') _expectWholeWords(tester, row);
+          // Where a line breaks depends on the font: without the iPhone
+          // fonts (Linux CI) the fallback glyphs wrap elsewhere, so only
+          // the layout below is checked there.
+          if (locale.languageCode == 'en' && haveIphoneFonts) {
+            _expectWholeWords(tester, row);
+          }
           final rowRect = tester.getRect(row);
           final words = _textRects(tester, row).toList();
           expect(words, hasLength(3), reason: 'title, numbers, stats');
