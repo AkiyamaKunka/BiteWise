@@ -499,7 +499,10 @@ class BackupCoordinator {
     return false;
   }
 
-  /// The headers of the top-level files in [listing], read once each.
+  /// The headers of the top-level files as last read. Every scan reads
+  /// each file again (another phone may have backed up since, and an offer
+  /// shows its counts); one that cannot be read this time (a coordinated
+  /// read that timed out) keeps the header read before.
   final Map<String, BackupHeader?> _headerCache = {};
 
   Future<List<BackupCandidate>> _recordsFiles(CloudListing listing,
@@ -508,17 +511,18 @@ class BackupCoordinator {
     for (final item in listing.items) {
       if (!item.topLevel || !item.path.endsWith('.json')) continue;
       BackupHeader? h;
-      if (_headerCache.containsKey(item.path) && !item.downloading) {
-        h = _headerCache[item.path];
-      } else {
-        final r = await _t.readHeader(item.path,
-            allowDownload: allowDownload, timeout: const Duration(seconds: 10));
-        if (r.kind == CloudResultKind.ok) {
+      final r = await _t.readHeader(item.path,
+          allowDownload: allowDownload, timeout: const Duration(seconds: 10));
+      switch (r.kind) {
+        case CloudResultKind.ok:
           h = r.header;
           _headerCache[item.path] = h;
-        } else if (r.kind == CloudResultKind.unknownOwner) {
+        case CloudResultKind.unknownOwner:
           _headerCache[item.path] = null;
-        }
+        case CloudResultKind.missing:
+          _headerCache.remove(item.path);
+        default:
+          h = _headerCache[item.path];
       }
       if (h != null && h.kind == BackupKind.records) {
         out.add(BackupCandidate(item.path, h));
@@ -1216,11 +1220,20 @@ class BackupCoordinator {
     await _prefs.setOffersAnswered(answered);
   }
 
-  /// Imports [path]'s records, then its months of pictures. A failed
-  /// month does not fail the import. Returns the summary, the months that
-  /// came in, and this phone's month prints from before the import.
-  Future<(RestoreSummary, List<String>, Map<String, ThumbMonthPrint>)>
-      _importBackup(String path, BackupHeader header) async {
+  /// Imports [path]'s records, then the months of pictures ITS header
+  /// lists: the header of the file as fetched, not one from an earlier
+  /// scan (the other phone may have backed up months since). A file that
+  /// is no longer [installId]'s backup is not imported. A failed month
+  /// does not fail the import. Returns the summary, the months that came
+  /// in, this phone's month prints from before the import, and the header
+  /// the import went by (null when it failed).
+  Future<
+      (
+        RestoreSummary,
+        List<String>,
+        Map<String, ThumbMonthPrint>,
+        BackupHeader?
+      )> _importBackup(String path, String installId) async {
     final before = await _monthPrints();
     final dest = await _tmpPath('restore-records.json');
     final f = await _t.fetch(path, dest, timeout: const Duration(seconds: 60));
@@ -1229,17 +1242,34 @@ class BackupCoordinator {
       return (
         RestoreSummary(ok: false, failure: f.kind),
         const <String>[],
-        before
+        before,
+        null
       );
     }
     final ImportSummary s;
+    final BackupHeader header;
     try {
+      final h = parseBackupHeader(await _headOf(dest));
+      if (h == null || h.installId != installId) {
+        return (
+          RestoreSummary(
+              ok: false,
+              failure: h == null
+                  ? CloudResultKind.unknownOwner
+                  : CloudResultKind.ownedByOther),
+          const <String>[],
+          before,
+          null
+        );
+      }
+      header = h;
       s = await _dao.importJson(await File(dest).readAsString());
     } on FormatException {
       return (
         const RestoreSummary(ok: false, failure: CloudResultKind.unknownOwner),
         const <String>[],
-        before
+        before,
+        null
       );
     } finally {
       await _deleteQuietly(dest);
@@ -1276,8 +1306,19 @@ class BackupCoordinator {
         failedMonths: failed,
       ),
       done,
-      before
+      before,
+      header
     );
+  }
+
+  /// The first bytes of a local file, where its backup header is.
+  static Future<List<int>> _headOf(String path) async {
+    final f = await File(path).open();
+    try {
+      return await f.read(kBackupHeaderLimit);
+    } finally {
+      await f.close();
+    }
   }
 
   /// After a restore, takeover or combine: the adopted install's months as
@@ -1320,12 +1361,15 @@ class BackupCoordinator {
     try {
       final summary = await _locked(() async {
         await _holdCatchUp();
-        final (summary, done, before) = await _importBackup(c.path, c.header);
-        if (!summary.ok) return summary;
+        // [c] is from the last scan; the import goes by the file as it is
+        // now, and so does the adoption.
+        final (summary, done, before, header) =
+            await _importBackup(c.path, c.header.installId);
+        if (!summary.ok || header == null) return summary;
         await _prefs.reload();
         if (restoreTakesOver(c)) {
-          await _prefs.setAdoptedFrom(c.header.installId);
-          await _adoptMonths(c.header, before: before, restored: done);
+          await _prefs.setAdoptedFrom(header.installId);
+          await _adoptMonths(header, before: before, restored: done);
         }
         await _markAnswered(c.header.installId);
         return summary;
@@ -1363,8 +1407,27 @@ class BackupCoordinator {
     _setBusy(true);
     try {
       return await _locked(() async {
+        // [c] is from the last scan: the months its file lists now are
+        // deleted too (the other phone may have backed up since). A file
+        // another install has written since is not [c]'s backup any more:
+        // nothing is deleted, and the offer comes back with what is there.
+        final cur = await _t.readHeader(c.path,
+            allowDownload: true, timeout: const Duration(seconds: 30));
+        final Map<String, int> listed;
+        switch (cur.kind) {
+          case CloudResultKind.ok:
+            if (cur.header!.installId != c.header.installId) {
+              _headerCache.clear();
+              return BackupDeleteResult.failed;
+            }
+            listed = {...c.header.months, ...cur.header!.months};
+          case CloudResultKind.missing:
+            listed = c.header.months;
+          default:
+            return BackupDeleteResult.failed;
+        }
         final result = await _deleteInOrder([
-          [for (final m in c.header.months.keys) picturesPath(m)],
+          [for (final m in listed.keys) picturesPath(m)],
           if (c.path == kRecordsFileName) const [kPreviousFileName],
           [c.path],
         ], WriteExpect(installId: _prefs.installId, adoptFrom: c.header.installId));
@@ -1406,13 +1469,14 @@ class BackupCoordinator {
         final h = await _t.readHeader(kRecordsFileName,
             allowDownload: true, timeout: const Duration(seconds: 30));
         if (h.kind == CloudResultKind.ok && h.header != null) {
-          final header = h.header!;
+          var header = h.header!;
           var done = header.months.keys.toList();
           var before = await _monthPrints();
           if (!replace) {
-            final (summary, months, prints) =
-                await _importBackup(kRecordsFileName, header);
-            if (!summary.ok) return false;
+            final (summary, months, prints, fetched) =
+                await _importBackup(kRecordsFileName, header.installId);
+            if (!summary.ok || fetched == null) return false;
+            header = fetched;
             done = months;
             before = prints;
             onDataImported?.call();
@@ -1483,15 +1547,15 @@ class BackupCoordinator {
         if (cur.kind == CloudResultKind.ok &&
             curHeader != null &&
             curHeader.installId != me) {
-          final (summary, done, before) =
-              await _importBackup(kRecordsFileName, curHeader);
-          if (summary.ok) {
+          final (summary, done, before, fetched) =
+              await _importBackup(kRecordsFileName, curHeader.installId);
+          if (summary.ok && fetched != null) {
             imported = true;
-            await _prefs.setAdoptedFrom(curHeader.installId);
+            await _prefs.setAdoptedFrom(fetched.installId);
             await _prefs.setLastSeq(0);
             await _prefs.setPendingSeq(0);
-            await _adoptMonths(curHeader, before: before, restored: done);
-            ids.add(curHeader.installId);
+            await _adoptMonths(fetched, before: before, restored: done);
+            ids.add(fetched.installId);
           }
         }
         if (imported) onDataImported?.call();

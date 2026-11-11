@@ -21,6 +21,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../support/fake_cloud_transport.dart';
 
 const _other = 'fedcba9876543210fedcba9876543210';
+const _third = 'abcdefabcdefabcdefabcdefabcdefab';
 
 Uint8List _jpeg(int tag) => Uint8List.fromList(
     [0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x04, tag, tag, 0xFF, 0xC0, 0x00, 0x04, 1, 1,
@@ -137,6 +138,23 @@ void main() {
   Future<void> myOctoberPicture() async {
     final mine = await seed(dao, '2026-10-15', hash: 'mine');
     await dao.saveMealThumb(mine, _jpeg(7));
+  }
+
+  /// The other phone, still in use, backs up again (seq 6): a November
+  /// photo meal, so its backup now has a month it did not have.
+  Future<void> otherPhoneAddsNovember() async {
+    final nov = await seed(otherDao, '2026-11-03', hash: 'o-nov');
+    await otherDao.saveMealThumb(nov, _jpeg(4));
+    final w = BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+    final prints = await otherDao.thumbMonthPrints();
+    final f = await w.writeRecords('${tmp.path}/o6.json',
+        installId: _other,
+        seq: 6,
+        months: {for (final e in prints.entries) e.key: e.value.count});
+    cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+    final p = await w.writePictures('${tmp.path}/o6-nov.json',
+        installId: _other, seq: 6, month: '2026-11');
+    cloud.files[picturesPath('2026-11')] = await File(p.path).readAsBytes();
   }
 
   group('G1: nothing uploads before the notice', () {
@@ -624,6 +642,62 @@ void main() {
       final again = c.prompt.value as RestoreOfferPrompt;
       expect(await c.startFresh(again.candidate), BackupDeleteResult.deleted);
       expect(cloud.files, isEmpty);
+    });
+
+    test('Restore takes the backup as it is now, not as the offer saw it',
+        () async {
+      await otherPhoneBackup(meals: 2); // October only
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(offer.candidate.header.months.keys, ['2026-10']);
+      await otherPhoneAddsNovember(); // before the user taps Restore
+      final mine = await seed(dao, '2026-11-05', hash: 'mine-nov');
+      await dao.saveMealThumb(mine, _jpeg(8));
+      final s = await c.restore(offer.candidate);
+      expect(s.ok, isTrue);
+      expect(s.thumbsAdded, 3, reason: 'November came in too');
+      expect(BackupPrefs(prefs).months.keys,
+          unorderedEquals(['2026-10', '2026-11']));
+      await c.answerNotice(keepOn: true);
+      await c.backUpNow();
+      expect(hashesIn('2026-11'), unorderedEquals(['o-nov', 'mine-nov']),
+          reason: 'the other phone\'s November picture is never lost');
+    });
+
+    test('Start Fresh deletes the backup as it is now, and nothing once '
+        'another install took its file over', () async {
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      await otherPhoneAddsNovember();
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.deleted);
+      expect(cloud.files, isEmpty, reason: 'November is not left orphaned');
+      // Offered again, but a third phone wrote the file before Start Fresh.
+      await prefs.remove(BackupPrefs.kOffersAnswered);
+      await otherPhoneBackup(meals: 1);
+      c.prompt.value = null;
+      await c.launchCheckForTest();
+      final second = c.prompt.value as RestoreOfferPrompt;
+      final third = BackupHeader(
+          kind: BackupKind.records, installId: _third, seq: 1);
+      cloud.put(kRecordsFileName, '${third.envelopePrefix(now)}{}}');
+      final before = Map.of(cloud.files);
+      expect(await c.startFresh(second.candidate), BackupDeleteResult.failed);
+      expect(cloud.files, before);
+    });
+
+    test('a later scan reads each backup\'s header again', () async {
+      await seed(dao, '2026-11-01');
+      await otherPhoneBackup(meals: 2); // seq 5
+      await c.launchCheckForTest();
+      await c.declineOffer((c.prompt.value as RestoreOfferPrompt).candidate);
+      c.prompt.value = null;
+      await noticeAnswered();
+      await otherPhoneAddsNovember(); // seq 6
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      final r = c.status.value.restorable.single;
+      expect(r.header.seq, 6, reason: 'what Restore From iCloud… shows');
+      expect(r.header.months, {'2026-10': 2, '2026-11': 1});
     });
   });
 
