@@ -3477,6 +3477,72 @@ void main() {
       expect(learned.zones, isEmpty);
     });
 
+    // Review r2 2026-11-11: a glasses photo without a GPS fix time (the
+    // Meta AI app may stamp the phone's position at import, possibly at
+    // home) only ever suggests, but answering it still taught the spot.
+    test('an unverified glasses fix teaches nothing: no answer reads its '
+        'position or learns the spot; a fresh glasses fix still does', () async {
+      final ids = <int>[];
+      for (var i = 0; i < 4; i++) {
+        ids.add(
+          h.add(
+            _bigMac(
+              capture: _capture(accuracy: null, fixDelta: null, glasses: true),
+            ),
+            timestamp: '2026-10-24T12:${30 + i}:00.000',
+            fileId: 'asset-$i',
+          ),
+        );
+      }
+      await h.assist.sweep();
+      for (final id in ids) {
+        expect(h.blockOf(id)?['status'], AssistStatus.suggested);
+        expect(h.blockOf(id)?['evidence'], 'location');
+      }
+      final asked = h.source.asked.length;
+      final actions = [
+        AssistUserAction.correct,
+        AssistUserAction.acceptSuggestion,
+        AssistUserAction.wrongRestaurant,
+        AssistUserAction.notFromRestaurant,
+      ];
+      for (var i = 0; i < actions.length; i++) {
+        expect(
+          h.assist.canLearnPlace(h.dao.byId(ids[i])),
+          isFalse,
+          reason: '${actions[i]}',
+        );
+        final r = await h.assist.act(
+          ids[i],
+          actions[i],
+          expectedRaw: await raw(ids[i]),
+        );
+        expect(r.status, AssistActionStatus.done, reason: '${actions[i]}');
+        expect(r.placeLearned, isFalse, reason: '${actions[i]}');
+      }
+      expect(h.source.asked, hasLength(asked), reason: 'no position read');
+      expect((await h.placesStore.read()).isEmpty, isTrue);
+
+      // A glasses photo whose fix was taken at the shutter is verified.
+      final fresh = h.add(
+        _bigMac(
+          capture: _capture(accuracy: null, fixDelta: 4, glasses: true),
+        ),
+        timestamp: '2026-10-24T12:40:00.000',
+        fileId: 'asset-fresh',
+      );
+      await h.assist.sweep();
+      expect(h.blockOf(fresh)?['status'], AssistStatus.suggested);
+      expect(h.assist.canLearnPlace(h.dao.byId(fresh)), isTrue);
+      final r = await h.assist.act(
+        fresh,
+        AssistUserAction.wrongRestaurant,
+        expectedRaw: await raw(fresh),
+      );
+      expect(r.placeLearned, isTrue);
+      expect((await h.placesStore.read()).blockedNear(h.cell), {'mcdonalds'});
+    });
+
     test('no consent for the recipient a lookup would reach now: nothing '
         'is learned', () async {
       final id = await suggested();
