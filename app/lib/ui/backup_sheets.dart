@@ -34,11 +34,23 @@ String backupDateLabel(BuildContext context, BackupHeader h) {
   return AppFormats.shortDate(context, iso);
 }
 
-/// The status line under the iCloud Backup switch.
+/// The status line under the iCloud Backup switch. A backup that landed
+/// without some months of this iPhone's pictures (their files are another
+/// iPhone's) says so instead of reading as complete.
 String backupStatusLine(BuildContext context, BackupStatus s,
     {DateTime? now}) {
   final l = context.l10n;
   if (s.busy) return l.backupStatusChecking;
+  final line = _statusLine(context, s, now: now);
+  final landed =
+      s.state == BackupState.ok || s.state == BackupState.uploading;
+  return landed && s.skippedMonths > 0
+      ? '$line ${l.backupStatusSkippedMonths(s.skippedMonths)}'
+      : line;
+}
+
+String _statusLine(BuildContext context, BackupStatus s, {DateTime? now}) {
+  final l = context.l10n;
   return switch (s.state) {
     BackupState.off => l.backupStatusOff,
     BackupState.needsNotice => l.backupStatusNotStarted,

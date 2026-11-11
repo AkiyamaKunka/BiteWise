@@ -95,6 +95,7 @@ class BackupPrefs {
   static const String kHoldCatchUpUntil = '${prefix}hold_catchup_until';
   static const String kPaused = '${prefix}paused';
   static const String kPausedCount = '${prefix}paused_count';
+  static const String kSkippedMonths = '${prefix}skipped_months';
 
   /// Every key this file owns (the reset paths and the privacy test).
   static const List<String> allKeys = [
@@ -102,6 +103,7 @@ class BackupPrefs {
     kAdoptedFrom, kOwnedPath, kFirstEmptyAt, kMonths, kLastRecordsChange,
     kLastOkAt, kLastAttemptAt, kLastBytes, kLastError, kLastMeals,
     kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused, kPausedCount,
+    kSkippedMonths,
   ];
 
   Future<void> reload() => _p.reload();
@@ -209,6 +211,11 @@ class BackupPrefs {
     await _p.setInt(kPausedCount, count);
   }
 
+  /// Months with pictures on this phone whose file is another install's
+  /// (MonthState.foreign), as the last run left them.
+  int get skippedMonths => _p.getInt(kSkippedMonths) ?? 0;
+  Future<void> setSkippedMonths(int v) => _p.setInt(kSkippedMonths, v);
+
   DateTime? _time(String key) {
     final raw = _p.getString(key);
     return raw == null || raw.isEmpty ? null : DateTime.tryParse(raw);
@@ -226,7 +233,7 @@ class BackupPrefs {
       kLastSeq, kPendingSeq, kAdoptedFrom, kOwnedPath, kFirstEmptyAt,
       kMonths, kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes,
       kLastError, kLastMeals, kPreviousDay, kPaused, kPausedCount,
-      kHoldCatchUpUntil,
+      kHoldCatchUpUntil, kSkippedMonths,
       if (!keepNotice) kNoticeSeen,
     ]) {
       await _p.remove(k);

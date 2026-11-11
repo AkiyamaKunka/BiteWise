@@ -3323,6 +3323,23 @@ class AppLocalizationsEn extends AppLocalizations {
       'The last backup did not finish. It will try again.';
 
   @override
+  String backupStatusSkippedMonths(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count months of pictures are',
+      one: '1 month of pictures is',
+    );
+    String _temp1 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'them',
+      one: 'it',
+    );
+    return '$_temp0 in another iPhone\'s backup files, so this iPhone does not back $_temp1 up.';
+  }
+
+  @override
   String get backupNoticeTitle => 'iCloud Backup is on';
 
   @override

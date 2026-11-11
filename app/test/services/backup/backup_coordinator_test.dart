@@ -316,6 +316,67 @@ void main() {
     });
   });
 
+  group('G3 before the months', () {
+    test('a phone that does not own the records file creates no month '
+        'file, on its first write too', () async {
+      await otherPhoneBackup(meals: 2); // the other phone owns the backup
+      final nov = await seed(dao, '2026-11-05', hash: 'b-nov');
+      await dao.saveMealThumb(nov, _jpeg(3));
+      await ready();
+      await prefs.setStringList(BackupPrefs.kOffersAnswered, [_other]);
+      cloud.log.clear();
+      expect(await run(), BackupState.otherDevice);
+      expect(cloud.files.containsKey(picturesPath('2026-11')), isFalse);
+      expect(cloud.log, isEmpty);
+    });
+
+    test('another install\'s month is skipped and said so, then written '
+        'once its file is gone', () async {
+      final oct = await seed(dao, '2026-10-03', hash: 'a-oct');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      await ready();
+      expect(await run(), BackupState.uploading);
+      // Another install created November (before this fix, the first-write
+      // path of a phone that answered Not Now did).
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final bnov = await seed(otherDao, '2026-11-01', hash: 'b-nov');
+      await otherDao.saveMealThumb(bnov, _jpeg(2));
+      final f = await w.writePictures('${tmp.path}/b.json',
+          installId: _other, seq: 1, month: '2026-11');
+      cloud.files[picturesPath('2026-11')] = await File(f.path).readAsBytes();
+      final nov = await seed(dao, '2026-11-05', hash: 'a-nov');
+      await dao.saveMealThumb(nov, _jpeg(3));
+      expect(await c.backUpNow(), BackupState.uploading);
+      expect(hashesIn('2026-11'), ['b-nov']);
+      expect(c.status.value.skippedMonths, 1);
+      // The other install's file goes (Start Fresh or Delete over there).
+      cloud.files.remove(picturesPath('2026-11'));
+      final nov2 = await seed(dao, '2026-11-06', hash: 'a-nov2');
+      await dao.saveMealThumb(nov2, _jpeg(4));
+      expect(await c.backUpNow(), BackupState.uploading);
+      expect(hashesIn('2026-11'), ['a-nov', 'a-nov2']);
+      expect(c.status.value.skippedMonths, 0);
+      expect(BackupPrefs(prefs).months['2026-11']!.state, MonthState.written);
+    });
+
+    test('the background never looks at another install\'s month again',
+        () async {
+      final oct = await seed(dao, '2026-10-03', hash: 'a-oct');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      await ready();
+      await run();
+      final months = BackupPrefs(prefs).months
+        ..['2026-11'] = const MonthRecord(MonthState.foreign);
+      await BackupPrefs(prefs).setMonths(months);
+      final nov = await seed(dao, '2026-11-05', hash: 'a-nov');
+      await dao.saveMealThumb(nov, _jpeg(3));
+      cloud.log.clear();
+      expect(await run(background: true), BackupState.uploading);
+      expect(cloud.log, ['write $kRecordsFileName']);
+    });
+  });
+
   test('G5: a much smaller record pauses until Back Up Anyway', () async {
     for (var i = 1; i <= 24; i++) {
       await seed(dao, '2026-10-${i.toString().padLeft(2, '0')}');

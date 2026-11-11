@@ -5141,6 +5141,12 @@ abstract class AppLocalizations {
   /// **'The last backup did not finish. It will try again.'**
   String get backupStatusFailed;
 
+  /// Added after the status line under the iCloud Backup switch when a backup landed but some months of this iPhone's pictures are in files another iPhone wrote, which this iPhone never overwrites.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 month of pictures is} other{{count} months of pictures are}} in another iPhone\'s backup files, so this iPhone does not back {count, plural, =1{it} other{them}} up.'**
+  String backupStatusSkippedMonths(int count);
+
   /// Title of the one-time notice shown in the foreground before the first backup.
   ///
   /// In en, this message translates to:

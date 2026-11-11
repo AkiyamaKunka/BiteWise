@@ -3070,6 +3070,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupStatusFailed => '上次备份没有完成，会再试一次。';
 
   @override
+  String backupStatusSkippedMonths(int count) {
+    return '有 $count 个月的图片在另一台 iPhone 的备份文件里，所以这台 iPhone 不会备份它们。';
+  }
+
+  @override
   String get backupNoticeTitle => 'iCloud 备份已开启';
 
   @override

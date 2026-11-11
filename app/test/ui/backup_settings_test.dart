@@ -91,6 +91,20 @@ void main() {
     expect(find.byKey(const Key('backupNowRow')), findsOneWidget);
   });
 
+  testWidgets('a backup that skipped months of pictures says so',
+      (tester) async {
+    await pump(tester, b: backup);
+    backup.debugSetStatus(BackupStatus(BackupState.ok,
+        lastOkAt: DateTime.now(), bytes: 1024, skippedMonths: 2));
+    await tester.pumpAndSettle();
+    expect(find.textContaining(_en.backupStatusSkippedMonths(2)),
+        findsOneWidget);
+    backup.debugSetStatus(BackupStatus(BackupState.ok,
+        lastOkAt: DateTime.now(), bytes: 1024));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('months of pictures'), findsNothing);
+  });
+
   testWidgets('each state shows only its own rows', (tester) async {
     await pump(tester, b: backup);
     final other = BackupHeader(

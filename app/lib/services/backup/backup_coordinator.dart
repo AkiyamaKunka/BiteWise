@@ -84,6 +84,7 @@ class BackupStatus {
     this.count = 0,
     this.busy = false,
     this.restorable = const [],
+    this.skippedMonths = 0,
   });
 
   final BackupState state;
@@ -105,6 +106,10 @@ class BackupStatus {
   /// Backups of other installs seen in the folder (Restore From iCloud…).
   final List<BackupCandidate> restorable;
 
+  /// Months with pictures on this phone whose file is another install's,
+  /// so the last run did not back them up.
+  final int skippedMonths;
+
   bool get canTakeOver => const {
         BackupState.otherDevice,
         BackupState.changedElsewhere,
@@ -118,7 +123,8 @@ class BackupStatus {
           other: other,
           count: count,
           busy: busy ?? this.busy,
-          restorable: restorable ?? this.restorable);
+          restorable: restorable ?? this.restorable,
+          skippedMonths: skippedMonths);
 }
 
 /// A question for the app shell to ask in the foreground, one at a time.
@@ -303,7 +309,10 @@ class BackupCoordinator {
     }
     final ok = _prefs.lastOkAt;
     if (ok == null) return const BackupStatus(BackupState.never);
-    return BackupStatus(BackupState.ok, lastOkAt: ok, bytes: _prefs.lastBytes);
+    return BackupStatus(BackupState.ok,
+        lastOkAt: ok,
+        bytes: _prefs.lastBytes,
+        skippedMonths: _prefs.skippedMonths);
   }
 
   BackupState _set(BackupState state,
@@ -314,7 +323,8 @@ class BackupCoordinator {
         bytes: _prefs.lastBytes,
         other: other,
         count: count,
-        restorable: _restorable);
+        restorable: _restorable,
+        skippedMonths: _prefs.skippedMonths);
     return state;
   }
 
@@ -537,49 +547,50 @@ class BackupCoordinator {
       if (!await _firstWriteAllowed(skipWait: r.skipWait)) {
         return _set(BackupState.never);
       }
-      allowAbsent = true;
-    } else {
-      final h = await _t.readHeader(kRecordsFileName,
-          allowDownload: !bg, timeout: r.timeout);
-      switch (h.kind) {
-        case CloudResultKind.ok:
-          current = h.header;
-          final verdict = checkOwner(
-              exists: true,
-              header: current,
-              expect: WriteExpect(
-                  installId: me,
-                  seqs: [lastSeq, if (_prefs.pendingSeq > 0) _prefs.pendingSeq],
-                  adoptFrom: adoptFrom));
-          if (verdict == OwnerVerdict.ownedByOther) {
-            return _set(BackupState.otherDevice, other: current);
+    }
+    // G3 before anything is written, the first write included: when the
+    // records file is another install's, this install creates no month
+    // file either (the owner could never write that month again).
+    final h = await _t.readHeader(kRecordsFileName,
+        allowDownload: !bg, timeout: r.timeout);
+    switch (h.kind) {
+      case CloudResultKind.ok:
+        current = h.header;
+        final verdict = checkOwner(
+            exists: true,
+            header: current,
+            expect: WriteExpect(
+                installId: me,
+                seqs: [lastSeq, if (_prefs.pendingSeq > 0) _prefs.pendingSeq],
+                adoptFrom: adoptFrom));
+        if (verdict == OwnerVerdict.ownedByOther) {
+          return _set(BackupState.otherDevice, other: current);
+        }
+        if (verdict == OwnerVerdict.changedElsewhere) {
+          return _set(BackupState.changedElsewhere, other: current);
+        }
+      case CloudResultKind.missing:
+        if (firstWrite || r.allowMissing) {
+          allowAbsent = true;
+        } else {
+          if (bg) return _skip();
+          // G9: only once the live query has gathered without it.
+          final listing = _listing = await _t.list();
+          if (listing.gathered && listing.item(kRecordsFileName) == null) {
+            await _prefs.setPaused(BackupPause.missing);
+            return _set(BackupState.missing);
           }
-          if (verdict == OwnerVerdict.changedElsewhere) {
-            return _set(BackupState.changedElsewhere, other: current);
-          }
-        case CloudResultKind.missing:
-          if (firstWrite || r.allowMissing) {
-            allowAbsent = true;
-          } else {
-            if (bg) return _skip();
-            // G9: only once the live query has gathered without it.
-            final listing = _listing = await _t.list();
-            if (listing.gathered && listing.item(kRecordsFileName) == null) {
-              await _prefs.setPaused(BackupPause.missing);
-              return _set(BackupState.missing);
-            }
-            return _skip();
-          }
-        case CloudResultKind.unknownOwner:
-          if (!r.replaceUnknown) return _set(BackupState.unknownFile);
-        case CloudResultKind.notDownloaded:
-          if (!bg) await _t.startDownloads(const [kRecordsFileName]);
           return _skip();
-        case CloudResultKind.twoCopies:
-          return _set(BackupState.twoCopies);
-        default:
-          return _fail(h.kind);
-      }
+        }
+      case CloudResultKind.unknownOwner:
+        if (!r.replaceUnknown) return _set(BackupState.unknownFile);
+      case CloudResultKind.notDownloaded:
+        if (!bg) await _t.startDownloads(const [kRecordsFileName]);
+        return _skip();
+      case CloudResultKind.twoCopies:
+        return _set(BackupState.twoCopies);
+      default:
+        return _fail(h.kind);
     }
     // G5: never replace a file of 20+ meals with one of under half.
     final replaced = current;
@@ -699,10 +710,19 @@ class BackupCoordinator {
         final rec = months[m];
         final print = prints[m];
         final path = picturesPath(m);
-        if (rec?.state == MonthState.foreign) continue;
         // Its file holds the adopted install's pictures that have not come
         // in yet: never written over before they did.
         if (rec?.state == MonthState.pending) continue;
+        if (rec?.state == MonthState.foreign) {
+          // Another install's file: nothing to back up here once this
+          // phone has no pictures in the month; otherwise looked at again
+          // in the foreground (below), in case it is gone or now ours.
+          if (print == null) {
+            months.remove(m);
+            continue;
+          }
+          if (bg) continue;
+        }
         if (print == null) {
           if (rec == null || rec.state == MonthState.absent) {
             months.remove(m);
@@ -720,11 +740,12 @@ class BackupCoordinator {
         }
         if (rec != null &&
             rec.state != MonthState.absent &&
+            rec.state != MonthState.foreign &&
             rec.print == print.key) {
           continue;
         }
         var allowAbsent = rec?.state == MonthState.absent;
-        if (rec == null) {
+        if (rec == null || rec.state == MonthState.foreign) {
           final st = await _t.itemState(path);
           if (st.exists == ItemExists.no) {
             allowAbsent = true;
@@ -781,6 +802,10 @@ class BackupCoordinator {
       return null;
     } finally {
       await _prefs.setMonths(months);
+      await _prefs.setSkippedMonths(months.entries
+          .where((e) =>
+              e.value.state == MonthState.foreign && prints.containsKey(e.key))
+          .length);
     }
   }
 
