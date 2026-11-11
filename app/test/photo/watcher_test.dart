@@ -671,14 +671,16 @@ void main() {
             root: () async => root, createMissingDirectory: true),
         clock: () => now);
 
-    LibraryPhotoIntake makeIntake({DateTime Function()? clock}) =>
+    LibraryPhotoIntake makeIntake(
+            {DateTime Function()? clock, bool Function()? liveGate}) =>
         LibraryPhotoIntake(
             lookbackDays: () => 7,
             library: library,
             clock: clock ?? () => now,
             lateImports: cursor(),
             loggedAssetIds: (ids) async => logged.intersection(ids.toSet()),
-            onLateImportPass: reports.add);
+            onLateImportPass: reports.add,
+            liveLateShouldContinue: liveGate);
 
     FakeAsset asset(String id, DateTime created) => FakeAsset(
         id, '$id.HEIC', created, bytesOf(id.length),
@@ -767,6 +769,59 @@ void main() {
           reason: 'only the live query, from the start time: no window '
               'listing, and the late photo moved no cutoff');
       expect(delivered, hasLength(1));
+    });
+
+    // RC 1.6.0: with no automatic analysis possible (no key, a quota pause,
+    // the rejected-key / region latch, the app in the background) the live
+    // pass read every carried original in full only for the pipeline to
+    // release it, and the carry outlives the session, so every relaunch
+    // read them all again. Every other automatic trigger is gated.
+    test('the live pass reads nothing while its gate is closed: every '
+        'waiting photo stays in the carry, in this session and the next, '
+        'and goes through once the gate opens', () async {
+      var open = false;
+      // What the pipeline answers an automatic photo it cannot analyze.
+      Future<bool> released(IntakePhoto p, DateTime? safe) async => false;
+      Future<Set<String>> carry() async =>
+          {for (final e in (await cursor().read())!.carry) e.id};
+
+      final first = makeIntake(liveGate: () => open)..attachSink(released);
+      await first.start();
+      library.assets = [
+        for (var i = 0; i < 3; i++)
+          asset('p$i', takenTuesday.add(Duration(hours: i))),
+      ];
+      insert(['p0', 'p1', 'p2']);
+      var passes = reports.length;
+      library.changeListener!();
+      await until(() => reports.length > passes);
+      expect(reads, isEmpty,
+          reason: 'no original is read while nothing could be analyzed');
+      expect(library.lookedUp, isEmpty, reason: 'nor even looked up');
+      expect(await carry(), {'p0', 'p1', 'p2'});
+
+      // The next session (a relaunch), still paused: a library change.
+      final second = makeIntake(liveGate: () => open)..attachSink(released);
+      await second.start();
+      passes = reports.length;
+      library.changeListener!();
+      await until(() => reports.length > passes);
+      expect(reads, isEmpty, reason: 'not read again in the next session');
+      expect(await carry(), {'p0', 'p1', 'p2'});
+
+      // The gate opens (a key, the latch lifted): the next change delivers
+      // them, oldest first, and the carry empties.
+      open = true;
+      second.attachSink((p, safe) async {
+        delivered.add((p, safe));
+        return true;
+      });
+      passes = reports.length;
+      library.changeListener!();
+      await until(() => reports.length > passes);
+      expect(delivered.map((d) => d.$1.assetId), ['p0', 'p1', 'p2']);
+      expect(reads, ['p0', 'p1', 'p2']);
+      expect(await carry(), isEmpty);
     });
 
     test('a photo this session already handled is not read again, and a '

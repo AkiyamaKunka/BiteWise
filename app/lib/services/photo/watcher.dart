@@ -14,6 +14,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../core/contracts.dart';
 import '../local_store.dart';
 import '../settings/app_settings.dart' show AppSettings;
+import 'background_time.dart' show appEngineInForeground;
 import 'filename_dates.dart';
 import 'glasses.dart';
 import 'photo_changes.dart';
@@ -57,7 +58,11 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// local store, and asks the same channel which photos sit in a Meta
 /// glasses album (G2a) and, for a glasses photo the dating guard could
 /// re-date, when it joined the library (G2b); elsewhere
-/// [PhotoIntake.lateImportScan] does nothing and nothing is asked.
+/// [PhotoIntake.lateImportScan] does nothing and nothing is asked. The
+/// live watcher's late-import pass reads a photo only while an automatic
+/// analysis could succeed and the app is open
+/// ([LibraryPhotoIntake.liveLateShouldContinue]), as every other automatic
+/// trigger does.
 PhotoIntake createPhotoIntake(AppSettings settings,
     {FutureOr<void> Function(int count)? onBackfillListed,
     bool Function(String assetId)? passOver,
@@ -75,6 +80,11 @@ PhotoIntake createPhotoIntake(AppSettings settings,
               source: changes, store: LocalNoBackupStore.platform()),
       loggedAssetIds: loggedAssetIds,
       onLateImportPass: changes == null ? null : recordLateImportPass,
+      // The background engine's intake is never started, so it has no
+      // live pass; its own passes take the run's budget.
+      liveLateShouldContinue: changes == null
+          ? null
+          : () => settings.canAutoAnalyze && appEngineInForeground(),
       metaAlbumIds: changes == null
           ? null
           : (since) => metaAlbumAssetIds(changes, since: since),
@@ -149,6 +159,7 @@ class LibraryPhotoIntake implements PhotoIntake {
       this.lateImports,
       this.loggedAssetIds,
       this.onLateImportPass,
+      this.liveLateShouldContinue,
       this.metaAlbumIds,
       @visibleForTesting this.metaAlbumTimeout = metaAlbumLookupTimeout,
       this.assetAddedDate,
@@ -195,6 +206,18 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// Hears what each late-import pass did (the diagnostics record). A
   /// throwing hook changes nothing.
   final FutureOr<void> Function(LateImportReport report)? onLateImportPass;
+
+  /// The live watcher's late-import pass (the one after each library
+  /// change) reads the next photo only while this says yes: in
+  /// production, while an automatic analysis could succeed (a key, no
+  /// quota pause, no rejected-key / region latch) and the app is open —
+  /// the gate every other automatic trigger has. Otherwise the pipeline
+  /// would release each photo after its original was read in full (an
+  /// iCloud download for some), and the carry, which outlives the
+  /// session, would have every relaunch read them all again. A "no" still
+  /// advances the history token and keeps every photo in the carry; the
+  /// next catch-up or pass that can analyze offers them. Null: always.
+  final bool Function()? liveLateShouldContinue;
 
   /// The background run's photos to count covered WITHOUT reading them:
   /// the ones it has deferred too often (deferred_assets.dart), so one file
@@ -333,13 +356,15 @@ class LibraryPhotoIntake implements PhotoIntake {
   Future<void> lateImportScan({bool Function()? shouldContinue}) =>
       _queueLateImport(shouldContinue: shouldContinue, rescan: true);
 
-  /// The live watcher's pass: no budget, and no rescan by date (that one
-  /// lists the whole window; the launch/resume and background passes do
-  /// it). One waiting at most.
+  /// The live watcher's pass: no time budget, only
+  /// [liveLateShouldContinue], and no rescan by date (that one lists the
+  /// whole window; the launch/resume and background passes do it). One
+  /// waiting at most.
   void _queueLiveLateImport() {
     if (lateImports == null || _liveLateQueued) return;
     _liveLateQueued = true;
-    unawaited(_queueLateImport(rescan: false, live: true));
+    unawaited(_queueLateImport(
+        shouldContinue: liveLateShouldContinue, rescan: false, live: true));
   }
 
   Future<void> _queueLateImport(

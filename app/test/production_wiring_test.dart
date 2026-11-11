@@ -18,6 +18,7 @@ import 'package:calorie_tracker/services/photo/photo_changes.dart'
     show recordLateImportPass;
 import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:flutter/widgets.dart' show AppLifecycleState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -804,6 +805,15 @@ void main() {
       // G2a/G2b: the album lookup and the added dates ride the same channel.
       expect(ios.metaAlbumIds, isNotNull);
       expect(ios.assetAddedDate, isNotNull);
+      // RC 1.6.0: the live late-import pass reads a photo only while an
+      // automatic analysis could succeed (canAutoAnalyze), like every
+      // other automatic trigger.
+      final gate = ios.liveLateShouldContinue!;
+      expect(settings.canAutoAnalyze, isFalse, reason: 'no key yet');
+      expect(gate(), isFalse);
+      await settings.setGeminiApiKey('test-key');
+      expect(settings.canAutoAnalyze, isTrue);
+      expect(gate(), isTrue);
       final android =
           createPhotoIntake(settings, loggedAssetIds: logged, isIOS: false)
               as LibraryPhotoIntake;
@@ -811,6 +821,29 @@ void main() {
       expect(android.onLateImportPass, isNull);
       expect(android.metaAlbumIds, isNull);
       expect(android.assetAddedDate, isNull);
+      expect(android.liveLateShouldContinue, isNull);
+    },
+  );
+
+  testWidgets(
+    'the live late-import gate is closed while the app is in the '
+    'background, even with a key',
+    (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(),
+        keyStore: _Keys(),
+      );
+      await settings.setGeminiApiKey('test-key');
+      final gate =
+          (createPhotoIntake(settings, isIOS: true) as LibraryPhotoIntake)
+              .liveLateShouldContinue!;
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(gate(), isTrue);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
+      expect(gate(), isFalse);
+      tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
+      expect(gate(), isTrue);
     },
   );
 }
