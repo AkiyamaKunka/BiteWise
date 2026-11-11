@@ -122,6 +122,10 @@ class RestaurantConsentSheet extends StatelessWidget {
     final theme = Theme.of(context);
     final bullets = restaurantConsentBullets(l,
         support: support, locationSupported: locationSupported);
+    // Only the three buttons are pinned; the title scrolls with the
+    // bullets. A pinned title (four lines at the largest text size) left
+    // the disclosure 0-13 px on a 320-375 pt phone, under buttons that
+    // could still be tapped, and on 320x568 pushed Not now off the screen.
     return SafeArea(
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
@@ -129,15 +133,16 @@ class RestaurantConsentSheet extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Text(l.restaurantConsentTitle,
-                style: theme.textTheme.titleLarge
-                    ?.copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 12),
             Flexible(
               child: SingleChildScrollView(
+                key: const Key('restaurantConsentScroll'),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(l.restaurantConsentTitle,
+                        style: theme.textTheme.titleLarge
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 12),
                     for (final b in bullets)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
@@ -324,32 +329,34 @@ Future<({bool clearPlaces})?> confirmRestaurantAssistOff(
     builder: (ctx) => StatefulBuilder(
       builder: (ctx, setDialog) => AlertDialog(
         key: const Key('restaurantOffDialog'),
+        // Title, body and the box scroll together above the buttons: with
+        // a fixed title, the largest text size on a 320 pt phone put the
+        // Turn off button below the screen.
+        scrollable: true,
         title: Text(ctx.l10n.restaurantOffTitle),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(ctx.l10n.restaurantOffBody),
-              if (offerClearPlaces)
-                CheckboxListTile(
-                  key: Key(
-                    placesKept
-                        ? 'restaurantOffClearPlaces'
-                        : 'restaurantOffClearAnswers',
-                  ),
-                  contentPadding: EdgeInsets.zero,
-                  controlAffinity: ListTileControlAffinity.leading,
-                  value: clear,
-                  onChanged: (v) => setDialog(() => clear = v ?? false),
-                  title: Text(
-                    placesKept
-                        ? ctx.l10n.restaurantOffClearPlaces
-                        : ctx.l10n.restaurantOffClearAnswers,
-                  ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(ctx.l10n.restaurantOffBody),
+            if (offerClearPlaces)
+              CheckboxListTile(
+                key: Key(
+                  placesKept
+                      ? 'restaurantOffClearPlaces'
+                      : 'restaurantOffClearAnswers',
                 ),
-            ],
-          ),
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: clear,
+                onChanged: (v) => setDialog(() => clear = v ?? false),
+                title: Text(
+                  placesKept
+                      ? ctx.l10n.restaurantOffClearPlaces
+                      : ctx.l10n.restaurantOffClearAnswers,
+                ),
+              ),
+          ],
         ),
         actions: [
           TextButton(

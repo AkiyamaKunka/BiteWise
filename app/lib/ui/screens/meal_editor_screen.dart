@@ -1007,6 +1007,12 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         key: const Key('assistAcceptConfirm'),
+        // The title, why and the new total scroll together above the
+        // buttons: not scrollable, from the third accessibility text size
+        // the total was cut off (or its box squeezed to nothing), and at
+        // the largest one on a 320 pt phone the confirm button was below
+        // the screen.
+        scrollable: true,
         title: Text(l.assistAcceptTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
