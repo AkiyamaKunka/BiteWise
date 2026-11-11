@@ -200,6 +200,45 @@ def test_a_slow_cli_start_is_reported_as_a_timeout_not_a_guard_failure(
                       "reason": "timeout"}
 
 
+def test_finished_jobs_leave_memory_after_the_ttl_without_another_call(
+        services):
+    """docs/PRIVACY.md: the server keeps a lookup's request and answer in
+    memory for up to 24 hours. With no later submit() or status() (both
+    prune on their own, so this test calls neither after the clock moves),
+    the idle worker must drop done AND failed jobs past the TTL."""
+    clock = Clock()
+    runner = ScriptedRunner([_ok_run, LookupRun(status="cli_error",
+                                                verdict="cli_error")])
+    service = _service(runner, clock=clock)
+    services.append(service)
+    _, done = service.submit(_request("Chicken burrito bowl"))
+    _wait_state(service, done["job_id"], {"done"})
+    _, failed = service.submit(_request("Steak quesadilla"))
+    _wait_state(service, failed["job_id"], {"failed"})
+
+    clock.now += lookup_jobs.CACHE_TTL_SECONDS + 1
+    end = time.monotonic() + 5
+    while True:
+        with service._cond:
+            left = (len(service._jobs), len(service._by_hash))
+        if left == (0, 0) or time.monotonic() > end:
+            break
+        time.sleep(0.01)
+    assert left == (0, 0), "requests and answers still in memory past the TTL"
+
+
+def test_the_worker_keeps_jobs_younger_than_the_ttl(services):
+    clock = Clock()
+    service = _service(ScriptedRunner([_ok_run]), clock=clock)
+    services.append(service)
+    _, body = service.submit(_request())
+    _wait_state(service, body["job_id"], {"done"})
+    clock.now += lookup_jobs.CACHE_TTL_SECONDS - 60
+    time.sleep(0.1)  # ten worker passes at poll_seconds=0.01
+    with service._cond:
+        assert list(service._jobs) == [body["job_id"]]
+
+
 def test_failed_run_reports_its_reason_and_a_resubmit_runs_again(services):
     runner = ScriptedRunner([LookupRun(status="guard_fail",
                                        verdict="guard_fail:tools")])

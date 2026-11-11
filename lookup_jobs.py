@@ -269,6 +269,12 @@ class LookupService:
     def _work(self) -> None:
         while not self._stop.is_set():
             with self._cond:
+                # Prune on every pass too, not only in submit()/status():
+                # with no further lookup call (lookups turned off, a week of
+                # home cooking) a finished job's dish names and answer would
+                # otherwise stay in memory past the 24 h docs/PRIVACY.md
+                # promises, until the next restart.
+                self._prune_locked()
                 job = None
                 while self._queue and job is None:
                     job = self._jobs.get(self._queue[0])
