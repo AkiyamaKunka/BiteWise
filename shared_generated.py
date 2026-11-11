@@ -41,7 +41,7 @@ RESTAURANT_LOOKUP_SCHEMA = '{"type":"object","additionalProperties":false,"requi
 US_CHAINS_AS_OF = '2026-10-24'
 
 US_CHAINS = [
-    {'key': 'a_and_w', 'name': 'A&W Restaurants', 'aliases': ['A&W', 'A&W All American Food'], 'domains': ['awrestaurants.com'], 'size': '20_plus'},
+    {'key': 'a_and_w', 'name': 'A&W Restaurants', 'aliases': ['A&W Restaurant', 'A&W All American Food'], 'domains': ['awrestaurants.com'], 'size': '20_plus'},
     {'key': 'amatos', 'name': "Amato's Sandwich Shops", 'aliases': [], 'domains': ['amatos.com'], 'size': '20_plus'},
     {'key': 'andys', 'name': "Andy's Frozen Custard", 'aliases': [], 'domains': ['eatandys.com'], 'size': '20_plus'},
     {'key': 'another_broken_egg', 'name': 'Another Broken Egg Cafe', 'aliases': ['Another Broken Egg'], 'domains': ['anotherbrokenegg.com'], 'size': '20_plus'},

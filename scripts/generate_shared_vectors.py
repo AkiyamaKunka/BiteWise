@@ -875,6 +875,14 @@ def build_restaurant_lookup():
         "order_merchant": "Joe's Pizza - 7 Carmine St, New York",
         "chains": ["chipotle"]})
     req("merchant_delivery_app", {"order_merchant": "Uber Eats"})
+    req("drink_brand_names_no_chain", {
+        "items": [{"name": "Brisket plate", "qty": 1, "unit": "plate",
+                   "brand": ""},
+                  {"name": "Root beer", "qty": 1, "unit": "can",
+                   "brand": "A&W Root Beer"},
+                  {"name": "Cream soda", "qty": 1, "unit": "can",
+                   "brand": "A&W"}],
+        "chains": []})
     req("merchant_numbered_chain_name", {
         "order_merchant": "Seasons 52 #12, Chicago",
         "items": [{"name": "Burger", "brand": "Hwy 55 Burgers 1200 Main"}]})
@@ -991,6 +999,13 @@ def build_restaurant_lookup():
     match("latin_folding", "Café Rio")
     match("degree_sign", "85°C Bakery Cafe")
     match("ampersand", "Noodles and Company")
+    # A&W Root Beer is Keurig Dr Pepper's drink, not A&W Restaurants: the
+    # printed drink brand names no chain; the restaurant's full name and
+    # its own web host still do.
+    match("drink_brand_bare", "A&W")
+    match("drink_brand_with_flavor", "A&W Root Beer")
+    match("drink_brand_chain_full_name", "A&W Restaurant")
+    match("drink_brand_chain_host", "A&W", "www.awrestaurants.com")
     match("prefix_longest", "Taco Bell Cantina")
     match("independent", "Junior's Restaurant")
     match("receipt_store_number", "KWIK TRIP #1234")

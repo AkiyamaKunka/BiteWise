@@ -81,6 +81,17 @@ void main() {
       ('Ora’s Market', null, null),
       ("Junior's Restaurant", null, null),
       ("John's Famous Hot Dogs", null, null),
+      // A&W Root Beer and A&W Cream Soda are Keurig Dr Pepper's drinks,
+      // not A&W Restaurants: a can's printed "A&W" names no chain, and the
+      // restaurant still matches by its full name or its own web host
+      ('A&W', null, null),
+      ('A&W Root Beer', null, null),
+      ('A&W Cream Soda', null, null),
+      ('A&W Zero Sugar Root Beer', null, null),
+      ('A&W', 'www.awrestaurants.com', 'a_and_w'),
+      ('A&W Restaurant', null, 'a_and_w'),
+      ('A&W Restaurants #1234', null, 'a_and_w'),
+      ('A&W All American Food', null, 'a_and_w'),
       // Normalization
       ('McDonald’s', null, 'mcdonalds'),
       ('MCDONALDS', null, 'mcdonalds'),

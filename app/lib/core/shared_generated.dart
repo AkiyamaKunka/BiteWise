@@ -482,7 +482,7 @@ final class SharedChain {
 const String sharedUsChainsAsOf = '2026-10-24';
 
 const List<SharedChain> sharedUsChains = [
-  SharedChain(key: 'a_and_w', name: 'A&W Restaurants', aliases: ['A&W', 'A&W All American Food'], domains: ['awrestaurants.com'], size: '20_plus'),
+  SharedChain(key: 'a_and_w', name: 'A&W Restaurants', aliases: ['A&W Restaurant', 'A&W All American Food'], domains: ['awrestaurants.com'], size: '20_plus'),
   SharedChain(key: 'amatos', name: 'Amato\'s Sandwich Shops', aliases: [], domains: ['amatos.com'], size: '20_plus'),
   SharedChain(key: 'andys', name: 'Andy\'s Frozen Custard', aliases: [], domains: ['eatandys.com'], size: '20_plus'),
   SharedChain(key: 'another_broken_egg', name: 'Another Broken Egg Cafe', aliases: ['Another Broken Egg'], domains: ['anotherbrokenegg.com'], size: '20_plus'),

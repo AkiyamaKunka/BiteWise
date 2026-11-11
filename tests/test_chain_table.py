@@ -219,6 +219,17 @@ def test_single_token_variants_are_not_generic_words():
     ("Casey's", None, None),
     ("Casey's", "www.caseys.com", "caseys"),
     ("Perkins", "stores.perkinsrestaurants.com", "perkins"),
+    # A&W Root Beer and A&W Cream Soda are Keurig Dr Pepper's drinks, not
+    # A&W Restaurants: a can's printed "A&W" names no chain, and the
+    # restaurant still matches by its full name or its own web host
+    ("A&W", None, None),
+    ("A&W Root Beer", None, None),
+    ("A&W Cream Soda", None, None),
+    ("A&W Zero Sugar Root Beer", None, None),
+    ("A&W", "www.awrestaurants.com", "a_and_w"),
+    ("A&W Restaurant", None, "a_and_w"),
+    ("A&W Restaurants #1234", None, "a_and_w"),
+    ("A&W All American Food", None, "a_and_w"),
     # Normalization
     ("McDonald’s", None, "mcdonalds"),
     ("MCDONALDS", None, "mcdonalds"),
