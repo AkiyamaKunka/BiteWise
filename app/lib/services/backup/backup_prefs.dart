@@ -80,7 +80,9 @@ class BackupPrefs {
   static const String kDeviceKey = '${prefix}device_key';
   static const String kLastSeq = '${prefix}last_seq';
   static const String kPendingSeq = '${prefix}pending_seq';
+  static const String kTopSeq = '${prefix}top_seq';
   static const String kAdoptedFrom = '${prefix}adopted_from';
+  static const String kAdoptedSeq = '${prefix}adopted_seq';
   static const String kOwnedPath = '${prefix}owned_path';
   static const String kFirstEmptyAt = '${prefix}first_empty_at';
   static const String kMonths = '${prefix}months';
@@ -100,10 +102,10 @@ class BackupPrefs {
   /// Every key this file owns (the reset paths and the privacy test).
   static const List<String> allKeys = [
     kEnabled, kNoticeSeen, kInstallId, kDeviceKey, kLastSeq, kPendingSeq,
-    kAdoptedFrom, kOwnedPath, kFirstEmptyAt, kMonths, kLastRecordsChange,
-    kLastOkAt, kLastAttemptAt, kLastBytes, kLastError, kLastMeals,
-    kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused, kPausedCount,
-    kSkippedMonths,
+    kTopSeq, kAdoptedFrom, kAdoptedSeq, kOwnedPath, kFirstEmptyAt, kMonths,
+    kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes, kLastError,
+    kLastMeals, kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused,
+    kPausedCount, kSkippedMonths,
   ];
 
   Future<void> reload() => _p.reload();
@@ -130,9 +132,31 @@ class BackupPrefs {
   int get pendingSeq => _p.getInt(kPendingSeq) ?? 0;
   Future<void> setPendingSeq(int v) => _p.setInt(kPendingSeq, v);
 
+  /// The highest seq this install id ever took, in any iCloud account.
+  /// Unlike [lastSeq], [forgetBackup] keeps it: after an account change
+  /// and back, the old account's file at a seq up to this one is still
+  /// this install's, and a seq is never taken twice. A new install id
+  /// starts again at 0.
+  int get topSeq => _p.getInt(kTopSeq) ?? 0;
+  Future<void> setTopSeq(int v) => _p.setInt(kTopSeq, v);
+
   /// The install whose backup this one restored or took over.
   String get adoptedFrom => _p.getString(kAdoptedFrom) ?? '';
-  Future<void> setAdoptedFrom(String v) => _p.setString(kAdoptedFrom, v);
+
+  /// The seq of its records file then (WriteExpect.adoptMaxSeq): a later
+  /// file of that install is another install's again.
+  int? get adoptedSeq => _p.getInt(kAdoptedSeq);
+
+  Future<void> setAdopted(BackupHeader header) async {
+    await _p.setString(kAdoptedFrom, header.installId);
+    await _p.setInt(kAdoptedSeq, header.seq);
+  }
+
+  /// The takeover given up before this install wrote over the file.
+  Future<void> clearAdopted() async {
+    await _p.remove(kAdoptedFrom);
+    await _p.remove(kAdoptedSeq);
+  }
 
   String get ownedPath => _p.getString(kOwnedPath) ?? '';
   Future<void> setOwnedPath(String v) => _p.setString(kOwnedPath, v);
@@ -230,7 +254,8 @@ class BackupPrefs {
   /// account. [keepNotice]: the answer to the notice still holds.
   Future<void> forgetBackup({required bool keepNotice}) async {
     for (final k in [
-      kLastSeq, kPendingSeq, kAdoptedFrom, kOwnedPath, kFirstEmptyAt,
+      kLastSeq, kPendingSeq, kAdoptedFrom, kAdoptedSeq, kOwnedPath,
+      kFirstEmptyAt,
       kMonths, kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes,
       kLastError, kLastMeals, kPreviousDay, kPaused, kPausedCount,
       kHoldCatchUpUntil, kSkippedMonths,

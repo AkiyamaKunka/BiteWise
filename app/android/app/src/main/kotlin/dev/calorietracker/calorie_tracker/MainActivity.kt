@@ -14,7 +14,8 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
-    /// The open pickFiles call, answered from onActivityResult.
+    /// The open pickFiles call, answered from onActivityResult once the
+    /// picked files are copied. Main thread only.
     private var pickReply: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -83,8 +84,8 @@ class MainActivity : FlutterActivity() {
             return
         }
         val reply = pickReply ?: return
-        pickReply = null
         if (resultCode != Activity.RESULT_OK || data == null) {
+            pickReply = null
             reply.success(mapOf("status" to "cancelled"))
             return
         }
@@ -96,6 +97,10 @@ class MainActivity : FlutterActivity() {
             data.data?.let { uris.add(it) }
         }
         // Copying a few MB off the UI thread; the reply goes back on it.
+        // The call stays open until then (pickFiles answers busy): every
+        // pick copies into the same folder, which a second pick would
+        // empty while this one still writes it. Dart keeps Import busy
+        // from the pick until it has read the copies.
         Thread {
             val dir = File(cacheDir, "picked").apply {
                 deleteRecursively()
@@ -103,30 +108,44 @@ class MainActivity : FlutterActivity() {
             }
             val paths = mutableListOf<String>()
             var tooBig = 0
+            var failed = 0
             uris.forEachIndexed { i, uri ->
                 val out = File(dir, "picked-$i.json")
-                if (copyAtMost(uri, out, MAX_BYTES)) {
-                    paths.add(out.absolutePath)
-                } else {
-                    out.delete()
-                    tooBig++
+                when (copyAtMost(uri, out, MAX_BYTES)) {
+                    Copied.OK -> paths.add(out.absolutePath)
+                    Copied.TOO_BIG -> {
+                        out.delete()
+                        tooBig++
+                    }
+                    Copied.FAILED -> {
+                        out.delete()
+                        failed++
+                    }
                 }
             }
             runOnUiThread {
-                reply.success(mapOf("status" to "ok", "paths" to paths, "tooBig" to tooBig))
+                if (pickReply === reply) pickReply = null
+                reply.success(
+                    mapOf("status" to "ok", "paths" to paths, "tooBig" to tooBig, "failed" to failed),
+                )
             }
         }.start()
     }
 
-    /// Copies [uri] to [out], refusing (false) a file over [limit] bytes:
-    /// by its declared size when the provider gives one, and by counting
-    /// while copying in any case.
-    private fun copyAtMost(uri: Uri, out: File, limit: Long): Boolean {
+    /// What copying one picked file came to.
+    private enum class Copied { OK, TOO_BIG, FAILED }
+
+    /// Copies [uri] to [out]. TOO_BIG: a file over [limit] bytes, by its
+    /// declared size when the provider gives one, and by counting while
+    /// copying in any case. FAILED: it could not be read or written (a
+    /// cloud file that cannot be fetched now, a grant the provider
+    /// refuses, a full disk), whatever its size.
+    private fun copyAtMost(uri: Uri, out: File, limit: Long): Copied {
         try {
             contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)?.use { c ->
-                if (c.moveToFirst() && !c.isNull(0) && c.getLong(0) > limit) return false
+                if (c.moveToFirst() && !c.isNull(0) && c.getLong(0) > limit) return Copied.TOO_BIG
             }
-            val input = contentResolver.openInputStream(uri) ?: return false
+            val input = contentResolver.openInputStream(uri) ?: return Copied.FAILED
             input.use { inp ->
                 out.outputStream().use { o ->
                     val buf = ByteArray(64 * 1024)
@@ -135,14 +154,14 @@ class MainActivity : FlutterActivity() {
                         val n = inp.read(buf)
                         if (n < 0) break
                         total += n
-                        if (total > limit) return false
+                        if (total > limit) return Copied.TOO_BIG
                         o.write(buf, 0, n)
                     }
                 }
             }
-            return true
+            return Copied.OK
         } catch (e: Exception) {
-            return false
+            return Copied.FAILED
         }
     }
 

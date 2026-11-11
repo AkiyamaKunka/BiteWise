@@ -482,13 +482,27 @@ class AppServices {
       // It also moves the background watermark over what it covers, so the
       // next background run starts from here (foregroundCatchUp).
       // iCloud Backup: held while a restore offer or a restore is open
-      // (a lease left by a crash lapses in 30 minutes).
-      if (settings.canAutoAnalyze &&
-          !(await cloudBackup?.holdsCatchUp() ?? false)) {
+      // (a lease left by a crash lapses in 30 minutes). Asked inside the
+      // catch-up, never awaited here: the shell starts the look for a
+      // backup to offer after the first frame, and the answer waits for
+      // that look (a catch-up begun before the offer exists would log the
+      // backup's photos afresh, and the restore would keep those over its
+      // own, maybe corrected, meals). One running stops before its next
+      // photo once an offer or a restore holds it.
+      if (settings.canAutoAnalyze) {
         catchingUp = true;
+        Future<void> launchCatchUp() async {
+          if (await cloudBackup?.holdsCatchUp() ?? false) return;
+          await foregroundCatchUp(photoIntake,
+              shouldContinue: Platform.isIOS
+                  ? () =>
+                      appEngineInForeground() &&
+                      !(cloudBackup?.holdsCatchUpNow ?? false)
+                  : null);
+        }
+
         // The assist looks once the catch-up's photos are in (design R6b).
-        unawaited(foregroundCatchUp(photoIntake,
-                shouldContinue: Platform.isIOS ? appEngineInForeground : null)
+        unawaited(launchCatchUp()
             .whenComplete(() => unawaited(mealAssist.sweep()))
             .then((_) {},
             onError: (Object e) {

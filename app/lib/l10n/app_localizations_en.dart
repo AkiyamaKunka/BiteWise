@@ -2408,7 +2408,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importDialogBody =>
-      'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.';
+      'Choose an exported file, or paste its contents. Existing meals are kept; only new ones are added.';
 
   @override
   String get importAction => 'Import';
@@ -3278,7 +3278,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupStatusNoAccount =>
-      'Sign in to iCloud in the Settings app to back up.';
+      'Sign in to iCloud and turn on iCloud Drive for Chopstats in the Settings app to back up.';
 
   @override
   String get backupStatusUnavailable =>

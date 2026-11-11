@@ -501,11 +501,18 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // photos once the user leaves again.
     final intake = s.photoIntake;
     if (intake == null) return;
-    // iCloud Backup: a restore offer is open or a restore runs; the next
-    // return to the app catches up.
-    if (await s.cloudBackup?.holdsCatchUp() ?? false) return;
+    // iCloud Backup: a restore offer is open or a restore runs (answered
+    // once a look for a backup to offer that is running decided); the next
+    // return to the app catches up. One running stops before its next
+    // photo once an offer or a restore holds it.
+    final backup = s.cloudBackup;
+    if (await backup?.holdsCatchUp() ?? false) return;
     await foregroundCatchUp(intake,
-            shouldContinue: Platform.isIOS ? appEngineInForeground : null)
+            shouldContinue: Platform.isIOS
+                ? () =>
+                    appEngineInForeground() &&
+                    !(backup?.holdsCatchUpNow ?? false)
+                : null)
         .then((_) {}, onError: (Object _) {})
         .then((_) => Future<void>.delayed(const Duration(seconds: 15)))
         .then((_) {

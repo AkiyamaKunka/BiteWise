@@ -3756,10 +3756,10 @@ abstract class AppLocalizations {
   /// **'Import exported data'**
   String get importDialogTitle;
 
-  /// No description provided for @importDialogBody.
+  /// Body of the Import Data dialog, above its Choose File… button (the way for a full export with pictures, tens of MB), Import from clipboard and a field for a small paste.
   ///
   /// In en, this message translates to:
-  /// **'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.'**
+  /// **'Choose an exported file, or paste its contents. Existing meals are kept; only new ones are added.'**
   String get importDialogBody;
 
   /// No description provided for @importAction.
@@ -5039,7 +5039,7 @@ abstract class AppLocalizations {
   /// **'Your meals, weight, measurements, workouts and meal pictures are copied to iCloud Drive › Chopstats, which you can see, copy or delete in the Files app. API keys are never included, and the developer receives nothing.'**
   String get backupICloudFooter;
 
-  /// Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, or iCloud Drive is not available for the app: nothing is copied, so it says to export a file before reinstalling or changing phones.
+  /// Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, iCloud Drive is not available for the app, or backups are blocked (another iPhone's backup, a file changed outside the app or unreadable) or paused (the backup gone from iCloud, a much smaller record): nothing is copied, so it says to export a file before reinstalling or changing phones.
   ///
   /// In en, this message translates to:
   /// **'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
@@ -5093,13 +5093,13 @@ abstract class AppLocalizations {
   /// **'Your iCloud storage is full, so the backup cannot upload.'**
   String get backupStatusQuota;
 
-  /// Status line under the iCloud Backup switch: no iCloud account.
+  /// Status line under the iCloud Backup switch: iOS gives no iCloud identity, which is the case when signed out and also while iCloud Drive is off for the phone or for the app (iOS does not say which).
   ///
   /// In en, this message translates to:
-  /// **'Sign in to iCloud in the Settings app to back up.'**
+  /// **'Sign in to iCloud and turn on iCloud Drive for Chopstats in the Settings app to back up.'**
   String get backupStatusNoAccount;
 
-  /// Status line under the iCloud Backup switch: iCloud Drive is off for the app, or the build has no iCloud container.
+  /// Status line under the iCloud Backup switch: iOS gives an iCloud identity but no container for the app, or the build has no iCloud container.
   ///
   /// In en, this message translates to:
   /// **'iCloud Drive is not available for Chopstats.'**
@@ -5399,7 +5399,7 @@ abstract class AppLocalizations {
   /// **'A file over 100 MB was not imported.'**
   String get importTooBig;
 
-  /// Snackbar when the file picker is not available.
+  /// Snackbar when the file picker is not available, or a picked file could not be read or copied (Android: a cloud file that cannot be fetched now, a full disk).
   ///
   /// In en, this message translates to:
   /// **'Files could not be opened here. Paste the file\'s contents with Import from clipboard instead.'**

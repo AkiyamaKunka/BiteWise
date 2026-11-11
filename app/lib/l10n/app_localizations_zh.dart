@@ -2232,7 +2232,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get importDialogTitle => '导入已导出的数据';
 
   @override
-  String get importDialogBody => '粘贴导出的 JSON 文件内容。已有的餐会保留，只会添加新的。';
+  String get importDialogBody => '选择导出的文件，或粘贴文件的内容。已有的餐会保留，只会添加新的。';
 
   @override
   String get importAction => '导入';
@@ -3043,7 +3043,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupStatusQuota => '你的 iCloud 储存空间已满，备份无法上传。';
 
   @override
-  String get backupStatusNoAccount => '请在「设置」App 里登录 iCloud 后再备份。';
+  String get backupStatusNoAccount =>
+      '请在「设置」App 里登录 iCloud，并为筷拍打开 iCloud 云盘，然后再备份。';
 
   @override
   String get backupStatusUnavailable => '筷拍无法使用 iCloud 云盘。';

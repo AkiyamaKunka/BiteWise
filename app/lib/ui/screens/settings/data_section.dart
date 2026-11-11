@@ -250,17 +250,33 @@ class _DataSectionState extends State<DataSection> {
   /// Import › Choose File…: records and full files first, then pictures
   /// by month, each merged; the picked copies are deleted afterwards. A
   /// file over 100 MB is refused before it is read (its 16 KB header
-  /// decides the order).
+  /// decides the order); one that could not be copied is reported as
+  /// such.
   Future<void> _importFiles() async {
     final l10n = context.l10n;
-    final picked = await widget.filePicker.pickJsonFiles();
+    // Android answers only once it has copied the picked files (seconds
+    // for a large one from a cloud drive), after its picker closed: the
+    // row is busy from the start, so no second pick runs meanwhile
+    // (MainActivity.kt holds its own call busy too). iOS answers after
+    // its picker's own copy, and a picker swiped away is reported not to
+    // answer on some iOS versions: the row stays usable while it is up.
+    final busyFirst = widget.platform == 'android';
+    if (busyFirst) setState(() => _importing = true);
+    final PickedFiles picked;
+    try {
+      picked = await widget.filePicker.pickJsonFiles();
+    } finally {
+      // Set again below when there is something to import.
+      if (busyFirst && mounted) setState(() => _importing = false);
+    }
     if (!mounted) return;
     if (picked.unavailable) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(l10n.importPickUnavailable)));
       return;
     }
-    if (picked.cancelled || (picked.paths.isEmpty && picked.tooBig == 0)) {
+    if (picked.cancelled ||
+        (picked.paths.isEmpty && picked.tooBig == 0 && picked.failed == 0)) {
       return;
     }
     setState(() => _importing = true);
@@ -308,6 +324,8 @@ class _DataSectionState extends State<DataSection> {
       if (summaries.isNotEmpty) importSummaryText(l10n, total),
       ?refusal,
       if (tooBig > 0) l10n.importTooBig,
+      // Never "over 100 MB" for a file that could not be read at all.
+      if (picked.failed > 0) l10n.importPickUnavailable,
     ];
     if (lines.isEmpty) return;
     ScaffoldMessenger.of(context)
@@ -490,7 +508,20 @@ class _DataSectionState extends State<DataSection> {
           onTap: busy
               ? null
               : () async {
-                  final state = await backup.backUpNow();
+                  var state = await backup.backUpNow();
+                  // Nothing uploads before the notice is answered (G1),
+                  // and one dismissed at launch is not asked again until
+                  // the next: it is asked here, and Keep On backs up.
+                  if (state == BackupState.needsNotice) {
+                    if (!context.mounted) return;
+                    await showBackupNotice(context, backup);
+                    final now = backup.status.value.state;
+                    if (now == BackupState.needsNotice ||
+                        now == BackupState.off) {
+                      return;
+                    }
+                    state = await backup.backUpNow();
+                  }
                   if (state == BackupState.uploading ||
                       state == BackupState.ok) {
                     _say(l.backupDone);

@@ -111,9 +111,10 @@ class BackupStatus {
   /// so the last run did not back them up.
   final int skippedMonths;
 
-  /// This install wrote backup files, or adopted another install's, that
-  /// may still be in iCloud: Delete iCloud Backup… is offered whatever
-  /// the switch says (with it off, there is no other way to them).
+  /// This install wrote backup files that may still be in iCloud (with the
+  /// files it took over, once its own records file replaced the adopted
+  /// one): Delete iCloud Backup… is offered whatever the switch says (with
+  /// it off, there is no other way to them).
   final bool ownsFiles;
 
   bool get canTakeOver => const {
@@ -249,6 +250,9 @@ class BackupCoordinator {
         _guard = backgroundGuard,
         _writer = BackupFileWriter(dao: dao, platform: platform, clock: clock) {
     _status = ValueNotifier(_statusFromPrefs());
+    // The launch's look for a backup to offer: the shell starts it after
+    // the first frame, and init asks about the photo catch-up before that.
+    if (uiEngine) _deciding = Completer<void>();
   }
 
   final MealsDao _dao;
@@ -283,6 +287,11 @@ class BackupCoordinator {
   static const Duration catchUpLease = Duration(minutes: 30);
   static const int shrinkFloor = 20;
 
+  /// How much longer than [gatherWait] [holdsCatchUp] waits, at most, for
+  /// a look for a backup to offer to decide (the status call, the query
+  /// starting, the headers read).
+  static const Duration lookSlack = Duration(seconds: 60);
+
   late final ValueNotifier<BackupStatus> _status;
   ValueListenable<BackupStatus> get status => _status;
 
@@ -299,6 +308,24 @@ class BackupCoordinator {
   int? _seenRecords;
   int? _seenThumbs;
 
+  /// The look for a backup to offer, until it has decided whether to offer
+  /// one (or ended without deciding): the photo catch-up waits for it
+  /// ([holdsCatchUp]). Pending from the start in the app's engine.
+  Completer<void>? _deciding;
+
+  /// A look for a backup to offer got as far as deciding (an offer, the
+  /// notice, or nothing to ask) for the iCloud account of now. One that
+  /// ended before (no iCloud identity, the query not gathered in time, the
+  /// app left meanwhile, another account) looks again at the next return
+  /// to the app ([_onResume]).
+  bool _decided = false;
+
+  void _endDeciding() {
+    final d = _deciding;
+    _deciding = null;
+    if (d != null && !d.isCompleted) d.complete();
+  }
+
   // ------------------------------------------------------------- the lock
 
   Future<void> _tail = Future.value();
@@ -312,13 +339,33 @@ class BackupCoordinator {
 
   // ------------------------------------------------------------ the status
 
-  /// Whether this install has backup files of its own or adopted ones
-  /// that a delete would remove.
+  /// Whether this install has backup files of its own that a delete would
+  /// remove. An adopted install's files count only once this install's
+  /// records file replaced theirs (lastSeq, [_adoptionTaken]): until then
+  /// that install still owns its backup and may still be writing it.
   bool get _ownsFiles =>
       _prefs.lastSeq > 0 ||
       _prefs.pendingSeq > 0 ||
-      _prefs.adoptedFrom.isNotEmpty ||
-      _prefs.months.values.any((m) => m.state != MonthState.foreign);
+      _prefs.months.values.any((m) => m.state == MonthState.written);
+
+  /// The adopted install's files are this install's to delete: its own
+  /// records file replaced the one it adopted.
+  bool get _adoptionTaken =>
+      _prefs.adoptedFrom.isNotEmpty && _prefs.lastSeq > 0;
+
+  /// [h] is the adopted install's file as it was adopted
+  /// (WriteExpect.adoptMaxSeq), not one it wrote after taking it back.
+  bool _isAdopted(BackupHeader h) {
+    final max = _prefs.adoptedSeq;
+    return _prefs.adoptedFrom.isNotEmpty &&
+        h.installId == _prefs.adoptedFrom &&
+        (max == null || h.seq <= max);
+  }
+
+  /// Restores, takeovers, combines and deletes going on ([_setBusy]).
+  /// Every status set meanwhile says busy, whoever sets it: a refresh, a
+  /// run of their own, or a trigger outside the lock.
+  int _busy = 0;
 
   BackupStatus _statusFromPrefs() {
     // Off and paused keep what is known about the last backup: the
@@ -328,6 +375,7 @@ class BackupCoordinator {
         lastOkAt: _prefs.lastOkAt,
         bytes: _prefs.lastBytes,
         count: count,
+        busy: _busy > 0,
         ownsFiles: _ownsFiles);
     if (!_prefs.enabled) return known(BackupState.off);
     if (!_prefs.noticeSeen) return known(BackupState.needsNotice);
@@ -346,6 +394,7 @@ class BackupCoordinator {
     return BackupStatus(BackupState.ok,
         lastOkAt: ok,
         bytes: _prefs.lastBytes,
+        busy: _busy > 0,
         skippedMonths: _prefs.skippedMonths,
         ownsFiles: _ownsFiles);
   }
@@ -358,6 +407,7 @@ class BackupCoordinator {
         bytes: _prefs.lastBytes,
         other: other,
         count: count,
+        busy: _busy > 0,
         restorable: _restorable,
         skippedMonths: _prefs.skippedMonths,
         ownsFiles: _ownsFiles);
@@ -383,8 +433,12 @@ class BackupCoordinator {
       },
       remember: true);
 
-  void _setBusy(bool busy) =>
-      _status.value = _status.value.copyWith(busy: busy);
+  /// One such action starts (true) or ends (false); each start has its end
+  /// in a finally.
+  void _setBusy(bool busy) {
+    _busy = max(0, _busy + (busy ? 1 : -1));
+    _status.value = _status.value.copyWith(busy: _busy > 0);
+  }
 
   DateTime get _now => _clock();
   String get _today {
@@ -433,6 +487,7 @@ class BackupCoordinator {
       await _prefs.forgetBackup(keepNotice: false);
       await _prefs.setOffersAnswered(const []);
       _restorable = const [];
+      _decided = false; // its folder is looked at on the next return
       _set(_prefs.enabled ? BackupState.needsNotice : BackupState.off);
       return null;
     }
@@ -447,6 +502,7 @@ class BackupCoordinator {
       }
       await _prefs.setDeviceKey(key);
       await _prefs.setInstallId(_newInstallId());
+      await _prefs.setTopSeq(0);
     }
     return _prefs.installId;
   }
@@ -499,7 +555,10 @@ class BackupCoordinator {
     return false;
   }
 
-  /// The headers of the top-level files in [listing], read once each.
+  /// The headers of the top-level files as last read. Every scan reads
+  /// each file again (another phone may have backed up since, and an offer
+  /// shows its counts); one that cannot be read this time (a coordinated
+  /// read that timed out) keeps the header read before.
   final Map<String, BackupHeader?> _headerCache = {};
 
   Future<List<BackupCandidate>> _recordsFiles(CloudListing listing,
@@ -508,17 +567,18 @@ class BackupCoordinator {
     for (final item in listing.items) {
       if (!item.topLevel || !item.path.endsWith('.json')) continue;
       BackupHeader? h;
-      if (_headerCache.containsKey(item.path) && !item.downloading) {
-        h = _headerCache[item.path];
-      } else {
-        final r = await _t.readHeader(item.path,
-            allowDownload: allowDownload, timeout: const Duration(seconds: 10));
-        if (r.kind == CloudResultKind.ok) {
+      final r = await _t.readHeader(item.path,
+          allowDownload: allowDownload, timeout: const Duration(seconds: 10));
+      switch (r.kind) {
+        case CloudResultKind.ok:
           h = r.header;
           _headerCache[item.path] = h;
-        } else if (r.kind == CloudResultKind.unknownOwner) {
+        case CloudResultKind.unknownOwner:
           _headerCache[item.path] = null;
-        }
+        case CloudResultKind.missing:
+          _headerCache.remove(item.path);
+        default:
+          h = _headerCache[item.path];
       }
       if (h != null && h.kind == BackupKind.records) {
         out.add(BackupCandidate(item.path, h));
@@ -563,7 +623,16 @@ class BackupCoordinator {
 
   // --------------------------------------------------------------- the run
 
-  Future<BackupState> _run(_Run r) => _locked(() => _runLocked(r));
+  /// Never throws: runs are started from timers and lifecycle callbacks
+  /// that nobody awaits, and anything a step did not expect (a database or
+  /// disk error) ends the run as failed.
+  Future<BackupState> _run(_Run r) => _locked(() async {
+        try {
+          return await _runLocked(r);
+        } catch (_) {
+          return _set(BackupState.failed, remember: true);
+        }
+      });
 
   Future<BackupState> _runLocked(_Run r) async {
     final bg = r.background;
@@ -582,7 +651,7 @@ class BackupCoordinator {
     }
     if (!bg && uiEngine) await _retryPending();
     final counts = await _dao.backupCounts();
-    final lastSeq = _prefs.lastSeq;
+    var lastSeq = _prefs.lastSeq;
     if (counts.records == 0) {
       // G2 / G10: nothing to back up, and never an empty file over a full
       // one.
@@ -600,6 +669,7 @@ class BackupCoordinator {
 
     final adopted = _prefs.adoptedFrom;
     final adoptFrom = adopted.isEmpty ? null : adopted;
+    final adoptMax = _prefs.adoptedSeq;
     final firstWrite = lastSeq == 0;
     var allowAbsent = false;
     BackupHeader? current;
@@ -617,13 +687,30 @@ class BackupCoordinator {
     switch (h.kind) {
       case CloudResultKind.ok:
         current = h.header;
+        // A write of this install's that landed but was never recorded
+        // (the app was killed first), or this install's file in an iCloud
+        // account it left and came back to (lastSeq was forgotten, not
+        // topSeq): the file is this install's at that seq, recorded now,
+        // before the next seq is taken. Otherwise one more run that fails
+        // after taking its seq, or the way back, would leave the file at a
+        // seq no expected one names (changedElsewhere).
+        final pending = _prefs.pendingSeq;
+        if (current != null &&
+            current.installId == me &&
+            current.seq > lastSeq &&
+            current.seq <= max(pending, _prefs.topSeq)) {
+          lastSeq = current.seq;
+          await _prefs.setLastSeq(lastSeq);
+          if (pending == lastSeq) await _prefs.setPendingSeq(0);
+        }
         final verdict = checkOwner(
             exists: true,
             header: current,
             expect: WriteExpect(
                 installId: me,
                 seqs: [lastSeq, if (_prefs.pendingSeq > 0) _prefs.pendingSeq],
-                adoptFrom: adoptFrom));
+                adoptFrom: adoptFrom,
+                adoptMaxSeq: adoptMax));
         if (verdict == OwnerVerdict.ownedByOther) {
           return _set(BackupState.otherDevice, other: current);
         }
@@ -663,8 +750,11 @@ class BackupCoordinator {
       return _set(BackupState.shrink, count: replaced.meals);
     }
 
+    // Above every seq this install id ever took, in any account, and after
+    // a takeover too: a seq names one write.
     final oldPending = _prefs.pendingSeq;
-    final newSeq = max(lastSeq, oldPending) + 1;
+    final newSeq = max(max(lastSeq, oldPending), _prefs.topSeq) + 1;
+    await _prefs.setTopSeq(newSeq);
     await _prefs.setPendingSeq(newSeq);
     var bytes = 0;
 
@@ -674,6 +764,7 @@ class BackupCoordinator {
         months: months,
         me: me,
         adoptFrom: adoptFrom,
+        adoptMax: adoptMax,
         seq: newSeq,
         r: r,
         addBytes: (n) => bytes += n);
@@ -707,6 +798,7 @@ class BackupCoordinator {
         installId: me,
         seqs: [lastSeq, if (oldPending > 0) oldPending],
         adoptFrom: adoptFrom,
+        adoptMaxSeq: adoptMax,
         allowAbsent: allowAbsent,
         replaceUnknown: r.replaceUnknown,
       ),
@@ -773,6 +865,7 @@ class BackupCoordinator {
     required Map<String, MonthRecord> months,
     required String me,
     required String? adoptFrom,
+    required int? adoptMax,
     required int seq,
     required _Run r,
     required void Function(int) addBytes,
@@ -804,7 +897,8 @@ class BackupCoordinator {
           }
           if (await _switchedOff()) return CloudResultKind.cancelled;
           final d = await _t.delete([path],
-              WriteExpect(installId: me, adoptFrom: adoptFrom),
+              WriteExpect(
+                  installId: me, adoptFrom: adoptFrom, adoptMaxSeq: adoptMax),
               timeout: r.timeout);
           if (d.ok && d.left == 0) {
             months.remove(m);
@@ -836,7 +930,9 @@ class BackupCoordinator {
             }
             final owner = h.header?.installId;
             if (h.kind != CloudResultKind.ok || owner == null) continue;
-            if (owner != me && owner != adoptFrom) {
+            final adoptedFile = owner == adoptFrom &&
+                (adoptMax == null || h.header!.seq <= adoptMax);
+            if (owner != me && !adoptedFile) {
               months[m] = const MonthRecord(MonthState.foreign);
               continue;
             }
@@ -845,16 +941,29 @@ class BackupCoordinator {
           }
         }
         if (await _switchedOff()) return CloudResultKind.cancelled;
-        final tmp = await _tmpPath('pictures-$m.json');
-        final file = await _writer.writePictures(tmp,
-            installId: me, seq: seq, month: m);
+        final WrittenBackupFile file;
+        try {
+          file = await _writer.writePictures(
+              await _tmpPath('pictures-$m.json'),
+              installId: me,
+              seq: seq,
+              month: m);
+        } catch (_) {
+          // The temporary file could not be made (the phone is full, the
+          // month could not be read; the writer deleted what it began):
+          // the run ends as failed, as it does for the records file.
+          return CloudResultKind.error;
+        }
         final w = await _t.write(
           path: path,
           sourcePath: file.path,
           bytes: file.bytes,
           sha256: file.sha256,
           expect: WriteExpect(
-              installId: me, adoptFrom: adoptFrom, allowAbsent: allowAbsent),
+              installId: me,
+              adoptFrom: adoptFrom,
+              adoptMaxSeq: adoptMax,
+              allowAbsent: allowAbsent),
           allowDownload: !bg,
           timeout: r.timeout,
         );
@@ -957,30 +1066,54 @@ class BackupCoordinator {
   // ------------------------------------------------------------- triggers
 
   /// The app's engine, after the first frame and once the database is
-  /// open: start the metadata query, look for a backup to offer, then run
-  /// if the last backup is stale.
+  /// open: ask iCloud for its status, start the metadata query, look for a
+  /// backup to offer, then run if the last backup is stale.
   Future<void> start() async {
     if (!uiEngine) return;
     await _prefs.reload();
     _status.value = _statusFromPrefs();
-    await _t.startWatching();
     _startPolling();
-    unawaited(_launchCheck());
+    unawaited(_launchCheck(startWatching: true));
   }
 
   Future<void> stop() async {
     _pollTimer?.cancel();
     _debounceTimer?.cancel();
     _refreshTimer?.cancel();
+    _endDeciding();
     await _t.stopWatching();
   }
 
-  Future<void> _launchCheck() async {
+  Future<void> _launchCheck({bool startWatching = false}) async {
+    _deciding ??= Completer<void>();
+    final bool nothingToAsk;
+    try {
+      nothingToAsk = await _lookForOffer(startWatching: startWatching);
+    } finally {
+      // Decided (an offer holds the catch-up from here), or ended without
+      // deciding: the catch-up waits no longer either way.
+      _endDeciding();
+    }
+    if (nothingToAsk) await _maybeLaunchRun();
+  }
+
+  /// The look for a backup to offer, or the notice to ask. True when it
+  /// found nothing to ask (the launch's run may go); false when it asks,
+  /// or ended before it could tell.
+  Future<bool> _lookForOffer({required bool startWatching}) async {
     final me = await _locked(() async {
       await _prefs.reload();
       return _identity(background: false);
     });
-    if (me == null) return;
+    // The metadata query only after that status call. In iOS a query finds
+    // the container's files only once the container was fetched in the
+    // process (url(forUbiquityContainerIdentifier:), which status runs, as
+    // does the plugin's startWatching); started before, it can gather an
+    // empty folder while a backup is there: no restore offer, and G4's
+    // "no backup" evidence. Started whatever status said: the plugin
+    // starts the query once there is a container (CloudQueryPlan).
+    if (startWatching) await _t.startWatching();
+    if (me == null) return false;
     // Wait for the query's first gathering (foreground only).
     final until = _now.add(gatherWait);
     var listing = await _t.list();
@@ -988,7 +1121,7 @@ class BackupCoordinator {
       await Future<void>.delayed(gatherPoll);
       listing = await _t.list();
     }
-    if (!listing.gathered || !_foreground) return;
+    if (!listing.gathered || !_foreground) return false;
     _listing = listing;
     final files = await _recordsFiles(listing, allowDownload: true);
     final others = _restorable = _others(files, me);
@@ -1003,14 +1136,16 @@ class BackupCoordinator {
           .compareTo(a.header.exportedAt ?? ''));
       await _holdCatchUp();
       final counts = await _dao.backupCounts();
+      _decided = true;
       prompt.value = RestoreOfferPrompt(open.first, counts.meals);
-      return;
+      return false;
     }
+    _decided = true;
     if (_prefs.enabled && !_prefs.noticeSeen) {
       prompt.value = const NoticePrompt();
-      return;
+      return false;
     }
-    await _maybeLaunchRun();
+    return true;
   }
 
   Future<void> _maybeLaunchRun() async {
@@ -1071,6 +1206,14 @@ class BackupCoordinator {
   }
 
   Future<void> _onResume() async {
+    // No look for a backup to offer has decided (see [_decided]): one looks
+    // again now, started before anything is awaited so that the photo
+    // catch-up of this return waits for it as well ([holdsCatchUp]). One
+    // at a time, and not over a question still waiting to be asked.
+    if (!_decided && _deciding == null && prompt.value == null) {
+      await _launchCheck();
+      if (_decided) return;
+    }
     await refresh();
     await _prefs.reload();
     if (prompt.value != null) return;
@@ -1120,8 +1263,31 @@ class BackupCoordinator {
 
   /// Whether the app's photo catch-up should wait: a restore offer is open
   /// or a restore is running (the headless run reads the same lease).
+  ///
+  /// While the look for a backup to offer has not decided, the answer
+  /// waits for it ([gatherWait] + [lookSlack] at most): a catch-up started
+  /// before the offer exists would log the offered backup's photos afresh,
+  /// and the restore would keep those over the backup's own, maybe
+  /// corrected, meals (it merges photo meals by their photo). The launch's
+  /// look starts after the first frame: never awaited before runApp.
   Future<bool> holdsCatchUp() async {
+    final deciding = _deciding;
+    if (deciding != null) {
+      try {
+        await deciding.future.timeout(gatherWait + lookSlack);
+      } on TimeoutException {
+        // A look that never ends holds nothing.
+      }
+    }
     await _prefs.reload();
+    return holdsCatchUpNow;
+  }
+
+  /// [holdsCatchUp] without waiting or reading the store again (this
+  /// engine sets and lets go the lease itself): a catch-up already running
+  /// asks it before each photo, and stops before the next one once an
+  /// offer is raised or a restore starts.
+  bool get holdsCatchUpNow {
     final until = _prefs.holdCatchUpUntil;
     return until != null && until.isAfter(_now);
   }
@@ -1139,10 +1305,43 @@ class BackupCoordinator {
     unawaited(_run(const _Run(_Kind.now, force: true)));
   }
 
-  /// Back Up Now: no wait for a change or the 24 h (G4's query still
-  /// counts).
-  Future<BackupState> backUpNow() =>
-      _run(const _Run(_Kind.now, force: true, skipWait: true));
+  /// Back Up Now: no wait for a change or the 24 h. G4's query still
+  /// counts: tapped within its first minute, a first write waits the rest
+  /// of it out (busy: Checking iCloud…) instead of doing nothing.
+  Future<BackupState> backUpNow() async {
+    await _awaitFirstWriteQuery();
+    return _run(const _Run(_Kind.now, force: true, skipWait: true));
+  }
+
+  /// Before Back Up Now's first write: the metadata query gathered and
+  /// live [firstWriteQuery] (G4), waited for while the app is in the
+  /// foreground and the query runs, [gatherWait] at most. Nothing to wait
+  /// for before the notice, with nothing to back up, or once this install
+  /// wrote or adopted the file (G4 is for the first write only).
+  Future<void> _awaitFirstWriteQuery() async {
+    if (!uiEngine) return;
+    await _prefs.reload();
+    if (!_prefs.enabled ||
+        !_prefs.noticeSeen ||
+        _prefs.lastSeq > 0 ||
+        _prefs.adoptedFrom.isNotEmpty) {
+      return;
+    }
+    bool ready(CloudListing l) =>
+        !l.watching || (l.gathered && l.live >= firstWriteQuery);
+    var listing = await _t.list();
+    if (ready(listing) || (await _dao.backupCounts()).records == 0) return;
+    final until = _now.add(gatherWait);
+    _setBusy(true);
+    try {
+      while (!ready(listing) && _foreground && _now.isBefore(until)) {
+        await Future<void>.delayed(gatherPoll);
+        listing = await _t.list();
+      }
+    } finally {
+      _setBusy(false);
+    }
+  }
 
   /// The upload state for the status line (Settings opening, a resume,
   /// 30 s after a foreground write).
@@ -1158,10 +1357,10 @@ class BackupCoordinator {
     if (item != null && item.hasConflicts && s != BackupState.twoCopies) {
       final versions = await _t.conflicts(
           kRecordsFileName, await _tmpPath('conflict-check'));
-      final me = _prefs.installId, adopted = _prefs.adoptedFrom;
+      final me = _prefs.installId;
       final foreign = versions.any((v) =>
           v.header == null ||
-          (v.header!.installId != me && v.header!.installId != adopted));
+          (v.header!.installId != me && !_isAdopted(v.header!)));
       for (final v in versions) {
         await _deleteQuietly(v.tmpPath);
       }
@@ -1175,6 +1374,7 @@ class BackupCoordinator {
   Future<void> answerNotice({required bool keepOn}) async {
     await _prefs.setNoticeSeen(true);
     await _prefs.setEnabled(keepOn);
+    if (!keepOn) await _dropUnwrittenAdoption();
     prompt.value = null;
     _status.value = _statusFromPrefs();
     if (keepOn) unawaited(_run(const _Run(_Kind.foreground)));
@@ -1184,8 +1384,41 @@ class BackupCoordinator {
   Future<void> setEnabled(bool on) async {
     await _prefs.setEnabled(on);
     if (on) await _prefs.setNoticeSeen(true);
+    if (!on) await _dropUnwrittenAdoption();
+    _dropNotice();
     _status.value = _statusFromPrefs();
     if (on) unawaited(_run(const _Run(_Kind.foreground)));
+  }
+
+  /// The switch was set while the notice waited to be asked (the shell
+  /// asks only with nothing on top of it): turned on, the notice is
+  /// answered; turned off, "iCloud Backup is on" is no longer true, and
+  /// its Keep On would turn the switch back on.
+  void _dropNotice() {
+    if (prompt.value is NoticePrompt) prompt.value = null;
+  }
+
+  /// Turned off before this install's records file replaced the one a
+  /// restore (or a takeover) adopted: the takeover is given up. That
+  /// install still owns its backup and may still be writing it, so its
+  /// files are not this install's to write over or delete; turned on
+  /// again, this install finds it in the way like any other install's
+  /// (Back Up From This iPhone… asks first). Not while one of this
+  /// install's writes may be in flight or landed (pendingSeq): a run
+  /// writes nothing once the switch is off, and one whose write landed
+  /// keeps the files it took over.
+  Future<void> _dropUnwrittenAdoption() async {
+    await _prefs.reload();
+    if (_prefs.adoptedFrom.isEmpty ||
+        _prefs.lastSeq > 0 ||
+        _prefs.pendingSeq > 0) {
+      return;
+    }
+    await _prefs.clearAdopted();
+    final months = _prefs.months
+      ..removeWhere((_, m) =>
+          m.state == MonthState.restored || m.state == MonthState.pending);
+    await _prefs.setMonths(months);
   }
 
   Future<void> _holdCatchUp() =>
@@ -1197,11 +1430,20 @@ class BackupCoordinator {
     await _prefs.setOffersAnswered(answered);
   }
 
-  /// Imports [path]'s records, then its months of pictures. A failed
-  /// month does not fail the import. Returns the summary, the months that
-  /// came in, and this phone's month prints from before the import.
-  Future<(RestoreSummary, List<String>, Map<String, ThumbMonthPrint>)>
-      _importBackup(String path, BackupHeader header) async {
+  /// Imports [path]'s records, then the months of pictures ITS header
+  /// lists: the header of the file as fetched, not one from an earlier
+  /// scan (the other phone may have backed up months since). A file that
+  /// is no longer [installId]'s backup is not imported. A failed month
+  /// does not fail the import. Returns the summary, the months that came
+  /// in, this phone's month prints from before the import, and the header
+  /// the import went by (null when it failed).
+  Future<
+      (
+        RestoreSummary,
+        List<String>,
+        Map<String, ThumbMonthPrint>,
+        BackupHeader?
+      )> _importBackup(String path, String installId) async {
     final before = await _monthPrints();
     final dest = await _tmpPath('restore-records.json');
     final f = await _t.fetch(path, dest, timeout: const Duration(seconds: 60));
@@ -1210,17 +1452,34 @@ class BackupCoordinator {
       return (
         RestoreSummary(ok: false, failure: f.kind),
         const <String>[],
-        before
+        before,
+        null
       );
     }
     final ImportSummary s;
+    final BackupHeader header;
     try {
+      final h = parseBackupHeader(await _headOf(dest));
+      if (h == null || h.installId != installId) {
+        return (
+          RestoreSummary(
+              ok: false,
+              failure: h == null
+                  ? CloudResultKind.unknownOwner
+                  : CloudResultKind.ownedByOther),
+          const <String>[],
+          before,
+          null
+        );
+      }
+      header = h;
       s = await _dao.importJson(await File(dest).readAsString());
     } on FormatException {
       return (
         const RestoreSummary(ok: false, failure: CloudResultKind.unknownOwner),
         const <String>[],
-        before
+        before,
+        null
       );
     } finally {
       await _deleteQuietly(dest);
@@ -1257,8 +1516,19 @@ class BackupCoordinator {
         failedMonths: failed,
       ),
       done,
-      before
+      before,
+      header
     );
+  }
+
+  /// The first bytes of a local file, where its backup header is.
+  static Future<List<int>> _headOf(String path) async {
+    final f = await File(path).open();
+    try {
+      return await f.read(kBackupHeaderLimit);
+    } finally {
+      await f.close();
+    }
   }
 
   /// After a restore, takeover or combine: the adopted install's months as
@@ -1292,21 +1562,24 @@ class BackupCoordinator {
     await _prefs.setMonths(months);
   }
 
-  /// Restore: merge [c] into this phone. When this install has no backup
-  /// of its own and [c] is the canonical file, it adopts it: the next
-  /// write replaces it with this phone's (now merged) record.
+  /// Restore: merge [c] into this phone. When it takes [c] over
+  /// ([restoreTakesOver]), it adopts it: the next write replaces it with
+  /// this phone's (now merged) record.
   Future<RestoreSummary> restore(BackupCandidate c) async {
     prompt.value = null;
     _setBusy(true);
     try {
       final summary = await _locked(() async {
         await _holdCatchUp();
-        final (summary, done, before) = await _importBackup(c.path, c.header);
-        if (!summary.ok) return summary;
+        // [c] is from the last scan; the import goes by the file as it is
+        // now, and so does the adoption.
+        final (summary, done, before, header) =
+            await _importBackup(c.path, c.header.installId);
+        if (!summary.ok || header == null) return summary;
         await _prefs.reload();
         if (restoreTakesOver(c)) {
-          await _prefs.setAdoptedFrom(c.header.installId);
-          await _adoptMonths(c.header, before: before, restored: done);
+          await _prefs.setAdopted(header);
+          await _adoptMonths(header, before: before, restored: done);
         }
         await _markAnswered(c.header.installId);
         return summary;
@@ -1321,10 +1594,14 @@ class BackupCoordinator {
   }
 
   /// Whether restoring [c] makes this install take its file over (the
-  /// restore sheet says so): this install has no backup of its own yet and
-  /// [c] is the canonical file, so the next run writes over it.
+  /// restore sheet says so): iCloud Backup is on, this install has no
+  /// backup of its own yet and [c] is the canonical file, so the next run
+  /// writes over it. With the switch off no run would: the restore is a
+  /// merge, and [c]'s install keeps its backup. (On by default, the offer
+  /// can come before the notice; Turn Off there gives the takeover up,
+  /// [_dropUnwrittenAdoption].)
   bool restoreTakesOver(BackupCandidate c) =>
-      _prefs.lastSeq == 0 && c.path == kRecordsFileName;
+      _prefs.enabled && _prefs.lastSeq == 0 && c.path == kRecordsFileName;
 
   /// Not Now: the offer is not raised again for that install (the Restore
   /// From iCloud… row still has it).
@@ -1333,6 +1610,14 @@ class BackupCoordinator {
     await _markAnswered(c.header.installId);
     await _releaseCatchUp();
     await _afterChoice();
+  }
+
+  /// The offer dismissed without an answer (swiped away): Not Now for this
+  /// launch only, so it comes back at the next one, and the photo catch-up
+  /// it held is let go now rather than when the lease runs out.
+  Future<void> dismissOffer() async {
+    prompt.value = null;
+    await _releaseCatchUp();
   }
 
   /// Start Fresh: delete [c]'s backup (after the red confirm) and back up
@@ -1344,12 +1629,46 @@ class BackupCoordinator {
     _setBusy(true);
     try {
       return await _locked(() async {
+        // [c] is from the last scan: the months its file lists now are
+        // deleted too (the other phone may have backed up since). A file
+        // another install has written since is not [c]'s backup any more:
+        // nothing is deleted, and the offer comes back with what is there.
+        final cur = await _t.readHeader(c.path,
+            allowDownload: true, timeout: const Duration(seconds: 30));
+        final Map<String, int> listed;
+        switch (cur.kind) {
+          case CloudResultKind.ok:
+            if (cur.header!.installId != c.header.installId) {
+              _headerCache.clear();
+              return BackupDeleteResult.failed;
+            }
+            listed = {...c.header.months, ...cur.header!.months};
+          case CloudResultKind.missing:
+            listed = c.header.months;
+          default:
+            return BackupDeleteResult.failed;
+        }
+        // Only [c]'s install's files go (its id stands where this
+        // install's would; any seq): a month path is every install's, and
+        // when this install backs up too ([c] is a second records file, or
+        // its month lost the name race) the month file is this install's
+        // own, which it would never write again.
         final result = await _deleteInOrder([
-          [for (final m in c.header.months.keys) picturesPath(m)],
+          [for (final m in listed.keys) picturesPath(m)],
           if (c.path == kRecordsFileName) const [kPreviousFileName],
           [c.path],
-        ], WriteExpect(installId: _prefs.installId, adoptFrom: c.header.installId));
+        ], WriteExpect(installId: c.header.installId));
         _headerCache.clear();
+        // A month whose file is gone now is forgotten: one this install
+        // skipped as [c]'s is written by the next run.
+        final months = _prefs.months;
+        final before = months.length;
+        for (final m in listed.keys) {
+          if (!months.containsKey(m)) continue;
+          final st = await _t.itemState(picturesPath(m));
+          if (st.exists == ItemExists.no) months.remove(m);
+        }
+        if (months.length != before) await _prefs.setMonths(months);
         if (result != BackupDeleteResult.deleted) return result;
         await _markAnswered(c.header.installId);
         await _prefs.setFirstEmptyAt(_now.subtract(firstWriteWait));
@@ -1387,19 +1706,27 @@ class BackupCoordinator {
         final h = await _t.readHeader(kRecordsFileName,
             allowDownload: true, timeout: const Duration(seconds: 30));
         if (h.kind == CloudResultKind.ok && h.header != null) {
-          final header = h.header!;
+          var header = h.header!;
           var done = header.months.keys.toList();
           var before = await _monthPrints();
           if (!replace) {
-            final (summary, months, prints) =
-                await _importBackup(kRecordsFileName, header);
-            if (!summary.ok) return false;
+            final (summary, months, prints, fetched) =
+                await _importBackup(kRecordsFileName, header.installId);
+            if (!summary.ok || fetched == null) return false;
+            header = fetched;
             done = months;
             before = prints;
             onDataImported?.call();
           }
-          await _prefs.setAdoptedFrom(header.installId);
-          await _prefs.setLastSeq(0);
+          if (header.installId == _prefs.installId) {
+            // This install's own file at a seq it did not expect (changed
+            // outside the app): it is this install's again at that seq.
+            // Adopting its own id would accept any seq from now on.
+            await _prefs.setLastSeq(header.seq);
+          } else {
+            await _prefs.setAdopted(header);
+            await _prefs.setLastSeq(0);
+          }
           await _prefs.setPendingSeq(0);
           await _adoptMonths(header,
               before: before, restored: done, replace: replace);
@@ -1429,14 +1756,15 @@ class BackupCoordinator {
 
   /// Combine the Two Copies: each conflict version another install wrote
   /// is merged in, marked resolved, and this phone's record written over
-  /// the file.
+  /// the file. True only once that write landed (the row says "backed
+  /// up"); the merge itself stays in either way.
   Future<bool> combine() async {
     _setBusy(true);
     try {
       final ok = await _locked(() async {
         await _prefs.reload();
         final me = _prefs.installId;
-        final ids = <String>{me, if (_prefs.adoptedFrom.isNotEmpty) _prefs.adoptedFrom};
+        final ids = <String>{me};
         final dir = (await _tmpPath('conflicts'));
         final versions = await _t.conflicts(kRecordsFileName, dir);
         var imported = false;
@@ -1444,7 +1772,9 @@ class BackupCoordinator {
           final h = v.header;
           try {
             if (h == null || h.kind != BackupKind.records) continue;
-            if (!ids.contains(h.installId)) {
+            // The adopted install's version as adopted is in already; a
+            // later one (it took the backup back) is merged like any other.
+            if (h.installId != me && !_isAdopted(h)) {
               await _dao.importJson(await File(v.tmpPath).readAsString());
               imported = true;
             }
@@ -1464,23 +1794,24 @@ class BackupCoordinator {
         if (cur.kind == CloudResultKind.ok &&
             curHeader != null &&
             curHeader.installId != me) {
-          final (summary, done, before) =
-              await _importBackup(kRecordsFileName, curHeader);
-          if (summary.ok) {
+          final (summary, done, before, fetched) =
+              await _importBackup(kRecordsFileName, curHeader.installId);
+          if (summary.ok && fetched != null) {
             imported = true;
-            await _prefs.setAdoptedFrom(curHeader.installId);
+            await _prefs.setAdopted(fetched);
             await _prefs.setLastSeq(0);
             await _prefs.setPendingSeq(0);
-            await _adoptMonths(curHeader, before: before, restored: done);
-            ids.add(curHeader.installId);
+            await _adoptMonths(fetched, before: before, restored: done);
+            ids.add(fetched.installId);
           }
         }
         if (imported) onDataImported?.call();
         return _t.resolveConflicts(kRecordsFileName, ids.toList());
       });
       if (!ok) return false;
-      await _run(const _Run(_Kind.now, force: true, takeover: true));
-      return true;
+      final state =
+          await _run(const _Run(_Kind.now, force: true, takeover: true));
+      return state == BackupState.uploading || state == BackupState.ok;
     } finally {
       _setBusy(false);
     }
@@ -1504,12 +1835,12 @@ class BackupCoordinator {
     return _run(const _Run(_Kind.now, force: true, overrideShrink: true));
   }
 
-  /// Deletes this install's files (and the adopted install's) from the
-  /// folder; anything another install wrote stays. Only the paths this
-  /// install wrote or adopted are sent (its months, the records file and
-  /// the previous copy): another phone's months, never read here and
-  /// maybe not even downloaded, are none of its business. The switch is
-  /// left as it is.
+  /// Deletes this install's files (and the adopted install's, once this
+  /// install's records file replaced theirs) from the folder; anything
+  /// another install wrote stays. Only the paths this install wrote or
+  /// adopted are sent (its months, the records file and the previous
+  /// copy): another phone's months, never read here and maybe not even
+  /// downloaded, are none of its business. The switch is left as it is.
   ///
   /// Pictures go first and the records file last, so a delete that stops
   /// part-way never leaves pictures the records file no longer names. When
@@ -1522,7 +1853,9 @@ class BackupCoordinator {
         await _prefs.reload();
         final me = _prefs.installId;
         if (!isValidInstallId(me)) return BackupDeleteResult.deleted;
-        final adopted = _prefs.adoptedFrom;
+        // Before this install wrote over the adopted file, it is still
+        // that install's live backup.
+        final adopted = _adoptionTaken ? _prefs.adoptedFrom : '';
         final months = _prefs.months;
         final result = await _deleteInOrder([
           [
@@ -1531,7 +1864,10 @@ class BackupCoordinator {
           ],
           const [kPreviousFileName],
           const [kRecordsFileName],
-        ], WriteExpect(installId: me, adoptFrom: adopted.isEmpty ? null : adopted));
+        ], WriteExpect(
+            installId: me,
+            adoptFrom: adopted.isEmpty ? null : adopted,
+            adoptMaxSeq: _prefs.adoptedSeq));
         _headerCache.clear();
         _listing = null;
         if (result == BackupDeleteResult.deleted) {
@@ -1596,6 +1932,8 @@ class BackupCoordinator {
   /// them. A run in progress stops before its next upload.
   Future<BackupDeleteResult?> turnOff({required bool deleteFiles}) async {
     await _prefs.setEnabled(false);
+    await _dropUnwrittenAdoption();
+    _dropNotice();
     _status.value = _statusFromPrefs();
     if (!deleteFiles) return null;
     final result = await deleteBackup();

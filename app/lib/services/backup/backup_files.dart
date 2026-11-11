@@ -85,18 +85,22 @@ class BackupFileWriter {
     required int seq,
     required String month,
   }) async {
+    // The month is read before the file is opened, as the records are: an
+    // IOSink whose file fails to open before anything was added to it
+    // reports that error to no one (an uncaught error), so nothing may be
+    // awaited between opening and the first write.
+    final rows = <String>[];
+    var skipped = 0;
+    for (final t in await dao.thumbsForMonth(month)) {
+      final row = _thumbRow(t);
+      if (row == null) {
+        skipped++;
+      } else {
+        rows.add(row);
+      }
+    }
     final out = _HashingFile(path);
     try {
-      final rows = <String>[];
-      var skipped = 0;
-      for (final t in await dao.thumbsForMonth(month)) {
-        final row = _thumbRow(t);
-        if (row == null) {
-          skipped++;
-        } else {
-          rows.add(row);
-        }
-      }
       final header = BackupHeader(
         kind: BackupKind.pictures,
         installId: installId,

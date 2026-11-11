@@ -106,6 +106,7 @@ void main() {
       'installId': _me,
       'seqs': [3, 4],
       'adoptFrom': null,
+      'adoptMaxSeq': null,
       'allowAbsent': false,
       'replaceUnknown': false,
     });
