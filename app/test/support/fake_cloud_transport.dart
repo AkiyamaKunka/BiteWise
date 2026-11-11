@@ -230,7 +230,8 @@ class FakeCloudTransport implements BackupTransport {
   static String _sha(List<int> b) => sha256.convert(b).toString();
 
   /// CloudFiles.deleteAll: another install's file is refused; one not on
-  /// this phone is left (its download started) and the rest go on.
+  /// this phone (its download started) or with another install's conflict
+  /// version is left, and the rest go on.
   @override
   Future<CloudResult> delete(List<String> paths, WriteExpect expect,
       {Duration timeout = const Duration(seconds: 20)}) async {
@@ -258,7 +259,15 @@ class FakeCloudTransport implements BackupTransport {
         refused++;
         continue;
       }
+      // CloudFiles.performDelete: never with another install's unresolved
+      // conflict version, which the removal would drop.
+      if ((conflictVersions[p] ?? const <Uint8List>[])
+          .any((v) => !_owns(expect, parseBackupHeader(v)?.installId))) {
+        left++;
+        continue;
+      }
       files.remove(p);
+      conflictVersions.remove(p);
       log.add('delete $p');
       deleted++;
     }

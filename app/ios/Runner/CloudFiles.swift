@@ -291,6 +291,15 @@ final class CloudFiles {
     }
   }
 
+  /// Whether [url] has an unresolved conflict version that is not this
+  /// install's or the adopted one's (an unreadable one counts).
+  static func hasForeignConflict(at url: URL, expect: Expect) -> Bool {
+    guard hasConflicts(url),
+      let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url)
+    else { return false }
+    return versions.contains { !expect.owns(installId(of: header(at: $0.url))) }
+  }
+
   /// Unresolved versions of [dest] from this install are settled here;
   /// one from another install may be the only copy of that phone's data,
   /// so the write stops and Dart offers Combine.
@@ -299,11 +308,7 @@ final class CloudFiles {
       let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: dest),
       !versions.isEmpty
     else { return nil }
-    if versions.contains(where: {
-      !expect.owns(CloudFiles.installId(of: CloudFiles.header(at: $0.url)))
-    }) {
-      return .twoCopies
-    }
+    if CloudFiles.hasForeignConflict(at: dest, expect: expect) { return .twoCopies }
     for v in versions { v.isResolved = true }
     try? NSFileVersion.removeOtherVersionsOfItem(at: dest)
     return nil
@@ -388,6 +393,10 @@ final class CloudFiles {
     let anySeq = Expect(installId: expect.installId, adoptFrom: expect.adoptFrom)
     let verdict = CloudFiles.checkOwner(exists: true, header: header, expect: anySeq)
     if verdict != .allowed { return .verdict(verdict, header: header) }
+    // Removing the item drops its unresolved conflict versions too, and
+    // one from another install may be the only copy of that phone's last
+    // write (settleConflicts keeps it on the write path): left alone.
+    if CloudFiles.hasForeignConflict(at: url, expect: anySeq) { return .twoCopies }
     do {
       try FileManager.default.removeItem(at: url)
       return .deleted(1)
@@ -413,8 +422,9 @@ final class CloudFiles {
   /// Deletes [paths] one after another, each in its own coordinated
   /// delete, and answers once with the channel reply. A file that is not
   /// this install's (or the adopted one's) is refused and counted. One
-  /// that is not on this phone yet (its download is started) or whose
-  /// coordination timed out is left and counted, and the rest go on: one
+  /// that is not on this phone yet (its download is started), whose
+  /// coordination timed out, or that has another install's unresolved
+  /// conflict version is left and counted, and the rest go on: one
   /// evicted month never keeps the others, or the records file after it.
   /// Any other error stops the rest, which count as left.
   func deleteAll(
@@ -440,7 +450,7 @@ final class CloudFiles {
         case .verdict:
           refused += 1
           next(i + 1)
-        case .notDownloaded, .timeout:
+        case .notDownloaded, .timeout, .twoCopies:
           left += 1
           next(i + 1)
         default:

@@ -3517,7 +3517,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupDeletePartial =>
-      'Some backup files are not on this iPhone yet, so they were not deleted. Try again in a minute.';
+      'Some backup files could not be deleted yet (iCloud may still be downloading them to this iPhone). Try again in a minute.';
 
   @override
   String get importChooseFile => 'Choose File…';

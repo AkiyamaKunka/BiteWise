@@ -940,6 +940,23 @@ void main() {
     expect(c.status.value.ownsFiles, isTrue, reason: 'adopted');
   });
 
+  test('a delete never drops another phone\'s unresolved write to the '
+      'records file', () async {
+    await seed(dao, '2026-11-10');
+    await ready();
+    await run();
+    await otherPhoneBackup(meals: 2, path: 'staging.json');
+    final theirs = cloud.files.remove('staging.json')!;
+    for (final p in [...cloud.files.keys]) {
+      if (p != kRecordsFileName) cloud.files.remove(p);
+    }
+    cloud.conflictVersions[kRecordsFileName] = [theirs];
+    expect(await c.deleteBackup(), BackupDeleteResult.failed);
+    expect(cloud.files.containsKey(kRecordsFileName), isTrue);
+    expect(cloud.conflictVersions[kRecordsFileName], [theirs]);
+    expect(prefs.getInt(BackupPrefs.kLastSeq), 1, reason: 'still known');
+  });
+
   group('the background', () {
     test('a background run updates our own file without downloading',
         () async {
