@@ -3513,6 +3513,50 @@ void main() {
       expect(en.assistUndo, 'Undo');
       expect(zh.assistUndo, '撤销');
     });
+
+    // RC 1.6.0: the totals read "1250 → 1320" where every other line
+    // groups them.
+    test('totals of 1,000 kcal and more are grouped (en, zh)', () {
+      AssistAppliedNotice big(int before, int after) => AssistAppliedNotice(
+        mealId: 1,
+        chainKey: 'mcdonalds',
+        brandName: "McDonald's",
+        oldKcal: before,
+        newKcal: after,
+        undo: () async => true,
+      );
+      expect(
+        assistAppliedSnackbar(AppLocalizationsEn(), big(1250, 1320)),
+        "Used McDonald's published numbers: 1,250 → 1,320 kcal",
+      );
+      expect(
+        assistAppliedSnackbar(AppLocalizationsZh(), big(980, 1040)),
+        '已采用 麦当劳 公布的数值：980 → 1,040 千卡',
+      );
+    });
+
+    // RC 1.6.0: an Undo pressed after the meal changed did nothing and
+    // said nothing.
+    test('Undo that undid nothing says so; one that undid says nothing',
+        () async {
+      for (final undone in [true, false]) {
+        var said = 0;
+        final press = assistUndoAction(
+          AssistAppliedNotice(
+            mealId: 1,
+            chainKey: 'mcdonalds',
+            brandName: "McDonald's",
+            oldKcal: 540,
+            newKcal: 590,
+            undo: () async => undone,
+          ),
+          onNothingUndone: () => said++,
+        );
+        press();
+        await pumpEventQueue();
+        expect(said, undone ? 0 : 1, reason: 'undone=$undone');
+      }
+    });
   });
 
   test('deviceRegion: the locale name\'s region, else the preferred '

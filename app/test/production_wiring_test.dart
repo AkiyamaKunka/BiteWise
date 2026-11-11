@@ -82,6 +82,21 @@ void main() {
       indent: '  ',
     );
 
+    // RC 1.6.0: the lookup's Undo was `() => unawaited(n.undo())`, silent
+    // when the meal had changed since and nothing was undone.
+    test("the lookup snackbar's Undo says when it undid nothing", () {
+      expect(init(), isNot(contains('unawaited(n.undo())')));
+      expect(
+        init(),
+        _wired(
+          r'assistUndoAction\(n, '
+          r'(//[^\n]*\n\s*)?'
+          r'onNothingUndone: \(\) => notify\?\.call\( '
+          r'localizationsFor\(settings\.appLanguage\) \.usualUndoStale\)',
+        ),
+      );
+    });
+
     test('iOS gives each photo background time and holds automatic photos '
         'while the app is in the background', () {
       expect(

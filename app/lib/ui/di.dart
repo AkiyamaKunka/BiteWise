@@ -50,7 +50,8 @@ import '../services/settings/app_settings.dart';
 import 'ai_consent.dart' show SharedPhotoConsentGate;
 import 'background_glue.dart';
 import 'migrations.dart';
-import 'outcome_text.dart' show assistAppliedSnackbar, outcomeSnackbar;
+import 'outcome_text.dart'
+    show assistAppliedSnackbar, assistUndoAction, outcomeSnackbar;
 import 'os_summary.dart';
 import 'meal_in_use.dart';
 import 'meal_thumbs.dart';
@@ -308,8 +309,14 @@ class AppServices {
           ? null
           : (n) {
               final l = localizationsFor(settings.appLanguage);
-              notifyAction(assistAppliedSnackbar(l, n), l.assistUndo,
-                  () => unawaited(n.undo()));
+              notifyAction(
+                  assistAppliedSnackbar(l, n),
+                  l.assistUndo,
+                  assistUndoAction(n,
+                      // In the language of the moment it is pressed.
+                      onNothingUndone: () => notify?.call(
+                          localizationsFor(settings.appLanguage)
+                              .usualUndoStale)));
             },
     );
 

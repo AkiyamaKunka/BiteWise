@@ -13,7 +13,7 @@ import '../core/coerce.dart' show calendarDaysBetween;
 import '../core/outcome_kind.dart';
 import '../l10n/app_localizations.dart';
 import '../services/assist/meal_assist.dart' show AssistAppliedNotice;
-import 'format.dart' show mealDescription;
+import 'format.dart' show formatKcal, mealDescription;
 import 'photo_pipeline.dart';
 import 'provider_names.dart';
 
@@ -161,15 +161,31 @@ String assistBrandLabel(AppLocalizations l, String? chainKey, String brandName) 
 /// numbers (design R6b): "Used McDonald's published numbers: 540 → 590
 /// kcal" / "已采用 麦当劳 公布的数值：540 → 590 千卡". Its action is
 /// [AppLocalizations.assistUndo]. English takes the name's possessive
-/// ([_possessive]); Chinese the name as it is.
+/// ([_possessive]); Chinese the name as it is. The totals are grouped as
+/// everywhere else ("1,250"), never "1250".
 String assistAppliedSnackbar(AppLocalizations l, AssistAppliedNotice n) {
   final name = assistBrandLabel(l, n.chainKey, n.brandName);
   return l.assistAppliedSnack(
     l.localeName.startsWith('zh') ? name : _possessive(name),
-    '${n.oldKcal}',
-    '${n.newKcal}',
+    formatKcal(n.oldKcal),
+    formatKcal(n.newKcal),
   );
 }
+
+/// That snackbar's Undo: reverts the application, and when nothing was
+/// undone — the meal changed since, or is gone — calls [onNothingUndone]
+/// (di.dart says [AppLocalizations.usualUndoStale], as the usual foods'
+/// Undo does). It was a silent no-op: the bar went and the meal kept the
+/// chain's numbers.
+void Function() assistUndoAction(
+  AssistAppliedNotice n, {
+  required void Function() onNothingUndone,
+}) =>
+    () {
+      n.undo().then((undone) {
+        if (!undone) onNothingUndone();
+      }, onError: (Object _) => onNothingUndone());
+    };
 
 /// An English possessive of a chain name: "Chipotle's", "Popeyes'", and
 /// a name that already is one as it is ("McDonald's", "Wendy’s").
