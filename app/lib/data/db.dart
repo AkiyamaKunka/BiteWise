@@ -12,14 +12,17 @@ import 'package:sqflite/sqflite.dart';
 /// the server never stores thumbnails; the app keeps a tiny JPEG per photo
 /// meal so history can show the picture even after the gallery original is
 /// gone). v3: body_measurements (app-only, spec §9 — waist/chest/hip for
-/// the Body page; the server tracks weight only).
-const int kSchemaVersion = 3;
+/// the Body page; the server tracks weight only). v4: data_changes and its
+/// triggers (app-only, 1.7.0 iCloud Backup — a counter every write to the
+/// backed-up tables bumps, whichever engine made it, so a backup run can
+/// tell "nothing changed" without reading the tables).
+const int kSchemaVersion = 4;
 
 const String kDatabaseFileName = 'calorie_tracker.db';
 
 /// DDL statements, executed in order on create (spec §2.1; idempotent
 /// IF NOT EXISTS mirrors database.py:20-156).
-const List<String> kSchemaDdl = [
+final List<String> kSchemaDdl = [
   // database.py:26-43
   '''
 CREATE TABLE IF NOT EXISTS meals (
@@ -144,7 +147,45 @@ CREATE TABLE IF NOT EXISTS meal_thumbs (
     meal_id INTEGER PRIMARY KEY,
     jpeg BLOB NOT NULL
 )''',
+  // App-only (1.7.0 iCloud Backup): ONE row, two counters. Not in
+  // kExportTables, so never exported or backed up.
+  '''
+CREATE TABLE IF NOT EXISTS data_changes (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    records INTEGER NOT NULL DEFAULT 0,
+    thumbs INTEGER NOT NULL DEFAULT 0
+)''',
+  'INSERT OR IGNORE INTO data_changes (id, records, thumbs) VALUES (1, 0, 0)',
+  ..._changeTriggers(),
 ];
+
+/// The tables whose writes bump data_changes.records: the export tables
+/// (kExportTables, spelled out here because a const list cannot be built
+/// from another at this point).
+const List<String> _recordTables = [
+  'meals',
+  'photo_ingestions',
+  'body_weight',
+  'body_measurements',
+  'workouts',
+  'activities',
+  'fitness_profile',
+];
+
+/// 24 triggers: insert, update and delete on each record table bump
+/// `records`; on meal_thumbs they bump `thumbs`. IF NOT EXISTS, so the
+/// upgrade path re-runs them like every other statement here.
+List<String> _changeTriggers() => [
+      for (final (table, column) in [
+        for (final t in _recordTables) (t, 'records'),
+        ('meal_thumbs', 'thumbs'),
+      ])
+        for (final op in const ['INSERT', 'UPDATE', 'DELETE'])
+          'CREATE TRIGGER IF NOT EXISTS dc_${table}_${op.toLowerCase()} '
+              'AFTER $op ON $table BEGIN '
+              'UPDATE data_changes SET $column = $column + 1 WHERE id = 1; '
+              'END',
+    ];
 
 /// Table names included in the full export (spec §8: exportJson covers all
 /// tables; order is the DDL order for a stable envelope).

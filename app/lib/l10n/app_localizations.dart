@@ -4972,6 +4972,438 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Logged'**
   String get usualLoggedLabel;
+
+  /// Settings › Your Data (iPhone): the switch for the automatic backup to the user's own iCloud Drive.
+  ///
+  /// In en, this message translates to:
+  /// **'iCloud Backup'**
+  String get backupRowICloud;
+
+  /// Settings › Your Data (iPhone): writes the backup now.
+  ///
+  /// In en, this message translates to:
+  /// **'Back Up Now'**
+  String get backupRowBackUpNow;
+
+  /// Settings › Your Data (iPhone): shown when the Chopstats folder in iCloud holds a backup of another install; opens the restore sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore From iCloud…'**
+  String get backupRowRestore;
+
+  /// Settings › Your Data (iPhone): shown when the backup file in iCloud belongs to another iPhone, was changed outside the app, or cannot be read; opens the takeover sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Back Up From This iPhone…'**
+  String get backupRowTakeOver;
+
+  /// Settings › Your Data (iPhone): shown when two iPhones wrote the backup at the same time; merges the other copy in and backs up.
+  ///
+  /// In en, this message translates to:
+  /// **'Combine the Two Copies'**
+  String get backupRowCombine;
+
+  /// Settings › Your Data (iPhone): shown when the backup this iPhone wrote is gone from iCloud; writes it again.
+  ///
+  /// In en, this message translates to:
+  /// **'Back Up Again'**
+  String get backupRowBackUpAgain;
+
+  /// Settings › Your Data (iPhone): shown when a backup was paused because it would replace one with far more meals.
+  ///
+  /// In en, this message translates to:
+  /// **'Back Up Anyway'**
+  String get backupRowBackUpAnyway;
+
+  /// Settings › Your Data (iPhone): shown when this iPhone has no meals but its backup does, or when iCloud Backup is off and this iPhone's backup is still in iCloud; deletes the backup after a confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete iCloud Backup…'**
+  String get backupRowDelete;
+
+  /// Footer of Settings › Your Data on iPhone before the first backup has been written (no mention of the Files app yet).
+  ///
+  /// In en, this message translates to:
+  /// **'Your meals, weight, measurements, workouts and meal pictures are copied to your own iCloud, so they come back if you reinstall Chopstats or move to a new iPhone. API keys are never included, and the developer receives nothing.'**
+  String get backupICloudFooterBefore;
+
+  /// Footer of Settings › Your Data on iPhone once a backup has been written.
+  ///
+  /// In en, this message translates to:
+  /// **'Your meals, weight, measurements, workouts and meal pictures are copied to iCloud Drive › Chopstats, which you can see, copy or delete in the Files app. API keys are never included, and the developer receives nothing.'**
+  String get backupICloudFooter;
+
+  /// Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, or iCloud Drive is not available for the app: nothing is copied, so it says to export a file before reinstalling or changing phones.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
+  String get backupICloudFooterOff;
+
+  /// Footer of Settings › Your Data on Android (there is no automatic backup file on Android).
+  ///
+  /// In en, this message translates to:
+  /// **'Android\'s own backup can keep this app\'s data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.'**
+  String get backupAndroidFooter;
+
+  /// Status line under the iCloud Backup switch: the user turned it off.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get backupStatusOff;
+
+  /// Status line under the iCloud Backup switch: on, but the one-time notice has not been answered, so nothing has been uploaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Not started yet'**
+  String get backupStatusNotStarted;
+
+  /// Status line under the iCloud Backup switch while a backup or restore is running.
+  ///
+  /// In en, this message translates to:
+  /// **'Checking iCloud…'**
+  String get backupStatusChecking;
+
+  /// Status line under the iCloud Backup switch: on, but nothing written yet (the first backup waits a day so an existing backup can arrive from iCloud first).
+  ///
+  /// In en, this message translates to:
+  /// **'No backup yet'**
+  String get backupStatusNever;
+
+  /// Status line under the iCloud Backup switch: when the last backup was written and how big it was.
+  ///
+  /// In en, this message translates to:
+  /// **'Last backup {when} · {size}'**
+  String backupStatusLast(String when, String size);
+
+  /// Status line under the iCloud Backup switch: the file is written and iCloud has not finished uploading it.
+  ///
+  /// In en, this message translates to:
+  /// **'Saved to iCloud Drive; uploading…'**
+  String get backupStatusUploading;
+
+  /// Status line under the iCloud Backup switch.
+  ///
+  /// In en, this message translates to:
+  /// **'Your iCloud storage is full, so the backup cannot upload.'**
+  String get backupStatusQuota;
+
+  /// Status line under the iCloud Backup switch: no iCloud account.
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to iCloud in the Settings app to back up.'**
+  String get backupStatusNoAccount;
+
+  /// Status line under the iCloud Backup switch: iCloud Drive is off for the app, or the build has no iCloud container.
+  ///
+  /// In en, this message translates to:
+  /// **'iCloud Drive is not available for Chopstats.'**
+  String get backupStatusUnavailable;
+
+  /// Status line under the iCloud Backup switch: the backup file belongs to another install.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup in iCloud is another iPhone\'s (from {date}). This iPhone does not overwrite it.'**
+  String backupStatusOtherDevice(String date);
+
+  /// Status line under the iCloud Backup switch.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup was changed outside Chopstats, so it is not overwritten.'**
+  String get backupStatusChangedElsewhere;
+
+  /// Status line under the iCloud Backup switch.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup file in iCloud is not one Chopstats can read, so it is left alone.'**
+  String get backupStatusUnknownFile;
+
+  /// Status line under the iCloud Backup switch: iCloud kept two versions of the file.
+  ///
+  /// In en, this message translates to:
+  /// **'Two iPhones saved the backup at the same time.'**
+  String get backupStatusTwoCopies;
+
+  /// Status line under the iCloud Backup switch: the file this iPhone wrote was deleted elsewhere.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup is gone from iCloud. Backups are paused.'**
+  String get backupStatusMissing;
+
+  /// Status line under the iCloud Backup switch: the shrink guard.
+  ///
+  /// In en, this message translates to:
+  /// **'Paused: this would replace a backup of {count, plural, =1{1 meal} other{{count} meals}} with far fewer.'**
+  String backupStatusShrink(int count);
+
+  /// Status line under the iCloud Backup switch: the log on the owner phone is empty.
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone has no meals, so the backup of {count, plural, =1{1 meal} other{{count} meals}} is kept as it is.'**
+  String backupStatusEmptyLog(int count);
+
+  /// Status line under the iCloud Backup switch.
+  ///
+  /// In en, this message translates to:
+  /// **'The last backup did not finish. It will try again.'**
+  String get backupStatusFailed;
+
+  /// Added after the status line under the iCloud Backup switch when a backup landed but some months of this iPhone's pictures are in files another iPhone wrote, which this iPhone never overwrites.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 month of pictures is} other{{count} months of pictures are}} in another iPhone\'s backup files, so this iPhone does not back {count, plural, =1{it} other{them}} up.'**
+  String backupStatusSkippedMonths(int count);
+
+  /// Title of the one-time notice shown in the foreground before the first backup.
+  ///
+  /// In en, this message translates to:
+  /// **'iCloud Backup is on'**
+  String get backupNoticeTitle;
+
+  /// Body of the one-time iCloud Backup notice.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats will copy your meals, weight, measurements, workouts and meal pictures to your own iCloud, so they come back if you reinstall the app or move to a new iPhone. API keys are never included, and the developer receives nothing. You can turn it off any time in Settings › Your Data.'**
+  String get backupNoticeBody;
+
+  /// Button on the iCloud Backup notice.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep On'**
+  String get backupNoticeKeep;
+
+  /// Button on the iCloud Backup notice.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn Off'**
+  String get backupNoticeOff;
+
+  /// Title of the restore sheet (a backup of another install was found in iCloud).
+  ///
+  /// In en, this message translates to:
+  /// **'Restore your meals?'**
+  String get backupRestoreTitle;
+
+  /// Restore sheet: what the backup holds.
+  ///
+  /// In en, this message translates to:
+  /// **'iCloud has a Chopstats backup with {meals, plural, =1{1 meal} other{{meals} meals}}, last saved {date}.'**
+  String backupRestoreBody(int meals, String date);
+
+  /// Restore and takeover sheets, when this phone already has meals.
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone already has {meals, plural, =1{1 meal} other{{meals} meals}}. Restoring adds the backup\'s meals to them; nothing here is removed.'**
+  String backupRestoreMergeNote(int meals);
+
+  /// Restore sheet: what a restore does not bring back.
+  ///
+  /// In en, this message translates to:
+  /// **'Your goals, units and API keys are not in the backup.'**
+  String get backupRestoreNotIncluded;
+
+  /// Restore sheet (iPhone), shown when restoring makes this iPhone take over the backup file of the iPhone that wrote it (this iPhone has no backup of its own yet): it will write over that backup from now on.
+  ///
+  /// In en, this message translates to:
+  /// **'After restoring, this iPhone takes the backup over and keeps it up to date; the iPhone that made it no longer writes to it.'**
+  String get backupRestoreTakesOver;
+
+  /// Restore sheet button (the default).
+  ///
+  /// In en, this message translates to:
+  /// **'Restore'**
+  String get backupRestoreAction;
+
+  /// Restore sheet button: deletes the old backup after a red confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Fresh…'**
+  String get backupStartFresh;
+
+  /// Restore sheet button: the offer is not raised again; Restore From iCloud… stays in Settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Not Now'**
+  String get backupNotNow;
+
+  /// Confirmation after Start Fresh.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the old backup?'**
+  String get backupStartFreshTitle;
+
+  /// Confirmation after Start Fresh.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup of {meals, plural, =1{1 meal} other{{meals} meals}} will be deleted from iCloud. This cannot be undone.'**
+  String backupStartFreshBody(int meals);
+
+  /// Red confirmation button that deletes an iCloud backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Backup'**
+  String get backupDeleteAction;
+
+  /// Snackbar after a restore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restored {meals, plural, =1{1 meal} other{{meals} meals}} and {pictures, plural, =1{1 picture} other{{pictures} pictures}}.'**
+  String backupRestoreDone(int meals, int pictures);
+
+  /// Snackbar after a restore when some months of pictures failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Some pictures ({months, plural, =1{1 month} other{{months} months}}) could not be read from iCloud; the rest came in.'**
+  String backupRestorePartial(int months);
+
+  /// Snackbar when a restore could not read the file.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not read the backup from iCloud. Try again later.'**
+  String get backupRestoreFailed;
+
+  /// Title of the takeover sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Back up from this iPhone?'**
+  String get backupTakeOverTitle;
+
+  /// Takeover sheet: both sides' counts.
+  ///
+  /// In en, this message translates to:
+  /// **'The backup in iCloud has {theirs, plural, =1{1 meal} other{{theirs} meals}}; this iPhone has {mine, plural, =1{1 meal} other{{mine} meals}}.'**
+  String backupTakeOverBody(int theirs, int mine);
+
+  /// Takeover sheet when the file's header cannot be read.
+  ///
+  /// In en, this message translates to:
+  /// **'The file in iCloud is not a backup Chopstats can read. Replacing it deletes what it holds.'**
+  String get backupTakeOverUnreadable;
+
+  /// Takeover sheet button (the default): imports the backup's meals, then writes this phone's.
+  ///
+  /// In en, this message translates to:
+  /// **'Combine, Then Back Up'**
+  String get backupTakeOverMerge;
+
+  /// Takeover sheet button: overwrites the backup after a red confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the Backup…'**
+  String get backupTakeOverReplace;
+
+  /// Confirmation after Replace the Backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the backup?'**
+  String get backupReplaceTitle;
+
+  /// Confirmation after Replace the Backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Meals in the backup that are not on this iPhone will be lost. This cannot be undone.'**
+  String get backupReplaceBody;
+
+  /// Red confirmation button.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace'**
+  String get backupReplaceAction;
+
+  /// Snackbar after a backup the user started.
+  ///
+  /// In en, this message translates to:
+  /// **'Backed up.'**
+  String get backupDone;
+
+  /// Snackbar when a backup action failed.
+  ///
+  /// In en, this message translates to:
+  /// **'That did not work. Try again later.'**
+  String get backupActionFailed;
+
+  /// Snackbar after Combine the Two Copies.
+  ///
+  /// In en, this message translates to:
+  /// **'Combined the two copies and backed up.'**
+  String get backupCombineDone;
+
+  /// Sheet shown when the switch is turned off.
+  ///
+  /// In en, this message translates to:
+  /// **'Turn off iCloud Backup?'**
+  String get backupTurnOffTitle;
+
+  /// Turn-off sheet button (the default).
+  ///
+  /// In en, this message translates to:
+  /// **'Keep the Backup in iCloud'**
+  String get backupTurnOffKeep;
+
+  /// Turn-off sheet button (red): deletes this iPhone's backup after a confirmation.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete It…'**
+  String get backupTurnOffDelete;
+
+  /// Confirmation before deleting this iPhone's backup.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete the iCloud backup?'**
+  String get backupDeleteTitle;
+
+  /// Confirmation before deleting this iPhone's backup.
+  ///
+  /// In en, this message translates to:
+  /// **'This iPhone\'s backup will be deleted from iCloud. The meals on this iPhone stay. This cannot be undone.'**
+  String get backupDeleteBody;
+
+  /// Snackbar after the backup was deleted.
+  ///
+  /// In en, this message translates to:
+  /// **'The iCloud backup was deleted.'**
+  String get backupDeleted;
+
+  /// Snackbar after a delete of the iCloud backup (Delete It…, Delete iCloud Backup…, Start Fresh) had to leave some files for now: mostly ones iCloud had not yet downloaded to the iPhone, or (rarely) one another iPhone saved at the same moment.
+  ///
+  /// In en, this message translates to:
+  /// **'Some backup files could not be deleted yet (iCloud may still be downloading them to this iPhone). Try again in a minute.'**
+  String get backupDeletePartial;
+
+  /// Import dialog: opens the system file picker (several files at once).
+  ///
+  /// In en, this message translates to:
+  /// **'Choose File…'**
+  String get importChooseFile;
+
+  /// Snackbar after importing a file that held pictures only.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {pictures, plural, =1{1 picture} other{{pictures} pictures}}.'**
+  String importPicturesAdded(int pictures);
+
+  /// Snackbar after importing a pictures-only file that matched no meal.
+  ///
+  /// In en, this message translates to:
+  /// **'None of these pictures belong to a meal on this phone. Import the backup or export file first.'**
+  String get importNoMatchingMeals;
+
+  /// Snackbar when a picked file is too large.
+  ///
+  /// In en, this message translates to:
+  /// **'A file over 100 MB was not imported.'**
+  String get importTooBig;
+
+  /// Snackbar when the file picker is not available.
+  ///
+  /// In en, this message translates to:
+  /// **'Files could not be opened here. Paste the file\'s contents with Import from clipboard instead.'**
+  String get importPickUnavailable;
+
+  /// Snackbar after an import that skipped photo meals deleted on this phone.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 meal you deleted on this phone was} other{{count} meals you deleted on this phone were}} left out.'**
+  String importDeletedLeftOut(int count);
 }
 
 class _AppLocalizationsDelegate

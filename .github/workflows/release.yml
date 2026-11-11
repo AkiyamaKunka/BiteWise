@@ -17,7 +17,9 @@
 #   build number = the tag's +N when the tag carries one, otherwise
 #                  BUILD_NUMBER_OFFSET + github.run_number. App Store Connect and Google
 #                  Play both refuse a number they have already seen; run_number only ever
-#                  grows, and the offset keeps CI above the hand-built era (pubspec +7).
+#                  grows, and the offset keeps CI above the hand-built era (pubspec +7)
+#                  and above the 107-199 the owner's iCloud device test builds use
+#                  (raised from 100 to 200 for 1.7.0, docs/RELEASING.md § iCloud container).
 #                  Never lower the offset.
 #
 # SECRETS  (repo Settings -> Secrets and variables -> Actions -> Secrets, or inside the
@@ -80,7 +82,7 @@ concurrency:
 env:
   FLUTTER_VERSION: "3.44.2"      # keep equal to mobile-build.yml
   XCODE_VERSION: "26.2"          # "" = the macos-26 image default
-  BUILD_NUMBER_OFFSET: 100       # see "VERSION AND BUILD NUMBER" above; never lower it
+  BUILD_NUMBER_OFFSET: 200       # see "VERSION AND BUILD NUMBER" above; never lower it
   IOS_UPLOAD_TRANSPORT: xcodebuild   # xcodebuild | altool
   IOS_BUNDLE_ID: dev.calorietracker.calorieTracker
   IOS_SHAREEXT_BUNDLE_ID: dev.calorietracker.calorieTracker.ShareExtension
@@ -361,6 +363,34 @@ jobs:
           fi
           echo "team_id=$runner_team" >> "$GITHUB_OUTPUT"
 
+      # iCloud Backup (1.7.0): once Runner.entitlements names the iCloud
+      # container, the Runner App Store profile must allow it with iCloud
+      # Documents, or the archive fails late or ships without the container.
+      # Checked here, before anything is built, with the step that says how
+      # to fix it (docs/RELEASING.md § iCloud container).
+      - name: Check the Runner profile allows the iCloud container
+        if: steps.secrets.outputs.ready == 'true'
+        working-directory: app
+        env:
+          RUNNER_PROFILE: ${{ steps.signing.outputs.runner_name }}
+        run: |
+          set -euo pipefail
+          ent=ios/Runner/Runner.entitlements
+          key=com.apple.developer.icloud-container-identifiers
+          container=$(/usr/libexec/PlistBuddy -c "Print :$key:0" "$ent" 2>/dev/null || true)
+          if [ -z "$container" ]; then
+            echo "Runner.entitlements names no iCloud container: nothing to check."
+            exit 0
+          fi
+          plist="$SIGNING_DIR/runner.plist"
+          allowed=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:$key" "$plist" 2>/dev/null || true)
+          services=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:com.apple.developer.icloud-services" "$plist" 2>/dev/null || true)
+          if ! grep -Fq "$container" <<< "$allowed" || ! grep -Eq 'CloudDocuments|\*' <<< "$services"; then
+            echo "::error::Runner.entitlements names the iCloud container $container, but the Runner profile '$RUNNER_PROFILE' does not allow it with iCloud Documents. Turn on iCloud (iCloud Documents) for the App ID with that container, regenerate the App Store profile and update IOS_PROFILE_RUNNER_BASE64 (docs/RELEASING.md § iCloud container)."
+            exit 1
+          fi
+          echo "Runner profile '$RUNNER_PROFILE' allows $container with iCloud Documents"
+
       # The committed project is Automatic/free-team (so `flutter run` on the
       # owner's phone keeps working). Only the Release configuration is flipped
       # to manual signing, on the runner, never committed. Flutter cannot pass
@@ -434,12 +464,23 @@ jobs:
         run: |
           set -euo pipefail
           app=build/ios/archive/Runner.xcarchive/Products/Applications/Runner.app
+          # iCloud Backup (1.7.0): the signed Runner carries the container
+          # exactly when Runner.entitlements names it; the ShareExtension
+          # never carries iCloud.
+          want_container=$(/usr/libexec/PlistBuddy -c "Print :com.apple.developer.icloud-container-identifiers:0" ios/Runner/Runner.entitlements 2>/dev/null || true)
           for bundle in "$app" "$app/PlugIns/ShareExtension.appex"; do
             label=$(basename "$bundle")
             codesign -dvv "$bundle" 2>&1 | grep -q 'Authority=Apple Distribution' \
               || { echo "::error::$label is not signed with an Apple Distribution certificate"; exit 1; }
-            codesign -d --entitlements - --xml "$bundle" 2>/dev/null | grep -q "$IOS_APP_GROUP" \
+            ents=$(codesign -d --entitlements - --xml "$bundle" 2>/dev/null || true)
+            grep -q "$IOS_APP_GROUP" <<< "$ents" \
               || { echo "::error::$label lost the $IOS_APP_GROUP entitlement (ITMS-90078 would follow)"; exit 1; }
+            if [ "$label" = "Runner.app" ] && [ -n "$want_container" ]; then
+              grep -Fq "$want_container" <<< "$ents" \
+                || { echo "::error::Runner.app was signed without the iCloud container $want_container that Runner.entitlements names (docs/RELEASING.md § iCloud container)"; exit 1; }
+            elif grep -q 'icloud' <<< "$ents"; then
+              echo "::error::$label carries an iCloud entitlement it should not have"; exit 1
+            fi
             v=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Info.plist")
             b=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bundle/Info.plist")
             [ "$v" = "$BUILD_NAME" ] && [ "$b" = "$BUILD_NUMBER" ] \

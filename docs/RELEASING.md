@@ -19,7 +19,7 @@ menu names as "as of this writing".
 
 ```mermaid
 flowchart LR
-    Tag["git tag v1.6.0<br/>or Run workflow"] --> Plan["plan<br/>build name = x.y.z<br/>build number = 100 + run_number"]
+    Tag["git tag v1.6.0<br/>or Run workflow"] --> Plan["plan<br/>build name = x.y.z<br/>build number = 200 + run_number"]
     Plan --> iOS["ios (macos-26)<br/>keychain + 2 profiles<br/>flutter build ipa<br/>xcodebuild -exportArchive destination=upload"]
     Plan --> And["android (ubuntu)<br/>key.properties<br/>flutter build appbundle + apk<br/>upload-google-play → internal"]
     iOS --> TF["TestFlight"]
@@ -37,7 +37,7 @@ Identifiers that must match everywhere:
 | Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` — the paid Apple Developer Program (Individual) since 2026-10-29; the Team ID did not change on enrolment (§ 1.2), so the keychain and the dev build carry over |
 | Android package / application id | `dev.calorietracker.calorie_tracker` (permanent after the first Play upload) |
 | Display name | `Chopstats` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `Chopstats · 筷拍` (owner decision R-F9, 2026-10-29; formerly BiteWise) |
-| Version | `app/pubspec.yaml` `version: 1.6.0+8` → `CFBundleShortVersionString` / `versionName` = `1.6.0`; the build number is stamped by CI (§ 5) |
+| Version | `app/pubspec.yaml` `version: 1.7.0+9` → `CFBundleShortVersionString` / `versionName` = `1.7.0`; the build number is stamped by CI (§ 5) |
 
 ---
 
@@ -332,11 +332,11 @@ When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
 - `app/test/ui/usual_copy_test.dart` pins the number of keys in each ARB
-  file: 776 on `main`, 809 on the merged #22 branch (#22 adds 33 at
-  8e24932, main's 1.6.0 review fixes added 2, none shared). If either
-  side adds keys before #22 merges, change the number in that test to the
-  merged count, and here too (the test checks this line); both files must
-  still have the same keys. Do not drop the check.
+  file: 809 on `main` since #22 merged, 881 on the iCloud Backup branch
+  (`feat/icloud-backup` adds 72 `backup*` and `import*` keys). If either
+  side adds keys before that branch merges, change the number in that
+  test to the merged count, and here too (the test checks this line);
+  both files must still have the same keys. Do not drop the check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
   with "the next photo you log that day (and with one taken before 4 a.m.
   the next day)", because #22 also sends the day before's meals with a
@@ -523,7 +523,7 @@ All done; this is what each one is and where it lives.
 - `ITSAppUsesNonExemptEncryption = false` in `app/ios/Runner/Info.plist`
   (the app only uses OS TLS, the keychain and SHA hashing, which are exempt;
   without the key every build sits in "Missing Compliance" until answered).
-- `app/pubspec.yaml` is `1.6.0+8`; the ShareExtension takes its version from
+- `app/pubspec.yaml` is `1.7.0+9`; the ShareExtension takes its version from
   `$(FLUTTER_BUILD_NAME)` / `$(FLUTTER_BUILD_NUMBER)`.
 
 1. **Privacy manifests — done.** Both targets ship a
@@ -1011,12 +1011,14 @@ step. Revisit if the app is ever published with a developer-run service.
   (Android). Bump it in the PR that ships the change, then tag that commit
   `vX.Y.Z`; `release.yml` refuses a tag whose `X.Y.Z` differs from pubspec.
 - The **build number** (`CFBundleVersion` / `versionCode`) is stamped by CI:
-  `100 + github.run_number` of the Release workflow, or `N` when the tag is
+  `200 + github.run_number` of the Release workflow, or `N` when the tag is
   written `vX.Y.Z+N`. App Store Connect wants it strictly increasing within
   a version, Play wants it unique forever; `run_number` only grows and the
-  `+100` keeps CI above the hand-built era. Never lower
-  `BUILD_NUMBER_OFFSET` in `release.yml`. Hand builds on the Mac use the `+N`
-  from pubspec (currently 8); keep those below 100.
+  offset keeps CI above the hand-built era. It was `+100` up to 1.6.0
+  (build 106) and is `+200` from 1.7.0, so the iCloud device tests can use
+  107–199 (§ 11). Never lower `BUILD_NUMBER_OFFSET` in `release.yml`. Hand
+  builds on the Mac use the `+N` from pubspec (currently 9); keep those
+  below 200.
 - A tag may be pushed again only after deleting it on both sides; prefer a
   patch bump instead.
 - Friends' sideloaded APKs: Android upgrades when `versionCode` grows **and**
@@ -1192,8 +1194,11 @@ GitHub release notes warn about it either way.
 
 ## 8. Running a release (cheat sheet)
 
+(Before the first 1.7.0 tag: § 11, the iCloud container, or the iOS lane
+stops at "Check the Runner profile allows the iCloud container".)
+
 ```bash
-# 1. in the shipping PR: app/pubspec.yaml  version: 1.6.0+8   (the +N is for hand builds only)
+# 1. in the shipping PR: app/pubspec.yaml  version: 1.7.0+9   (the +N is for hand builds only)
 # 2. edit app/android/whatsnew/whatsnew-*.{en-US,zh-CN}
 # 3. merge to main, then
 git tag v1.6.0 && git push origin v1.6.0     # iOS + Android lanes, external-eligible TestFlight build, GitHub Release
@@ -1340,3 +1345,120 @@ raw file instead of its base64 text. Re-create it with `base64 -i <file>`.
 | When GitHub rotates the macOS image | `XCODE_VERSION` in both workflows; pin a new one or float. |
 | When Flutter is upgraded on the Mac | `FLUTTER_VERSION` in `mobile-build.yml` and `release.yml`, in the same PR as the `pubspec.lock` change (`python-tests.yml` floats on `stable` and needs nothing). |
 | Never, unless compromised | The ASC API key, the Play service account key, the upload keystore (if lost: § 6.3 key reset). |
+
+---
+
+## 11. iCloud container (1.7.0 iCloud Backup)
+
+iCloud Backup writes the meal record into the user's **own** iCloud Drive
+(a *Chopstats* folder they see in the Files app). The code is split in two
+on `feat/icloud-backup`:
+
+- **Part A — everything but the entitlement.** Safe to merge and ship on
+  its own: without the entitlement `url(forUbiquityContainerIdentifier:)`
+  is nil, every channel call answers `unavailable`, and Settings › Your
+  Data says *iCloud Drive is not available for Chopstats*. Export with
+  pictures and Import › Choose File… work on both platforms.
+- **Part B — one commit** (*iOS: Runner gets the iCloud container…*;
+  the fixes after it touch neither the entitlements nor Info.plist):
+  `Runner.entitlements` gains `com.apple.developer.icloud-container-identifiers`,
+  `com.apple.developer.icloud-services` = `CloudDocuments` and
+  `com.apple.developer.ubiquity-container-identifiers`, all
+  `iCloud.dev.calorietracker.calorieTracker`, and `Info.plist` gains
+  `NSUbiquitousContainers` for it (public scope, name *Chopstats*, one
+  folder level). The ShareExtension gets nothing. To ship without iCloud,
+  revert that one commit.
+
+### 11.1 Owner steps (Apple Developer website), before any device test
+
+1. **Certificates, Identifiers & Profiles → Identifiers → +** → *iCloud
+   Containers* → description `Chopstats`, identifier
+   `iCloud.dev.calorietracker.calorieTracker` → Register. (A container id
+   can never be deleted or reused; this one matches the code.)
+2. **Identifiers → App IDs → `dev.calorietracker.calorieTracker`** → tick
+   **iCloud** (*Include CloudKit support* is not needed; iCloud Documents
+   is what the app uses) → **Configure** → select the container → Save →
+   confirm that the profiles become invalid. Leave the ShareExtension's
+   App ID alone.
+3. **Profiles** → the App Store profile for
+   `dev.calorietracker.calorieTracker` → **Edit → Save** (it is
+   regenerated with the container) → Download →
+   `base64 -i <file>.mobileprovision | pbcopy` → update the secret
+   `IOS_PROFILE_RUNNER_BASE64`. The ShareExtension profile does not change.
+4. On the Mac, the development profile updates itself the next time the
+   register-and-build recipe runs with `-allowProvisioningUpdates`.
+
+`release.yml` checks this before it builds: when `Runner.entitlements`
+names a container and the decoded Runner profile does not allow it with
+iCloud Documents, the run stops at *Check the Runner profile allows the
+iCloud container* with these steps. The verify step after the archive
+checks the signed Runner carries the container exactly when the
+entitlements file names it, and that the ShareExtension never carries
+iCloud.
+
+### 11.2 The build-number trap
+
+iOS reads `NSUbiquitousContainers` (the folder's name and whether Files
+shows it) only when an install has a **higher `CFBundleVersion`** than the
+last one it saw. So:
+
+- give every device test build a higher number than the last one on that
+  phone: `flutter build ios --config-only --build-number 107` (then 108,
+  109 …) before the register-and-build recipe; stay within **107–199**
+  (1.6.0 in the store is build 106, and CI starts at 201 now);
+- do not change the `NSUbiquitousContainers` block after the first device
+  test (a changed name may not show until the next higher build);
+- the folder appears in iCloud Drive only after the app has written a
+  file into it, so nothing in the app mentions the Files app before the
+  first backup has landed.
+
+### 11.3 What only the device can show (checklist for the owner)
+
+The unit tests cover the format, the owner rule (Dart and, in RunnerTests,
+Swift on a temporary folder: `xcodebuild test … -only-testing:RunnerTests/CloudFilesTests`,
+local only, no CI job runs RunnerTests), the guards and every choice
+against an in-memory folder. iCloud itself is not in any test. On the
+phone, with Part B and § 11.1 done:
+
+1. Fresh install with meals: the notice appears once; *Keep On*; after a
+   day (or *Back Up Now*) Settings says *Last backup …* and later the
+   uploaded state; iCloud Drive › Chopstats shows `Chopstats Backup.json`
+   and `Meal Pictures/` in Files.
+2. Delete the app, reinstall: the restore offer appears with the right
+   counts; *Restore* brings back meals and pictures; the next backup
+   replaces the old file (its header names the new install).
+3. A second iPhone on the same account: it is offered the first phone's
+   backup; *Not Now* leaves the first phone's file untouched (Settings
+   says another iPhone's backup is in iCloud).
+4. Sign out of iCloud / iCloud Drive off for the app: the status line says
+   so; signing in to another account asks the notice again.
+5. Optimize iPhone Storage / evicted files: a background run skips a file
+   that is not downloaded; the app downloads it in the foreground.
+6. Airplane mode on two phones, both back up, then online: *Combine the
+   Two Copies* appears and merges.
+7. Delete `Chopstats Backup.json` in Files: Settings says the backup is
+   gone and offers *Back Up Again*.
+8. iCloud storage full: the status line says so.
+9. Turn the switch off → *Delete It…*: this phone's files go, another
+   phone's stay.
+10. Files not on the phone (the unit tests model them with the fake and,
+    in RunnerTests, a pre-iOS 17 `.icloud` placeholder; only a device
+    shows real eviction):
+    - a new iPhone with an old backup that has pictures → *Start Fresh…*:
+      every file of the old backup goes (pictures first, the records file
+      last), and the offer does not come back;
+    - evict this phone's `Meal Pictures` files in Files (*Remove
+      Download*), then turn the switch off → *Delete It…*: they are
+      downloaded and deleted; in Airplane mode the snackbar says some
+      files could not be deleted yet, the switch stays off, and *Delete
+      iCloud Backup…* in Settings finishes the job once online;
+    - with the switch off after *Keep the Backup in iCloud*, Settings
+      shows *Delete iCloud Backup…*, and nothing uploads before it.
+11. Restore on a fresh reinstall in poor network: a month whose pictures
+    cannot be read is reported, then comes in on a later launch (no
+    manual Import), and the new backup's header still lists it.
+12. Two phones conflict, then *Delete It…* on one: the other phone's
+    version is not lost (the delete is left; *Combine the Two Copies*
+    first).
+13. A file another device has not uploaded yet (error 4353) never makes
+    Settings say *iCloud Drive is not available for Chopstats*.

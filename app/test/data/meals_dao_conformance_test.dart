@@ -439,7 +439,7 @@ void main() {
     await dao.saveBodyWeight('2026-07-17', 70);
     final decoded = jsonDecode(await dao.exportJson()) as Map<String, dynamic>;
     expect(decoded['format'], 'calorie_tracker_export');
-    expect(decoded['version'], 1);
+    expect(decoded['version'], 2);
     final tables = decoded['tables'] as Map<String, dynamic>;
     for (final t in kExportTables) {
       expect(tables.containsKey(t), isTrue, reason: t);

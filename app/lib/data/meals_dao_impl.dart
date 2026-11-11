@@ -903,6 +903,9 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     final tables = envelope.tables;
     final added = <String, int>{};
     final skipped = <String, int>{};
+    var mealsSkippedDeleted = 0;
+    var thumbsAdded = 0, thumbsSkipped = 0;
+    var thumbsMatched = 0;
 
     await _db.transaction((txn) async {
       for (final table in kExportTables) {
@@ -920,6 +923,15 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           if (table == 'photo_ingestions') row['meal_id'] = null;
           if (await _importRowExists(txn, table, row)) {
             s++;
+            continue;
+          }
+          // A photo meal the user deleted HERE stays deleted (1.7.0):
+          // deleteMeal leaves the ledger row 'deleted' and no meal, and an
+          // older backup or a second phone's file would otherwise bring it
+          // back on every restore or combine.
+          if (table == 'meals' && await _deletedHere(txn, row)) {
+            s++;
+            mealsSkippedDeleted++;
             continue;
           }
           try {
@@ -960,8 +972,160 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           'WHERE status = ? AND meal_id IS NULL '
           "AND IFNULL(image_hash, '') != ''",
           [IngestionStatus.saved.name]);
+      // Pictures (1.7.0: iCloud Backup files and full exports), after the
+      // meals so a file's own meals are here to match. Each goes onto the
+      // LOCAL meal of the same photo (chat_id + image_hash) and never
+      // replaces a picture already there.
+      for (final raw in tables['meal_thumbs'] ?? const <Map<String, Object?>>[]) {
+        final (inserted, matched) = await _importThumb(txn, raw);
+        if (matched) thumbsMatched++;
+        if (inserted) {
+          thumbsAdded++;
+        } else {
+          thumbsSkipped++;
+        }
+      }
     });
-    return ImportSummary(added, skipped, exportedAt: envelope.exportedAt);
+    final thumbRows = tables['meal_thumbs']?.length ?? 0;
+    final onlyPictures = thumbRows > 0 &&
+        kExportTables.every((t) => (tables[t] ?? const []).isEmpty);
+    return ImportSummary(added, skipped,
+        exportedAt: envelope.exportedAt,
+        thumbsAdded: thumbsAdded,
+        thumbsSkipped: thumbsSkipped,
+        mealsSkippedDeleted: mealsSkippedDeleted,
+        noMatchingMeals: onlyPictures && thumbsMatched == 0);
+  }
+
+  /// Whether [row] is a photo meal this phone deleted: its ledger row for
+  /// the photo says 'deleted' and no meal of that photo is left (a
+  /// deliberate re-add makes a new meal and marks the row 'saved' again).
+  Future<bool> _deletedHere(
+      DatabaseExecutor txn, Map<String, Object?> row) async {
+    final hash = normalizeImageHash(row['image_hash'] as String?);
+    if (hash.isEmpty) return false;
+    final ledger = await txn.query('photo_ingestions',
+        columns: const ['status'],
+        where: 'chat_id = ? AND image_hash = ?',
+        whereArgs: [row['chat_id'], hash],
+        limit: 1);
+    return ledger.isNotEmpty &&
+        ledger.first['status'] == IngestionStatus.deleted.name;
+  }
+
+  /// One `meal_thumbs` row of a file: `{chat_id, image_hash, jpeg_b64}`.
+  /// (inserted, matched a local meal). A row that is not base64 of a JPEG
+  /// under 64 KB is refused before any lookup.
+  Future<(bool, bool)> _importThumb(
+      DatabaseExecutor txn, Map<String, Object?> raw) async {
+    final hash = normalizeImageHash(raw['image_hash'] as String?);
+    final chat = raw['chat_id'];
+    final b64 = raw['jpeg_b64'];
+    if (hash.isEmpty || chat is! int || b64 is! String) return (false, false);
+    if (b64.length > (_maxThumbBytes * 4 ~/ 3) + 8) return (false, false);
+    final Uint8List jpeg;
+    try {
+      jpeg = base64Decode(b64);
+    } on FormatException {
+      return (false, false);
+    }
+    if (jpeg.length < 4 ||
+        jpeg.length > _maxThumbBytes ||
+        jpeg[0] != 0xFF ||
+        jpeg[1] != 0xD8) {
+      return (false, false);
+    }
+    final meal = await txn.query('meals',
+        columns: const ['id'],
+        where: 'chat_id = ? AND image_hash = ?',
+        whereArgs: [chat, hash],
+        orderBy: 'id',
+        limit: 1);
+    if (meal.isEmpty) return (false, false);
+    final id = await txn.insert(
+        'meal_thumbs', {'meal_id': meal.first['id'], 'jpeg': jpeg},
+        conflictAlgorithm: ConflictAlgorithm.ignore);
+    return (id > 0, true);
+  }
+
+  /// services/backup/backup_format.dart kMaxThumbBytes (the data layer
+  /// does not import the services).
+  static const int _maxThumbBytes = 64 * 1024;
+
+  // ------------------------------------------------- iCloud Backup (1.7.0)
+
+  @override
+  Future<BackupCounts> backupCounts() async {
+    final rows = await _db.rawQuery('SELECT '
+        '(SELECT COUNT(*) FROM meals) AS meals, '
+        '(SELECT COUNT(*) FROM body_weight) AS body_weight, '
+        '(SELECT COUNT(*) FROM body_measurements) AS body_measurements, '
+        '(SELECT COUNT(*) FROM workouts) AS workouts, '
+        '(SELECT COUNT(*) FROM activities) AS activities, '
+        '(SELECT COUNT(*) FROM meal_thumbs) AS thumbs, '
+        "(SELECT MIN(date) FROM meals WHERE IFNULL(date, '') != '') "
+        'AS first_date, '
+        "(SELECT MAX(date) FROM meals WHERE IFNULL(date, '') != '') "
+        'AS last_date, '
+        '(SELECT records FROM data_changes WHERE id = 1) AS records_change, '
+        '(SELECT thumbs FROM data_changes WHERE id = 1) AS thumbs_change');
+    final r = rows.first;
+    int n(String k) => (r[k] as num?)?.toInt() ?? 0;
+    return BackupCounts(
+      meals: n('meals'),
+      bodyWeight: n('body_weight'),
+      bodyMeasurements: n('body_measurements'),
+      workouts: n('workouts'),
+      activities: n('activities'),
+      thumbs: n('thumbs'),
+      firstDate: r['first_date'] as String?,
+      lastDate: r['last_date'] as String?,
+      recordsChange: n('records_change'),
+      thumbsChange: n('thumbs_change'),
+    );
+  }
+
+  @override
+  Future<Map<String, List<Map<String, Object?>>>> backupRecordTables() =>
+      _db.transaction((txn) async => {
+            for (final table in kExportTables) table: await txn.query(table),
+          });
+
+  /// The photo meals whose pictures go into backup files: a picture
+  /// without a photo hash could never be matched back on import.
+  static const String _thumbJoin = 'FROM meal_thumbs t '
+      'JOIN meals m ON m.id = t.meal_id '
+      "WHERE IFNULL(m.image_hash, '') != '' AND LENGTH(m.date) >= 7";
+
+  @override
+  Future<Map<String, ThumbMonthPrint>> thumbMonthPrints() async {
+    final rows = await _db.rawQuery(
+        'SELECT substr(m.date, 1, 7) AS month, COUNT(*) AS n, '
+        'SUM(LENGTH(t.jpeg)) AS bytes, MAX(t.meal_id) AS max_id '
+        '$_thumbJoin GROUP BY month');
+    return {
+      for (final r in rows)
+        if (r['month'] is String)
+          r['month'] as String: ThumbMonthPrint(
+              (r['n'] as num?)?.toInt() ?? 0,
+              (r['bytes'] as num?)?.toInt() ?? 0,
+              (r['max_id'] as num?)?.toInt() ?? 0),
+    };
+  }
+
+  @override
+  Future<List<BackupThumb>> thumbsForMonth(String month) async {
+    final rows = await _db.rawQuery(
+        'SELECT m.chat_id AS chat_id, m.image_hash AS image_hash, '
+        't.jpeg AS jpeg $_thumbJoin AND substr(m.date, 1, 7) = ? '
+        'ORDER BY m.id',
+        [month]);
+    return [
+      for (final r in rows)
+        if (r['jpeg'] is Uint8List)
+          BackupThumb((r['chat_id'] as num?)?.toInt() ?? localChatId,
+              normalizeImageHash(r['image_hash'] as String?), r['jpeg'] as Uint8List),
+    ];
   }
 
   /// Identity per table — the dedup rule that makes re-importing the same

@@ -297,7 +297,7 @@ void main() {
       final envelope =
           buildExportEnvelope(tables, DateTime(2026, 7, 17, 8, 30));
       expect(envelope['format'], 'calorie_tracker_export');
-      expect(envelope['version'], 1);
+      expect(envelope['version'], 2);
       expect(envelope['exported_at'], '2026-07-17T08:30:00.000');
       expect(envelope['tables'], same(tables));
       expect((envelope['tables'] as Map)['meals'], hasLength(1));

@@ -15,6 +15,7 @@ import 'package:path_provider/path_provider.dart'
 
 import 'package:flutter/material.dart';
 
+import '../services/backup/backup_coordinator.dart';
 import '../services/photo/background_time.dart' show appEngineInForeground;
 import 'ai_consent.dart'
     show
@@ -23,6 +24,7 @@ import 'ai_consent.dart'
         askAiConsentUpdate,
         ensureAiConsent;
 import 'background_glue.dart' show foregroundCatchUp;
+import 'backup_sheets.dart';
 import 'screens/add_flow.dart';
 import 'screens/body_screen.dart';
 import 'l10n.dart';
@@ -194,6 +196,54 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // The consent text changed what is sent since the current recipient
     // was allowed: asked once, over the first frame.
     _askConsentUpdateWhenIdle();
+    // iCloud Backup (iPhone, 1.7.0): starts after the first frame (the
+    // database is open by then: init opened it); its notice and restore
+    // offer are asked here, one question at a time.
+    final backup = widget.services.cloudBackup;
+    if (backup != null) {
+      backup.prompt.addListener(_onBackupPrompt);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) unawaited(backup.start().then((_) {}, onError: (Object _) {}));
+      });
+    }
+  }
+
+  /// The backup question being asked, so it is asked once.
+  BackupPrompt? _backupAsking;
+
+  /// iCloud Backup asks (the notice, or a restore offer): like the
+  /// consent update, only over the shell itself with nothing on top, and
+  /// after the consent-update question. A later prompt change or a return
+  /// to the app asks again if it could not now.
+  void _onBackupPrompt() {
+    final backup = widget.services.cloudBackup;
+    final prompt = backup?.prompt.value;
+    if (backup == null || prompt == null || !mounted) return;
+    if (identical(_backupAsking, prompt)) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted || backup.prompt.value != prompt) return;
+      if (_backupAsking != null) return;
+      await _consentUpdateAnswered();
+      if (!mounted || backup.prompt.value != prompt) return;
+      if (Navigator.maybeOf(context)?.canPop() ?? false) return;
+      _backupAsking = prompt;
+      try {
+        switch (prompt) {
+          case NoticePrompt():
+            await showBackupNotice(context, backup);
+          case RestoreOfferPrompt(:final candidate, :final localMeals):
+            await showRestoreOffer(context, backup, candidate, localMeals);
+        }
+      } finally {
+        _backupAsking = null;
+      }
+      // Answering one may raise the next (the notice after a restore).
+      if (mounted && backup.prompt.value != null &&
+          !identical(backup.prompt.value, prompt)) {
+        _onBackupPrompt();
+      }
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 
   /// The share gate's question: true = allowed (and saved). Not now says
@@ -245,6 +295,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    widget.services.cloudBackup?.prompt.removeListener(_onBackupPrompt);
     widget.services.sharedPhotoConsent?.detach(_askShareConsent);
     _linkSub?.cancel();
     mealsChangedSignal.removeListener(_onMealsChanged);
@@ -388,6 +439,8 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (!settings.mealLogged) {
       unawaited(settings.markMealLogged().then((_) {}, onError: (Object _) {}));
     }
+    // A change worth backing up (debounced by the coordinator).
+    widget.services.cloudBackup?.noteChange();
     // iOS: a meal just landed (pipeline / share sheet) — the pending OS card
     // must carry it even if the user stays in the app through the slot.
     final rearm = widget.services.refreshDailyNotification;
@@ -409,11 +462,15 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     if (state == AppLifecycleState.hidden ||
         state == AppLifecycleState.paused) {
       _leftApp = true;
+      // iCloud Backup's background-entry run (inside a background task).
+      s.cloudBackup?.onLifecycle(false);
     }
     if (state != AppLifecycleState.resumed) return;
     if (_leftApp) {
       _leftApp = false;
       _askConsentUpdateWhenIdle();
+      s.cloudBackup?.onLifecycle(true);
+      _onBackupPrompt();
     }
     // The background job may have logged meals while we were away — the
     // IndexedStack keeps stale screens alive, so refresh them now.
@@ -444,6 +501,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     // photos once the user leaves again.
     final intake = s.photoIntake;
     if (intake == null) return;
+    // iCloud Backup: a restore offer is open or a restore runs; the next
+    // return to the app catches up.
+    if (await s.cloudBackup?.holdsCatchUp() ?? false) return;
     await foregroundCatchUp(intake,
             shouldContinue: Platform.isIOS ? appEngineInForeground : null)
         .then((_) {}, onError: (Object _) {})
@@ -522,6 +582,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
             backgroundScanStuck: s.backgroundScanStuck,
             changes: s.settingsChanges,
             restaurantAssist: s.restaurantAssist,
+            cloudBackup: s.cloudBackup,
+            androidBackupNote: Platform.isAndroid,
+            onImported: () {
+              s.thumbs?.clear();
+              signalMealsChanged();
+            },
           ),
         ]),
       ),
@@ -557,6 +623,9 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           if (i == 0) _todayKey.currentState?.reload();
           if (i == 1) _historyKey.currentState?.reload();
           if (i == 2) _bodyKey.currentState?.reload();
+          // The backup's upload state for the status line.
+          final backup = s.cloudBackup;
+          if (i == 3 && backup != null) unawaited(backup.refresh());
         },
         destinations: [
           NavigationDestination(
