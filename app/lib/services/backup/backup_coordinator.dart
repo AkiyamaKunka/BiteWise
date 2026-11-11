@@ -595,7 +595,7 @@ class BackupCoordinator {
     }
     if (!bg && uiEngine) await _retryPending();
     final counts = await _dao.backupCounts();
-    final lastSeq = _prefs.lastSeq;
+    var lastSeq = _prefs.lastSeq;
     if (counts.records == 0) {
       // G2 / G10: nothing to back up, and never an empty file over a full
       // one.
@@ -630,6 +630,20 @@ class BackupCoordinator {
     switch (h.kind) {
       case CloudResultKind.ok:
         current = h.header;
+        // A write of this install's that landed but was never recorded
+        // (the app was killed first): the file is this install's at that
+        // seq, recorded now, before the next seq is taken. Otherwise one
+        // more run that fails after taking its seq would leave the file at
+        // a seq neither expected one names (changedElsewhere).
+        final pending = _prefs.pendingSeq;
+        if (current != null &&
+            current.installId == me &&
+            current.seq > lastSeq &&
+            current.seq <= pending) {
+          lastSeq = current.seq;
+          await _prefs.setLastSeq(lastSeq);
+          if (pending == lastSeq) await _prefs.setPendingSeq(0);
+        }
         final verdict = checkOwner(
             exists: true,
             header: current,
@@ -1496,8 +1510,15 @@ class BackupCoordinator {
             before = prints;
             onDataImported?.call();
           }
-          await _prefs.setAdoptedFrom(header.installId);
-          await _prefs.setLastSeq(0);
+          if (header.installId == _prefs.installId) {
+            // This install's own file at a seq it did not expect (changed
+            // outside the app): it is this install's again at that seq.
+            // Adopting its own id would accept any seq from now on.
+            await _prefs.setLastSeq(header.seq);
+          } else {
+            await _prefs.setAdoptedFrom(header.installId);
+            await _prefs.setLastSeq(0);
+          }
           await _prefs.setPendingSeq(0);
           await _adoptMonths(header,
               before: before, restored: done, replace: replace);

@@ -318,6 +318,31 @@ void main() {
       expect(cloud.headerOf(kRecordsFileName)!.seq, 3);
     });
 
+    test('a write that landed unrecorded, then a run that failed after '
+        'taking the next seq: the file is still ours', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run(); // seq 1
+      // seq 2 landed, but the app died before it recorded it.
+      await prefs.setInt(BackupPrefs.kPendingSeq, 2);
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      final w = BackupFileWriter(dao: dao, platform: 'ios', clock: () => now);
+      final f = await w.writeRecords('${tmp.path}/s2.json',
+          installId: me, seq: 2, months: const {});
+      cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+      // The next run takes seq 3, and iCloud goes away before it lands.
+      await seed(dao, '2026-11-11');
+      cloud.onWrite = (_) async => cloud.state = CloudState.unavailable;
+      expect(await run(), BackupState.unavailable);
+      cloud.onWrite = null;
+      cloud.state = CloudState.ok;
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 2);
+      expect(await run(), BackupState.uploading);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, greaterThan(2));
+      expect(prefs.getInt(BackupPrefs.kLastSeq),
+          cloud.headerOf(kRecordsFileName)!.seq);
+    });
+
     test('a pictures file that cannot be written ends the run as failed, '
         'like the records file', () async {
       final oct = await seed(dao, '2026-10-03', hash: 'h1');
@@ -775,6 +800,33 @@ void main() {
       expect(await c.takeOver(replace: false), isFalse);
       expect(await c.takeOver(replace: true), isTrue);
       expect(cloud.headerOf(kRecordsFileName)!.meals, 2);
+    });
+
+    test('over this install\'s own file changed elsewhere: the seq check '
+        'stays on', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run();
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      final w = BackupFileWriter(dao: dao, platform: 'ios', clock: () => now);
+      Future<void> ownFileAt(int seq) async {
+        final f = await w.writeRecords('${tmp.path}/x$seq.json',
+            installId: me, seq: seq, months: const {});
+        cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+      }
+
+      await ownFileAt(40);
+      await seed(dao, '2026-11-11');
+      expect(await run(), BackupState.changedElsewhere);
+      expect(await c.takeOver(replace: false), isTrue);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 41);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom) ?? '', isNot(me),
+          reason: 'adopting its own id would turn the check off for good');
+      // Changed elsewhere again: still noticed.
+      await ownFileAt(90);
+      await seed(dao, '2026-11-12');
+      expect(await run(), BackupState.changedElsewhere);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 90);
     });
   });
 
