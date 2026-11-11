@@ -18,6 +18,7 @@ import 'package:calorie_tracker/services/backup/file_pick_channel.dart';
 import 'package:calorie_tracker/ui/backup_sheets.dart';
 import 'package:calorie_tracker/ui/screens/settings/data_section.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -367,6 +368,44 @@ void main() {
     for (final p in paths) {
       expect(File(p).existsSync(), isFalse, reason: 'copies are deleted');
     }
+  });
+
+  testWidgets('Android Choose File…: a file that could not be read is never '
+      'called over 100 MB', (tester) async {
+    // MainActivity.kt answers how many picks were too big and how many
+    // could not be copied at all (a Drive file offline, a full disk).
+    Object? answer;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel(filesChannelName),
+        (call) async => call.method == 'pickFiles' ? answer : null);
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        const MethodChannel(filesChannelName), null));
+    await pump(tester, picker: const PlatformFilePicker());
+
+    Future<String> pick(Map<String, Object?> reply) async {
+      answer = reply;
+      await tester.tap(find.byKey(const Key('importButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('importChooseFile')));
+      await tester.pumpAndSettle();
+      final shown = tester
+          .widgetList<Text>(find.descendant(
+              of: find.byType(SnackBar), matching: find.byType(Text)))
+          .map((t) => t.data ?? '')
+          .join();
+      ScaffoldMessenger.of(tester.element(find.byType(DataSection)))
+          .removeCurrentSnackBar();
+      await tester.pumpAndSettle();
+      return shown;
+    }
+
+    final failed = await pick(
+        {'status': 'ok', 'paths': <String>[], 'tooBig': 0, 'failed': 1});
+    expect(failed, _en.importPickUnavailable);
+    final both = await pick(
+        {'status': 'ok', 'paths': <String>[], 'tooBig': 1, 'failed': 1});
+    expect(both, '${_en.importTooBig} ${_en.importPickUnavailable}');
   });
 
   test('a delete says done, done in part (try again), or not done', () {

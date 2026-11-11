@@ -3389,7 +3389,7 @@
   },
   "importPickUnavailable": "Files could not be opened here. Paste the file's contents with Import from clipboard instead.",
   "@importPickUnavailable": {
-    "description": "Snackbar when the file picker is not available."
+    "description": "Snackbar when the file picker is not available, or a picked file could not be read or copied (Android: a cloud file that cannot be fetched now, a full disk)."
   },
   "importDeletedLeftOut": "{count, plural, =1{1 meal you deleted on this phone was} other{{count} meals you deleted on this phone were}} left out.",
   "@importDeletedLeftOut": {

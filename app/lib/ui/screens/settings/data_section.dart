@@ -250,7 +250,8 @@ class _DataSectionState extends State<DataSection> {
   /// Import › Choose File…: records and full files first, then pictures
   /// by month, each merged; the picked copies are deleted afterwards. A
   /// file over 100 MB is refused before it is read (its 16 KB header
-  /// decides the order).
+  /// decides the order); one that could not be copied is reported as
+  /// such.
   Future<void> _importFiles() async {
     final l10n = context.l10n;
     final picked = await widget.filePicker.pickJsonFiles();
@@ -260,7 +261,8 @@ class _DataSectionState extends State<DataSection> {
           SnackBar(content: Text(l10n.importPickUnavailable)));
       return;
     }
-    if (picked.cancelled || (picked.paths.isEmpty && picked.tooBig == 0)) {
+    if (picked.cancelled ||
+        (picked.paths.isEmpty && picked.tooBig == 0 && picked.failed == 0)) {
       return;
     }
     setState(() => _importing = true);
@@ -308,6 +310,8 @@ class _DataSectionState extends State<DataSection> {
       if (summaries.isNotEmpty) importSummaryText(l10n, total),
       ?refusal,
       if (tooBig > 0) l10n.importTooBig,
+      // Never "over 100 MB" for a file that could not be read at all.
+      if (picked.failed > 0) l10n.importPickUnavailable,
     ];
     if (lines.isEmpty) return;
     ScaffoldMessenger.of(context)

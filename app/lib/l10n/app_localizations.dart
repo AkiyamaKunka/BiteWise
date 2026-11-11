@@ -5399,7 +5399,7 @@ abstract class AppLocalizations {
   /// **'A file over 100 MB was not imported.'**
   String get importTooBig;
 
-  /// Snackbar when the file picker is not available.
+  /// Snackbar when the file picker is not available, or a picked file could not be read or copied (Android: a cloud file that cannot be fetched now, a full disk).
   ///
   /// In en, this message translates to:
   /// **'Files could not be opened here. Paste the file\'s contents with Import from clipboard instead.'**
