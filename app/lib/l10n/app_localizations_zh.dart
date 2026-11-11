@@ -2370,7 +2370,8 @@ class AppLocalizationsZh extends AppLocalizations {
       '查询会用你的密钥发送给 Anthropic（Claude 网页搜索）。';
 
   @override
-  String get restaurantRecipientOpenrouter => '查询会发送给 OpenRouter 及其搜索合作方 Exa。';
+  String get restaurantRecipientOpenrouter =>
+      '查询会发送给 OpenRouter（再由它转交给你所选模型的厂商）及其搜索合作方 Exa。';
 
   @override
   String restaurantUnsupported(String provider) {
@@ -2472,7 +2473,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get restaurantRecipientNameAnthropic => 'Anthropic（Claude 网页搜索）';
 
   @override
-  String get restaurantRecipientNameOpenrouter => 'OpenRouter 及其搜索合作方 Exa';
+  String get restaurantRecipientNameOpenrouter =>
+      'OpenRouter（再由它转交给你所选模型的厂商）及其搜索合作方 Exa';
 
   @override
   String get restaurantConsentUseLocation => '使用位置';

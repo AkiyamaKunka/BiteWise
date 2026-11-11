@@ -3,9 +3,10 @@
 /// 5.1.1, 5.1.2(i)).
 ///
 /// The sheet names the recipient chain — the user's own server (Claude web
-/// search), Anthropic, or OpenRouter and Exa — and says exactly what leaves
-/// the phone: on iPhone, the photo's location goes only to Apple Maps on
-/// the phone; the recipient gets the name of a chain from the app's own
+/// search), Anthropic, or OpenRouter, the maker of the model picked in
+/// Settings (OpenRouter passes the lookup on to it) and Exa — and says
+/// exactly what leaves the phone: on iPhone, the photo's location goes
+/// only to Apple Maps on the phone; the recipient gets the name of a chain from the app's own
 /// table and the food names and amounts, never the photo, its location,
 /// the city, the street or the distance. On Claude Plan it also says the
 /// https rule and that lookups there are suggestions only (amendment to

@@ -409,10 +409,20 @@ void main() {
       final paused = find.byKey(const Key('restaurantPausedRow'));
       expect(paused, findsOneWidget);
       expect(footer(tester), contains('Lookups are paused until you agree'));
+      expect(
+          footer(tester),
+          contains('Lookups go to OpenRouter, which passes them on to the '
+              'maker of the model you picked, and to its search partner '
+              'Exa.'));
       await tester.ensureVisible(paused);
       await tester.tap(paused);
       await tester.pumpAndSettle();
-      expect(inSheet('sent to OpenRouter and its search partner Exa'),
+      // OpenRouter answers with the model picked in Settings, so the sheet
+      // names that model's maker too (RC 1.6.0 review, 2026-11-10).
+      expect(
+          inSheet('sent to OpenRouter (which passes them on to the maker of '
+              'the model you picked) and its search partner Exa, which '
+              'searches the web'),
           findsOneWidget);
       await tester.tap(find.byKey(const Key('restaurantConsentBrandOnly')));
       await tester.pumpAndSettle();
@@ -445,7 +455,10 @@ void main() {
       c.support = _openrouter;
       final asked = section.promptIfRecipientChanged(before);
       await tester.pumpAndSettle();
-      expect(inSheet('OpenRouter and its search partner Exa'), findsOneWidget);
+      expect(
+          inSheet('OpenRouter (which passes them on to the maker of the model '
+              'you picked) and its search partner Exa'),
+          findsOneWidget);
       await tester.tap(find.byKey(const Key('restaurantConsentUseLocation')));
       await tester.pumpAndSettle();
       await asked;
