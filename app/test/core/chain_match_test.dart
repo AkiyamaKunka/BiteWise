@@ -225,6 +225,7 @@ void main() {
       expect(chainTokens('85°C Bakery Cafe'), ['85c', 'bakery', 'cafe']);
       expect(chainTokens('麦当劳'), ['麦', '当', '劳']);
       expect(chainTokens('The'), ['the']);
+      expect(chainTokens('The Habit', keepLeadingThe: true), ['the', 'habit']);
       expect(chainTokens('Whataburger™'), ['whataburger']);
       expect(chainTokens('Chick-fil-A™'), ['chick', 'fil', 'a']);
       expect(chainTokens('Service℠ Plan'), ['service', 'plan']);
