@@ -42,6 +42,19 @@ if (!hasUploadKeystore && releaseRequested) {
     )
 }
 
+// The sideload APK (GitHub release, scripts/build_share_apk.sh) is ONE arm64
+// APK built with `flutter build apk --target-platform android-arm64`, not
+// --split-per-abi: Flutter gives a split APK the versionCode 1000 x ABI + the
+// build number (2102 for arm64 build 102), so it could never upgrade to or
+// from the Play bundle's plain 102. A plain build would still pack the
+// plugins' libraries for every ABI (libdartjni, libdatastore_shared_counter)
+// without libflutter.so for them, so a 32-bit phone would install it and
+// crash at launch; the filter below keeps only arm64-v8a. Bundles (Flutter
+// passes all three platforms) and --split-per-abi builds are untouched.
+val arm64OnlyApk =
+    project.findProperty("target-platform")?.toString() == "android-arm64" &&
+        project.findProperty("split-per-abi")?.toString()?.toBoolean() != true
+
 android {
     namespace = "dev.calorietracker.calorie_tracker"
     // receive_sharing_intent's AAR metadata requires compileSdk >= 37.
@@ -64,6 +77,12 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        if (arm64OnlyApk) {
+            ndk {
+                abiFilters.clear()
+                abiFilters.add("arm64-v8a")
+            }
+        }
     }
 
     signingConfigs {
