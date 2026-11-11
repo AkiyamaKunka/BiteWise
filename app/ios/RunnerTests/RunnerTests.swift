@@ -2378,6 +2378,43 @@ class CloudFilesTests: XCTestCase {
     XCTAssertTrue(gone, "the empty folder is removed")
   }
 
+  // MARK: - conflicts
+
+  private func resolve(_ path: String, timeout: TimeInterval) -> [String: Any] {
+    let done = expectation(description: "resolve")
+    var reply: [String: Any] = [:]
+    files.resolveConflicts(path, installIds: [me], queue: queue, timeout: timeout) { outcome in
+      reply = CloudFiles.reply(outcome, protectedDataAvailable: true)
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 10)
+    return reply
+  }
+
+  func testResolvingAFileWithoutConflictsLeavesNone() throws {
+    try put(body(id: me, seq: 1), at: "Chopstats Backup.json")
+    let r = resolve("Chopstats Backup.json", timeout: 5)
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["left"] as? Int, 0)
+  }
+
+  func testResolvingTimesOutWhileAnotherAccessHoldsTheFile() throws {
+    try put(body(id: me, seq: 1), at: "Chopstats Backup.json")
+    let url = files.url(for: "Chopstats Backup.json")!
+    let held = expectation(description: "held")
+    let release = DispatchSemaphore(value: 0)
+    NSFileCoordinator(filePresenter: nil).coordinate(
+      with: [.writingIntent(with: url, options: .forReplacing)], queue: OperationQueue()
+    ) { _ in
+      held.fulfill()
+      release.wait()
+    }
+    wait(for: [held], timeout: 5)
+    let r = resolve("Chopstats Backup.json", timeout: 0.5)
+    release.signal()
+    XCTAssertEqual(r["status"] as? String, "timeout", "never waits forever for the claim")
+  }
+
   // MARK: - errors and the plugin's pure parts
 
   func testErrorsCarryCodesNeverText() {

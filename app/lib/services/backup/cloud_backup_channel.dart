@@ -178,7 +178,11 @@ abstract class BackupTransport {
   Future<CloudResult> delete(List<String> paths, WriteExpect expect,
       {Duration timeout = const Duration(seconds: 20)});
   Future<List<ConflictVersion>> conflicts(String path, String destDir);
-  Future<bool> resolveConflicts(String path, List<String> installIds);
+
+  /// Marks resolved the conflict versions [installIds] wrote. True only
+  /// when none is left unresolved (and within [timeout]).
+  Future<bool> resolveConflicts(String path, List<String> installIds,
+      {Duration timeout = const Duration(seconds: 30)});
 
   /// The document picker (JSON files, several at once): copies the user
   /// picked, or cancelled / unavailable.
@@ -382,10 +386,18 @@ class ICloudTransport implements BackupTransport {
   }
 
   @override
-  Future<bool> resolveConflicts(String path, List<String> installIds) async {
-    final r = await _call(
-        'resolveConflicts', {'path': path, 'installIds': installIds});
-    return r is Map && r['status'] == 'ok';
+  Future<bool> resolveConflicts(String path, List<String> installIds,
+      {Duration timeout = const Duration(seconds: 30)}) async {
+    final r = await _call('resolveConflicts', {
+      'path': path,
+      'installIds': installIds,
+      'timeoutMs': timeout.inMilliseconds,
+    });
+    // A version nobody listed (another install's, or unreadable) is still
+    // unresolved: the conflict is not settled.
+    return r is Map &&
+        r['status'] == 'ok' &&
+        ((r['left'] as num?)?.toInt() ?? 0) == 0;
   }
 
   @override
@@ -447,7 +459,8 @@ class NoTransport implements BackupTransport {
   Future<List<ConflictVersion>> conflicts(String path, String destDir) async =>
       const [];
   @override
-  Future<bool> resolveConflicts(String path, List<String> installIds) async =>
+  Future<bool> resolveConflicts(String path, List<String> installIds,
+          {Duration timeout = const Duration(seconds: 30)}) async =>
       false;
   @override
   Future<CloudResult> pickFiles() async => CloudResult.unavailable;

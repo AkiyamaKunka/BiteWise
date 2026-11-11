@@ -792,6 +792,20 @@ void main() {
     });
   });
 
+  test('combine with a version it cannot read leaves it unresolved and '
+      'says it did not work', () async {
+    await seed(dao, '2026-11-10');
+    await ready();
+    await run();
+    cloud.conflictVersions[kRecordsFileName] = [
+      Uint8List.fromList('my notes'.codeUnits)
+    ];
+    await seed(dao, '2026-11-11');
+    expect(await run(), BackupState.twoCopies);
+    expect(await c.combine(), isFalse);
+    expect(cloud.conflictVersions[kRecordsFileName], hasLength(1));
+  });
+
   test('delete removes this install\'s files and leaves another\'s',
       () async {
     final oct = await seed(dao, '2026-10-03', hash: 'h1');

@@ -126,6 +126,17 @@ void main() {
     expect([old.deleted, old.refused, old.left], [1, 0, 0]);
   });
 
+  test('resolving conflicts sends a timeout and is true only when none is '
+      'left', () async {
+    answer = (_) => {'status': 'ok', 'left': 0};
+    expect(await t.resolveConflicts(kRecordsFileName, const [_me]), isTrue);
+    expect((calls.last.arguments as Map)['timeoutMs'], 30000);
+    answer = (_) => {'status': 'ok', 'left': 1};
+    expect(await t.resolveConflicts(kRecordsFileName, const [_me]), isFalse);
+    answer = (_) => {'status': 'timeout'};
+    expect(await t.resolveConflicts(kRecordsFileName, const [_me]), isFalse);
+  });
+
   test('error replies carry a code and nothing else', () async {
     answer = (_) => {'status': 'error', 'domain': 'NSCocoaErrorDomain', 'code': 4};
     final r = await t.readHeader(kRecordsFileName,

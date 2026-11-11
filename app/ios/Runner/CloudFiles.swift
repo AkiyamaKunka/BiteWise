@@ -257,6 +257,7 @@ final class CloudFiles {
     case notDownloaded
     case verifyFailed
     case twoCopies
+    case resolved(left: Int)
     case timeout
     case badArguments
     case failure(NSError)
@@ -490,6 +491,39 @@ final class CloudFiles {
     rmdir(folder.path) == 0
   }
 
+  // MARK: - conflicts
+
+  /// Marks resolved the unresolved versions of [path] whose header names
+  /// one of [installIds], and removes the other versions only when none is
+  /// left unresolved. Through coordinate(...) like every other file call,
+  /// so a .forMerging claim that is never granted (iCloud holding the item
+  /// during a stalled download of the conflicting version) times out
+  /// instead of keeping Dart's combine, and everything queued behind it,
+  /// waiting forever.
+  func resolveConflicts(
+    _ path: String, installIds: [String], queue: OperationQueue, timeout: TimeInterval,
+    completion: @escaping (Outcome) -> Void
+  ) {
+    guard let target = url(for: path) else {
+      completion(.badArguments)
+      return
+    }
+    let intent = NSFileAccessIntent.writingIntent(with: target, options: .forMerging)
+    coordinate([intent], queue: queue, timeout: timeout, completion: completion) {
+      let found = NSFileVersion.unresolvedConflictVersionsOfItem(at: intent.url) ?? []
+      var left = 0
+      for v in found {
+        if let id = CloudFiles.installId(of: CloudFiles.header(at: v.url)), installIds.contains(id) {
+          v.isResolved = true
+        } else {
+          left += 1
+        }
+      }
+      if left == 0 { try? NSFileVersion.removeOtherVersionsOfItem(at: intent.url) }
+      return .resolved(left: left)
+    }
+  }
+
   // MARK: - read
 
   /// A coordinated read of [path]: [body] gets the URL to read.
@@ -596,6 +630,7 @@ final class CloudFiles {
     case .notDownloaded: return ["status": "notDownloaded"]
     case .verifyFailed: return ["status": "verifyFailed"]
     case .twoCopies: return ["status": "twoCopies"]
+    case .resolved(let left): return ["status": "ok", "left": left]
     case .timeout: return ["status": "timeout"]
     case .badArguments: return ["status": "badArguments"]
     case .failure(let e): return errorReply(e, protectedDataAvailable: protectedDataAvailable)

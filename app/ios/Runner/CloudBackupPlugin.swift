@@ -29,7 +29,7 @@ import UniformTypeIdentifiers
 ///   delete {paths, expect, timeoutMs} → ok{deleted, refused, left} |
 ///          error{deleted, refused, left} | … (CloudFiles.deleteAll)
 ///   conflicts {path, destDir} → {status, versions: [{tmpPath, header?}]}
-///   resolveConflicts {path, installIds} → {status}
+///   resolveConflicts {path, installIds, timeoutMs} → ok{left} | timeout | …
 ///   pickFiles              → ok{paths} | cancelled | unavailable
 ///   backgroundTimeRemaining → {status, ms: Int | null}
 ///
@@ -532,32 +532,15 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
     }
   }
 
-  /// Marks resolved the versions whose header names one of installIds;
-  /// removes the other versions only when none is left unresolved.
+  /// CloudFiles.resolveConflicts, with the call's timeout.
   private func resolveConflicts(_ files: CloudFiles, _ args: [String: Any], _ reply: @escaping (Any?) -> Void) {
-    guard let path = args["path"] as? String, let url = files.url(for: path),
-      let ids = args["installIds"] as? [String]
-    else {
+    guard let path = args["path"] as? String, let ids = args["installIds"] as? [String] else {
       reply(["status": "badArguments"])
       return
     }
-    let intent = NSFileAccessIntent.writingIntent(with: url, options: .forMerging)
-    NSFileCoordinator(filePresenter: nil).coordinate(with: [intent], queue: fileQueue) { error in
-      if let error = error as NSError? {
-        reply(CloudFiles.errorReply(error, protectedDataAvailable: true))
-        return
-      }
-      let found = NSFileVersion.unresolvedConflictVersionsOfItem(at: intent.url) ?? []
-      var left = 0
-      for v in found {
-        if let id = CloudFiles.installId(of: CloudFiles.header(at: v.url)), ids.contains(id) {
-          v.isResolved = true
-        } else {
-          left += 1
-        }
-      }
-      if left == 0 { try? NSFileVersion.removeOtherVersionsOfItem(at: intent.url) }
-      reply(["status": "ok", "left": left])
+    let protected = protectedNow
+    files.resolveConflicts(path, installIds: ids, queue: fileQueue, timeout: timeout(args)) { outcome in
+      reply(CloudFiles.reply(outcome, protectedDataAvailable: protected))
     }
   }
 

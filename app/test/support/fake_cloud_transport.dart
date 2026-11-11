@@ -288,8 +288,10 @@ class FakeCloudTransport implements BackupTransport {
     return out;
   }
 
+  /// The plugin: true only when no version is left unresolved.
   @override
-  Future<bool> resolveConflicts(String path, List<String> installIds) async {
+  Future<bool> resolveConflicts(String path, List<String> installIds,
+      {Duration timeout = const Duration(seconds: 30)}) async {
     final left = (conflictVersions[path] ?? const <Uint8List>[])
         .where((v) => !installIds.contains(parseBackupHeader(v)?.installId))
         .toList();
@@ -298,7 +300,7 @@ class FakeCloudTransport implements BackupTransport {
     } else {
       conflictVersions[path] = left;
     }
-    return true;
+    return left.isEmpty;
   }
 
   List<String> picked = const [];
