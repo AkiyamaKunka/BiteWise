@@ -455,7 +455,9 @@ a network tool, so it is fenced separately from the photo and text paths:
   lock as photos, but a photo, leftover or text request always wins — it
   kills a running lookup, which is requeued (3 strikes and it fails).
   Results are cached for 24 h; at most 5 queued; at most
-  `CLAUDE_LOOKUP_DAILY_CAP` (30) runs a day.
+  `CLAUDE_LOOKUP_DAILY_CAP` (30) runs a day. When the count in
+  `logs/service_health.json` cannot be written (a full disk), no lookup
+  starts: the cap fails closed.
 - **Evidence** in a `done` result is labelled `"verbatim": false,
   "scope": "search"`: it is the CLI search tool's own summary of a whole
   search, shared by every URL that search listed — not text from the

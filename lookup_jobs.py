@@ -21,6 +21,7 @@ polls /api/restaurant_lookup/status.
   * Daily cap: CLAUDE_LOOKUP_DAILY_CAP (default 30) STARTED CLI runs per
     server-local day, counted in service_health.json under
     "restaurant_lookup" — counted when a run starts, whatever its outcome.
+    A ledger that cannot be read or written refuses the run (fails closed).
 
 Knobs: CLAUDE_LOOKUP_ENABLED (default off: the endpoints answer 403
 {reason: disabled}), CLAUDE_LOOKUP_DAILY_CAP, plus the runner's own
@@ -90,8 +91,18 @@ class DailyRunCounter:
         return max(self._cap_fn() - self._runs_today(data), 0)
 
     def try_start(self) -> bool:
-        """Count one started run; False (nothing counted) at the cap."""
+        """Count one started run; False (nothing counted) at the cap.
+
+        Fails closed: service_health only warns when the ledger cannot be
+        read or written (a full disk, a bad permission), and a run that was
+        not counted is a run the cap cannot stop. So any such warning
+        during this update refuses the run, even under the cap."""
         allowed = {"ok": False}
+        ledger_errors = []
+
+        def warn(message):
+            ledger_errors.append(message)
+            log.warning(message)
 
         def mutate(data):
             runs = self._runs_today(data)
@@ -101,7 +112,11 @@ class DailyRunCounter:
             data[HEALTH_KEY] = {"date": self._today_fn(), "runs": runs + 1,
                                 "last_start_at": service_health.timestamp()}
 
-        service_health.update(mutate, self._path_fn(), warn=log.warning)
+        service_health.update(mutate, self._path_fn(), warn=warn)
+        if ledger_errors:
+            log.warning("Restaurant lookup refused: the daily-cap ledger "
+                        "could not be updated")
+            return False
         return allowed["ok"]
 
 

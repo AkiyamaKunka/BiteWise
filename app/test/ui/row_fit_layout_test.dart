@@ -30,6 +30,8 @@ import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/shared_generated.dart'
+    show SharedChain, sharedUsChains;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
     show LookupRecipient, LookupSupport;
@@ -144,6 +146,36 @@ void main() {
           await tester.tap(find.byKey(const Key('leftoverMeal-1')));
           await tester.pumpAndSettle();
           expect(find.byKey(const Key('leftoverChosenMeal')), findsOneWidget);
+        });
+      }
+    }
+  });
+
+  // RC 1.6.0 review: a two-line cap cut the long chain names (Red Robin
+  // Gourmet Burgers and Brews, Freddy's Frozen Custard & Steakburgers) to
+  // an ellipsis on 320–390 pt phones at the standard sizes. The chip takes
+  // the lines its words need — a layout invariant under any font.
+  group('the meal card\'s restaurant chip is never cut', () {
+    for (final lang in const ['en', 'zh']) {
+      for (final (width, scale) in const [
+        (320.0, 1.0),
+        (320.0, 1.35),
+        (375.0, 1.0),
+        (375.0, 1.35),
+        (390.0, 1.35),
+      ]) {
+        testWidgets('$lang at $width pt, ${scale}x', (tester) async {
+          for (final key in _longChainKeys()) {
+            for (final analysis in [appliedBigMac(), suggestedBigMac()]) {
+              final chip = await _pumpChip(
+                  tester, lang, _asChain(analysis, key), width, scale);
+              expect(chip, findsOneWidget);
+              expect(_ellipsised(tester, chip), isEmpty,
+                  reason: '$key: the chip must read in full');
+              expect(tester.getRect(chip).right, lessThanOrEqualTo(width));
+              expect(tester.takeException(), isNull, reason: key);
+            }
+          }
         });
       }
     }
@@ -461,8 +493,87 @@ void main() {
           });
         }
       }
+
+      // RC 1.6.0 review: the long chain names read in full on the iPhone's
+      // glyphs, and the chip that wraps for them stays short: three lines
+      // on the common phones, four on a 320 pt one.
+      for (final scale in const [1.0, 1.35]) {
+        testWidgets('restaurant chip, long chain names, $lang at 320–390 pt, '
+            '${scale}x', (tester) async {
+          for (final width in const [320.0, 375.0, 390.0]) {
+            for (final key in _longChainKeys()) {
+              for (final analysis in [appliedBigMac(), suggestedBigMac()]) {
+                final chip = await _pumpChip(tester, lang,
+                    _asChain(analysis, key), width, scale,
+                    theme: iphoneTheme);
+                final where = '$key at $width pt';
+                expect(_ellipsised(tester, chip), isEmpty, reason: where);
+                expect(tester.takeException(), isNull, reason: where);
+                // The words' paragraph (the store icon is one too).
+                final text = tester.renderObject<RenderParagraph>(
+                    find.descendant(
+                        of: find.descendant(
+                            of: chip, matching: find.byType(Text)),
+                        matching: find.byType(RichText)));
+                // The paragraph's own layout, laid out again to count its
+                // lines (RenderParagraph does not expose them).
+                final lines = (TextPainter(
+                  text: text.text,
+                  textDirection: text.textDirection,
+                  textScaler: text.textScaler,
+                  locale: text.locale,
+                  strutStyle: text.strutStyle,
+                  textWidthBasis: text.textWidthBasis,
+                  textHeightBehavior: text.textHeightBehavior,
+                )..layout(maxWidth: text.constraints.maxWidth))
+                    .computeLineMetrics()
+                    .length;
+                // Measured 2026-11-10: at most 3 lines at 375/390 pt; 4 at
+                // 320 pt ×1.35 (Red Robin's and Fleming's suggestions).
+                expect(lines, lessThanOrEqualTo(width < 375 ? 4 : 3),
+                    reason: '$where: "${text.text.toPlainText()}"');
+              }
+            }
+          }
+        });
+      }
     }
   }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');
+}
+
+/// The chains whose names cut the meal card's chip at two lines (RC 1.6.0
+/// review), and the longest English and Chinese names in the table.
+List<String> _longChainKeys() {
+  int byName(SharedChain a, SharedChain b) => b.name.length - a.name.length;
+  int byZh(SharedChain a, SharedChain b) =>
+      (b.zhName ?? b.name).length - (a.zhName ?? a.name).length;
+  return {
+    'red_robin',
+    'freddys',
+    'cheesecake_factory',
+    'buffalo_wild_wings',
+    for (final c in ([...sharedUsChains]..sort(byName)).take(3)) c.key,
+    for (final c in ([...sharedUsChains]..sort(byZh)).take(2)) c.key,
+  }.toList();
+}
+
+/// The meal card's restaurant chip for [analysis] at [width] pt and
+/// [scale], with the unseen dot (the narrowest the words get).
+Future<Finder> _pumpChip(WidgetTester tester, String lang,
+    Map<String, dynamic> analysis, double width, double scale,
+    {ThemeData? theme}) async {
+  _phone(tester, width, scale: scale);
+  await tester.pumpWidget(_app(
+      Locale(lang),
+      Scaffold(
+        key: UniqueKey(),
+        body: ListView(children: [
+          MealCard(meal: assistMeal(analysis), assistUnseen: true),
+        ]),
+      ),
+      theme: theme));
+  await tester.pumpAndSettle();
+  return find.byKey(const Key('assistChip'));
 }
 
 /// [analysis] with its block naming another table chain (a longer name).

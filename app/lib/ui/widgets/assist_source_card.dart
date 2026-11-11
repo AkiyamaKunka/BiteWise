@@ -314,17 +314,29 @@ class AssistSourceCard extends StatelessWidget {
             ],
             const SizedBox(height: 10),
             if (url != null && host != null)
-              InkWell(
+              // Its own node, announced as a link (VoiceOver read it as
+              // plain text inside the card's text); the label replaces
+              // the visible text so the host is read once.
+              Semantics(
                 key: const Key('assistSourceLink'),
-                onTap: onOpenSource == null ? null : () => onOpenSource!(url),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Text(
-                    l.assistSourceHost(host),
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: scheme.primary,
-                      decoration: TextDecoration.underline,
-                      decorationColor: scheme.primary,
+                container: true,
+                link: onOpenSource != null,
+                label: onOpenSource == null
+                    ? l.assistSourceHost(host)
+                    : l.assistSourceLinkLabel(host),
+                child: InkWell(
+                  onTap: onOpenSource == null ? null : () => onOpenSource!(url),
+                  child: ExcludeSemantics(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Text(
+                        l.assistSourceHost(host),
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: scheme.primary,
+                          decoration: TextDecoration.underline,
+                          decorationColor: scheme.primary,
+                        ),
+                      ),
                     ),
                   ),
                 ),

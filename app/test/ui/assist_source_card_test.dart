@@ -16,6 +16,7 @@ import 'package:calorie_tracker/ui/widgets/assist_source_card.dart';
 import 'package:calorie_tracker/ui/widgets/chain_picker_sheet.dart';
 import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/assist_fixtures.dart';
@@ -523,6 +524,63 @@ void main() {
         await tester.tap(notes);
       }
       expect(opened, isEmpty);
+    });
+
+    // RC 1.6.0: VoiceOver read the source link as plain text inside the
+    // card's text, with no link trait — nothing said it could be opened.
+    testWidgets('the source link is announced as a link, with its own '
+        'label (en and zh)', (tester) async {
+      final handle = tester.ensureSemantics();
+      for (final (lang, label) in [
+        ('en', 'Source: mcdonalds.com, opens in your browser'),
+        ('zh', '来源：mcdonalds.com，在浏览器中打开'),
+      ]) {
+        final opened = <String>[];
+        await tester.pumpWidget(
+          _app(
+            AssistSourceCard(
+              view: AssistView.of(appliedBigMac()),
+              onUseEstimate: () {},
+              onOpenSource: opened.add,
+            ),
+            lang: lang,
+          ),
+        );
+        final link = find.byKey(const Key('assistSourceLink'));
+        expect(
+          tester.getSemantics(link),
+          matchesSemantics(
+            isLink: true,
+            label: label,
+            hasTapAction: true,
+            hasFocusAction: true,
+            isFocusable: true,
+          ),
+          reason: lang,
+        );
+        // Its own node: the card's text no longer swallows the host, and
+        // the host is not read twice.
+        final card = tester
+            .getSemantics(find.byKey(const Key('assistBrand')))
+            .getSemanticsData();
+        expect(card.label, isNot(contains('mcdonalds.com')), reason: lang);
+        tester.semantics.tap(find.semantics.byLabel(label));
+        expect(opened, [
+          'https://mcdonalds.com/us/en-us/product/big-mac.html',
+        ], reason: lang);
+      }
+
+      // No callback: not tappable, so not announced as a link either.
+      await tester.pumpWidget(
+        _app(AssistSourceCard(view: AssistView.of(appliedBigMac()))),
+      );
+      final data = tester
+          .getSemantics(find.byKey(const Key('assistSourceLink')))
+          .getSemanticsData();
+      expect(data.flagsCollection.isLink, isFalse);
+      expect(data.hasAction(SemanticsAction.tap), isFalse);
+      expect(data.label, 'Source: mcdonalds.com');
+      handle.dispose();
     });
 
     // Usual foods §2.4 / D12 / D14: a block decided on a saved answer says

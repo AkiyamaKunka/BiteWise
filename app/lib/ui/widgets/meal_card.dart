@@ -22,7 +22,6 @@ import '../../services/photo/glasses.dart' show isMetaGlassesAnalysis;
 import '../assist_view.dart';
 import '../format.dart';
 import '../l10n.dart';
-import '../large_text.dart';
 import 'glasses_badge.dart';
 import 'grouped.dart' show GroupedCard;
 import 'macro_chart.dart' show MacroPalette;
@@ -183,10 +182,11 @@ class _AssistChip extends StatelessWidget {
               text,
               style: theme.textTheme.labelSmall
                   ?.copyWith(color: scheme.onSurfaceVariant),
-              // At the accessibility sizes the words take the lines they
-              // need; a cut chain name would say nothing.
-              maxLines: isLargeText(context) ? null : 2,
-              overflow: isLargeText(context) ? null : TextOverflow.ellipsis,
+              // The words take the lines they need, at every text size: a
+              // cut chain name would say nothing. Two lines cut the long
+              // table names (Red Robin Gourmet Burgers and Brews) on
+              // 320–390 pt phones (RC 1.6.0); a name is at most
+              // kAssistBrandNameMax characters, so the chip stays short.
             ),
           ),
           if (unseen) ...[

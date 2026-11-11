@@ -38,8 +38,22 @@ void _holdSnackbar(String message, SnackBarAction? action) {
 /// same 8 s as the usual-foods and Settings ones.
 const Duration kAppActionSnackDuration = Duration(seconds: 8);
 
-/// True once the messenger is mounted and everything pending was shown.
-/// Not mounted (startup error screen): kept for the next message or frame.
+/// The one message of ours the messenger holds (on screen, or behind a
+/// screen's own snackbar), until it closes.
+({
+  ScaffoldMessengerState messenger,
+  ScaffoldFeatureController<SnackBar, SnackBarClosedReason> controller,
+})? _shown;
+
+/// True once the messenger is mounted (the next pending message is on it,
+/// or waits for the one it holds). Not mounted (startup error screen):
+/// kept for the next message or frame.
+///
+/// One at a time, so a usual-foods result and its Undo (showUsualSnack,
+/// shown in place of the snackbar that is up) are next on screen, and the
+/// messages still pending here follow it (owner decision 2026-11-11, RC
+/// 1.6.0 finding 4). Handed over all at once, a catch-up's "Logged" lines
+/// sat in the messenger's own queue, ahead of the Undo, 4 s each.
 ///
 /// A snackbar with an action never times out by default (SnackBar.persist
 /// defaults to `action != null`): the lookup's Undo stayed up until tapped,
@@ -49,17 +63,33 @@ const Duration kAppActionSnackDuration = Duration(seconds: 8);
 bool _flushSnackbars() {
   final messenger = messengerKey.currentState;
   if (messenger == null) return false;
-  for (final s in _pendingSnackbars) {
-    messenger.showSnackBar(s.action == null
-        ? SnackBar(content: Text(s.message))
-        : SnackBar(
-            content: Text(s.message),
-            action: s.action,
-            duration: kAppActionSnackDuration,
-            persist: MediaQuery.accessibleNavigationOf(messenger.context),
-          ));
+  final shown = _shown;
+  // A disposed messenger never reports its snackbars closed: once it is
+  // gone, nothing waits for it.
+  if (shown != null &&
+      identical(shown.messenger, messenger) &&
+      messenger.mounted) {
+    return true;
   }
-  _pendingSnackbars.clear();
+  _shown = null;
+  if (_pendingSnackbars.isEmpty) return true;
+  final s = _pendingSnackbars.removeAt(0);
+  final controller = messenger.showSnackBar(s.action == null
+      ? SnackBar(content: Text(s.message))
+      : SnackBar(
+          content: Text(s.message),
+          action: s.action,
+          duration: kAppActionSnackDuration,
+          persist: MediaQuery.accessibleNavigationOf(messenger.context),
+        ));
+  _shown = (messenger: messenger, controller: controller);
+  controller.closed.whenComplete(() {
+    if (!identical(_shown?.controller, controller)) return;
+    _shown = null;
+    if (!_flushSnackbars()) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _flushSnackbars());
+    }
+  });
   return true;
 }
 

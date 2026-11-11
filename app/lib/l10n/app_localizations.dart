@@ -4433,6 +4433,12 @@ abstract class AppLocalizations {
   /// **'Source: {host}'**
   String assistSourceHost(String host);
 
+  /// Screen-reader label of the source link on the editor's restaurant source card (announced as a link). Starts with the visible text so voice control can name it.
+  ///
+  /// In en, this message translates to:
+  /// **'Source: {host}, opens in your browser'**
+  String assistSourceLinkLabel(String host);
+
   /// Under the source link when the page is not on the chain's own website.
   ///
   /// In en, this message translates to:
