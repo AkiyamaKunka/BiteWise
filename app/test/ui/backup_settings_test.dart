@@ -330,6 +330,31 @@ void main() {
     expect(find.byKey(const Key('backupTurnOffDelete')), findsOneWidget);
   });
 
+  testWidgets('Back Up Now before the notice was answered asks it, and Keep '
+      'On backs up', (tester) async {
+    // Nothing uploads before the notice (G1); dismissed at launch, it is
+    // only asked again at the next one. (Made in the test's zone: its runs
+    // are awaited here.)
+    final b = BackupCoordinator(
+        dao: dao,
+        transport: cloud,
+        prefs: prefs,
+        tempDir: () async => Directory.systemTemp);
+    addTearDown(b.stop);
+    await pump(tester, b: b);
+    expect(find.text(_en.backupStatusNotStarted), findsOneWidget);
+    await tester.tap(find.byKey(const Key('backupNowRow')));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupNoticeTitle), findsOneWidget);
+    expect(cloud.statusCalls, 0, reason: 'nothing ran past the notice');
+    await tester.tap(find.byKey(const Key('backupNoticeKeep')));
+    await tester.pumpAndSettle();
+    expect(prefs.getBool(BackupPrefs.kNoticeSeen), isTrue);
+    expect(prefs.getBool(BackupPrefs.kEnabled), isTrue);
+    expect(cloud.statusCalls, 2,
+        reason: 'the run Keep On starts, then the Back Up Now asked for');
+  });
+
   testWidgets('the notice: Keep On records the answer', (tester) async {
     await pump(tester);
     final ctx = tester.element(find.byType(DataSection));

@@ -202,6 +202,40 @@ void main() {
       expect(await c.backUpNow(), BackupState.uploading);
     });
 
+    test('Back Up Now in the query\'s first minute waits the rest of it out '
+        '(Checking iCloud…) rather than doing nothing', () async {
+      final query = _QueryWarmingUp(
+          () => now = now.add(const Duration(seconds: 10)))
+        ..watching = true
+        ..live = const Duration(seconds: 30);
+      cloud = query;
+      c = BackupCoordinator(
+          dao: dao,
+          transport: cloud,
+          prefs: prefs,
+          tempDir: () async => tmp,
+          clock: () => now,
+          gatherWait: const Duration(seconds: 90),
+          gatherPoll: Duration.zero);
+      await seed(dao, '2026-11-10');
+      await noticeAnswered();
+      var busySeen = false;
+      c.status.addListener(() => busySeen |= c.status.value.busy);
+      expect(await c.backUpNow(), BackupState.uploading);
+      expect(busySeen, isTrue, reason: 'the line said Checking iCloud…');
+      expect(c.status.value.busy, isFalse);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 1);
+      // A query that never gathers is waited for 90 s at most.
+      await prefs.clear();
+      await noticeAnswered();
+      cloud.files.clear();
+      query.gathered = false;
+      final start = now;
+      expect(await c.backUpNow(), BackupState.never);
+      expect(now.difference(start), lessThan(const Duration(seconds: 120)));
+      expect(c.status.value.busy, isFalse);
+    });
+
     test('G8: a background run never writes first', () async {
       await seed(dao, '2026-11-10');
       await ready();
@@ -1454,6 +1488,20 @@ void main() {
     expect(backupHoldsCatchUp(prefs, now.add(const Duration(minutes: 31))),
         isFalse);
   });
+}
+
+/// A metadata query in its first minute: each look at it is 10 s later
+/// ([onLook] moves the clock as far).
+class _QueryWarmingUp extends FakeCloudTransport {
+  _QueryWarmingUp(this.onLook);
+  final void Function() onLook;
+
+  @override
+  Future<CloudListing> list() async {
+    live += const Duration(seconds: 10);
+    onLook();
+    return super.list();
+  }
 }
 
 /// An iCloud folder whose fetch of [held] waits for [gate] (a long

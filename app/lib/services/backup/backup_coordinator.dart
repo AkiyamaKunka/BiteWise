@@ -1228,10 +1228,43 @@ class BackupCoordinator {
     unawaited(_run(const _Run(_Kind.now, force: true)));
   }
 
-  /// Back Up Now: no wait for a change or the 24 h (G4's query still
-  /// counts).
-  Future<BackupState> backUpNow() =>
-      _run(const _Run(_Kind.now, force: true, skipWait: true));
+  /// Back Up Now: no wait for a change or the 24 h. G4's query still
+  /// counts: tapped within its first minute, a first write waits the rest
+  /// of it out (busy: Checking iCloud…) instead of doing nothing.
+  Future<BackupState> backUpNow() async {
+    await _awaitFirstWriteQuery();
+    return _run(const _Run(_Kind.now, force: true, skipWait: true));
+  }
+
+  /// Before Back Up Now's first write: the metadata query gathered and
+  /// live [firstWriteQuery] (G4), waited for while the app is in the
+  /// foreground and the query runs, [gatherWait] at most. Nothing to wait
+  /// for before the notice, with nothing to back up, or once this install
+  /// wrote or adopted the file (G4 is for the first write only).
+  Future<void> _awaitFirstWriteQuery() async {
+    if (!uiEngine) return;
+    await _prefs.reload();
+    if (!_prefs.enabled ||
+        !_prefs.noticeSeen ||
+        _prefs.lastSeq > 0 ||
+        _prefs.adoptedFrom.isNotEmpty) {
+      return;
+    }
+    bool ready(CloudListing l) =>
+        !l.watching || (l.gathered && l.live >= firstWriteQuery);
+    var listing = await _t.list();
+    if (ready(listing) || (await _dao.backupCounts()).records == 0) return;
+    final until = _now.add(gatherWait);
+    _setBusy(true);
+    try {
+      while (!ready(listing) && _foreground && _now.isBefore(until)) {
+        await Future<void>.delayed(gatherPoll);
+        listing = await _t.list();
+      }
+    } finally {
+      _setBusy(false);
+    }
+  }
 
   /// The upload state for the status line (Settings opening, a resume,
   /// 30 s after a foreground write).

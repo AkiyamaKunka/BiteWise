@@ -508,7 +508,20 @@ class _DataSectionState extends State<DataSection> {
           onTap: busy
               ? null
               : () async {
-                  final state = await backup.backUpNow();
+                  var state = await backup.backUpNow();
+                  // Nothing uploads before the notice is answered (G1),
+                  // and one dismissed at launch is not asked again until
+                  // the next: it is asked here, and Keep On backs up.
+                  if (state == BackupState.needsNotice) {
+                    if (!context.mounted) return;
+                    await showBackupNotice(context, backup);
+                    final now = backup.status.value.state;
+                    if (now == BackupState.needsNotice ||
+                        now == BackupState.off) {
+                      return;
+                    }
+                    state = await backup.backUpNow();
+                  }
                   if (state == BackupState.uploading ||
                       state == BackupState.ok) {
                     _say(l.backupDone);
