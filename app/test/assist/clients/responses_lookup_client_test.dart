@@ -101,6 +101,25 @@ void main() {
       expect(c.reason, 'source_not_cited');
     });
 
+    test('a citation link before or after the JSON still parses', () async {
+      // The inline ([domain](url)) form was already stripped; a link
+      // outside the object widened parseAiJson's first-to-last cut.
+      for (final (label, wrap) in <(String, String Function(String))>[
+        ('a Sources line after',
+            (t) => '$t\n\nSources: [mcdonalds.com]($_bigMac)'),
+        ('a link before', (t) => 'From [mcdonalds.com]($_bigMac):\n$t'),
+      ]) {
+        final body = fixture('openai_found.json');
+        final msg = (body['output'] as List)[1] as Map;
+        final part = (msg['content'] as List).single as Map;
+        part['text'] = wrap(part['text'] as String);
+        final o = await client(ScriptedClient([(_) => json200(body)]))
+            .submit(bigMacRequest);
+        expect(o.kind, LookupOutcomeKind.done, reason: '$label: ${o.failure}');
+        expect(o.result!.matches.single.publishedCalories, 590, reason: label);
+      }
+    });
+
     test('no sources in the reply → nothing is cited', () async {
       final body = fixture('openai_found.json');
       (((body['output'] as List).first as Map)['action'] as Map)
