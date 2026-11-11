@@ -563,7 +563,16 @@ class BackupCoordinator {
 
   // --------------------------------------------------------------- the run
 
-  Future<BackupState> _run(_Run r) => _locked(() => _runLocked(r));
+  /// Never throws: runs are started from timers and lifecycle callbacks
+  /// that nobody awaits, and anything a step did not expect (a database or
+  /// disk error) ends the run as failed.
+  Future<BackupState> _run(_Run r) => _locked(() async {
+        try {
+          return await _runLocked(r);
+        } catch (_) {
+          return _set(BackupState.failed, remember: true);
+        }
+      });
 
   Future<BackupState> _runLocked(_Run r) async {
     final bg = r.background;
@@ -845,9 +854,19 @@ class BackupCoordinator {
           }
         }
         if (await _switchedOff()) return CloudResultKind.cancelled;
-        final tmp = await _tmpPath('pictures-$m.json');
-        final file = await _writer.writePictures(tmp,
-            installId: me, seq: seq, month: m);
+        final WrittenBackupFile file;
+        try {
+          file = await _writer.writePictures(
+              await _tmpPath('pictures-$m.json'),
+              installId: me,
+              seq: seq,
+              month: m);
+        } catch (_) {
+          // The temporary file could not be made (the phone is full, the
+          // month could not be read; the writer deleted what it began):
+          // the run ends as failed, as it does for the records file.
+          return CloudResultKind.error;
+        }
         final w = await _t.write(
           path: path,
           sourcePath: file.path,

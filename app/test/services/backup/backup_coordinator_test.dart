@@ -299,6 +299,42 @@ void main() {
       expect(await run(), BackupState.uploading);
       expect(cloud.headerOf(kRecordsFileName)!.seq, 3);
     });
+
+    test('a pictures file that cannot be written ends the run as failed, '
+        'like the records file', () async {
+      final oct = await seed(dao, '2026-10-03', hash: 'h1');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      await ready();
+      BackupCoordinator other(MealsDao d, Future<Directory> Function() dir) =>
+          BackupCoordinator(
+              dao: d,
+              transport: cloud,
+              prefs: prefs,
+              tempDir: dir,
+              clock: () => now,
+              gatherWait: Duration.zero);
+      // The month's pictures cannot be read.
+      final noThumbs = other(_ThumbsFailDao(db, clock: () => now),
+          () async => tmp);
+      expect(await noThumbs.backUpNow(), BackupState.failed);
+      expect(noThumbs.status.value.state, BackupState.failed);
+      expect(prefs.getString(BackupPrefs.kLastError), 'failed');
+      // The temporary file cannot be made (here: its folder is a file).
+      final blocked = File('${tmp.path}/blocked')..writeAsStringSync('x');
+      final noTemp = other(dao, () async => Directory(blocked.path));
+      expect(await noTemp.backUpNow(), BackupState.failed);
+      // The temporary file cannot be opened (a folder is in its place): no
+      // error escapes the run either, not even one nobody awaits.
+      final inTheWay =
+          Directory('${tmp.path}/icloud_backup/pictures-2026-10.json')
+            ..createSync(recursive: true);
+      expect(await c.backUpNow(), BackupState.failed);
+      inTheWay.deleteSync();
+      expect(cloud.log, isEmpty);
+      // Nothing was left half done: the next run writes it all.
+      expect(await c.backUpNow(), BackupState.uploading);
+      expect(hashesIn('2026-10'), ['h1']);
+    });
   });
 
   group('G3: another install\'s file is never replaced', () {
@@ -1026,4 +1062,12 @@ void main() {
     expect(backupHoldsCatchUp(prefs, now.add(const Duration(minutes: 31))),
         isFalse);
   });
+}
+
+/// A database whose month of pictures cannot be read.
+class _ThumbsFailDao extends SqfliteMealsDao {
+  _ThumbsFailDao(super.db, {super.clock});
+  @override
+  Future<List<BackupThumb>> thumbsForMonth(String month) async =>
+      throw const FileSystemException('No space left on device');
 }
