@@ -993,19 +993,9 @@ class PhotoPipeline {
       final from = when.hour < 4 && (previousDayContext?.call() ?? false)
           ? isoDate(DateTime(when.year, when.month, when.day - 1))
           : today;
-      final candidates = byMealClock(
+      final read = byMealClock(
               (await dao.mealsBetween(from, today)).where(isFoodMeal))
           .toList();
-      // A held verdict resolves against the snapshot ITS model call saw.
-      final recent = held?.recent ??
-          (candidates.length > kAutoLeftoverMaxCandidates
-              ? candidates
-                  .sublist(candidates.length - kAutoLeftoverMaxCandidates)
-              : candidates);
-      final compacts = [
-        for (final m in recent)
-          recentMealCompact(time: m.time, analysis: m.analysis),
-      ];
 
       final revision = latch?.revision();
       // The consent once more, AT the send ([AiSendGate]): hashing, the
@@ -1021,6 +1011,24 @@ class PhotoPipeline {
         _held = null;
         return _notAllowed;
       }
+      // The day before's meals are decided again here, in the same turn as
+      // the check above and the call below: the recipient may have changed
+      // while the meals were read, and one allowed only under the older
+      // consent text gets that day's meals only.
+      final candidates = from == today ||
+              (previousDayContext?.call() ?? false)
+          ? read
+          : [for (final m in read) if (m.date == today) m];
+      // A held verdict resolves against the snapshot ITS model call saw.
+      final recent = held?.recent ??
+          (candidates.length > kAutoLeftoverMaxCandidates
+              ? candidates
+                  .sublist(candidates.length - kAutoLeftoverMaxCandidates)
+              : candidates);
+      final compacts = [
+        for (final m in recent)
+          recentMealCompact(time: m.time, analysis: m.analysis),
+      ];
       final gpuOffSkips = gpuOffDecodeSkips;
       final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
