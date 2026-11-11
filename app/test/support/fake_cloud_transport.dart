@@ -48,6 +48,22 @@ class FakeCloudTransport implements BackupTransport {
   final List<String> log = [];
   int statusCalls = 0;
 
+  /// CloudFiles.url(for:): the records files at the top, `Meal Pictures/`
+  /// one level down, `.json`, nothing hidden, no `..`. Any other path is
+  /// refused with badArguments (itemState: unknown), as Swift does.
+  static bool validPath(String path) {
+    if (!path.endsWith('.json') || path.startsWith('/') || path.contains('..')) {
+      return false;
+    }
+    final parts = path.split('/');
+    if (parts.length == 1) return !parts[0].startsWith('.');
+    return parts.length == 2 &&
+        parts[0] == kPicturesFolder &&
+        !parts[1].startsWith('.');
+  }
+
+  static const CloudResult _bad = CloudResult(CloudResultKind.badArguments);
+
   BackupHeader? headerOf(String path) {
     final b = files[path];
     return b == null ? null : parseBackupHeader(b);
@@ -89,7 +105,9 @@ class FakeCloudTransport implements BackupTransport {
       );
 
   @override
-  Future<CloudItemState> itemState(String path) async => CloudItemState(
+  Future<CloudItemState> itemState(String path) async => !validPath(path)
+      ? const CloudItemState(ItemExists.unknown)
+      : CloudItemState(
       files.containsKey(path) ? ItemExists.yes : ItemExists.no,
       downloading: notDownloaded.contains(path),
       hasConflicts: conflictVersions[path]?.isNotEmpty ?? false);
@@ -98,6 +116,7 @@ class FakeCloudTransport implements BackupTransport {
   Future<CloudResult> readHeader(String path,
       {required bool allowDownload, required Duration timeout}) async {
     if (state != CloudState.ok) return CloudResult.unavailable;
+    if (!validPath(path)) return _bad;
     final b = files[path];
     if (b == null) return const CloudResult(CloudResultKind.missing);
     if (notDownloaded.contains(path) || unreachable.contains(path)) {
@@ -117,6 +136,7 @@ class FakeCloudTransport implements BackupTransport {
   @override
   Future<CloudResult> fetch(String path, String destPath,
       {required Duration timeout}) async {
+    if (!validPath(path)) return _bad;
     final b = files[path];
     if (b == null) return const CloudResult(CloudResultKind.missing);
     if (unreachable.contains(path)) {
@@ -154,6 +174,7 @@ class FakeCloudTransport implements BackupTransport {
     required Duration timeout,
   }) async {
     if (state != CloudState.ok) return CloudResult.unavailable;
+    if (!validPath(path)) return _bad;
     final exists = files.containsKey(path);
     if (exists && notDownloaded.contains(path)) {
       return const CloudResult(CloudResultKind.notDownloaded);

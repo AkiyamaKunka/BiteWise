@@ -417,6 +417,30 @@ class BackupCoordinator {
 
   // ------------------------------------------------------------ the guards
 
+  /// Pictures whose meal date names no month, at the last [_monthPrints].
+  int _noMonth = 0;
+
+  /// This phone's pictures per month. A meal whose date does not start
+  /// with a month (`YYYY-MM`, backup_format.dart monthOfDate) has no
+  /// pictures file to go in: '2026/10/05' would make a path iCloud
+  /// refuses and '2026-1-05' a month a restore never reads. Those pictures
+  /// are counted in [_noMonth] (thumbs_skipped) and never make a month
+  /// look changed.
+  Future<Map<String, ThumbMonthPrint>> _monthPrints() async {
+    final all = await _dao.thumbMonthPrints();
+    var noMonth = 0;
+    final out = <String, ThumbMonthPrint>{};
+    for (final e in all.entries) {
+      if (monthOfDate(e.key) == e.key) {
+        out[e.key] = e.value;
+      } else {
+        noMonth += e.value.count;
+      }
+    }
+    _noMonth = noMonth;
+    return out;
+  }
+
   bool _monthsChanged(
       Map<String, ThumbMonthPrint> prints, Map<String, MonthRecord> months) {
     for (final e in prints.entries) {
@@ -530,8 +554,9 @@ class BackupCoordinator {
           ? _set(BackupState.emptyLog, count: _prefs.lastMeals)
           : _set(BackupState.never);
     }
-    final prints = await _dao.thumbMonthPrints();
+    final prints = await _monthPrints();
     final months = _prefs.months;
+    final noMonth = _noMonth;
     final dirty = counts.recordsChange != _prefs.lastRecordsChange ||
         _monthsChanged(prints, months);
     if (!dirty && !r.force) return _okState(); // G6
@@ -620,7 +645,7 @@ class BackupCoordinator {
 
     // 2. The records file.
     final skipped =
-        months.values.fold<int>(0, (a, m) => a + m.skipped);
+        months.values.fold<int>(0, (a, m) => a + m.skipped) + noMonth;
     final tmp = await _tmpPath('records-$newSeq.json');
     final WrittenBackupFile file;
     try {
@@ -836,7 +861,7 @@ class BackupCoordinator {
     if (pending.isEmpty) return;
     _pendingTriedAt = _now;
     await _t.startDownloads([for (final m in pending) picturesPath(m)]);
-    final before = await _dao.thumbMonthPrints();
+    final before = await _monthPrints();
     final done = <String>[];
     var added = 0;
     CloudListing? listing;
@@ -863,7 +888,7 @@ class BackupCoordinator {
       }
     }
     if (done.isNotEmpty) {
-      final after = await _dao.thumbMonthPrints();
+      final after = await _monthPrints();
       for (final m in done) {
         months[m] = MonthRecord(MonthState.restored,
             print: before[m] == null ? (after[m]?.key ?? '') : '');
@@ -972,7 +997,7 @@ class BackupCoordinator {
     final last = _prefs.lastAttemptAt;
     if (last != null && _now.difference(last) < minBackgroundGap) return;
     final counts = await _dao.backupCounts();
-    final prints = await _dao.thumbMonthPrints();
+    final prints = await _monthPrints();
     if (counts.recordsChange == _prefs.lastRecordsChange &&
         !_monthsChanged(prints, _prefs.months)) {
       return;
@@ -998,7 +1023,7 @@ class BackupCoordinator {
     if (prompt.value != null) return;
     final counts = await _dao.backupCounts();
     if (counts.recordsChange == _prefs.lastRecordsChange &&
-        !_monthsChanged(await _dao.thumbMonthPrints(), _prefs.months) &&
+        !_monthsChanged(await _monthPrints(), _prefs.months) &&
         !_pendingDue) {
       return;
     }
@@ -1124,7 +1149,7 @@ class BackupCoordinator {
   /// came in, and this phone's month prints from before the import.
   Future<(RestoreSummary, List<String>, Map<String, ThumbMonthPrint>)>
       _importBackup(String path, BackupHeader header) async {
-    final before = await _dao.thumbMonthPrints();
+    final before = await _monthPrints();
     final dest = await _tmpPath('restore-records.json');
     final f = await _t.fetch(path, dest, timeout: const Duration(seconds: 60));
     if (!f.ok) {
@@ -1199,7 +1224,7 @@ class BackupCoordinator {
       {required Map<String, ThumbMonthPrint> before,
       required List<String> restored,
       bool replace = false}) async {
-    final after = await _dao.thumbMonthPrints();
+    final after = await _monthPrints();
     final months = _prefs.months;
     for (final m in header.months.keys) {
       if (!restored.contains(m)) {
@@ -1306,7 +1331,7 @@ class BackupCoordinator {
         if (h.kind == CloudResultKind.ok && h.header != null) {
           final header = h.header!;
           var done = header.months.keys.toList();
-          var before = await _dao.thumbMonthPrints();
+          var before = await _monthPrints();
           if (!replace) {
             final (summary, months, prints) =
                 await _importBackup(kRecordsFileName, header);

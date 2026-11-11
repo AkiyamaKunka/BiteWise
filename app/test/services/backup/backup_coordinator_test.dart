@@ -260,6 +260,29 @@ void main() {
       expect(cloud.headerOf(kRecordsFileName)!.months, isEmpty);
     });
 
+    test('a picture whose meal date names no month is counted as skipped '
+        'and never keeps the backup changed', () async {
+      final oct = await seed(dao, '2026-10-03', hash: 'h1');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      final slash = await seed(dao, '2026/10/05', hash: 'odd1');
+      await dao.saveMealThumb(slash, _jpeg(2));
+      final short = await seed(dao, '2026-1-05', hash: 'odd2');
+      await dao.saveMealThumb(short, _jpeg(3));
+      await ready();
+      expect(await run(), BackupState.uploading);
+      final h = cloud.headerOf(kRecordsFileName)!;
+      expect(h.months, {'2026-10': 1});
+      expect(h.thumbsSkipped, 2);
+      expect(cloud.files.keys,
+          unorderedEquals([kRecordsFileName, picturesPath('2026-10')]));
+      expect(BackupPrefs(prefs).months.keys, ['2026-10']);
+      // Nothing changed: nothing written, run after run (G6).
+      cloud.log.clear();
+      await run();
+      await run();
+      expect(cloud.log, isEmpty);
+    });
+
     test('a write that landed before the app was killed is still ours',
         () async {
       await seed(dao, '2026-11-10');
