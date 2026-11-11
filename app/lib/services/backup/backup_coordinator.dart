@@ -641,9 +641,13 @@ class BackupCoordinator {
         seq: newSeq,
         r: r,
         addBytes: (n) => bytes += n);
+    if (monthFailure == CloudResultKind.cancelled) {
+      return _set(BackupState.off);
+    }
     if (monthFailure != null) return _fail(monthFailure);
 
-    // 2. The records file.
+    // 2. The records file (not once the switch went off).
+    if (await _switchedOff()) return _set(BackupState.off);
     final skipped =
         months.values.fold<int>(0, (a, m) => a + m.skipped) + noMonth;
     final tmp = await _tmpPath('records-$newSeq.json');
@@ -712,13 +716,22 @@ class BackupCoordinator {
       _refreshTimer?.cancel();
       _refreshTimer = Timer(const Duration(seconds: 30), () => unawaited(refresh()));
     }
-    return _set(BackupState.uploading);
+    // Turned off while this last write was in flight: it landed, and the
+    // switch says off.
+    return _set(_prefs.enabled ? BackupState.uploading : BackupState.off);
+  }
+
+  /// The switch went off while a run was going (turnOff only sets the
+  /// preference): the run stops before its next upload.
+  Future<bool> _switchedOff() async {
+    await _prefs.reload();
+    return !_prefs.enabled;
   }
 
   /// Writes each month whose pictures changed and deletes each of this
   /// install's months that has none left. Only months this install wrote,
   /// restored or found absent are touched. Returns a failure that stops
-  /// the run, or null.
+  /// the run (cancelled: the switch went off), or null.
   Future<CloudResultKind?> _writeMonths({
     required Map<String, ThumbMonthPrint> prints,
     required Map<String, MonthRecord> months,
@@ -753,6 +766,7 @@ class BackupCoordinator {
             months.remove(m);
             continue;
           }
+          if (await _switchedOff()) return CloudResultKind.cancelled;
           final d = await _t.delete([path],
               WriteExpect(installId: me, adoptFrom: adoptFrom),
               timeout: r.timeout);
@@ -792,6 +806,7 @@ class BackupCoordinator {
             continue;
           }
         }
+        if (await _switchedOff()) return CloudResultKind.cancelled;
         final tmp = await _tmpPath('pictures-$m.json');
         final file = await _writer.writePictures(tmp,
             installId: me, seq: seq, month: m);
@@ -1480,6 +1495,7 @@ class BackupCoordinator {
   }
 
   /// Turning the switch off: keep the files (the default) or delete them.
+  /// A run in progress stops before its next upload.
   Future<bool> turnOff({required bool deleteFiles}) async {
     await _prefs.setEnabled(false);
     _status.value = _statusFromPrefs();

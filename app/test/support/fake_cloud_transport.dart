@@ -46,6 +46,9 @@ class FakeCloudTransport implements BackupTransport {
 
   /// Writes and deletes that landed, in order (`write <path>`).
   final List<String> log = [];
+
+  /// Called as each write starts (a test acts while a run is going).
+  Future<void> Function(String path)? onWrite;
   int statusCalls = 0;
 
   /// CloudFiles.url(for:): the records files at the top, `Meal Pictures/`
@@ -173,6 +176,7 @@ class FakeCloudTransport implements BackupTransport {
     required bool allowDownload,
     required Duration timeout,
   }) async {
+    await onWrite?.call(path);
     if (state != CloudState.ok) return CloudResult.unavailable;
     if (!validPath(path)) return _bad;
     final exists = files.containsKey(path);

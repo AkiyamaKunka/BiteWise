@@ -776,6 +776,24 @@ void main() {
     expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
   });
 
+  test('turning the switch off stops a run before its next upload',
+      () async {
+    for (var m = 1; m <= 9; m++) {
+      final id = await seed(dao, '2026-0$m-10', hash: 'h$m');
+      await dao.saveMealThumb(id, _jpeg(m));
+    }
+    await ready();
+    cloud.onWrite = (path) async {
+      if (path == picturesPath('2026-01')) {
+        await c.turnOff(deleteFiles: false);
+      }
+    };
+    expect(await run(), BackupState.off);
+    expect(cloud.log, ['write ${picturesPath('2026-01')}'],
+        reason: 'the write in flight lands; nothing after it');
+    expect(c.status.value.state, BackupState.off);
+  });
+
   group('the background', () {
     test('a background run updates our own file without downloading',
         () async {
