@@ -11,6 +11,10 @@
 ///
 /// The list is worked out once on open (UsualFoods.invalidate: a
 /// background save bumps no signal) and does not reorder while open.
+///
+/// Drawn with run 7's kit (theme/tokens.dart, widgets/grouped.dart,
+/// widgets/states.dart): grouped rows on the page colour, the shared
+/// loading, failure and empty states, and the app's alert dialog.
 library;
 
 import 'package:flutter/material.dart';
@@ -20,13 +24,17 @@ import '../../services/usual/usual_foods.dart';
 import '../format.dart' show formatKcal;
 import '../l10n.dart';
 import '../large_text.dart';
+import '../theme/app_dialog.dart';
+import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
-import '../widgets/small_spinner.dart';
+import '../widgets/states.dart';
 import '../widgets/usual_offer_card.dart'
     show kUsualUndoSnackDuration, showUsualSnack, usualUndoPersists;
 
 /// The Log sheet's row for this screen (in the first section, right after
-/// Add from photos); the sheet pops 'usual'.
+/// Add from photos); the sheet pops 'usual'. Its badge is the neutral grey
+/// (badgeNeutral) of the sheet's other plain ways in: run 7 keeps the
+/// brand for photos and indigo for Fix.
 GroupedRow usualFoodsRow(BuildContext ctx) => GroupedRow(
       key: const Key('addUsual'),
       icon: Icons.history,
@@ -167,9 +175,8 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
   /// "Log it again?" over [recent], a similar meal of the last 3 h.
   Future<bool?> _confirmAgain(Meal recent) => showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
+        builder: (ctx) => appAlertDialog(
           key: const Key('usualAgainDialog'),
-          scrollable: true,
           title: Text(ctx.l10n.usualAgainTitle),
           content: Text(ctx.l10n.usualAgainBody(
               usualMealTitle(recent.analysis), ctx.clock(recent.time))),
@@ -236,61 +243,45 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
     }
     if (!mounted) return;
     var changed = false;
+    // showGroupedSheet's title is fixed when the sheet opens, and this one
+    // counts the meals still hidden, so the route builds the same
+    // GroupedSheet itself (as Body's log sheet does).
     await showModalBottomSheet<void>(
       context: context,
-      showDragHandle: true,
-      useSafeArea: true,
       isScrollControlled: true,
-      backgroundColor: groupedBackground(Theme.of(context).colorScheme),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheet) => SafeArea(
-          top: false,
-          child: SingleChildScrollView(
-            child: Column(
-              key: const Key('usualHiddenSheet'),
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
-                  child: Text(
-                    ctx.l10n.usualHiddenRow(hidden.length),
-                    style: Theme.of(ctx)
-                        .textTheme
-                        .titleLarge
-                        ?.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                ),
-                if (hidden.isNotEmpty)
-                  GroupedSection(
-                    separatorInset: 16,
-                    children: [
-                      for (final m in hidden)
-                        _HiddenRow(
-                          key: ValueKey('usualHidden:${m.key}'),
-                          meal: m,
-                          onShow: () async {
-                            try {
-                              await usual.unhide(m);
-                            } catch (_) {
-                              return;
-                            }
-                            changed = true;
-                            setSheet(() => hidden = [
-                                  for (final h in hidden)
-                                    if (h.key != m.key) h,
-                                ]);
-                            if (hidden.isEmpty && ctx.mounted) {
-                              Navigator.of(ctx).pop();
-                            }
-                          },
-                        ),
-                    ],
-                  ),
-                const SizedBox(height: 16),
-              ],
-            ),
-          ),
+      useSafeArea: true,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheet) => GroupedSheet(
+          key: const Key('usualHiddenSheet'),
+          title: ctx.l10n.usualHiddenRow(hidden.length),
+          children: [
+            if (hidden.isNotEmpty)
+              GroupedSection(
+                separatorInset: AppSpace.separatorInset,
+                children: [
+                  for (final m in hidden)
+                    _HiddenRow(
+                      key: ValueKey('usualHidden:${m.key}'),
+                      meal: m,
+                      onShow: () async {
+                        try {
+                          await usual.unhide(m);
+                        } catch (_) {
+                          return;
+                        }
+                        changed = true;
+                        setSheet(() => hidden = [
+                              for (final h in hidden)
+                                if (h.key != m.key) h,
+                            ]);
+                        if (hidden.isEmpty && ctx.mounted) {
+                          Navigator.of(ctx).pop();
+                        }
+                      },
+                    ),
+                ],
+              ),
+          ],
         ),
       ),
     );
@@ -304,6 +295,7 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
   Widget build(BuildContext context) {
     final l = context.l10n;
     return Scaffold(
+      backgroundColor: pageColor(context),
       appBar: AppBar(title: Text(l.addUsual)),
       body: _body(context),
     );
@@ -312,29 +304,19 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
   Widget _body(BuildContext context) {
     final l = context.l10n;
     final theme = Theme.of(context);
-    if (_loading) {
-      return const Center(
-          key: Key('usualLoading'), child: SmallSpinner(size: 24));
-    }
+    if (_loading) return const LoadingState(key: Key('usualLoading'));
     final list = _list;
     if (_failed || list == null) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(l.usualListFailed,
-                  key: const Key('usualListFailed'),
-                  textAlign: TextAlign.center),
-              const SizedBox(height: 12),
-              FilledButton(
-                  key: const Key('usualRetry'),
-                  onPressed: _retry,
-                  child: Text(l.retry)),
-            ],
+      return ListView(
+        padding: const EdgeInsets.only(bottom: AppSpace.s32),
+        children: [
+          InlineError(
+            key: const Key('usualListFailed'),
+            message: l.usualListFailed,
+            onRetry: _retry,
+            retryKey: const Key('usualRetry'),
           ),
-        ),
+        ],
       );
     }
     final around = [
@@ -350,25 +332,23 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
             GroupedRow(
               key: const Key('usualHiddenRow'),
               icon: Icons.visibility_off_outlined,
-              iconColor: theme.colorScheme.outline,
+              iconColor: theme.colorScheme.secondary,
               title: l.usualHiddenRow(_hiddenCount),
               onTap: _showHidden,
             ),
           ])
         : null;
     if (around.isEmpty && more.isEmpty) {
+      final allHidden = _hiddenCount > 0;
       return ListView(
-        padding: const EdgeInsets.only(bottom: 32),
+        padding: const EdgeInsets.only(bottom: AppSpace.s32),
         children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(32, 32, 32, 8),
-            child: Text(
-              _hiddenCount > 0 ? l.usualAllHidden : l.usualEmpty,
-              key: Key(_hiddenCount > 0 ? 'usualAllHidden' : 'usualEmpty'),
-              textAlign: TextAlign.center,
-              style: theme.textTheme.bodyLarge
-                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-            ),
+          EmptyState(
+            key: Key(allHidden ? 'usualAllHidden' : 'usualEmpty'),
+            icon: allHidden
+                ? Icons.visibility_off_rounded
+                : Icons.history_rounded,
+            title: allHidden ? l.usualAllHidden : l.usualEmpty,
           ),
           ?hiddenRow,
         ],
@@ -381,7 +361,7 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
           footer: identical(meals, more) || more.isEmpty
               ? l.usualScreenHint
               : null,
-          separatorInset: 16,
+          separatorInset: AppSpace.separatorInset,
           children: [
             for (final m in meals)
               _UsualRow(
@@ -399,7 +379,7 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
           ],
         );
     return ListView(
-      padding: const EdgeInsets.only(bottom: 32),
+      padding: const EdgeInsets.only(bottom: AppSpace.s32),
       children: [
         if (around.isNotEmpty) rows(around),
         if (more.isNotEmpty) rows(more),
@@ -414,7 +394,8 @@ String _grams(num v) =>
     v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
 /// One meal: its title, the numbers a log writes, how often and when it
-/// was last logged; ⋯ holds Hide from this list.
+/// was last logged; ⋯ holds Hide from this list. A tap logs it (no
+/// chevron: nothing opens).
 class _UsualRow extends StatelessWidget {
   const _UsualRow({
     super.key,
@@ -437,63 +418,54 @@ class _UsualRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l10n;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final colors = context.colors;
     final n = meal.numbers;
     final numbers = '${l.kcalAmount(formatKcal(n.kcal))} · '
         '${l.macroProteinShort}: ${_grams(n.p)}g · '
         '${l.macroCarbsShort}: ${_grams(n.c)}g · '
         '${l.macroFatShort}: ${_grams(n.f)}g';
-    final muted = theme.textTheme.bodySmall
-        ?.copyWith(color: scheme.onSurfaceVariant);
-    return Semantics(
-      button: enabled ? true : null,
-      child: InkWell(
-        onTap: enabled ? onTap : null,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: 44),
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(
-                16, isLargeText(context) ? 10 : 8, 4, isLargeText(context) ? 10 : 8),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(meal.title, style: theme.textTheme.bodyLarge),
-                      Text(numbers,
-                          style: theme.textTheme.bodyMedium
-                              ?.copyWith(color: scheme.onSurfaceVariant)),
-                      Text(stats, style: muted),
-                    ],
-                  ),
-                ),
-                if (logged)
-                  Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: Icon(Icons.check_circle,
-                        key: const Key('usualLoggedCheck'),
-                        size: 20,
-                        color: scheme.primary,
-                        semanticLabel: l.usualLoggedLabel),
-                  ),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_horiz),
-                  tooltip: l.usualMoreActions,
-                  enabled: enabled,
-                  onSelected: (_) => onHide(),
-                  itemBuilder: (_) => [
-                    PopupMenuItem<String>(
-                      key: const Key('usualHide'),
-                      value: 'hide',
-                      child: Text(l.usualHide),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+    return GroupedRow.custom(
+      onTap: onTap,
+      enabled: enabled,
+      showChevron: false,
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (logged)
+            Icon(Icons.check_circle,
+                key: const Key('usualLoggedCheck'),
+                size: 20,
+                color: colors.accent,
+                semanticLabel: l.usualLoggedLabel),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_horiz),
+            tooltip: l.usualMoreActions,
+            enabled: enabled,
+            onSelected: (_) => onHide(),
+            itemBuilder: (_) => [
+              PopupMenuItem<String>(
+                key: const Key('usualHide'),
+                value: 'hide',
+                child: Text(l.usualHide),
+              ),
+            ],
           ),
-        ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(meal.title,
+              style: theme.textTheme.bodyLarge?.copyWith(color: colors.label)),
+          const SizedBox(height: AppSpace.s2),
+          Text(numbers,
+              style: theme.textTheme.bodyMedium
+                  ?.copyWith(color: colors.secondaryLabel)),
+          Text(stats,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: colors.secondaryLabel)),
+        ],
       ),
     );
   }
@@ -508,22 +480,27 @@ class _HiddenRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final title = Text(meal.title, style: theme.textTheme.bodyLarge);
+    final title = Text(meal.title,
+        style: Theme.of(context)
+            .textTheme
+            .bodyLarge
+            ?.copyWith(color: context.colors.label));
     final show = TextButton(
       key: const Key('usualUnhide'),
       onPressed: onShow,
       child: Text(context.l10n.usualUnhide),
     );
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
-      // At large text the button goes under the title.
-      child: isLargeText(context)
+    // At large text the button goes under the title.
+    final stacked = isLargeText(context);
+    return GroupedRow.custom(
+      trailing: stacked ? null : show,
+      child: stacked
           ? Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [title, show],
             )
-          : Row(children: [Expanded(child: title), show]),
+          : title,
     );
   }
 }
