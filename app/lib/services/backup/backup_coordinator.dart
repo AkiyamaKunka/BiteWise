@@ -147,6 +147,20 @@ class NoticePrompt extends BackupPrompt {
   const NoticePrompt();
 }
 
+/// What a delete of backup files came to.
+enum BackupDeleteResult {
+  /// Every file it set out to delete is gone (another install's stay).
+  deleted,
+
+  /// Some went and some are left for now (not downloaded to this phone in
+  /// time, or busy): the backup is still known, so Delete can be tried
+  /// again.
+  partial,
+
+  /// Nothing was deleted.
+  failed,
+}
+
 class RestoreSummary {
   const RestoreSummary({
     this.ok = true,
@@ -1295,25 +1309,24 @@ class BackupCoordinator {
 
   /// Start Fresh: delete [c]'s backup (after the red confirm) and back up
   /// this phone from scratch, without the 24 h wait.
-  Future<bool> startFresh(BackupCandidate c) async {
+  /// A delete that did not finish leaves the offer unanswered: it comes
+  /// back (and the Restore From iCloud… row keeps it) to be finished.
+  Future<BackupDeleteResult> startFresh(BackupCandidate c) async {
     prompt.value = null;
     _setBusy(true);
     try {
-      final ok = await _locked(() async {
-        final paths = <String>{
-          c.path,
-          if (c.path == kRecordsFileName) kPreviousFileName,
-          for (final m in c.header.months.keys) picturesPath(m),
-        };
-        final r = await _t.delete(paths.toList(),
-            WriteExpect(installId: _prefs.installId, adoptFrom: c.header.installId));
-        if (!r.ok || r.left > 0) return false;
-        await _markAnswered(c.header.installId);
+      return await _locked(() async {
+        final result = await _deleteInOrder([
+          [for (final m in c.header.months.keys) picturesPath(m)],
+          if (c.path == kRecordsFileName) const [kPreviousFileName],
+          [c.path],
+        ], WriteExpect(installId: _prefs.installId, adoptFrom: c.header.installId));
         _headerCache.clear();
+        if (result != BackupDeleteResult.deleted) return result;
+        await _markAnswered(c.header.installId);
         await _prefs.setFirstEmptyAt(_now.subtract(firstWriteWait));
-        return true;
+        return result;
       });
-      return ok;
     } finally {
       await _releaseCatchUp();
       _setBusy(false);
@@ -1469,43 +1482,97 @@ class BackupCoordinator {
   /// the previous copy): another phone's months, never read here and
   /// maybe not even downloaded, are none of its business. The switch is
   /// left as it is.
-  Future<bool> deleteBackup() async {
+  ///
+  /// Pictures go first and the records file last, so a delete that stops
+  /// part-way never leaves pictures the records file no longer names. When
+  /// it does stop part-way, the months that are gone are forgotten and the
+  /// rest of the backup stays known, so Delete can be tried again.
+  Future<BackupDeleteResult> deleteBackup() async {
     _setBusy(true);
     try {
       return await _locked(() async {
         await _prefs.reload();
         final me = _prefs.installId;
-        if (!isValidInstallId(me)) return true;
+        if (!isValidInstallId(me)) return BackupDeleteResult.deleted;
         final adopted = _prefs.adoptedFrom;
-        final paths = <String>{
-          for (final e in _prefs.months.entries)
-            if (e.value.state != MonthState.foreign) picturesPath(e.key),
-          kPreviousFileName,
-          kRecordsFileName,
-        };
-        final r = await _t.delete(paths.toList(),
-            WriteExpect(installId: me, adoptFrom: adopted.isEmpty ? null : adopted));
-        if (!r.ok || r.left > 0) return false;
-        await _prefs.forgetBackup(keepNotice: true);
+        final months = _prefs.months;
+        final result = await _deleteInOrder([
+          [
+            for (final e in months.entries)
+              if (e.value.state != MonthState.foreign) picturesPath(e.key),
+          ],
+          const [kPreviousFileName],
+          const [kRecordsFileName],
+        ], WriteExpect(installId: me, adoptFrom: adopted.isEmpty ? null : adopted));
         _headerCache.clear();
         _listing = null;
+        if (result == BackupDeleteResult.deleted) {
+          await _prefs.forgetBackup(keepNotice: true);
+        } else {
+          for (final m in months.keys.toList()) {
+            if (months[m]!.state == MonthState.foreign) continue;
+            final st = await _t.itemState(picturesPath(m));
+            if (st.exists == ItemExists.no) months.remove(m);
+          }
+          await _prefs.setMonths(months);
+        }
         _status.value = _statusFromPrefs();
-        return true;
+        return result;
       });
     } finally {
       _setBusy(false);
     }
   }
 
-  /// Turning the switch off: keep the files (the default) or delete them.
-  /// A run in progress stops before its next upload.
-  Future<bool> turnOff({required bool deleteFiles}) async {
+  /// How long a delete waits, in all, for files that are not on this phone
+  /// yet to download.
+  static const Duration deleteDownloadWait = Duration(seconds: 60);
+
+  /// Deletes each step's paths, a step only once everything before it is
+  /// gone. A file not on this phone yet has no owner Swift can read, so it
+  /// is read first: a coordinated read waits for its download (within
+  /// [deleteDownloadWait] in all), and Swift then decides inside the
+  /// delete, as always. Another install's file is never deleted and does
+  /// not stop the steps.
+  Future<BackupDeleteResult> _deleteInOrder(
+      List<List<String>> steps, WriteExpect expect) async {
+    final all = [for (final step in steps) ...step];
+    await _t.startDownloads(all);
+    final until = _now.add(deleteDownloadWait);
+    for (final p in all) {
+      final st = await _t.itemState(p);
+      if (st.exists != ItemExists.yes || !st.downloading) continue;
+      final left = until.difference(_now);
+      if (left <= Duration.zero) break;
+      await _t.readHeader(p,
+          allowDownload: true,
+          timeout: left < const Duration(seconds: 30)
+              ? left
+              : const Duration(seconds: 30));
+    }
+    var deleted = 0;
+    for (final step in steps) {
+      if (step.isEmpty) continue;
+      final r = await _t.delete(step, expect);
+      deleted += r.deleted;
+      if (!r.ok || r.left > 0) {
+        return deleted > 0
+            ? BackupDeleteResult.partial
+            : BackupDeleteResult.failed;
+      }
+    }
+    return BackupDeleteResult.deleted;
+  }
+
+  /// Turning the switch off: keep the files (the default; null) or delete
+  /// them. A run in progress stops before its next upload.
+  Future<BackupDeleteResult?> turnOff({required bool deleteFiles}) async {
     await _prefs.setEnabled(false);
     _status.value = _statusFromPrefs();
-    if (!deleteFiles) return true;
-    final ok = await deleteBackup();
+    if (!deleteFiles) return null;
+    final result = await deleteBackup();
     _status.value = _statusFromPrefs();
-    return ok;
+    return result;
   }
 
   // ------------------------------------------------------ headless engine

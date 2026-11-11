@@ -9,7 +9,7 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 879 keys, and the generated classes say what
+/// - Both files have the same 880 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
 /// - Keys added or changed after review (fix list U3, U5, C5) follow the
 ///   same rules; the iOS Off box names the saved answers it also clears.
@@ -151,9 +151,9 @@ final Map<String, String Function(AppLocalizations l)> _render = {
 final _cjk = RegExp(r'[⺀-鿿豈-﫿＀-￯　-〿]');
 final _placeholderRe = RegExp(r'\{(\w+)\}');
 
-/// The message keys in each ARB file: 809 on `main` once #22 merged, 70
+/// The message keys in each ARB file: 809 on `main` once #22 merged, 71
 /// more with the 1.7.0 iCloud Backup branch (feat/icloud-backup).
-const _keyCount = 879;
+const _keyCount = 880;
 
 Directory _appRoot() {
   var dir = Directory.current;
@@ -192,7 +192,7 @@ void main() {
     expect(_render.keys.toSet(), {..._newKeys.keys, _changed, _changedOff});
   });
 
-  test('both files have the same 879 keys', () {
+  test('both files have the same 880 keys', () {
     expect(_messageKeys(en), hasLength(_keyCount));
     expect(_messageKeys(zh), hasLength(_keyCount));
     expect(_messageKeys(zh).toSet(), _messageKeys(en).toSet());

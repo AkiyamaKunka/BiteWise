@@ -991,6 +991,7 @@
   "backupDeleteTitle": "删除 iCloud 备份？",
   "backupDeleteBody": "这台 iPhone 的备份会从 iCloud 删除，这台 iPhone 上的餐食记录会保留。无法撤销。",
   "backupDeleted": "iCloud 备份已删除。",
+  "backupDeletePartial": "有些备份文件还没有下载到这台 iPhone 上，所以没有被删除。请过一会儿再试。",
   "importChooseFile": "选择文件…",
   "importPicturesAdded": "已添加 {pictures} 张图片。",
   "importNoMatchingMeals": "这些图片都不属于这台手机上的餐。请先导入备份或导出文件。",

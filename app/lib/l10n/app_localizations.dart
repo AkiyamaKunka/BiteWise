@@ -5357,6 +5357,12 @@ abstract class AppLocalizations {
   /// **'The iCloud backup was deleted.'**
   String get backupDeleted;
 
+  /// Snackbar after a delete of the iCloud backup (Delete It…, Delete iCloud Backup…, Start Fresh) removed some files but had to leave others that iCloud had not yet downloaded to the iPhone.
+  ///
+  /// In en, this message translates to:
+  /// **'Some backup files are not on this iPhone yet, so they were not deleted. Try again in a minute.'**
+  String get backupDeletePartial;
+
   /// Import dialog: opens the system file picker (several files at once).
   ///
   /// In en, this message translates to:

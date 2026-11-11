@@ -3195,6 +3195,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get backupDeleted => 'iCloud 备份已删除。';
 
   @override
+  String get backupDeletePartial => '有些备份文件还没有下载到这台 iPhone 上，所以没有被删除。请过一会儿再试。';
+
+  @override
   String get importChooseFile => '选择文件…';
 
   @override

@@ -3512,6 +3512,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get backupDeleted => 'The iCloud backup was deleted.';
 
   @override
+  String get backupDeletePartial =>
+      'Some backup files are not on this iPhone yet, so they were not deleted. Try again in a minute.';
+
+  @override
   String get importChooseFile => 'Choose File…';
 
   @override

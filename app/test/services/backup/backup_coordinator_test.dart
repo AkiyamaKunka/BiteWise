@@ -553,7 +553,40 @@ void main() {
       await otherPhoneBackup();
       await c.launchCheckForTest();
       final offer = c.prompt.value as RestoreOfferPrompt;
-      expect(await c.startFresh(offer.candidate), isTrue);
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.deleted);
+      expect(cloud.files, isEmpty);
+    });
+
+    test('Start Fresh on a new iPhone: the old backup\'s months are not on '
+        'this phone, and all of it is deleted', () async {
+      await otherPhoneBackup();
+      cloud.notDownloaded.addAll(
+          [for (final p in cloud.files.keys) if (p != kRecordsFileName) p]);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.deleted);
+      expect(cloud.files, isEmpty);
+      expect(cloud.log.last, 'delete $kRecordsFileName',
+          reason: 'the records file goes last');
+    });
+
+    test('Start Fresh that cannot finish deletes no records file, says so, '
+        'and the offer comes back', () async {
+      await otherPhoneBackup();
+      cloud.unreachable.add(picturesPath('2026-10'));
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.failed);
+      expect(cloud.files.keys,
+          unorderedEquals([kRecordsFileName, picturesPath('2026-10')]),
+          reason: 'nothing orphaned: the records file still names the month');
+      expect(prefs.getStringList(BackupPrefs.kOffersAnswered) ?? const [],
+          isNot(contains(_other)));
+      c.prompt.value = null;
+      cloud.unreachable.clear();
+      await c.launchCheckForTest();
+      final again = c.prompt.value as RestoreOfferPrompt;
+      expect(await c.startFresh(again.candidate), BackupDeleteResult.deleted);
       expect(cloud.files, isEmpty);
     });
   });
@@ -771,7 +804,7 @@ void main() {
     cloud.put(picturesPath('2026-02'), '${theirs.envelopePrefix(now)}{}}');
     // Another phone's month this phone never read is not even downloaded.
     cloud.notDownloaded.add(picturesPath('2026-02'));
-    expect(await c.turnOff(deleteFiles: true), isTrue);
+    expect(await c.turnOff(deleteFiles: true), BackupDeleteResult.deleted);
     expect(cloud.files.keys,
         unorderedEquals(['Meal Pictures/2026-01.json', picturesPath('2026-02')]));
     expect(c.status.value.state, BackupState.off);
@@ -823,11 +856,50 @@ void main() {
     await ready();
     await run();
     cloud.unreachable.add(picturesPath('2026-10'));
-    expect(await c.deleteBackup(), isFalse);
+    expect(await c.deleteBackup(), BackupDeleteResult.failed);
     expect(prefs.getInt(BackupPrefs.kLastSeq), 1);
     cloud.unreachable.clear();
     cloud.notDownloaded.clear();
-    expect(await c.deleteBackup(), isTrue);
+    expect(await c.deleteBackup(), BackupDeleteResult.deleted);
+    expect(cloud.files, isEmpty);
+    expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
+  });
+
+  test('turning off with Delete: this phone\'s months not on this phone '
+      'are downloaded first and deleted, pictures before the records file',
+      () async {
+    for (final d in ['2026-09-03', '2026-10-03']) {
+      final id = await seed(dao, d, hash: 'h$d');
+      await dao.saveMealThumb(id, _jpeg(1));
+    }
+    await ready();
+    await run();
+    cloud.notDownloaded.add(picturesPath('2026-09'));
+    cloud.log.clear();
+    expect(await c.turnOff(deleteFiles: true), BackupDeleteResult.deleted);
+    expect(cloud.files, isEmpty);
+    expect(cloud.log.last, 'delete $kRecordsFileName');
+    expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
+  });
+
+  test('turning off with Delete when one month cannot download: the rest '
+      'goes, the records file stays, the partial delete is said, and a retry '
+      'finishes', () async {
+    for (final d in ['2026-09-03', '2026-10-03']) {
+      final id = await seed(dao, d, hash: 'h$d');
+      await dao.saveMealThumb(id, _jpeg(1));
+    }
+    await ready();
+    await run();
+    cloud.unreachable.add(picturesPath('2026-09'));
+    expect(await c.turnOff(deleteFiles: true), BackupDeleteResult.partial);
+    expect(cloud.files.keys,
+        unorderedEquals([kRecordsFileName, picturesPath('2026-09')]));
+    expect(BackupPrefs(prefs).months.keys, ['2026-09']);
+    expect(prefs.getInt(BackupPrefs.kLastSeq), 1, reason: 'still known');
+    expect(c.status.value.state, BackupState.off);
+    cloud.unreachable.clear();
+    expect(await c.deleteBackup(), BackupDeleteResult.deleted);
     expect(cloud.files, isEmpty);
     expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
   });

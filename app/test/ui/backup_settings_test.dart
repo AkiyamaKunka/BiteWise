@@ -305,6 +305,15 @@ void main() {
     }
   });
 
+  test('a delete says done, done in part (try again), or not done', () {
+    expect(backupDeleteMessage(_en, BackupDeleteResult.deleted),
+        _en.backupDeleted);
+    expect(backupDeleteMessage(_en, BackupDeleteResult.partial),
+        allOf(_en.backupDeletePartial, contains('Try again')));
+    expect(backupDeleteMessage(_en, BackupDeleteResult.failed),
+        _en.backupActionFailed);
+  });
+
   test('the import summary names pictures and what was left out', () {
     const s = ImportSummary({'meals': 2}, {},
         thumbsAdded: 2, mealsSkippedDeleted: 1);

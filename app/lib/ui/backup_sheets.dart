@@ -93,6 +93,14 @@ String backupFooter(AppLocalizations l, BackupStatus s) => switch (s.state) {
       _ => backupHasWritten(s) ? l.backupICloudFooter : l.backupICloudFooterBefore,
     };
 
+/// What a delete says: done, done in part (try again), or not done.
+String backupDeleteMessage(AppLocalizations l, BackupDeleteResult r) =>
+    switch (r) {
+      BackupDeleteResult.deleted => l.backupDeleted,
+      BackupDeleteResult.partial => l.backupDeletePartial,
+      BackupDeleteResult.failed => l.backupActionFailed,
+    };
+
 void _snack(BuildContext context, String text) {
   if (!context.mounted) return;
   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
@@ -229,10 +237,8 @@ Future<void> showRestoreOffer(BuildContext context, BackupCoordinator backup,
         // Back to the offer: nothing was answered.
         return showRestoreOffer(context, backup, candidate, localMeals);
       }
-      final ok = await backup.startFresh(candidate);
-      if (context.mounted) {
-        _snack(context, ok ? l.backupDeleted : l.backupActionFailed);
-      }
+      final result = await backup.startFresh(candidate);
+      if (context.mounted) _snack(context, backupDeleteMessage(l, result));
     case _OfferChoice.notNow:
       await backup.declineOffer(candidate);
   }
@@ -333,8 +339,10 @@ Future<void> showTurnOffSheet(
       body: l.backupDeleteBody,
       action: l.backupDeleteAction);
   if (!sure || !context.mounted) return;
-  final ok = await backup.turnOff(deleteFiles: true);
-  if (context.mounted) _snack(context, ok ? l.backupDeleted : l.backupActionFailed);
+  final result = await backup.turnOff(deleteFiles: true);
+  if (result != null && context.mounted) {
+    _snack(context, backupDeleteMessage(l, result));
+  }
 }
 
 /// Delete iCloud Backup… (the empty-log row): confirmed, this install's
@@ -347,6 +355,6 @@ Future<void> confirmDeleteBackup(
       body: l.backupDeleteBody,
       action: l.backupDeleteAction);
   if (!sure || !context.mounted) return;
-  final ok = await backup.deleteBackup();
-  if (context.mounted) _snack(context, ok ? l.backupDeleted : l.backupActionFailed);
+  final result = await backup.deleteBackup();
+  if (context.mounted) _snack(context, backupDeleteMessage(l, result));
 }
