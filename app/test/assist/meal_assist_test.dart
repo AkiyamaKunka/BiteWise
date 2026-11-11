@@ -2232,6 +2232,101 @@ void main() {
       expect(h.lookups.submits, hasLength(2));
       expect((await h.state.jobs())[id]?.jobId, 'job_second_99');
     });
+
+    // The editor offers Look up on a photo meal of any day, but the sweep
+    // lists only yesterday's and today's meals: it dropped the editor's job
+    // for an older one, so every other press of the editor was a new
+    // counted submit, and once the editor was closed the answer was never
+    // collected.
+    group("the editor's lookup of a meal older than yesterday", () {
+      const pending = LookupOutcome(
+        kind: LookupOutcomeKind.pending,
+        provider: LookupRecipient.claudePlan,
+        jobId: 'job_abcdef12',
+      );
+      late int id;
+
+      setUp(() async {
+        id = h.add(
+          _bigMac(),
+          date: '2026-10-21',
+          timestamp: '2026-10-21T12:30:00.000',
+        );
+        // As ServerLookupClient.submit: every submit counts a lookup.
+        h.lookups.onSubmit = (_) async {
+          h.budget.tryStartLookup(0);
+          return pending;
+        };
+        h.lookups.onPoll = (_) async => pending;
+        h.inUse.add(id); // the editor holds the meal
+        expect((await h.assist.lookupNow(id)).code, AssistSkip.pending);
+        expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+        expect(h.budget.lookupsToday, 1);
+      });
+
+      test('its job survives a sweep, and the next press polls it', () async {
+        await h.assist.sweep();
+        expect((await h.state.jobs())[id]?.jobId, 'job_abcdef12');
+        expect(h.lookups.polls, isEmpty, reason: 'the editor holds it');
+        h.now = _now.add(kAssistPollInterval);
+        expect((await h.assist.lookupNow(id)).code, AssistSkip.pending);
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect(h.lookups.submits, hasLength(1));
+        expect(h.budget.lookupsToday, 1);
+      });
+
+      test('the editor closed: the sweep collects the answer', () async {
+        h.inUse.clear();
+        h.now = _now.add(kAssistPollInterval);
+        h.lookups.onPoll = (_) async =>
+            _done(provider: LookupRecipient.claudePlan, verbatim: false);
+        await h.assist.sweep();
+        expect(h.lookups.polls, ['job_abcdef12']);
+        expect(h.lookups.submits, hasLength(1));
+        expect(
+          (h.analysisOf(id)['assist'] as Map)['status'],
+          AssistStatus.suggested,
+        );
+        expect(await h.state.jobs(), isEmpty);
+      });
+
+      test('the meal deleted: its job is dropped, nothing polled', () async {
+        h.inUse.clear();
+        await h.dao.deleteMeal(id);
+        h.now = _now.add(kAssistPollInterval);
+        await h.assist.sweep();
+        expect(h.lookups.polls, isEmpty);
+        expect(await h.state.jobs(), isEmpty);
+      });
+
+      test("an older meal's automatic job is still dropped", () async {
+        final auto = h.add(
+          _bigMac(),
+          date: '2026-10-20',
+          timestamp: '2026-10-20T12:30:00.000',
+        );
+        expect(
+          await h.state.putJob(
+            auto,
+            AssistJob(
+              jobId: 'job_automatic',
+              reqHash: lookupRequestHash(
+                composeAssistRequest(_bigMac(), country: 'US'),
+              ),
+              at: _now,
+              nextAt: _now,
+              recipient: 'claude_plan:abcd1234',
+            ),
+          ),
+          isTrue,
+        );
+        await h.assist.sweep();
+        final jobs = await h.state.jobs();
+        expect(jobs.containsKey(auto), isFalse);
+        expect(jobs[id]?.jobId, 'job_abcdef12');
+        expect(h.lookups.polls, isEmpty);
+      });
+    });
   });
 
   // Review 2026-11-06: a sweep at the daily cap polled nothing, so the day's

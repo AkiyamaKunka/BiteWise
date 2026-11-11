@@ -941,7 +941,9 @@ class AssistLocalState {
   }, false);
 
   /// Keeps only the jobs of [mealIds] (a job for a meal that is gone, or
-  /// out of the window, answers nothing anyone will read) and, with
+  /// out of the window, answers nothing anyone will read; the sweep passes
+  /// the window's meals and the older meals the editor still has a job
+  /// running for) and, with
   /// [recipient], only those sent to it ([AssistJob.recipient]; a record
   /// without one goes too).
   Future<bool> retainJobs(Set<int> mealIds, {String? recipient}) =>

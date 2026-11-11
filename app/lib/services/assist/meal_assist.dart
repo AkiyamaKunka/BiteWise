@@ -1278,6 +1278,12 @@ class MealAssist {
     if (gen != _generation) return;
     final misses = await _state.misses();
     final jobs = await _state.jobs();
+    // The editor's own lookups still running on the server for meals older
+    // than yesterday (the editor offers Look up on a meal of any day): kept
+    // and walked too, so the editor's next press polls its job instead of
+    // submitting (and counting) it again, and the sweep collects the answer
+    // once the editor is closed. Until the job's 24 h end, like any job.
+    final older = <Meal>[];
     if (jobs.isNotEmpty) {
       // Only these meals' jobs, and only those sent to the recipient a
       // lookup reaches now (the consent covers it: the gate above). A
@@ -1289,14 +1295,34 @@ class MealAssist {
       // not taken as the editor's pending lookup, and the place it kept —
       // found under the old recipient's location answer — is never sent.
       final stamp = support.recipientStamp;
-      await _state.retainJobs({for (final m in meals) m.id}, recipient: stamp);
-      jobs.removeWhere((_, job) => job.recipient != stamp);
+      final keep = {for (final m in meals) m.id};
+      for (final MapEntry(key: id, value: job) in jobs.entries) {
+        if (keep.contains(id) ||
+            !job.manual ||
+            !job.isPending ||
+            job.recipient != stamp) {
+          continue;
+        }
+        final snap = await _dao.mealSnapshot(id);
+        if (gen != _generation) return;
+        if (snap == null) continue; // the meal is gone: so is its job
+        keep.add(id);
+        older.add(snap.meal);
+      }
+      await _state.retainJobs(keep, recipient: stamp);
+      jobs.removeWhere(
+        (id, job) => job.recipient != stamp || !keep.contains(id),
+      );
     }
     final ordered = [
       for (final m in meals)
         if (_eligible(m, now, consentAt, misses) ||
             _manualPending(m, jobs[m.id]))
           m,
+      // Never eligible for an automatic lookup (older than the window):
+      // only polled, and only once the editor is closed.
+      for (final m in older)
+        if (_manualPending(m, jobs[m.id])) m,
     ]..sort((a, b) => _timeOf(b).compareTo(_timeOf(a)));
     for (final meal in ordered) {
       if (gen != _generation || _disposed) return;
