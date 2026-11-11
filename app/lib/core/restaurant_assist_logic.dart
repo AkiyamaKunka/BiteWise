@@ -821,6 +821,55 @@ Set<String> _sizeTags(String text) {
   };
 }
 
+const Map<String, int> _numberWords = {
+  'one': 1,
+  'two': 2,
+  'three': 3,
+  'four': 4,
+  'five': 5,
+  'six': 6,
+  'seven': 7,
+  'eight': 8,
+  'nine': 9,
+  'ten': 10,
+  'eleven': 11,
+  'twelve': 12,
+};
+
+/// A whole number, a fraction or decimal kept as ONE token ("1/8", "16.5",
+/// "2,000": none of them a count), or a word.
+final RegExp _countTokenRe = RegExp(r'[0-9]+(?:[./,][0-9]+)*|[a-z]+');
+final RegExp _wholeRe = RegExp(r'^[0-9]{1,3}$');
+
+/// The counts of [unitKey] a published text names: a whole number (digits,
+/// or one … twelve) directly before the unit's own word, singular or
+/// plural ("2 tacos", "Two Tacos", "10 piece" in piece → 2, 2, 10); when
+/// none does, a number before a piece word ("2 pc", "4-pc", "3 ct"). So
+/// "1 box (10 pieces)" counts one box. A fraction, a decimal, or a number
+/// before any other word ("1/8 pie", "16 fl oz", "6 inch") counts nothing.
+Set<int> _unitCounts(String text, String unitKey) {
+  if (unitKey.isEmpty) return const {};
+  final t = nfkcLite(text).toLowerCase().replaceAll(_apostropheRe, '');
+  final tokens = [for (final m in _countTokenRe.allMatches(t)) m.group(0)!];
+  final unitLength = unitKey.split(' ').length;
+  final own = <int>{};
+  final pieces = <int>{};
+  for (var i = 0; i + 1 < tokens.length; i++) {
+    final token = tokens[i];
+    final n = _wholeRe.hasMatch(token) ? int.parse(token) : _numberWords[token];
+    if (n == null) continue;
+    final next = tokens[i + 1];
+    if (i + 1 + unitLength <= tokens.length &&
+        _unitKey(tokens.sublist(i + 1, i + 1 + unitLength).join(' ')) ==
+            unitKey) {
+      own.add(n);
+    } else if (_unitKey(next) == 'piece' || next == 'ct' || next == 'count') {
+      pieces.add(n);
+    }
+  }
+  return own.isNotEmpty ? own : pieces;
+}
+
 // ─── Options ───────────────────────────────────────────────────────────
 
 /// One published size or variant, coerced.
@@ -1012,17 +1061,40 @@ AssistPick? _pickFrom(
   final qty = fields.qty;
   final single = (qty - 1).abs() < _eps;
   final itemUnit = _unitKey(fields.unit);
-  final candidates = <({_Option o, num multiplier, bool agree, num kcal})>[];
-  void add(_Option o, num multiplier, bool agree) => candidates.add((
-    o: o,
-    multiplier: multiplier,
-    agree: agree,
-    kcal: o.kcal * multiplier,
-  ));
+  final candidates =
+      <({_Option o, num multiplier, bool agree, num kcal, bool counted})>[];
+  void add(_Option o, num multiplier, bool agree, {bool counted = false}) =>
+      candidates.add((
+        o: o,
+        multiplier: multiplier,
+        agree: agree,
+        kcal: o.kcal * multiplier,
+        counted: counted,
+      ));
   for (final o in options) {
-    if (single) {
+    final sameUnit = itemUnit.isNotEmpty && _unitKey(o.unit) == itemUnit;
+    // A published serving may itself count several of the item's unit
+    // ("2 tacos", "10 piece"; the menu item's name when its one option
+    // names no count: "Two Tacos"). It covers that many, never one.
+    var counts = sameUnit
+        ? _unitCounts('${o.label} ${o.serving}', itemUnit)
+        : const <int>{};
+    if (sameUnit && counts.isEmpty && options.length == 1) {
+      counts = _unitCounts(menuItem, itemUnit);
+    }
+    if (counts.isNotEmpty && !(counts.length == 1 && counts.single == 1)) {
+      if (counts.length == 1 && (qty - counts.single).abs() < _eps) {
+        // Exactly what the photo shows: the serving once, a named size.
+        add(o, 1, true, counted: true);
+      } else {
+        // Another count (or several): the number is for that many. Offered
+        // as published, never scaled to a figure on no page, and never
+        // applied.
+        add(o, 1, false);
+      }
+    } else if (single) {
       add(o, 1, true);
-    } else if (itemUnit.isNotEmpty && _unitKey(o.unit) == itemUnit) {
+    } else if (sameUnit) {
       add(o, qty, true);
     } else {
       // The option counts in something else: it may be per piece or the
@@ -1042,14 +1114,17 @@ AssistPick? _pickFrom(
     return a.o.index.compareTo(b.o.index);
   });
 
-  // A size the item names ("Large fries", "venti", "6 pieces") beats the
-  // nearest number, as long as it stays plausible for the photo.
+  // A size the item names ("Large fries", "venti", "6 pieces"), or a
+  // serving counting exactly the item's qty of its unit ("2 tacos" for 2
+  // tacos), beats the nearest number, as long as it stays plausible for the
+  // photo.
   final name = item is Map && item['name'] is String ? item['name'] : '';
   final itemTags = _sizeTags('$name ${fields.unit}');
+  final anyCounted = candidates.any((c) => c.counted);
   var chosen = candidates.first;
-  if (itemTags.isNotEmpty) {
+  if (itemTags.isNotEmpty || anyCounted) {
     for (final c in candidates) {
-      if (c.o.sizeTags.intersection(itemTags).isNotEmpty &&
+      if ((c.counted || c.o.sizeTags.intersection(itemTags).isNotEmpty) &&
           _inRatio(
             c.kcal,
             vision,
@@ -1066,7 +1141,7 @@ AssistPick? _pickFrom(
     for (final o in options)
       if (o.index != chosen.o.index) ...o.sizeTags,
   }.difference(chosenTags);
-  final named = itemTags.intersection(chosenTags).isNotEmpty;
+  final named = chosen.counted || itemTags.intersection(chosenTags).isNotEmpty;
   final o = chosen.o;
   return AssistPick(
     optionIndex: components.isEmpty ? o.index : -1,
@@ -1094,9 +1169,10 @@ AssistPick? _pickFrom(
     }.length,
     sizeNamed: named,
     sizeConflict:
-        itemTags.isNotEmpty &&
-        (itemTags.intersection(otherTags).isNotEmpty ||
-            (chosenTags.isNotEmpty && !named)),
+        (anyCounted && !chosen.counted) ||
+        (itemTags.isNotEmpty &&
+            (itemTags.intersection(otherTags).isNotEmpty ||
+                (chosenTags.isNotEmpty && !named))),
   );
 }
 
@@ -1104,7 +1180,11 @@ AssistPick? _pickFrom(
 /// estimated_calories, the TOTAL for its qty). When the item counts more
 /// than one (qty ≠ 1), an option counted in the same unit is multiplied by
 /// qty; an option in another or no unit is tried at 1× and at qty× and
-/// flagged [AssistPick.unitsAgree] false. Ties go to a single value over a
+/// flagged [AssistPick.unitsAgree] false. An option in the same unit whose
+/// serving counts several of it ("2 tacos", "10 piece"; for a lone option
+/// also the menu item's name, "Two Tacos") covers that many: it is taken
+/// once, agreeing and as a named size when the count is the item's qty,
+/// else once and flagged unitsAgree false. Ties go to a single value over a
 /// range, then to agreeing units, then to the smaller value. A size the
 /// item's name or unit names wins over the nearest number while it stays
 /// inside the suggestion band. Null when the item has no positive kcal or

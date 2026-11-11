@@ -2100,6 +2100,127 @@ void main() {
     });
   });
 
+  // A published serving that is itself a count of the item's unit ("Two
+  // Tacos" = 2 tacos, "10 piece" = 10 pieces) covers that many, not one:
+  // multiplying it by the item's qty doubled 2 tacos into an automatic
+  // 688 kcal and threw 10 nuggets away as implausible.
+  group('a published serving that counts the item\'s unit', () {
+    test('2 tacos against "2 tacos" → the serving once, agreeing', () {
+      final pick = pickOption(tacos(), [taco2()])!;
+      expect(pick.multiplier, 1);
+      expect(pick.kcal, 344);
+      expect(pick.unitsAgree, isTrue);
+      expect(pick.sizeUnambiguous, isTrue);
+    });
+
+    test('the count may come from the menu item\'s name ("Two Tacos") when '
+        'the single option names none', () {
+      final pick = pickOption(tacos(), [
+        taco2(label: '', serving: ''),
+      ], menuItem: 'Two Tacos')!;
+      expect(pick.multiplier, 1);
+      expect(pick.kcal, 344);
+      expect(pick.unitsAgree, isTrue);
+    });
+
+    test('another count than the photo shows (3 tacos, "2 tacos") → the '
+        'serving once, suggestion only; never scaled', () {
+      final pick = pickOption(tacos(qty: 3, kcal: 520), [taco2()])!;
+      expect(pick.multiplier, 1);
+      expect(pick.kcal, 344);
+      expect(pick.unitsAgree, isFalse);
+      // One taco against "2 tacos": the published number is for two.
+      final one = pickOption(tacos(qty: 1, kcal: 210), [taco2()])!;
+      expect(one.kcal, 344);
+      expect(one.unitsAgree, isFalse);
+    });
+
+    test('10 pieces against 4/6/10/20 piece sizes counted in "piece" → the '
+        '10 piece at 1×, named', () {
+      final pick = pickOption(countedNuggets(qty: 10, kcal: 600), [
+        ...countedNuggetOptions(),
+      ])!;
+      expect(pick.label, '10 piece');
+      expect(pick.multiplier, 1);
+      expect(pick.kcal, 410);
+      expect(pick.unitsAgree, isTrue);
+      expect(pick.sizeNamed, isTrue);
+      expect(pick.sizeUnambiguous, isTrue);
+    });
+
+    test('6 pieces with a high estimate → the 6 piece, not the nearer '
+        '10 piece', () {
+      final pick = pickOption(countedNuggets(qty: 6, kcal: 400), [
+        ...countedNuggetOptions(),
+      ])!;
+      expect(pick.label, '6 piece');
+      expect(pick.kcal, 250);
+      expect(pick.unitsAgree, isTrue);
+    });
+
+    test('5 pieces: no published size counts 5 → suggestion only, at 1×', () {
+      final pick = pickOption(countedNuggets(qty: 5, kcal: 210), [
+        ...countedNuggetOptions(),
+      ])!;
+      expect(pick.multiplier, 1);
+      expect(pick.unitsAgree, isFalse);
+    });
+
+    test('numbers before another word, fractions and a serving of one count '
+        'nothing', () {
+      final glasses = food(name: 'Lager', kcal: 400, qty: 2, unit: 'glasses');
+      final pint = pickOption(glasses, [
+        option(label: 'Pint', serving: '16 fl oz', unit: 'glass', kcal: 200),
+      ])!;
+      expect(pint.multiplier, 2);
+      expect(pint.unitsAgree, isTrue);
+      final slices = food(name: 'Pizza', kcal: 600, qty: 2, unit: 'slice');
+      final eighth = pickOption(slices, [
+        option(label: 'Slice', serving: '1/8 pie', unit: 'slice', kcal: 300),
+      ])!;
+      expect(eighth.multiplier, 2);
+      expect(eighth.unitsAgree, isTrue);
+      final perTaco = pickOption(tacos(), [
+        taco2(label: 'Taco', serving: '1 taco', kcal: 172),
+      ], menuItem: 'Two Tacos')!;
+      expect(perTaco.multiplier, 2);
+      expect(perTaco.kcal, 344);
+      expect(perTaco.unitsAgree, isTrue);
+    });
+
+    test('decided: 2 tacos at 420 → apply 344, never 688', () {
+      for (final kcal in [420, 350]) {
+        final a = analysis(items: [tacos(kcal: kcal)]);
+        final d = decide(
+          a: a,
+          lookup: lookupOf(tacosResult(), cited: const [jackUrl]),
+          ctx: ctxOf(request: const ['jack_in_the_box']),
+        );
+        expect(d.outcome, AssistOutcome.apply, reason: 'estimate $kcal');
+        expect(d.items.single.proposed.calories, 344);
+        expect(recordAssistDecision(a, d)!['total_calories'], 344);
+      }
+    });
+
+    test('decided: 10 nuggets in pieces → apply the 10 piece (410); 5 → '
+        'a suggestion', () {
+      final ten = decide(
+        a: analysis(items: [countedNuggets(qty: 10, kcal: 430)]),
+        lookup: lookupOf(countedNuggetsResult(), cited: const [mcdUrl]),
+        ctx: ctxOf(request: const ['mcdonalds']),
+      );
+      expect(ten.outcome, AssistOutcome.apply);
+      expect(ten.items.single.proposed.calories, 410);
+      final five = decide(
+        a: analysis(items: [countedNuggets(qty: 5, kcal: 210)]),
+        lookup: lookupOf(countedNuggetsResult(), cited: const [mcdUrl]),
+        ctx: ctxOf(request: const ['mcdonalds']),
+      );
+      expect(five.outcome, AssistOutcome.suggest);
+      expect(five.items.single.reason, AssistReason.unitMismatch);
+    });
+  });
+
   group('grounded', () {
     final rows = <(num, String, bool)>[
       (1050, '1050 Cal', true),
@@ -3758,6 +3879,82 @@ Map<String, dynamic> nuggets(String name) => analysis(
 );
 
 /// A bowl from a confirmed, auto-picked Qdoba spot.
+const String jackUrl = 'https://www.jackinthebox.com/menu/two-tacos';
+
+/// Tacos the photo model counted in "taco".
+Map<String, dynamic> tacos({num qty = 2, num kcal = 420}) => food(
+  name: 'Tacos',
+  kcal: kcal,
+  p: 14,
+  c: 36,
+  f: 24,
+  brand: 'Jack in the Box',
+  qty: qty,
+  unit: 'taco',
+);
+
+/// Jack in the Box's "Two Tacos": one published serving of 2 tacos.
+Map<String, dynamic> taco2({
+  String label = '',
+  String serving = '2 tacos',
+  int kcal = 344,
+}) => option(
+  label: label,
+  serving: serving,
+  unit: 'taco',
+  kcal: kcal,
+  p: 12,
+  c: 32,
+  f: 19,
+);
+
+Map<String, dynamic> tacosResult() => result(
+  chain: 'jack_in_the_box',
+  url: jackUrl,
+  title: 'Two Tacos',
+  matches: [
+    match(menu: 'Two Tacos', options: [taco2()]),
+  ],
+);
+
+/// Nuggets the photo model counted in pieces.
+Map<String, dynamic> countedNuggets({required num qty, required num kcal}) =>
+    food(
+      name: 'Chicken McNuggets',
+      kcal: kcal,
+      p: 23,
+      c: 26,
+      f: 25,
+      brand: "McDonald's",
+      qty: qty,
+      unit: 'pieces',
+    );
+
+/// The 4/6/10/20 piece sizes, each counted in "piece".
+List<Map<String, dynamic>> countedNuggetOptions() => [
+  for (final (n, kcal, p, c, f) in const [
+    (4, 170, 9, 10, 10),
+    (6, 250, 14, 15, 15),
+    (10, 410, 23, 25, 24),
+    (20, 830, 46, 49, 49),
+  ])
+    option(
+      label: '$n piece',
+      serving: '$n pieces',
+      unit: 'piece',
+      kcal: kcal,
+      p: p,
+      c: c,
+      f: f,
+    ),
+];
+
+Map<String, dynamic> countedNuggetsResult() => result(
+  chain: 'mcdonalds',
+  url: mcdUrl,
+  matches: [match(menu: 'Chicken McNuggets', options: countedNuggetOptions())],
+);
+
 AssistContext atQdoba() => ctxOf(
   request: const ['chipotle', 'qdoba'],
   location: const ['qdoba'],
