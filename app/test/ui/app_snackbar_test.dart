@@ -3,6 +3,11 @@
 /// A cold-start share whose verdict needs no analyzer call (duplicate /
 /// already logged — DB-only) can resolve before the first frame mounts the
 /// ScaffoldMessenger; `currentState?.showSnackBar` used to drop it.
+///
+/// Owner decision 2026-11-11 (RC 1.6.0 review, finding 4): a usual-foods
+/// result and its Undo jump the queue. The app's own messages are handed
+/// to the messenger one at a time, so the Undo is shown next and the
+/// "Logged" lines a catch-up queued follow it, none dropped.
 library;
 
 import 'package:flutter/material.dart';
@@ -23,11 +28,21 @@ Future<bool> _seenWithin(WidgetTester tester, String text, int seconds) async {
   return false;
 }
 
+const _used = 'Used your usual numbers: 300 → 350 kcal';
+
 SnackBar _usedSnack(ScaffoldMessengerState messenger) => SnackBar(
     duration: kUsualUndoSnackDuration,
     persist: usualUndoPersists(messenger),
-    content: const Text('Used your usual numbers: 300 → 350 kcal'),
+    content: const Text(_used),
     action: SnackBarAction(label: 'Undo', onPressed: () {}));
+
+/// The snackbar texts on screen now, for a failure message.
+String _onScreen() => [
+      for (final e in find
+          .descendant(of: find.byType(SnackBar), matching: find.byType(Text))
+          .evaluate())
+        (e.widget as Text).data,
+    ].join(' | ');
 
 void main() {
   testWidgets('a message sent before the messenger mounts is shown after '
@@ -38,7 +53,7 @@ void main() {
     await tester.pumpWidget(_app());
     await tester.pump(); // the post-frame flush schedules the snackbar frame
     expect(find.text('held one'), findsOneWidget);
-    // Queued behind the first on the messenger, not lost.
+    // Held behind the first, not lost.
     messengerKey.currentState!.removeCurrentSnackBar();
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
@@ -101,7 +116,7 @@ void main() {
   });
 
   testWidgets('Use on a chip while the lookup Undo snackbar is queued: its '
-      'snackbar is still seen', (tester) async {
+      'snackbar is next, and the lookup Undo follows it', (tester) async {
     await tester.pumpWidget(_app());
     showAppSnackbar('Logged: Big Mac');
     showAppSnackbarWithAction(
@@ -110,15 +125,19 @@ void main() {
     await tester.pump(const Duration(seconds: 1));
     final messenger = messengerKey.currentState!;
     showUsualSnack(messenger, _usedSnack(messenger));
+    expect(await _seenWithin(tester, _used, 2), isTrue,
+        reason: 'the usual Undo jumps the queue');
+    expect(find.text('Used published numbers: 540 → 590 kcal'), findsNothing);
     expect(
         await _seenWithin(
-            tester, 'Used your usual numbers: 300 → 350 kcal', 20),
-        isTrue);
+            tester, 'Used published numbers: 540 → 590 kcal', 11),
+        isTrue,
+        reason: 'the lookup Undo is not dropped');
   });
 
-  testWidgets('Use on a chip after a catch-up logged three photos: the '
-      'queued messages are not dropped, and its snackbar follows them',
-      (tester) async {
+  testWidgets('Use on a chip after a catch-up logged three photos: its '
+      'snackbar is next, for its full time, and the queued messages follow '
+      'it in order', (tester) async {
     await tester.pumpWidget(_app());
     showAppSnackbar('Logged: Oatmeal');
     showAppSnackbar('Logged: Latte');
@@ -128,11 +147,37 @@ void main() {
     expect(find.text('Logged: Oatmeal'), findsOneWidget);
     final messenger = messengerKey.currentState!;
     showUsualSnack(messenger, _usedSnack(messenger));
-    expect(await _seenWithin(tester, 'Logged: Latte', 3), isTrue);
+    // Oatmeal's exit, then the Undo: nothing in between.
+    expect(await _seenWithin(tester, _used, 2), isTrue,
+        reason: 'on screen instead: ${_onScreen()}');
+    // No later message cuts its 8 s short.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text(_used), findsOneWidget);
+    expect(await _seenWithin(tester, 'Logged: Latte', 5), isTrue);
+    expect(find.text(_used), findsNothing);
     expect(await _seenWithin(tester, 'Logged: Banana', 6), isTrue);
-    expect(
-        await _seenWithin(
-            tester, 'Used your usual numbers: 300 → 350 kcal', 6),
-        isTrue);
+  });
+
+  testWidgets('a messenger that went away does not hold later messages '
+      'back', (tester) async {
+    await tester.pumpWidget(_app());
+    showAppSnackbar('Logged: Toast');
+    showAppSnackbar('Logged: Tea');
+    await tester.pump();
+    expect(find.text('Logged: Toast'), findsOneWidget);
+    // The startup error screen, then the app again: the first messenger is
+    // disposed with Toast still up, and its close is never reported.
+    await tester.pumpWidget(const SizedBox());
+    await tester.pumpWidget(_app());
+    showAppSnackbar('Logged: Jam');
+    expect(await _seenWithin(tester, 'Logged: Tea', 2), isTrue);
+    expect(await _seenWithin(tester, 'Logged: Jam', 6), isTrue);
+    // Nothing left held for the next test.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.byType(SnackBar), findsNothing);
   });
 }

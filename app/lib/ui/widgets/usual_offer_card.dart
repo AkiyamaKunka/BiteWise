@@ -153,10 +153,11 @@ const Duration kUsualUndoSnackDuration = Duration(seconds: 8);
 bool usualUndoPersists(ScaffoldMessengerState messenger) =>
     messenger.mounted && MediaQuery.accessibleNavigationOf(messenger.context);
 
-/// Shows [bar] in place of the snackbar that is up now. App messages
-/// already queued behind that one (main.dart showAppSnackbar: a "Logged"
-/// line per photo, a share verdict, a failure) are not dropped: they are
-/// shown first, each for its own few seconds, then [bar] with its Undo.
+/// Shows [bar] in place of the snackbar that is up now, ahead of the app
+/// messages waiting behind that one (main.dart showAppSnackbar: a "Logged"
+/// line per photo, a share verdict, the lookup's Undo). They are not
+/// dropped: main.dart hands them to the messenger one at a time, so they
+/// follow [bar] (owner decision 2026-11-11: the Undo jumps the queue).
 void showUsualSnack(ScaffoldMessengerState messenger, SnackBar bar) {
   messenger
     ..hideCurrentSnackBar()
