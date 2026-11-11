@@ -6335,6 +6335,28 @@ def _process_update(gemini_client, bot: TelegramBot, update: Dict):
     handle_text_message_safe(gemini_client, bot, chat_id, text)
 
 
+def _api_only_idle_loop():
+    """The main thread's loop when TELEGRAM_POLLING=0: runs until
+    KeyboardInterrupt (SIGTERM is routed there too).
+
+    It keeps the two duties the polling loop has besides polling:
+      * stamp progress — the watchdog kills a process whose stamp goes
+        stale, and "idle on purpose" must not look like "hung";
+      * reap an abandoned `claude setup-token` consent — the app never
+        calls /cancel, so "tapped Connect, closed the sheet" would leave a
+        Node process holding a PTY until the next restart, next to every
+        photo and lookup CLI run on a 1 GB VM.
+    Stamp first: killing a session can wait up to 5 s for it to exit.
+    """
+    while True:
+        _stamp_progress()
+        try:
+            claude_auth.reap_expired_session()
+        except Exception:
+            pass
+        time.sleep(30)
+
+
 def main():
     log.info("=" * 50)
     log.info("🤖 CalorieTracker Bot (Corrections Mode)")
@@ -6437,9 +6459,7 @@ def main():
         log.info("Telegram polling is OFF (TELEGRAM_POLLING=0) — serving "
                  "the phone API only. Chat commands will not be answered.")
         try:
-            while True:
-                _stamp_progress()
-                time.sleep(30)
+            _api_only_idle_loop()
         except KeyboardInterrupt:
             log.info("Shutting down.")
             return
