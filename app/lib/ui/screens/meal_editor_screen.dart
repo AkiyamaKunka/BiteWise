@@ -28,7 +28,9 @@
 /// against the stored text the form was loaded from (MealAssist.act /
 /// lookupNow); a meal that changed meanwhile says "This meal was just
 /// updated — please review." and shows the newer meal. The buttons wait
-/// while the form has unsaved typing, so a write never lands under it.
+/// while the form has unsaved typing, and the form waits (read-only)
+/// while one of their writes runs — a lookup the owner's server runs can
+/// be polled for minutes — so a write never lands under typing.
 /// Opening a meal clears its 'updated' dot.
 ///
 /// Usual foods (opened from Today only): a photo meal of today whose foods
@@ -752,6 +754,15 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// The form shows something the user typed since the last load.
   bool get _dirty => _meal != null && _signature() != _loadedSignature;
 
+  /// One of the cards' own writes is running: a lookup the user started
+  /// (polled for up to [kAssistPollWindow] on the owner's server), an
+  /// answer to the source card, or Use my numbers. The form is read-only
+  /// meanwhile. It was open before: typing during a lookup made the
+  /// lookup's write land under it, nothing was said or shown, and the
+  /// next Save answered "This meal was just updated" and threw the typing
+  /// away.
+  bool get _formLocked => _lookingUp || _assistBusy || _usualBusy;
+
   bool get _assistOn =>
       widget.settings != null && widget.settings!.restaurantAssist != 'off';
 
@@ -1070,6 +1081,9 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     // numbers or a suggestion says when it writes nothing.
     final before = meal.analysis;
     final beforeKind = AssistView.of(before).kind;
+    // The form goes read-only; a field left focused would bring the
+    // keyboard back up when the lookup ends.
+    FocusManager.instance.primaryFocus?.unfocus();
     setState(() => _lookingUp = true);
     var run = const AssistRun(AssistSkip.error);
     try {
@@ -1385,6 +1399,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             0;
     final assistCard = _assistSection();
     _shownDirty = _dirty;
+    final locked = _formLocked;
     final usualCard = _usualSection(_shownDirty);
     return Scaffold(
       appBar: AppBar(
@@ -1443,6 +1458,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           TextField(
             key: const Key('editorDescription'),
             controller: _desc,
+            readOnly: locked,
             textCapitalization: TextCapitalization.sentences,
             decoration: InputDecoration(
               labelText: context.l10n.editorDescriptionLabel,
@@ -1458,13 +1474,13 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
             [
               OutlinedButton.icon(
                 key: const Key('editorDateButton'),
-                onPressed: _pickDate,
+                onPressed: locked ? null : _pickDate,
                 icon: const Icon(Icons.event_outlined, size: 18),
                 label: Text(_draft.dateIso),
               ),
               OutlinedButton.icon(
                 key: const Key('editorTimeButton'),
-                onPressed: _pickTime,
+                onPressed: locked ? null : _pickTime,
                 icon: const Icon(Icons.schedule_outlined, size: 18),
                 // Locale clock (24h in zh), like every other time in the UI.
                 label: Text(context.clock(_draft.time)),
@@ -1481,6 +1497,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
           _NumberField(
             fieldKey: const Key('editorCalories'),
             controller: _cal,
+            readOnly: locked,
             label: context.l10n.editorCaloriesLabel,
             suffixText: context.l10n.editorKcalSuffix,
           ),
@@ -1500,16 +1517,19 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               _NumberField(
                   fieldKey: const Key('editorProtein'),
                   controller: _pro,
+                  readOnly: locked,
                   label: context.l10n.editorProteinLabel,
                   suffixText: context.l10n.editorGramsSuffix),
               _NumberField(
                   fieldKey: const Key('editorCarbs'),
                   controller: _carb,
+                  readOnly: locked,
                   label: context.l10n.editorCarbsLabel,
                   suffixText: context.l10n.editorGramsSuffix),
               _NumberField(
                   fieldKey: const Key('editorFat'),
                   controller: _fat,
+                  readOnly: locked,
                   label: context.l10n.editorFatLabel,
                   suffixText: context.l10n.editorGramsSuffix),
             ],
@@ -1553,13 +1573,14 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
               key: ObjectKey(_draft.items[i]),
               index: i,
               ctrls: _itemCtrls[i],
+              locked: locked,
               onRemove: () => _removeItem(_draft.items[i]),
             ),
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton.icon(
               key: const Key('addItemRow'),
-              onPressed: () {
+              onPressed: locked ? null : () {
                 _harvest();
                 setState(() {
                   // The first row is seeded from the hand-typed totals
@@ -1615,11 +1636,16 @@ class _NumberField extends StatelessWidget {
     required this.controller,
     required this.label,
     this.suffixText,
+    this.readOnly = false,
   });
 
   final Key fieldKey;
   final TextEditingController controller;
   final String label;
+
+  /// One of the editor's own writes is running ([_MealEditorScreenState
+  /// ._formLocked]).
+  final bool readOnly;
 
   /// The unit, kept out of [label] where a third of the row can't hold it.
   final String? suffixText;
@@ -1628,6 +1654,7 @@ class _NumberField extends StatelessWidget {
   Widget build(BuildContext context) => TextField(
         key: fieldKey,
         controller: controller,
+        readOnly: readOnly,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
           labelText: label,
@@ -1644,9 +1671,13 @@ class _ItemRow extends StatelessWidget {
     required this.index,
     required this.ctrls,
     required this.onRemove,
+    this.locked = false,
   });
 
   final int index;
+
+  /// The form is read-only ([_MealEditorScreenState._formLocked]).
+  final bool locked;
   final ({TextEditingController name, TextEditingController cal,
       TextEditingController pro, TextEditingController carb,
       TextEditingController fat}) ctrls;
@@ -1663,6 +1694,7 @@ class _ItemRow extends StatelessWidget {
                   child: TextField(
                     key: Key('itemName$index'),
                     controller: ctrls.name,
+                    readOnly: locked,
                     decoration: InputDecoration(
                       labelText: context.l10n.editorItemLabel,
                       border: const OutlineInputBorder(),
@@ -1674,7 +1706,7 @@ class _ItemRow extends StatelessWidget {
                   key: Key('removeItem$index'),
                   tooltip: context.l10n.editorRemoveItemTooltip,
                   icon: const Icon(Icons.close),
-                  onPressed: onRemove,
+                  onPressed: locked ? null : onRemove,
                 ),
               ],
             ),
@@ -1688,18 +1720,22 @@ class _ItemRow extends StatelessWidget {
                 _NumberField(
                     fieldKey: Key('itemCal$index'),
                     controller: ctrls.cal,
+                    readOnly: locked,
                     label: context.l10n.editorItemKcalLabel),
                 _NumberField(
                     fieldKey: Key('itemPro$index'),
                     controller: ctrls.pro,
+                    readOnly: locked,
                     label: '${context.l10n.macroProteinShort} g'),
                 _NumberField(
                     fieldKey: Key('itemCarb$index'),
                     controller: ctrls.carb,
+                    readOnly: locked,
                     label: '${context.l10n.macroCarbsShort} g'),
                 _NumberField(
                     fieldKey: Key('itemFat$index'),
                     controller: ctrls.fat,
+                    readOnly: locked,
                     label: '${context.l10n.macroFatShort} g'),
               ],
             ),

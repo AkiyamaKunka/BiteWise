@@ -1445,6 +1445,99 @@ void main() {
       expect(find.byKey(const Key('assistUseEstimate')), findsOneWidget);
     });
 
+    // RC 1.6.0: the form stayed open while the lookup ran. Typing then
+    // let the lookup's write land under it: no result card, no word, and
+    // Save answered "This meal was just updated" and dropped the typing.
+    testWidgets('Look up: the form waits while it runs, then shows the '
+        'result and saves over it', (tester) async {
+      late FakeDao store;
+      var calls = 0;
+      final (dao, _) = await open(
+        tester,
+        bigMacAnalysis(),
+        setUp: (a) {
+          store = a.dao as FakeDao;
+          a.onLookup = (id, useLocation, chainKey) async {
+            calls++;
+            if (calls < 3) return const AssistRun(AssistSkip.pending);
+            final m = store.meals.first;
+            await store.updateMealAnalysisIfUnchanged(
+              id,
+              expectedRaw: store.rawOf(m),
+              analysis: suggestedBigMac(),
+            );
+            return const AssistRun(AssistReason.notGrounded, wrote: true);
+          };
+        },
+      );
+      const fields = [
+        'editorDescription',
+        'editorCalories',
+        'editorProtein',
+        'editorCarbs',
+        'editorFat',
+        'itemName0',
+        'itemCal0',
+        'itemPro0',
+        'itemCarb0',
+        'itemFat0',
+      ];
+      const buttons = ['editorDateButton', 'editorTimeButton'];
+      bool readOnly(String key) =>
+          tester.widget<TextField>(find.byKey(Key(key))).readOnly;
+      bool enabled(String key) => tester
+          .widget<ButtonStyleButton>(find.descendant(
+              of: find.byKey(Key(key)),
+              matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+              matchRoot: true))
+          .enabled;
+      bool iconEnabled(String key) =>
+          tester.widget<IconButton>(find.byKey(Key(key))).onPressed != null;
+
+      // A field focused before the lookup: its keyboard goes with it.
+      await tester.tap(find.byKey(const Key('editorDescription')));
+      await tester.pump();
+      expect(tester.testTextInput.isVisible, isTrue);
+
+      await tester.ensureVisible(find.byKey(const Key('assistLookUp')));
+      await tester.tap(find.byKey(const Key('assistLookUp')));
+      await tester.pump();
+      expect(find.byKey(const Key('assistLookingUp')), findsOneWidget);
+      for (final k in fields) {
+        expect(readOnly(k), isTrue, reason: '$k is open for typing');
+      }
+      for (final k in [...buttons, 'addItemRow']) {
+        expect(enabled(k), isFalse, reason: '$k is open');
+      }
+      expect(iconEnabled('removeItem0'), isFalse);
+      expect(tester.testTextInput.isVisible, isFalse,
+          reason: 'the keyboard is still up over a read-only form');
+
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pump(const Duration(seconds: 1));
+      await tester.pumpAndSettle();
+      expect(calls, 3);
+      // The result shows, and the form is open again.
+      expect(find.byKey(const Key('assistUsePublished')), findsOneWidget);
+      for (final k in fields) {
+        expect(readOnly(k), isFalse, reason: '$k stayed read-only');
+      }
+      for (final k in [...buttons, 'addItemRow']) {
+        expect(enabled(k), isTrue, reason: '$k stayed disabled');
+      }
+      expect(iconEnabled('removeItem0'), isTrue);
+
+      // Typed now, over the newer meal: Save writes it, keeping the
+      // suggestion.
+      await tester.enterText(
+          find.byKey(const Key('editorDescription')), 'Big Mac, no sauce');
+      await tester.tap(find.byKey(const Key('saveMealButton')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('editorSaveConflict')), findsNothing);
+      expect(dao.meals.first.analysis['meal_description'], 'Big Mac, no sauce');
+      expect(dao.meals.first.analysis['assist'], isNotNull);
+    });
+
     testWidgets('Look up: still running after four minutes, or nothing to '
         'ask about, says so', (tester) async {
       var (_, assist) = await open(
