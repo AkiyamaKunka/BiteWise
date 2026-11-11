@@ -210,10 +210,13 @@ Future<void> showRestoreOffer(BuildContext context, BackupCoordinator backup,
       ],
     ),
   );
+  if (choice == null) {
+    // Not Now for this launch only: the catch-up it held may run.
+    await backup.dismissOffer();
+    return;
+  }
   if (!context.mounted) return;
   switch (choice) {
-    case null:
-      backup.prompt.value = null;
     case _OfferChoice.restore:
       final s = await backup.restore(candidate);
       if (!context.mounted) return;

@@ -335,6 +335,42 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('the restore offer swiped away holds the photo catch-up no '
+      'longer', (tester) async {
+    // The launch holds it (30 min lease) while the offer is open; every
+    // answer lets it go, and so does dismissing it (Not Now for this
+    // launch only).
+    final ok = FakeCloudTransport();
+    final h = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 4,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    ok.put(kRecordsFileName,
+        '${h.envelopePrefix(DateTime.utc(2026, 11, 1))}{"meals":[]}}');
+    final b = BackupCoordinator(
+        dao: dao,
+        transport: ok,
+        prefs: prefs,
+        tempDir: () async => Directory.systemTemp,
+        gatherWait: Duration.zero);
+    addTearDown(b.stop);
+    await tester.runAsync(() => b.launchCheckForTest());
+    final offer = b.prompt.value as RestoreOfferPrompt;
+    expect(backupHoldsCatchUp(prefs, DateTime.now()), isTrue);
+    await pump(tester);
+    final shown = showRestoreOffer(tester.element(find.byType(DataSection)),
+        b, offer.candidate, 0);
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupRestoreTitle), findsOneWidget);
+    await tester.tapAt(const Offset(195, 20)); // the barrier
+    await tester.pumpAndSettle();
+    await shown;
+    expect(find.text(_en.backupRestoreTitle), findsNothing);
+    expect(b.prompt.value, isNull);
+    expect(backupHoldsCatchUp(prefs, DateTime.now()), isFalse);
+    expect(prefs.getStringList(BackupPrefs.kOffersAnswered), isNull,
+        reason: 'unanswered: it comes back at the next launch');
+  });
+
   testWidgets('with iCloud Backup off, the restore offer says nothing about '
       'taking the backup over', (tester) async {
     // Nothing would write over it, and its iPhone goes on backing up.

@@ -1493,6 +1493,14 @@ class BackupCoordinator {
     await _afterChoice();
   }
 
+  /// The offer dismissed without an answer (swiped away): Not Now for this
+  /// launch only, so it comes back at the next one, and the photo catch-up
+  /// it held is let go now rather than when the lease runs out.
+  Future<void> dismissOffer() async {
+    prompt.value = null;
+    await _releaseCatchUp();
+  }
+
   /// Start Fresh: delete [c]'s backup (after the red confirm) and back up
   /// this phone from scratch, without the 24 h wait.
   /// A delete that did not finish leaves the offer unanswered: it comes
