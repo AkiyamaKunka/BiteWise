@@ -2785,8 +2785,11 @@ class MealAssist {
   /// assist waits for one), the photo's location may be read for this
   /// meal at all (iOS, a recipient that may receive location-derived
   /// chains, GPS, a RESTAURANT meal — [_locationPossible]), and the fix
-  /// passes the place step's own gate (no coarse or stale fix becomes a
-  /// cell). Never throws.
+  /// passes the place step's own gate and is verified there (no coarse or
+  /// stale fix becomes a cell, and neither does a glasses photo without a
+  /// GPS fix time: the Meta AI app may stamp the phone's position at
+  /// import, possibly at home, so that fix only ever suggests). Never
+  /// throws.
   bool canLearnPlace(Meal meal) {
     try {
       final s = _readSettings();
@@ -2800,7 +2803,8 @@ class MealAssist {
         meal.analysis['capture'],
         glasses: isMetaGlassesAnalysis(meal.analysis),
       );
-      return placeGate(geo).reason == null;
+      final gate = placeGate(geo);
+      return gate.passes && gate.verified;
     } catch (_) {
       return false;
     }
