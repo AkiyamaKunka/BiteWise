@@ -37,7 +37,7 @@ Identifiers that must match everywhere:
 | Apple team in `Runner.xcodeproj` today | `WLQB3YB22M` — the paid Apple Developer Program (Individual) since 2026-10-29; the Team ID did not change on enrolment (§ 1.2), so the keychain and the dev build carry over |
 | Android package / application id | `dev.calorietracker.calorie_tracker` (permanent after the first Play upload) |
 | Display name | `Chopstats` (Info.plist `CFBundleDisplayName` and en `InfoPlist.strings`, both targets; 筷拍 under zh-Hans); store name `Chopstats · 筷拍` (owner decision R-F9, 2026-10-29; formerly BiteWise) |
-| Version | `app/pubspec.yaml` `version: 1.6.0+8` → `CFBundleShortVersionString` / `versionName` = `1.6.0`; the build number is stamped by CI (§ 5) |
+| Version | `app/pubspec.yaml` `version: 1.7.0+9` → `CFBundleShortVersionString` / `versionName` = `1.7.0`; the build number is stamped by CI (§ 5) |
 
 ---
 
@@ -504,7 +504,7 @@ All done; this is what each one is and where it lives.
 - `ITSAppUsesNonExemptEncryption = false` in `app/ios/Runner/Info.plist`
   (the app only uses OS TLS, the keychain and SHA hashing, which are exempt;
   without the key every build sits in "Missing Compliance" until answered).
-- `app/pubspec.yaml` is `1.6.0+8`; the ShareExtension takes its version from
+- `app/pubspec.yaml` is `1.7.0+9`; the ShareExtension takes its version from
   `$(FLUTTER_BUILD_NAME)` / `$(FLUTTER_BUILD_NUMBER)`.
 
 1. **Privacy manifests — done.** Both targets ship a
@@ -1174,7 +1174,7 @@ GitHub release notes warn about it either way.
 ## 8. Running a release (cheat sheet)
 
 ```bash
-# 1. in the shipping PR: app/pubspec.yaml  version: 1.6.0+8   (the +N is for hand builds only)
+# 1. in the shipping PR: app/pubspec.yaml  version: 1.7.0+9   (the +N is for hand builds only)
 # 2. edit app/android/whatsnew/whatsnew-*.{en-US,zh-CN}
 # 3. merge to main, then
 git tag v1.6.0 && git push origin v1.6.0     # iOS + Android lanes, external-eligible TestFlight build, GitHub Release
