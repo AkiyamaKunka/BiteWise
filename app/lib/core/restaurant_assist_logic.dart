@@ -61,7 +61,12 @@ import 'chain_match.dart';
 import 'coerce.dart';
 import 'contracts.dart';
 import 'restaurant_lookup_contract.dart'
-    show composeLookupItem, kLookupMaxItems;
+    show
+        composeLookupItem,
+        kLookupBrandMax,
+        kLookupMaxItems,
+        kLookupMerchantMax,
+        printedChainKey;
 
 // ─── Thresholds (named so the diagnostics log can quote them) ──────────
 
@@ -1677,15 +1682,20 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       : kLookupMaxItems;
 
   // ── Evidence for THIS chain ──
+  // Printed text is read exactly as the request read it ([printedChainKey],
+  // the reading of composeLookupItem and chainNameOnly): a brand or receipt
+  // line with a store number ("CHIPOTLE 2381") that put the chain in the
+  // request is evidence for it here too, and another chain's numbered
+  // brand is a conflict.
   final brandItems = <int>{
     for (var i = 0; i < itemCount; i++)
       if (rawItems[i] is Map &&
-          matchChain(itemContextFields(rawItems[i]).brand) == chainKey)
+          printedChainKey((rawItems[i] as Map)['brand'], kLookupBrandMax) ==
+              chainKey)
         i,
   };
   final merchant =
-      fields.orderMerchant.isNotEmpty &&
-      matchChain(fields.orderMerchant) == chainKey;
+      printedChainKey(base['order_merchant'], kLookupMerchantMax) == chainKey;
   final isRestaurant = fields.restaurantContext == RestaurantContext.restaurant;
   final fromLocation = ctx.locationChainKeys.contains(chainKey);
   final blocked = ctx.blockedChainKeys.contains(chainKey);
@@ -1703,7 +1713,8 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
     for (var i = 0; i < itemCount; i++)
       if (rawItems[i] is Map &&
           !brandItems.contains(i) &&
-          matchChain(itemContextFields(rawItems[i]).brand) != null)
+          printedChainKey((rawItems[i] as Map)['brand'], kLookupBrandMax) !=
+              null)
         i,
   };
   final AssistEvidenceKind? evidence = brandItems.isNotEmpty

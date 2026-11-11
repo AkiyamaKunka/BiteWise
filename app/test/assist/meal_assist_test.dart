@@ -590,6 +590,34 @@ void main() {
       expect(h.lookups.submits, hasLength(1));
     });
 
+    for (final (what, merchant, brand, status, evidence) in const [
+      (
+        'a receipt merchant',
+        'MCDONALDS 2381',
+        '',
+        AssistStatus.suggested,
+        'order_merchant',
+      ),
+      (
+        'an item brand',
+        '',
+        'MCDONALDS 2381',
+        AssistStatus.applied,
+        'item_brand',
+      ),
+    ]) {
+      test('$what printed with a store number ("MCDONALDS 2381"): the lookup '
+          'it sends reaches the meal and adds no miss', () async {
+        final id = h.add(_bigMac(brand: brand, merchant: merchant));
+        await h.assist.sweep();
+        expect(h.lookups.submits.single.chainKeys, ['mcdonalds']);
+        final block = h.analysisOf(id)['assist'] as Map?;
+        expect(block?['status'], status);
+        expect(block?['evidence'], evidence);
+        expect(await h.state.misses(), isEmpty);
+      });
+    }
+
     test('a meal already looked up (any assist block) is never looked up '
         'again', () async {
       h.add(_bigMac());

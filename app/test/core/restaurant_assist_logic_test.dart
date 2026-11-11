@@ -443,6 +443,40 @@ void main() {
         outcome: AssistOutcome.suggest,
         reason: AssistReason.orderMerchantOnly,
       ),
+      // A printed name with a standalone store number is read the way the
+      // request read it (chainNameOnly): the lookup it sent is not thrown
+      // away as no_evidence.
+      (
+        name: "order_merchant 'CHIPOTLE 2381' alone → suggest",
+        run: () => decide(
+          a: analysis(
+            items: [food(brand: '')],
+            context: 'takeout',
+            merchant: 'CHIPOTLE 2381',
+          ),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.orderMerchantOnly,
+      ),
+      (
+        name: "item brand 'CHIPOTLE 2381' → item-brand evidence, apply",
+        run: () =>
+            decide(a: analysis(items: [food(brand: 'CHIPOTLE 2381')])),
+        outcome: AssistOutcome.apply,
+        reason: AssistReason.ok,
+      ),
+      (
+        name:
+            "a bowl printed 'CHIPOTLE 2381' at a confirmed Qdoba spot "
+            '→ suggest (brand_conflict)',
+        run: () => decide(
+          a: analysis(items: [food(brand: 'CHIPOTLE 2381')]),
+          lookup: lookupOf(qdobaResult(), cited: const [qdobaUrl]),
+          ctx: atQdoba(),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.brandConflict,
+      ),
       // Another chain's printed brand beats a location match.
       (
         name:
@@ -2097,6 +2131,103 @@ void main() {
       expect(pickOption(food(), [...junk, option(kcal: 1000)])!.optionIndex, 8);
       expect(pickOption(food(kcal: 0), [option()]), isNull);
       expect(pickOption(food(), 'options'), isNull);
+    });
+  });
+
+  // The request names a chain from printed text through chainNameOnly
+  // (the whole text, then its head before a separator or a standalone
+  // number); the decision must read that text the same way, or the lookup
+  // it paid for is rejected as no_evidence and the meal denylisted.
+  group('a printed name with a standalone store number', () {
+    AssistDecision bigMac({
+      String brand = '',
+      String merchant = '',
+      List<String>? request,
+    }) {
+      final a = analysis(
+        items: [
+          food(
+            name: 'Big Mac',
+            kcal: 540,
+            p: 24,
+            c: 44,
+            f: 30,
+            brand: brand,
+            unit: 'sandwich',
+          ),
+        ],
+        context: 'takeout',
+        merchant: merchant,
+      );
+      final r = result(
+        chain: 'mcdonalds',
+        url: mcdUrl,
+        matches: [
+          match(
+            menu: 'Big Mac',
+            options: [
+              option(
+                serving: '1 sandwich',
+                unit: 'sandwich',
+                kcal: 590,
+                p: 25,
+                c: 46,
+                f: 34,
+              ),
+            ],
+          ),
+        ],
+      );
+      return decide(
+        a: a,
+        lookup: lookupOf(r, cited: const [mcdUrl]),
+        ctx: ctxOf(
+          request:
+              request ??
+              LookupRequest.compose({
+                'items': a['food_items'],
+                'order_merchant': a['order_merchant'],
+              }).chainKeys,
+        ),
+      );
+    }
+
+    test('the request names the chain for each shape', () {
+      for (final printed in [
+        'MCDONALDS 2381',
+        "McDonald's 1540 Broadway",
+      ]) {
+        expect(
+          chainNameOnly(printed, kLookupMerchantMax),
+          "McDonald's",
+          reason: printed,
+        );
+        expect(printedChainKey(printed, kLookupBrandMax), 'mcdonalds');
+      }
+    });
+
+    test('a receipt merchant → order-merchant evidence, a suggestion', () {
+      for (final printed in [
+        'MCDONALDS 2381',
+        "McDonald's 1540 Broadway",
+        "McDonald's #2381",
+      ]) {
+        final d = bigMac(merchant: printed);
+        expect(d.evidence, AssistEvidenceKind.orderMerchant, reason: printed);
+        expect(d.outcome, AssistOutcome.suggest, reason: printed);
+      }
+    });
+
+    test('an item brand → item-brand evidence', () {
+      final d = bigMac(brand: 'MCDONALDS 2381');
+      expect(d.evidence, AssistEvidenceKind.itemBrand);
+      expect(d.reason, isNot(AssistReason.noEvidence));
+    });
+
+    test('a number that is part of no chain name still names nothing', () {
+      expect(printedChainKey('STORE 2381', kLookupBrandMax), isNull);
+      final d = bigMac(merchant: 'STORE 2381', request: const ['mcdonalds']);
+      expect(d.reason, AssistReason.noEvidence);
     });
   });
 
