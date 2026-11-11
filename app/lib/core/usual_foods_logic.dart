@@ -1095,6 +1095,12 @@ bool _deepEq(Object? a, Object? b) {
 /// previous `user` (or none) back; the totals get their previous values
 /// back while they still read what Use wrote, else they move back by the
 /// delta.
+///
+/// Null too when the revert would break a restaurant lookup's stamp that
+/// holds now (assistStampValid): a lookup applied after the Use stamped
+/// the meal totals it wrote, and moving them took away the lookup's own
+/// Undo and "Use AI estimate" and left its items published for good,
+/// though nobody touched them (RC 1.6.0).
 Map<String, dynamic>? revertUsualOffer(
     Map<String, dynamic> current, UsualUndo undo) {
   if (_hasLeftover(current) || undo.indices.isEmpty) return null;
@@ -1147,6 +1153,9 @@ Map<String, dynamic>? revertUsualOffer(
   } else {
     _moveTotals(out, delta);
   }
+  // A lookup stamped the meal after the Use: the caller says the meal
+  // changed since (usualUndoStale) rather than break that stamp.
+  if (assistStampValid(current) && !assistStampValid(out)) return null;
   return out;
 }
 

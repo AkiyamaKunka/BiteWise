@@ -3,9 +3,12 @@
 // undo, the My usual foods list and the re-log whitelist.
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
-    show assistStampValid, kAssistVersion;
+    show applyAssist, assistStampValid, kAssistVersion;
 import 'package:calorie_tracker/core/usual_foods_logic.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../support/assist_fixtures.dart'
+    show bigMacAnalysis, bigMacFound, decideFixture;
 
 // ─── Fixtures ──────────────────────────────────────────────────────────
 
@@ -1036,6 +1039,34 @@ void main() {
       expect(back['total_calories'], 450);
       expect((back['food_items'] as List)[0],
           (m.analysis['food_items'] as List)[0]);
+    });
+
+    // RC 1.6.0 (gate): Use on the oatmeal, then a lookup applied to the
+    // Big Mac of the same meal, then the Use's Undo. Moving the totals
+    // under the lookup's stamp took away its Undo and "Use AI estimate"
+    // and left the Big Mac published for good.
+    test('revert is null when it would break a lookup applied since', () {
+      final bigMac = bigMacAnalysis();
+      final mac = (bigMac['food_items'] as List).single as Map<String, dynamic>;
+      Map<String, dynamic> withOatmeal(Map<String, dynamic> oatmeal) => {
+            ...bigMac,
+            'food_items': [mac, oatmeal],
+            'total_calories': 540 + (oatmeal['estimated_calories'] as num),
+            'total_protein_g': 24 + (oatmeal['protein_g'] as num),
+            'total_carbs_g': 44 + (oatmeal['carbs_g'] as num),
+            'total_fat_g': 30 + (oatmeal['fat_g'] as num),
+          };
+      final before = withOatmeal(item('Oatmeal', 300));
+      final afterUse = withOatmeal(item('Oatmeal', 350,
+          p: 12, c: 55, f: 8, user: mark([350, 12, 55, 8])));
+      final undo = UsualUndo(before: before, after: afterUse, indices: [1]);
+      expect(revertUsualOffer(afterUse, undo), before,
+          reason: 'control: with no lookup the Use is undone');
+
+      final applied =
+          applyAssist(afterUse, decideFixture(afterUse, bigMacFound()))!;
+      expect(assistStampValid(applied), isTrue);
+      expect(revertUsualOffer(applied, undo), isNull);
     });
   });
   group('My usual foods: keys and ranking (T37)', () {
