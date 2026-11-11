@@ -71,7 +71,7 @@ class LookupCostPolicy {
     this.maxUsdPerLookup = 0.05,
     this.maxSearches = 2,
     this.maxContinuations = 2,
-    this.maxOutputTokens = 1500,
+    this.maxOutputTokens = 6000,
     this.promptTokensAllowance = 4000,
     this.tokensPerSearchAllowance = 10000,
     this.unknownModelAllowanceUsd = 0.02,
@@ -88,6 +88,16 @@ class LookupCostPolicy {
 
   /// pause_turn continuations (Anthropic only).
   final int maxContinuations;
+
+  /// The answer's token cap (Anthropic and OpenRouter `max_tokens`, OpenAI
+  /// and xAI `max_output_tokens`). It holds the largest answer the shared
+  /// prompt asks for — every published size of up to 12 items
+  /// (`kLookupMaxItems`), about 3,500 tokens laid out like the prompt's
+  /// example — plus room for thinking: Haiku 5.5 thinks by default and an
+  /// OpenRouter reasoning model reasons, both inside this cap. A cut answer
+  /// is a permanent 'truncated' after the searches were paid. Output is
+  /// billed as written, so a larger cap costs only what an answer needs;
+  /// the Anthropic worst case is ~2.5¢, under the 5¢ ceiling.
   final int maxOutputTokens;
 
   /// Worst-case input assumptions for the pre-flight check: the prompt —

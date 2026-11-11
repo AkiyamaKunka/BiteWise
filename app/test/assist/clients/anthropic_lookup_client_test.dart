@@ -108,7 +108,7 @@ void main() {
       expect(body.keys.toSet(),
           {'model', 'max_tokens', 'output_config', 'messages', 'tools'});
       expect(body['model'], 'claude-haiku-5-5');
-      expect(body['max_tokens'], 1500);
+      expect(body['max_tokens'], 6000);
       expect(body['output_config'], {'effort': 'low'});
       expect(body['tools'], [
         {
@@ -248,7 +248,7 @@ void main() {
         (_) => json200(_pausedWithCallPending()),
         (_) => json200(_resumedPastTheLimit()),
       ]);
-      // First worst case 2.3¢ fits; after ~2.1¢ spent, the resume fits
+      // First worst case 2.54¢ fits; after ~2.1¢ spent, the resume fits
       // only priced as what it is: tokens, no search left to buy.
       final o = await _client(s,
               policy: const LookupCostPolicy(maxUsdPerLookup: 0.03))
@@ -301,10 +301,11 @@ void main() {
           (_) => json200(paused),
           (_) => fixture200('anthropic_pause_2.json'),
         ]);
-        // The resume fits the cap only priced with no search left.
+        // The resume fits the cap only priced with no search left: 2.54¢
+        // charged, then 0.6¢ of tokens, against 3.5¢.
         final o = await _client(s,
                 budget: ledger,
-                policy: const LookupCostPolicy(maxUsdPerLookup: 0.03))
+                policy: const LookupCostPolicy(maxUsdPerLookup: 0.035))
             .submit(bigMacRequest);
         expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
         expect(o.searches, 2);
@@ -315,7 +316,7 @@ void main() {
         expect(
             spent,
             closeTo(
-                0.02 + haikuUsd(4000 + 2 * 10000, 1500) + haikuUsd(8890, 380),
+                0.02 + haikuUsd(4000 + 2 * 10000, 6000) + haikuUsd(8890, 380),
                 1e-12));
         // …but never reported as tokens the reply did not report.
         expect(o.cost.inputTokens, 8890);
@@ -386,8 +387,8 @@ void main() {
             o.cost.usd,
             closeTo(
                 0.01 +
-                    haikuUsd(4000 + 10000, 1500) +
-                    haikuUsd(4000 + 10000 + 1500, 1500),
+                    haikuUsd(4000 + 10000, 6000) +
+                    haikuUsd(4000 + 10000 + 6000, 6000),
                 1e-12));
       });
 
