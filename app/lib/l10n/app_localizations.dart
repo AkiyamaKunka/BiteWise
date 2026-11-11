@@ -3498,6 +3498,18 @@ abstract class AppLocalizations {
   /// **'no server address or upload key is set'**
   String get reasonNoServerKey;
 
+  /// No description provided for @reasonNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'this AI service is not allowed to receive your photos'**
+  String get reasonNotAllowed;
+
+  /// No description provided for @errNotAllowed.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing was sent: this AI service is not allowed to receive your photos. Chopstats asks first the next time you add one.'**
+  String get errNotAllowed;
+
   /// No description provided for @errRegionBlocked.
   ///
   /// In en, this message translates to:

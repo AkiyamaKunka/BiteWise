@@ -154,6 +154,11 @@ const String glassesCappedReason = 'glasses_capped';
 /// released, nothing deducted; a later scan or a retry asks again.
 const String leftoverConflictReason = 'leftover_conflict';
 
+/// [PhotoOutcome.reason] of a photo let go, unsent, because the AI
+/// recipient a send would reach was not allowed when its turn came
+/// ([AiSendGate]): released, nothing hashed or uploaded.
+const String notAllowedReason = 'not_allowed';
+
 /// The Glasses check card's outcome (glasses_check.dart) for [o], or null
 /// for a verdict that is not this photo's own: already logged, being
 /// analyzed by another run, a deliberate duplicate of minutes ago.
@@ -246,6 +251,33 @@ class AutoScanLatch {
   final Future<void> Function() clear;
 }
 
+/// The AI consent (App Store 5.1.2(i)) as the pipeline reads it AT THE
+/// SEND. The UI asks before a photo is ADMITTED — the add flow, a shared
+/// photo's gate, the Watch Camera Roll switch, a provider change while it
+/// is on (ui/ai_consent.dart) — but an admitted photo can wait its turn in
+/// the FIFO behind another one, and the analyzer picks its provider per
+/// call. Without this second read, a photo queued when Settings › Stop
+/// Sharing was confirmed was still uploaded once the photo in flight ended
+/// ("Stopped — nothing more is sent to …"), and one queued across a
+/// provider switch went to a recipient nobody had allowed (2026-11-10).
+/// It only ever holds a photo back; every gate before it stands as it was.
+/// Built by `aiSendGateFor` (background_glue.dart) in production.
+class AiSendGate {
+  const AiSendGate({required this.allowed, this.refresh});
+
+  /// Whether a photo may go to the recipient a send would reach right now:
+  /// it is allowed, or no key is set (nothing can leave then, and the
+  /// analyzer answers with its own 'no key' line). Read with no await
+  /// between it and the analyzer call. A throw counts as not allowed.
+  final bool Function() allowed;
+
+  /// Re-read the consent from disk before [allowed] is asked at the send:
+  /// the background run is another isolate with its own preferences cache,
+  /// and the open app may have withdrawn the consent since it loaded. Null
+  /// (the app's own engine, tests): [allowed] is trusted as is.
+  final Future<void> Function()? refresh;
+}
+
 class PhotoPipeline {
   final MealsDao dao;
   final AnalyzerService analyzer;
@@ -269,6 +301,11 @@ class PhotoPipeline {
   /// Null (tests, the add flow's fallback instance) = no latch: every
   /// automatic photo reaches the analyzer.
   final AutoScanLatch? latch;
+
+  /// The AI consent, read again when a photo's turn comes and once more at
+  /// the send ([AiSendGate]). Null (tests, the add flow's fallback
+  /// instance, which asks right before it runs): every photo may be sent.
+  final AiSendGate? sendGate;
 
   /// True in the iOS background engine (runHeadlessBackfill): a photo the
   /// analyzer could not turn into upload bytes is DEFERRED — released,
@@ -377,6 +414,7 @@ class PhotoPipeline {
       this.notify,
       this.onMealSaved,
       this.latch,
+      this.sendGate,
       this.deferUndecodable = false,
       this.backgroundTime,
       this.backgrounded,
@@ -693,6 +731,30 @@ class PhotoPipeline {
     } catch (_) {}
   }
 
+  /// [sendGate]'s answer right now: whether a photo may be sent to the
+  /// recipient a send would reach. Synchronous, so the caller can ask with
+  /// no await before the analyzer call. A throwing gate holds the photo
+  /// back: a consent that cannot be read is not a consent.
+  bool _sendAllowed() {
+    final gate = sendGate;
+    if (gate == null) return true;
+    try {
+      return gate.allowed();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// [AiSendGate.refresh], contained: a store that cannot be re-read
+  /// leaves this engine's own copy to decide.
+  Future<void> _refreshSendGate() async {
+    final refresh = sendGate?.refresh;
+    if (refresh == null) return;
+    try {
+      await refresh();
+    } catch (_) {}
+  }
+
   /// The photo's verdict once [abandon] ran: retryable, so the intake
   /// releases it and the frontier halts in front of it. Releases the
   /// reservation itself when [abandon] could not (it was taken after).
@@ -768,6 +830,14 @@ class PhotoPipeline {
       // row, no model, and a terminal verdict (the late-import carry drops
       // it, the frontier passes it). A deliberate add is the user's call.
       if (_excludesGlasses(photo)) return _glassesExcluded;
+      // The recipient a send would reach is not allowed NOW ([AiSendGate]):
+      // the consent was withdrawn, or the provider changed, while this
+      // photo waited its turn. Let go before it is hashed or reserved — a
+      // deliberate reservation reclaims a skipped/failed tombstone, and
+      // releasing it afterwards would delete that row. Not while a verdict
+      // this photo already got is being settled ([held]): nothing is
+      // uploaded then.
+      if (held == null && !_sendAllowed()) return _notAllowed;
       // The automatic-analysis latch is armed: release the photo before
       // even hashing it — no ledger row, no analyzer call, no upload. It
       // stays eligible (retryable), so the scan after the fix picks it up.
@@ -912,7 +982,19 @@ class PhotoPipeline {
       ];
 
       final revision = latch?.revision();
+      // The consent once more, AT the send ([AiSendGate]): hashing, the
+      // reservation and the reads above all awaited, and the background
+      // engine re-reads it from disk first. From this check to the
+      // analyzer call below nothing awaits, and the analyzer picks its
+      // provider in that same turn — so the recipient asked about here is
+      // the one the photo goes to. Released like any transient failure.
+      if (held == null) await _refreshSendGate();
       if (_abandoned) return await _whenAbandoned(); // no upload
+      if (held == null && !_sendAllowed()) {
+        await dao.releasePhotoHash(hash, ownerStamp: stamp);
+        _held = null;
+        return _notAllowed;
+      }
       final gpuOffSkips = gpuOffDecodeSkips;
       final outcome = held?.outcome ??
           await analyzer.analyzePhoto(photo.bytes, recentMeals: compacts);
@@ -1303,6 +1385,18 @@ class PhotoPipeline {
       errorKind: AnalysisErrorKind.unknown,
       detail: 'leftover conflict',
       reason: leftoverConflictReason);
+
+  /// A photo whose AI recipient was not allowed when its turn came
+  /// ([AiSendGate]): let go unsent and untouched, retryable. A shared or
+  /// picked one is announced by its caller (unannouncedOutcome), which
+  /// asks for it again — and adding it again asks for the consent first.
+  static const _notAllowed = PhotoOutcome(PhotoOutcomeKind.failed,
+      'Nothing was sent: this AI service is not allowed to receive your '
+      'photos. Chopstats asks first the next time you add one.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'not allowed',
+      reason: notAllowedReason);
 
   /// [abandon]'s verdict: released, offered again by a later scan.
   static const _outOfTime = PhotoOutcome(PhotoOutcomeKind.failed,

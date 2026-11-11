@@ -54,6 +54,13 @@ String outcomeBody(AppLocalizations l, PhotoOutcome o,
     };
     if (reason != null) return l.outcomeRetryLaterMsg(reason);
   }
+  // Let go unsent: the AI recipient was not allowed when the photo's turn
+  // came (photo_pipeline.dart AiSendGate). Not "kept and retried later" —
+  // nothing is sent until the user allows it, and adding the photo again
+  // asks first.
+  if (o.kind == PhotoOutcomeKind.failed && o.reason == notAllowedReason) {
+    return l.errNotAllowed;
+  }
   switch (o.kind) {
     case PhotoOutcomeKind.saved:
       final name = _shownName(l, o), kcal = o.kcal;
@@ -128,6 +135,11 @@ String outcomeSnackbar(AppLocalizations l, PhotoOutcome o) {
     return l.outcomePickRetryMsg(retryReason(l, o) ?? _bare(o.message));
   }
   final body = outcomeBody(l, o);
+  // Unsent for want of the AI consent: its own sentence, never "kept for
+  // retry" — nothing retries it until the user allows the recipient.
+  if (o.kind == PhotoOutcomeKind.failed && o.reason == notAllowedReason) {
+    return body;
+  }
   return o.kind == PhotoOutcomeKind.failed
       ? l.outcomeFailedKeptMsg(body)
       : body;
@@ -174,6 +186,8 @@ String _possessive(String name) {
 String? retryReason(AppLocalizations l, PhotoOutcome o) {
   // Analyzed, but the meal its leftovers belong to changed (design R6a).
   if (o.reason == leftoverConflictReason) return l.reasonLeftoverConflict;
+  // Not sent: the AI recipient was not allowed at the photo's turn.
+  if (o.reason == notAllowedReason) return l.reasonNotAllowed;
   return switch (o.errorKind) {
     AnalysisErrorKind.rateLimited => l.reasonRateLimited,
     AnalysisErrorKind.quotaPaused => l.reasonQuotaPaused,

@@ -2197,6 +2197,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reasonNoServerKey => 'no server address or upload key is set';
 
   @override
+  String get reasonNotAllowed =>
+      'this AI service is not allowed to receive your photos';
+
+  @override
+  String get errNotAllowed =>
+      'Nothing was sent: this AI service is not allowed to receive your photos. Chopstats asks first the next time you add one.';
+
+  @override
   String errRegionBlocked(String provider) {
     return '$provider is not available from your current network region. Check that the provider serves your region, or choose another provider.';
   }

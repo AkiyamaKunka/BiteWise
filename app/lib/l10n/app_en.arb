@@ -1722,6 +1722,8 @@
   "reasonLeftoverConflict": "the meal it belongs to changed meanwhile",
   "reasonNoApiKey": "no API key is set",
   "reasonNoServerKey": "no server address or upload key is set",
+  "reasonNotAllowed": "this AI service is not allowed to receive your photos",
+  "errNotAllowed": "Nothing was sent: this AI service is not allowed to receive your photos. Chopstats asks first the next time you add one.",
   "errRegionBlocked": "{provider} is not available from your current network region. Check that the provider serves your region, or choose another provider.",
   "@errRegionBlocked": {
     "placeholders": {

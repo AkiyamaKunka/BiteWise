@@ -627,6 +627,8 @@
   "reasonLeftoverConflict": "它所属的那一餐刚被修改",
   "reasonNoApiKey": "还没有设置 API Key",
   "reasonNoServerKey": "还没有设置服务器地址或上传密钥",
+  "reasonNotAllowed": "还没有允许把照片发送给这个 AI 服务",
+  "errNotAllowed": "没有发送任何内容：还没有允许把照片发送给这个 AI 服务。下次添加照片时，筷拍会先征求你的同意。",
   "errRegionBlocked": "{provider} 在当前网络地区不可用 —— 请检查 VPN 节点（香港等地区不支持）。",
   "@errRegionBlocked": {
     "placeholders": {

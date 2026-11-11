@@ -233,6 +233,10 @@ class AppServices {
         onMealSaved: signalMealsChanged,
         // A rejected key / blocked region parks the automatic scan.
         latch: autoScanLatchFor(settings),
+        // The AI consent, read again at each send: a photo still queued
+        // when Stop Sharing is confirmed, or across a provider switch, is
+        // let go instead of uploaded.
+        sendGate: aiSendGateFor(settings),
         // iOS suspends the app seconds after the user leaves it: each photo
         // asks for the time to finish its upload and save first, and no
         // automatic photo starts once the app is in the background.
