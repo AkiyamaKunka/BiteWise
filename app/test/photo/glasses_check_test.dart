@@ -184,6 +184,54 @@ void main() {
           [('a', 'logged'), ('b', 'logged')]);
     });
 
+    test(
+        'an entry that is not the photo\'s own verdict (a refusal before '
+        'the hash) never replaces a verdict row, only a waiting one',
+        () async {
+      GlassesCheckEntry refusal(String id, String outcome) =>
+          GlassesCheckEntry(
+              assetId: id, at: now, outcome: outcome, ownVerdict: false);
+      final earlier = now.subtract(const Duration(hours: 1));
+      final verdicts = GlassesCheckOutcome.verdicts.toList();
+      for (var i = 0; i < verdicts.length; i++) {
+        await recordGlassesCheck(store, row('v$i', earlier, verdicts[i]),
+            now: now);
+      }
+      await recordGlassesCheck(store, row('w', earlier, 'app_wait'),
+          now: now);
+      for (var i = 0; i < verdicts.length; i++) {
+        await recordGlassesCheck(store, refusal('v$i', 'excluded'),
+            now: now);
+      }
+      await recordGlassesCheck(store, refusal('w', 'retry'), now: now);
+      await recordGlassesCheck(store, refusal('new', 'excluded'), now: now);
+      final rows = await readGlassesChecks(store: store, now: now);
+      expect({for (final r in rows) (r.assetId, r.outcome, r.at)}, {
+        for (var i = 0; i < verdicts.length; i++)
+          ('v$i', verdicts[i], earlier),
+        ('w', 'retry', now),
+        ('new', 'excluded', now),
+      });
+      // The photo's own later verdict still replaces its row.
+      await recordGlassesCheck(store, row('v0', now, 'not_food_ai'),
+          now: now);
+      expect(
+          (await readGlassesChecks(store: store, now: now))
+              .firstWhere((r) => r.assetId == 'v0')
+              .outcome,
+          'not_food_ai');
+      expect(GlassesCheckOutcome.verdicts,
+          {'logged', 'not_food', 'not_food_ai', 'duplicate', 'failed'});
+      expect(
+          GlassesCheckEntry.of(photo('a'), outcome: 'excluded', at: now)
+              .ownVerdict,
+          isTrue,
+          reason: 'the default');
+      expect(refusal('a', 'retry').toJson(),
+          row('a', now, 'retry').toJson(),
+          reason: 'not stored');
+    });
+
     test('a later verdict that does not know the import lag (a deliberate '
         're-add) keeps the one the earlier row knew', () async {
       GlassesCheckEntry withLag(String id, DateTime at, String outcome,

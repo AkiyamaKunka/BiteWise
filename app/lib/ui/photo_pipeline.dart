@@ -372,6 +372,10 @@ class PhotoPipeline {
   /// The food check that ran on the photo in flight, for its record.
   FoodCheck? _foodChecked;
 
+  /// Whether the photo [process] has now was hashed: its verdict was
+  /// reached by looking at it. Read and reset by [process].
+  bool _hashed = false;
+
   final List<StreamSubscription<IntakePhoto>> _subs = [];
 
   /// The 'processing' reservation the photo in flight holds right now, and
@@ -717,18 +721,46 @@ class PhotoPipeline {
   /// Adds a Meta glasses photo's verdict to the Glasses check record —
   /// unless the run was abandoned: its engine is about to go, and a write
   /// then would only race the teardown. Never throws.
-  Future<void> _recordGlasses(IntakePhoto photo, PhotoOutcome outcome,
-      FoodCheck? check) async {
+  ///
+  /// A verdict reached before the photo was [hashed] is a refusal that says
+  /// nothing about the photo itself (Meta glasses photos switched off, the
+  /// consent, the latch, the app in the background), and every catch-up
+  /// offers the photos of its look-back window again, long-settled ones
+  /// included. Such a refusal is recorded as not the photo's own
+  /// ([GlassesCheckEntry.ownVerdict]: a verdict row stays), and not at all
+  /// for a photo a meal names: its row may have aged out of the record, and
+  /// a fresh "excluded" or "will retry" would call a logged meal that and
+  /// push real verdicts out of the newest [glassesCheckKept] (2026-11-11).
+  /// Asked by the photo's asset id: the photo is still never hashed for it.
+  Future<void> _recordGlasses(
+      IntakePhoto photo, PhotoOutcome outcome, FoodCheck? check,
+      {required bool hashed}) async {
     final log = glassesCheckLog;
     if (log == null || _abandoned) return;
     if (!(photo.capture?.isMetaGlasses ?? false)) return;
     try {
       final code = glassesCheckOutcome(outcome);
       if (code == null) return;
+      if (!hashed && await _namedByAMeal(photo)) return;
+      if (_abandoned) return;
       await log(GlassesCheckEntry.of(photo,
-              outcome: code, check: check, at: _clock()))
+              outcome: code, check: check, at: _clock(), ownVerdict: hashed))
           .timeout(glassesCheckLimit);
     } catch (_) {}
+  }
+
+  /// Whether a meal names [photo]'s asset as its photo
+  /// ([MealsDao.loggedAssetIds]). Read-only; a lookup that fails or
+  /// outlasts [glassesCheckLimit] says no.
+  Future<bool> _namedByAMeal(IntakePhoto photo) async {
+    if (photo.assetId.isEmpty) return false;
+    try {
+      final logged = await dao
+          .loggedAssetIds([photo.assetId]).timeout(glassesCheckLimit);
+      return logged.contains(photo.assetId);
+    } catch (_) {
+      return false;
+    }
   }
 
   /// [sendGate]'s answer right now: whether a photo may be sent to the
@@ -779,6 +811,7 @@ class PhotoPipeline {
     _running++;
     try {
       _foodChecked = null;
+      _hashed = false;
       final time = backgroundTime;
       final outcome = !photo.deliberate && _inBackground()
           ? _waitsForForeground
@@ -789,10 +822,12 @@ class PhotoPipeline {
       _held = null;
       final checked = _foodChecked;
       _foodChecked = null;
+      final hashed = _hashed;
+      _hashed = false;
       try {
         onOutcome?.call(photo, outcome);
       } catch (_) {}
-      await _recordGlasses(photo, outcome, checked);
+      await _recordGlasses(photo, outcome, checked, hashed: hashed);
       return outcome;
     } finally {
       _running--;
@@ -868,6 +903,7 @@ class PhotoPipeline {
       final sameShot =
           shotKey != null && await _sameShotLogged(shotKey, shotClock!);
       hash = normalizeImageHash(await _hash(photo.bytes));
+      _hashed = true;
       // A glasses preview copy (< 2 MP) waits once for its full-size
       // version: released with no ledger row and nothing sent. Only a
       // photo no run has settled waits. Every catch-up offers the photos
