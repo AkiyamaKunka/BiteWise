@@ -571,7 +571,11 @@ class _DataSectionState extends State<DataSection> {
                       : l.backupActionFailed);
                 },
         ),
-      if (s.state == BackupState.emptyLog)
+      // The empty log, or the switch off with this install's files still
+      // in iCloud (turning it on to reach the turn-off sheet would upload
+      // first).
+      if (s.state == BackupState.emptyLog ||
+          (s.state == BackupState.off && s.ownsFiles))
         GroupedRow(
           key: const Key('backupDeleteRow'),
           title: l.backupRowDelete,

@@ -312,7 +312,8 @@ Future<void> showTurnOffSheet(
           showChevron: false,
           onTap: () => Navigator.of(ctx).pop(_TurnOff.keep),
         ),
-        if (backupHasWritten(backup.status.value))
+        if (backupHasWritten(backup.status.value) ||
+            backup.status.value.ownsFiles)
           GroupedRow(
             key: const Key('backupTurnOffDelete'),
             title: l.backupTurnOffDelete,
@@ -345,8 +346,9 @@ Future<void> showTurnOffSheet(
   }
 }
 
-/// Delete iCloud Backup… (the empty-log row): confirmed, this install's
-/// files only, the switch left on.
+/// Delete iCloud Backup… (the empty-log row, and the row shown while the
+/// switch is off and this install's files are still in iCloud):
+/// confirmed, this install's files only, the switch left as it is.
 Future<void> confirmDeleteBackup(
     BuildContext context, BackupCoordinator backup) async {
   final l = context.l10n;

@@ -5015,7 +5015,7 @@ abstract class AppLocalizations {
   /// **'Back Up Anyway'**
   String get backupRowBackUpAnyway;
 
-  /// Settings › Your Data (iPhone): shown when this iPhone has no meals but its backup does; deletes the backup after a confirmation.
+  /// Settings › Your Data (iPhone): shown when this iPhone has no meals but its backup does, or when iCloud Backup is off and this iPhone's backup is still in iCloud; deletes the backup after a confirmation.
   ///
   /// In en, this message translates to:
   /// **'Delete iCloud Backup…'**

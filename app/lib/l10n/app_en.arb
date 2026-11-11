@@ -3056,7 +3056,7 @@
   },
   "backupRowDelete": "Delete iCloud Backup…",
   "@backupRowDelete": {
-    "description": "Settings › Your Data (iPhone): shown when this iPhone has no meals but its backup does; deletes the backup after a confirmation."
+    "description": "Settings › Your Data (iPhone): shown when this iPhone has no meals but its backup does, or when iCloud Backup is off and this iPhone's backup is still in iCloud; deletes the backup after a confirmation."
   },
   "backupICloudFooterBefore": "Your meals, weight, measurements, workouts and meal pictures are copied to your own iCloud, so they come back if you reinstall Chopstats or move to a new iPhone. API keys are never included, and the developer receives nothing.",
   "@backupICloudFooterBefore": {

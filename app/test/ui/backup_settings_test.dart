@@ -217,6 +217,33 @@ void main() {
     expect(find.text(_en.backupStatusOff), findsOneWidget);
   });
 
+  testWidgets('switched off with this iPhone\'s backup still in iCloud: '
+      'Delete iCloud Backup… is offered', (tester) async {
+    await pump(tester, b: backup);
+    backup.debugSetStatus(const BackupStatus(BackupState.off));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('backupDeleteRow')), findsNothing,
+        reason: 'nothing of this install\'s in iCloud');
+    backup.debugSetStatus(
+        const BackupStatus(BackupState.off, ownsFiles: true));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('backupDeleteRow')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('backupDeleteRow')));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupDeleteTitle), findsOneWidget);
+  });
+
+  testWidgets('paused after a relaunch (no last backup time): the turn-off '
+      'sheet still offers Delete It…', (tester) async {
+    await prefs.setBool(BackupPrefs.kNoticeSeen, true);
+    backup.debugSetStatus(
+        const BackupStatus(BackupState.missing, ownsFiles: true));
+    await pump(tester, b: backup);
+    await tester.tap(find.byKey(const Key('backupSwitch')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('backupTurnOffDelete')), findsOneWidget);
+  });
+
   testWidgets('the notice: Keep On records the answer', (tester) async {
     await pump(tester);
     final ctx = tester.element(find.byType(DataSection));

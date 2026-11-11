@@ -85,6 +85,7 @@ class BackupStatus {
     this.busy = false,
     this.restorable = const [],
     this.skippedMonths = 0,
+    this.ownsFiles = false,
   });
 
   final BackupState state;
@@ -110,6 +111,11 @@ class BackupStatus {
   /// so the last run did not back them up.
   final int skippedMonths;
 
+  /// This install wrote backup files, or adopted another install's, that
+  /// may still be in iCloud: Delete iCloud Backup… is offered whatever
+  /// the switch says (with it off, there is no other way to them).
+  final bool ownsFiles;
+
   bool get canTakeOver => const {
         BackupState.otherDevice,
         BackupState.changedElsewhere,
@@ -124,7 +130,8 @@ class BackupStatus {
           count: count,
           busy: busy ?? this.busy,
           restorable: restorable ?? this.restorable,
-          skippedMonths: skippedMonths);
+          skippedMonths: skippedMonths,
+          ownsFiles: ownsFiles);
 }
 
 /// A question for the app shell to ask in the foreground, one at a time.
@@ -305,28 +312,42 @@ class BackupCoordinator {
 
   // ------------------------------------------------------------ the status
 
+  /// Whether this install has backup files of its own or adopted ones
+  /// that a delete would remove.
+  bool get _ownsFiles =>
+      _prefs.lastSeq > 0 ||
+      _prefs.pendingSeq > 0 ||
+      _prefs.adoptedFrom.isNotEmpty ||
+      _prefs.months.values.any((m) => m.state != MonthState.foreign);
+
   BackupStatus _statusFromPrefs() {
-    if (!_prefs.enabled) return const BackupStatus(BackupState.off);
-    if (!_prefs.noticeSeen) return const BackupStatus(BackupState.needsNotice);
+    // Off and paused keep what is known about the last backup: the
+    // turn-off sheet and the Delete row go by it.
+    BackupStatus known(BackupState state, {int count = 0}) => BackupStatus(
+        state,
+        lastOkAt: _prefs.lastOkAt,
+        bytes: _prefs.lastBytes,
+        count: count,
+        ownsFiles: _ownsFiles);
+    if (!_prefs.enabled) return known(BackupState.off);
+    if (!_prefs.noticeSeen) return known(BackupState.needsNotice);
     switch (_prefs.paused) {
       case BackupPause.missing:
-        return const BackupStatus(BackupState.missing);
+        return known(BackupState.missing);
       case BackupPause.shrink:
-        return BackupStatus(BackupState.shrink, count: _prefs.pausedCount);
+        return known(BackupState.shrink, count: _prefs.pausedCount);
       case BackupPause.none:
         break;
     }
     final err = BackupState.values.where((s) => s.name == _prefs.lastError);
-    if (err.isNotEmpty) {
-      return BackupStatus(err.first,
-          lastOkAt: _prefs.lastOkAt, bytes: _prefs.lastBytes);
-    }
+    if (err.isNotEmpty) return known(err.first);
     final ok = _prefs.lastOkAt;
-    if (ok == null) return const BackupStatus(BackupState.never);
+    if (ok == null) return known(BackupState.never);
     return BackupStatus(BackupState.ok,
         lastOkAt: ok,
         bytes: _prefs.lastBytes,
-        skippedMonths: _prefs.skippedMonths);
+        skippedMonths: _prefs.skippedMonths,
+        ownsFiles: _ownsFiles);
   }
 
   BackupState _set(BackupState state,
@@ -338,7 +359,8 @@ class BackupCoordinator {
         other: other,
         count: count,
         restorable: _restorable,
-        skippedMonths: _prefs.skippedMonths);
+        skippedMonths: _prefs.skippedMonths,
+        ownsFiles: _ownsFiles);
     return state;
   }
 

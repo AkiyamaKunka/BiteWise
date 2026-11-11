@@ -904,6 +904,42 @@ void main() {
     expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
   });
 
+  test('with the switch off, or paused after a relaunch, the status still '
+      'knows this install\'s files are in iCloud', () async {
+    await seed(dao, '2026-11-10');
+    await ready();
+    await run();
+    expect(await c.turnOff(deleteFiles: false), isNull);
+    expect(c.status.value.state, BackupState.off);
+    expect(c.status.value.ownsFiles, isTrue);
+    expect(c.status.value.lastOkAt, isNotNull);
+    // Relaunched with the switch off.
+    final next = make();
+    expect(next.status.value.state, BackupState.off);
+    expect(next.status.value.ownsFiles, isTrue);
+    expect(await next.deleteBackup(), BackupDeleteResult.deleted);
+    expect(next.status.value.ownsFiles, isFalse);
+    expect(cloud.files, isEmpty);
+    expect(cloud.log.where((e) => e.startsWith('write')), hasLength(1),
+        reason: 'deleting never uploaded first');
+    // Paused (the file went missing), relaunched.
+    await prefs.setBool(BackupPrefs.kEnabled, true);
+    await prefs.setInt(BackupPrefs.kLastSeq, 3);
+    await prefs.setString(BackupPrefs.kPaused, 'missing');
+    final paused = make();
+    expect(paused.status.value.state, BackupState.missing);
+    expect(paused.status.value.ownsFiles, isTrue);
+  });
+
+  test('a restored backup is this install\'s to delete', () async {
+    await otherPhoneBackup(meals: 1);
+    await c.launchCheckForTest();
+    await c.restore((c.prompt.value as RestoreOfferPrompt).candidate);
+    await c.answerNotice(keepOn: false);
+    expect(c.status.value.state, BackupState.off);
+    expect(c.status.value.ownsFiles, isTrue, reason: 'adopted');
+  });
+
   group('the background', () {
     test('a background run updates our own file without downloading',
         () async {
