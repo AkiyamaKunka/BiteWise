@@ -156,6 +156,10 @@ abstract class BackupTransport {
   /// A hash of identifierForVendor, or null while iOS has none.
   Future<String?> deviceKey();
 
+  /// Starts the metadata query. iOS: once the container is fetched in the
+  /// process, and again when it comes back or the account changes
+  /// (CloudBackupPlugin.swift, CloudQueryPlan). The launch calls it after
+  /// [status].
   Future<void> startWatching();
   Future<void> stopWatching();
   Future<CloudListing> list();

@@ -1020,15 +1020,14 @@ class BackupCoordinator {
   // ------------------------------------------------------------- triggers
 
   /// The app's engine, after the first frame and once the database is
-  /// open: start the metadata query, look for a backup to offer, then run
-  /// if the last backup is stale.
+  /// open: ask iCloud for its status, start the metadata query, look for a
+  /// backup to offer, then run if the last backup is stale.
   Future<void> start() async {
     if (!uiEngine) return;
     await _prefs.reload();
     _status.value = _statusFromPrefs();
-    await _t.startWatching();
     _startPolling();
-    unawaited(_launchCheck());
+    unawaited(_launchCheck(startWatching: true));
   }
 
   Future<void> stop() async {
@@ -1038,11 +1037,19 @@ class BackupCoordinator {
     await _t.stopWatching();
   }
 
-  Future<void> _launchCheck() async {
+  Future<void> _launchCheck({bool startWatching = false}) async {
     final me = await _locked(() async {
       await _prefs.reload();
       return _identity(background: false);
     });
+    // The metadata query only after that status call. In iOS a query finds
+    // the container's files only once the container was fetched in the
+    // process (url(forUbiquityContainerIdentifier:), which status runs, as
+    // does the plugin's startWatching); started before, it can gather an
+    // empty folder while a backup is there: no restore offer, and G4's
+    // "no backup" evidence. Started whatever status said: the plugin
+    // starts the query once there is a container (CloudQueryPlan).
+    if (startWatching) await _t.startWatching();
     if (me == null) return;
     // Wait for the query's first gathering (foreground only).
     final until = _now.add(gatherWait);

@@ -35,8 +35,13 @@ import UniformTypeIdentifiers
 ///
 /// Threads: the identity token, identifierForVendor, UIApplication and the
 /// protected-data state are read on main. The container URL is fetched on
-/// `statusQueue` (it can block), at every `status` call. File work runs on
-/// `fileQueue`, one operation at a time. Replies go back on main, once.
+/// `statusQueue` (it can block), at every `status` and `startWatching`
+/// call. File work runs on `fileQueue`, one operation at a time. Replies
+/// go back on main, once.
+///
+/// The metadata query starts only after a fetch found the container, and
+/// starts again when the container comes back or the account changes
+/// (CloudQueryPlan, below).
 ///
 /// Registered for both engines (AppDelegate.registerAppPlugins): the
 /// headless background run may update a backup this install already owns
@@ -79,9 +84,11 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
   private let lock = NSLock()
   private var documents: URL?
 
-  // The metadata query: created and stopped on main, its notifications
-  // and reads on its own queue; the snapshot is read under `lock`.
+  // The metadata query: started, started again and stopped on main when
+  // `queryPlan` (main) says, its notifications and reads on its own
+  // queue; `query`, the snapshot and gatheredAt change under `lock`.
   private var query: NSMetadataQuery?
+  private var queryPlan = CloudQueryPlan()
   private let queryQueue: OperationQueue = {
     let q = OperationQueue()
     q.name = "dev.calorietracker.cloudbackup.query"
@@ -182,19 +189,35 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
   private func status(_ reply: @escaping (Any?) -> Void) {
     // main: the token, and whether it changed since the last call.
     guard let token = FileManager.default.ubiquityIdentityToken else {
+      // No iCloud now: a query that is running is started again once
+      // there is a container.
+      follow(queryPlan.fetched(found: false))
       reply(["status": "noAccount", "accountChanged": false])
       return
     }
     let changed = CloudBackupPlugin.noteToken(token)
     statusQueue.async {
-      let container = FileManager.default.url(
-        forUbiquityContainerIdentifier: CloudBackupPlugin.containerIdentifier)
-      let docs = container?.appendingPathComponent("Documents", isDirectory: true)
-      self.lock.lock()
-      self.documents = docs
-      self.lock.unlock()
-      reply(["status": docs == nil ? "unavailable" : "ok", "accountChanged": changed])
+      let docs = self.fetchDocuments()
+      DispatchQueue.main.async {
+        // Before the reply: once Dart hears of a new account, the query
+        // it lists is that account's.
+        self.follow(self.queryPlan.fetched(found: docs != nil, accountChanged: changed))
+        reply(["status": docs == nil ? "unavailable" : "ok", "accountChanged": changed])
+      }
     }
+  }
+
+  /// On statusQueue: the container's Documents folder, nil while there is
+  /// none, kept for the file calls. The first call in the process is what
+  /// sets the container up (and may take a while).
+  private func fetchDocuments() -> URL? {
+    let docs = FileManager.default.url(
+      forUbiquityContainerIdentifier: CloudBackupPlugin.containerIdentifier)?
+      .appendingPathComponent("Documents", isDirectory: true)
+    lock.lock()
+    documents = docs
+    lock.unlock()
+    return docs
   }
 
   /// Stores [token] and says whether it differs from the stored one,
@@ -236,13 +259,7 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
       return
     }
     statusQueue.async {
-      let docs = FileManager.default.url(
-        forUbiquityContainerIdentifier: CloudBackupPlugin.containerIdentifier)?
-        .appendingPathComponent("Documents", isDirectory: true)
-      self.lock.lock()
-      self.documents = docs
-      self.lock.unlock()
-      guard let docs = docs else {
+      guard let docs = self.fetchDocuments() else {
         reply(["status": "unavailable"])
         return
       }
@@ -257,11 +274,40 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
 
   // MARK: - the metadata query
 
+  /// The container first, then the query (CloudQueryPlan): it is running
+  /// by the reply when the fetch found the container, and starts at the
+  /// first later status call that finds it when it did not.
   private func startWatching(_ reply: @escaping (Any?) -> Void) {
-    if query != nil {
-      reply(["status": "ok"])
-      return
+    queryPlan.watch()
+    statusQueue.async {
+      let docs = self.fetchDocuments()
+      DispatchQueue.main.async {
+        self.follow(self.queryPlan.fetched(found: docs != nil))
+        reply(["status": "ok"])
+      }
     }
+  }
+
+  private func stopWatching(_ reply: @escaping (Any?) -> Void) {
+    if queryPlan.unwatch() { stopQuery() }
+    reply(["status": "ok"])
+  }
+
+  /// On main: what the plan says to do with the query.
+  private func follow(_ step: CloudQueryPlan.Step) {
+    switch step {
+    case .none:
+      return
+    case .start:
+      startQuery()
+    case .restart:
+      stopQuery()
+      startQuery()
+    }
+  }
+
+  /// On main.
+  private func startQuery() {
     let q = NSMetadataQuery()
     q.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
     q.predicate = NSPredicate(format: "%K LIKE %@", NSMetadataItemFSNameKey, "*.json")
@@ -272,31 +318,31 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
       name: .NSMetadataQueryDidFinishGathering, object: q)
     center.addObserver(
       self, selector: #selector(queryChanged(_:)), name: .NSMetadataQueryDidUpdate, object: q)
-    query = q
     lock.lock()
+    query = q
     snapshot = []
     gatheredAt = nil
     lock.unlock()
     queryQueue.addOperation {
       q.start()
     }
-    reply(["status": "ok"])
   }
 
-  private func stopWatching(_ reply: @escaping (Any?) -> Void) {
-    if let q = query {
-      NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: q)
-      NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: q)
-      queryQueue.addOperation {
-        q.stop()
-      }
-    }
-    query = nil
+  /// On main. What the stopped query saw is forgotten with it: a query
+  /// started again has gathered nothing yet.
+  private func stopQuery() {
     lock.lock()
+    let stopped = query
+    query = nil
     snapshot = []
     gatheredAt = nil
     lock.unlock()
-    reply(["status": "ok"])
+    guard let q = stopped else { return }
+    NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidFinishGathering, object: q)
+    NotificationCenter.default.removeObserver(self, name: .NSMetadataQueryDidUpdate, object: q)
+    queryQueue.addOperation {
+      q.stop()
+    }
   }
 
   /// On queryQueue (the query's operationQueue).
@@ -328,11 +374,14 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
     }
     q.enableUpdates()
     lock.lock()
+    defer { lock.unlock() }
+    // A query stopped meanwhile (started again for a new account) says
+    // nothing about the folder now.
+    guard q === query else { return }
     snapshot = items
     if note.name == .NSMetadataQueryDidFinishGathering || gatheredAt == nil {
       gatheredAt = gatheredAt ?? Date()
     }
-    lock.unlock()
   }
 
   /// `Chopstats Backup.json` or `Meal Pictures/2026-10.json` from a
@@ -589,5 +638,49 @@ final class CloudBackupPlugin: NSObject, FlutterPlugin, UIDocumentPickerDelegate
       top = presented
     }
     return top
+  }
+}
+
+/// When the metadata query runs. In iOS a query finds the ubiquity
+/// container's files only once url(forUbiquityContainerIdentifier:) has
+/// run in the process (Apple: "In iOS, you must call this method at least
+/// once before trying to search for cloud-based files in the ubiquity
+/// container"), so it starts only right after a fetch that found the
+/// container. One started before the container went away (signed out,
+/// iCloud Drive turned off) or for the account before this one is started
+/// again: its gathering may never show this account's folder, and an
+/// empty folder long gathered is what guard G4 reads as "no backup".
+struct CloudQueryPlan {
+  enum Step: Equatable {
+    case none, start, restart
+  }
+
+  /// startWatching, and no stopWatching since.
+  private(set) var wanted = false
+  private(set) var running = false
+  private var stale = false
+
+  mutating func watch() {
+    wanted = true
+  }
+
+  /// True when a running query is to be stopped.
+  mutating func unwatch() -> Bool {
+    let was = running
+    wanted = false
+    running = false
+    stale = false
+    return was
+  }
+
+  /// A container fetch that [found] the container (or not), and whether
+  /// the account changed since the last status call.
+  mutating func fetched(found: Bool, accountChanged: Bool = false) -> Step {
+    if !found || accountChanged { stale = true }
+    guard wanted, found, !running || stale else { return .none }
+    let step: Step = running ? .restart : .start
+    running = true
+    stale = false
+    return step
   }
 }

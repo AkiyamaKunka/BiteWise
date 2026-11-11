@@ -2627,3 +2627,43 @@ class CloudFilesTests: XCTestCase {
     XCTAssertEqual(CloudBackupPlugin.containerIdentifier, "iCloud.dev.calorietracker.calorieTracker")
   }
 }
+
+/// When the metadata query runs (CloudBackupPlugin.swift, CloudQueryPlan):
+/// in iOS only after url(forUbiquityContainerIdentifier:) found the
+/// container in the process, and again when the container comes back or
+/// the account changes.
+class CloudQueryPlanTests: XCTestCase {
+  func testTheQueryStartsOnlyAfterAFetchFoundTheContainer() {
+    var plan = CloudQueryPlan()
+    plan.watch()
+    XCTAssertFalse(plan.running, "startWatching alone starts nothing")
+    XCTAssertEqual(plan.fetched(found: false), .none, "no container yet")
+    XCTAssertEqual(plan.fetched(found: true), .start)
+    XCTAssertTrue(plan.running)
+    XCTAssertEqual(plan.fetched(found: true), .none, "started once")
+  }
+
+  func testANewAccountOrAContainerThatCameBackStartsItAgain() {
+    var plan = CloudQueryPlan()
+    plan.watch()
+    XCTAssertEqual(plan.fetched(found: true), .start)
+    XCTAssertEqual(plan.fetched(found: true, accountChanged: true), .restart)
+    XCTAssertEqual(plan.fetched(found: true), .none)
+    XCTAssertEqual(plan.fetched(found: false), .none, "signed out: kept until there is a container")
+    XCTAssertEqual(plan.fetched(found: false), .none)
+    XCTAssertEqual(plan.fetched(found: true), .restart, "signed in again")
+    XCTAssertEqual(plan.fetched(found: true), .none)
+  }
+
+  func testNothingRunsWhileNobodyWatches() {
+    var plan = CloudQueryPlan()
+    XCTAssertEqual(plan.fetched(found: true), .none, "a status call before startWatching")
+    plan.watch()
+    XCTAssertEqual(plan.fetched(found: true), .start)
+    XCTAssertTrue(plan.unwatch(), "stopWatching stops it")
+    XCTAssertFalse(plan.unwatch())
+    XCTAssertEqual(plan.fetched(found: true, accountChanged: true), .none)
+    plan.watch()
+    XCTAssertEqual(plan.fetched(found: true), .start)
+  }
+}

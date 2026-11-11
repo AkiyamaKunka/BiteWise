@@ -606,6 +606,35 @@ void main() {
     });
   });
 
+  group('the launch', () {
+    /// Real SQLite answers from another isolate: wait for [done].
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 400 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
+    test('asks iCloud for its status before the metadata query starts, '
+        'then offers the backup', () async {
+      await otherPhoneBackup();
+      await c.start();
+      await until(() => c.prompt.value != null);
+      expect(cloud.calls.take(2), ['status', 'startWatching'],
+          reason: 'in iOS a query started before the container was fetched '
+              'can gather an empty folder: no offer, and G4 says "no backup"');
+      expect(cloud.watching, isTrue);
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+    });
+
+    test('starts the metadata query whatever the status says', () async {
+      cloud.state = CloudState.noAccount;
+      await c.start();
+      await until(() => cloud.watching);
+      expect(cloud.calls, ['status', 'startWatching']);
+      expect(c.status.value.state, BackupState.noAccount);
+    });
+  });
+
   group('the restore offer', () {
     test('a fresh install is offered the backup, the catch-up is held, and '
         'Restore brings back meals and pictures, then adopts the file',

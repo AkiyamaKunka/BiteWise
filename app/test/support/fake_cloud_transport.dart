@@ -51,6 +51,9 @@ class FakeCloudTransport implements BackupTransport {
   Future<void> Function(String path)? onWrite;
   int statusCalls = 0;
 
+  /// status, startWatching and stopWatching, in the order they came.
+  final List<String> calls = [];
+
   /// CloudFiles.url(for:): the records files at the top, `Meal Pictures/`
   /// one level down, `.json`, nothing hidden, no `..`. Any other path is
   /// refused with badArguments (itemState: unknown), as Swift does.
@@ -78,6 +81,7 @@ class FakeCloudTransport implements BackupTransport {
   @override
   Future<CloudStatus> status() async {
     statusCalls++;
+    calls.add('status');
     final changed = accountChangedOnce;
     accountChangedOnce = false;
     return CloudStatus(state, accountChanged: changed);
@@ -88,9 +92,16 @@ class FakeCloudTransport implements BackupTransport {
 
   bool watching = false;
   @override
-  Future<void> startWatching() async => watching = true;
+  Future<void> startWatching() async {
+    calls.add('startWatching');
+    watching = true;
+  }
+
   @override
-  Future<void> stopWatching() async => watching = false;
+  Future<void> stopWatching() async {
+    calls.add('stopWatching');
+    watching = false;
+  }
 
   @override
   Future<CloudListing> list() async => CloudListing(
