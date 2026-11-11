@@ -1300,13 +1300,86 @@ void main() {
     expect(cloud.files, theirs, reason: 'nothing of it written or deleted');
   });
 
-  test('a restored backup is this install\'s to delete', () async {
-    await otherPhoneBackup(meals: 1);
-    await c.launchCheckForTest();
-    await c.restore((c.prompt.value as RestoreOfferPrompt).candidate);
-    await c.answerNotice(keepOn: false);
-    expect(c.status.value.state, BackupState.off);
-    expect(c.status.value.ownsFiles, isTrue, reason: 'adopted');
+  group('a restore while this iPhone does not back up takes nothing over',
+      () {
+    test('the switch off: a plain merge, and Delete never reaches the other '
+        'iPhone\'s backup', () async {
+      await noticeAnswered();
+      await prefs.setBool(BackupPrefs.kEnabled, false);
+      await otherPhoneBackup(meals: 3);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isNull, reason: 'no offer while off');
+      final cand = c.status.value.restorable.single; // Restore From iCloud…
+      final takesOver = c.restoreTakesOver(cand);
+      final s = await c.restore(cand);
+      expect(s.ok, isTrue);
+      expect(s.mealsAdded, 3);
+      final theirs = Map.of(cloud.files);
+      await c.deleteBackup();
+      expect(cloud.files, theirs,
+          reason: 'the other iPhone still owns its backup, and may write it');
+      expect(takesOver, isFalse,
+          reason: 'the sheet does not say this iPhone takes it over');
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), isNull);
+      expect(c.status.value.ownsFiles, isFalse,
+          reason: 'no Delete iCloud Backup… row while off');
+      // Turned on later: that backup is in the way like any other
+      // install's (Back Up From This iPhone… asks first).
+      await c.setEnabled(true);
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      expect(cloud.files, theirs);
+    });
+
+    test('Turn Off on the notice after a restore gives the takeover up',
+        () async {
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(c.restoreTakesOver(offer.candidate), isTrue,
+          reason: 'on by default: the sheet says it takes the backup over');
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      expect(c.prompt.value, isA<NoticePrompt>());
+      await c.answerNotice(keepOn: false);
+      final theirs = Map.of(cloud.files);
+      await c.deleteBackup();
+      expect(cloud.files, theirs,
+          reason: 'never written over: still the other iPhone\'s backup');
+      expect(c.status.value.state, BackupState.off);
+      expect(c.status.value.ownsFiles, isFalse);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), isNull);
+      expect(BackupPrefs(prefs).months, isEmpty);
+      await c.setEnabled(true);
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      expect(cloud.files, theirs, reason: 'not written over without asking');
+    });
+
+    test('the switch turned off before this iPhone wrote over the file gives '
+        'the takeover up; after it did, the backup is this iPhone\'s',
+        () async {
+      await noticeAnswered();
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      cloud.state = CloudState.unavailable; // the run after the restore stops
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      expect(await run(), BackupState.unavailable, reason: 'after that run');
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), _other);
+      expect(await c.turnOff(deleteFiles: false), isNull);
+      cloud.state = CloudState.ok;
+      final theirs = Map.of(cloud.files);
+      expect(c.status.value.ownsFiles, isFalse);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), isNull);
+      await c.setEnabled(true);
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      expect(cloud.files, theirs);
+      // Taken over on purpose and written: this iPhone's, the switch off.
+      expect(await c.takeOver(replace: false), isTrue);
+      expect(await c.turnOff(deleteFiles: false), isNull);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), _other);
+      expect(c.status.value.ownsFiles, isTrue);
+      expect(await c.deleteBackup(), BackupDeleteResult.deleted);
+      expect(cloud.files, isEmpty);
+    });
   });
 
   test('a delete never drops another phone\'s unresolved write to the '

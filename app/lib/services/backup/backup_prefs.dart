@@ -152,6 +152,12 @@ class BackupPrefs {
     await _p.setInt(kAdoptedSeq, header.seq);
   }
 
+  /// The takeover given up before this install wrote over the file.
+  Future<void> clearAdopted() async {
+    await _p.remove(kAdoptedFrom);
+    await _p.remove(kAdoptedSeq);
+  }
+
   String get ownedPath => _p.getString(kOwnedPath) ?? '';
   Future<void> setOwnedPath(String v) => _p.setString(kOwnedPath, v);
 

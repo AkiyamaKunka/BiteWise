@@ -335,6 +335,25 @@ void main() {
     await tester.pumpAndSettle();
   });
 
+  testWidgets('with iCloud Backup off, the restore offer says nothing about '
+      'taking the backup over', (tester) async {
+    // Nothing would write over it, and its iPhone goes on backing up.
+    await prefs.setBool(BackupPrefs.kNoticeSeen, true);
+    await prefs.setBool(BackupPrefs.kEnabled, false);
+    await pump(tester);
+    final ctx = tester.element(find.byType(DataSection));
+    final h = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 2,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    unawaited(showRestoreOffer(
+        ctx, backup, BackupCandidate(kRecordsFileName, h), 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 meals'), findsOneWidget);
+    expect(find.textContaining(_en.backupRestoreTakesOver), findsNothing);
+    await tester.tap(find.byKey(const Key('backupNotNow')));
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('Android: no iCloud rows, its own footer', (tester) async {
     await pump(tester, android: true);
     expect(find.byKey(const Key('backupSwitch')), findsNothing);

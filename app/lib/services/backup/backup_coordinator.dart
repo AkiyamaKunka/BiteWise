@@ -111,9 +111,10 @@ class BackupStatus {
   /// so the last run did not back them up.
   final int skippedMonths;
 
-  /// This install wrote backup files, or adopted another install's, that
-  /// may still be in iCloud: Delete iCloud Backup… is offered whatever
-  /// the switch says (with it off, there is no other way to them).
+  /// This install wrote backup files that may still be in iCloud (with the
+  /// files it took over, once its own records file replaced the adopted
+  /// one): Delete iCloud Backup… is offered whatever the switch says (with
+  /// it off, there is no other way to them).
   final bool ownsFiles;
 
   bool get canTakeOver => const {
@@ -312,13 +313,19 @@ class BackupCoordinator {
 
   // ------------------------------------------------------------ the status
 
-  /// Whether this install has backup files of its own or adopted ones
-  /// that a delete would remove.
+  /// Whether this install has backup files of its own that a delete would
+  /// remove. An adopted install's files count only once this install's
+  /// records file replaced theirs (lastSeq, [_adoptionTaken]): until then
+  /// that install still owns its backup and may still be writing it.
   bool get _ownsFiles =>
       _prefs.lastSeq > 0 ||
       _prefs.pendingSeq > 0 ||
-      _prefs.adoptedFrom.isNotEmpty ||
-      _prefs.months.values.any((m) => m.state != MonthState.foreign);
+      _prefs.months.values.any((m) => m.state == MonthState.written);
+
+  /// The adopted install's files are this install's to delete: its own
+  /// records file replaced the one it adopted.
+  bool get _adoptionTaken =>
+      _prefs.adoptedFrom.isNotEmpty && _prefs.lastSeq > 0;
 
   /// [h] is the adopted install's file as it was adopted
   /// (WriteExpect.adoptMaxSeq), not one it wrote after taking it back.
@@ -1257,6 +1264,7 @@ class BackupCoordinator {
   Future<void> answerNotice({required bool keepOn}) async {
     await _prefs.setNoticeSeen(true);
     await _prefs.setEnabled(keepOn);
+    if (!keepOn) await _dropUnwrittenAdoption();
     prompt.value = null;
     _status.value = _statusFromPrefs();
     if (keepOn) unawaited(_run(const _Run(_Kind.foreground)));
@@ -1266,8 +1274,32 @@ class BackupCoordinator {
   Future<void> setEnabled(bool on) async {
     await _prefs.setEnabled(on);
     if (on) await _prefs.setNoticeSeen(true);
+    if (!on) await _dropUnwrittenAdoption();
     _status.value = _statusFromPrefs();
     if (on) unawaited(_run(const _Run(_Kind.foreground)));
+  }
+
+  /// Turned off before this install's records file replaced the one a
+  /// restore (or a takeover) adopted: the takeover is given up. That
+  /// install still owns its backup and may still be writing it, so its
+  /// files are not this install's to write over or delete; turned on
+  /// again, this install finds it in the way like any other install's
+  /// (Back Up From This iPhone… asks first). Not while one of this
+  /// install's writes may be in flight or landed (pendingSeq): a run
+  /// writes nothing once the switch is off, and one whose write landed
+  /// keeps the files it took over.
+  Future<void> _dropUnwrittenAdoption() async {
+    await _prefs.reload();
+    if (_prefs.adoptedFrom.isEmpty ||
+        _prefs.lastSeq > 0 ||
+        _prefs.pendingSeq > 0) {
+      return;
+    }
+    await _prefs.clearAdopted();
+    final months = _prefs.months
+      ..removeWhere((_, m) =>
+          m.state == MonthState.restored || m.state == MonthState.pending);
+    await _prefs.setMonths(months);
   }
 
   Future<void> _holdCatchUp() =>
@@ -1411,9 +1443,9 @@ class BackupCoordinator {
     await _prefs.setMonths(months);
   }
 
-  /// Restore: merge [c] into this phone. When this install has no backup
-  /// of its own and [c] is the canonical file, it adopts it: the next
-  /// write replaces it with this phone's (now merged) record.
+  /// Restore: merge [c] into this phone. When it takes [c] over
+  /// ([restoreTakesOver]), it adopts it: the next write replaces it with
+  /// this phone's (now merged) record.
   Future<RestoreSummary> restore(BackupCandidate c) async {
     prompt.value = null;
     _setBusy(true);
@@ -1443,10 +1475,14 @@ class BackupCoordinator {
   }
 
   /// Whether restoring [c] makes this install take its file over (the
-  /// restore sheet says so): this install has no backup of its own yet and
-  /// [c] is the canonical file, so the next run writes over it.
+  /// restore sheet says so): iCloud Backup is on, this install has no
+  /// backup of its own yet and [c] is the canonical file, so the next run
+  /// writes over it. With the switch off no run would: the restore is a
+  /// merge, and [c]'s install keeps its backup. (On by default, the offer
+  /// can come before the notice; Turn Off there gives the takeover up,
+  /// [_dropUnwrittenAdoption].)
   bool restoreTakesOver(BackupCandidate c) =>
-      _prefs.lastSeq == 0 && c.path == kRecordsFileName;
+      _prefs.enabled && _prefs.lastSeq == 0 && c.path == kRecordsFileName;
 
   /// Not Now: the offer is not raised again for that install (the Restore
   /// From iCloud… row still has it).
@@ -1672,12 +1708,12 @@ class BackupCoordinator {
     return _run(const _Run(_Kind.now, force: true, overrideShrink: true));
   }
 
-  /// Deletes this install's files (and the adopted install's) from the
-  /// folder; anything another install wrote stays. Only the paths this
-  /// install wrote or adopted are sent (its months, the records file and
-  /// the previous copy): another phone's months, never read here and
-  /// maybe not even downloaded, are none of its business. The switch is
-  /// left as it is.
+  /// Deletes this install's files (and the adopted install's, once this
+  /// install's records file replaced theirs) from the folder; anything
+  /// another install wrote stays. Only the paths this install wrote or
+  /// adopted are sent (its months, the records file and the previous
+  /// copy): another phone's months, never read here and maybe not even
+  /// downloaded, are none of its business. The switch is left as it is.
   ///
   /// Pictures go first and the records file last, so a delete that stops
   /// part-way never leaves pictures the records file no longer names. When
@@ -1690,7 +1726,9 @@ class BackupCoordinator {
         await _prefs.reload();
         final me = _prefs.installId;
         if (!isValidInstallId(me)) return BackupDeleteResult.deleted;
-        final adopted = _prefs.adoptedFrom;
+        // Before this install wrote over the adopted file, it is still
+        // that install's live backup.
+        final adopted = _adoptionTaken ? _prefs.adoptedFrom : '';
         final months = _prefs.months;
         final result = await _deleteInOrder([
           [
@@ -1767,6 +1805,7 @@ class BackupCoordinator {
   /// them. A run in progress stops before its next upload.
   Future<BackupDeleteResult?> turnOff({required bool deleteFiles}) async {
     await _prefs.setEnabled(false);
+    await _dropUnwrittenAdoption();
     _status.value = _statusFromPrefs();
     if (!deleteFiles) return null;
     final result = await deleteBackup();
