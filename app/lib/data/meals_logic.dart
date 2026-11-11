@@ -190,7 +190,12 @@ Map<String, dynamic> buildExportEnvelope(
 /// skipped row-by-row), because refusing outright would strand a user
 /// moving between devices mid-upgrade.
 const String kExportFormat = 'calorie_tracker_export';
-const int kExportVersion = 1;
+
+/// 2 since 1.7.0 (iCloud Backup): a backup file adds a `backup` header
+/// before `tables` and may carry a `meal_thumbs` table
+/// (services/backup/backup_format.dart). 1.6.0's importer already accepts
+/// it: any version from 1 up, and only the tables it knows are read.
+const int kExportVersion = 2;
 
 /// A parsed export: the per-table rows plus the stamp for the UI.
 class ParsedExport {
