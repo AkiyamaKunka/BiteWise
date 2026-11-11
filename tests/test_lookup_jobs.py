@@ -1,9 +1,11 @@
 """Async restaurant-lookup jobs (design stage R3b): queue, cache, TTL,
 the single worker, pre-emption by photos, and the daily cap."""
 import copy
+import errno
 import json
 import threading
 import time
+from pathlib import Path
 
 import pytest
 
@@ -384,6 +386,45 @@ def test_daily_counter_persists_and_resets_by_day(tmp_path):
     path.write_text(json.dumps({"restaurant_lookup": {
         "date": "2026-10-24", "runs": "lots"}}))
     assert counter.remaining() == 2
+
+
+def test_daily_counter_fails_closed_when_the_ledger_cannot_be_written(
+        tmp_path, monkeypatch):
+    """A full disk: service_health only warns when its write fails, so an
+    uncounted run used to be allowed, and every run after it — no cap at
+    all. Nothing counted must mean nothing started."""
+    path = tmp_path / "health.json"
+    counter = lookup_jobs.DailyRunCounter(lambda: path, cap_fn=lambda: 2,
+                                          today_fn=lambda: "2026-11-10")
+    real_write = Path.write_text
+
+    def disk_full(self, *args, **kwargs):
+        if self.name.startswith(path.name) and self.name.endswith(".tmp"):
+            raise OSError(errno.ENOSPC, "No space left on device")
+        return real_write(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "write_text", disk_full)
+    assert [counter.try_start() for _ in range(5)] == [False] * 5
+    assert not path.exists()
+
+    # Space again: the cap counts from where the ledger really is.
+    monkeypatch.setattr(Path, "write_text", real_write)
+    assert [counter.try_start() for _ in range(3)] == [True, True, False]
+    assert service_health.load(path)["restaurant_lookup"]["runs"] == 2
+
+
+def test_daily_counter_fails_closed_when_the_ledger_cannot_be_locked(
+        tmp_path, monkeypatch):
+    """The lock file itself cannot be opened (the same full disk, or a bad
+    permission): update() warns and never runs the mutation."""
+    path = tmp_path / "health.json"
+    counter = lookup_jobs.DailyRunCounter(lambda: path, cap_fn=lambda: 2)
+
+    def no_lock(*args, **kwargs):
+        raise OSError(errno.ENOSPC, "No space left on device")
+
+    monkeypatch.setattr(service_health.fcntl, "flock", no_lock)
+    assert counter.try_start() is False
 
 
 @pytest.mark.parametrize("raw,expected", [
