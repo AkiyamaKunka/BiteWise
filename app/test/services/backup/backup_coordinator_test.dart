@@ -122,6 +122,23 @@ void main() {
     }
   }
 
+  /// The photo hashes a month's pictures file holds, in file order.
+  List<String> hashesIn(String month) {
+    final b = cloud.files[picturesPath(month)];
+    if (b == null) return const [];
+    final j = jsonDecode(utf8.decode(b)) as Map;
+    return [
+      for (final r in (j['tables'] as Map)['meal_thumbs'] as List)
+        (r as Map)['image_hash'] as String
+    ];
+  }
+
+  /// This phone's own photo meal with a picture, dated in October.
+  Future<void> myOctoberPicture() async {
+    final mine = await seed(dao, '2026-10-15', hash: 'mine');
+    await dao.saveMealThumb(mine, _jpeg(7));
+  }
+
   group('G1: nothing uploads before the notice', () {
     test('the default is on, but the notice comes first', () async {
       await seed(dao, '2026-11-10');
@@ -518,6 +535,75 @@ void main() {
     expect(h.installId, prefs.getString(BackupPrefs.kInstallId));
     expect(h.meals, 3);
     expect(cloud.conflictVersions, isEmpty);
+  });
+
+  group('adopted months keep this phone\'s own pictures', () {
+    test('restore onto a phone that already has pictures in the month',
+        () async {
+      await myOctoberPicture();
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      await c.answerNotice(keepOn: true);
+      await c.backUpNow();
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      expect(cloud.headerOf(picturesPath('2026-10'))!.installId, me);
+      expect(hashesIn('2026-10'), unorderedEquals(['mine', 'o0', 'o1']));
+      expect(cloud.headerOf(kRecordsFileName)!.months, {'2026-10': 3});
+    });
+
+    test('takeover, combined first', () async {
+      await myOctoberPicture();
+      await ready();
+      await otherPhoneBackup(meals: 2);
+      await prefs.setStringList(BackupPrefs.kOffersAnswered, [_other]);
+      expect(await run(), BackupState.otherDevice);
+      expect(await c.takeOver(replace: false), isTrue);
+      await dao.saveBodyWeight('2026-11-10', 70);
+      await c.backUpNow();
+      expect(hashesIn('2026-10'), unorderedEquals(['mine', 'o0', 'o1']));
+    });
+
+    test('takeover, replaced: only this phone\'s pictures stay', () async {
+      await myOctoberPicture();
+      await seed(dao, '2026-11-01');
+      await ready();
+      await otherPhoneBackup(meals: 2);
+      // The other phone also has a month this phone has no pictures in.
+      final dec = await seed(otherDao, '2026-12-01', hash: 'o-dec');
+      await otherDao.saveMealThumb(dec, _jpeg(5));
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final f = await w.writeRecords('${tmp.path}/o2.json',
+          installId: _other,
+          seq: 6,
+          months: const {'2026-10': 2, '2026-12': 1});
+      cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+      final p = await w.writePictures('${tmp.path}/o-dec.json',
+          installId: _other, seq: 6, month: '2026-12');
+      cloud.files[picturesPath('2026-12')] = await File(p.path).readAsBytes();
+      await prefs.setStringList(BackupPrefs.kOffersAnswered, [_other]);
+      expect(await run(), BackupState.otherDevice);
+      expect(await c.takeOver(replace: true), isTrue);
+      expect(hashesIn('2026-10'), ['mine']);
+      expect(cloud.files.containsKey(picturesPath('2026-12')), isFalse,
+          reason: 'the replaced backup\'s month this phone has none in');
+      expect(cloud.headerOf(kRecordsFileName)!.months, {'2026-10': 1});
+    });
+
+    test('combine, when it adopts the other phone\'s current file',
+        () async {
+      await myOctoberPicture();
+      await ready();
+      await run();
+      expect(hashesIn('2026-10'), ['mine']);
+      final mine = cloud.files[kRecordsFileName]!;
+      await otherPhoneBackup(meals: 2); // now the current file and month
+      cloud.conflictVersions[kRecordsFileName] = [mine];
+      expect(await c.combine(), isTrue);
+      expect(hashesIn('2026-10'), unorderedEquals(['mine', 'o0', 'o1']));
+    });
   });
 
   test('delete removes this install\'s files and leaves another\'s',

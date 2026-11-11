@@ -1016,15 +1016,20 @@ class BackupCoordinator {
   }
 
   /// Imports [path]'s records, then its months of pictures. A failed
-  /// month does not fail the import. Returns the summary and the months
-  /// that came in.
-  Future<(RestoreSummary, List<String>)> _importBackup(
-      String path, BackupHeader header) async {
+  /// month does not fail the import. Returns the summary, the months that
+  /// came in, and this phone's month prints from before the import.
+  Future<(RestoreSummary, List<String>, Map<String, ThumbMonthPrint>)>
+      _importBackup(String path, BackupHeader header) async {
+    final before = await _dao.thumbMonthPrints();
     final dest = await _tmpPath('restore-records.json');
     final f = await _t.fetch(path, dest, timeout: const Duration(seconds: 60));
     if (!f.ok) {
       await _deleteQuietly(dest);
-      return (RestoreSummary(ok: false, failure: f.kind), const <String>[]);
+      return (
+        RestoreSummary(ok: false, failure: f.kind),
+        const <String>[],
+        before
+      );
     }
     final ImportSummary s;
     try {
@@ -1032,7 +1037,8 @@ class BackupCoordinator {
     } on FormatException {
       return (
         const RestoreSummary(ok: false, failure: CloudResultKind.unknownOwner),
-        const <String>[]
+        const <String>[],
+        before
       );
     } finally {
       await _deleteQuietly(dest);
@@ -1068,21 +1074,37 @@ class BackupCoordinator {
         mealsSkippedDeleted: s.mealsSkippedDeleted,
         failedMonths: failed,
       ),
-      done
+      done,
+      before
     );
   }
 
-  /// After a restore or takeover: the adopted install's months as this one
-  /// knows them. A month that could not be read is left alone (foreign):
-  /// its file still has the other phone's pictures, which this install
-  /// never overwrites with fewer.
-  Future<void> _adoptMonths(BackupHeader header, List<String> restored) async {
-    final prints = await _dao.thumbMonthPrints();
+  /// After a restore, takeover or combine: the adopted install's months as
+  /// this one knows them. A month that could not be read is left alone
+  /// (foreign): its file still has the other phone's pictures, which this
+  /// install never overwrites with fewer.
+  ///
+  /// A month's print says what its FILE holds, not what the merged
+  /// database holds: only when this phone had no pictures in the month
+  /// before the import ([before]) and the file is kept (not [replace]d) is
+  /// the file what the database now holds. Otherwise the print is '', and
+  /// the next run rewrites the month from the merged database (or deletes
+  /// it when this phone has no pictures there), so this phone's own
+  /// pictures in it are backed up too.
+  Future<void> _adoptMonths(BackupHeader header,
+      {required Map<String, ThumbMonthPrint> before,
+      required List<String> restored,
+      bool replace = false}) async {
+    final after = await _dao.thumbMonthPrints();
     final months = _prefs.months;
     for (final m in header.months.keys) {
-      months[m] = restored.contains(m)
-          ? MonthRecord(MonthState.restored, print: prints[m]?.key ?? '')
-          : const MonthRecord(MonthState.foreign);
+      if (!restored.contains(m)) {
+        months[m] = const MonthRecord(MonthState.foreign);
+        continue;
+      }
+      final fileIsDatabase = !replace && before[m] == null;
+      months[m] = MonthRecord(MonthState.restored,
+          print: fileIsDatabase ? (after[m]?.key ?? '') : '');
     }
     await _prefs.setMonths(months);
   }
@@ -1096,12 +1118,12 @@ class BackupCoordinator {
     try {
       final summary = await _locked(() async {
         await _holdCatchUp();
-        final (summary, done) = await _importBackup(c.path, c.header);
+        final (summary, done, before) = await _importBackup(c.path, c.header);
         if (!summary.ok) return summary;
         await _prefs.reload();
         if (_prefs.lastSeq == 0 && c.path == kRecordsFileName) {
           await _prefs.setAdoptedFrom(c.header.installId);
-          await _adoptMonths(c.header, done);
+          await _adoptMonths(c.header, before: before, restored: done);
         }
         await _markAnswered(c.header.installId);
         return summary;
@@ -1178,19 +1200,21 @@ class BackupCoordinator {
             allowDownload: true, timeout: const Duration(seconds: 30));
         if (h.kind == CloudResultKind.ok && h.header != null) {
           final header = h.header!;
-          var done = const <String>[];
+          var done = header.months.keys.toList();
+          var before = await _dao.thumbMonthPrints();
           if (!replace) {
-            final (summary, months) =
+            final (summary, months, prints) =
                 await _importBackup(kRecordsFileName, header);
             if (!summary.ok) return false;
             done = months;
+            before = prints;
             onDataImported?.call();
           }
           await _prefs.setAdoptedFrom(header.installId);
           await _prefs.setLastSeq(0);
           await _prefs.setPendingSeq(0);
-          await _adoptMonths(
-              header, replace ? header.months.keys.toList() : done);
+          await _adoptMonths(header,
+              before: before, restored: done, replace: replace);
           await _markAnswered(header.installId);
           return true;
         }
@@ -1252,14 +1276,14 @@ class BackupCoordinator {
         if (cur.kind == CloudResultKind.ok &&
             curHeader != null &&
             curHeader.installId != me) {
-          final (summary, done) =
+          final (summary, done, before) =
               await _importBackup(kRecordsFileName, curHeader);
           if (summary.ok) {
             imported = true;
             await _prefs.setAdoptedFrom(curHeader.installId);
             await _prefs.setLastSeq(0);
             await _prefs.setPendingSeq(0);
-            await _adoptMonths(curHeader, done);
+            await _adoptMonths(curHeader, before: before, restored: done);
             ids.add(curHeader.installId);
           }
         }
