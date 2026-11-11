@@ -17,6 +17,7 @@ import 'package:calorie_tracker/services/backup/cloud_backup_channel.dart';
 import 'package:calorie_tracker/services/backup/file_pick_channel.dart';
 import 'package:calorie_tracker/ui/backup_sheets.dart';
 import 'package:calorie_tracker/ui/screens/settings/data_section.dart';
+import 'package:calorie_tracker/ui/widgets/small_spinner.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -34,6 +35,19 @@ class _Picker implements FilePicker {
   final List<String> paths;
   @override
   Future<PickedFiles> pickJsonFiles() async => PickedFiles(paths);
+}
+
+/// A pick that answers when the test says (Android answers only once the
+/// picked files are copied).
+class _SlowPicker implements FilePicker {
+  _SlowPicker(this.answer);
+  final Future<PickedFiles> answer;
+  int calls = 0;
+  @override
+  Future<PickedFiles> pickJsonFiles() {
+    calls++;
+    return answer;
+  }
 }
 
 void main() {
@@ -55,7 +69,10 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester,
-      {BackupCoordinator? b, bool android = false, FilePicker? picker}) =>
+      {BackupCoordinator? b,
+      bool android = false,
+      FilePicker? picker,
+      String platform = 'ios'}) =>
       pumpApp(
           tester,
           Scaffold(
@@ -66,6 +83,7 @@ void main() {
                 backup: b,
                 androidBackupNote: android,
                 filePicker: picker ?? _Picker(const []),
+                platform: platform,
               ),
             ]),
           ),
@@ -406,6 +424,40 @@ void main() {
     final both = await pick(
         {'status': 'ok', 'paths': <String>[], 'tooBig': 1, 'failed': 1});
     expect(both, '${_en.importTooBig} ${_en.importPickUnavailable}');
+  });
+
+  testWidgets('Android Choose File…: Import is busy until the picked files '
+      'are copied, so a second pick cannot empty the first one\'s copies',
+      (tester) async {
+    Future<void> chooseFile() async {
+      await tester.tap(find.byKey(const Key('importButton')));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('importChooseFile')));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    final copying = Completer<PickedFiles>();
+    final picker = _SlowPicker(copying.future);
+    await pump(tester, picker: picker, platform: 'android');
+    await chooseFile();
+    expect(picker.calls, 1);
+    expect(find.byType(SmallSpinner), findsOneWidget);
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('importChooseFile')), findsNothing,
+        reason: 'no second pick while the first one is copied');
+    copying.complete(const PickedFiles([], cancelled: true));
+    await tester.pumpAndSettle();
+    expect(find.byType(SmallSpinner), findsNothing);
+
+    // iOS answers only after its own picker's copy, and a picker swiped
+    // away is reported not to answer on some iOS versions: the row stays
+    // usable while it is up.
+    final open = _SlowPicker(Completer<PickedFiles>().future);
+    await pump(tester, picker: open);
+    await chooseFile();
+    expect(open.calls, 1);
+    expect(find.byType(SmallSpinner), findsNothing);
   });
 
   test('a delete says done, done in part (try again), or not done', () {

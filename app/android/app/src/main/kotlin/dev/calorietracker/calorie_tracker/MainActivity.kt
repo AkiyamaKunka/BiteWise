@@ -14,7 +14,8 @@ import io.flutter.plugin.common.MethodChannel
 import java.io.File
 
 class MainActivity : FlutterActivity() {
-    /// The open pickFiles call, answered from onActivityResult.
+    /// The open pickFiles call, answered from onActivityResult once the
+    /// picked files are copied. Main thread only.
     private var pickReply: MethodChannel.Result? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -83,8 +84,8 @@ class MainActivity : FlutterActivity() {
             return
         }
         val reply = pickReply ?: return
-        pickReply = null
         if (resultCode != Activity.RESULT_OK || data == null) {
+            pickReply = null
             reply.success(mapOf("status" to "cancelled"))
             return
         }
@@ -96,6 +97,10 @@ class MainActivity : FlutterActivity() {
             data.data?.let { uris.add(it) }
         }
         // Copying a few MB off the UI thread; the reply goes back on it.
+        // The call stays open until then (pickFiles answers busy): every
+        // pick copies into the same folder, which a second pick would
+        // empty while this one still writes it. Dart keeps Import busy
+        // from the pick until it has read the copies.
         Thread {
             val dir = File(cacheDir, "picked").apply {
                 deleteRecursively()
@@ -119,6 +124,7 @@ class MainActivity : FlutterActivity() {
                 }
             }
             runOnUiThread {
+                if (pickReply === reply) pickReply = null
                 reply.success(
                     mapOf("status" to "ok", "paths" to paths, "tooBig" to tooBig, "failed" to failed),
                 )

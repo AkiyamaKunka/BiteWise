@@ -254,7 +254,21 @@ class _DataSectionState extends State<DataSection> {
   /// such.
   Future<void> _importFiles() async {
     final l10n = context.l10n;
-    final picked = await widget.filePicker.pickJsonFiles();
+    // Android answers only once it has copied the picked files (seconds
+    // for a large one from a cloud drive), after its picker closed: the
+    // row is busy from the start, so no second pick runs meanwhile
+    // (MainActivity.kt holds its own call busy too). iOS answers after
+    // its picker's own copy, and a picker swiped away is reported not to
+    // answer on some iOS versions: the row stays usable while it is up.
+    final busyFirst = widget.platform == 'android';
+    if (busyFirst) setState(() => _importing = true);
+    final PickedFiles picked;
+    try {
+      picked = await widget.filePicker.pickJsonFiles();
+    } finally {
+      // Set again below when there is something to import.
+      if (busyFirst && mounted) setState(() => _importing = false);
+    }
     if (!mounted) return;
     if (picked.unavailable) {
       ScaffoldMessenger.of(context).showSnackBar(
