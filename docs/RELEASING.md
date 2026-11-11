@@ -1340,7 +1340,8 @@ on `feat/icloud-backup`:
   is nil, every channel call answers `unavailable`, and Settings › Your
   Data says *iCloud Drive is not available for Chopstats*. Export with
   pictures and Import › Choose File… work on both platforms.
-- **Part B — the last commit** (*iOS: Runner gets the iCloud container…*):
+- **Part B — one commit** (*iOS: Runner gets the iCloud container…*;
+  the fixes after it touch neither the entitlements nor Info.plist):
   `Runner.entitlements` gains `com.apple.developer.icloud-container-identifiers`,
   `com.apple.developer.icloud-services` = `CloudDocuments` and
   `com.apple.developer.ubiquity-container-identifiers`, all
@@ -1421,3 +1422,24 @@ phone, with Part B and § 11.1 done:
 8. iCloud storage full: the status line says so.
 9. Turn the switch off → *Delete It…*: this phone's files go, another
    phone's stay.
+10. Files not on the phone (the unit tests model them with the fake and,
+    in RunnerTests, a pre-iOS 17 `.icloud` placeholder; only a device
+    shows real eviction):
+    - a new iPhone with an old backup that has pictures → *Start Fresh…*:
+      every file of the old backup goes (pictures first, the records file
+      last), and the offer does not come back;
+    - evict this phone's `Meal Pictures` files in Files (*Remove
+      Download*), then turn the switch off → *Delete It…*: they are
+      downloaded and deleted; in Airplane mode the snackbar says some
+      files could not be deleted yet, the switch stays off, and *Delete
+      iCloud Backup…* in Settings finishes the job once online;
+    - with the switch off after *Keep the Backup in iCloud*, Settings
+      shows *Delete iCloud Backup…*, and nothing uploads before it.
+11. Restore on a fresh reinstall in poor network: a month whose pictures
+    cannot be read is reported, then comes in on a later launch (no
+    manual Import), and the new backup's header still lists it.
+12. Two phones conflict, then *Delete It…* on one: the other phone's
+    version is not lost (the delete is left; *Combine the Two Copies*
+    first).
+13. A file another device has not uploaded yet (error 4353) never makes
+    Settings say *iCloud Drive is not available for Chopstats*.
