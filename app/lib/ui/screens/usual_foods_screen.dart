@@ -424,39 +424,45 @@ class _UsualRow extends StatelessWidget {
         '${l.macroProteinShort}: ${_grams(n.p)}g · '
         '${l.macroCarbsShort}: ${_grams(n.c)}g · '
         '${l.macroFatShort}: ${_grams(n.f)}g';
+    final actions = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (logged)
+          Icon(Icons.check_circle,
+              key: const Key('usualLoggedCheck'),
+              size: 20,
+              color: colors.accent,
+              semanticLabel: l.usualLoggedLabel),
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.more_horiz),
+          // The theme's icon-button look (accent, dimmed while pressed
+          // on iOS), as the app's other icon buttons: the menu button
+          // hands its IconButton a colour of its own (black87 or white),
+          // which would win over the theme.
+          style: theme.iconButtonTheme.style,
+          tooltip: l.usualMoreActions,
+          enabled: enabled,
+          onSelected: (_) => onHide(),
+          itemBuilder: (_) => [
+            PopupMenuItem<String>(
+              key: const Key('usualHide'),
+              value: 'hide',
+              child: Text(l.usualHide),
+            ),
+          ],
+        ),
+      ],
+    );
+    // At large text the check and ⋯ go under the words, as History's day
+    // value and the Hidden foods row's Show again do: beside them they
+    // took 20 to 34 pt from a 256-pt column on a 320-pt phone, and at AX5
+    // 'Avocado', 'Spaghetti' and 'Pepperoni' broke inside the word.
+    final stacked = isLargeText(context);
     return GroupedRow.custom(
       onTap: onTap,
       enabled: enabled,
       showChevron: false,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (logged)
-            Icon(Icons.check_circle,
-                key: const Key('usualLoggedCheck'),
-                size: 20,
-                color: colors.accent,
-                semanticLabel: l.usualLoggedLabel),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_horiz),
-            // The theme's icon-button look (accent, dimmed while pressed
-            // on iOS), as the app's other icon buttons: the menu button
-            // hands its IconButton a colour of its own (black87 or white),
-            // which would win over the theme.
-            style: theme.iconButtonTheme.style,
-            tooltip: l.usualMoreActions,
-            enabled: enabled,
-            onSelected: (_) => onHide(),
-            itemBuilder: (_) => [
-              PopupMenuItem<String>(
-                key: const Key('usualHide'),
-                value: 'hide',
-                child: Text(l.usualHide),
-              ),
-            ],
-          ),
-        ],
-      ),
+      trailing: stacked ? null : actions,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,6 +476,7 @@ class _UsualRow extends StatelessWidget {
           Text(stats,
               style: theme.textTheme.bodySmall
                   ?.copyWith(color: colors.secondaryLabel)),
+          if (stacked) actions,
         ],
       ),
     );
