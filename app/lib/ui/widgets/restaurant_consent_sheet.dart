@@ -227,10 +227,25 @@ Future<RestaurantConsentChoice?> showRestaurantConsentSheet(
 /// Asks for the restaurant assist's consent and, on an answer, stamps it
 /// with the CURRENT recipient (re-read after the sheet: a recipient that
 /// changed meanwhile is not the one the user agreed to, so nothing is
-/// stamped). [mode] is written with it (the first enable); for
-/// [RestaurantConsentKind.manual] the 'Use photo location' setting is left
-/// alone — the answer is for that one lookup — otherwise it follows the
-/// answer. Returns the answer, or null.
+/// stamped). [mode] is written with it (the first enable).
+///
+/// The 'Use photo location' setting is written in the same store call as
+/// the consent, so no lookup gate ever reads the new consent with the old
+/// setting:
+///
+///   * Brand only turns it off, under every kind. The stamp is a standing
+///     consent for this recipient — the editor's sheet
+///     ([RestaurantConsentKind.manual]) is only reachable while the mode is
+///     on and the consent names someone else, so its answer un-pauses the
+///     automatic lookups too — and the only answer the user gave about this
+///     recipient is "skip the location". Left on from the recipient before,
+///     the next sweep would read a photo's position, ask Apple Maps and send
+///     the chain found there.
+///   * Use location turns it on, except for the manual kind, where it is
+///     left as it was: that answer is used for the one lookup the editor
+///     starts, and never widens what the automatic lookups read.
+///
+/// Returns the answer, or null.
 Future<RestaurantConsentChoice?> askRestaurantConsent(
   BuildContext context, {
   required SettingsStore settings,
@@ -250,9 +265,11 @@ Future<RestaurantConsentChoice?> askRestaurantConsent(
   }
   await settings.updateRestaurantAssist(
     mode: mode,
-    location: kind == RestaurantConsentKind.manual
-        ? null
-        : choice == RestaurantConsentChoice.useLocation,
+    location: choice == RestaurantConsentChoice.brandOnly
+        ? false
+        : kind == RestaurantConsentKind.manual
+            ? null
+            : true,
     consentAt: controls.now(),
     consentRecipient: support.recipientStamp,
   );

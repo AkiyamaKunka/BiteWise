@@ -584,6 +584,70 @@ void main() {
           reason: 'the location setting decides once consent covers');
     });
 
+    // The state the editor really shows this sheet in: the mode is on and
+    // the consent names the recipient before (the assist is paused). The
+    // answer un-pauses the automatic lookups for the new recipient, so
+    // Brand only must not leave 'Use photo location' on from the old one.
+    testWidgets('paused for a new recipient: Brand only also turns the '
+        'location setting off, with the consent it stamps', (tester) async {
+      final settings = FakeSettings()
+        ..provider = 'openrouter'
+        ..apiKey = 'k'
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistLocation = true
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      final c = _Controls(_openrouter);
+      // What the engine would read at each change of the settings: never
+      // the new consent together with the old location setting.
+      final seen = <(String?, bool)>[];
+      settings.addListener(() => seen.add((
+            settings.restaurantAssistConsentRecipient,
+            settings.restaurantAssistLocation,
+          )));
+      final ctx = await host(tester);
+      final pending = restaurantManualLookupChoice(ctx,
+          settings: settings, controls: c.controls);
+      await tester.pumpAndSettle();
+      expect(sheet(), findsOneWidget);
+      await tester.tap(find.byKey(const Key('restaurantConsentBrandOnly')));
+      await tester.pumpAndSettle();
+      expect((await pending)?.useLocation, isFalse);
+      expect(settings.restaurantAssistConsentRecipient, 'openrouter');
+      expect(settings.restaurantAssistConsentAt, _now);
+      expect(settings.restaurantAssist, 'auto', reason: 'the mode stays');
+      expect(settings.restaurantAssistLocation, isFalse,
+          reason: 'Brand only is the only answer given about OpenRouter');
+      expect(seen, [('openrouter', false)]);
+
+      final again = restaurantManualLookupChoice(ctx,
+          settings: settings, controls: c.controls);
+      await tester.pumpAndSettle();
+      expect(sheet(), findsNothing);
+      expect((await again)?.useLocation, isFalse);
+    });
+
+    testWidgets('paused for a new recipient: Use location is for that one '
+        'lookup and never turns the location setting on', (tester) async {
+      final settings = FakeSettings()
+        ..provider = 'openrouter'
+        ..apiKey = 'k'
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistLocation = false
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      final c = _Controls(_openrouter);
+      final ctx = await host(tester);
+      final pending = restaurantManualLookupChoice(ctx,
+          settings: settings, controls: c.controls);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('restaurantConsentUseLocation')));
+      await tester.pumpAndSettle();
+      expect((await pending)?.useLocation, isTrue);
+      expect(settings.restaurantAssistConsentRecipient, 'openrouter');
+      expect(settings.restaurantAssistLocation, isFalse);
+    });
+
     testWidgets('a recipient the app has no copy for cannot be consented to',
         (tester) async {
       final settings = FakeSettings()..provider = 'gemini';
