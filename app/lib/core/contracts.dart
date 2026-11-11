@@ -297,7 +297,85 @@ abstract class MealsDao {
   /// Never destructive: existing rows win, new rows are added, and the
   /// result reports what happened. Throws [FormatException] on a payload
   /// that is not a CalorieTracker export.
+  ///
+  /// Since 1.7.0 a `meal_thumbs` table (iCloud Backup and full exports:
+  /// `{chat_id, image_hash, jpeg_b64}` rows) is imported too, each picture
+  /// onto the local meal of the same photo, never replacing one; and a
+  /// photo meal deleted on this phone (its ledger row says deleted, no meal
+  /// is left) is not brought back.
   Future<ImportSummary> importJson(String json);
+
+  // ------------------------------------------------- iCloud Backup (1.7.0)
+
+  /// How many records each backed-up table holds, the meal date range and
+  /// the change counters the triggers keep (schema v4, data_changes).
+  Future<BackupCounts> backupCounts();
+
+  /// Every row of the export tables (data/db.dart kExportTables), read in
+  /// one transaction so the backup is one moment's state.
+  Future<Map<String, List<Map<String, Object?>>>> backupRecordTables();
+
+  /// Per month (`YYYY-MM` of the meal's date): how many photo meals have a
+  /// picture, their bytes and the highest meal id — what tells a changed
+  /// month from an unchanged one.
+  Future<Map<String, ThumbMonthPrint>> thumbMonthPrints();
+
+  /// The pictures of the photo meals dated in [month], by meal id.
+  Future<List<BackupThumb>> thumbsForMonth(String month);
+}
+
+/// [MealsDao.backupCounts].
+class BackupCounts {
+  const BackupCounts({
+    this.meals = 0,
+    this.bodyWeight = 0,
+    this.bodyMeasurements = 0,
+    this.workouts = 0,
+    this.activities = 0,
+    this.thumbs = 0,
+    this.firstDate,
+    this.lastDate,
+    this.recordsChange = 0,
+    this.thumbsChange = 0,
+  });
+  final int meals;
+  final int bodyWeight;
+  final int bodyMeasurements;
+  final int workouts;
+  final int activities;
+  final int thumbs;
+  final String? firstDate;
+  final String? lastDate;
+
+  /// Bumped by every insert, update and delete on the export tables.
+  final int recordsChange;
+
+  /// Bumped by every change to meal_thumbs.
+  final int thumbsChange;
+
+  /// What the user logged (the ledger and the fitness profile are not
+  /// counted): zero means there is nothing worth backing up.
+  int get records =>
+      meals + bodyWeight + bodyMeasurements + workouts + activities;
+}
+
+/// One month's pictures, as [MealsDao.thumbMonthPrints] sums them.
+class ThumbMonthPrint {
+  const ThumbMonthPrint(this.count, this.bytes, this.maxMealId);
+  final int count;
+  final int bytes;
+  final int maxMealId;
+
+  /// Stored in the backup prefs to tell whether the month changed.
+  String get key => '$count:$bytes:$maxMealId';
+}
+
+/// One picture for a backup file: the photo it belongs to and its JPEG.
+class BackupThumb {
+  const BackupThumb(this.chatId, this.imageHash, this.jpeg);
+  final int chatId;
+  final String imageHash;
+  final Uint8List jpeg;
 }
 
 /// One weigh-in row (body_weight): a date and the kilograms recorded for it.
@@ -323,10 +401,28 @@ class BodyMeasurements {
 /// Outcome of [MealsDao.importJson] — per-table added/skipped counts so the
 /// UI can say "142 meals added, 3 already here" instead of "done".
 class ImportSummary {
-  const ImportSummary(this.added, this.skipped, {this.exportedAt});
+  const ImportSummary(this.added, this.skipped,
+      {this.exportedAt,
+      this.thumbsAdded = 0,
+      this.thumbsSkipped = 0,
+      this.mealsSkippedDeleted = 0,
+      this.noMatchingMeals = false});
   final Map<String, int> added;
   final Map<String, int> skipped;
   final String? exportedAt;
+
+  /// Pictures (meal_thumbs rows) put on a local meal, and those that were
+  /// not: no matching meal, one already there, or not a usable JPEG.
+  final int thumbsAdded;
+  final int thumbsSkipped;
+
+  /// Photo meals in the file that were deleted on this phone and so not
+  /// brought back.
+  final int mealsSkippedDeleted;
+
+  /// A file that held pictures only, none of which belongs to a meal on
+  /// this phone (import the records file first).
+  final bool noMatchingMeals;
 
   int get totalAdded => added.values.fold(0, (a, b) => a + b);
   int get totalSkipped => skipped.values.fold(0, (a, b) => a + b);
