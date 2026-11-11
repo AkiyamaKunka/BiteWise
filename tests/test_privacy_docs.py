@@ -15,6 +15,8 @@ deliverable of R7a, so this pins it in both languages.
 import json
 import os
 
+import lookup_jobs
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 
 
@@ -552,3 +554,18 @@ def test_policy_usual_foods_and_saved_answers():
     assert ("并可同时清除已记住的地点和保存的查询结果（Android 上是保存的查询结果）。"
             "如果不清除，它们会按上文所述保存。") in zh_lookup
     assert "如果不清除，它们会按上文所述保存。" in zh_lookup
+
+
+def test_the_policys_own_server_retention_is_the_servers_cache_ttl():
+    """The policy tells the user how long their own server keeps a lookup's
+    request and answer; lookup_jobs.CACHE_TTL_SECONDS is what makes it
+    true. The hours are built from the constant, so the code and the policy
+    (English and 中文) cannot move apart (RC 1.6.0 review, 2026-11-10)."""
+    ttl = lookup_jobs.CACHE_TTL_SECONDS
+    assert ttl % 3600 == 0, ttl
+    hours = ttl // 3600
+    en, zh = map(_flat, _policy_halves())
+    assert ("Your server keeps a lookup's request and answer in memory for "
+            "up to %d hours." % hours) in en
+    assert ("你的服务器会在内存中保留一次查询的请求和结果，最长 %d 小时。"
+            % hours) in zh

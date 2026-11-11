@@ -184,6 +184,24 @@ def test_unknown_job_and_ttl_expiry(services):
     assert service.submit(_request())[0] == "accepted"  # cache expired
 
 
+def test_a_finished_lookup_is_served_for_24_hours_and_not_a_second_more(
+        services):
+    """docs/PRIVACY.md promises the server keeps a lookup's request and
+    answer for up to 24 hours. The numbers are literal on purpose: the test
+    above moves the clock by CACHE_TTL_SECONDS, so it follows any value the
+    constant is given and would not notice the promise being broken."""
+    clock = Clock()
+    service = _service(ScriptedRunner([_ok_run]), clock=clock)
+    services.append(service)
+    _, body = service.submit(_request())
+    _wait_state(service, body["job_id"], {"done"})
+    clock.now += 24 * 3600 - 1
+    assert service.status(body["job_id"])["state"] == "done"
+    clock.now += 2  # one second past 24 hours after it finished
+    assert service.status(body["job_id"])["state"] == "unknown"
+    assert service.submit(_request())[0] == "accepted"  # not "cached"
+
+
 def test_a_slow_cli_start_is_reported_as_a_timeout_not_a_guard_failure(
         services):
     """guard_fail:init_timeout means the CLI printed nothing before the init
