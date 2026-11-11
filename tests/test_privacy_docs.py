@@ -584,3 +584,22 @@ def test_the_policys_own_server_retention_is_the_servers_cache_ttl():
             "up to %d hours." % hours) in en
     assert ("你的服务器会在内存中保留一次查询的请求和结果，最长 %d 小时。"
             % hours) in zh
+
+
+def test_the_server_doc_says_a_photo_before_4am_carries_the_day_befores_meals():
+    """Run 7 (#22) sends the day before's meals with a photo taken before
+    4 a.m., to every backend, your own server included. docs/SERVER.md's
+    list of what the phone supplies came from main's README commit after
+    run 7 branched, so it named that day only. The README describes the App
+    Store build, so it changes when run 7's build ships, and the #22 merge
+    list in RELEASING.md says so."""
+    server = _flat(_read("docs", "SERVER.md"))
+    assert ("The phone supplies only data for it: a bounded dietary-profile "
+            "appendix, that day's meal summaries, plus the day before's for "
+            "a photo taken before 4 a.m., and the choice of plan, model, "
+            "effort and reply language.") in server
+    releasing = _flat(_read("docs", "RELEASING.md"))
+    merging = releasing[releasing.index("When merging #22 after this PR:"):
+                        releasing.index("**After #22, one restyle commit:**")]
+    assert ("When run 7's build reaches the App Store, say the day before's "
+            "meals in `README.md` and `README.zh-CN.md` too") in merging

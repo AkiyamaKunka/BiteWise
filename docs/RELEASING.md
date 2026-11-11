@@ -343,6 +343,13 @@ When merging #22 after this PR:
   photo taken before 4 a.m. Both languages say so since the merge of `main`
   into #22, and `tests/test_privacy_docs.py` pins it; keep it when you give
   #22 its merge date.
+- When run 7's build reaches the App Store, say the day before's meals in
+  `README.md` and `README.zh-CN.md` too, in both languages. They describe
+  the App Store build, and three places in each name that day's meals
+  only: the Privacy paragraph (当天其他餐食), the "You log a photo" bullet
+  and the own-server bullet on what the phone supplies (当天的餐食摘要).
+  Use the wording `docs/SERVER.md` already has: "that day's meal
+  summaries, plus the day before's for a photo taken before 4 a.m.".
 
 **After #22, one restyle commit:**
 - Move the *My usual foods* screen, the usual-numbers card and the chip to
