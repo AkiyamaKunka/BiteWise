@@ -1982,6 +1982,36 @@
       "expected": "raising_canes"
     },
     {
+      "id": "match_traditional_logo_with_latin",
+      "fn": "match_chain",
+      "input": "貢茶 Gong cha",
+      "expected": "gong_cha"
+    },
+    {
+      "id": "match_degree_brand_alone",
+      "fn": "match_chain",
+      "input": "85°C",
+      "expected": "eighty_five_c"
+    },
+    {
+      "id": "match_receipt_without_periods",
+      "fn": "match_chain",
+      "input": "PF CHANGS #8812",
+      "expected": "pf_changs"
+    },
+    {
+      "id": "match_periods_in_an_initialism",
+      "fn": "match_chain",
+      "input": "T.G.I. Friday's",
+      "expected": "tgi_fridays"
+    },
+    {
+      "id": "match_traditional_characters",
+      "fn": "match_chain",
+      "input": "塔可貝爾",
+      "expected": "taco_bell"
+    },
+    {
       "id": "match_drink_brand_bare",
       "fn": "match_chain",
       "input": "A&W",

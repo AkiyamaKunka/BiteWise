@@ -152,6 +152,14 @@ void main() {
       ('Raising Cane’s℠', null, 'raising_canes'),
       ('Whataburger™ (Main St)', null, 'whataburger'),
       ('Starbucks®', null, 'starbucks'),
+      // Names as the chains print them: Gong cha's logo (Traditional),
+      // 85°C's cups, receipts without the periods, Traditional characters
+      ('貢茶 Gong cha', null, 'gong_cha'),
+      ('85°C', null, 'eighty_five_c'),
+      ('PF CHANGS #8812', null, 'pf_changs'),
+      ("T.G.I. Friday's", null, 'tgi_fridays'),
+      ('塔可貝爾', null, 'taco_bell'),
+      ('溫蒂漢堡', null, 'wendys'),
       // Branch suffixes
       ("McDonald's - Times Square", null, 'mcdonalds'),
       ('Starbucks (Times Sq)', null, 'starbucks'),

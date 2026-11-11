@@ -178,7 +178,9 @@
       "key": "baskin_robbins",
       "name": "Baskin-Robbins",
       "zh_name": "芭斯罗缤",
-      "aliases": [],
+      "aliases": [
+        "芭斯羅繽"
+      ],
       "domains": [
         "baskinrobbins.com"
       ],
@@ -801,7 +803,9 @@
       "key": "coffee_bean",
       "name": "The Coffee Bean & Tea Leaf",
       "zh_name": "香啡缤",
-      "aliases": [],
+      "aliases": [
+        "香啡繽"
+      ],
       "domains": [
         "coffeebean.com"
       ],
@@ -821,7 +825,8 @@
       "name": "Cold Stone Creamery",
       "zh_name": "酷圣石",
       "aliases": [
-        "Cold Stone"
+        "Cold Stone",
+        "酷聖石"
       ],
       "domains": [
         "coldstonecreamery.com"
@@ -1169,7 +1174,9 @@
       "key": "eighty_five_c",
       "name": "85°C Bakery Cafe",
       "zh_name": "85度C",
-      "aliases": [],
+      "aliases": [
+        "85°C"
+      ],
       "domains": [
         "85cbakerycafe.com"
       ],
@@ -1467,7 +1474,9 @@
       "key": "gong_cha",
       "name": "Gong cha",
       "zh_name": "贡茶",
-      "aliases": [],
+      "aliases": [
+        "貢茶"
+      ],
       "domains": [
         "gong-cha.com",
         "gongchausofficial.com"
@@ -2694,7 +2703,9 @@
       "key": "papa_johns",
       "name": "Papa John's",
       "zh_name": "棒约翰",
-      "aliases": [],
+      "aliases": [
+        "棒約翰"
+      ],
       "domains": [
         "papajohns.com"
       ],
@@ -2733,7 +2744,9 @@
       "key": "paris_baguette",
       "name": "Paris Baguette",
       "zh_name": "巴黎贝甜",
-      "aliases": [],
+      "aliases": [
+        "巴黎貝甜"
+      ],
       "domains": [
         "parisbaguette.com"
       ],
@@ -2743,7 +2756,9 @@
       "key": "peets",
       "name": "Peet's Coffee",
       "zh_name": "皮爷咖啡",
-      "aliases": [],
+      "aliases": [
+        "皮爺咖啡"
+      ],
       "domains": [
         "peets.com"
       ],
@@ -2794,7 +2809,8 @@
       "key": "pf_changs",
       "name": "P.F. Chang's",
       "aliases": [
-        "P.F. Chang's China Bistro"
+        "P.F. Chang's China Bistro",
+        "PF Chang's"
       ],
       "domains": [
         "pfchangs.com"
@@ -3496,7 +3512,9 @@
       "key": "taco_bell",
       "name": "Taco Bell",
       "zh_name": "塔可贝尔",
-      "aliases": [],
+      "aliases": [
+        "塔可貝爾"
+      ],
       "domains": [
         "tacobell.com"
       ],
@@ -3613,7 +3631,9 @@
     {
       "key": "tgi_fridays",
       "name": "TGI Fridays",
-      "aliases": [],
+      "aliases": [
+        "T.G.I. Friday's"
+      ],
       "domains": [
         "tgifridays.com"
       ],
@@ -3678,7 +3698,9 @@
       "key": "tous_les_jours",
       "name": "Tous les Jours",
       "zh_name": "多乐之日",
-      "aliases": [],
+      "aliases": [
+        "多樂之日"
+      ],
       "domains": [
         "tljus.com"
       ],
@@ -3850,7 +3872,8 @@
       "name": "Wendy's",
       "zh_name": "温蒂汉堡",
       "aliases": [
-        "Wendy's Old Fashioned Hamburgers"
+        "Wendy's Old Fashioned Hamburgers",
+        "溫蒂漢堡"
       ],
       "domains": [
         "wendys.com"
