@@ -1426,12 +1426,27 @@ class BackupCoordinator {
           default:
             return BackupDeleteResult.failed;
         }
+        // Only [c]'s install's files go (its id stands where this
+        // install's would; any seq): a month path is every install's, and
+        // when this install backs up too ([c] is a second records file, or
+        // its month lost the name race) the month file is this install's
+        // own, which it would never write again.
         final result = await _deleteInOrder([
           [for (final m in listed.keys) picturesPath(m)],
           if (c.path == kRecordsFileName) const [kPreviousFileName],
           [c.path],
-        ], WriteExpect(installId: _prefs.installId, adoptFrom: c.header.installId));
+        ], WriteExpect(installId: c.header.installId));
         _headerCache.clear();
+        // A month whose file is gone now is forgotten: one this install
+        // skipped as [c]'s is written by the next run.
+        final months = _prefs.months;
+        final before = months.length;
+        for (final m in listed.keys) {
+          if (!months.containsKey(m)) continue;
+          final st = await _t.itemState(picturesPath(m));
+          if (st.exists == ItemExists.no) months.remove(m);
+        }
+        if (months.length != before) await _prefs.setMonths(months);
         if (result != BackupDeleteResult.deleted) return result;
         await _markAnswered(c.header.installId);
         await _prefs.setFirstEmptyAt(_now.subtract(firstWriteWait));

@@ -240,7 +240,8 @@ class WriteExpect {
     this.replaceUnknown = false,
   });
 
-  /// This install.
+  /// This install (Start Fresh: the install whose backup is deleted, so
+  /// that only its files go).
   final String installId;
 
   /// The seqs of [installId]'s own file that may be replaced; null = any

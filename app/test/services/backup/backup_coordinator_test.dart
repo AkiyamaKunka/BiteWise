@@ -686,6 +686,51 @@ void main() {
       expect(cloud.files, before);
     });
 
+    test('Start Fresh on a second backup deletes only that install\'s '
+        'files, never this install\'s own month', () async {
+      // December's file is the other install's; October's is this one's.
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final odec = await seed(otherDao, '2026-12-01', hash: 'o-dec');
+      await otherDao.saveMealThumb(odec, _jpeg(5));
+      final p = await w.writePictures('${tmp.path}/o-dec.json',
+          installId: _other, seq: 5, month: '2026-12');
+      cloud.files[picturesPath('2026-12')] = await File(p.path).readAsBytes();
+      final oct = await seed(dao, '2026-10-03', hash: 'h1');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      final dec = await seed(dao, '2026-12-02', hash: 'mine-dec');
+      await dao.saveMealThumb(dec, _jpeg(6));
+      await ready();
+      expect(await run(), BackupState.uploading);
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      expect(cloud.headerOf(picturesPath('2026-10'))!.installId, me);
+      expect(BackupPrefs(prefs).months['2026-12']!.state, MonthState.foreign);
+      // The other install's records file appears under another name (an
+      // iCloud name race, or a copied file), listing October too.
+      final f = await w.writeRecords('${tmp.path}/o.json',
+          installId: _other,
+          seq: 5,
+          months: const {'2026-10': 2, '2026-12': 1});
+      cloud.files['Chopstats Backup 2.json'] = await File(f.path).readAsBytes();
+      c.prompt.value = null;
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(offer.candidate.path, 'Chopstats Backup 2.json');
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.deleted);
+      expect(cloud.files.keys,
+          unorderedEquals([kRecordsFileName, picturesPath('2026-10')]));
+      expect(cloud.headerOf(picturesPath('2026-10'))!.installId, me);
+      expect(BackupPrefs(prefs).months.containsKey('2026-12'), isFalse,
+          reason: 'its file is gone: written by the next run');
+      await c.backUpNow();
+      await dao.saveBodyWeight('2026-11-10', 70);
+      await c.backUpNow();
+      expect(cloud.headerOf(kRecordsFileName)!.months,
+          {'2026-10': 1, '2026-12': 1});
+      expect(hashesIn('2026-10'), ['h1']);
+      expect(hashesIn('2026-12'), ['mine-dec']);
+    });
+
     test('a later scan reads each backup\'s header again', () async {
       await seed(dao, '2026-11-01');
       await otherPhoneBackup(meals: 2); // seq 5
