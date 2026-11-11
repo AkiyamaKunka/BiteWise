@@ -56,7 +56,7 @@ The download badge and the second language:
    docs/readme/zh/slides/, and its badge is Apple's zh-cn artwork.
 -->
 
-<p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
+<p align="center"><b>English</b> · <a href="README.zh-CN.md" lang="zh-Hans" hreflang="zh-Hans">简体中文</a></p>
 
 <div align="center">
 
@@ -71,7 +71,7 @@ A free, open-source calorie tracker for iPhone, powered by the AI you&nbsp;choos
 </div>
 
 <p align="center">
-  <img src="docs/readme/slides/01-hero.jpg" width="100%" alt="Chopstats · 筷拍. Your food photos become your calorie log. A free, open-source calorie tracker for iPhone, powered by the AI you choose. Free, no subscription, no account, open source. A photo of a Greek yogurt bowl beside the Today screen, where the same meal's card is magnified: about 360 kcal, with protein, carbs, fat and the portion of each food.">
+  <img src="docs/readme/slides/01-hero.jpg" width="100%" alt="Chopstats · 筷拍: your food photos become your calorie log. A photo of a yogurt bowl beside the Today screen, whose meal card is magnified as an example estimate with calories, protein, carbs, fat and each food's portion.">
 </p>
 
 <div align="center">
@@ -123,32 +123,32 @@ Every food shows the portion your AI assumed, such as "Grilled chicken breast (~
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/04-trend.jpg" width="100%" alt="Your day, and your trend. Today beside your typical day, 30 days of History, and your weight in Body. Three phones in dark mode: Today, with 1,772 kcal eaten against a typical day of about 1,625; History, a bar chart of daily calories that averages about 1,577 kcal a day; and Body, a weight trend falling to 170.0 lb, with waist, chest and hip measurements.">
+  <img src="docs/readme/slides/10-privacy.jpg" width="100%" alt="Your log stays on your phone. No account, no ads, no tracking. The developer receives none of your data. A diagram: on your iPhone are your meal log, weight and measurements, settings, and your API key in the iOS Keychain. An arrow labelled “The photo or text you log, plus the context it needs” leads to your AI provider, or your own server, whose terms apply. A dotted line labelled Nothing leads to a dashed box: Chopstats server: none. No analytics. No ads. Above, the Settings rows AI Provider (Gemini) and Stop Sharing with Gemini, labelled Stop any time. Restaurant nutrition, if you turn it on, has its own recipients; the privacy policy lists them.">
 </p>
 
 <div align="center">
 
-### Your day and your trend
+### No account, no ads, no tracking
 
-Today shows what you ate next to your typical day. History charts the last 30 days, and Body tracks your weight along with your waist, chest and hip.
+Your meals, weight and settings stay on your phone, and the developer receives none of your data. The photos and text you log go to the AI provider you chose, or to your own server.
 
-<sub>Your typical day comes from your previous 7 days, or you can set a daily calorie goal. Also: an optional daily summary notification, your day as one image to share, metric or imperial units, and light and dark mode that follow your iPhone.</sub>
+<sub>The app asks before it first sends anything, and Stop Sharing ends it. Watch Camera Roll sends every new photo while it is on, and Restaurant nutrition, if you turn it on, has its own recipients. Details under [Privacy](#privacy).</sub>
 
 </div>
 
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/05-no-photo.jpg" width="100%" alt="No photo? Log it anyway. Describe a meal in any language your AI reads, or type the numbers yourself. Describe a meal, like “two eggs and toast with butter”. Enter manually: no AI and no key, and it works offline. The Log a meal sheet with its six rows: From recent photos, My usual foods (no AI), Leftovers (deduct what's left), Describe a meal (any language), Enter manually (no AI), and Fix or delete a meal. Describe a meal and Enter manually are highlighted.">
+  <img src="docs/readme/slides/11-cost.jpg" width="100%" alt="Free app. No subscription. Use a key from the AI you choose. If it charges, you pay it directly, never the app. No in-app purchases. Typing numbers needs no key. A card titled Works with your key from: Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. Google Gemini, the default, has a free tier; on it, Google says it may use what you send to improve its products. DeepSeek, Qwen, Doubao and GLM process data in mainland China. Prices change; check your provider's pricing page.">
 </p>
 
 <div align="center">
 
-### No photo needed
+### Bring your own AI key
 
-Describe a meal in words, such as "two eggs and toast with butter", in any language your AI reads. Or enter the numbers yourself: no AI, no key, and it works offline.
+The app is free, with no subscription and nothing to buy inside it. You use a key from the AI service you choose, and if it charges, you pay it directly.
 
-<sub>Describing a meal sends your text and today's date to your AI.</sub>
+<sub>Works with Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. Gemini, the default, has a free tier. More under [What it costs](#what-it-costs).</sub>
 
 </div>
 
@@ -171,7 +171,7 @@ Meals you logged on at least 2 of the last 90 days wait under Today › Log › 
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/07-restaurant.jpg" width="100%" alt="New in 1.6. Off by default. Chain restaurant? Use its published numbers. For a US chain meal, your AI can look up the nutrition the chain publishes. US meals only, from a built-in list of 403 chains. Needs an Anthropic or OpenRouter key, or your own server. Undo any time, or tap Wrong restaurant. A photo of a chicken burrito bowl beside the Edit meal screen in dark mode. Its Chipotle card, magnified, reads Published numbers in use: Chicken, 4 oz, 180 kcal, 32 g protein, 0 g carbs, 7 g fat. Under the items: Source: chipotle.com, Number found on the source page, and the buttons Use AI estimate, Wrong restaurant and Not from a restaurant. Demo data, not affiliated with the restaurant shown.">
+  <img src="docs/readme/slides/07-restaurant.jpg" width="100%" alt="New in 1.6, off by default. Chain restaurant? Use its published numbers. The Edit meal screen in dark mode with its Chipotle card magnified: Published numbers in use, Chicken, 4 oz, 180 kcal; below it, Source: chipotle.com with the buttons Use AI estimate and Wrong restaurant. Demo data, not affiliated with the restaurant shown.">
 </p>
 
 <div align="center">
@@ -180,7 +180,7 @@ Meals you logged on at least 2 of the last 90 days wait under Today › Log › 
 
 For a meal photo from a US chain restaurant, your AI can look up the nutrition the chain publishes and use it in place of its own estimate. The meal names its source, and you can undo the change or tap Wrong restaurant.
 
-<sub>Off by default. US meals only, from a built-in list of 403 chains. Needs an Anthropic or OpenRouter key, or your own server; not available with Gemini yet. Your AI's numbers are replaced only when the chain's own website publishes them and the match is clear; otherwise, and always with your own server, you get a suggestion. The published serving may not match what you ate. Demo data; Chopstats is not affiliated with the restaurant shown.</sub>
+<sub>Off by default. US meals only, from a built-in list of 403 chains. Needs an Anthropic or OpenRouter key, or your own server on the Claude plan; not available with Gemini yet. Your AI's numbers are replaced only when the chain's own website publishes them and the match is clear; otherwise, and always with your own server, you get a suggestion. The published serving may not match what you ate. Demo data; Chopstats is not affiliated with the restaurant shown.</sub>
 
 </div>
 
@@ -219,32 +219,32 @@ With Watch Camera Roll on, photos that the Meta AI app saves from your glasses t
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/10-privacy.jpg" width="100%" alt="Your log stays on your phone. No account, no ads, no tracking. The developer receives none of your data. A diagram: on your iPhone are your meal log, weight and measurements, settings, and your API key in the iOS Keychain. An arrow labelled “The photo or text you log, plus the context it needs” leads to your AI provider, or your own server, whose terms apply. A dotted line labelled Nothing leads to a dashed box: Chopstats server: none. No analytics. No ads. Above, the Settings rows AI Provider (Gemini) and Stop Sharing with Gemini, labelled Stop any time. Restaurant nutrition, if you turn it on, has its own recipients; the privacy policy lists them.">
+  <img src="docs/readme/slides/05-no-photo.jpg" width="100%" alt="No photo? Log it anyway. Describe a meal in any language your AI reads, or type the numbers yourself. Describe a meal, like “two eggs and toast with butter”. Enter manually: no AI and no key, and it works offline. The Log a meal sheet with its six rows: From recent photos, My usual foods (no AI), Leftovers (deduct what's left), Describe a meal (any language), Enter manually (no AI), and Fix or delete a meal. Describe a meal and Enter manually are highlighted.">
 </p>
 
 <div align="center">
 
-### No account, no ads, no tracking
+### No photo needed
 
-Your meals, weight and settings stay on your phone, and the developer receives none of your data. The photos and text you log go to the AI provider you chose, or to your own server.
+Describe a meal in words, such as "two eggs and toast with butter", in any language your AI reads. Or enter the numbers yourself: no AI, no key, and it works offline.
 
-<sub>The app asks before it first sends anything, and Stop Sharing ends it. Watch Camera Roll sends every new photo while it is on, and Restaurant nutrition, if you turn it on, has its own recipients. Details under [Privacy](#privacy).</sub>
+<sub>Describing a meal sends your text and today's date to your AI.</sub>
 
 </div>
 
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/11-cost.jpg" width="100%" alt="Free app. No subscription. Use a key from the AI you choose. If it charges, you pay it directly, never the app. No in-app purchases. Typing numbers needs no key. A card titled Works with your key from: Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. Google Gemini, the default, has a free tier; on it, Google says it may use what you send to improve its products. DeepSeek, Qwen, Doubao and GLM process data in mainland China. Prices change; check your provider's pricing page.">
+  <img src="docs/readme/slides/04-trend.jpg" width="100%" alt="Your day, and your trend. Today beside your typical day, 30 days of History, and your weight in Body. Three phones in dark mode: Today, with 1,772 kcal eaten against a typical day of about 1,625; History, a bar chart of daily calories that averages about 1,577 kcal a day; and Body, a weight trend falling to 170.0 lb, with waist, chest and hip measurements.">
 </p>
 
 <div align="center">
 
-### Bring your own AI key
+### Your day and your trend
 
-The app is free, with no subscription and nothing to buy inside it. You use a key from the AI service you choose, and if it charges, you pay it directly.
+Today shows what you ate next to your typical day. History charts the last 30 days, and Body tracks your weight along with your waist, chest and hip.
 
-<sub>Works with Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. Gemini, the default, has a free tier. More under [What it costs](#what-it-costs).</sub>
+<sub>Your typical day comes from your previous 7 days, or you can set a daily calorie goal. Also: an optional daily summary notification, your day as one image to share, metric or imperial units, and light and dark mode that follow your iPhone.</sub>
 
 </div>
 
@@ -261,20 +261,6 @@ The app is free, with no subscription and nothing to buy inside it. You use a ke
 Every screen comes in English and Simplified Chinese. Pick one under Settings › Language, or let it follow your iPhone, and describe meals in any language your AI reads.
 
 <sub>Not on the mainland China App Store.</sub>
-
-</div>
-
-<br>
-
-<p align="center">
-  <img src="docs/readme/slides/13-next.jpg" width="100%" alt="Coming next, not in the App Store yet. Coming next: a native iOS look. In the public code, not in the App Store yet: an iOS-style redesign and iCloud Backup. Three cards: Native look, a redesign in the iOS style; iCloud Backup, which copies your log to your own iCloud Drive, with no account; No date yet, not part of version 1.6. A dashed frame marks the slide as not released.">
-</p>
-
-<div align="center">
-
-### Coming next · not in the App Store yet
-
-A native iOS look and iCloud Backup are already in the public code, but not in the App Store version, and they have no release date. See [Coming next](#coming-next).
 
 </div>
 

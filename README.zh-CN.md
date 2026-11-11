@@ -28,7 +28,7 @@ Rules for this file:
    餐食, "portion" is 分量, "estimate" is 估算, "calories" is 热量.
 -->
 
-<p align="center"><a href="README.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="README.md" lang="en" hreflang="en">English</a> · <b>简体中文</b></p>
 
 <div align="center">
 
@@ -43,7 +43,7 @@ Rules for this file:
 </div>
 
 <p align="center">
-  <img src="docs/readme/zh/slides/01-hero.jpg" width="100%" alt="筷拍 Chopstats。让食物照片变成你的热量记录。免费、开源的 iPhone 热量记录应用，用你自己选的 AI。免费、无订阅、无需账户、开源。一张煎饺照片旁边是「今天」页面，同一餐的卡片被放大：约 390 千卡，列出蛋白质、碳水、脂肪和每样食物的分量。">
+  <img src="docs/readme/zh/slides/01-hero.jpg" width="100%" alt="筷拍 Chopstats：让食物照片变成你的热量记录。一张酸奶碗的照片，旁边是「今天」页面，放大的餐食卡片是一个估算示例，列出热量、蛋白质、碳水、脂肪和每种食物的份量。">
 </p>
 
 <div align="center">
@@ -95,32 +95,32 @@ Rules for this file:
 <br>
 
 <p align="center">
-  <img src="docs/readme/zh/slides/04-trend.jpg" width="100%" alt="看清今天，也看清趋势。「今天」对照日常水平，「历史」回看 30 天，「身体」记录体重和围度。三台深色模式的手机：「今天」显示已摄入 1,530 千卡，日常水平约 1,552 千卡；「历史」是每日热量柱状图，平均每天约 1,589 千卡；「身体」是降到 77.1 kg 的体重趋势，以及腰围、胸围和臀围。">
+  <img src="docs/readme/zh/slides/10-privacy.jpg" width="100%" alt="饮食记录保存在你的手机上。无需账户，没有广告，不做追踪。开发者收不到你的任何数据。示意图：你的 iPhone 上有你的饮食记录、体重和围度、设置，以及存在 iOS 钥匙串里的 API Key。一条箭头标着“你记录的照片或文字，以及必要的上下文”，指向你选的 AI 服务商或者你自己的服务器，以它的条款为准。一条虚线标着“什么都不发”，指向虚线框：筷拍服务器：没有，没有统计分析，没有广告。上方是「设置」里的「AI 服务」（Claude）和「停止发送给 Claude」，标注“随时可以停下”。「餐厅营养」打开后另有接收方，详见隐私政策。">
 </p>
 
 <div align="center">
 
-### 今天和趋势
+### 无需账户，没有广告，不做追踪
 
-「今天」把吃了多少和你的日常水平放在一起对照，「历史」回看 30 天，「身体」记录体重以及腰围、胸围和臀围。
+你的餐食、体重和设置保存在你的手机上，开发者收不到你的任何数据。你记录的照片和文字，会发送给你选的 AI 服务商，或者你自己的服务器。
 
-<sub>日常水平由此前 7 天的记录算出，你也可以设定「每日热量目标」。此外还有可开可关的每日总结通知、把今天分享为一张图片，以及跟随系统的浅色和深色模式。</sub>
+<sub>第一次发送前，应用会先征求同意；「停止发送给 …」随时可以停下。「监控相册」开启期间会发送每一张新照片，「餐厅营养」打开后另有接收方。详见[隐私](#隐私)。</sub>
 
 </div>
 
 <br>
 
 <p align="center">
-  <img src="docs/readme/zh/slides/05-no-photo.jpg" width="100%" alt="没有照片，也能记。用你的 AI 读得懂的任何语言描述一餐，或者自己输入数字。文字描述一餐，比如“一碗牛肉面加一个鸡蛋”；手动输入：不用 AI，不需要 Key，离线也能用。「记录一餐」面板的六行：从最近照片选择、我常吃的（不用 AI）、记录剩菜（扣除没吃完的部分）、文字描述一餐（任何语言）、手动输入（不用 AI）、修改或删除某餐，其中「文字描述一餐」和「手动输入」被高亮。">
+  <img src="docs/readme/zh/slides/11-cost.jpg" width="100%" alt="应用免费，没有订阅。用你自己选的 AI 的 Key；如果收费，费用直接付给服务商，不付给应用。无 App 内购买；自己输入数字不需要 Key。卡片“可以用这些服务商的 Key”：Google Gemini、OpenAI、Anthropic、xAI、OpenRouter、DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包、GLM 智谱，或者你自己的服务器。默认的 Google Gemini 有免费额度；按 Google 的说法，使用免费额度时，它可能把你发送的内容用于改进自己的产品。DeepSeek、通义千问、豆包和智谱在中国大陆处理数据。价格会变，请查看服务商的定价页面。">
 </p>
 
 <div align="center">
 
-### 不拍照也能记
+### 用你自己的 AI Key
 
-用文字描述一餐，例如“一碗牛肉面加一个鸡蛋”，你的 AI 读得懂的语言都可以。也可以自己输入数字：不用 AI，不需要 Key，离线也能用。
+应用免费，没有订阅，应用内也不出售任何东西。你用自己所选 AI 服务的 Key；如果收费，费用直接付给服务商。
 
-<sub>文字描述会把你输入的文字和今天的日期发送给你的 AI。</sub>
+<sub>支持 Google Gemini、OpenAI、Anthropic、xAI、OpenRouter、DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包和 GLM 智谱，也可以用你自己的服务器。默认的 Gemini 有免费额度。详见[费用](#费用)。</sub>
 
 </div>
 
@@ -143,7 +143,7 @@ Rules for this file:
 <br>
 
 <p align="center">
-  <img src="docs/readme/zh/slides/07-restaurant.jpg" width="100%" alt="1.6 新增，默认关闭。连锁餐厅？用它公布的数值。在美国连锁餐厅吃的餐，你的 AI 可以查找该连锁店公布的营养信息。只查在美国吃的餐，内置 403 家连锁店名单；需要 Anthropic 或 OpenRouter 的 Key，或者你自己的服务器；随时撤销，也可以点「不是这家」。一张鸡肉卷饼碗的照片旁边，是深色模式的「编辑这一餐」页面。放大的 Chipotle 卡片写着「已采用公布的数值」：Chicken，4 oz，180 千卡，蛋白质 32 克，碳水 0 克，脂肪 7 克。食物下方是来源 chipotle.com、“数值见于来源页面”，以及「改用 AI 估算」「不是这家」「不是餐厅的」三个按钮。演示数据，与图中餐厅没有任何关联。">
+  <img src="docs/readme/zh/slides/07-restaurant.jpg" width="100%" alt="1.6 新增，默认关闭。连锁餐厅？用它公布的数值。深色模式的编辑页，放大的 Chipotle 卡片显示「已采用公布的数值」：鸡肉 4 oz，180 千卡；下方是 Source: chipotle.com，以及「改用 AI 估算」和「不是这家」按钮。演示数据，与图中餐厅没有任何关联。">
 </p>
 
 <div align="center">
@@ -152,7 +152,7 @@ Rules for this file:
 
 在美国连锁餐厅吃饭时拍下的餐，你的 AI 可以查找该连锁店公布的营养信息，用它代替自己的估算。这一餐会注明来源，你可以撤销，也可以点「不是这家」。
 
-<sub>默认关闭。只查在美国吃的餐，内置 403 家连锁店名单。需要 Anthropic 或 OpenRouter 的 Key，或者你自己的服务器；Gemini 暂不支持。只有连锁店官网公布了数值且匹配明确时，才会替换 AI 的数值；否则只给出建议，使用你自己的服务器时也一律只给建议。公布的份量可能和你吃的量不一致。图中为演示数据，筷拍与该餐厅没有任何关联。</sub>
+<sub>默认关闭。只查在美国吃的餐，内置 403 家连锁店名单。需要 Anthropic 或 OpenRouter 的 Key，或者使用 Claude 套餐的你自己的服务器；Gemini 暂不支持。只有连锁店官网公布了数值且匹配明确时，才会替换 AI 的数值；否则只给出建议，使用你自己的服务器时也一律只给建议。公布的份量可能和你吃的量不一致。图中为演示数据，筷拍与该餐厅没有任何关联。</sub>
 
 </div>
 
@@ -191,32 +191,32 @@ Rules for this file:
 <br>
 
 <p align="center">
-  <img src="docs/readme/zh/slides/10-privacy.jpg" width="100%" alt="饮食记录只留在你的手机上。无需账户，没有广告，不做追踪。开发者收不到你的任何数据。示意图：你的 iPhone 上有你的饮食记录、体重和围度、设置，以及存在 iOS 钥匙串里的 API Key。一条箭头标着“你记录的照片或文字，以及必要的上下文”，指向你选的 AI 服务商或者你自己的服务器，以它的条款为准。一条虚线标着“什么都不发”，指向虚线框：筷拍服务器：没有，没有统计分析，没有广告。上方是「设置」里的「AI 服务」（Claude）和「停止发送给 Claude」，标注“随时可以停下”。「餐厅营养」打开后另有接收方，详见隐私政策。">
+  <img src="docs/readme/zh/slides/05-no-photo.jpg" width="100%" alt="没有照片，也能记。用你的 AI 读得懂的任何语言描述一餐，或者自己输入数字。文字描述一餐，比如“一碗牛肉面加一个鸡蛋”；手动输入：不用 AI，不需要 Key，离线也能用。「记录一餐」面板的六行：从最近照片选择、我常吃的（不用 AI）、记录剩菜（扣除没吃完的部分）、文字描述一餐（任何语言）、手动输入（不用 AI）、修改或删除某餐，其中「文字描述一餐」和「手动输入」被高亮。">
 </p>
 
 <div align="center">
 
-### 无需账户，没有广告，不做追踪
+### 不拍照也能记
 
-你的餐食、体重和设置保存在你的手机上，开发者收不到你的任何数据。你记录的照片和文字，会发送给你选的 AI 服务商，或者你自己的服务器。
+用文字描述一餐，例如“一碗牛肉面加一个鸡蛋”，你的 AI 读得懂的语言都可以。也可以自己输入数字：不用 AI，不需要 Key，离线也能用。
 
-<sub>第一次发送前，应用会先征求同意；「停止发送给 …」随时可以停下。「监控相册」开启期间会发送每一张新照片，「餐厅营养」打开后另有接收方。详见[隐私](#隐私)。</sub>
+<sub>文字描述会把你输入的文字和今天的日期发送给你的 AI。</sub>
 
 </div>
 
 <br>
 
 <p align="center">
-  <img src="docs/readme/zh/slides/11-cost.jpg" width="100%" alt="应用免费，没有订阅。用你自己选的 AI 的 Key；如果收费，费用直接付给服务商，不付给应用。无 App 内购买；自己输入数字不需要 Key。卡片“可以用这些服务商的 Key”：Google Gemini、OpenAI、Anthropic、xAI、OpenRouter、DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包、GLM 智谱，或者你自己的服务器。默认的 Google Gemini 有免费额度；按 Google 的说法，使用免费额度时，它可能把你发送的内容用于改进自己的产品。DeepSeek、通义千问、豆包和智谱在中国大陆处理数据。价格会变，请查看服务商的定价页面。">
+  <img src="docs/readme/zh/slides/04-trend.jpg" width="100%" alt="看清今天，也看清趋势。「今天」对照日常水平，「历史」回看 30 天，「身体」记录体重和围度。三台深色模式的手机：「今天」显示已摄入 1,530 千卡，日常水平约 1,552 千卡；「历史」是每日热量柱状图，平均每天约 1,589 千卡；「身体」是降到 77.1 kg 的体重趋势，以及腰围、胸围和臀围。">
 </p>
 
 <div align="center">
 
-### 用你自己的 AI Key
+### 今天和趋势
 
-应用免费，没有订阅，应用内也不出售任何东西。你用自己所选 AI 服务的 Key；如果收费，费用直接付给服务商。
+「今天」把吃了多少和你的日常水平放在一起对照，「历史」回看 30 天，「身体」记录体重以及腰围、胸围和臀围。
 
-<sub>支持 Google Gemini、OpenAI、Anthropic、xAI、OpenRouter、DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包和 GLM 智谱，也可以用你自己的服务器。默认的 Gemini 有免费额度。详见[费用](#费用)。</sub>
+<sub>日常水平由此前 7 天的记录算出，你也可以设定「每日热量目标」。此外还有可开可关的每日总结通知、把今天分享为一张图片，以及跟随系统的浅色和深色模式。</sub>
 
 </div>
 
@@ -233,20 +233,6 @@ Rules for this file:
 每个页面都有简体中文和英文。可以在「设置 › 语言」里选择，或者选「跟随系统」；描述一餐时，用你的 AI 读得懂的任何语言都行。
 
 <sub>未在中国大陆区 App Store 上架。</sub>
-
-</div>
-
-<br>
-
-<p align="center">
-  <img src="docs/readme/zh/slides/13-next.jpg" width="100%" alt="即将推出，还不在 App Store 版本里。即将推出：原生 iOS 外观。代码已公开，但还不在 App Store 版本里：iOS 风格的新界面和 iCloud 备份。三张卡片：原生外观，iOS 风格的新界面；iCloud 备份，把记录复制到你自己的 iCloud 云盘，不需要账户；尚无日期，不在 1.6 版本里。虚线框表示尚未发布。">
-</p>
-
-<div align="center">
-
-### 即将推出 · 还不在 App Store 版本里
-
-原生 iOS 外观和「iCloud 备份」已经在公开的代码里，但还不在 App Store 版本中，也还没有发布日期。详见[即将推出](#即将推出)。
 
 </div>
 
@@ -481,7 +467,7 @@ flutter run
 scripts/test_providers_live.sh
 ```
 
-它会通过应用自己的分析器，向每一家在 `~/.bitewise/provider_keys.env` 里配了 Key 的服务商，发送一张真实的照片和一条真实的文字请求。模板是 `scripts/provider_keys.env.example`，这个文件只留在你自己的机器上。
+它会通过应用自己的分析器，向每一家在 `~/.bitewise/provider_keys.env` 里配了 Key 的服务商，发送一张真实的照片和一条真实的文字请求。模板是 `scripts/provider_keys.env.example`，这个文件保存在你自己的机器上。
 
 没有配 Key 的服务商同样会被探测。真实接口必须拒绝一个无效的 Key，应用也必须把它报告为 Key 的问题。这样可以发现写错的 URL、已经停用的接口，或者被误读的错误。
 
