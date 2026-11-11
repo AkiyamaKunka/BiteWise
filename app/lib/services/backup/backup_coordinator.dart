@@ -412,7 +412,9 @@ class BackupCoordinator {
     for (final e in prints.entries) {
       final rec = months[e.key];
       if (rec == null) return true;
-      if (rec.state == MonthState.foreign) continue;
+      if (rec.state == MonthState.foreign || rec.state == MonthState.pending) {
+        continue;
+      }
       if (rec.state == MonthState.absent || rec.print != e.value.key) {
         return true;
       }
@@ -508,6 +510,7 @@ class BackupCoordinator {
     if (pause == BackupPause.shrink && !r.overrideShrink) {
       return _set(BackupState.shrink, count: _prefs.pausedCount);
     }
+    if (!bg && uiEngine) await _retryPending();
     final counts = await _dao.backupCounts();
     final lastSeq = _prefs.lastSeq;
     if (counts.records == 0) {
@@ -613,7 +616,7 @@ class BackupCoordinator {
       file = await _writer.writeRecords(tmp,
           installId: me,
           seq: newSeq,
-          months: {for (final e in prints.entries) e.key: e.value.count},
+          months: _headerMonths(prints, months),
           thumbsSkipped: skipped);
     } catch (_) {
       return _set(BackupState.failed, remember: true);
@@ -697,6 +700,9 @@ class BackupCoordinator {
         final print = prints[m];
         final path = picturesPath(m);
         if (rec?.state == MonthState.foreign) continue;
+        // Its file holds the adopted install's pictures that have not come
+        // in yet: never written over before they did.
+        if (rec?.state == MonthState.pending) continue;
         if (print == null) {
           if (rec == null || rec.state == MonthState.absent) {
             months.remove(m);
@@ -778,6 +784,70 @@ class BackupCoordinator {
     }
   }
 
+  /// The records header's months: this phone's pictures per month, and
+  /// each adopted month still pending with the count its file holds.
+  static Map<String, int> _headerMonths(
+          Map<String, ThumbMonthPrint> prints, Map<String, MonthRecord> months) =>
+      {
+        for (final e in prints.entries) e.key: e.value.count,
+        for (final e in months.entries)
+          if (e.value.state == MonthState.pending) e.key: e.value.count,
+      };
+
+  bool get _hasPending =>
+      _prefs.months.values.any((m) => m.state == MonthState.pending);
+  DateTime? _pendingTriedAt;
+
+  /// Foreground only: the adopted months that could not be read during the
+  /// restore are fetched and imported again. One that comes in is marked
+  /// restored (by the same rule as _adoptMonths); one whose file the
+  /// gathered query no longer shows is dropped; the rest stay pending.
+  Future<void> _retryPending() async {
+    final months = _prefs.months;
+    final pending = [
+      for (final e in months.entries)
+        if (e.value.state == MonthState.pending) e.key,
+    ]..sort();
+    if (pending.isEmpty) return;
+    _pendingTriedAt = _now;
+    await _t.startDownloads([for (final m in pending) picturesPath(m)]);
+    final before = await _dao.thumbMonthPrints();
+    final done = <String>[];
+    var added = 0;
+    CloudListing? listing;
+    for (final m in pending) {
+      final p = await _tmpPath('retry-$m.json');
+      try {
+        final r = await _t.fetch(picturesPath(m), p,
+            timeout: const Duration(seconds: 20));
+        if (r.kind == CloudResultKind.missing) {
+          listing ??= await _t.list();
+          if (listing.gathered && listing.item(picturesPath(m)) == null) {
+            months.remove(m); // gone from iCloud: nothing left to bring in
+          }
+          continue;
+        }
+        if (!r.ok) continue;
+        final s = await _dao.importJson(await File(p).readAsString());
+        added += s.thumbsAdded;
+        done.add(m);
+      } catch (_) {
+        // Stays pending.
+      } finally {
+        await _deleteQuietly(p);
+      }
+    }
+    if (done.isNotEmpty) {
+      final after = await _dao.thumbMonthPrints();
+      for (final m in done) {
+        months[m] = MonthRecord(MonthState.restored,
+            print: before[m] == null ? (after[m]?.key ?? '') : '');
+      }
+    }
+    await _prefs.setMonths(months);
+    if (added > 0) onDataImported?.call();
+  }
+
   static bool _transient(CloudResultKind k) =>
       k == CloudResultKind.notDownloaded || k == CloudResultKind.timeout;
 
@@ -844,8 +914,16 @@ class BackupCoordinator {
     final last = _prefs.lastOkAt;
     final stale = last == null ||
         _now.difference(last) >= launchStaleAfter ||
-        _prefs.lastError.isNotEmpty;
+        _prefs.lastError.isNotEmpty ||
+        _pendingDue;
     if (stale) await _run(const _Run(_Kind.launch));
+  }
+
+  /// Adopted months wait to come in, and the last try was a while ago.
+  bool get _pendingDue {
+    if (!_hasPending) return false;
+    final tried = _pendingTriedAt;
+    return tried == null || _now.difference(tried) >= minForegroundGap;
   }
 
   /// The app's lifecycle (the shell forwards every change).
@@ -895,7 +973,8 @@ class BackupCoordinator {
     if (prompt.value != null) return;
     final counts = await _dao.backupCounts();
     if (counts.recordsChange == _prefs.lastRecordsChange &&
-        !_monthsChanged(await _dao.thumbMonthPrints(), _prefs.months)) {
+        !_monthsChanged(await _dao.thumbMonthPrints(), _prefs.months) &&
+        !_pendingDue) {
       return;
     }
     await _maybeLaunchRun();
@@ -1080,9 +1159,9 @@ class BackupCoordinator {
   }
 
   /// After a restore, takeover or combine: the adopted install's months as
-  /// this one knows them. A month that could not be read is left alone
-  /// (foreign): its file still has the other phone's pictures, which this
-  /// install never overwrites with fewer.
+  /// this one knows them. A month that could not be read is pending: its
+  /// file still has the other phone's pictures, which this install never
+  /// overwrites with fewer, and its import is tried again (_retryPending).
   ///
   /// A month's print says what its FILE holds, not what the merged
   /// database holds: only when this phone had no pictures in the month
@@ -1099,7 +1178,8 @@ class BackupCoordinator {
     final months = _prefs.months;
     for (final m in header.months.keys) {
       if (!restored.contains(m)) {
-        months[m] = const MonthRecord(MonthState.foreign);
+        months[m] =
+            MonthRecord(MonthState.pending, count: header.months[m] ?? 0);
         continue;
       }
       final fileIsDatabase = !replace && before[m] == null;
@@ -1301,9 +1381,11 @@ class BackupCoordinator {
   /// Back Up Again: the records file this install wrote went missing.
   Future<BackupState> backUpAgain() async {
     await _prefs.setPaused(BackupPause.none);
-    // Its months may have gone too: looked at again.
+    // Its months may have gone too: looked at again (an adopted month
+    // still waiting to come in stays pending).
     final months = _prefs.months
-      ..removeWhere((_, m) => m.state != MonthState.foreign);
+      ..removeWhere((_, m) =>
+          m.state != MonthState.foreign && m.state != MonthState.pending);
     await _prefs.setMonths(months);
     return _run(const _Run(_Kind.now, force: true, allowMissing: true));
   }

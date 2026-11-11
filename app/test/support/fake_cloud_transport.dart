@@ -28,6 +28,11 @@ class FakeCloudTransport implements BackupTransport {
   /// Paths whose bytes are not on this phone yet.
   final Set<String> notDownloaded = {};
 
+  /// Paths whose download cannot finish now (no network, a stalled
+  /// download): a coordinated read of one times out, and it stays not
+  /// downloaded.
+  final Set<String> unreachable = {};
+
   /// Unresolved conflict versions per path.
   final Map<String, List<Uint8List>> conflictVersions = {};
 
@@ -95,8 +100,12 @@ class FakeCloudTransport implements BackupTransport {
     if (state != CloudState.ok) return CloudResult.unavailable;
     final b = files[path];
     if (b == null) return const CloudResult(CloudResultKind.missing);
-    if (notDownloaded.contains(path)) {
+    if (notDownloaded.contains(path) || unreachable.contains(path)) {
       if (!allowDownload) return const CloudResult(CloudResultKind.notDownloaded);
+      if (unreachable.contains(path)) {
+        notDownloaded.add(path);
+        return const CloudResult(CloudResultKind.timeout);
+      }
       notDownloaded.remove(path);
     }
     final h = parseBackupHeader(b);
@@ -110,6 +119,10 @@ class FakeCloudTransport implements BackupTransport {
       {required Duration timeout}) async {
     final b = files[path];
     if (b == null) return const CloudResult(CloudResultKind.missing);
+    if (unreachable.contains(path)) {
+      notDownloaded.add(path);
+      return const CloudResult(CloudResultKind.timeout);
+    }
     notDownloaded.remove(path);
     await File(destPath).writeAsBytes(b);
     return CloudResult(CloudResultKind.ok, bytes: b.length);
@@ -122,7 +135,8 @@ class FakeCloudTransport implements BackupTransport {
   }
 
   /// The downloads [startDownloads] started have finished.
-  void finishDownloads() => notDownloaded.removeAll(downloadsStarted);
+  void finishDownloads() => notDownloaded
+      .removeAll(downloadsStarted.where((p) => !unreachable.contains(p)));
 
   /// CloudFiles.Expect.owns: never true for a header that cannot be read.
   static bool _owns(WriteExpect expect, String? id) =>

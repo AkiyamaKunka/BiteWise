@@ -27,18 +27,33 @@ enum MonthState {
 
   /// Another install's file: never touched automatically.
   foreign,
+
+  /// The adopted install's month that could not be read during the
+  /// restore (a download that timed out on a fresh reinstall): its import
+  /// is tried again in the foreground, its file is never written over
+  /// until it came in, and this install's records header keeps listing it
+  /// with [MonthRecord.count], so a later restore still fetches it.
+  pending,
 }
 
 class MonthRecord {
-  const MonthRecord(this.state, {this.print = '', this.skipped = 0});
+  const MonthRecord(this.state,
+      {this.print = '', this.skipped = 0, this.count = 0});
   final MonthState state;
 
   /// ThumbMonthPrint.key when the file was last written or restored.
   final String print;
   final int skipped;
 
-  Map<String, Object?> toJson() =>
-      {'s': state.name, 'p': print, if (skipped > 0) 'k': skipped};
+  /// pending: the pictures the adopted install's header listed for it.
+  final int count;
+
+  Map<String, Object?> toJson() => {
+        's': state.name,
+        'p': print,
+        if (skipped > 0) 'k': skipped,
+        if (count > 0) 'n': count,
+      };
 
   static MonthRecord? fromJson(Object? j) {
     if (j is! Map) return null;
@@ -46,7 +61,8 @@ class MonthRecord {
     if (s.isEmpty) return null;
     return MonthRecord(s.first,
         print: j['p'] is String ? j['p'] as String : '',
-        skipped: j['k'] is int ? j['k'] as int : 0);
+        skipped: j['k'] is int ? j['k'] as int : 0,
+        count: j['n'] is int ? j['n'] as int : 0);
   }
 }
 

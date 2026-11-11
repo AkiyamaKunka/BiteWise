@@ -606,6 +606,75 @@ void main() {
     });
   });
 
+  group('a month that could not be read during the restore', () {
+    Future<void> restoreWithOctoberUnreachable() async {
+      await otherPhoneBackup(meals: 2);
+      cloud.unreachable.add(picturesPath('2026-10'));
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      final s = await c.restore(offer.candidate);
+      expect(s.ok, isTrue);
+      expect(s.failedMonths, 1);
+      expect(s.thumbsAdded, 0);
+      await c.answerNotice(keepOn: true);
+    }
+
+    test('is tried again in the foreground until it comes in, and stays in '
+        'this phone\'s backup meanwhile', () async {
+      await restoreWithOctoberUnreachable();
+      await c.backUpNow();
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      expect(cloud.headerOf(kRecordsFileName)!.installId, me);
+      expect(cloud.headerOf(kRecordsFileName)!.months, {'2026-10': 2},
+          reason: 'a later restore of this backup still fetches it');
+      expect((await dao.backupCounts()).thumbs, 0);
+      // The background never downloads.
+      await dao.saveBodyWeight('2026-11-10', 70);
+      cloud.unreachable.clear();
+      await run(background: true);
+      expect((await dao.backupCounts()).thumbs, 0);
+      // The next foreground run brings it in.
+      await c.backUpNow();
+      expect((await dao.backupCounts()).thumbs, 2);
+      expect(cloud.headerOf(kRecordsFileName)!.months, {'2026-10': 2});
+      expect(hashesIn('2026-10'), unorderedEquals(['o0', 'o1']));
+      final rec = BackupPrefs(prefs).months['2026-10']!;
+      expect(rec.state, MonthState.restored);
+    });
+
+    test('is never written over, even when this phone has its own pictures '
+        'in it', () async {
+      await myOctoberPicture();
+      await restoreWithOctoberUnreachable();
+      await c.backUpNow();
+      expect(hashesIn('2026-10'), unorderedEquals(['o0', 'o1']),
+          reason: 'the other phone\'s pictures have not come in yet');
+      cloud.unreachable.clear();
+      await c.backUpNow();
+      expect(hashesIn('2026-10'), unorderedEquals(['mine', 'o0', 'o1']));
+      expect((await dao.backupCounts()).thumbs, 3);
+    });
+
+    test('is dropped once its file is gone from iCloud', () async {
+      await restoreWithOctoberUnreachable();
+      cloud.unreachable.clear();
+      cloud.files.remove(picturesPath('2026-10'));
+      await c.backUpNow();
+      expect(BackupPrefs(prefs).months, isEmpty);
+      expect(cloud.headerOf(kRecordsFileName)!.months, isEmpty);
+    });
+
+    test('a launch retries it even when nothing else changed', () async {
+      await restoreWithOctoberUnreachable();
+      await c.backUpNow();
+      cloud.unreachable.clear();
+      // The app is opened again (a new engine).
+      final next = make();
+      await next.launchCheckForTest();
+      expect((await dao.backupCounts()).thumbs, 2);
+    });
+  });
+
   test('delete removes this install\'s files and leaves another\'s',
       () async {
     final oct = await seed(dao, '2026-10-03', hash: 'h1');
