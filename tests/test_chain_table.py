@@ -104,15 +104,33 @@ def test_generated_bindings_carry_the_table():
 
 # ─── domains ───────────────────────────────────────────────────────
 
+# Where a registrable domain is a whole company's and only one host on it
+# is the chain's, the table lists that host: hardrock.com is Hard Rock
+# International (hotels, casinos and the restaurants inside them), and only
+# cafe.hardrock.com is Hard Rock Cafe's. Host -> its registrable domain.
+HOST_SCOPED = {"cafe.hardrock.com": "hardrock.com"}
+
+
 def test_domains_are_ascii_registrable_names():
     """Two labels, lowercase ASCII, no scheme, path, port or www. — the
     shape that is registrable by construction, so no Public Suffix List
-    is needed to decide what 'the chain's own domain' means."""
+    is needed to decide what 'the chain's own domain' means. A host-scoped
+    entry (HOST_SCOPED) is one label on such a name, and that name itself
+    is no chain's."""
+    listed = {d for c in CHAINS for d in c["domains"]}
     for c in CHAINS:
         for d in c["domains"]:
             assert d.isascii(), (c["key"], d)
-            assert DOMAIN_RE.fullmatch(d), (c["key"], d)
             assert not d.startswith("www."), (c["key"], d)
+            if d in HOST_SCOPED:
+                parent = HOST_SCOPED[d]
+                label = d[:-len("." + parent)]
+                assert d == label + "." + parent, (c["key"], d)
+                assert re.fullmatch(r"(?!-)[a-z0-9-]{1,63}(?<!-)", label), d
+                assert DOMAIN_RE.fullmatch(parent), (c["key"], d)
+                assert parent not in listed, (c["key"], d)
+            else:
+                assert DOMAIN_RE.fullmatch(d), (c["key"], d)
 
 
 @pytest.mark.parametrize("bad", MULTI_TENANT)
@@ -305,6 +323,25 @@ def test_every_domain_and_subdomain_maps_to_its_chain():
             assert rl.is_chain_host("nutrition." + d, c["key"]), d
             assert not rl.match_chain(None, "x" + d), d
             assert not rl.is_chain_host(d + ".evil.example", c["key"]), d
+
+
+def test_a_company_wide_domain_does_not_make_its_other_restaurants_the_chain():
+    """Hard Rock casinos and hotels publish their own restaurants on
+    hardrock.com hosts (Council Oak Steaks & Seafood at
+    casino.hardrock.com/tampa/dining/...): neither the place nor a source
+    there is Hard Rock Cafe. The Cafe's own hosts still are."""
+    for host in ("casino.hardrock.com", "hotel.hardrock.com",
+                 "www.hardrock.com", "hardrock.com", "shop.hardrock.com"):
+        assert rl.match_chain(None, host) is None, host
+        assert not rl.is_chain_host(host, "hard_rock_cafe"), host
+    assert rl.match_chain("Council Oak Steaks & Seafood",
+                          "casino.hardrock.com") is None
+    assert rl.match_chain("YouYu", "casino.hardrock.com") is None
+    assert rl.match_chain("Hard Rock Cafe",
+                          "casino.hardrock.com") == "hard_rock_cafe"
+    assert rl.match_chain(None, "cafe.hardrock.com") == "hard_rock_cafe"
+    assert rl.is_chain_host("cafe.hardrock.com", "hard_rock_cafe")
+    assert rl.match_chain(None, "www.hardrockcafe.com") == "hard_rock_cafe"
 
 
 def test_is_chain_host_is_per_chain():

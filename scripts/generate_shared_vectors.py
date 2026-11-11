@@ -1014,6 +1014,14 @@ def build_restaurant_lookup():
     match("audited_domain", None, "locations.goldenkrust.com")
     match("lapsed_domain", None, "www.gongchausa.com")
     match("host_and_name_agree", "Chipotle", "www.chipotle.com")
+    # hardrock.com is Hard Rock International's; only cafe.hardrock.com
+    # (and hardrockcafe.com) is Hard Rock Cafe's.
+    match("company_host_other_restaurant", "Council Oak Steaks & Seafood",
+          "casino.hardrock.com")
+    match("company_host_alone", None, "hotel.hardrock.com")
+    match("company_host_the_chain_by_name", "Hard Rock Cafe",
+          "casino.hardrock.com")
+    match("host_scoped_domain", None, "cafe.hardrock.com")
     match("host_and_name_disagree", "Starbucks", "www.mcdonalds.com")
     match("host_only_subdomain", "", "locations.wendys.com")
     match("host_trailing_dot", None, "WWW.STARBUCKS.COM.")

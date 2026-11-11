@@ -1,5 +1,5 @@
 {
-  "_comment": "BiteWise's own table of US restaurant chains with 20 or more locations (the FDA menu-labeling threshold, 21 CFR 101.11). The restaurant assist matches nearby places and printed brands against THIS table on the device and sends only the canonical name of a matched chain; 'domains' are the chain's own registrable web domains that may serve as an official nutrition source. Edit here, then run scripts/sync_shared.py. Refresh yearly.",
+  "_comment": "BiteWise's own table of US restaurant chains with 20 or more locations (the FDA menu-labeling threshold, 21 CFR 101.11). The restaurant assist matches nearby places and printed brands against THIS table on the device and sends only the canonical name of a matched chain; 'domains' are the chain's own registrable web domains that may serve as an official nutrition source; where the registrable domain is a whole company's, only the chain's own host on it (cafe.hardrock.com: hardrock.com also serves Hard Rock's casinos, hotels and their other restaurants). Edit here, then run scripts/sync_shared.py. Refresh yearly.",
   "source": "Curated 2026-10-23 for BiteWise and audited 2026-10-24. Chains and US unit counts come from the public lists below. Each domain was checked live (HTTPS home page reachable with the chain's own name in its title, or a bot-protection page on a domain long known to be the chain's), scanned for parked-domain and hosting-placeholder pages, and compared with the website Apple Maps lists for the chain's own locations. Chains whose domain had lapsed, redirected to an unrelated site or could not be verified were left out, as were chains without a source showing 20+ US locations; the audit also removed chains that have since dropped below 20 US locations or closed.",
   "sources": [
     {
@@ -1613,7 +1613,7 @@
       "aliases": [],
       "domains": [
         "hardrockcafe.com",
-        "hardrock.com"
+        "cafe.hardrock.com"
       ],
       "size": "20_plus"
     },

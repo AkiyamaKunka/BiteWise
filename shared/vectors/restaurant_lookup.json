@@ -1984,6 +1984,34 @@
       "expected": "chipotle"
     },
     {
+      "id": "match_company_host_other_restaurant",
+      "fn": "match_chain",
+      "input": "Council Oak Steaks & Seafood",
+      "url_host": "casino.hardrock.com",
+      "expected": null
+    },
+    {
+      "id": "match_company_host_alone",
+      "fn": "match_chain",
+      "input": null,
+      "url_host": "hotel.hardrock.com",
+      "expected": null
+    },
+    {
+      "id": "match_company_host_the_chain_by_name",
+      "fn": "match_chain",
+      "input": "Hard Rock Cafe",
+      "url_host": "casino.hardrock.com",
+      "expected": "hard_rock_cafe"
+    },
+    {
+      "id": "match_host_scoped_domain",
+      "fn": "match_chain",
+      "input": null,
+      "url_host": "cafe.hardrock.com",
+      "expected": "hard_rock_cafe"
+    },
+    {
       "id": "match_host_and_name_disagree",
       "fn": "match_chain",
       "input": "Starbucks",

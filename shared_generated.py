@@ -199,7 +199,7 @@ US_CHAINS = [
     {'key': 'handels', 'name': "Handel's Homemade Ice Cream", 'aliases': ["Handel's Ice Cream"], 'domains': ['handelsicecream.com'], 'size': '20_plus'},
     {'key': 'happy_joes', 'name': "Happy Joe's Pizza & Ice Cream", 'aliases': ["Happy Joe's Pizza"], 'domains': ['happyjoes.com'], 'size': '20_plus'},
     {'key': 'happys_pizza', 'name': "Happy's Pizza", 'aliases': [], 'domains': ['happyspizza.com'], 'size': '20_plus'},
-    {'key': 'hard_rock_cafe', 'name': 'Hard Rock Cafe', 'aliases': [], 'domains': ['hardrockcafe.com', 'hardrock.com'], 'size': '20_plus'},
+    {'key': 'hard_rock_cafe', 'name': 'Hard Rock Cafe', 'aliases': [], 'domains': ['hardrockcafe.com', 'cafe.hardrock.com'], 'size': '20_plus'},
     {'key': 'hardees', 'name': "Hardee's", 'aliases': [], 'domains': ['hardees.com'], 'size': '20_plus'},
     {'key': 'honey_dew', 'name': 'Honey Dew Donuts', 'aliases': [], 'domains': ['honeydewdonuts.com'], 'size': '20_plus'},
     {'key': 'honeybaked', 'name': 'The Honey Baked Ham Company', 'aliases': ['HoneyBaked Ham', 'Honey Baked Ham'], 'domains': ['honeybaked.com'], 'size': '20_plus'},

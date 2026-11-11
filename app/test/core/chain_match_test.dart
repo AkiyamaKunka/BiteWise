@@ -30,13 +30,56 @@ void main() {
 
     test('every row is a 20+ chain with at least one ASCII domain', () {
       final domainRe = RegExp(r'^[a-z0-9-]+\.[a-z]{2,63}$');
+      // One host on a whole company's domain (tests/test_chain_table.py
+      // HOST_SCOPED): hardrock.com is Hard Rock International's.
+      const hostScoped = {'cafe.hardrock.com': 'hardrock.com'};
       for (final c in sharedUsChains) {
         expect(c.size, '20_plus', reason: c.key);
         expect(c.domains, isNotEmpty, reason: c.key);
         for (final d in c.domains) {
-          expect(domainRe.hasMatch(d), isTrue, reason: '${c.key}: $d');
+          final parent = hostScoped[d];
+          expect(
+            domainRe.hasMatch(parent ?? d),
+            isTrue,
+            reason: '${c.key}: $d',
+          );
         }
       }
+    });
+
+    test('a company-wide domain does not make its other restaurants the '
+        'chain', () {
+      // Hard Rock casinos and hotels publish their own restaurants on
+      // hardrock.com hosts (Council Oak Steaks & Seafood at
+      // casino.hardrock.com/tampa/dining/...).
+      for (final host in [
+        'casino.hardrock.com',
+        'hotel.hardrock.com',
+        'www.hardrock.com',
+        'hardrock.com',
+        'shop.hardrock.com',
+      ]) {
+        expect(matchChain(null, urlHost: host), isNull, reason: host);
+        expect(isChainHost(host, 'hard_rock_cafe'), isFalse, reason: host);
+      }
+      expect(
+        matchChain(
+          'Council Oak Steaks & Seafood',
+          urlHost: 'casino.hardrock.com',
+        ),
+        isNull,
+      );
+      expect(matchChain('YouYu', urlHost: 'casino.hardrock.com'), isNull);
+      expect(
+        matchChain('Hard Rock Cafe', urlHost: 'casino.hardrock.com'),
+        'hard_rock_cafe',
+      );
+      expect(matchChain(null, urlHost: 'cafe.hardrock.com'), 'hard_rock_cafe');
+      expect(isChainHost('cafe.hardrock.com', 'hard_rock_cafe'), isTrue);
+      expect(
+        matchChain(null, urlHost: 'www.hardrockcafe.com'),
+        'hard_rock_cafe',
+      );
     });
 
     test('every name, alias and Chinese name maps back to its own chain', () {
