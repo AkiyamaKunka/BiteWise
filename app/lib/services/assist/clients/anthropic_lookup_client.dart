@@ -14,7 +14,9 @@
 ///     the reply's own successful `web_search_tool_result` blocks are
 ///     counted too and the larger number wins (the client's cost rule);
 ///   - `stop_reason: pause_turn` → send the paused assistant content back
-///     unchanged in a new request.
+///     unchanged in a new request, with the same tools: `max_uses` counts
+///     per TURN, a turn can span several requests, and the searches of the
+///     earlier requests in it count against the limit (Max uses section).
 ///
 /// The model is FIXED (claude-haiku-5-5), independent of the user's photo
 /// model: search results are billed as input tokens, so the cheapest model
@@ -59,17 +61,17 @@ class AnthropicLookupClient extends HttpLookupClient {
   String get lookupModel => model;
 
   /// Worst case of request number [continuation] (0 = the first) when
-  /// [searchesSoFar] searches already ran and this one may run [maxUses]:
+  /// [searchesSoFar] searches already ran and this one may run [searches]:
   /// every earlier result is re-sent as input on a continuation.
   double worstCaseRequestUsd(
       {required int continuation,
       required int searchesSoFar,
-      required int maxUses}) {
+      required int searches}) {
     final input = inputTokensAllowance(
         continuation: continuation,
         searchesSoFar: searchesSoFar,
-        searches: maxUses);
-    return maxUses * kAnthropicSearchUsd +
+        searches: searches);
+    return searches * kAnthropicSearchUsd +
         haikuUsd(input, policy.maxOutputTokens);
   }
 
@@ -86,18 +88,21 @@ class AnthropicLookupClient extends HttpLookupClient {
 
   @override
   double worstCaseFirstRequestUsd() => worstCaseRequestUsd(
-      continuation: 0, searchesSoFar: 0, maxUses: policy.maxSearches);
+      continuation: 0, searchesSoFar: 0, searches: policy.maxSearches);
 
   Map<String, String> _headers(String key) => {
         'x-api-key': key,
         'anthropic-version': '2023-06-01',
       };
 
-  /// The request body (public for the request golden test).
+  /// The request body (public for the request golden test). The tools are
+  /// the same on every request of a lookup, continuations included: the
+  /// API counts `max_uses` over the whole turn, and Haiku 5.5's thinking
+  /// blocks in a replayed paused turn are refused (400) once `tools` has
+  /// changed (history-editing check; enforced for accounts created on or
+  /// after 2026-08-31).
   Map<String, Object?> buildBody(List<Map<String, Object?>> messages,
-          {required int maxUses,
-          String? country,
-          List<String> domains = const []}) =>
+          {String? country, List<String> domains = const []}) =>
       {
         'model': model,
         'max_tokens': policy.maxOutputTokens,
@@ -107,7 +112,7 @@ class AnthropicLookupClient extends HttpLookupClient {
           {
             'type': kWebSearchToolType,
             'name': 'web_search',
-            'max_uses': maxUses,
+            'max_uses': policy.maxSearches,
             // Country only: never a city, region or timezone (design §4).
             if (country != null)
               'user_location': {'type': 'approximate', 'country': country},
@@ -130,32 +135,21 @@ class AnthropicLookupClient extends HttpLookupClient {
     final turn = <Map<String, dynamic>>[]; // the assistant turn, all parts
     for (var continuation = 0;; continuation++) {
       final searchesSoFar = run.cost.searches;
-      // A continuation may only spend the searches the first request left.
-      // max_uses is per REQUEST and the API needs it >= 1, so with nothing
-      // left the continuation is not sent at all: a paused turn resumes a
-      // trailing server_tool_use by running it, and no request field can
-      // forbid that search (tool_choice none is undefined on a resume).
-      final left = policy.maxSearches - searchesSoFar;
-      if (continuation > 0 && left <= 0) {
-        throw LookupAbort(LookupFailure(LookupFailureCode.truncated,
-            // Permanent: a retry would spend the same searches again.
-            transient: false,
-            message: 'paused after $searchesSoFar searches; the lookup '
-                'allows ${policy.maxSearches}'));
-      }
-      final maxUses = continuation == 0 ? policy.maxSearches : left;
+      // max_uses counts per TURN and a continuation resumes the turn: the
+      // searches already run count against it, so a continuation can run
+      // only what the turn has left (none after both: a pending call is
+      // answered max_uses_exceeded, and the model answers from what ran).
+      final left = math.max(0, policy.maxSearches - searchesSoFar);
       final worst = worstCaseRequestUsd(
           continuation: continuation,
           searchesSoFar: searchesSoFar,
-          maxUses: maxUses);
+          searches: left);
       run.ensureWithinCap(worst);
       final body = await postJson(
           endpoint,
           _headers(key),
           buildBody(messages,
-              maxUses: maxUses,
-              country: request.iso2Country,
-              domains: domains),
+              country: request.iso2Country, domains: domains),
           run,
           worstCaseUsd: worst);
       run.add(_costOf(body,
@@ -200,11 +194,11 @@ class AnthropicLookupClient extends HttpLookupClient {
   /// What one reply cost.
   ///
   /// Searches: the LARGER of what `usage` reports and what the reply's own
-  /// content shows ran, always both. This count drives the pause_turn
-  /// allowance, the per-lookup cap and the daily ledger, so a usage block
+  /// content shows ran, always both. This count drives a continuation's
+  /// worst case, the per-lookup cap and the daily ledger, so a usage block
   /// that is missing, renamed or mistyped must not read as "no searches"
-  /// (that would let continuations buy searches past max 2 and record a
-  /// 2-search lookup at a tenth of a cent).
+  /// (that would under-price what a continuation may still buy and record
+  /// a 2-search lookup at a tenth of a cent).
   ///
   /// Tokens: a count the reply does not report is priced at this request's
   /// policy allowance ([inputTokensAllowance] in, the policy's

@@ -6,8 +6,13 @@
 ///   under the free-tier rows;
 /// - the Today empty state names Watch Camera Roll exactly as Settings
 ///   does, and offers the no-AI path too;
-/// - plain emphasis instead of ALL CAPS in the strings that shouted.
+/// - plain emphasis instead of ALL CAPS in the strings that shouted;
+/// - Chinese quotes a button name or an example in corner brackets 「」,
+///   never ASCII straight quotes (L7).
 library;
+
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
@@ -72,5 +77,25 @@ void main() {
           .toList();
       expect(words, isEmpty, reason: text);
     }
+  });
+
+  // L7 (run 7) turned the zh ASCII quotes into 「」 in nine strings; the
+  // restaurant consent's Brand only bullet (PR #19) and the Fix screen's
+  // intro and hint were missed (review 2026-11-11, round 2).
+  test('Chinese quotes in corner brackets, never ASCII straight quotes', () {
+    final arb = jsonDecode(File('lib/l10n/app_zh.arb').readAsStringSync())
+        as Map<String, dynamic>;
+    final straight = [
+      for (final e in arb.entries)
+        if (!e.key.startsWith('@') &&
+            e.value is String &&
+            (e.value as String).contains('"'))
+          e.key,
+    ];
+    expect(straight, isEmpty);
+    expect(zh.restaurantConsentBrandOnly,
+        startsWith('「${zh.restaurantConsentBrandOnlyButton}」'));
+    expect(zh.fixIntro, contains('（「那碗面」、「早餐」、「600 千卡那个」）'));
+    expect(zh.fixHint, '例如：「那碗面其实是烧鸭饭」\n或「删除刚才那杯咖啡」');
   });
 }

@@ -43,6 +43,43 @@ Map<String, dynamic> _pausedAfterTwoSearches() {
   return p;
 }
 
+const _pendingId = 'srvtoolu_033333333333333333333333';
+
+/// [_pausedAfterTwoSearches] with the model's third call still pending: a
+/// resume runs it, or (the turn's max_uses spent) refuses it.
+Map<String, dynamic> _pausedWithCallPending() {
+  final p = _pausedAfterTwoSearches();
+  (p['usage'] as Map)['server_tool_use'] = {'web_search_requests': 2};
+  (p['content'] as List).add({
+    'type': 'server_tool_use',
+    'id': _pendingId,
+    'name': 'web_search',
+    'input': {'query': 'Big Mac nutrition PDF'}
+  });
+  return p;
+}
+
+/// The resume of a turn whose two searches are spent: the pending call
+/// comes back max_uses_exceeded (the API counts the whole turn), then
+/// pause_2's answer.
+Map<String, dynamic> _resumedPastTheLimit() {
+  final r = fixture('anthropic_pause_2.json');
+  (r['content'] as List).insert(0, {
+    'type': 'web_search_tool_result',
+    'tool_use_id': _pendingId,
+    'content': {
+      'type': 'web_search_tool_result_error',
+      'error_code': 'max_uses_exceeded'
+    }
+  });
+  return r;
+}
+
+List<Object?> _maxUses(ScriptedClient s) => [
+      for (final b in s.bodies)
+        ((b['tools'] as List).single as Map)['max_uses']
+    ];
+
 AnthropicLookupClient _client(ScriptedClient s,
         {String? key = 'test-key',
         LookupCostPolicy policy = const LookupCostPolicy(),
@@ -71,7 +108,7 @@ void main() {
       expect(body.keys.toSet(),
           {'model', 'max_tokens', 'output_config', 'messages', 'tools'});
       expect(body['model'], 'claude-haiku-5-5');
-      expect(body['max_tokens'], 1500);
+      expect(body['max_tokens'], 6000);
       expect(body['output_config'], {'effort': 'low'});
       expect(body['tools'], [
         {
@@ -175,8 +212,10 @@ void main() {
       expect((msgs[1] as Map)['content'],
           fixture('anthropic_pause_1.json')['content'],
           reason: 'encrypted_content and all, byte for byte');
-      // The first request used 1 search: 1 left for the continuation.
-      expect(((second['tools'] as List).single as Map)['max_uses'], 1);
+      // The same tools on the resume: max_uses counts over the whole turn,
+      // and a changed tools array would void the replayed thinking blocks.
+      expect(second['tools'], s.bodies[0]['tools']);
+      expect(_maxUses(s), [2, 2]);
       // Citations from the second reply, results from the first.
       expect(o.citedUrls.first, _bigMac);
       expect(o.evidence, isNotEmpty);
@@ -193,59 +232,68 @@ void main() {
                   const LookupCostPolicy(maxUsdPerLookup: 1, maxSearches: 5))
           .submit(bigMacRequest);
       expect(s.requests, hasLength(3), reason: '1 + 2 continuations');
-      expect([
-        for (final b in s.bodies)
-          ((b['tools'] as List).single as Map)['max_uses']
-      ], [5, 4, 3], reason: 'each request only what is left');
+      expect(_maxUses(s), [5, 5, 5], reason: 'the same tool every request');
       expect(o.kind, LookupOutcomeKind.failed);
       expect(o.failure!.code, LookupFailureCode.truncated);
       expect(o.cost.httpCalls, 3, reason: 'spend is still reported');
     });
 
-    test('a pause after the whole search allowance: no continuation',
-        () async {
-      // The first request ran both allowed searches and paused. max_uses
-      // is per request and cannot be 0, so a continuation could only buy a
-      // third search: it is not sent, whatever the cost cap would allow.
-      final paused = fixture('anthropic_pause_1.json');
-      (paused['usage'] as Map)['server_tool_use'] = {'web_search_requests': 2};
+    test('a pause after the whole search allowance resumes with the same '
+        'tool, and the refused third call still answers', () async {
+      // max_uses counts per turn (web search tool page, "Max uses"): the
+      // resume cannot run a third search — the pending call comes back
+      // max_uses_exceeded — and the model answers from the two that ran.
+      // Abandoning the paused turn lost a paid-for answer for good.
       final s = ScriptedClient([
-        (_) => json200(paused),
-        (_) => fixture200('anthropic_pause_2.json'),
+        (_) => json200(_pausedWithCallPending()),
+        (_) => json200(_resumedPastTheLimit()),
       ]);
+      // First worst case 2.54¢ fits; after ~2.1¢ spent, the resume fits
+      // only priced as what it is: tokens, no search left to buy.
       final o = await _client(s,
-              policy: const LookupCostPolicy(maxUsdPerLookup: 1))
+              policy: const LookupCostPolicy(maxUsdPerLookup: 0.03))
           .submit(bigMacRequest);
-      expect(s.requests, hasLength(1), reason: 'zero further calls');
-      expect(o.kind, LookupOutcomeKind.failed);
-      expect(o.failure!.code, LookupFailureCode.truncated);
-      expect(o.failure!.transient, isFalse,
-          reason: 'a retry would spend the same searches again');
-      expect(o.searches, 2);
-      expect(o.cost.httpCalls, 1);
+      expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
+      expect(s.requests, hasLength(2));
+      expect(s.bodies[1]['tools'], s.bodies[0]['tools']);
+      expect((s.bodies[1]['messages'] as List).last, {
+        'role': 'assistant',
+        'content': _pausedWithCallPending()['content'],
+      });
+      expect(o.searches, 2, reason: 'the refused call is not a search');
+      expect(o.result!.matches.single.publishedCalories, 590);
+      expect(o.evidence, isNotEmpty);
     });
 
-    test('a pause after one of two searches resumes with max_uses 1, then '
-        'stops', () async {
-      // Each reply runs one search and pauses: request 2 may run the one
-      // search left; after it the allowance is spent and nothing is sent.
-      final s = ScriptedClient([(_) => fixture200('anthropic_pause_1.json')]);
-      final o = await _client(s,
-              policy: const LookupCostPolicy(maxUsdPerLookup: 1))
-          .submit(bigMacRequest);
-      expect([
-        for (final b in s.bodies)
-          ((b['tools'] as List).single as Map)['max_uses']
-      ], [2, 1]);
-      expect(o.failure!.code, LookupFailureCode.truncated);
+    test('a pause after one of two searches resumes with the same max_uses; '
+        'the turn still stops at two', () async {
+      // Request 2 runs the search the turn has left and pauses on a third
+      // call; request 3 can buy none, so that call is refused and the
+      // answer comes from the two that ran.
+      final again = fixture('anthropic_pause_1.json');
+      (again['content'] as List).add({
+        'type': 'server_tool_use',
+        'id': _pendingId,
+        'name': 'web_search',
+        'input': {'query': 'Big Mac nutrition PDF'}
+      });
+      final s = ScriptedClient([
+        (_) => fixture200('anthropic_pause_1.json'),
+        (_) => json200(again),
+        (_) => json200(_resumedPastTheLimit()),
+      ]);
+      final o = await _client(s).submit(bigMacRequest);
+      expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
+      expect(_maxUses(s), [2, 2, 2]);
       expect(o.searches, 2, reason: 'never more than the design\'s 2');
+      expect(o.cost.usd, lessThanOrEqualTo(0.05));
     });
 
     group('the search count survives a drifting usage block', () {
-      // The count drives the pause_turn allowance, the per-lookup cap and
-      // the daily ledger: it is the larger of usage and the reply's own
+      // The count drives a continuation's worst case, the per-lookup cap
+      // and the daily ledger: it is the larger of usage and the reply's own
       // successful search results, so no usage shape can lower it.
-      test('usage missing: one request, truncated, both searches charged',
+      test('usage missing: both searches charged, the resume buys none',
           () async {
         final paused = _pausedAfterTwoSearches()..remove('usage');
         final ledger = _Ledger();
@@ -253,20 +301,26 @@ void main() {
           (_) => json200(paused),
           (_) => fixture200('anthropic_pause_2.json'),
         ]);
-        final o = await _client(s, budget: ledger).submit(bigMacRequest);
-        expect(s.requests, hasLength(1),
-            reason: 'both allowed searches ran: no continuation');
-        expect(o.failure!.code, LookupFailureCode.truncated);
-        expect(o.failure!.transient, isFalse);
+        // The resume fits the cap only priced with no search left: 2.54¢
+        // charged, then 0.6¢ of tokens, against 3.5¢.
+        final o = await _client(s,
+                budget: ledger,
+                policy: const LookupCostPolicy(maxUsdPerLookup: 0.035))
+            .submit(bigMacRequest);
+        expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
         expect(o.searches, 2);
         final spent = ledger.spends.single.usd;
         expect(spent, greaterThanOrEqualTo(2 * kAnthropicSearchUsd));
-        // Unreported tokens are priced at the allowance, not at 0…
-        expect(spent,
-            closeTo(0.02 + haikuUsd(4000 + 2 * 10000, 1500), 1e-12));
+        // Unreported tokens are priced at the allowance, not at 0 (the
+        // resume reported its own: 8890 in, 380 out)…
+        expect(
+            spent,
+            closeTo(
+                0.02 + haikuUsd(4000 + 2 * 10000, 6000) + haikuUsd(8890, 380),
+                1e-12));
         // …but never reported as tokens the reply did not report.
-        expect(o.cost.inputTokens, 0);
-        expect(o.cost.outputTokens, 0);
+        expect(o.cost.inputTokens, 8890);
+        expect(o.cost.outputTokens, 380);
       });
 
       test('a missing, mistyped or short count never lowers it', () async {
@@ -308,8 +362,8 @@ void main() {
             (_) => fixture200('anthropic_pause_2.json'),
           ]);
           final o = await _client(s, budget: ledger).submit(bigMacRequest);
-          expect(s.requests, hasLength(1), reason: label);
-          expect(o.failure!.code, LookupFailureCode.truncated, reason: label);
+          expect(s.requests, hasLength(2), reason: label);
+          expect(o.kind, LookupOutcomeKind.done, reason: label);
           expect(o.searches, 2, reason: label);
           expect(ledger.spends.single.usd,
               greaterThanOrEqualTo(2 * kAnthropicSearchUsd),
@@ -317,28 +371,24 @@ void main() {
         }
       });
 
-      test('usage missing on a resumed turn: max_uses [2, 1], then done',
+      test('usage missing on a resumed turn: max_uses [2, 2], then done',
           () async {
         // One search ran: the continuation may still spend the other one.
-        // Counting from the content must not truncate a legitimate resume.
         final s = ScriptedClient([
           (_) => json200(fixture('anthropic_pause_1.json')..remove('usage')),
           (_) => json200(fixture('anthropic_pause_2.json')..remove('usage')),
         ]);
         final o = await _client(s).submit(bigMacRequest);
         expect(o.kind, LookupOutcomeKind.done, reason: '${o.failure}');
-        expect([
-          for (final b in s.bodies)
-            ((b['tools'] as List).single as Map)['max_uses']
-        ], [2, 1]);
+        expect(_maxUses(s), [2, 2]);
         expect(o.searches, 1);
         // Request 2 re-sends request 1's search results and output.
         expect(
             o.cost.usd,
             closeTo(
                 0.01 +
-                    haikuUsd(4000 + 10000, 1500) +
-                    haikuUsd(4000 + 10000 + 1500, 1500),
+                    haikuUsd(4000 + 10000, 6000) +
+                    haikuUsd(4000 + 10000 + 6000, 6000),
                 1e-12));
       });
 

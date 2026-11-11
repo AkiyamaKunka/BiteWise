@@ -155,6 +155,10 @@ void main() {
       ("Joe's Pizza - 7 Carmine St, New York", ''),
       ('Uber Eats', ''),
       ('麦当劳（时代广场店）', "McDonald's"),
+      // ™ and ℠ as printed (the prompt asks for brands copied exactly)
+      ('Whataburger™', 'Whataburger'),
+      ('Chick-fil-A™ #0421', 'Chick-fil-A'),
+      ('Raising Cane’s℠', "Raising Cane's"),
     ]) {
       expect(chainNameOnly(printed, kLookupMerchantMax), sent, reason: printed);
       expect(

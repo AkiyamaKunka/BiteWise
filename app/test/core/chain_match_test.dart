@@ -30,13 +30,56 @@ void main() {
 
     test('every row is a 20+ chain with at least one ASCII domain', () {
       final domainRe = RegExp(r'^[a-z0-9-]+\.[a-z]{2,63}$');
+      // One host on a whole company's domain (tests/test_chain_table.py
+      // HOST_SCOPED): hardrock.com is Hard Rock International's.
+      const hostScoped = {'cafe.hardrock.com': 'hardrock.com'};
       for (final c in sharedUsChains) {
         expect(c.size, '20_plus', reason: c.key);
         expect(c.domains, isNotEmpty, reason: c.key);
         for (final d in c.domains) {
-          expect(domainRe.hasMatch(d), isTrue, reason: '${c.key}: $d');
+          final parent = hostScoped[d];
+          expect(
+            domainRe.hasMatch(parent ?? d),
+            isTrue,
+            reason: '${c.key}: $d',
+          );
         }
       }
+    });
+
+    test('a company-wide domain does not make its other restaurants the '
+        'chain', () {
+      // Hard Rock casinos and hotels publish their own restaurants on
+      // hardrock.com hosts (Council Oak Steaks & Seafood at
+      // casino.hardrock.com/tampa/dining/...).
+      for (final host in [
+        'casino.hardrock.com',
+        'hotel.hardrock.com',
+        'www.hardrock.com',
+        'hardrock.com',
+        'shop.hardrock.com',
+      ]) {
+        expect(matchChain(null, urlHost: host), isNull, reason: host);
+        expect(isChainHost(host, 'hard_rock_cafe'), isFalse, reason: host);
+      }
+      expect(
+        matchChain(
+          'Council Oak Steaks & Seafood',
+          urlHost: 'casino.hardrock.com',
+        ),
+        isNull,
+      );
+      expect(matchChain('YouYu', urlHost: 'casino.hardrock.com'), isNull);
+      expect(
+        matchChain('Hard Rock Cafe', urlHost: 'casino.hardrock.com'),
+        'hard_rock_cafe',
+      );
+      expect(matchChain(null, urlHost: 'cafe.hardrock.com'), 'hard_rock_cafe');
+      expect(isChainHost('cafe.hardrock.com', 'hard_rock_cafe'), isTrue);
+      expect(
+        matchChain(null, urlHost: 'www.hardrockcafe.com'),
+        'hard_rock_cafe',
+      );
     });
 
     test('every name, alias and Chinese name maps back to its own chain', () {
@@ -81,6 +124,17 @@ void main() {
       ('Ora’s Market', null, null),
       ("Junior's Restaurant", null, null),
       ("John's Famous Hot Dogs", null, null),
+      // A&W Root Beer and A&W Cream Soda are Keurig Dr Pepper's drinks,
+      // not A&W Restaurants: a can's printed "A&W" names no chain, and the
+      // restaurant still matches by its full name or its own web host
+      ('A&W', null, null),
+      ('A&W Root Beer', null, null),
+      ('A&W Cream Soda', null, null),
+      ('A&W Zero Sugar Root Beer', null, null),
+      ('A&W', 'www.awrestaurants.com', 'a_and_w'),
+      ('A&W Restaurant', null, 'a_and_w'),
+      ('A&W Restaurants #1234', null, 'a_and_w'),
+      ('A&W All American Food', null, 'a_and_w'),
       // Normalization
       ('McDonald’s', null, 'mcdonalds'),
       ('MCDONALDS', null, 'mcdonalds'),
@@ -91,6 +145,21 @@ void main() {
       ('Chick fil A', null, 'chick_fil_a'),
       ('Chickfila', null, 'chick_fil_a'),
       ('Wing Stop', null, 'wingstop'),
+      // A trademark or service mark sign is a separator, like ®, not the
+      // letters TM / SM glued onto the brand
+      ('Whataburger™', null, 'whataburger'),
+      ('Chick-fil-A™', null, 'chick_fil_a'),
+      ('Raising Cane’s℠', null, 'raising_canes'),
+      ('Whataburger™ (Main St)', null, 'whataburger'),
+      ('Starbucks®', null, 'starbucks'),
+      // Names as the chains print them: Gong cha's logo (Traditional),
+      // 85°C's cups, receipts without the periods, Traditional characters
+      ('貢茶 Gong cha', null, 'gong_cha'),
+      ('85°C', null, 'eighty_five_c'),
+      ('PF CHANGS #8812', null, 'pf_changs'),
+      ("T.G.I. Friday's", null, 'tgi_fridays'),
+      ('塔可貝爾', null, 'taco_bell'),
+      ('溫蒂漢堡', null, 'wendys'),
       // Branch suffixes
       ("McDonald's - Times Square", null, 'mcdonalds'),
       ('Starbucks (Times Sq)', null, 'starbucks'),
@@ -156,6 +225,10 @@ void main() {
       expect(chainTokens('85°C Bakery Cafe'), ['85c', 'bakery', 'cafe']);
       expect(chainTokens('麦当劳'), ['麦', '当', '劳']);
       expect(chainTokens('The'), ['the']);
+      expect(chainTokens('The Habit', keepLeadingThe: true), ['the', 'habit']);
+      expect(chainTokens('Whataburger™'), ['whataburger']);
+      expect(chainTokens('Chick-fil-A™'), ['chick', 'fil', 'a']);
+      expect(chainTokens('Service℠ Plan'), ['service', 'plan']);
       expect(chainTokens(null), isEmpty);
     });
   });
