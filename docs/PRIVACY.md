@@ -1,6 +1,6 @@
 # Chopstats · 筷拍 — Privacy Policy
 
-Effective date: 2026-11-10
+Effective date: 2026-11-11
 
 [English](#english) · [中文](#中文)
 
@@ -48,10 +48,10 @@ accounts, and receives none of your data.**
   you set them and, for a food you renamed, the name the AI first gave it.
   Working them out sends nothing: no AI call, no lookup. A meal you log or
   change with them is then like any other meal: its summary goes with the
-  next photo you log that day, as described under "What is sent, and to
-  whom". Which foods you hid from **My usual foods** and which offers you
-  turned down are kept with the app's settings as short codes, not food
-  names.
+  next photo you log that day (and with one taken before 4 a.m. the next
+  day), as described under "What is sent, and to whom". Which foods you hid
+  from **My usual foods** and which offers you turned down are kept with
+  the app's settings as short codes, not food names.
 
 The app contains no analytics, no crash reporting, no advertising and no
 tracking SDK, and it does not use your data to track you across apps or
@@ -107,8 +107,9 @@ lookup* below.
   (such as previews) are not sent.
 - Your dietary profile text, if you wrote one.
 - For the leftover check: the descriptions, food names, times and calorie
-  estimates of meals you already logged (that day's meals, or the meal you
-  picked as the original).
+  estimates of meals you already logged (that day's meals, plus the day
+  before's for a photo taken before 4 a.m., or the meal you picked as the
+  original).
 
 **What is sent with a text request:**
 
@@ -249,9 +250,12 @@ receives none of it. That recipient is:
 What that recipient receives:
 
 - **Each photo** comes with your dietary profile (if you wrote one) and a
-  short summary of the other meals logged that day — up to five, each with
+  short summary of the other meals logged that day (for a photo taken
+  before 4 a.m., the day before too) — up to five, each with
   its time, description, food names and calorie estimates — so the AI can
-  tell leftovers from a new meal.
+  tell leftovers from a new meal. If you allowed AI analysis before the
+  day before's meals were added, the app asks you once more, and they are
+  included only after you allow it again.
 - **A leftover photo** comes with the meal it belongs to.
 - **Describe a meal** sends what you typed and today's date — no other
   meals.
@@ -305,7 +309,7 @@ date. Questions: open an issue at
 - 通知（餐食卡片、每日总结）在手机上生成。
 - 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
 - 仅当你开启「**餐厅营养**」查询时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；每条都记录最后一次使用的时间，空间不够时先删除最久没用的；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的「**清除已记住的地点**」会删除这些地点、保存的查询结果和还在等待的查询。在不保存地点的 Android 上，「**清除保存的查询结果**」会删除保存的查询结果和还在等待的查询。
-- 「**我常吃的**」和「**你平时的数值**」都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按「**采用**」）。这一餐会在该食物上保存一个小标记，说明数值是你设定的，以及你改过名的食物最初由 AI 给出的名称。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时，它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
+- 「**我常吃的**」和「**你平时的数值**」都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按「**采用**」）。这一餐会在该食物上保存一个小标记，说明数值是你设定的，以及你改过名的食物最初由 AI 给出的名称。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时（第二天凌晨 4 点前拍的照片也一样），它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
 
 应用不包含任何统计分析、崩溃上报、广告或追踪 SDK，也不会利用你的数据在其他应用或网站之间追踪你。
 
@@ -326,7 +330,7 @@ date. Questions: open an issue at
 
 - 照片本身（缩小尺寸并重新编码为 JPEG；极少数情况下应用无法解码一张较小的 JPEG，则不经重新编码直接发送该文件）。照片中嵌入的元数据（例如拍摄时间、相机型号，以及相机记录了的话，拍摄地点）会从发送的这份副本中删除，文件里附带的其他图像（例如预览图）也不会被发送。
 - 你的饮食档案文字（如果你填写了）。
-- 用于剩菜判断：已记录餐食的描述、食物名称、时间和热量估算（当天的餐食，或你选作原餐的那一餐）。
+- 用于剩菜判断：已记录餐食的描述、食物名称、时间和热量估算（当天的餐食，凌晨 4 点前拍的照片还包括前一天的餐食；或你选作原餐的那一餐）。
 
 **随文字请求一起发送的内容：**
 
@@ -372,7 +376,7 @@ date. Questions: open an issue at
 
 接收方会收到的内容：
 
-- **每张照片**都会附带你的饮食档案（如果你填写了）和当天其他已记录餐食的简短摘要——最多五餐，每餐包括时间、描述、食物名称和热量估算——便于 AI 区分剩菜和新的一餐。
+- **每张照片**都会附带你的饮食档案（如果你填写了）和当天其他已记录餐食的简短摘要（凌晨 4 点前拍的照片还包括前一天的餐食）——最多五餐，每餐包括时间、描述、食物名称和热量估算——便于 AI 区分剩菜和新的一餐。如果你在加入前一天的餐食之前就已允许 AI 分析，应用会再询问你一次；你再次允许之后才会附带前一天的餐食。
 - **剩菜照片**会附带它对应的那一餐。
 - **文字描述一餐**只发送你输入的文字和今天的日期，不发送其他餐食。
 - **修改或删除某餐**会发送你输入的文字、今天的日期和最近 7 天的餐食。

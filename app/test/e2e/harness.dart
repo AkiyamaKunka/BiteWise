@@ -714,6 +714,13 @@ Future<void> goBack(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// The day's eaten total as Today shows it: the number in the ring's
+/// centre. Run 7 (U15, one hero number) took the "N kcal" line beside the
+/// ring away, so the centre is where the owner reads the total; its unit
+/// is the caption under it (`ringKcalToday`).
+String todayEaten(WidgetTester tester) =>
+    tester.widget<Text>(find.byKey(const Key('ringCenterValue'))).data!;
+
 /// The snackbar on screen goes away (its Undo with it).
 Future<void> dismissSnackBar(WidgetTester tester) async {
   for (final m in tester

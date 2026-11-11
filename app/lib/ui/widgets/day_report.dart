@@ -13,7 +13,9 @@
 /// Design: the app's own grouped-Apple language on the neutral grouped
 /// background — a coach receives the same visual truth the user sees,
 /// including the transparent Typical/Burn/Eaten arithmetic and the
-/// portion-size assumptions in item names.
+/// portion-size assumptions in item names. The image is always light
+/// (owner decision O-1) and always carries the absolute date: it is read
+/// later, on someone else's phone, often after being saved or forwarded.
 library;
 
 import 'dart:typed_data';
@@ -22,19 +24,39 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart';
 
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../format.dart';
 import '../l10n.dart';
+import '../meal_edit_logic.dart' show isRealIsoDate;
+import '../theme/app_theme.dart';
 import 'calorie_ring.dart';
-import 'grouped.dart' show cellBackground, groupedBackground;
+import 'grouped.dart' show cellColor, kCellRadius;
 import 'macro_chart.dart' show MacroPalette;
 
 /// Logical width of the report; WeChat previews ~3:4 to very tall images
 /// fine, and 420 keeps 17pt-class text comfortably readable at 3x.
 const double kReportWidth = 420;
 const double kReportPixelRatio = 3;
+
+/// The report's date line: the absolute, localized date with its weekday
+/// ('Fri, Oct 30, 2026' / '2026年10月30日周五'), never 'Today' (U14). The
+/// share flow always reports today, so the relative label made every
+/// image read 'Today' once saved or forwarded. A value that is not a real
+/// ISO date is shown as stored.
+String reportDateLabel(String date, {String? localeName}) {
+  if (!isRealIsoDate(date)) return date;
+  final parsed = DateTime.tryParse(date);
+  if (parsed == null) return date;
+  try {
+    return DateFormat.yMMMEd(localeName).format(parsed);
+  } catch (_) {
+    // Date symbols for this locale never loaded (a bare test tree).
+    return DateFormat.yMMMEd('en').format(parsed);
+  }
+}
 
 /// One meal, resolved for synchronous painting.
 class ReportMeal {
@@ -61,15 +83,18 @@ class DayReportCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final colors = AppColors.of(context);
     final palette = MacroPalette.of(context);
     final l = context.l10n;
     final foodMeals =
         meals.where((m) => isFoodMeal(m.meal)).toList(growable: false);
     final totals = todayTotals([for (final m in foodMeals) m.meal]);
     final burn = burnKcal.round();
+    final quiet =
+        theme.textTheme.bodySmall?.copyWith(color: colors.secondaryLabel);
     return Container(
       width: kReportWidth,
-      color: groupedBackground(scheme),
+      color: colors.page,
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -82,22 +107,32 @@ class DayReportCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(l.reportTitle,
-                        style: theme.textTheme.titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w700)),
-                    Text(context.friendlyDay(date),
+                        style: AppTypography.of(context)
+                            .title2
+                            .copyWith(color: colors.label)),
+                    Text(
+                        reportDateLabel(date,
+                            localeName:
+                                Localizations.maybeLocaleOf(context)
+                                    ?.toString()),
+                        key: const Key('reportDate'),
                         style: theme.textTheme.bodyMedium
-                            ?.copyWith(color: scheme.onSurfaceVariant)),
+                            ?.copyWith(color: colors.secondaryLabel)),
                   ],
                 ),
               ),
+              const SizedBox(width: 12),
               Text(l.kcalAmount(formatKcal(totals.cal)),
-                  style: theme.textTheme.headlineSmall),
+                  key: const Key('reportTotal'),
+                  style: AppNumerals.of(context)
+                      .large
+                      .copyWith(color: colors.label)),
             ],
           ),
           const SizedBox(height: 14),
           // The hero: same ring + reconciling arithmetic the app shows.
           _cell(
-            scheme,
+            context,
             Padding(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -114,15 +149,13 @@ class DayReportCard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(l.reportMeals(totals.meals),
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                  color: scheme.onSurfaceVariant)),
+                          Text(l.reportMeals(totals.meals), style: quiet),
                           const SizedBox(height: 6),
                           if (typicalKcal != null) ...[
                             ArithmeticRow(
                                 label: l.rowTypical,
                                 value: '~${formatKcal(typicalKcal!)}',
-                                dot: scheme.outlineVariant),
+                                dot: colors.tertiaryLabel),
                             if (burn > 0)
                               ArithmeticRow(
                                   label: l.rowBurn,
@@ -141,7 +174,7 @@ class DayReportCard extends StatelessWidget {
                               key: const Key('reportEatenRow'),
                               label: l.rowEaten,
                               value: formatKcal(totals.cal.round()),
-                              dot: scheme.primary,
+                              dot: colors.accent,
                               emphasized: typicalKcal != null),
                         ],
                       ),
@@ -168,40 +201,43 @@ class DayReportCard extends StatelessWidget {
           ],
           if (foodMeals.isEmpty)
             _cell(
-              scheme,
+              context,
               Padding(
                 padding: const EdgeInsets.all(20),
                 child: Text(l.reportNoMeals,
                     style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: scheme.onSurfaceVariant)),
+                        ?.copyWith(color: colors.secondaryLabel)),
               ),
             ),
           const SizedBox(height: 6),
           Center(
+            // secondaryLabel, not the outline grey (3.08:1 on the page).
             child: Text(l.reportFooter,
                 style: theme.textTheme.labelSmall
-                    ?.copyWith(color: scheme.outline)),
+                    ?.copyWith(color: colors.secondaryLabel)),
           ),
         ],
       ),
     );
   }
 
-  Widget _cell(ColorScheme scheme, Widget child) => Material(
-        color: cellBackground(scheme),
-        borderRadius: BorderRadius.circular(18),
+  Widget _cell(BuildContext context, Widget child) => Material(
+        color: cellColor(context),
+        borderRadius: BorderRadius.circular(kCellRadius),
         clipBehavior: Clip.antiAlias,
         child: child,
       );
 
   Widget _mealBlock(BuildContext context, ReportMeal rm) {
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final colors = AppColors.of(context);
     final l = context.l10n;
     final a = rm.meal.analysis;
     final items = safeFoodItems(a);
+    final quiet =
+        theme.textTheme.bodySmall?.copyWith(color: colors.secondaryLabel);
     return _cell(
-      scheme,
+      context,
       Padding(
         padding: const EdgeInsets.all(14),
         child: Column(
@@ -223,12 +259,13 @@ class DayReportCard extends StatelessWidget {
                 ],
                 Expanded(
                   child: Text(mealDescription(a, fallback: l.nlUnnamedMeal),
-                      style: theme.textTheme.titleSmall
-                          ?.copyWith(fontWeight: FontWeight.w600)),
+                      style: theme.textTheme.titleMedium
+                          ?.copyWith(color: colors.label)),
                 ),
                 const SizedBox(width: 8),
                 Text(context.clock(rm.meal.time),
-                    style: theme.textTheme.bodySmall),
+                    style: quiet?.copyWith(
+                        fontFeatures: const [FontFeature.tabularFigures()])),
               ],
             ),
             const SizedBox(height: 6),
@@ -237,18 +274,17 @@ class DayReportCard extends StatelessWidget {
               '${l.macroProteinShort} ${displayMacro(a, 'total_protein_g')}g · '
               '${l.macroCarbsShort} ${displayMacro(a, 'total_carbs_g')}g · '
               '${l.macroFatShort} ${displayMacro(a, 'total_fat_g')}g',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: scheme.onSurfaceVariant),
+              style: quiet,
             ),
             if (items.isNotEmpty) ...[
               const SizedBox(height: 6),
               for (final item in items)
                 Padding(
                   padding: const EdgeInsets.only(top: 2),
+                  // The meal cards' own item line (zh: a full-width colon).
                   child: Text(
-                    '• ${item['name'] ?? '?'}: '
-                    '~${l.kcalAmount(displayItemCalories(item['estimated_calories']))}',
-                    style: theme.textTheme.bodySmall,
+                    '• ${l.mealItemLine('${item['name'] ?? '?'}', l.kcalAmount(displayItemCalories(item['estimated_calories'])))}',
+                    style: quiet,
                   ),
                 ),
             ],
@@ -268,6 +304,11 @@ class DayReportCard extends StatelessWidget {
 /// [locale] localizes the report's own labels: the detached tree has no
 /// ancestor Localizations scope, so without the explicit wrapper the card
 /// would silently render in fallback English even for a zh user.
+///
+/// The image is always LIGHT, whatever [theme] the caller passes (owner
+/// decision O-1): it is read on a coach's phone in that phone's mode, and
+/// a dark capture in a light chat read as a black slab. [theme] is kept so
+/// callers need not change; reverting O-1 is the one line marked below.
 Future<Uint8List> renderDayReport({
   required String date,
   required List<ReportMeal> meals,
@@ -276,6 +317,10 @@ Future<Uint8List> renderDayReport({
   ThemeData? theme,
   Locale locale = const Locale('en'),
 }) async {
+  // O-1. To follow the app's mode again: `theme?.brightness ?? Brightness.light`.
+  const brightness = Brightness.light;
+  final reportTheme =
+      AppTheme.build(brightness, cjk: locale.languageCode == 'zh');
   final boundary = RenderRepaintBoundary();
   final pipelineOwner = PipelineOwner();
   final buildOwner = BuildOwner(focusManager: FocusManager());
@@ -311,8 +356,7 @@ Future<Uint8List> renderDayReport({
           GlobalCupertinoLocalizations.delegate,
         ],
         child: Theme(
-          data: theme ?? ThemeData(colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFFCC785C))),
+          data: reportTheme,
           child: DayReportCard(
               date: date,
               meals: meals,

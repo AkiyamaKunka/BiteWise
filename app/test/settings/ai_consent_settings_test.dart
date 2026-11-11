@@ -9,6 +9,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'app_settings_test.dart' show MemoryKeyStore, freshSettings;
 
 const _kRoutes = 'settings.ai_consent_routes';
+const _kVersions = 'settings.ai_consent_versions';
+const _kDeclined = 'settings.ai_consent_update_declined';
 
 Future<AppSettings> _reload() async => AppSettings.load(
     prefs: await SharedPreferences.getInstance(), keyStore: MemoryKeyStore());
@@ -116,6 +118,151 @@ void main() {
     expect(again.hasAiConsent('server:glm'), isTrue);
   });
 
+  // Re-consent (run 7): the consent text changed what is sent (B14: a
+  // photo taken before 4 a.m. also carries the day before's meals), so each
+  // grant remembers the text it was given under.
+  group('the consent text a grant was given under', () {
+    test('the current text is version 2 and is what sends the previous '
+        'day', () {
+      expect(aiConsentWordingVersion, 2);
+      expect(aiConsentPreviousDayVersion, 2);
+    });
+
+    test('a new grant records the current text, across a reload', () async {
+      final (s, prefs, _) = await freshSettings();
+      expect(s.aiConsentVersion('gemini'), 0, reason: 'not allowed');
+      await s.setAiConsent('gemini', granted: true);
+      expect(s.aiConsentVersion('gemini'), aiConsentWordingVersion);
+      expect(prefs.getStringList(_kVersions), ['gemini=2']);
+      expect((await _reload()).aiConsentVersion('gemini'), 2);
+      expect(s.previousDayLeftoverContext, isTrue);
+    });
+
+    test('a grant from before versions existed is version 1, and sends '
+        'that day only', () async {
+      final (s, prefs, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini', 'server:claude'],
+      });
+      expect(s.aiConsentVersion('gemini'), 1);
+      expect(s.aiConsentVersion('server:claude'), 1);
+      expect(s.previousDayLeftoverContext, isFalse);
+      expect(prefs.getStringList(_kVersions), isNull,
+          reason: 'reading writes nothing');
+      // Allowing it again (the update question) records the new text.
+      await s.setAiConsent('gemini', granted: true);
+      expect(s.aiConsentVersion('gemini'), 2);
+      expect(s.aiConsentVersion('server:claude'), 1, reason: 'per recipient');
+      expect(s.previousDayLeftoverContext, isTrue);
+    });
+
+    test('the background run re-reads the text a grant was given under '
+        'together with the grants (reloadAiConsent)', () async {
+      final (bg, _, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini'],
+        'settings.provider': 'gemini',
+      });
+      expect(bg.activeAiConsentRoute, 'gemini');
+      expect(bg.previousDayLeftoverContext, isFalse);
+      // The open app (its own engine): the user allows the new text.
+      final app = await _reload();
+      await app.setAiConsent('gemini', granted: true);
+      expect(bg.previousDayLeftoverContext, isFalse,
+          reason: 'the background snapshot until it re-reads');
+      await bg.reloadAiConsent();
+      expect(bg.aiConsentVersion('gemini'), 2);
+      expect(bg.previousDayLeftoverContext, isTrue);
+      // And Stop Sharing in the open app takes both away again.
+      await app.setAiConsent('gemini', granted: false);
+      await bg.reloadAiConsent();
+      expect(bg.hasAiConsent('gemini'), isFalse);
+      expect(bg.previousDayLeftoverContext, isFalse);
+    });
+
+    test("the owner's seeded grant is version 1: they never saw the new "
+        'text', () async {
+      final (s, prefs, _) = await freshSettings(initial: {
+        'settings.watcher_enabled': true,
+        'settings.provider': 'server',
+        'settings.server_backend': 'claude',
+      });
+      expect(s.hasAiConsent('server:claude'), isTrue);
+      expect(s.aiConsentVersion('server:claude'), 1);
+      expect(s.previousDayLeftoverContext, isFalse);
+      expect(prefs.getStringList(_kVersions), isNull);
+      expect((await _reload()).aiConsentVersion('server:claude'), 1);
+    });
+
+    test('Stop Sharing forgets the version; allowing again records the new '
+        'text', () async {
+      final (s, prefs, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini'],
+      });
+      await s.declineAiConsentUpdate('gemini');
+      await s.setAiConsent('gemini', granted: false);
+      expect(s.aiConsentVersion('gemini'), 0);
+      expect(s.aiConsentUpdateDeclined('gemini'), isFalse);
+      expect(prefs.getStringList(_kVersions), isEmpty);
+      expect(prefs.getStringList(_kDeclined), isEmpty);
+      expect(s.previousDayLeftoverContext, isFalse);
+      await s.setAiConsent('gemini', granted: true);
+      expect(s.aiConsentVersion('gemini'), 2);
+      expect(s.previousDayLeftoverContext, isTrue);
+    });
+
+    test('Not now to the update is remembered per recipient and changes '
+        'nothing else', () async {
+      final (s, prefs, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini', 'openai'],
+      });
+      var notified = 0;
+      s.addListener(() => notified++);
+      await s.declineAiConsentUpdate('gemini');
+      expect(notified, 1);
+      expect(s.aiConsentUpdateDeclined('gemini'), isTrue);
+      expect(s.aiConsentUpdateDeclined('openai'), isFalse);
+      expect(s.hasAiConsent('gemini'), isTrue);
+      expect(s.aiConsentVersion('gemini'), 1);
+      expect(s.previousDayLeftoverContext, isFalse);
+      expect(prefs.getStringList(_kRoutes), ['gemini', 'openai']);
+      expect(prefs.getStringList(_kDeclined), ['gemini=2']);
+      expect((await _reload()).aiConsentUpdateDeclined('gemini'), isTrue);
+    });
+
+    test('an answer to an older update does not silence a newer one',
+        () async {
+      final (s, _, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini'],
+        _kDeclined: ['gemini=1'],
+      });
+      expect(s.aiConsentUpdateDeclined('gemini'), isFalse);
+    });
+
+    test('the previous day follows the CURRENT recipient', () async {
+      final (s, _, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini', 'openai'],
+        _kVersions: ['gemini=2'],
+      });
+      expect(s.activeAiConsentRoute, 'gemini');
+      expect(s.previousDayLeftoverContext, isTrue);
+      await s.setProvider(AiProvider.openai);
+      expect(s.aiConsentVersion('openai'), 1);
+      expect(s.previousDayLeftoverContext, isFalse);
+      await s.setProvider(AiProvider.anthropic);
+      expect(s.previousDayLeftoverContext, isFalse, reason: 'no grant');
+    });
+
+    test('a malformed entry reads as no version (version 1)', () async {
+      final (s, _, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini', 'qwen', 'server:glm'],
+        _kVersions: ['gemini=x', '=2', 'qwen', 'server:glm=2'],
+      });
+      expect(s.aiConsentVersion('gemini'), 1);
+      expect(s.aiConsentVersion('qwen'), 1);
+      expect(s.aiConsentVersion('server:glm'), 2,
+          reason: "a route's own ':' is kept");
+    });
+  });
+
   test('the UI adapter reads and writes the same store', () async {
     final (s, _, _) = await freshSettings();
     final store = createSettingsStore(s);
@@ -124,5 +271,10 @@ void main() {
     expect(s.hasAiConsent('gemini'), isTrue);
     await store.setAiConsent('gemini', granted: false);
     expect(store.hasAiConsent('gemini'), isFalse);
+    await s.setAiConsent('openai', granted: true);
+    expect(store.aiConsentVersion('openai'), aiConsentWordingVersion);
+    await store.declineAiConsentUpdate('openai');
+    expect(s.aiConsentUpdateDeclined('openai'), isTrue);
+    expect(store.aiConsentUpdateDeclined('openai'), isTrue);
   });
 }

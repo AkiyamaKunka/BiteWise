@@ -146,13 +146,23 @@ double? parseWeightKg(dynamic input) {
 /// Single-meal result card, meal-local portion of format_food_result
 /// (spec §5.4, telegram_bot.py:2875-2919) rendered as plain text. The
 /// running daily-totals block is the reports module's concern; the UI
-/// appends it separately. [unnamed] stands in for a missing
-/// meal_description; the executor passes its localized string so the
-/// fallback is not the one English word in a Chinese reply.
-String formatFoodResult(Map<String, dynamic> analysis,
-    {String unnamed = 'Unknown meal'}) {
-  if (!isTruthy(analysis['is_food'])) return '🚫 No food detected in this photo.';
-  final lines = <String>['🍽️ ${analysis['meal_description'] ?? unnamed}\n'];
+/// appends it separately. Every label comes from [l]: the card sits under
+/// the localized "added a meal" header, and the item lines, totals and
+/// the item-sum warning were the English part of a Chinese reply.
+String formatFoodResult(Map<String, dynamic> analysis, AppLocalizations l) {
+  if (!isTruthy(analysis['is_food'])) return l.nlNoFoodDetected;
+  // 'P: 25g | C: 40g | F: 10g' (zh '蛋 25g | 碳 40g | 脂 10g'); the totals
+  // line puts an emoji before each.
+  String macros(Object p, Object c, Object f,
+          {List<String> marks = const ['', '', '']}) =>
+      [
+        '${marks[0]}${l.nlMacroAmount(l.macroProteinShort, '$p')}',
+        '${marks[1]}${l.nlMacroAmount(l.macroCarbsShort, '$c')}',
+        '${marks[2]}${l.nlMacroAmount(l.macroFatShort, '$f')}',
+      ].join(' | ');
+  final lines = <String>[
+    '🍽️ ${analysis['meal_description'] ?? l.nlUnnamedMeal}\n'
+  ];
   for (final item in safeFoodItems(analysis)) {
     dynamic cals =
         item.containsKey('estimated_calories') ? item['estimated_calories'] : '?';
@@ -164,19 +174,22 @@ String formatFoodResult(Map<String, dynamic> analysis,
     } else if (cals is num) {
       cals = safeNumber(cals);
     }
-    lines.add('  • ${item['name'] ?? '?'}: ~$cals kcal');
-    lines.add('    P:${safeNumber(item['protein_g'])}g | '
-        'C:${safeNumber(item['carbs_g'])}g | F:${safeNumber(item['fat_g'])}g');
+    lines.add(l.nlResultItem('${item['name'] ?? '?'}', l.kcalAmount('$cals')));
+    final itemMacros = macros(safeNumber(item['protein_g']),
+        safeNumber(item['carbs_g']), safeNumber(item['fat_g']));
+    lines.add('    $itemMacros');
   }
   final total = _orElse(analysis['total_calories'], '?'); // raw `or "?"`
-  lines.add('\n📊 This meal: ~$total kcal');
-  lines.add('🥩 P: ${_orElse(analysis['total_protein_g'], 0)}g | '
-      '🍞 C: ${_orElse(analysis['total_carbs_g'], 0)}g | '
-      '🧈 F: ${_orElse(analysis['total_fat_g'], 0)}g');
+  lines.add('\n${l.nlThisMeal(l.kcalAmount('$total'))}');
+  lines.add(macros(
+      _orElse(analysis['total_protein_g'], 0),
+      _orElse(analysis['total_carbs_g'], 0),
+      _orElse(analysis['total_fat_g'], 0),
+      marks: const ['🥩 ', '🍞 ', '🧈 ']));
   final itemSum = mealCalorieMismatch(analysis);
   if (itemSum != null) {
-    lines.add('⚠️ Item calories sum to ~$itemSum kcal but the meal total is '
-        '~$total kcal — reply with a correction if this looks wrong.');
+    lines.add(l.nlItemSumMismatch(
+        l.kcalAmount('$itemSum'), l.kcalAmount('$total')));
   }
   return lines.join('\n');
 }
@@ -205,27 +218,31 @@ String buildMealsList(List<Meal> meals) {
 }
 
 /// The quota-pause refusal (spec §3.3/§4, telegram_bot.py:951-966 wording,
-/// 4253-4261 framing) as plain text.
-String _quotaPauseMessage(DateTime until) {
+/// 4253-4261 framing) as plain text, in the UI language. The English
+/// wording is the server's.
+String _quotaPauseMessage(DateTime until, AppLocalizations l) {
   final remainingSeconds =
       math.max(0, until.difference(DateTime.now()).inSeconds);
   final String remaining;
   if (remainingSeconds < 60) {
-    remaining = '${remainingSeconds}s';
+    remaining = l.nlPauseRemaining('seconds', '', '', '$remainingSeconds');
   } else if (remainingSeconds < 3600) {
-    remaining = '${remainingSeconds ~/ 60}m';
+    remaining =
+        l.nlPauseRemaining('minutes', '', '${remainingSeconds ~/ 60}', '');
   } else {
-    remaining = '${remainingSeconds ~/ 3600}h'
-        '${((remainingSeconds % 3600) ~/ 60).toString().padLeft(2, '0')}m';
+    remaining = l.nlPauseRemaining(
+        'hours',
+        '${remainingSeconds ~/ 3600}',
+        ((remainingSeconds % 3600) ~/ 60).toString().padLeft(2, '0'),
+        '');
   }
-  final untilStr = '${isoDate(until)}T'
-      '${until.hour.toString().padLeft(2, '0')}:'
-      '${until.minute.toString().padLeft(2, '0')}';
-  return '⏸️ Gemini is paused right now.\n\n'
-      'Gemini daily free-tier quota is paused until $untilStr '
-      '(about $remaining remaining).\n\n'
-      'Text corrections and manual meal parsing need Gemini too, '
-      'so I did not send this request.';
+  // A local 'yyyy-MM-dd HH:mm', as Diagnostics shows the same pause (the
+  // date stays: a pause can run past midnight).
+  final local = until.toLocal();
+  final untilStr = '${isoDate(local)} '
+      '${local.hour.toString().padLeft(2, '0')}:'
+      '${local.minute.toString().padLeft(2, '0')}';
+  return l.nlQuotaPaused(untilStr, remaining);
 }
 
 const List<String> _weekdayNames = [

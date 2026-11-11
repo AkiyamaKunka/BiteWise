@@ -90,15 +90,20 @@ void main() {
       ..isQuotaPaused = true
       ..quotaPauseUntil = until;
 
-    testWidgets('en: byte-identical to the old literal, with and without '
+    // Run 7 (U1): only Gemini arms this pause, so the banner names it,
+    // says why a free key hits it, and gives the billing remedy (a passing
+    // Test This Provider clears the pause).
+    testWidgets('en: names the limit and the remedy, with and without '
         'the until-time', (tester) async {
       await _pump(tester, const Locale('en'),
           ProviderSettingsPage(settings: paused(), analyzer: FakeAnalyzer()));
       expect(
           _bannerText(tester),
-          'Analyses are paused — the daily quota was hit. New photos are '
-          'kept and retried automatically; changing the key or provider '
-          'resumes now.');
+          "Analyses are paused — Gemini's daily limit was reached (a free "
+          'tier allows only a limited number of requests a day). New photos '
+          'are kept and retried automatically. To resume now, turn on '
+          'billing in Google AI Studio and run Test This Provider, or change '
+          'the key or provider.');
 
       await _pump(
           tester,
@@ -108,9 +113,11 @@ void main() {
               analyzer: FakeAnalyzer()));
       expect(
           _bannerText(tester),
-          'Analyses are paused — the daily quota was hit (until 11:30 PM). '
-          'New photos are kept and retried automatically; changing the key '
-          'or provider resumes now.');
+          "Analyses are paused until 11:30 PM — Gemini's daily limit was "
+          'reached (a free tier allows only a limited number of requests a '
+          'day). New photos are kept and retried automatically. To resume '
+          'now, turn on billing in Google AI Studio and run Test This '
+          'Provider, or change the key or provider.');
     });
 
     testWidgets('zh: Chinese, with the until-time, and no English',
@@ -130,8 +137,11 @@ void main() {
 
       await _pump(tester, const Locale('zh'),
           ProviderSettingsPage(settings: paused(), analyzer: FakeAnalyzer()));
-      expect(_bannerText(tester),
-          '分析已暂停 — 已达当日额度。新照片会保留并自动重试；更换 Key 或服务后立即恢复。');
+      expect(
+          _bannerText(tester),
+          '分析已暂停 — 已达 Gemini 当日上限（免费额度每天只能处理有限的请求）。'
+          '新照片会保留并自动重试。想立即恢复：在 Google AI Studio 开通付费后运行'
+          '「测试当前服务」，或更换 Key 或服务。');
     });
   });
 

@@ -26,7 +26,10 @@ class OpenAiAnalyzer extends _HttpVisionAnalyzer {
 
   @override
   http.Request buildRequest(String key,
-      {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
+      {required String prompt,
+      Uint8List? jpegBytes,
+      required int maxTokens,
+      List<Map<String, dynamic>> recentMeals = const []}) {
     final content = _chatContent(prompt, jpegBytes);
     final req = http.Request('POST', _endpoint)
       ..headers['Authorization'] = 'Bearer $key'
@@ -107,7 +110,10 @@ class OpenAiCompatAnalyzer extends _HttpVisionAnalyzer {
 
   @override
   http.Request buildRequest(String key,
-      {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
+      {required String prompt,
+      Uint8List? jpegBytes,
+      required int maxTokens,
+      List<Map<String, dynamic>> recentMeals = const []}) {
     final content = _chatContent(prompt, jpegBytes);
     // The model field is free text: a user-typed *thinking* model id
     // (doubao-seed-*-thinking-*, glm-4.1v-thinking-*) REQUIRES thinking,
@@ -162,7 +168,10 @@ class AnthropicAnalyzer extends _HttpVisionAnalyzer {
 
   @override
   http.Request buildRequest(String key,
-      {required String prompt, Uint8List? jpegBytes, required int maxTokens}) {
+      {required String prompt,
+      Uint8List? jpegBytes,
+      required int maxTokens,
+      List<Map<String, dynamic>> recentMeals = const []}) {
     final content = <Map<String, Object?>>[
       if (jpegBytes != null)
         {

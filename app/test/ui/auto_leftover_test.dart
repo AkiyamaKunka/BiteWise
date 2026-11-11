@@ -6,6 +6,7 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/leftover_logic.dart';
+import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
@@ -48,6 +49,18 @@ Map<String, dynamic> _leftoverReply(
         {'name': 'Pork (~150 g)', 'left_fraction': 0.0},
       ],
       'note': 'same tray, rice untouched',
+    };
+
+/// A reply that names a leftover AND carries a full meal of its own: when
+/// the gate refuses the leftover, the meal is still a meal.
+Map<String, dynamic> _dualReply({num index = 0, double confidence = 0.9}) =>
+    {
+      ..._leftoverReply(index: index, confidence: confidence),
+      'meal_description': 'Fried rice',
+      'total_calories': 520,
+      'food_items': [
+        {'name': 'Fried rice (~300 g)', 'estimated_calories': 520},
+      ],
     };
 
 void main() {
@@ -225,7 +238,7 @@ void main() {
   test('low confidence falls through to a NORMAL new meal', () async {
     dao.put(_meal(1, '01:34 PM', 965));
     analyzer.nextPhotoOutcome = AnalysisOutcome(
-        analysis: _leftoverReply(confidence: 0.4),
+        analysis: _dualReply(confidence: 0.4),
         isFood: true,
         wall: Duration.zero);
     final out = await pipeline.process(photo());
@@ -234,6 +247,10 @@ void main() {
         reason: 'uncertain verdicts must not silently shrink a real meal');
     expect(dao.meals.first.analysis['total_calories'], 965,
         reason: 'the original is untouched');
+    // What was stored is the reply's own meal, not an empty shell.
+    expect(dao.meals.last.analysis['meal_description'], 'Fried rice');
+    expect(dao.meals.last.analysis['total_calories'], 520);
+    expect(out.message, 'Meal logged: Fried rice — ~520 kcal');
   });
 
   test('the save and the deduction snackbars say 千卡 in Chinese, English '
@@ -270,12 +287,13 @@ void main() {
   test('an out-of-range index falls through to a normal meal', () async {
     dao.put(_meal(1, '01:34 PM', 965));
     analyzer.nextPhotoOutcome = AnalysisOutcome(
-        analysis: _leftoverReply(index: 7),
+        analysis: _dualReply(index: 7),
         isFood: true,
         wall: Duration.zero);
     final out = await pipeline.process(photo());
     expect(out.kind, PhotoOutcomeKind.saved);
     expect(dao.meals, hasLength(2));
+    expect(dao.meals.last.analysis['total_calories'], 520);
   });
 
   test('an empty day sends no candidates and a leftover_of reply cannot '
@@ -284,8 +302,12 @@ void main() {
         analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
     final out = await pipeline.process(photo());
     expect(analyzer.lastRecentMeals, isEmpty);
-    expect(out.kind, PhotoOutcomeKind.saved);
-    expect(dao.meals, hasLength(1));
+    // Nothing to deduct from and no meal of its own: kept as failed, not
+    // stored as a nameless "~? kcal" meal (B4, run 7).
+    expect(out.kind, PhotoOutcomeKind.failed);
+    expect(out.errorKind, AnalysisErrorKind.leftoverUnsure);
+    expect(dao.meals, isEmpty);
+    expect(dao.ledger['leftover-hash-1'], IngestionStatus.failed);
   });
 
   test('only the LAST five meals ride along, newest last', () async {
@@ -345,7 +367,7 @@ void main() {
     dao.put(today);
     dao.put(old);
     analyzer.nextPhotoOutcome = AnalysisOutcome(
-        analysis: _leftoverReply(confidence: 0.4), // falls through to save
+        analysis: _dualReply(confidence: 0.4), // falls through to save
         isFood: true,
         wall: Duration.zero);
     final shotYesterday = IntakePhoto(Uint8List.fromList([7]), 'w2', 'y.jpg',
@@ -464,5 +486,167 @@ void main() {
             applied: out.analysis!,
             before: out.previousAnalysis!)!['total_calories'],
         965);
+  });
+
+  // B14 (run 7): remains shot just after midnight were only ever compared
+  // with the NEW day's meals, so the late dinner they came from was never
+  // offered and the remains were logged as a meal of their own.
+  Meal lateDinner() => const Meal(
+        id: 21,
+        date: '2026-10-29',
+        time: '11:20 PM',
+        timestamp: '2026-10-29T23:21:00',
+        source: 'app_watch',
+        imageHash: 'orig-21',
+        analysis: {
+          'is_food': true,
+          'meal_description': 'Hotpot',
+          'total_calories': 1200,
+          'food_items': [
+            {'name': 'Rice (~200 g)', 'estimated_calories': 300},
+            {'name': 'Pork (~150 g)', 'estimated_calories': 900},
+          ],
+        },
+      );
+
+  test('remains shot at 00:10 are checked against the 23:20 dinner the '
+      'night before', () async {
+    dao.put(lateDinner());
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    // Allowed under the consent text that says so (aiConsentWordingVersion 2).
+    final out = await PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'leftover-hash-1',
+            previousDayContext: () => true)
+        .process(IntakePhoto(
+        Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
+        capturedAt: DateTime(2026, 10, 30, 0, 10)));
+    expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
+        ['Hotpot']);
+    expect(out.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(out.mealId, 21);
+    expect(out.mealDate, '2026-10-29');
+    expect(dao.meals, hasLength(1), reason: 'no meal of their own');
+    // The rice was left: 1200 − 300.
+    expect(dao.byId(21).analysis['total_calories'], 900);
+  });
+
+  test("a daytime photo still sees only its own day's meals", () async {
+    dao.put(lateDinner());
+    analyzer.nextPhotoOutcome =
+        const AnalysisOutcome(analysis: {'is_food': false}, wall: Duration.zero);
+    // Even under the updated consent.
+    await PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'leftover-hash-1',
+            previousDayContext: () => true)
+        .process(IntakePhoto(
+        Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
+        capturedAt: DateTime(2026, 10, 30, 13, 0)));
+    expect(analyzer.lastRecentMeals, isEmpty,
+        reason: "yesterday's dinner is not offered at 1 PM");
+    // 04:00 is already morning: the previous night is not offered either.
+    await PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'other-hash',
+            previousDayContext: () => true)
+        .process(IntakePhoto(Uint8List.fromList([8]), 'w4', 'IMG_10.jpg',
+            capturedAt: DateTime(2026, 10, 30, 4, 0)));
+    expect(analyzer.lastRecentMeals, isEmpty);
+  });
+
+  // Re-consent (run 7): a grant from before the consent text mentioned the
+  // previous night keeps sending exactly what it agreed to.
+  test('without the updated consent the 00:10 photo sees only its own day',
+      () async {
+    dao.put(lateDinner());
+    for (final pre in <bool Function()?>[null, () => false]) {
+      analyzer.nextPhotoOutcome = const AnalysisOutcome(
+          analysis: {'is_food': false}, wall: Duration.zero);
+      await PhotoPipeline(
+              dao: dao,
+              analyzer: analyzer,
+              hasher: (_) async => 'v1-${pre == null}',
+              previousDayContext: pre)
+          .process(IntakePhoto(Uint8List.fromList([9]), 'w5', 'IMG_11.jpg',
+              capturedAt: DateTime(2026, 10, 30, 0, 10)));
+      expect(analyzer.lastRecentMeals, isEmpty,
+          reason: "the day before's dinner is not sent under a v1 grant");
+    }
+    expect(dao.byId(21).analysis['total_calories'], 1200);
+  });
+
+  // B4 (run 7): a leftover-shaped reply the gate turned down (or that
+  // applyLeftover could not use) was stored AS a meal — no description, no
+  // total, no items: "Meal logged: Meal — ~? kcal", ledgered as done.
+  group('a leftover reply nothing could be applied from', () {
+    final refused = <String, Map<String, dynamic>>{
+      'low confidence': _leftoverReply(confidence: 0.4),
+      'an index outside the list': _leftoverReply(index: 7),
+      'a 1-based index for the only meal': _leftoverReply(index: 1),
+      'a confidence given as text': {..._leftoverReply(), 'confidence': '0.9'},
+      'fractions applyLeftover cannot use': {
+        ..._leftoverReply(),
+        'leftover_fraction': null,
+        'items': [
+          {'name': 'Rice (~200 g)', 'left_fraction': 'most'},
+        ],
+      },
+    };
+    for (final MapEntry(key: why, value: reply) in refused.entries) {
+      test('$why: kept as failed, nothing stored, nothing cut', () async {
+        dao.put(_meal(1, '01:34 PM', 965));
+        analyzer.nextPhotoOutcome =
+            AnalysisOutcome(analysis: reply, isFood: true, wall: Duration.zero);
+        final out = await pipeline.process(photo());
+        expect(out.kind, PhotoOutcomeKind.failed);
+        expect(out.errorKind, AnalysisErrorKind.leftoverUnsure);
+        expect(out.retryable, isFalse,
+            reason: 'the model answered; asking again unattended would '
+                'upload the photo on every scan');
+        expect(dao.meals, hasLength(1), reason: 'no contentless meal row');
+        expect(dao.meals.single.analysis['total_calories'], 965,
+            reason: 'the original is untouched');
+        expect(dao.ledger['leftover-hash-1'], IngestionStatus.failed,
+            reason: 'kept for a deliberate retry, not marked done');
+        expect(notifications.single.kind, PhotoOutcomeKind.failed);
+      });
+    }
+
+    test('says why in both languages, English word for word', () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _leftoverReply(confidence: 0.4),
+          isFood: true,
+          wall: Duration.zero);
+      final out = await pipeline.process(photo());
+      final en = AppLocalizationsEn(), zh = AppLocalizationsZh();
+      expect(outcomeBody(en, out), out.message);
+      expect(out.message, en.errLeftoverUnsure);
+      expect(outcomeSnackbar(zh, out),
+          zh.outcomeFailedKeptMsg(zh.errLeftoverUnsure));
+      expect(outcomeSnackbar(zh, out), contains('记录剩菜'));
+      expect(RegExp(r'[a-z]{4,}').hasMatch(outcomeSnackbar(zh, out)), isFalse,
+          reason: 'no English leaking into the Chinese UI');
+    });
+
+    test('a deliberate add of such a photo is refused the same way',
+        () async {
+      dao.put(_meal(1, '01:34 PM', 965));
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _leftoverReply(confidence: 0.4),
+          isFood: true,
+          wall: Duration.zero);
+      final out = await pipeline.process(IntakePhoto(
+          Uint8List.fromList([7]), '', 'picked.jpg',
+          deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.errorKind, AnalysisErrorKind.leftoverUnsure);
+      expect(dao.meals, hasLength(1));
+    });
   });
 }

@@ -128,6 +128,12 @@ abstract class AppLocalizations {
   /// **'{kcal} kcal'**
   String kcalAmount(String kcal);
 
+  /// One food item under a meal card, after a bullet: the item name, then its calories already formatted by kcalAmount. zh uses a full-width colon.
+  ///
+  /// In en, this message translates to:
+  /// **'{name}: ~{kcal}'**
+  String mealItemLine(String name, String kcal);
+
   /// No description provided for @mealsToday.
   ///
   /// In en, this message translates to:
@@ -201,7 +207,7 @@ abstract class AppLocalizations {
   /// No description provided for @todayEmptyHint.
   ///
   /// In en, this message translates to:
-  /// **'Tap \"Log\" below to add one from a photo or a description — or turn on \"Watch camera roll\" in Settings and new food photos log themselves.'**
+  /// **'Tap \"Log\" below to add one from a photo, a description or by hand — or turn on \"Watch Camera Roll\" in Settings and new food photos log themselves.'**
   String get todayEmptyHint;
 
   /// No description provided for @fabLog.
@@ -270,6 +276,12 @@ abstract class AppLocalizations {
   /// **'on {date}'**
   String bodyOnDate(String date);
 
+  /// One shared footnote under the Body measurements when every row was measured on the same day; {date} is a short localized date such as 'Oct 28'.
+  ///
+  /// In en, this message translates to:
+  /// **'as of {date}'**
+  String bodyAsOf(String date);
+
   /// No description provided for @bodyNoChange.
   ///
   /// In en, this message translates to:
@@ -321,7 +333,7 @@ abstract class AppLocalizations {
   /// No description provided for @bodyEmptyHint.
   ///
   /// In en, this message translates to:
-  /// **'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 81.6 kg\") lands here too.'**
+  /// **'Tap Log to record your weight or your waist, chest and hip measurements.'**
   String get bodyEmptyHint;
 
   /// No description provided for @bodySheetLogTitle.
@@ -341,6 +353,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Leave anything you did not measure empty.'**
   String get bodySheetHint;
+
+  /// Label of the row at the top of the Log body sheet that shows the day being logged; tapping it opens a date picker.
+  ///
+  /// In en, this message translates to:
+  /// **'Date'**
+  String get bodySheetDate;
+
+  /// Asked when the user picks another day in the Log body sheet after typing values, and that day already has an entry; {date} is a short date such as 'Oct 28'.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to {date}?'**
+  String bodySheetSwitchTitle(String date);
+
+  /// No description provided for @bodySheetSwitchBody.
+  ///
+  /// In en, this message translates to:
+  /// **'That day already has an entry. What you typed here is not saved and will be discarded.'**
+  String get bodySheetSwitchBody;
+
+  /// No description provided for @bodySheetDiscard.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get bodySheetDiscard;
 
   /// No description provided for @bodyFieldWeight.
   ///
@@ -423,13 +459,13 @@ abstract class AppLocalizations {
   /// No description provided for @settingsWelcomeTitle.
   ///
   /// In en, this message translates to:
-  /// **'Welcome — one step to start logging'**
+  /// **'Set up AI to start logging'**
   String get settingsWelcomeTitle;
 
   /// No description provided for @settingsWelcomeBody.
   ///
   /// In en, this message translates to:
-  /// **'Tap AI Provider below, pick a provider and paste its API key (it saves as you type), then Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.'**
+  /// **'Pick a provider and paste its API key (it saves as you type), then tap Test This Provider.\nThen turn on Watch Camera Roll and new food photos log themselves.'**
   String get settingsWelcomeBody;
 
   /// No description provided for @settingsSectionAi.
@@ -441,19 +477,19 @@ abstract class AppLocalizations {
   /// No description provided for @settingsAiFooterPaused.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider on the AI Provider page resumes now.'**
+  /// **'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider on the AI Provider page.'**
   String get settingsAiFooterPaused;
 
   /// No description provided for @providerQuotaPaused.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are paused — the daily quota was hit. New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  /// **'Analyses are paused — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.'**
   String get providerQuotaPaused;
 
   /// Banner on the AI Provider page itself, so unlike settingsAiFooterPaused it does not point at that page. {time} is the local clock time the pause lifts.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are paused — the daily quota was hit (until {time}). New photos are kept and retried automatically; changing the key or provider resumes now.'**
+  /// **'Analyses are paused until {time} — Gemini\'s daily limit was reached (a free tier allows only a limited number of requests a day). New photos are kept and retried automatically. To resume now, turn on billing in Google AI Studio and run Test This Provider, or change the key or provider.'**
   String providerQuotaPausedUntil(String time);
 
   /// No description provided for @settingsAiFooter.
@@ -498,10 +534,10 @@ abstract class AppLocalizations {
   /// **'Photos will be sent to your AI service'**
   String get watcherDisclosureTitle;
 
-  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)). {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.
+  /// One-time notice before Watch Camera Roll is first turned on (App Store 5.1.2(i)), shown ABOVE aiConsentBody in the same dialog — which already says the developer receives nothing, so this text does not repeat it. {provider} is the current AI provider's display name, e.g. Gemini or Claude (server). {days} is the lookback window the enable sweeps right away.
   ///
   /// In en, this message translates to:
-  /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Nothing is sent to the app\'s developer. You can turn this off any time.'**
+  /// **'While Watch Camera Roll is on, every new photo in your library, plus the photos from the last {days, plural, =1{day} other{{days} days}}, is sent to {provider} — including ones that are not food — so it can tell whether it is a meal. Each photo is one AI request, so a free tier\'s daily limit can run out during this first catch-up, and on some free tiers (Gemini\'s, for example) the AI company may use the photos to improve its AI and let people review them; check its terms or turn on billing. You can turn this off any time.'**
   String watcherDisclosureBody(String provider, int days);
 
   /// No description provided for @watcherDisclosureContinue.
@@ -516,10 +552,22 @@ abstract class AppLocalizations {
   /// **'Allow AI analysis?'**
   String get aiConsentTitle;
 
-  /// Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow).
+  /// Title of the same consent dialog (aiConsentBody, Not now / Allow), asked ONCE on a launch or return to the app when the current recipient was allowed under an older consent text (core/ai_consent.dart aiConsentWordingVersion): the text now also says a photo taken before 4 a.m. carries the day before's meals, which are sent only after Allow. Not now keeps the older permission as it was.
   ///
   /// In en, this message translates to:
-  /// **'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.'**
+  /// **'What Chopstats sends has changed'**
+  String get aiConsentUpdateTitle;
+
+  /// First paragraph of the aiConsentUpdateTitle dialog, above the camera-roll notice (while Watch Camera Roll is on) and aiConsentBody: names what changed, so the user need not find it in the full text. Must stay true to AppSettings.previousDayLeftoverContext (a version-1 grant sends that day's meals only) and to aiConsentNotNow's label.
+  ///
+  /// In en, this message translates to:
+  /// **'New: a photo taken before 4 a.m. now also carries a short summary of the day before\'s meals, so leftovers from a late dinner are recognized. Until you allow it, a photo carries only that day\'s meals; Not now keeps it that way.'**
+  String get aiConsentUpdateLead;
+
+  /// Consent dialog body. {recipient} is aiConsentCompany, aiConsentRelayRecipient or aiConsentServerRecipient(NoHost). The list must stay true to what the app sends (photo_pipeline: the day's other meals; nl/executor: handleText (Fix) sends the 7-day window, describeMeal sends no meals; leftover_flow). A change to WHAT it says is sent also bumps aiConsentWordingVersion (core/ai_consent.dart), so a grant given under the older text is asked again (aiConsentUpdateTitle) before the new data goes.
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats estimates calories with an AI service. If you allow it, Chopstats sends the following to {recipient}:\n• each photo you log, with your dietary profile and a short summary of the other meals logged that day (for a photo taken before 4 a.m., the day before too)\n• leftover photos, with the meal they belong to\n• what you type to describe a meal\n• what you type to fix a meal, with your meals from the last 7 days\n\nChopstats has no server of its own, and its developer never receives any of this. The AI company\'s own privacy policy and terms apply to what it receives. Nothing is sent until you allow it, and you can stop at any time in Settings.'**
   String aiConsentBody(String recipient);
 
   /// The company that receives the data for an API-key provider id.
@@ -759,7 +807,7 @@ abstract class AppLocalizations {
   /// No description provided for @settingsDataFooter.
   ///
   /// In en, this message translates to:
-  /// **'Import MERGES an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.'**
+  /// **'Import merges an exported file into this phone: meals already here are left alone, so importing twice never doubles your calories.'**
   String get settingsDataFooter;
 
   /// No description provided for @settingsRowExport.
@@ -879,7 +927,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiProviderFooter.
   ///
   /// In en, this message translates to:
-  /// **'Pay per photo: the key lives on this phone and every photo is a metered API call billed by the vendor.'**
+  /// **'The key stays on this phone. Some providers have a free tier; others charge for each request.'**
   String get apiProviderFooter;
 
   /// No description provided for @noteVpn.
@@ -918,6 +966,18 @@ abstract class AppLocalizations {
   /// **'{provider} API key'**
   String apiKeyLabel(String provider);
 
+  /// No description provided for @apiKeyShow.
+  ///
+  /// In en, this message translates to:
+  /// **'Show key'**
+  String get apiKeyShow;
+
+  /// No description provided for @apiKeyHide.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide key'**
+  String get apiKeyHide;
+
   /// No description provided for @apiKeyFooterDefault.
   ///
   /// In en, this message translates to:
@@ -927,7 +987,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiKeyFooterGemini.
   ///
   /// In en, this message translates to:
-  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier. Stored securely on this device only.'**
+  /// **'From aistudio.google.com/apikey (Google AI Studio). Has a free tier, but it allows only a limited number of photos a day, and on it Google may use what you send to improve its AI and let people review it. Turning on billing in AI Studio lifts the limit and avoids this — worth doing before photos are logged automatically. Stored securely on this device only.'**
   String get apiKeyFooterGemini;
 
   /// No description provided for @apiKeyFooterOpenai.
@@ -1170,10 +1230,16 @@ abstract class AppLocalizations {
   /// **'Signs your server in to your Anthropic account.'**
   String get connectClaudeFooter;
 
+  /// Snackbar when Connect Claude is tapped on the Your own server page while the server address or the upload key is empty: nothing is sent, and the user is pointed at the two fields above the button.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter your server address and upload key above first.'**
+  String get connectNeedsServer;
+
   /// No description provided for @subInactiveFooter.
   ///
   /// In en, this message translates to:
-  /// **'An API key is currently active. Pick an AI above to have your own server analyze photos instead.'**
+  /// **'An API key is currently active. This option is for people who run their own Chopstats server: pick its AI above to have that server analyze photos instead. No server of your own? Go back and use an API key.'**
   String get subInactiveFooter;
 
   /// No description provided for @connectDialogTitle.
@@ -1281,7 +1347,7 @@ abstract class AppLocalizations {
   /// No description provided for @addFixFooter.
   ///
   /// In en, this message translates to:
-  /// **'\"meal 2 was roast duck\" · \"delete the first meal\"'**
+  /// **'\"the noodles were roast duck rice\" · \"delete the coffee I just logged\"'**
   String get addFixFooter;
 
   /// No description provided for @addPhotosTip.
@@ -1395,7 +1461,7 @@ abstract class AppLocalizations {
   /// bodyEmptyHint for imperial units (en-only surface; zh never renders imperial).
   ///
   /// In en, this message translates to:
-  /// **'Tap Log to record your weight or your waist, chest and hip measurements. Weight logged by chat (\"I weigh 180 lb\") lands here too.'**
+  /// **'Tap Log to record your weight or your waist, chest and hip measurements.'**
   String get bodyEmptyHintImperial;
 
   /// No description provided for @bodySince.
@@ -1431,7 +1497,7 @@ abstract class AppLocalizations {
   /// No description provided for @leftoverPickPhoto.
   ///
   /// In en, this message translates to:
-  /// **'Pick the photo of what\'s LEFT — the meal\'s calories shrink to what you ate.'**
+  /// **'Pick the photo of what\'s left over — the meal\'s calories shrink to what you ate.'**
   String get leftoverPickPhoto;
 
   /// No description provided for @leftoverChangeMeal.
@@ -1451,6 +1517,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use anyway'**
   String get leftoverUseAnyway;
+
+  /// No description provided for @leftoverQuotaPaused.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused: the daily quota was hit. Try the leftovers again once it resets.'**
+  String get leftoverQuotaPaused;
 
   /// No description provided for @leftoverResultTitle.
   ///
@@ -1671,8 +1743,8 @@ abstract class AppLocalizations {
   /// No description provided for @coachDetail.
   ///
   /// In en, this message translates to:
-  /// **'{meals} meals · {protein} g protein'**
-  String coachDetail(String meals, String protein);
+  /// **'{meals, plural, =1{1 meal} other{{meals} meals}} · {protein} g protein'**
+  String coachDetail(int meals, String protein);
 
   /// No description provided for @settingsRowGoal.
   ///
@@ -1703,6 +1775,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'kcal per day'**
   String get goalFieldLabel;
+
+  /// Under the daily-goal field when Save is tapped with something that is not a whole number in range; the dialog stays open. max is already formatted (20,000).
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number from 1 to {max}.'**
+  String goalInvalid(String max);
 
   /// No description provided for @goalClear.
   ///
@@ -1971,7 +2049,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixTopUp.
   ///
   /// In en, this message translates to:
-  /// **'Top up the provider account, or switch to a free tier (Zhipu GLM\'s default vision model is free).'**
+  /// **'Add credit or turn on billing at the provider. On a free tier, wait for the daily limit to reset.'**
   String get diagFixTopUp;
 
   /// No description provided for @diagRateLimited.
@@ -1995,7 +2073,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagFixRecopyKey.
   ///
   /// In en, this message translates to:
-  /// **'Re-copy the key from the provider console — and check it belongs to THIS provider (keys are not interchangeable).'**
+  /// **'Re-copy the key from the provider console, and check that it belongs to this provider (keys are not interchangeable).'**
   String get diagFixRecopyKey;
 
   /// No description provided for @diagModelNotFound.
@@ -2007,7 +2085,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextOk.
   ///
   /// In en, this message translates to:
-  /// **'The model answered JSON — chat fixes and \"describe a meal\" work.'**
+  /// **'The model answered JSON — \"Describe a meal\" and \"Fix or delete a meal\" work.'**
   String get diagTextOk;
 
   /// No description provided for @diagTextBad.
@@ -2019,7 +2097,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextBadDetail.
   ///
   /// In en, this message translates to:
-  /// **'Chat fixes and \"describe a meal\" may fail; photo analysis can still work.'**
+  /// **'\"Describe a meal\" and \"Fix or delete a meal\" may fail; photo analysis can still work.'**
   String get diagTextBadDetail;
 
   /// No description provided for @diagFixPickModel.
@@ -2031,7 +2109,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagTextBadPhotoAlsoFailed.
   ///
   /// In en, this message translates to:
-  /// **'Chat fixes and \"describe a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.'**
+  /// **'\"Describe a meal\" and \"Fix or delete a meal\" may fail. The photo request below failed too, so its reason is the likely cause of both.'**
   String get diagTextBadPhotoAlsoFailed;
 
   /// No description provided for @diagFixTextPickModel.
@@ -2067,13 +2145,13 @@ abstract class AppLocalizations {
   /// No description provided for @diagPhotoTempFail.
   ///
   /// In en, this message translates to:
-  /// **'Photo analysis failed with a TEMPORARY problem.'**
+  /// **'Photo analysis failed with a temporary problem.'**
   String get diagPhotoTempFail;
 
   /// No description provided for @diagPhotoPermFail.
   ///
   /// In en, this message translates to:
-  /// **'Photo analysis failed and a retry will NOT fix it.'**
+  /// **'Photo analysis failed, and retrying will not fix it.'**
   String get diagPhotoPermFail;
 
   /// No description provided for @diagFixPhotoTemp.
@@ -2091,7 +2169,7 @@ abstract class AppLocalizations {
   /// No description provided for @diagQuotaPaused.
   ///
   /// In en, this message translates to:
-  /// **'Analyses are PAUSED — the daily quota was hit.'**
+  /// **'Analyses are paused — the daily quota was hit.'**
   String get diagQuotaPaused;
 
   /// No description provided for @diagQuotaPausedUntil.
@@ -2514,6 +2592,18 @@ abstract class AppLocalizations {
   /// **'Analysis failed'**
   String get outcomeFailed;
 
+  /// Title of the picked-photo result dialog when no API key (or no server address/upload key) is set, instead of outcomeFailed: nothing was analyzed, so nothing failed. The body (errNoApiKey / errNoServerKey) says where to add it.
+  ///
+  /// In en, this message translates to:
+  /// **'AI isn\'t set up yet'**
+  String get outcomeNotSetUp;
+
+  /// Title of the picked-photo result dialog when the saved own-server address is not a valid web address (a typo, or no http:// in front), instead of outcomeNotSetUp: the server IS set up. The body (errBadServerAddress) says to check it for typos.
+  ///
+  /// In en, this message translates to:
+  /// **'Check your server address'**
+  String get outcomeCheckServer;
+
   /// No description provided for @outcomeLeftoverApplied.
   ///
   /// In en, this message translates to:
@@ -2525,6 +2615,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'If this IS food, log it yourself — the photo stays attached to the meal.'**
   String get outcomeLogManuallyHint;
+
+  /// Added under a FAILED analysis in the picked-photo dialog (no key, rejected key, network, rate limit…). outcomeLogManuallyHint is for a 'not food' verdict only: a failed photo had no verdict.
+  ///
+  /// In en, this message translates to:
+  /// **'You can still log this meal yourself — the photo stays attached to it.'**
+  String get outcomeLogManuallyFailedHint;
+
+  /// Picked-photo dialog body while the daily-quota pause is armed: nothing was sent and Retry would fail the same way, so no Retry is offered. {time} is when the pause lifts (dayTimeLabel, e.g. 'Tomorrow 07:00').
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused — the daily quota is used up (until {time}), so this photo was not sent. Log this meal yourself now, or pick the photo again after that. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).'**
+  String outcomeQuotaPausedPickMsg(String time);
+
+  /// No description provided for @outcomeQuotaPausedPickMsgNoTime.
+  ///
+  /// In en, this message translates to:
+  /// **'Analysis is paused — the daily quota is used up, so this photo was not sent. Log this meal yourself now, or pick the photo again later. To resume sooner, turn on billing or raise the quota for your key and run Test This Provider, or switch to another key or provider (Settings › AI Provider).'**
+  String get outcomeQuotaPausedPickMsgNoTime;
 
   /// No description provided for @outcomeUndoLeftover.
   ///
@@ -2670,6 +2778,12 @@ abstract class AppLocalizations {
   /// **'No server address or upload key is set — add them in Settings.'**
   String get errNoServerKey;
 
+  /// No description provided for @errBadServerAddress.
+  ///
+  /// In en, this message translates to:
+  /// **'The server address in Settings is not a valid web address — check it for typos.'**
+  String get errBadServerAddress;
+
   /// No description provided for @errRejectedKey.
   ///
   /// In en, this message translates to:
@@ -2736,6 +2850,12 @@ abstract class AppLocalizations {
   /// **'This photo could not be processed (it could not be decoded).'**
   String get errBadPhoto;
 
+  /// Why a photo was not logged: the AI answered that it shows the leftovers of an earlier meal, but the app could not apply that answer (the AI was unsure, or named a meal that was not in the list). Shown after outcomeFailedKeptMsg. 'Leftovers' is the Add screen's tile (addLeftover).
+  ///
+  /// In en, this message translates to:
+  /// **'It looks like the leftovers of an earlier meal, but the AI wasn\'t sure which one, so nothing was logged or deducted. Use Leftovers to deduct them.'**
+  String get errLeftoverUnsure;
+
   /// No description provided for @errServerBusy.
   ///
   /// In en, this message translates to:
@@ -2771,6 +2891,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Could not load this day: {error}'**
   String dayLoadFailed(String error);
+
+  /// Today tab error state when the meals query fails; shown with a Retry button (the raw error goes to the debug log only).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load today\'s meals.'**
+  String get todayLoadFailed;
+
+  /// History tab error state when the query fails; shown with a Retry button.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your history.'**
+  String get historyLoadFailed;
 
   /// No description provided for @dayEmpty.
   ///
@@ -3093,7 +3225,7 @@ abstract class AppLocalizations {
   /// No description provided for @covIntro.
   ///
   /// In en, this message translates to:
-  /// **'Checks every photo of the last {days} day(s) against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
+  /// **'Checks every photo of the last {days, plural, =1{day} other{{days} days}} against the log: each one is fingerprinted and looked up — nothing is sent to the AI by the check itself.'**
   String covIntro(int days);
 
   /// No description provided for @covChecking.
@@ -3171,19 +3303,19 @@ abstract class AppLocalizations {
   /// No description provided for @covAllAccounted.
   ///
   /// In en, this message translates to:
-  /// **'All {count} photos are accounted for.'**
+  /// **'{count, plural, =0{No photos to check in this window.} =1{The 1 photo is accounted for.} other{All {count} photos are accounted for.}}'**
   String covAllAccounted(int count);
 
   /// No description provided for @covSummary.
   ///
   /// In en, this message translates to:
-  /// **'{scanned} photos checked — {missing} never scanned.'**
+  /// **'{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {missing} never scanned.'**
   String covSummary(int scanned, int missing);
 
   /// No description provided for @covLimitedAccess.
   ///
   /// In en, this message translates to:
-  /// **'Note: the app has LIMITED photo access — only the selected photos can be checked. Grant full access in system settings for a complete answer.'**
+  /// **'Note: the app has limited photo access, so only the selected photos can be checked. Grant full access in system settings for a complete answer.'**
   String get covLimitedAccess;
 
   /// No description provided for @covTruncated.
@@ -3239,6 +3371,18 @@ abstract class AppLocalizations {
     String reason,
     int remaining,
   );
+
+  /// Bulk-action snackbar when the run stopped on its LAST photo, so nothing remains to run again (covStoppedBecause says how many remain).
+  ///
+  /// In en, this message translates to:
+  /// **'{label} stopped after {attempted} of {total}: {reason}'**
+  String covStoppedLast(String label, int attempted, int total, String reason);
+
+  /// Coverage summary when nothing is missing but some photos failed: not the all-accounted-for success state.
+  ///
+  /// In en, this message translates to:
+  /// **'{scanned, plural, =1{1 photo checked} other{{scanned} photos checked}} — {failed, plural, =1{1 failed} other{{failed} failed}}: retry, or enter it yourself below.'**
+  String covSummaryFailed(int scanned, int failed);
 
   /// No description provided for @covMoreNotFood.
   ///
@@ -3576,6 +3720,12 @@ abstract class AppLocalizations {
   /// **'Watch Camera Roll is paused: {provider} is not available from this network region. Photos are kept — once it is reachable again, Test This Provider or add one photo via Log › From recent photos to resume now (next try: {time}).'**
   String autoScanPausedRegion(String provider, String time);
 
+  /// No description provided for @autoScanPausedBilling.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch Camera Roll is paused: the {provider} account is out of balance or credits. Photos are kept — after topping up, a passing Test This Provider or one photo added via Log › From recent photos resumes it now (next try: {time}).'**
+  String autoScanPausedBilling(String provider, String time);
+
   /// No description provided for @autoScanPausedTitle.
   ///
   /// In en, this message translates to:
@@ -3587,6 +3737,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.'**
   String get watcherLimitedAccess;
+
+  /// First line of the Settings Photos footer while Watch Camera Roll is on but Photos access is not full (selected photos only, or withdrawn).
+  ///
+  /// In en, this message translates to:
+  /// **'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.'**
+  String get watcherLimitedFooter;
 
   /// No description provided for @fixAction.
   ///
@@ -3683,6 +3839,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Import from clipboard'**
   String get importFromClipboard;
+
+  /// No description provided for @importFieldHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Or paste a small export here'**
+  String get importFieldHint;
 
   /// No description provided for @importClipboardRead.
   ///
@@ -3786,10 +3948,51 @@ abstract class AppLocalizations {
   /// **'Unnamed meal'**
   String get nlUnnamedMeal;
 
+  /// One food item on the added-meal card. kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'  • {name}: ~{kcal}'**
+  String nlResultItem(String name, String kcal);
+
+  /// Total line of the added-meal card (Fix a meal → new meal). kcal is already kcalAmount-formatted.
+  ///
+  /// In en, this message translates to:
+  /// **'📊 This meal: ~{kcal}'**
+  String nlThisMeal(String kcal);
+
+  /// One macro on the added-meal card, e.g. 'P: 25g'. label is macroProteinShort / macroCarbsShort / macroFatShort.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: {grams}g'**
+  String nlMacroAmount(String label, String grams);
+
+  /// Added-meal card warning when the items do not add up to the total. Both values are already kcalAmount-formatted. No 'reply' wording: there is no chat to reply in.
+  ///
+  /// In en, this message translates to:
+  /// **'⚠️ Item calories sum to ~{itemSum} but the meal total is ~{total} — if this looks wrong, open the meal on Today to fix it.'**
+  String nlItemSumMismatch(String itemSum, String total);
+
+  /// Describe / Fix a meal refusal during the daily-quota pause; no model call is made. until is a local 'yyyy-MM-dd HH:mm' stamp; remaining is nlPauseRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'⏸️ Gemini is paused right now.\n\nGemini daily free-tier quota is paused until {until} (about {remaining} remaining).\n\nText corrections and manual meal parsing need Gemini too, so I did not send this request.'**
+  String nlQuotaPaused(String until, String remaining);
+
+  /// Time left in the quota pause. unit is 'seconds', 'minutes' or 'hours'; in the hours form minutes is zero-padded ('3h05m').
+  ///
+  /// In en, this message translates to:
+  /// **'{unit, select, seconds{{seconds}s} minutes{{minutes}m} other{{hours}h{minutes}m}}'**
+  String nlPauseRemaining(
+    String unit,
+    String hours,
+    String minutes,
+    String seconds,
+  );
+
   /// No description provided for @nlNoActions.
   ///
   /// In en, this message translates to:
-  /// **'❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change meal 2 to roast duck rice”.'**
+  /// **'❌ I couldn\'t work out what to do with that. Try one request at a time, e.g. “change the noodles to roast duck rice”.'**
   String get nlNoActions;
 
   /// No description provided for @nlRequestFailed.
