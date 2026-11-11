@@ -192,6 +192,10 @@ def test_printed_brand_and_merchant_go_out_only_as_a_table_name():
     ("A&W", ""),
     ("A&W Root Beer", ""),
     ("A&W RESTAURANT #4410", "A&W Restaurants"),
+    # ™ and ℠ as printed (the prompt asks for brands copied exactly)
+    ("Whataburger™", "Whataburger"),
+    ("Chick-fil-A™ #0421", "Chick-fil-A"),
+    ("Raising Cane’s℠", "Raising Cane's"),
     (None, ""),
     (42, ""),
 ])

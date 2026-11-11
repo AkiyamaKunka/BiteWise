@@ -9,7 +9,8 @@
 ///
 /// Rules (restaurant_lookup.py holds the Python twin; the parity vectors in
 /// shared/vectors/restaurant_lookup.json pin them):
-///   * Tokens: [nfkcLite], apostrophes and the degree sign dropped, Latin-1
+///   * Tokens: ™ and ℠ read as separators ([chainMarksAsSpaces]), then
+///     [nfkcLite], apostrophes and the degree sign dropped, Latin-1
 ///     letters folded to ASCII, ASCII lowercased, "&" and "+" read as "and",
 ///     each CJK character its own token, anything else a separator, and a
 ///     leading "the" ignored when more follows.
@@ -80,11 +81,19 @@ String _asciiLower(String s) {
   return out.toString();
 }
 
+/// [s] with the trademark and service mark signs (™ U+2122, ℠ U+2120)
+/// as spaces. [nfkcLite], and every cleaner built on it, spells them out as
+/// the letters TM and SM, which would glue onto the brand in front
+/// ("Whataburger™" -> "whataburgertm"), so chain matching reads them as the
+/// separators ® already is, before any folding.
+String chainMarksAsSpaces(String s) =>
+    s.replaceAll('\u2122', ' ').replaceAll('\u2120', ' ');
+
 /// The match tokens of [value] (see the library doc). Non-strings have none.
 List<String> chainTokens(dynamic value) {
   if (value is! String) return const [];
   final buf = StringBuffer();
-  for (final r in nfkcLite(value).runes) {
+  for (final r in nfkcLite(chainMarksAsSpaces(value)).runes) {
     if (_dropped.contains(r)) continue;
     if (r >= 0x41 && r <= 0x5A) {
       buf.writeCharCode(r + 32);
@@ -201,10 +210,13 @@ String? _cutName(String value) {
 
 /// The chain a place or brand [name] belongs to, or null.
 String? matchChainName(dynamic name) {
-  if (name is! String || _isHostLike(name)) return null;
-  final (key, matched) = _matchTokens(chainTokens(name));
+  if (name is! String) return null;
+  // Before the suffix cut too: it folds with nfkcLite.
+  final text = chainMarksAsSpaces(name);
+  if (_isHostLike(text)) return null;
+  final (key, matched) = _matchTokens(chainTokens(text));
   if (matched) return key;
-  final cut = _cutName(name);
+  final cut = _cutName(text);
   if (cut == null) return null;
   return _matchTokens(chainTokens(cut)).$1;
 }
