@@ -7,6 +7,9 @@
 /// numbers for {count} items" and **Review**, which opens the editor's
 /// card: an offer of several foods is taken or left whole, after a look.
 /// Nothing changes without the tap. No dot, no notification.
+///
+/// Outlined in the separator colour with secondary-label words (run 7's
+/// tokens), not filled: the filled chips above it are the meal's numbers.
 library;
 
 import 'package:flutter/material.dart';
@@ -14,6 +17,7 @@ import 'package:flutter/material.dart';
 import '../../services/usual/usual_foods.dart';
 import '../l10n.dart';
 import '../large_text.dart';
+import '../theme/tokens.dart';
 import 'usual_offer_card.dart' show usualItemText;
 
 class UsualChip extends StatelessWidget {
@@ -36,7 +40,7 @@ class UsualChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l10n;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final colors = context.colors;
     final large = isLargeText(context);
     final single = offer.items.length == 1;
     final item = offer.items.first;
@@ -48,7 +52,7 @@ class UsualChip extends StatelessWidget {
       text,
       key: const Key('usualChipText'),
       style: theme.textTheme.labelSmall?.copyWith(
-        color: scheme.onSurfaceVariant,
+        color: colors.secondaryLabel,
       ),
       // Never cut: the number at its end is what Use writes, so the words
       // take the lines they need at every size.
@@ -73,17 +77,17 @@ class UsualChip extends StatelessWidget {
     final lead = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.history, size: icon, color: scheme.onSurfaceVariant),
-        const SizedBox(width: 4),
+        Icon(Icons.history, size: icon, color: colors.secondaryLabel),
+        const SizedBox(width: AppSpace.s4),
         Flexible(child: label),
       ],
     );
     return Container(
       key: const Key('usualChip'),
-      padding: const EdgeInsets.only(left: 8),
+      padding: const EdgeInsets.only(left: AppSpace.chipH),
       decoration: BoxDecoration(
-        border: Border.all(color: scheme.outlineVariant),
-        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colors.separator),
+        borderRadius: BorderRadius.circular(AppRadius.l),
       ),
       // At large text the button goes under the words; side by side they
       // would leave the words a few glyphs a line. At the standard sizes it
