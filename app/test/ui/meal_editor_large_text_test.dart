@@ -152,6 +152,73 @@ void main() {
     );
   });
 
+  // Your usual numbers (usual foods §3.4) for both foods, in run 7's
+  // card: it sits right above the description, whose floated label
+  // reaches up out of the field at large text.
+  for (final (locale, scale) in [
+    (const Locale('zh'), 53 / 17), // AX5
+    (const Locale('en'), 53 / 17),
+    (const Locale('en'), 1.35),
+  ]) {
+    testWidgets('${locale.languageCode} at ${scale.toStringAsFixed(2)}x: '
+        'the usual card with two items reads in full on an SE, and no '
+        'floated label covers it', (tester) async {
+      final now = DateTime(2026, 10, 31, 12);
+      // The user's own numbers for both foods, typed two days before.
+      final dao = FakeDao()
+        ..seed(foodMeal(
+          id: 2,
+          date: '2026-10-29',
+          source: MealSource.appManual,
+          items: [
+            foodItem('Pan-fried pork dumplings (8 pieces)', 560,
+                p: 21, c: 58, f: 27),
+            foodItem('Millet porridge', 210, p: 6, c: 36, f: 4),
+          ],
+        ))
+        ..seed(_meal());
+      final usual = await makeUsualFoods(dao, clock: () => now);
+      // As wide as an SE, tall enough that every row is built.
+      await pumpApp(
+        tester,
+        MealEditorScreen(
+            dao: dao, meal: dao.byId(1), now: () => now, usual: usual),
+        size: const Size(375, 4000),
+        locale: locale,
+        scale: scale,
+      );
+      expect(tester.takeException(), isNull);
+      final card = find.byKey(const Key('usualOfferCard'));
+      expect(card, findsOneWidget);
+      for (final key in ['usualOfferItem0', 'usualOfferItem1']) {
+        expect(find.descendant(of: card, matching: find.byKey(Key(key))),
+            findsOneWidget, reason: key);
+      }
+      final cardRect = tester.getRect(card);
+      expect(cardRect.left, greaterThanOrEqualTo(0));
+      expect(cardRect.right, lessThanOrEqualTo(375));
+      for (final p in tester.renderObjectList<RenderParagraph>(
+          find.descendant(of: card, matching: find.byType(RichText)))) {
+        expect(p.didExceedMaxLines, isFalse,
+            reason: '"${p.text.toPlainText()}" was cut');
+        final r = _global(p);
+        expect(r.left >= cardRect.left - 0.5 && r.right <= cardRect.right + 0.5,
+            isTrue,
+            reason: '"${p.text.toPlainText()}" $r leaves the card $cardRect');
+      }
+      for (final key in ['usualUseMine', 'usualKeepAi']) {
+        final b = tester.getRect(find.byKey(Key(key)));
+        expect(b.right, lessThanOrEqualTo(cardRect.right + 0.5), reason: key);
+        expect(b.bottom, lessThanOrEqualTo(cardRect.bottom + 0.5),
+            reason: key);
+      }
+      for (final f in _fields(tester)) {
+        expect(f.label.overlaps(cardRect.deflate(0.5)), isFalse,
+            reason: "'${f.text}' label ${f.label} covers the card $cardRect");
+      }
+    });
+  }
+
   RenderEditable editableFor(WidgetTester tester, String text) => tester
       .allRenderObjects
       .whereType<RenderEditable>()
