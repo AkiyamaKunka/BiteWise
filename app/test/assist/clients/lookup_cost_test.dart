@@ -118,8 +118,25 @@ void main() {
 
   test('every lookup stays under the per-lookup cap', () async {
     // Three pauses: the loop must stop on cap or limit, never overspend.
+    // The API counts max_uses over the whole turn, so once the turn's two
+    // searches ran, a resumed call comes back max_uses_exceeded (not run,
+    // not billed) — the fake keeps that contract.
+    final refused = fixture('anthropic_pause_1.json');
+    for (final b in refused['content'] as List) {
+      if ((b as Map)['type'] == 'web_search_tool_result') {
+        b['content'] = {
+          'type': 'web_search_tool_result_error',
+          'error_code': 'max_uses_exceeded'
+        };
+      }
+    }
+    (refused['usage'] as Map)['server_tool_use'] = {'web_search_requests': 0};
     for (final cap in [0.024, 0.03, 0.04, 0.05]) {
-      final s = ScriptedClient([(_) => fixture200('anthropic_pause_1.json')]);
+      final s = ScriptedClient([
+        (_) => fixture200('anthropic_pause_1.json'),
+        (_) => fixture200('anthropic_pause_1.json'),
+        (_) => json200(refused),
+      ]);
       final o = await _anthropic(s,
               policy: LookupCostPolicy(maxUsdPerLookup: cap))
           .submit(bigMacRequest);
@@ -215,7 +232,7 @@ void main() {
       expect(o.failure!.code, LookupFailureCode.timeout);
       final first = 0.01 + haikuUsd(7012, 96);
       final second =
-          c.worstCaseRequestUsd(continuation: 1, searchesSoFar: 1, maxUses: 1);
+          c.worstCaseRequestUsd(continuation: 1, searchesSoFar: 1, searches: 1);
       expect(budget.spends.single.usd, closeTo(first + second, 1e-12));
     });
 
