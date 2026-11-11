@@ -20,6 +20,11 @@
 ///     itself. A row the user changed is rebuilt from what the editor shows
 ///     — a user-curated row makes no printed-brand claim, and its numbers
 ///     are no longer anyone's published ones.
+///   - the rows of a leftover deduction 1.5.0 stored kept the whole
+///     plate's protein, carbs and fat (only their kcal was the eaten
+///     part); the form shows those rows' eaten part and the save writes
+///     it, so the totals derived from the rows never put the uneaten part
+///     back (leftover_logic.legacyLeftoverMacroScale).
 ///   - a draft of a STORED meal carries [MealDraft.expectedRaw], the
 ///     analysis text it was loaded from: the save is a compare-and-set
 ///     against it (MealsDao.updateMealFieldsIfUnchanged).
@@ -33,6 +38,7 @@ library;
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
+import '../core/leftover_logic.dart';
 import '../core/usual_foods_logic.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
@@ -83,7 +89,8 @@ class MealItemDraft {
     this.fat = '',
   })  : stored = null,
         _seed = null,
-        _loaded = null;
+        _loaded = null,
+        _macroScale = null;
 
   /// The first row "Add item" adds to a stored meal with no rows
   /// ([MealDraft.addItem]): its fields are the totals above it, and [_seed]
@@ -96,14 +103,15 @@ class MealItemDraft {
     required this.fat,
   })  : name = '',
         stored = null,
-        _loaded = null;
+        _loaded = null,
+        _macroScale = null;
 
-  MealItemDraft._fromStored(Map<String, dynamic> m)
+  MealItemDraft._fromStored(Map<String, dynamic> m, [this._macroScale])
       : name = (m['name'] ?? '').toString(),
         calories = _numText(m['estimated_calories']),
-        protein = _numText(m['protein_g']),
-        carbs = _numText(m['carbs_g']),
-        fat = _numText(m['fat_g']),
+        protein = _macroText(m['protein_g'], _macroScale),
+        carbs = _macroText(m['carbs_g'], _macroScale),
+        fat = _macroText(m['fat_g'], _macroScale),
         stored = m,
         _seed = null,
         _loaded = null {
@@ -129,8 +137,16 @@ class MealItemDraft {
   /// The five field texts as loaded, to tell an untouched row.
   (String, String, String, String, String)? _loaded;
 
-  static MealItemDraft fromMap(Map<String, dynamic> m) =>
-      MealItemDraft._fromStored(m);
+  /// For a row of a leftover deduction 1.5.0 stored, whose protein, carbs
+  /// and fat are still the whole plate's (legacyLeftoverMacroScale): the
+  /// share eaten, which the macro fields show and the save writes (the
+  /// block is then stamped, [MealDraft.toAnalysis]). Null for every other
+  /// row.
+  final double? _macroScale;
+
+  /// [macroScale]: see [_macroScale].
+  static MealItemDraft fromMap(Map<String, dynamic> m, {double? macroScale}) =>
+      MealItemDraft._fromStored(m, macroScale);
 
   /// A stored row whose five fields still read exactly as loaded.
   bool get untouched =>
@@ -216,11 +232,14 @@ class MealItemDraft {
       return out;
     }
     final user = <String, dynamic>{};
+    // A legacy leftover row is compared with the eaten macros it showed:
+    // a rename alone sets no number of the user's.
+    final scale = _macroScale;
     final storedNumbers = [
       _storedNumber(src['estimated_calories']),
-      _storedNumber(src['protein_g']),
-      _storedNumber(src['carbs_g']),
-      _storedNumber(src['fat_g']),
+      _scaledMacro(src['protein_g'], scale),
+      _scaledMacro(src['carbs_g'], scale),
+      _scaledMacro(src['fat_g'], scale),
     ];
     final changed = _differs(numbers, storedNumbers);
     final storedUser = src['user'];
@@ -269,6 +288,22 @@ num _storedNumber(dynamic v) {
   var n = safeNumberOr(v, null);
   if (n == null && v is String) n = safeNumberOr(num.tryParse(v.trim()), null);
   return n ?? 0;
+}
+
+/// A stored macro times [scale] (a legacy leftover row's eaten share) to
+/// 0.1 g, as its field shows it; [scale] null is [_storedNumber].
+num _scaledMacro(dynamic v, double? scale) {
+  final n = _storedNumber(v);
+  if (scale == null) return n;
+  return double.parse((n * scale).toStringAsFixed(1));
+}
+
+/// Field text for a stored macro, scaled as [_scaledMacro] says; a value
+/// the field would show blank stays blank.
+String _macroText(dynamic v, double? scale) {
+  final t = _numText(v);
+  if (scale == null || t.isEmpty) return t;
+  return _numText(_scaledMacro(v, scale));
 }
 
 /// Field text for a stored value. Numeric STRINGS must parse: the analyzer
@@ -336,7 +371,9 @@ class MealDraft {
         carbs: _numText(meal.analysis['total_carbs_g']),
         fat: _numText(meal.analysis['total_fat_g']),
         items: [
-          for (final m in safeFoodItems(meal.analysis)) MealItemDraft.fromMap(m)
+          for (final m in safeFoodItems(meal.analysis))
+            MealItemDraft.fromMap(m,
+                macroScale: legacyLeftoverMacroScale(meal.analysis, m))
         ],
         base: Map<String, dynamic>.from(meal.analysis),
       ).._loadedTotals = [
@@ -464,9 +501,16 @@ class MealDraft {
     out['total_fat_g'] = field(fat, maxMacroGrams);
     // A hand-curated meal is food by definition — see the library note.
     out['is_food'] = true;
-    out['food_items'] = [
-      for (final it in items.where((i) => !i.isBlank)) it.toStoredMap(when)
-    ];
+    final kept = items.where((i) => !i.isBlank).toList();
+    out['food_items'] = [for (final it in kept) it.toStoredMap(when)];
+    // A leftover deduction 1.5.0 stored kept the rows' macros whole; the
+    // form showed (and these rows now hold) the eaten part, so the block
+    // says so and the next load does not scale them again.
+    final leftover = out['leftover'];
+    if (leftover is Map && kept.any((i) => i._macroScale != null)) {
+      out['leftover'] = Map<String, dynamic>.from(leftover)
+        ..[kLeftoverItemMacrosScaled] = true;
+    }
     return out;
   }
 }

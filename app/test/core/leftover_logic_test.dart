@@ -50,6 +50,72 @@ void main() {
     expect(r.adjusted['leftover']['original']['total_calories'], 965);
   });
 
+  test('rows carrying macros: each row\'s macros are its eaten part, and '
+      'the meal\'s follow the rows; a row never gains a macro', () {
+    final m = {
+      'total_calories': 1000,
+      'total_protein_g': 40,
+      'total_carbs_g': 120,
+      'total_fat_g': 40,
+      'food_items': [
+        {
+          'name': 'Fried rice',
+          'estimated_calories': 600,
+          'protein_g': 20,
+          'carbs_g': '80', // a raw model string
+          'fat_g': 20,
+        },
+        {
+          'name': 'Orange chicken',
+          'estimated_calories': 400,
+          'protein_g': 20,
+          'carbs_g': 40,
+        },
+      ],
+    };
+    final r = applyLeftover(
+        m,
+        {
+          'items': [
+            {'name': 'Fried rice', 'left_fraction': 1.0},
+            {'name': 'Orange chicken', 'left_fraction': 0.25},
+          ],
+        },
+        leftoverPhotoMd5: 'aa',
+        appliedAtIso: 't')!;
+    final items = r.adjusted['food_items'] as List;
+    expect(items[0]['protein_g'], 0);
+    expect(items[0]['carbs_g'], 0);
+    expect(items[1]['estimated_calories'], 300);
+    expect(items[1]['protein_g'], 15);
+    expect(items[1]['carbs_g'], 30);
+    expect((items[1] as Map).containsKey('fat_g'), isFalse);
+    expect(r.adjusted['total_protein_g'], 15);
+    expect(r.adjusted['total_carbs_g'], 30);
+    // Fat is on one row only: the rows do not speak for the meal's fat,
+    // which follows the calories (300 of 1000).
+    expect(r.adjusted['total_fat_g'], 12);
+    expect(r.adjusted['leftover'][kLeftoverItemMacrosScaled], isTrue);
+    // Re-applied: from the ORIGINAL rows, never compounded.
+    final again = applyLeftover(r.adjusted, {'leftover_fraction': 0.5},
+        leftoverPhotoMd5: 'bb', appliedAtIso: 't2')!;
+    expect(((again.adjusted['food_items'] as List)[0] as Map)['carbs_g'], 40);
+  });
+
+  test('a block 1.5.0 wrote (no stamp) asks the editor to scale its rows',
+      () {
+    final row = {'name': 'Rice', 'leftover_left_fraction': 0.25};
+    expect(legacyLeftoverMacroScale({'leftover': {}}, row), 0.75);
+    expect(
+        legacyLeftoverMacroScale({
+          'leftover': {kLeftoverItemMacrosScaled: true}
+        }, row),
+        isNull);
+    expect(legacyLeftoverMacroScale(const {}, row), isNull);
+    expect(legacyLeftoverMacroScale({'leftover': {}}, {'name': 'Rice'}),
+        isNull);
+  });
+
   test('re-application bases on the ORIGINAL, never compounds', () {
     final first = applyLeftover(meal(), {'leftover_fraction': 0.5},
         leftoverPhotoMd5: 'aa', appliedAtIso: 't1')!;
