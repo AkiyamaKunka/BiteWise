@@ -107,9 +107,17 @@ class MealEditorScreen extends StatefulWidget {
     this.openUrl,
     this.assistPollInterval = kAssistPollInterval,
     this.usual,
+    this.mealsChanged,
   });
 
   final MealsDao dao;
+
+  /// "The meal list changed" (refresh_signal.dart mealsChangedSignal): an
+  /// Undo on the app's snackbar (usual foods, the restaurant lookup) can
+  /// change the meal this editor shows while it is open. On a signal the
+  /// editor re-reads its row ([_MealEditorScreenState._onMealsChanged]).
+  /// Null: nothing to listen to (tests, a new meal).
+  final Listenable? mealsChanged;
 
   /// Usual foods (D31: passed by Today only): the card offering the numbers
   /// the user set for a food before. Null shows none.
@@ -189,7 +197,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// at first, the row as re-read after a reload. Null for a new meal.
   Meal? _meal;
 
-  /// The open-time re-read of the row ([_confirmBasis]) while it runs; a
+  /// A re-read of the row ([_confirmBasis], [_readBasis]) while it runs; a
   /// save of an existing meal waits for it. Never completes with an error.
   Future<void>? _basisRead;
 
@@ -290,7 +298,8 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
     if (meal != null) {
       _hold = widget.inUse?.acquire(meal.id);
       _loadedSignature = _signature();
-      _basisRead = _confirmBasis();
+      _readBasis();
+      widget.mealsChanged?.addListener(_onMealsChanged);
       // Opened: the card's 'updated' dot goes (design R7b).
       final seen = widget.assist?.markSeen;
       if (seen != null) {
@@ -298,6 +307,40 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       }
       _refreshUsual();
     }
+  }
+
+  @override
+  void didUpdateWidget(MealEditorScreen old) {
+    super.didUpdateWidget(old);
+    if (old.mealsChanged != widget.mealsChanged && widget.meal != null) {
+      old.mealsChanged?.removeListener(_onMealsChanged);
+      widget.mealsChanged?.addListener(_onMealsChanged);
+    }
+  }
+
+  /// Some meal changed while the editor is open; it may be this one (an
+  /// Undo tapped on the snackbar over the editor). The row is read again
+  /// ([_refreshBasis]): an untouched form shows the meal as stored, a
+  /// typed-over one gets the save's conflict, an unchanged row only
+  /// renews the basis. Skipped while a save or one of the cards' writes
+  /// is under way: each reads the row again itself when it is done.
+  void _onMealsChanged() {
+    if (!mounted || _meal == null) return;
+    if (_saving || _usualBusy || _assistBusy || _lookingUp) return;
+    _refreshBasis();
+  }
+
+  /// Starts [_confirmBasis] as [_basisRead], the read a save waits for.
+  /// The handle is cleared only by the read it names: with two reads
+  /// under way, the first to finish must not leave a save waiting on
+  /// nothing while the newer one still runs.
+  Future<void> _readBasis() {
+    late final Future<void> read;
+    read = _confirmBasis().whenComplete(() {
+      if (identical(_basisRead, read)) _basisRead = null;
+    });
+    _basisRead = read;
+    return read;
   }
 
   /// A text edit that makes the form dirty (or clean again) rebuilds it:
@@ -360,26 +403,22 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   Future<void> _confirmBasis() async {
     final shown = _meal;
     if (shown == null) return;
+    final MealSnapshot? snap;
     try {
-      final MealSnapshot? snap;
-      try {
-        snap = await widget.dao.mealSnapshot(shown.id);
-      } catch (_) {
-        return;
-      }
-      if (!mounted || !identical(shown, _meal)) return;
-      if (snap == null) {
-        _basisStale = true;
-      } else if (_sameBasis(snap.meal, shown)) {
-        _draft.expectedRaw = snap.rawAnalysis;
-      } else if (!_saving && _signature() == _loadedSignature) {
-        _load(snap);
-        setState(() {});
-      } else {
-        _basisStale = true;
-      }
-    } finally {
-      _basisRead = null;
+      snap = await widget.dao.mealSnapshot(shown.id);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || !identical(shown, _meal)) return;
+    if (snap == null) {
+      _basisStale = true;
+    } else if (_sameBasis(snap.meal, shown)) {
+      _draft.expectedRaw = snap.rawAnalysis;
+    } else if (!_saving && _signature() == _loadedSignature) {
+      _load(snap);
+      setState(() {});
+    } else {
+      _basisStale = true;
     }
   }
 
@@ -481,6 +520,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
 
   @override
   void dispose() {
+    widget.mealsChanged?.removeListener(_onMealsChanged);
     _hold?.release();
     _scroll.dispose();
     for (final c in [_desc, _cal, _pro, _carb, _fat]) {
@@ -731,9 +771,7 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
   /// form shows the newer meal; typing over an older copy becomes the
   /// save's conflict ([_confirmBasis]).
   Future<void> _refreshBasis() async {
-    final read = _confirmBasis();
-    _basisRead = read;
-    await read;
+    await _readBasis();
     if (mounted) setState(() {});
     _refreshUsual();
   }
