@@ -1056,11 +1056,16 @@ class AppSettings extends ChangeNotifier {
   /// (AiSendGate.refresh). The app's own engine never calls it: it is the
   /// one that writes the list, and a reload overlapping its own write
   /// could bring a consent just withdrawn back into memory. No stored
-  /// list: the copy in memory stands.
+  /// list: the copy in memory stands. The text each grant was given under
+  /// is re-read with it, so [previousDayLeftoverContext] follows an update
+  /// question answered in the open app as well.
   Future<void> reloadAiConsent() async {
     await _prefs.reload();
     final stored = _prefs.getStringList(_kAiConsentRoutes);
-    if (stored != null) _aiConsentRoutes = stored.toSet();
+    if (stored == null) return;
+    _aiConsentRoutes = stored.toSet();
+    _aiConsentVersions =
+        _readVersionEntries(_prefs.getStringList(_kAiConsentVersions));
   }
 
   /// Spec §6 auto intake toggle — defaults false until permissions granted.

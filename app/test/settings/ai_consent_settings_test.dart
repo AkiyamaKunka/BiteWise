@@ -155,6 +155,29 @@ void main() {
       expect(s.previousDayLeftoverContext, isTrue);
     });
 
+    test('the background run re-reads the text a grant was given under '
+        'together with the grants (reloadAiConsent)', () async {
+      final (bg, _, _) = await freshSettings(initial: {
+        _kRoutes: ['gemini'],
+        'settings.provider': 'gemini',
+      });
+      expect(bg.activeAiConsentRoute, 'gemini');
+      expect(bg.previousDayLeftoverContext, isFalse);
+      // The open app (its own engine): the user allows the new text.
+      final app = await _reload();
+      await app.setAiConsent('gemini', granted: true);
+      expect(bg.previousDayLeftoverContext, isFalse,
+          reason: 'the background snapshot until it re-reads');
+      await bg.reloadAiConsent();
+      expect(bg.aiConsentVersion('gemini'), 2);
+      expect(bg.previousDayLeftoverContext, isTrue);
+      // And Stop Sharing in the open app takes both away again.
+      await app.setAiConsent('gemini', granted: false);
+      await bg.reloadAiConsent();
+      expect(bg.hasAiConsent('gemini'), isFalse);
+      expect(bg.previousDayLeftoverContext, isFalse);
+    });
+
     test("the owner's seeded grant is version 1: they never saw the new "
         'text', () async {
       final (s, prefs, _) = await freshSettings(initial: {
