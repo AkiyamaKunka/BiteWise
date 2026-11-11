@@ -368,7 +368,9 @@ commits: cc26be4 to da80fa5). Where each item went:
   the theme draws as the editor's other controls.
 - The Android clear dialog (`_confirmClearAnswers` in
   `ui/screens/settings/restaurant_section.dart`) is `appAlertDialog`
-  (c27e551). #19's iOS "Clear learned places?" beside it is unchanged.
+  (c27e551). Its Clear and that of #19's iOS "Clear learned places?"
+  beside it are `AppButtonStyles.destructive`, as Stop sharing and every
+  Delete are; the iOS dialog is otherwise unchanged.
 - The Log sheet row was already back after the #22 merge, on the neutral
   role (`colorScheme.secondary`, painted `badgeNeutral`).
 - Tests: `add_flow_refresh_test` builds services with the usual-foods

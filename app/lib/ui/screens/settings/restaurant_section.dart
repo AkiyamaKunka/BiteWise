@@ -27,6 +27,7 @@ import '../../provider_names.dart' show providerDisplayLabel;
 import '../../restaurant_assist_controls.dart';
 import '../../services.dart' show SettingsStore;
 import '../../theme/app_dialog.dart';
+import '../../theme/app_theme.dart' show AppButtonStyles;
 import '../../widgets/grouped.dart';
 import '../../widgets/restaurant_consent_sheet.dart';
 
@@ -235,6 +236,7 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
               child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('clearPlacesConfirm'),
+              style: AppButtonStyles.destructive(ctx),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(ctx.l10n.clearPlacesConfirm)),
         ],
@@ -262,6 +264,7 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
               child: Text(ctx.l10n.cancel)),
           FilledButton(
               key: const Key('clearAnswersConfirm'),
+              style: AppButtonStyles.destructive(ctx),
               onPressed: () => Navigator.pop(ctx, true),
               child: Text(ctx.l10n.clearPlacesConfirm)),
         ],
