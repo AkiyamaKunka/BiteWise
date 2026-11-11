@@ -8,7 +8,12 @@ the request (data_contracts section 4) and the prompt, from the shared
 prompt, response schema and US chain table that scripts/sync_shared.py
 generates into shared_generated.py. So a request the app composed reaches
 the model byte-identical to what a direct provider gets, and nothing here
-keeps a second copy of the table, the prompt or the schema.
+keeps a second copy of the table, the prompt or the schema. The one
+exception is a name or unit this gate would refuse although the composer
+kept it (read under full NFKC, or joined with its neighbours): the app's
+server client sends it as "" (server_lookup_client.dart, pinned with this
+gate by app/test/assist/clients/fixtures/server_gate_coordinates.json),
+because a 400 makes the app write the meal's automatic lookup off.
 
 What this module adds is the server's own gate around that contract:
 
@@ -112,8 +117,10 @@ def clean_text(value, cap: int) -> str:
     """The gate's cleaner: full NFKC (stricter than the composer's
     nfkc_lite, so coordinate-shaped text in any Unicode digit form is
     caught), control/format characters and angle brackets removed,
-    whitespace collapsed, trimmed, capped. Idempotent, so text the app's
-    composer already cleaned passes through unchanged."""
+    whitespace collapsed, trimmed, capped. Idempotent; text the app's
+    composer already cleaned passes through unchanged unless it holds a
+    compatibility or format character the composer keeps (℃, ², a soft
+    hyphen)."""
     text = unicodedata.normalize("NFKC", str(value))
     text = "".join(
         " " if ch in "\t\n\r" else ch for ch in text
