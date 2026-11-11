@@ -3756,10 +3756,10 @@ abstract class AppLocalizations {
   /// **'Import exported data'**
   String get importDialogTitle;
 
-  /// No description provided for @importDialogBody.
+  /// Body of the Import Data dialog, above its Choose File… button (the way for a full export with pictures, tens of MB), Import from clipboard and a field for a small paste.
   ///
   /// In en, this message translates to:
-  /// **'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.'**
+  /// **'Choose an exported file, or paste its contents. Existing meals are kept; only new ones are added.'**
   String get importDialogBody;
 
   /// No description provided for @importAction.

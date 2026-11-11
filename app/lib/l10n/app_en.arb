@@ -1924,7 +1924,10 @@
   },
   "fixAction": "Fix",
   "importDialogTitle": "Import exported data",
-  "importDialogBody": "Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.",
+  "importDialogBody": "Choose an exported file, or paste its contents. Existing meals are kept; only new ones are added.",
+  "@importDialogBody": {
+    "description": "Body of the Import Data dialog, above its Choose File… button (the way for a full export with pictures, tens of MB), Import from clipboard and a field for a small paste."
+  },
   "importAction": "Import",
   "importNothingNew": "Nothing new to import — everything in that file is already here.",
   "importDone": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).",

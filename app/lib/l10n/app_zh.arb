@@ -725,7 +725,7 @@
   "watcherLimitedFooter": "筷拍无法访问你的全部照片，新拍的照片不会被自动记录。请在系统「设置」里允许访问所有照片。",
   "fixAction": "去修复",
   "importDialogTitle": "导入已导出的数据",
-  "importDialogBody": "粘贴导出的 JSON 文件内容。已有的餐会保留，只会添加新的。",
+  "importDialogBody": "选择导出的文件，或粘贴文件的内容。已有的餐会保留，只会添加新的。",
   "importAction": "导入",
   "importNothingNew": "没有可导入的新内容 —— 那个文件里的记录这里都已经有了。",
   "importDone": "已导入 {meals} 餐（共 {rows} 行）。",

@@ -2408,7 +2408,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get importDialogBody =>
-      'Paste the contents of an exported JSON file. Existing meals are kept; only new ones are added.';
+      'Choose an exported file, or paste its contents. Existing meals are kept; only new ones are added.';
 
   @override
   String get importAction => 'Import';

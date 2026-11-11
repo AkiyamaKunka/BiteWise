@@ -589,6 +589,23 @@ void main() {
     expect(find.byType(SmallSpinner), findsNothing);
   });
 
+  testWidgets('the import dialog says to choose the file first, and to paste '
+      'only as the other way, in English and Chinese', (tester) async {
+    // Choose File… is the first button since 1.7.0: a full export with
+    // its pictures is tens of MB, which no clipboard carries.
+    await pump(tester);
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.importDialogBody), findsOneWidget);
+    expect(_en.importDialogBody, startsWith('Choose an exported file'));
+    expect(_en.importDialogBody, contains('paste'));
+    expect(_en.importDialogBody, isNot(contains('Paste the contents')));
+    final zh = AppLocalizationsZh();
+    expect(zh.importDialogBody, startsWith('选择导出的文件'));
+    expect(zh.importDialogBody, contains('粘贴'));
+    expect(zh.importDialogBody, isNot(startsWith('粘贴')));
+  });
+
   test('a delete says done, done in part (try again), or not done', () {
     expect(backupDeleteMessage(_en, BackupDeleteResult.deleted),
         _en.backupDeleted);
