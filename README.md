@@ -1,39 +1,59 @@
 <!--
 Maintainer notes. Nothing in this comment is shown on GitHub.
 
+This page is a slide deck followed by the reference sections. It describes
+the App Store version, 1.6.0. Merge a change that names a new version only
+once that version is live on the App Store.
+
 Lines tied to a release. Re-read them when a new App Store version ships:
-1. The caption under the hero picture names the App Store version.
-2. "Coming next": move each bullet into "What you get" when it ships.
-3. "Privacy" and "Everything that is sent, case by case" describe the App Store
-   version. When restaurant lookup ships, add its recipients (docs/PRIVACY.md,
-   "Restaurant nutrition lookup"). With it on, a photo's location can go to
-   Apple Maps on iPhone.
-4. "Android": rewrite it when a current Android build is published.
-5. The pictures in docs/readme/ and their alt text show the 1.5.0 look.
-   Re-shoot them when the look changes. The six phone screenshots carry 14
-   transparent pixels above and below (540 x 1201), so they do not touch when
-   they stack on a phone. Pad a new picture the same way.
-6. "For developers": the two test counts are dated lower bounds.
+1. "New in 1.6": the line under the hero slide, and the headings of slides
+   06, 07 and 09, whose pictures carry the same pill. Drop them when 1.6 is
+   no longer the newest version.
+2. The caption under the hero slide names the version the screens show.
+3. Slide 13 and "Coming next" list what is on main but not in the App Store
+   version: the native iOS look and iCloud Backup. When they ship, give them
+   feature slides, move them into the deck and "More features", and update
+   "Privacy", because iCloud Backup copies the log to the user's own iCloud
+   Drive.
+4. "Privacy" and "Everything that is sent, case by case" describe the App
+   Store version. Check them against docs/PRIVACY.md at that version's tag,
+   because the policy on main may already describe the next version.
+5. "Android" names the newest GitHub release, its APK file and its size.
+   Update them with each release.
+6. "For developers" names the tag the App Store version was built from. Its
+   two test counts are dated lower bounds.
 7. "What it costs": the sentence about Gemini's free tier and what Google may
    do with what is sent comes from Google's Gemini API pricing page, read on
    2026-11-10. Check it again when the default model or Google's terms change.
 
+The slides:
+1. docs/readme/slides/NN-name.jpg (English) and docs/readme/zh/slides/
+   NN-name.jpg (Chinese), 1600 x 900 JPEG, rendered from docs/readme/src
+   (its README says how). To change a slide, change deck.json, render both
+   languages, and update the alt text and the caption in both READMEs.
+2. Every phone on a slide is a screenshot of version 1.6.0 with demo data.
+   Slide 13 has no screenshots.
+3. Slide 07 shows Chipotle's published US numbers as demo data, with "not
+   affiliated" in its footer and in its caption here. The burrito bowl's
+   meal card on slides 02, 04 and 05 names Chipotle too.
+4. Under each slide: a heading, one or two sentences and its fine print, so
+   the page still reads without the pictures. Keep the slide headings
+   unique, because they become anchors. These anchors are linked: get-started,
+   what-it-costs, privacy, android, coming-next, for-developers and
+   build-from-source.
+5. The food photos are from Unsplash. docs/readme/CREDITS.md names each one,
+   and the first line under "License" credits the photographers.
+
 The download badge and the second language:
 1. App Store badge. It is Apple's own artwork, loaded from Apple's marketing
-   tools address (the way Apple's embed code does it), shown once, 180 px wide
-   (60 px tall; Apple's minimum is 40 px). It links to the app's page. Do not
-   recolor it, crop it or replace it with a shields.io pill. If the picture
-   fails to load, its alt text is still the link.
+   tools address (the way Apple's embed code does it), shown once at the
+   top, 180 px wide (60 px tall; Apple's minimum is 40 px). It links to the
+   app's page. Do not recolor it, crop it or replace it with a shields.io
+   pill. If the picture fails to load, its alt text is still the link. The
+   caption under slide 14 links the App Store with text, not a second badge.
 2. Chinese README. README.zh-CN.md follows this file section by section.
-   Change both files in the same commit. Its pictures are in docs/readme/zh/,
-   padded like the English ones (note 5 above), and its badge is Apple's
-   zh-cn artwork.
-
-Left out on purpose, until it exists:
-1. The commit of the App Store build. When it has a tag, name it once under
-   "For developers", so a reader can check the Privacy claims against the
-   code that shipped. Use a tag name that does not start with "v", because a
-   v tag starts the release workflow.
+   Change both files in the same commit. Its slides are in
+   docs/readme/zh/slides/, and its badge is Apple's zh-cn artwork.
 -->
 
 <p align="center"><b>English</b> · <a href="README.zh-CN.md">简体中文</a></p>
@@ -44,56 +64,240 @@ Left out on purpose, until it exists:
 
 **Your food photos become your calorie&nbsp;log.**
 
-A free, open-source calorie tracker for iPhone. Take meal photos the way you already do. Pick one in the app, and the AI service you choose estimates its calories, protein, carbs and fat. You can check and correct every number.
+A free, open-source calorie tracker for iPhone, powered by the AI you&nbsp;choose.
 
 <a href="https://apps.apple.com/app/id6828989410"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/en-us" width="180" alt="Download on the App Store"></a>
 
-Free · No in-app purchases · iPhone, iOS&nbsp;15 or later
-
-You need a key from the AI service you choose. Google Gemini, the default, has a free&nbsp;tier.
-
 </div>
 
 <p align="center">
-  <img src="docs/readme/hero.png" width="100%" alt="Three Chopstats screens: the Log a meal sheet, the Today screen with a calorie ring and meal cards, and the History chart of daily totals.">
+  <img src="docs/readme/slides/01-hero.jpg" width="100%" alt="Chopstats · 筷拍. Your food photos become your calorie log. A free, open-source calorie tracker for iPhone, powered by the AI you choose. Free, no subscription, no account, open source. A photo of a Greek yogurt bowl beside the Today screen, where the same meal's card is magnified: about 360 kcal, with protein, carbs, fat and the portion of each food.">
 </p>
-
-<p align="center"><sub>Screenshots of App Store version 1.5.0, with demo&nbsp;data.</sub></p>
 
 <div align="center">
 
-No Chopstats account. No ads. No tracking. Your log stays on your phone. Photos and descriptions you log go to the AI service you choose, and the developer receives none of your&nbsp;data.
+Free · No in-app purchases · iPhone, iOS&nbsp;15 or later
 
-[Get started](#get-started) · [What it costs](#what-it-costs) · [Privacy](#privacy)
+**New in 1.6:** My usual foods · Restaurant nutrition for US chains (off by default) · Meta glasses photos
 
-<sub>In English and 简体中文 · Not on the mainland China App Store · Android: not on Google Play, developers can <a href="#android">build from source</a></sub>
+You need a key from the AI service you choose. Google Gemini, the default, has a free&nbsp;tier.
+
+[Get started](#get-started) · [What it costs](#what-it-costs) · [Privacy](#privacy) · [Android](#android)
+
+<sub>Screens of version 1.6, with demo data. Food photos from Unsplash, credited at the end.</sub>
 
 </div>
 
-## Get started
-
-1. **Get the app.** Download Chopstats from the [App Store](https://apps.apple.com/app/id6828989410).
-2. **Get an API key.** A key is a code you create on an AI provider's website. Google Gemini is already selected, and it has a free tier. See [where to get a key](docs/SUPPORT.md#getting-started-bring-your-own-key). If you are charged, you pay the provider, never the app.
-3. **Paste the key.** Open **Settings › AI Provider › API Key** and paste it. Then go back and tap **Test This Provider**. The app asks before it first sends anything. Tap **Allow**.
-4. **Log a meal.** Open **Today › Log › From recent photos** and pick a meal photo. Your AI names the dishes and estimates calories, protein, carbs and fat. Check the numbers and change any that look wrong.
-
-## What you get
-
-- **Log a meal from a photo.** Pick one from your recent photos, or share it from the Photos app.
-- **Turn on automatic logging, if you want.** The Watch Camera Roll setting logs new food photos. It is off by default. While it is on, the app sends every new photo, food or not, to your AI provider, which decides whether it shows a meal.
-- **Check what the AI assumed.** The app asks the AI to name the portion it assumed, such as "Steamed rice (~150 g)". It also asks the AI to read a nutrition label or printed weight before it estimates by eye.
-- **Change any number.** Open a meal to edit it, or type a fix such as "meal 2 was roast duck".
-- **Subtract leftovers.** Photograph what is left and the meal shrinks to what you ate.
-- **Log without a photo.** Describe a meal in words, such as "two eggs and toast with butter", in any language your AI reads. Or enter the numbers yourself, with no AI and no key.
-- **See your day and your trend.** Today shows what you ate next to your typical day. History covers 30 days. Body charts your weight and keeps waist, chest and hip. A daily summary notification is optional.
+<br>
 
 <p align="center">
-  <img src="docs/readme/today.png" width="250" hspace="8" alt="Today screen. A calorie ring shows what was eaten today beside a typical day, with bars for protein, carbs and fat. Below it, meal cards list each food with its assumed portion and calories.">
-  <img src="docs/readme/editor.png" width="250" hspace="8" alt="Edit meal screen. Fields for the meal's name, date and time, totals for calories, protein, carbs and fat, a bar that shows what share of the calories comes from each, and one editable row per food.">
+  <img src="docs/readme/slides/02-how.jpg" width="100%" alt="Snap. Estimate. Check. Step 1, Snap: take photos as usual, then pick one in the app or share it from Photos (a stack of meal photos with a chicken Caesar salad on top). Step 2, Estimate: your AI names each food, the portion it assumed, and its calories and macros (the Today screen with the salad's card highlighted). Step 3, Check: change anything that looks wrong (the Edit meal screen).">
 </p>
 
+<div align="center">
+
+### How it works
+
+Take meal photos the way you already do, then pick one in Chopstats or share it from Photos. Your AI names each food, the portion it assumed, and its calories, protein, carbs and fat, and you check the result.
+
+<sub>Chopstats has no camera of its own: photos come from the Camera app. The first time, the app asks before it sends anything to your AI. Write a dietary profile, such as "vegetarian", and the AI reads it with every photo.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/03-control.jpg" width="100%" alt="See the guess. Change any number. Every food shows the portion your AI assumed, so a wrong guess is easy to spot. Edit calories, protein, carbs or fat, or type a fix in plain words. Didn't finish? Photograph the leftovers. The Edit meal screen with one food row magnified: Grilled chicken breast (~140 g), 225 kcal, 42 g protein, 0 g carbs, 5 g fat, each in an editable field. Beside it, a typed fix: “meal 2 was roast duck”.">
+</p>
+
+<div align="center">
+
+### Numbers you control
+
+Every food shows the portion your AI assumed, such as "Grilled chicken breast (~140 g)", so a wrong guess is easy to spot. Change any number, or type a fix in plain words, such as "meal 2 was roast duck".
+
+<sub>Didn't finish? Photograph what is left under Today › Log › Leftovers, and the meal shrinks to what you ate. The app asks the AI to read a nutrition label or printed weight before it estimates by eye. Estimates can be wrong, and nobody has measured this app's accuracy.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/04-trend.jpg" width="100%" alt="Your day, and your trend. Today beside your typical day, 30 days of History, and your weight in Body. Three phones in dark mode: Today, with 1,772 kcal eaten against a typical day of about 1,625; History, a bar chart of daily calories that averages about 1,577 kcal a day; and Body, a weight trend falling to 170.0 lb, with waist, chest and hip measurements.">
+</p>
+
+<div align="center">
+
+### Your day and your trend
+
+Today shows what you ate next to your typical day. History charts the last 30 days, and Body tracks your weight along with your waist, chest and hip.
+
+<sub>Your typical day comes from your previous 7 days, or you can set a daily calorie goal. Also: an optional daily summary notification, your day as one image to share, metric or imperial units, and light and dark mode that follow your iPhone.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/05-no-photo.jpg" width="100%" alt="No photo? Log it anyway. Describe a meal in any language your AI reads, or type the numbers yourself. Describe a meal, like “two eggs and toast with butter”. Enter manually: no AI and no key, and it works offline. The Log a meal sheet with its six rows: From recent photos, My usual foods (no AI), Leftovers (deduct what's left), Describe a meal (any language), Enter manually (no AI), and Fix or delete a meal. Describe a meal and Enter manually are highlighted.">
+</p>
+
+<div align="center">
+
+### No photo needed
+
+Describe a meal in words, such as "two eggs and toast with butter", in any language your AI reads. Or enter the numbers yourself: no AI, no key, and it works offline.
+
+<sub>Describing a meal sends your text and today's date to your AI.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/06-usual.jpg" width="100%" alt="New in 1.6. Your usual foods, one tap away. Meals you log often wait in My usual foods. Tap one to log it again: no photo, no AI, nothing sent. The My usual foods screen, grouped into Around this time and More, lists meals with their calories and macros, such as Pan-fried pork dumplings, logged on 12 of the last 90 days. Beside it, a photo of an iced latte and the card the app shows the next time you log it: Your usual numbers. Iced latte: AI 160 → your usual 120 kcal, with the buttons Use my numbers and Keep AI estimate. If you set a food's numbers yourself, the app may offer them on later photos of it. Nothing changes until you accept.">
+</p>
+
+<div align="center">
+
+### My usual foods · New in 1.6
+
+Meals you logged on at least 2 of the last 90 days wait under Today › Log › My usual foods. Tap one to log it again: no photo, no AI, nothing sent.
+
+<sub>If you set a food's numbers yourself, the app may offer them as Your usual numbers on later photos of that food. Nothing changes until you tap Use my numbers.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/07-restaurant.jpg" width="100%" alt="New in 1.6. Off by default. Chain restaurant? Use its published numbers. For a US chain meal, your AI can look up the nutrition the chain publishes. US meals only, from a built-in list of 403 chains. Needs an Anthropic or OpenRouter key, or your own server. Undo any time, or tap Wrong restaurant. A photo of a chicken burrito bowl beside the Edit meal screen in dark mode. Its Chipotle card, magnified, reads Published numbers in use: Chicken, 4 oz, 180 kcal, 32 g protein, 0 g carbs, 7 g fat. Under the items: Source: chipotle.com, Number found on the source page, and the buttons Use AI estimate, Wrong restaurant and Not from a restaurant. Demo data, not affiliated with the restaurant shown.">
+</p>
+
+<div align="center">
+
+### Restaurant nutrition · New in 1.6
+
+For a meal photo from a US chain restaurant, your AI can look up the nutrition the chain publishes and use it in place of its own estimate. The meal names its source, and you can undo the change or tap Wrong restaurant.
+
+<sub>Off by default. US meals only, from a built-in list of 403 chains. Needs an Anthropic or OpenRouter key, or your own server; not available with Gemini yet. Your AI's numbers are replaced only when the chain's own website publishes them and the match is clear; otherwise, and always with your own server, you get a suggestion. The published serving may not match what you ate. Demo data; Chopstats is not affiliated with the restaurant shown.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/08-watch.jpg" width="100%" alt="Off by default. Snap your meal. It logs itself. Turn on Watch Camera Roll, and new food photos are logged for you. Four photos: a yogurt bowl, a burrito bowl and an iced latte, each marked Logged, and a drawing of a park marked Sent, not a meal. While it is on, every new photo goes to your AI, which decides whether it shows a meal. iOS decides when the background scan runs. Beside them, the Settings screen with Watch Camera Roll and Meta glasses photos switched on and Backfill Lookback set to 2 days.">
+</p>
+
+<div align="center">
+
+### Watch Camera Roll
+
+Turn it on, and new food photos are logged for you without opening the app. While it is on, every new photo, food or not, goes to your AI, which decides whether it shows a meal.
+
+<sub>Off by default. iOS decides when background scans run, so a photo is not always logged right away; opening the app catches up. Needs full photo access and Background App Refresh. Switching it on also sends recent photos, as far back as the Backfill Lookback setting says (2 days by default).</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/09-glasses.jpg" width="100%" alt="New in 1.6. Your Meta glasses photos count too. Photos the Meta AI app saves to your library are checked for food on your iPhone, then logged. A flow: the Meta AI app saves a photo from your glasses to your library; Chopstats sees the new photo; a food check runs on your iPhone before anything is sent; with food, the photo is sent to your AI and logged; with no food, it is not sent. Above, Settings › Photos with Watch Camera Roll and Meta glasses photos switched on. Works with Watch Camera Roll on. If the food check can't run, the photo is sent like any other. Chopstats does not connect to the glasses.">
+</p>
+
+<div align="center">
+
+### Meta glasses photos · New in 1.6
+
+With Watch Camera Roll on, photos that the Meta AI app saves from your glasses to your library are checked for food on your iPhone first. Photos with food go to your AI and are logged; photos without food are not sent.
+
+<sub>Chopstats does not connect to the glasses. The check runs on the phone and can be wrong; if it cannot run, the photo is sent like any other. Switch it off under Settings › Photos › Meta glasses photos. Photos you pick or share are still sent.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/10-privacy.jpg" width="100%" alt="Your log stays on your phone. No account, no ads, no tracking. The developer receives none of your data. A diagram: on your iPhone are your meal log, weight and measurements, settings, and your API key in the iOS Keychain. An arrow labelled “The photo or text you log, plus the context it needs” leads to your AI provider, or your own server, whose terms apply. A dotted line labelled Nothing leads to a dashed box: Chopstats server: none. No analytics. No ads. Above, the Settings rows AI Provider (Gemini) and Stop Sharing with Gemini, labelled Stop any time. Restaurant nutrition, if you turn it on, has its own recipients; the privacy policy lists them.">
+</p>
+
+<div align="center">
+
+### No account, no ads, no tracking
+
+Your meals, weight and settings stay on your phone, and the developer receives none of your data. The photos and text you log go to the AI provider you chose, or to your own server.
+
+<sub>The app asks before it first sends anything, and Stop Sharing ends it. Watch Camera Roll sends every new photo while it is on, and Restaurant nutrition, if you turn it on, has its own recipients. Details under [Privacy](#privacy).</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/11-cost.jpg" width="100%" alt="Free app. No subscription. Use a key from the AI you choose. If it charges, you pay it directly, never the app. No in-app purchases. Typing numbers needs no key. A card titled Works with your key from: Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. Google Gemini, the default, has a free tier; on it, Google says it may use what you send to improve its products. DeepSeek, Qwen, Doubao and GLM process data in mainland China. Prices change; check your provider's pricing page.">
+</p>
+
+<div align="center">
+
+### Bring your own AI key
+
+The app is free, with no subscription and nothing to buy inside it. You use a key from the AI service you choose, and if it charges, you pay it directly.
+
+<sub>Works with Google Gemini, OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. Gemini, the default, has a free tier. More under [What it costs](#what-it-costs).</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/12-languages.jpg" width="100%" alt="In English and 简体中文. Every screen in both languages. Describe meals in any language your AI reads. Two phones side by side, labelled English and 简体中文, each showing the Today screen in that language, between photos of a yogurt bowl and of pan-fried dumplings.">
+</p>
+
+<div align="center">
+
+### English and 简体中文
+
+Every screen comes in English and Simplified Chinese. Pick one under Settings › Language, or let it follow your iPhone, and describe meals in any language your AI reads.
+
+<sub>Not on the mainland China App Store.</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/13-next.jpg" width="100%" alt="Coming next, not in the App Store yet. Coming next: a native iOS look. In the public code, not in the App Store yet: an iOS-style redesign and iCloud Backup. Three cards: Native look, a redesign in the iOS style; iCloud Backup, which copies your log to your own iCloud Drive, with no account; No date yet, not part of version 1.6. A dashed frame marks the slide as not released.">
+</p>
+
+<div align="center">
+
+### Coming next · not in the App Store yet
+
+A native iOS look and iCloud Backup are already in the public code, but not in the App Store version, and they have no release date. See [Coming next](#coming-next).
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/slides/14-get.jpg" width="100%" alt="Chopstats · 筷拍. Free to download. Open to read. Get it free on the App Store. Read every line on GitHub. iPhone, iOS 15 or later. MIT licensed. Android: APK on GitHub. Below, dark-mode phones showing Body, Today and History, between photos of a burrito bowl and a chicken salad.">
+</p>
+
+<div align="center">
+
+### Get Chopstats
+
+**[Download on the App Store](https://apps.apple.com/app/id6828989410)** · [Build from source](#build-from-source) · [Android APK](#android)
+
+<sub>iPhone, iOS 15 or later · MIT licensed · Android: a signed APK for arm64 phones on GitHub Releases, not on Google Play</sub>
+
+</div>
+
+<br>
+
 <details>
-<summary><b>More features and screens</b></summary>
+<summary><b>More features, in detail</b></summary>
 
 Everything here is in the App Store version.
 
@@ -104,6 +308,7 @@ Everything here is in the App Store version.
 - **Dietary profile.** Write a line such as "vegetarian" or "home cooking, light oil", and the AI reads it with every photo.
 - **Leftovers, two ways.** If your AI recognizes the remains of a meal you logged earlier that day, the app reduces that meal and adds no second one. You can also pick the meal and the leftover photo yourself under **Today › Log › Leftovers**, for meals from today and yesterday.
 - **Fixes in your own words.** Under **Today › Log › Fix or delete a meal**, type "meal 2 was roast duck" or "delete the first meal". The app always asks you to confirm before it deletes a meal.
+- **Foods you stopped eating.** In **My usual foods**, **Hide from this list** takes one off the list.
 
 **Photos**
 
@@ -128,17 +333,14 @@ Everything here is in the App Store version.
 - **Export.** **Settings › Your Data › Export Data** writes one JSON file with your meals, weight and body measurements, plus the list of processed photos. Settings, the dietary profile, thumbnails and API keys are not in the file.
 - **Import.** On another phone, open **Import Data** and paste the file's text, or tap **Import from clipboard**. Import adds what is missing and never duplicates meals that are already there.
 
-<p align="center">
-  <img src="docs/readme/log.png" width="250" hspace="8" alt="Log a meal sheet with five rows: From recent photos, Leftovers, Describe a meal, Enter manually, and Fix or delete a meal.">
-  <img src="docs/readme/history.png" width="250" hspace="8" alt="History screen. A bar chart of daily calories with the average, then one row per day with its total.">
-</p>
-
-<p align="center">
-  <img src="docs/readme/body.png" width="250" hspace="8" alt="Body screen. The latest weight above a trend chart, then waist, chest and hip measurements and a dated history list.">
-  <img src="docs/readme/watch.png" width="250" hspace="8" alt="Settings screen. The AI Provider row with a Stop Sharing row under it. Watch Camera Roll is switched on, and the text below says that new photos are sent to the AI service you chose and that iOS decides when the background scan runs.">
-</p>
-
 </details>
+
+## Get started
+
+1. **Get the app.** Download Chopstats from the [App Store](https://apps.apple.com/app/id6828989410).
+2. **Get an API key.** A key is a code you create on an AI provider's website. Google Gemini is already selected, and it has a free tier. See [where to get a key](docs/SUPPORT.md#getting-started-bring-your-own-key). If you are charged, you pay the provider, never the app.
+3. **Paste the key.** Open **Settings › AI Provider › API Key** and paste it. Then go back and tap **Test This Provider**. The app asks before it first sends anything. Tap **Allow**.
+4. **Log a meal.** Open **Today › Log › From recent photos** and pick a meal photo. Your AI names the dishes and estimates calories, protein, carbs and fat. Check the numbers and change any that look wrong.
 
 > [!NOTE]
 > Calories and nutrients are AI estimates from photos and descriptions, and they can be wrong. Check them and correct them. Chopstats is not a medical device and does not give medical or nutrition advice. Talk to a doctor or registered dietitian before you make health decisions.
@@ -158,48 +360,43 @@ Your meals, weight and settings stay on your phone. The app contains no code for
 The photos and text that the AI analyzes go to your AI provider, or to your own server if you run one. The app adds the context the AI needs, such as your dietary profile or a short summary of that day's other meals.
 
 - **Photos travel without location.** The copy the app sends has no location or other hidden details (metadata).
-- **Watch Camera Roll sends every new photo while it is on.** That includes photos that are not food.
+- **Watch Camera Roll sends every new photo while it is on.** That includes photos that are not food. On iPhone, Meta glasses photos are checked for food on the phone first, and one with no food in it is not sent.
+- **Restaurant nutrition has its own recipients.** It is off by default and asks permission on its own screen, which names who receives lookups.
 - **The app asks first.** Before it first sends anything to a provider, a dialog names the company and lists what is sent.
-- **You can stop it.** In Settings, **Stop Sharing** ends all sending to your current provider and turns Watch Camera Roll off.
+- **You can stop it.** In Settings, **Stop Sharing** ends all sending to your current provider, including photos still waiting to be sent and its restaurant lookups, and turns Watch Camera Roll off.
 - **Your provider's terms apply.** Its privacy policy covers what it does with your data. A free tier can have different terms, as [Gemini's does](#what-it-costs).
 
 <details>
 <summary><b>Everything that is sent, case by case</b></summary>
 
-This list covers the App Store version. The recipient is always the AI provider you chose, or your own server. Two of them pass the data on: OpenRouter sends it to the maker of the model you picked, and your own server sends it to the AI plan signed in on it.
+This list covers the App Store version. Apart from Restaurant nutrition, the recipient is always the AI provider you chose, or your own server. Two of them pass the data on: OpenRouter sends it to the maker of the model you picked, and your own server sends it to the AI plan signed in on it.
 
 - **You log a photo:** a smaller copy of it, without its location or other metadata. With it go your dietary profile, if you wrote one, and a short summary of up to five other meals from that day.
 - **You turn on Watch Camera Roll:** the same, for every new photo in your photo library, food or not. Switching it on also sends recent photos, as far back as the **Backfill Lookback** setting says.
+- **Watch Camera Roll meets a Meta glasses photo:** the app recognizes photos that the Meta AI app saved to your library. On iPhone, Apple's built-in image classifier first checks each one for food, on the phone, and a photo with no food in it is not sent. If the check cannot run, the photo is sent like any other. On Android there is no such check. Switch **Meta glasses photos** off to stop logging these photos automatically.
 - **You log leftovers:** the leftover photo and the meal you picked.
 - **You describe a meal:** your text and today's date.
 - **You type a fix or ask to delete a meal:** your text, today's date and your meals from the last 7 days.
 - **You tap Test This Provider:** a fixed message and a built-in test image, plus your dietary profile if you wrote one. None of your photos or meals.
+- **You turn on Restaurant nutrition:** for a meal eaten in the US, up to three chain names from the app's built-in list, the food names with their amounts, the country code US and the reply language. They go to your AI service, which searches the web for the chain's published nutrition: Anthropic; or OpenRouter, which passes them to the maker of the model you picked and searches with its partner Exa; or your own server, which searches with Claude web search. No other provider gets lookups. A chain found nearby shows that you were near it. A lookup never sends the photo, its location, your dietary profile or your meal history. With **Use photo location** on, the iPhone reads where a restaurant or takeout photo was taken, and for a restaurant meal it asks Apple Maps which food places are nearby. Apple receives that location, as when you use Maps.
 - **You use your own server:** the same data goes to the server you run. While a server address is saved, the app also sends the server the date, to ask for that day's Garmin activity summary.
 
 The app sends nothing to the developer. It keeps API keys in the iOS Keychain, the iPhone's protected store for passwords and keys. On Android it keeps them in encrypted storage backed by the Android Keystore. Your phone's own backup can include the app's data.
 
-Restaurant nutrition lookup is not in the App Store version yet. It is off by default, it asks permission on its own screen, and it sends data to its own list of recipients. The privacy policy already describes them.
-
 </details>
 
-Export your data to a file at any time. The [privacy policy](docs/PRIVACY.md) has the full details.
+Export your data to a file at any time. The [privacy policy](docs/PRIVACY.md) has the full details, including [Restaurant nutrition](docs/PRIVACY.md#restaurant-nutrition-lookup-off-unless-you-turn-it-on).
 
 ## Android
 
-Chopstats is not on Google Play, and there is no Android download of the current version yet. The Android code in this repository is up to date, so developers can [build the app from source](#build-from-source).
+Chopstats is not on Google Play. Version 1.6.0 is on the [Releases page](https://github.com/AkiyamaKunka/Chopstats/releases/tag/v1.6.0) as an APK, the Android install file: `Chopstats-v1.6.0-b106-arm64-v8a.apk`, about 22 MB. This repository's release workflow built and signed it from the `v1.6.0` tag, the same code as the iPhone app.
 
-<details>
-<summary><b>An older preview build from August&nbsp;2026</b></summary>
+- **arm64 phones only.** A phone with a 32-bit processor refuses it.
+- **You install it yourself.** Android asks you to allow installs from your browser or file manager. The app does not update itself: install the next APK from the Releases page when one comes out.
+- **Coming from the 1.4.0 preview?** That August 2026 build is still named Bitewise. It sends photos with their embedded metadata, which includes the location if your camera recorded it, and it asks no permission first. Android cannot install 1.6.0 over it. Export your log in the old app, uninstall it, install 1.6.0, then open **Settings › Your Data › Import Data**.
+- **A few things differ from iPhone.** Restaurant nutrition looks up printed brands only and never reads where a photo was taken. Meta glasses photos are not checked for food on the phone, so with Watch Camera Roll on they are sent like any other photo. The screenshots on this page are from an iPhone.
 
-Version 1.4.0 is on the [Releases page](https://github.com/AkiyamaKunka/Chopstats/releases/tag/v1.4.0) as an APK, the Android install file, for arm64 phones. It is three months older than the iPhone app and still carries the old name, Bitewise. It differs from the app this page describes:
-
-- It sends photos with their embedded metadata, which includes the location if your camera recorded it.
-- It shows no permission dialog and no notice before Watch Camera Roll starts sending, and it has no Stop Sharing.
-- It has six of the nine providers (no DeepSeek, xAI or OpenRouter) and no daily calorie goal.
-
-A future Android release cannot be installed over it. You will have to uninstall it first, so export your data before you upgrade.
-
-</details>
+Developers can also [build the app from source](#build-from-source).
 
 ## Questions
 
@@ -210,7 +407,7 @@ They are estimates, and they can be wrong. Nobody has measured this app's accura
 
 The app does three things about errors. It asks the AI to prefer printed numbers over guesses. It asks the AI to put the portion it assumed in each food's name, so you can see a wrong assumption. And you can change every number.
 
-The preference for printed numbers is an [instruction to the AI](shared/prompts/estimation_priority.txt). How well it works depends on the AI you choose. The app does not show where a number came from, such as a label or a visual estimate.
+The preference for printed numbers is an [instruction to the AI](shared/prompts/estimation_priority.txt). How well it works depends on the AI you choose. Apart from Restaurant nutrition, which names the chain's page its numbers came from, the app does not show where a number came from, such as a label or a visual estimate.
 
 </details>
 
@@ -240,26 +437,20 @@ Something not working? Start with **Settings › AI Provider › Test This Provi
 
 ## Coming next
 
-Built and in the public code, but not in the App Store version yet:
+Built and in the public code on `main`, but not in the App Store version yet. Neither has a release date.
 
-- **My usual foods.** Log one of your regular foods again with one tap. It needs no photo and no AI.
-- **Restaurant nutrition lookup.** The app can look up published nutrition for meals from US chain restaurants. It is off by default, and it needs an Anthropic or OpenRouter key, or your own server.
+- **A native iOS look.** A redesign in the iOS style.
+- **iCloud Backup.** Copies your log to your own iCloud Drive, so it survives deleting the app or moving to a new iPhone, with no account and no server of ours. It is on by default, and a notice comes first: nothing is uploaded until you answer it.
 
 ## For developers
 
-Chopstats is a Flutter app for iPhone and Android in `app/`, with an optional self-hosted Python server at the repository root.
+Chopstats is a Flutter app for iPhone and Android in `app/`, with an optional self-hosted Python server at the repository root. The App Store version, 1.6.0, was built from the tag [`v1.6.0`](https://github.com/AkiyamaKunka/Chopstats/tree/v1.6.0), so you can check this page against the code that shipped. `main` already holds the next version.
 
 <p>
   <a href="https://apps.apple.com/app/id6828989410"><img src="https://img.shields.io/itunes/v/6828989410?label=version" width="96" alt="Current App Store version"></a>
   <a href="https://github.com/AkiyamaKunka/Chopstats/actions/workflows/python-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/AkiyamaKunka/Chopstats/python-tests.yml?branch=main&amp;label=tests" width="88" alt="Test status on the main branch"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/AkiyamaKunka/Chopstats" width="78" alt="MIT license"></a>
 </p>
-
-- **Two implementations, kept in step.** The Dart app and the Python server share no runtime code. A [behavior spec](docs/APP_PORT_SPEC.md) cites file and line for each rule and lists the deliberate differences. [Shared constants and prompts](shared/) are generated for both sides, and both test suites replay the same [golden vectors](shared/vectors/).
-- **One vocabulary for provider errors.** A [conformance test](app/test/analyzer/provider_feedback_matrix_test.dart) checks each provider's error replies against eight failure classes. A user whose account is out of credit is told to recharge, not to make a new key.
-- **A ledger for every photo.** A photo is identified by the md5 of its original bytes and tracked through five states. The same file is not analyzed twice, and the watcher does not log a meal again after you delete it.
-
-Both suites run in CI on every push. Measured on `main` on 2026-11-10, they held more than 3,500 Dart tests and more than 2,300 Python tests. The diagrams and the detail are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the photo pipeline, capture dating, leftover arithmetic and the server runbook.
 
 ### Build from source
 
@@ -272,8 +463,19 @@ flutter run
 
 You need Flutter with Dart SDK 3.12.2 or later. Then add a key in the app, as in [Get started](#get-started).
 
-- **A real iPhone.** Open `app/ios/Runner.xcworkspace` in Xcode and set your signing team. Change the two bundle identifiers and the app group to your own, because the ones in the project belong to the App Store app.
+- **A real iPhone.** Open `app/ios/Runner.xcworkspace` in Xcode and set your signing team. Change the two bundle identifiers, the app group and the iCloud container to your own, because the ones in the project belong to the App Store app.
 - **An Android APK.** Run `bash scripts/build_share_apk.sh` from the repository root. It writes an arm64 APK to `~/Desktop/Chopstats-share/`. Android builds need JDK 17. On Linux, set `JAVA_HOME` first.
+
+<details>
+<summary><b>How it is built and tested</b></summary>
+
+- **Two implementations, kept in step.** The Dart app and the Python server share no runtime code. A [behavior spec](docs/APP_PORT_SPEC.md) cites file and line for each rule and lists the deliberate differences. [Shared constants and prompts](shared/) are generated for both sides, and both test suites replay the same [golden vectors](shared/vectors/).
+- **One vocabulary for provider errors.** A [conformance test](app/test/analyzer/provider_feedback_matrix_test.dart) checks each provider's error replies against eight failure classes. A user whose account is out of credit is told to recharge, not to make a new key.
+- **A ledger for every photo.** A photo is identified by the md5 of its original bytes and tracked through five states. The same file is not analyzed twice, and the watcher does not log a meal again after you delete it.
+
+Both suites run in CI on every push. Measured on `main` on 2026-11-10, they held more than 3,500 Dart tests and more than 2,300 Python tests. The diagrams and the detail are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): the photo pipeline, capture dating, leftover arithmetic and the server runbook.
+
+</details>
 
 <details>
 <summary><b>Your own server (optional)</b></summary>
@@ -348,6 +550,7 @@ CI runs all four on every push. The Python suite runs on 3.9 and 3.10, with `ruf
 - `docs/SERVER.md`: running your own server. Analysis backends, Telegram bot and app API.
 - `docs/RELEASING.md`: the signed release lane for the App Store and Android, and the owner's checklist.
 - `docs/PRIVACY.md` and `docs/SUPPORT.md`: the privacy policy and the support page, both linked from the App Store listing.
+- `docs/readme/`: the slides on this page and the source they are rendered from.
 - `android/` and `ios/`: older upload clients for the server (Termux, Shortcuts). They are not the app.
 
 </details>
@@ -358,5 +561,6 @@ Issues and pull requests are welcome. Two rules matter more than style: never co
 
 [MIT](LICENSE) © 2026 AkiyamaKunka
 
+<sub>Food photos: Natalie Behn, Katka Pavlickova, Andrew Relf, Demi DeHerrera and Mikey Frost on Unsplash ([credits](docs/readme/CREDITS.md)).</sub><br>
 <sub>Formerly named Bitewise and, before that, CalorieTracker. Old links redirect here.</sub><br>
-<sub>iPhone is a trademark of Apple Inc., registered in the U.S. and other countries and regions. App Store is a service mark of Apple Inc. Android and Google Play are trademarks of Google LLC.</sub>
+<sub>iPhone is a trademark of Apple Inc., registered in the U.S. and other countries and regions. App Store is a service mark of Apple Inc. Android and Google Play are trademarks of Google LLC. Other product, company and restaurant names belong to their owners, and Chopstats is not affiliated with them.</sub>
