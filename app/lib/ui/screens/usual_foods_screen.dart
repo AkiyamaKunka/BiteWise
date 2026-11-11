@@ -439,6 +439,11 @@ class _UsualRow extends StatelessWidget {
                 semanticLabel: l.usualLoggedLabel),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz),
+            // The theme's icon-button look (accent, dimmed while pressed
+            // on iOS), as the app's other icon buttons: the menu button
+            // hands its IconButton a colour of its own (black87 or white),
+            // which would win over the theme.
+            style: theme.iconButtonTheme.style,
             tooltip: l.usualMoreActions,
             enabled: enabled,
             onSelected: (_) => onHide(),

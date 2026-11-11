@@ -4,10 +4,14 @@
 /// - A row's ⋯ menu stands off the cell it opens over. In light the menu
 ///   and the cell are the same white, and the theme drew the menu flat,
 ///   so "Hide from this list" floated over the row's words with no edge.
+/// - The ⋯ glyph is the accent, as the app's other icon buttons are, and
+///   dims while pressed on iOS like them. The menu button passed
+///   Material's default icon colour (black87, or white in dark).
 library;
 
 import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
 import 'package:calorie_tracker/ui/theme/tokens.dart';
+import 'package:flutter/gestures.dart' show kPressTimeout;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -47,8 +51,48 @@ Future<void> _pumpScreen(WidgetTester tester,
       brightness: brightness);
 }
 
+/// The colour the first row's ⋯ glyph is drawn in.
+Color? _moreGlyph(WidgetTester tester) => tester
+    .widget<RichText>(find.descendant(
+        of: find.byType(PopupMenuButton<String>).first,
+        matching: find.byType(RichText)))
+    .text
+    .style
+    ?.color;
+
 void main() {
   setUpAll(loadIphoneFonts);
+
+  for (final brightness in Brightness.values) {
+    testWidgets('the ⋯ glyph is the accent, like the app\'s other icon '
+        'buttons (${brightness.name})', (tester) async {
+      await _pumpScreen(tester, brightness: brightness);
+      final colors = AppColors.forBrightness(brightness);
+      expect(_moreGlyph(tester), colors.accent);
+      // The theme's own icon buttons resolve to the same.
+      final theme = Theme.of(tester.element(find.byType(UsualFoodsScreen)));
+      expect(theme.iconButtonTheme.style?.foregroundColor?.resolve({}),
+          colors.accent);
+    });
+  }
+
+  testWidgets('iOS: the ⋯ glyph dims while pressed, as the other icon '
+      'buttons do', (tester) async {
+    // Passing only an accent iconColor would draw it right at rest but
+    // never dim it: an explicit colour wins over the theme's states.
+    await _pumpScreen(tester);
+    final accent = AppColors.light.accent;
+    expect(_moreGlyph(tester), accent);
+    final press = await tester.startGesture(
+        tester.getCenter(find.byType(PopupMenuButton<String>).first));
+    // In a list the press registers after the tap-or-scroll timeout; the
+    // dim then fades in.
+    await tester.pump(kPressTimeout);
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(_moreGlyph(tester), accent.withValues(alpha: 0.4));
+    await press.cancel();
+    await tester.pumpAndSettle();
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   for (final brightness in Brightness.values) {
     testWidgets('the ⋯ menu stands off the cell it opens over '
