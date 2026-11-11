@@ -313,6 +313,13 @@ class BackupCoordinator {
   /// ([holdsCatchUp]). Pending from the start in the app's engine.
   Completer<void>? _deciding;
 
+  /// A look for a backup to offer got as far as deciding (an offer, the
+  /// notice, or nothing to ask) for the iCloud account of now. One that
+  /// ended before (no iCloud identity, the query not gathered in time, the
+  /// app left meanwhile, another account) looks again at the next return
+  /// to the app ([_onResume]).
+  bool _decided = false;
+
   void _endDeciding() {
     final d = _deciding;
     _deciding = null;
@@ -480,6 +487,7 @@ class BackupCoordinator {
       await _prefs.forgetBackup(keepNotice: false);
       await _prefs.setOffersAnswered(const []);
       _restorable = const [];
+      _decided = false; // its folder is looked at on the next return
       _set(_prefs.enabled ? BackupState.needsNotice : BackupState.off);
       return null;
     }
@@ -1128,9 +1136,11 @@ class BackupCoordinator {
           .compareTo(a.header.exportedAt ?? ''));
       await _holdCatchUp();
       final counts = await _dao.backupCounts();
+      _decided = true;
       prompt.value = RestoreOfferPrompt(open.first, counts.meals);
       return false;
     }
+    _decided = true;
     if (_prefs.enabled && !_prefs.noticeSeen) {
       prompt.value = const NoticePrompt();
       return false;
@@ -1196,6 +1206,14 @@ class BackupCoordinator {
   }
 
   Future<void> _onResume() async {
+    // No look for a backup to offer has decided (see [_decided]): one looks
+    // again now, started before anything is awaited so that the photo
+    // catch-up of this return waits for it as well ([holdsCatchUp]). One
+    // at a time, and not over a question still waiting to be asked.
+    if (!_decided && _deciding == null && prompt.value == null) {
+      await _launchCheck();
+      if (_decided) return;
+    }
     await refresh();
     await _prefs.reload();
     if (prompt.value != null) return;

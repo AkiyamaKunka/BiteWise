@@ -743,6 +743,68 @@ void main() {
     });
   });
 
+  group('a look for a backup to offer that ended before it decided', () {
+    /// The app leaves and comes back.
+    void leaveAndReturn() {
+      c.onLifecycle(false);
+      c.onLifecycle(true);
+    }
+
+    test('looks again at the next return to the app, and the notice is '
+        'asked then', () async {
+      cloud.gathered = false; // the query has not gathered in time
+      await c.start();
+      await c.holdsCatchUp(); // once the launch's look ended
+      expect(c.prompt.value, isNull);
+      cloud.gathered = true;
+      leaveAndReturn();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<NoticePrompt>());
+    });
+
+    test('the photo catch-up of that return waits for the look, and the '
+        'offer it raises holds it', () async {
+      await otherPhoneBackup();
+      cloud.gathered = false;
+      await c.start();
+      expect(await c.holdsCatchUp(), isFalse,
+          reason: 'nothing offered yet: the launch catch-up goes');
+      cloud.gathered = true;
+      leaveAndReturn();
+      expect(await c.holdsCatchUp(), isTrue); // app.dart _resumeCatchUp
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+    });
+
+    test('another iCloud account seen by a run looks again at the next '
+        'return', () async {
+      await noticeAnswered();
+      await c.start();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isNull, reason: 'nothing to ask');
+      cloud.accountChangedOnce = true;
+      expect(await run(), BackupState.needsNotice);
+      leaveAndReturn();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<NoticePrompt>());
+    });
+
+    test('a look that decided does not look again: a notice swiped away '
+        'comes back at the next launch, not at every return', () async {
+      await c.start();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<NoticePrompt>());
+      c.prompt.value = null; // dismissed (showBackupNotice)
+      final calls = cloud.statusCalls;
+      leaveAndReturn();
+      await c.holdsCatchUp();
+      for (var i = 0; i < 40; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(c.prompt.value, isNull);
+      expect(cloud.statusCalls, calls, reason: 'no second look');
+    });
+  });
+
   group('the restore offer', () {
     test('a fresh install is offered the backup, the catch-up is held, and '
         'Restore brings back meals and pictures, then adopts the file',
