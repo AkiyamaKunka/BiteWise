@@ -1452,14 +1452,18 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
                 child: MetaGlassesBadge(key: Key('editorMetaGlassesBadge')),
               ),
             ),
+          // The card right above the description leaves room for its
+          // floated label at large text: 16 pt let it cover the card's
+          // bottom edge at AX5. Unchanged at the default size.
           if (assistCard != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: EdgeInsets.only(
+                  bottom: usualCard == null ? _gapAboveField(context, 16) : 16),
               child: assistCard,
             ),
           if (usualCard != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: EdgeInsets.only(bottom: _gapAboveField(context, 16)),
               child: usualCard,
             ),
           TextField(

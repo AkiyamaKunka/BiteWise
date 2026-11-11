@@ -10,6 +10,9 @@
 ///
 /// Everything shown was worked out on the phone from the user's own meal
 /// log; nothing here sends anything.
+///
+/// A grouped card in run 7's token colours; the buttons take the theme's
+/// tonal and grey-pill styles, as the editor's other controls do.
 library;
 
 import 'package:flutter/material.dart';
@@ -17,6 +20,8 @@ import 'package:flutter/material.dart';
 import '../../services/usual/usual_foods.dart';
 import '../format.dart' show formatKcal;
 import '../l10n.dart';
+import '../theme/tokens.dart';
+import 'grouped.dart' show GroupedCard;
 
 /// Grams as the meal card writes them: whole, else to 0.1 g.
 String _grams(num v) =>
@@ -63,69 +68,70 @@ class UsualOfferCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l10n;
     final theme = Theme.of(context);
-    final scheme = theme.colorScheme;
+    final colors = context.colors;
     final muted = theme.textTheme.bodySmall?.copyWith(
-      color: scheme.onSurfaceVariant,
+      color: colors.secondaryLabel,
     );
     final locked = busy || editFirst;
-    return Card(
+    return GroupedCard(
       key: const Key('usualOfferCard'),
+      // The editor's list already keeps the gutter.
       margin: EdgeInsets.zero,
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Icon(Icons.history, size: 20, color: scheme.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    l.usualCardTitle,
-                    style: theme.textTheme.titleMedium,
+      padding: const EdgeInsets.all(AppSpace.cardPadding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.history, size: 20, color: colors.secondaryLabel),
+              const SizedBox(width: AppSpace.s8),
+              Expanded(
+                child: Text(
+                  l.usualCardTitle,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: colors.label,
                   ),
                 ),
-              ],
+              ),
+            ],
+          ),
+          for (final item in offer.items) ...[
+            const SizedBox(height: AppSpace.s8),
+            Text(
+              usualItemText(l, item, item.name),
+              key: Key('usualOfferItem${item.index}'),
+              style: theme.textTheme.bodyMedium?.copyWith(color: colors.label),
             ),
-            for (final item in offer.items) ...[
-              const SizedBox(height: 8),
-              Text(
-                usualItemText(l, item, item.name),
-                key: Key('usualOfferItem${item.index}'),
-                style: theme.textTheme.bodyMedium,
-              ),
-              Text(l.usualCardFrom(item.learnedName, item.fromDate),
-                  style: muted),
-            ],
-            if (editFirst) ...[
-              const SizedBox(height: 8),
-              Text(
-                l.assistEditFirst,
-                key: const Key('usualEditFirst'),
-                style: muted,
-              ),
-            ],
-            const SizedBox(height: 10),
-            Wrap(
-              spacing: 8,
-              runSpacing: 4,
-              children: [
-                FilledButton.tonal(
-                  key: const Key('usualUseMine'),
-                  onPressed: locked ? null : onUse,
-                  child: Text(l.usualUseMine),
-                ),
-                OutlinedButton(
-                  key: const Key('usualKeepAi'),
-                  onPressed: locked ? null : onKeepAi,
-                  child: Text(l.usualKeepAi),
-                ),
-              ],
+            Text(l.usualCardFrom(item.learnedName, item.fromDate),
+                style: muted),
+          ],
+          if (editFirst) ...[
+            const SizedBox(height: AppSpace.s8),
+            Text(
+              l.assistEditFirst,
+              key: const Key('usualEditFirst'),
+              style: muted,
             ),
           ],
-        ),
+          const SizedBox(height: AppSpace.s12),
+          Wrap(
+            spacing: AppSpace.s8,
+            runSpacing: AppSpace.s4,
+            children: [
+              FilledButton.tonal(
+                key: const Key('usualUseMine'),
+                onPressed: locked ? null : onUse,
+                child: Text(l.usualUseMine),
+              ),
+              OutlinedButton(
+                key: const Key('usualKeepAi'),
+                onPressed: locked ? null : onKeepAi,
+                child: Text(l.usualKeepAi),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

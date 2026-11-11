@@ -26,7 +26,10 @@
 /// links — so an annotation may be built from a link the model wrote, which
 /// could be invented. Exa highlights in `content` can only come from a
 /// result Exa returned, so a content-bearing annotation is search-returned;
-/// a content-less one is the model's claim and is not cited. UNVERIFIED
+/// a content-less one is the model's claim and is not cited. The same
+/// prompt puts those links in the answer text, before, after or inside the
+/// JSON: [decodeAnswerJson] leaves out the ones outside JSON strings, so a
+/// cited answer still parses. UNVERIFIED
 /// LIVE: all fixtures are synthetic (scripts/generate_lookup_client_fixtures
 /// .py); one live call should confirm the annotation semantics before the
 /// assist is wired to this client.

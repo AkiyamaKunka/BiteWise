@@ -79,4 +79,11 @@ class MealThumbResolver {
     _cache.remove(mealId);
     _inFlight.remove(mealId);
   }
+
+  /// Drops every cached result (1.7.0): an import or an iCloud restore
+  /// may have brought pictures for meals cached as having none.
+  void clear() {
+    _cache.clear();
+    _inFlight.clear();
+  }
 }

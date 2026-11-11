@@ -1678,7 +1678,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fixIntro =>
-      '说出要改或要删的内容 —— 用你习惯的方式描述那一餐（\"那碗面\"、\"早餐\"、\"600 千卡那个\"），任何语言都可以。要把某餐挪到别的日期或时间，请在「今天」或「历史」里点开那一餐，修改日期或时间。';
+      '说出要改或要删的内容 —— 用你习惯的方式描述那一餐（「那碗面」、「早餐」、「600 千卡那个」），任何语言都可以。要把某餐挪到别的日期或时间，请在「今天」或「历史」里点开那一餐，修改日期或时间。';
 
   @override
   String get fixNamingTip => '最稳妥的是说出食物名 —— 餐次编号是按最近 7 天算的，不只是今天。';
@@ -1687,7 +1687,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fixLabel => '要改什么？';
 
   @override
-  String get fixHint => '例如：\"那碗面其实是烧鸭饭\"\n或 \"删除刚才那杯咖啡\"';
+  String get fixHint => '例如：「那碗面其实是烧鸭饭」\n或「删除刚才那杯咖啡」';
 
   @override
   String get working => '处理中…';
@@ -2594,7 +2594,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get restaurantConsentBrandOnly => '\"仅按品牌\"不使用位置，只用照片中杯子、袋子或小票上印的品牌名。';
+  String get restaurantConsentBrandOnly => '「仅按品牌」不使用位置，只用照片中杯子、袋子或小票上印的品牌名。';
 
   @override
   String get restaurantConsentHttps =>
@@ -2978,4 +2978,254 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get usualLoggedLabel => '已记录';
+
+  @override
+  String get backupRowICloud => 'iCloud 备份';
+
+  @override
+  String get backupRowBackUpNow => '立即备份';
+
+  @override
+  String get backupRowRestore => '从 iCloud 恢复…';
+
+  @override
+  String get backupRowTakeOver => '从这台 iPhone 备份…';
+
+  @override
+  String get backupRowCombine => '合并两份备份';
+
+  @override
+  String get backupRowBackUpAgain => '重新备份';
+
+  @override
+  String get backupRowBackUpAnyway => '仍然备份';
+
+  @override
+  String get backupRowDelete => '删除 iCloud 备份…';
+
+  @override
+  String get backupICloudFooterBefore =>
+      '你的餐食、体重、身体围度、运动记录和餐食图片会复制到你自己的 iCloud，重新安装筷拍或换新 iPhone 后都能找回。API Key 绝不会包含在内，开发者也收不到任何内容。';
+
+  @override
+  String get backupICloudFooter =>
+      '你的餐食、体重、身体围度、运动记录和餐食图片会复制到 iCloud 云盘 › Chopstats，你可以在「文件」App 里查看、复制或删除。API Key 绝不会包含在内，开发者也收不到任何内容。';
+
+  @override
+  String get backupICloudFooterOff =>
+      '现在没有任何内容复制到 iCloud，所以重新安装筷拍或换新 iPhone 后，你的餐食不会回来。在那之前，请先导出一个文件，之后再导入。API Key 绝不会包含在内，开发者也收不到任何内容。';
+
+  @override
+  String get backupAndroidFooter =>
+      'Android 自带的备份可以把应用数据保存在你的 Google 账户里。换手机之前，请导出一个文件，再在新手机上导入。导入会合并：已有的餐不会被改动。';
+
+  @override
+  String get backupStatusOff => '已关闭';
+
+  @override
+  String get backupStatusNotStarted => '尚未开始';
+
+  @override
+  String get backupStatusChecking => '正在检查 iCloud…';
+
+  @override
+  String get backupStatusNever => '尚未备份';
+
+  @override
+  String backupStatusLast(String when, String size) {
+    return '上次备份：$when · $size';
+  }
+
+  @override
+  String get backupStatusUploading => '已存入 iCloud 云盘，正在上传…';
+
+  @override
+  String get backupStatusQuota => '你的 iCloud 储存空间已满，备份无法上传。';
+
+  @override
+  String get backupStatusNoAccount => '请在「设置」App 里登录 iCloud 后再备份。';
+
+  @override
+  String get backupStatusUnavailable => '筷拍无法使用 iCloud 云盘。';
+
+  @override
+  String backupStatusOtherDevice(String date) {
+    return 'iCloud 里的备份来自另一台 iPhone（$date），这台 iPhone 不会覆盖它。';
+  }
+
+  @override
+  String get backupStatusChangedElsewhere => '备份在筷拍之外被改动过，所以不会被覆盖。';
+
+  @override
+  String get backupStatusUnknownFile => 'iCloud 里的备份文件筷拍读不了，所以不会动它。';
+
+  @override
+  String get backupStatusTwoCopies => '两台 iPhone 同时保存了备份。';
+
+  @override
+  String get backupStatusMissing => 'iCloud 里的备份不见了，备份已暂停。';
+
+  @override
+  String backupStatusShrink(int count) {
+    return '已暂停：这会用少得多的记录替换一份有 $count 餐的备份。';
+  }
+
+  @override
+  String backupStatusEmptyLog(int count) {
+    return '这台 iPhone 上没有餐食记录，所以有 $count 餐的备份保持原样。';
+  }
+
+  @override
+  String get backupStatusFailed => '上次备份没有完成，会再试一次。';
+
+  @override
+  String backupStatusSkippedMonths(int count) {
+    return '有 $count 个月的图片在另一台 iPhone 的备份文件里，所以这台 iPhone 不会备份它们。';
+  }
+
+  @override
+  String get backupNoticeTitle => 'iCloud 备份已开启';
+
+  @override
+  String get backupNoticeBody =>
+      '筷拍会把你的餐食、体重、身体围度、运动记录和餐食图片复制到你自己的 iCloud，重新安装应用或换新 iPhone 后都能找回。API Key 绝不会包含在内，开发者也收不到任何内容。你可以随时在 设置 › 你的数据 里关闭。';
+
+  @override
+  String get backupNoticeKeep => '保持开启';
+
+  @override
+  String get backupNoticeOff => '关闭';
+
+  @override
+  String get backupRestoreTitle => '恢复你的饮食记录？';
+
+  @override
+  String backupRestoreBody(int meals, String date) {
+    return 'iCloud 里有一份筷拍备份，共 $meals 餐，最后保存于 $date。';
+  }
+
+  @override
+  String backupRestoreMergeNote(int meals) {
+    return '这台 iPhone 上已经有 $meals 餐。恢复会把备份里的餐加进来，这里的记录都不会被删除。';
+  }
+
+  @override
+  String get backupRestoreNotIncluded => '目标、单位和 API Key 不在备份里。';
+
+  @override
+  String get backupRestoreTakesOver =>
+      '恢复之后，这台 iPhone 会接管这份备份并保持更新；原来那台 iPhone 不再写入它。';
+
+  @override
+  String get backupRestoreAction => '恢复';
+
+  @override
+  String get backupStartFresh => '重新开始…';
+
+  @override
+  String get backupNotNow => '以后再说';
+
+  @override
+  String get backupStartFreshTitle => '删除旧备份？';
+
+  @override
+  String backupStartFreshBody(int meals) {
+    return '这份有 $meals 餐的备份会从 iCloud 删除，无法撤销。';
+  }
+
+  @override
+  String get backupDeleteAction => '删除备份';
+
+  @override
+  String backupRestoreDone(int meals, int pictures) {
+    return '已恢复 $meals 餐和 $pictures 张图片。';
+  }
+
+  @override
+  String backupRestorePartial(int months) {
+    return '有些图片（$months 个月）无法从 iCloud 读取，其余的都已恢复。';
+  }
+
+  @override
+  String get backupRestoreFailed => '无法从 iCloud 读取备份，请稍后再试。';
+
+  @override
+  String get backupTakeOverTitle => '从这台 iPhone 备份？';
+
+  @override
+  String backupTakeOverBody(int theirs, int mine) {
+    return 'iCloud 里的备份有 $theirs 餐，这台 iPhone 有 $mine 餐。';
+  }
+
+  @override
+  String get backupTakeOverUnreadable => 'iCloud 里的文件不是筷拍能读取的备份。替换会删除它的内容。';
+
+  @override
+  String get backupTakeOverMerge => '合并后备份';
+
+  @override
+  String get backupTakeOverReplace => '替换备份…';
+
+  @override
+  String get backupReplaceTitle => '替换备份？';
+
+  @override
+  String get backupReplaceBody => '备份里有而这台 iPhone 上没有的餐会丢失，无法撤销。';
+
+  @override
+  String get backupReplaceAction => '替换';
+
+  @override
+  String get backupDone => '已备份。';
+
+  @override
+  String get backupActionFailed => '没有成功，请稍后再试。';
+
+  @override
+  String get backupCombineDone => '已合并两份备份并完成备份。';
+
+  @override
+  String get backupTurnOffTitle => '关闭 iCloud 备份？';
+
+  @override
+  String get backupTurnOffKeep => '保留 iCloud 里的备份';
+
+  @override
+  String get backupTurnOffDelete => '删除备份…';
+
+  @override
+  String get backupDeleteTitle => '删除 iCloud 备份？';
+
+  @override
+  String get backupDeleteBody =>
+      '这台 iPhone 的备份会从 iCloud 删除，这台 iPhone 上的餐食记录会保留。无法撤销。';
+
+  @override
+  String get backupDeleted => 'iCloud 备份已删除。';
+
+  @override
+  String get backupDeletePartial =>
+      '有些备份文件暂时无法删除（iCloud 可能还在把它们下载到这台 iPhone 上）。请过一会儿再试。';
+
+  @override
+  String get importChooseFile => '选择文件…';
+
+  @override
+  String importPicturesAdded(int pictures) {
+    return '已添加 $pictures 张图片。';
+  }
+
+  @override
+  String get importNoMatchingMeals => '这些图片都不属于这台手机上的餐。请先导入备份或导出文件。';
+
+  @override
+  String get importTooBig => '超过 100 MB 的文件没有导入。';
+
+  @override
+  String get importPickUnavailable => '这里无法打开文件，请改用「从剪贴板导入」粘贴文件内容。';
+
+  @override
+  String importDeletedLeftOut(int count) {
+    return '你在这台手机上删除过的 $count 餐没有被恢复。';
+  }
 }

@@ -30,6 +30,7 @@ import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
 import 'package:calorie_tracker/ui/screens/settings/restaurant_section.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
+import 'package:calorie_tracker/ui/theme/tokens.dart' show AppColors;
 import 'package:calorie_tracker/ui/widgets/restaurant_consent_sheet.dart';
 
 import 'fakes.dart';
@@ -94,6 +95,17 @@ FakeSettings _planSettings({String url = 'https://bitewise.example.test'}) =>
       ..serverBackend = 'claude'
       ..serverBaseUrl = url
       ..apiKey = 'k';
+
+/// [key]'s confirm is run 7's destructive action (a quiet fill with a
+/// danger label), as Stop sharing and every Delete are, not the accent
+/// fill of a Save.
+void expectDestructiveConfirm(WidgetTester tester, String key) {
+  final style = tester.widget<FilledButton>(find.byKey(Key(key))).style;
+  expect(style?.backgroundColor?.resolve({}), AppColors.light.fill,
+      reason: '$key: no accent fill');
+  expect(style?.foregroundColor?.resolve({}), AppColors.light.danger,
+      reason: '$key: a danger label');
+}
 
 void main() {
   setUp(debugResetRestaurantConsentSheet);
@@ -383,6 +395,7 @@ void main() {
       await tester.tap(row);
       await tester.pumpAndSettle();
       expect(find.text('Clear learned places?'), findsOneWidget);
+      expectDestructiveConfirm(tester, 'clearPlacesConfirm');
       await tester.tap(find.text('Cancel'));
       await tester.pumpAndSettle();
       expect(c.clears, 0);
@@ -801,6 +814,7 @@ void main() {
         await tester.tap(row);
         await tester.pumpAndSettle();
         expect(find.byKey(const Key('clearAnswersDialog')), findsOneWidget);
+        expectDestructiveConfirm(tester, 'clearAnswersConfirm');
         expect(find.text(title), findsOneWidget);
         expect(find.textContaining(body), findsOneWidget);
         await tester.tap(find.text(locale.languageCode == 'en' ? 'Cancel' : '取消'));

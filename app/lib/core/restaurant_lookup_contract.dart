@@ -155,8 +155,13 @@ String _nameHead(String text) {
 /// separator or standalone number ("CHIPOTLE 2381" → chipotle). Null when
 /// it names none. The one reading of printed text: the request
 /// ([chainNameOnly]), the trigger and the decision's evidence all use it.
+/// A printed ™ or ℠ is a separator ([chainMarksAsSpaces]), read before the
+/// cleaner would spell it out as TM or SM ("Whataburger™" → whataburger).
 String? printedChainKey(dynamic value, int maxChars) {
-  final text = cleanShortText(value, maxChars);
+  final text = cleanShortText(
+    value is String ? chainMarksAsSpaces(value) : value,
+    maxChars,
+  );
   if (text.isEmpty) return null;
   var key = matchChain(text);
   if (key == null) {

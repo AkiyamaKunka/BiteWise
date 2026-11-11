@@ -945,6 +945,43 @@ void main() {
       expect(chainPickerMatches('zzzzqqq'), isEmpty);
     });
 
+    test('a chain whose name starts with "The" stays listed while it is '
+        'typed', () {
+      List<String> keys(String q) => [
+        for (final c in chainPickerMatches(q)) c.key,
+      ];
+      const theChains = [
+        'boiling_crab',
+        'capital_grille',
+        'cheesecake_factory',
+        'coffee_bean',
+        'habit_burger',
+        'halal_guys',
+        'honeybaked',
+        'human_bean',
+        'kickin_crab',
+        'melting_pot',
+        'old_spaghetti_factory',
+        'original_pancake_house',
+      ];
+      for (final q in ['The', 'the ', 'THE']) {
+        expect(keys(q), containsAll(theChains), reason: q);
+        // "the" inside a name still counts.
+        expect(keys(q), contains('jack_in_the_box'), reason: q);
+      }
+      for (final q in [
+        'Thec',
+        'Thecheese',
+        'The Cheese',
+        'the cheesecake factory',
+        'TheCheesecakeFactory',
+        'Cheesecake',
+      ]) {
+        expect(keys(q), contains('cheesecake_factory'), reason: q);
+      }
+      expect(keys('Thecheese'), ['cheesecake_factory']);
+    });
+
     testWidgets('the sheet lists table rows only and returns the key', (
       tester,
     ) async {

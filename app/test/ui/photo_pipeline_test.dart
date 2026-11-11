@@ -4,6 +4,7 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
@@ -15,6 +16,7 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
+import 'package:calorie_tracker/services/local_store.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/services/photo/deferred_assets.dart'
     show holdGlassesPreview;
@@ -1046,6 +1048,120 @@ void main() {
           (GlassesCheckOutcome.logged, null),
           (GlassesCheckOutcome.excluded, null),
         ]);
+      });
+
+      // Every catch-up offers the photos of the look-back window again,
+      // those the ledger settled long ago included. A refusal reached
+      // before the photo is even hashed (the switch, the consent, the
+      // latch, the app in the background) says nothing about the photo:
+      // it once replaced a logged photo's row with "excluded" or "will
+      // retry", and pushed real verdicts out of the newest 20 (2026-11-11).
+      group('a refusal reached before the hash', () {
+        late Directory root;
+        late LocalNoBackupStore store;
+        late bool allowed;
+        late bool background;
+        AnalysisErrorKind? latched;
+        final at = DateTime(2026, 10, 8, 13, 5);
+
+        setUp(() {
+          root = Directory.systemTemp.createTempSync('glasses_refusal');
+          store = LocalNoBackupStore(
+              root: () async => root, createMissingDirectory: true);
+          allowed = true;
+          background = false;
+          latched = null;
+        });
+        tearDown(() => root.deleteSync(recursive: true));
+
+        PhotoPipeline real() => PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            includeGlasses: () => include,
+            sendGate: AiSendGate(allowed: () => allowed),
+            backgrounded: () => background,
+            latch: AutoScanLatch(
+                blockedKind: () => latched,
+                revision: () => 0,
+                block: (_, _) async {},
+                clear: () async {}),
+            foodCheck: (bytes) async => answer(bytes),
+            glassesCheckLog: (e) => recordGlassesCheck(store, e, now: at),
+            clock: () => at,
+            hasher: (bytes) async {
+              hashes++;
+              return md5.convert(bytes).toString();
+            });
+
+        Future<List<(String, String)>> rows() async => [
+              for (final r in await readGlassesChecks(store: store, now: at))
+                (r.assetId, r.outcome)
+            ];
+
+        final refusals = <(String, void Function(), String)>[
+          (
+            'the switch off',
+            () => include = false,
+            GlassesCheckOutcome.excluded
+          ),
+          (
+            'the consent withdrawn',
+            () => allowed = false,
+            GlassesCheckOutcome.retry
+          ),
+          (
+            'the latch armed',
+            () => latched = AnalysisErrorKind.rejectedKey,
+            GlassesCheckOutcome.retry
+          ),
+          (
+            'the app in the background',
+            () => background = true,
+            GlassesCheckOutcome.retry
+          ),
+        ];
+        for (final (name, refuse, code) in refusals) {
+          test('$name: a logged photo keeps its "logged" row', () async {
+            final p = real();
+            expect((await p.process(photo([1, 2, 3], 'g1'))).kind,
+                PhotoOutcomeKind.saved);
+            refuse();
+            final again = await p.process(photo([1, 2, 3], 'g1'));
+            expect(glassesCheckOutcome(again), code, reason: 'the refusal');
+            expect(await rows(), [('g1', GlassesCheckOutcome.logged)]);
+            expect(dao.meals, hasLength(1));
+          });
+
+          test('$name: a photo checked not food keeps its "not food" row',
+              () async {
+            answer = (_) => ok(0.01);
+            final p = real();
+            await p.process(photo([1, 2, 3], 'g1'));
+            refuse();
+            await p.process(photo([1, 2, 3], 'g1'));
+            expect(await rows(), [('g1', GlassesCheckOutcome.notFood)]);
+          });
+
+          test('$name: a logged photo whose row aged out gets none',
+              () async {
+            final p = real();
+            await p.process(photo([1, 2, 3], 'g1'));
+            root.deleteSync(recursive: true); // the record is gone
+            root.createSync();
+            refuse();
+            await p.process(photo([1, 2, 3], 'g1'));
+            expect(await rows(), isEmpty);
+          });
+
+          test('$name: a photo never seen still says so', () async {
+            refuse();
+            await real().process(photo([4, 5, 6], 'g2'));
+            expect(await rows(), [('g2', code)]);
+            if (name == 'the switch off') {
+              expect(hashes, 0, reason: 'still let go before it is hashed');
+            }
+          });
+        }
       });
 
       test('an abandoned run records nothing', () async {

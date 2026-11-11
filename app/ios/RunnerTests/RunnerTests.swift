@@ -1,4 +1,6 @@
+import CryptoKit
 import CoreLocation
+import CoreVideo
 import Flutter
 import ImageIO
 import MapKit
@@ -457,13 +459,17 @@ class ImageIOFoodScoreTests: XCTestCase {
     }
   }
 
-  /// A width x height JPEG of one colour.
-  private func jpeg(width: Int = 640, height: Int = 480) -> Data {
+  /// A width x height JPEG of one colour (orange unless [gray] is given).
+  private func jpeg(width: Int = 640, height: Int = 480, gray: CGFloat? = nil) -> Data {
     let ctx = CGContext(
       data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
       space: CGColorSpace(name: CGColorSpace.sRGB)!,
       bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)!
-    ctx.setFillColor(red: 0.9, green: 0.5, blue: 0.1, alpha: 1)
+    if let gray {
+      ctx.setFillColor(red: gray, green: gray, blue: gray, alpha: 1)
+    } else {
+      ctx.setFillColor(red: 0.9, green: 0.5, blue: 0.1, alpha: 1)
+    }
     ctx.fill(CGRect(x: 0, y: 0, width: width, height: height))
     let out = NSMutableData()
     let dest = CGImageDestinationCreateWithData(
@@ -522,6 +528,48 @@ class ImageIOFoodScoreTests: XCTestCase {
     } else {
       XCTAssertTrue(request.usesCPUOnly)
     }
+  }
+
+  /// [b, g, r] of the pixel at (x, y) of a 32BGRA [buffer] (its fourth
+  /// byte is skipped: the buffer is opaque).
+  private func bgr(_ buffer: CVPixelBuffer, x: Int, y: Int) -> [UInt8] {
+    CVPixelBufferLockBaseAddress(buffer, .readOnly)
+    defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+    guard let base = CVPixelBufferGetBaseAddress(buffer) else { return [] }
+    let row = base.advanced(by: y * CVPixelBufferGetBytesPerRow(buffer))
+    let pixel = row.advanced(by: x * 4).assumingMemoryBound(to: UInt8.self)
+    return (0..<3).map { pixel[$0] }
+  }
+
+  /// What Vision is shown: the image itself, drawn on the CPU into plain
+  /// memory. No IOSurface, and never the CGImage, whose scaling Vision does
+  /// with a GPU command buffer even with every stage on the CPU: where iOS
+  /// refuses that work (a background app) the request still runs, on a
+  /// black frame or the previous image's.
+  func testTheVisionInputIsTheImageDrawnOnTheCPU() throws {
+    let thumb = try XCTUnwrap(imageIOThumbnail(jpeg(), maxPx: 360))
+    let buffer = try XCTUnwrap(imageIOVisionInput(thumb))
+    XCTAssertEqual(CVPixelBufferGetWidth(buffer), thumb.width)
+    XCTAssertEqual(CVPixelBufferGetHeight(buffer), thumb.height)
+    XCTAssertEqual(CVPixelBufferGetPixelFormatType(buffer), kCVPixelFormatType_32BGRA)
+    XCTAssertNil(CVPixelBufferGetIOSurface(buffer), "plain memory, nothing a GPU owns")
+    // The JPEG's orange (0.9, 0.5, 0.1), within JPEG rounding.
+    let centre = bgr(buffer, x: thumb.width / 2, y: thumb.height / 2)
+    XCTAssertEqual(centre.count, 3)
+    for (got, want) in zip(centre, [26, 128, 230] as [Int]) {
+      XCTAssertEqual(Int(got), want, accuracy: 6, "BGR \(centre)")
+    }
+  }
+
+  func testTheVisionInputLaysTransparencyOverWhite() throws {
+    let ctx = try XCTUnwrap(
+      CGContext(
+        data: nil, width: 8, height: 8, bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpace(name: CGColorSpace.sRGB)!,
+        bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+    ctx.clear(CGRect(x: 0, y: 0, width: 8, height: 8))
+    let buffer = try XCTUnwrap(imageIOVisionInput(try XCTUnwrap(ctx.makeImage())))
+    XCTAssertEqual(bgr(buffer, x: 4, y: 4), [255, 255, 255])
   }
 
   // MARK: - every way a check ends
@@ -662,9 +710,10 @@ class ImageIOFoodScoreTests: XCTestCase {
   /// A drawn plate of food, as JPEG: a cream table, a white plate with a
   /// rim, and round pieces of food in four colours — the shape of
   /// app/test_live/fixtures/plate.jpg, drawn here so the check needs no
-  /// file and runs on a device as well. On a Mac's classifier (2026-10-24)
-  /// it scores plate / tableware 0.36, food 0.12: over kFoodThreshold
-  /// (0.10) by more than three times.
+  /// file and runs on a device as well. On a Mac's classifier it scores
+  /// plate / tableware 0.29 from the CPU-drawn input (2026-11-11; 0.36 when
+  /// Vision was handed the CGImage): over kFoodThreshold (0.10) by more
+  /// than twice.
   private func drawnPlateJpeg(width: Int = 1200, height: Int = 900) throws -> Data {
     let ctx = try XCTUnwrap(
       CGContext(
@@ -755,18 +804,18 @@ class ImageIOFoodScoreTests: XCTestCase {
 
   func testABlindClassifierIsFoundOnceAndKept() throws {
     let check = ImageIOBlindCheck()
-    XCTAssertNil(check.known)
+    XCTAssertNil(check.known(background: false))
     var shown: [Float] = []
     let blind: (CGImage) throws -> [(String, Float)] = { image in
       shown.append(self.meanGray(image))
       return [("outdoor", 0.49), ("night_sky", 0.49)]
     }
-    XCTAssertFalse(try check.seesInput(blind))
+    XCTAssertFalse(try check.seesInput(background: false, blind))
     XCTAssertEqual(shown.count, 2, "one black and one white probe")
     XCTAssertEqual(shown.min() ?? -1, 0, accuracy: 0.01)
     XCTAssertEqual(shown.max() ?? -1, 1, accuracy: 0.01)
-    XCTAssertEqual(check.known, false)
-    XCTAssertFalse(try check.seesInput(blind))
+    XCTAssertEqual(check.known(background: false), false)
+    XCTAssertFalse(try check.seesInput(background: false, blind))
     XCTAssertEqual(shown.count, 2, "the verdict is kept: no probe again")
   }
 
@@ -778,10 +827,10 @@ class ImageIOFoodScoreTests: XCTestCase {
       return self.meanGray(image) < 0.5
         ? [("outdoor", 0.49), ("night_sky", 0.49)] : [("machine", 0.02)]
     }
-    XCTAssertTrue(try check.seesInput(sees))
-    XCTAssertTrue(try check.seesInput(sees))
+    XCTAssertTrue(try check.seesInput(background: false, sees))
+    XCTAssertTrue(try check.seesInput(background: false, sees))
     XCTAssertEqual(calls, 2)
-    XCTAssertEqual(check.known, true)
+    XCTAssertEqual(check.known(background: false), true)
   }
 
   func testAProbeThatThrowsKeepsNoVerdict() throws {
@@ -789,9 +838,109 @@ class ImageIOFoodScoreTests: XCTestCase {
     let failing: (CGImage) throws -> [(String, Float)] = { _ in
       throw NSError(domain: VNErrorDomain, code: VNErrorCode.internalError.rawValue)
     }
-    XCTAssertThrowsError(try check.seesInput(failing))
-    XCTAssertNil(check.known, "asked again next time")
-    XCTAssertTrue(try check.seesInput { self.meanGray($0) < 0.5 ? [("a", 0.9)] : [("b", 0.9)] })
+    XCTAssertThrowsError(try check.seesInput(background: false, failing))
+    XCTAssertNil(check.known(background: false), "asked again next time")
+    XCTAssertTrue(
+      try check.seesInput(background: false) {
+        self.meanGray($0) < 0.5 ? [("a", 0.9)] : [("b", 0.9)]
+      })
+  }
+
+  /// The app's engine and the background refresh's headless one share the
+  /// process, and the GPU takes work only in the foreground: a verdict
+  /// found in one state says nothing about the other. A foreground "sees"
+  /// once vouched for a background shown black frames (every glasses photo
+  /// there not food, for good); a background "blind" once made every later
+  /// foreground check unsupported until the process ended.
+  func testTheForegroundAndTheBackgroundEachGetTheirOwnVerdict() throws {
+    let sees: (CGImage) throws -> [(String, Float)] = {
+      self.meanGray($0) < 0.5 ? [("outdoor", 0.49), ("night_sky", 0.49)] : [("machine", 0.02)]
+    }
+    let blind: (CGImage) throws -> [(String, Float)] = { _ in [("outdoor", 0.49)] }
+
+    let foregroundFirst = ImageIOBlindCheck()
+    XCTAssertTrue(try foregroundFirst.seesInput(background: false, sees))
+    XCTAssertNil(foregroundFirst.known(background: true), "the background is still unknown")
+    XCTAssertFalse(try foregroundFirst.seesInput(background: true, blind))
+    XCTAssertEqual(foregroundFirst.known(background: false), true)
+    XCTAssertEqual(foregroundFirst.known(background: true), false)
+
+    let backgroundFirst = ImageIOBlindCheck()
+    XCTAssertFalse(try backgroundFirst.seesInput(background: true, blind))
+    XCTAssertNil(backgroundFirst.known(background: false), "the foreground is still unknown")
+    XCTAssertTrue(try backgroundFirst.seesInput(background: false, sees))
+    XCTAssertEqual(backgroundFirst.known(background: true), false)
+
+    // Through the check: the photo itself is only shown where it is seen.
+    let plate: [(String, Float)] = [("plate", 0.32), ("food", 0.12)]
+    let thumb = try XCTUnwrap(imageIOThumbnail(jpeg(), maxPx: 360))
+    let fresh = ImageIOBlindCheck()
+    XCTAssertTrue(try fresh.seesInput(background: false, sees))
+    var photoShown = 0
+    let blindInTheBackground: (CGImage) throws -> [(String, Float)] = { image in
+      if image === thumb {
+        photoShown += 1
+        return [("outdoor", 0.49), ("night_sky", 0.49)]
+      }
+      return try blind(image)
+    }
+    XCTAssertThrowsError(
+      try imageIOClassifySeeing(
+        thumb, background: true, blindCheck: fresh, run: blindInTheBackground)
+    ) { XCTAssertTrue(imageIOFoodUnsupported($0), "\($0)") }
+    XCTAssertEqual(photoShown, 0, "a blind state never looks at the photo")
+    let seen = try imageIOClassifySeeing(thumb, background: false, blindCheck: fresh) { image in
+      image === thumb ? plate : try sees(image)
+    }
+    guard case .observations(let observations) = seen else {
+      return XCTFail("the foreground still sees")
+    }
+    XCTAssertEqual(observations.map(\.0), ["plate", "food"])
+  }
+
+  /// A photo the classifier answers as it answered the black probe reached
+  /// it as a black frame (or was one): no answer, never "not food". On a
+  /// Mac a black frame scores food 0.0007, which would skip the photo for
+  /// good.
+  func testAPhotoAnsweredAsTheBlackProbeIsUnsupported() throws {
+    let blackAnswer: [(String, Float)] = [("outdoor", 0.49), ("night_sky", 0.49)]
+    let check = ImageIOBlindCheck()
+    let thumb = try XCTUnwrap(imageIOThumbnail(jpeg(), maxPx: 360))
+    var photo: [(String, Float)] = [("night_sky", 0.47), ("outdoor", 0.51)]
+    let run: (CGImage) throws -> [(String, Float)] = { image in
+      if image === thumb { return photo }
+      return self.meanGray(image) < 0.5 ? blackAnswer : [("machine", 0.02)]
+    }
+    XCTAssertFalse(check.isBlackProbeAnswer(blackAnswer, background: false), "no probe yet")
+    XCTAssertThrowsError(
+      try imageIOClassifySeeing(thumb, background: false, blindCheck: check, run: run)
+    ) { XCTAssertTrue(imageIOFoodUnsupported($0), "\($0)") }
+    XCTAssertEqual(check.known(background: false), true, "the classifier sees")
+    XCTAssertFalse(
+      check.isBlackProbeAnswer(blackAnswer, background: true), "the other state has no probe")
+
+    photo = [("outdoor", 0.49), ("night_sky", 0.30)]  // a real night: not the black frame
+    guard
+      case .observations(let observations) = try imageIOClassifySeeing(
+        thumb, background: false, blindCheck: check, run: run)
+    else { return XCTFail("observations") }
+    XCTAssertEqual(observations.map(\.0), ["outdoor", "night_sky"])
+  }
+
+  /// The real check on a black photo, wherever it runs: never ok. Before
+  /// 2026-11-11 a classifier that sees answered it ok, food 0.0007 (a
+  /// Mac's): exactly what a photo that reached Vision as a black frame
+  /// gets, and "not food" skips it for good.
+  func testAPhotoSeenAsABlackFrameIsNeverNotFood() throws {
+    let check = ImageIOBlindCheck()
+    for background in [false, true] {
+      let score = imageIOFoodScore(
+        jpeg(gray: 0), maxPx: 360, labels: labels, background: background, timeout: 15
+      ) { image, background in
+        try imageIOVisionClassify(image, background: background, blindCheck: check)
+      }
+      XCTAssertNotEqual(score.status, "ok", "background \(background): \(score)")
+    }
   }
 
   /// A blind verdict stops the production classifier before it looks at
@@ -799,7 +948,7 @@ class ImageIOFoodScoreTests: XCTestCase {
   /// answers unsupported, and the Dart side lets the photo through.
   func testABlindClassifierIsUnsupportedNeverNotFood() throws {
     let check = ImageIOBlindCheck()
-    XCTAssertFalse(try check.seesInput { _ in [("outdoor", 0.49)] })
+    XCTAssertFalse(try check.seesInput(background: false) { _ in [("outdoor", 0.49)] })
     let thumb = try XCTUnwrap(imageIOThumbnail(jpeg(), maxPx: 360))
     XCTAssertThrowsError(try imageIOVisionClassify(thumb, background: false, blindCheck: check)) {
       XCTAssertTrue(imageIOFoodUnsupported($0), "\($0)")
@@ -827,7 +976,9 @@ class ImageIOFoodScoreTests: XCTestCase {
     let plate = try drawnPlateJpeg()
     let score = imageIOFoodScore(
       plate, maxPx: 360, labels: labels, background: false, timeout: 15)
-    let seen = ImageIOBlindCheck.shared.known.map { $0 ? "sees" : "blind" } ?? "not checked"
+    let seen =
+      ImageIOBlindCheck.shared.known(background: false).map { $0 ? "sees" : "blind" }
+      ?? "not checked"
     print(
       "real food check on a drawn plate: \(score.status) \(score.score ?? -1) "
         + "[\(score.top.map { "\($0.id) \($0.conf)" }.joined(separator: ", "))] "
@@ -835,7 +986,7 @@ class ImageIOFoodScoreTests: XCTestCase {
     switch score.status {
     case "ok":
       XCTAssertGreaterThanOrEqual(score.score ?? -1, threshold, "a plate of food, not food")
-      XCTAssertEqual(ImageIOBlindCheck.shared.known, true)
+      XCTAssertEqual(ImageIOBlindCheck.shared.known(background: false), true)
     case "unsupported", "error":
       break  // no answer: fail open
     default:
@@ -2029,5 +2180,432 @@ class PlacesPluginTests: XCTestCase {
     XCTAssertEqual(
       CLLocationManager().authorizationStatus, .notDetermined,
       "the app asked for location: the places channel must never need it")
+  }
+}
+
+/// iCloud Backup's file layer (Runner/CloudFiles.swift), on a temporary
+/// folder: NSFileCoordinator coordinates local files the same way, so the
+/// owner rule, the checks before a replace, the previous-copy rotation and
+/// the delete are the real code paths. What only iCloud can show
+/// (downloads, eviction, conflict versions, the metadata query) is on the
+/// owner's device checklist (docs/RELEASING.md § iCloud container).
+class CloudFilesTests: XCTestCase {
+  private let me = "0123456789abcdef0123456789abcdef"
+  private let other = "fedcba9876543210fedcba9876543210"
+  private var root: URL!
+  private var files: CloudFiles!
+  private let queue: OperationQueue = {
+    let q = OperationQueue()
+    q.maxConcurrentOperationCount = 1
+    return q
+  }()
+
+  override func setUpWithError() throws {
+    root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("cloudfiles-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    files = CloudFiles(root: root)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: root)
+  }
+
+  // MARK: - fixtures
+
+  private func body(
+    kind: String = "records", id: String, seq: Any, version: Any = 2, tables: String = "{\"meals\":[]}"
+  ) -> Data {
+    let seqText = seq is String ? "\"\(seq)\"" : "\(seq)"
+    let text =
+      "{\"format\":\"calorie_tracker_export\",\"version\":\(version),"
+      + "\"exported_at\":\"2026-11-11T08:00:00.000Z\","
+      + "\"backup\":{\"kind\":\"\(kind)\",\"install_id\":\"\(id)\",\"seq\":\(seqText)},"
+      + "\"tables\":\(tables)}"
+    return Data(text.utf8)
+  }
+
+  private func sha(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  }
+
+  /// A source file as Dart writes it to tmp before asking for the write.
+  private func source(_ data: Data) throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("src-\(UUID().uuidString).json")
+    try data.write(to: url)
+    return url
+  }
+
+  private func put(_ data: Data, at path: String) throws {
+    let url = files.url(for: path)!
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: url)
+  }
+
+  private func read(_ path: String) -> Data? {
+    try? Data(contentsOf: files.url(for: path)!)
+  }
+
+  private func write(
+    _ data: Data, to path: String, expect: CloudFiles.Expect, keepPrevious: String? = nil,
+    sha override: String? = nil
+  ) throws -> [String: Any] {
+    let src = try source(data)
+    let req = CloudFiles.WriteRequest(
+      path: path, source: src, bytes: data.count, sha256: override ?? sha(data), expect: expect,
+      keepPreviousPath: keepPrevious, allowDownload: false)
+    let done = expectation(description: "write")
+    var reply: [String: Any] = [:]
+    files.write(req, queue: queue, timeout: 10) { outcome in
+      reply = CloudFiles.reply(outcome, protectedDataAvailable: true)
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 15)
+    return reply
+  }
+
+  private func delete(_ path: String, expect: CloudFiles.Expect) -> [String: Any] {
+    let done = expectation(description: "delete")
+    var reply: [String: Any] = [:]
+    files.delete(path, expect: expect, queue: queue, timeout: 10) { outcome in
+      reply = CloudFiles.reply(outcome, protectedDataAvailable: true)
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 15)
+    return reply
+  }
+
+  // MARK: - the header
+
+  func testHeaderIsReadFromTheFirstBytesOnly() {
+    let big = body(
+      id: me, seq: 17,
+      tables: "{\"meals\":[" + Array(repeating: "{\"x\":1}", count: 20000).joined(separator: ",") + "]}")
+    XCTAssertGreaterThan(big.count, CloudFiles.headerLimit)
+    let header = CloudFiles.parseHeader(big.prefix(CloudFiles.headerLimit))
+    XCTAssertEqual(CloudFiles.installId(of: header), me)
+    XCTAssertEqual(CloudFiles.seq(of: header), 17)
+  }
+
+  func testAnUnknownOwnerIsAnyHeaderThatFailsOneRule() {
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: 1, version: 1)), "version 1")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: 1, version: "\"2\"")), "string version")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: "1")), "string seq")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: true)), "bool seq")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: 1.5)), "fractional seq")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: "ABC", seq: 1)), "bad id")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me.uppercased(), seq: 1)), "upper-case id")
+    XCTAssertNil(CloudFiles.parseHeader(body(kind: "everything", id: me, seq: 1)), "kind")
+    XCTAssertNil(CloudFiles.parseHeader(Data("{\"format\":\"calorie_tracker_export\"}".utf8)))
+    XCTAssertNil(CloudFiles.parseHeader(Data()))
+    XCTAssertNotNil(CloudFiles.parseHeader(body(kind: "pictures", id: me, seq: 0)))
+  }
+
+  func testOnlyBackupPathsResolve() {
+    XCTAssertNotNil(files.url(for: "Chopstats Backup.json"))
+    XCTAssertNotNil(files.url(for: "Meal Pictures/2026-10.json"))
+    for bad in [
+      "../x.json", "/etc/x.json", "Other/x.json", "Meal Pictures/../x.json", ".hidden.json",
+      "a/b/c.json", "x.txt", "Meal Pictures/.x.json",
+    ] {
+      XCTAssertNil(files.url(for: bad), bad)
+    }
+  }
+
+  func testTheOwnerRuleMatchesDart() {
+    let mine = CloudFiles.parseHeader(body(id: me, seq: 5))
+    let theirs = CloudFiles.parseHeader(body(id: other, seq: 9))
+    typealias E = CloudFiles.Expect
+    XCTAssertEqual(CloudFiles.checkOwner(exists: false, header: nil, expect: E(installId: me)), .absentNotAllowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: false, header: nil, expect: E(installId: me, allowAbsent: true)), .allowed)
+    XCTAssertEqual(CloudFiles.checkOwner(exists: true, header: mine, expect: E(installId: me, seqs: [5])), .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: mine, expect: E(installId: me, seqs: [4, 6])), .changedElsewhere)
+    XCTAssertEqual(CloudFiles.checkOwner(exists: true, header: mine, expect: E(installId: me)), .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: theirs, expect: E(installId: me, seqs: [0], allowAbsent: true)),
+      .ownedByOther)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other)),
+      .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: nil, expect: E(installId: me, allowAbsent: true)), .unknownOwner)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: nil, expect: E(installId: me, replaceUnknown: true)), .allowed)
+  }
+
+  func testExpectFromDartIgnoresAnAdoptIdThatIsNotOne() {
+    let e = CloudFiles.Expect([
+      "installId": me, "seqs": [NSNumber(value: 3)], "adoptFrom": "nope", "allowAbsent": true,
+    ])
+    XCTAssertEqual(e?.seqs, [3])
+    XCTAssertNil(e?.adoptFrom)
+    XCTAssertNil(CloudFiles.Expect(["installId": "short"]))
+  }
+
+  // MARK: - write
+
+  func testTheFirstWriteCreatesTheFileAndItsFolder() throws {
+    let data = body(kind: "pictures", id: me, seq: 1)
+    let r = try write(data, to: "Meal Pictures/2026-10.json", expect: .init(installId: me, allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["bytes"] as? Int, data.count)
+    XCTAssertEqual(read("Meal Pictures/2026-10.json"), data)
+  }
+
+  func testAMissingFileIsNotCreatedWithoutPermission() throws {
+    let r = try write(body(id: me, seq: 2), to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [1]))
+    XCTAssertEqual(r["status"] as? String, "absentNotAllowed")
+    XCTAssertNil(read("Chopstats Backup.json"))
+  }
+
+  func testAnotherInstallsFileIsNeverReplaced() throws {
+    let theirs = body(id: other, seq: 9)
+    try put(theirs, at: "Chopstats Backup.json")
+    let r = try write(
+      body(id: me, seq: 1), to: "Chopstats Backup.json",
+      expect: .init(installId: me, seqs: [0], allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "ownedByOther")
+    let header = r["header"] as? [String: Any]
+    XCTAssertEqual(CloudFiles.installId(of: header), other)
+    XCTAssertEqual(read("Chopstats Backup.json"), theirs)
+  }
+
+  func testOwnFileAtAnUnexpectedSeqWasChangedElsewhere() throws {
+    let copy = body(id: me, seq: 40)
+    try put(copy, at: "Chopstats Backup.json")
+    let r = try write(body(id: me, seq: 8), to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [7]))
+    XCTAssertEqual(r["status"] as? String, "changedElsewhere")
+    XCTAssertEqual(read("Chopstats Backup.json"), copy)
+  }
+
+  func testAnUnreadableFileIsLeftAlone() throws {
+    try put(Data("my notes".utf8), at: "Chopstats Backup.json")
+    let r = try write(
+      body(id: me, seq: 1), to: "Chopstats Backup.json",
+      expect: .init(installId: me, seqs: [0], allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "unknownOwner")
+    XCTAssertEqual(read("Chopstats Backup.json"), Data("my notes".utf8))
+  }
+
+  func testOwnFileAtTheExpectedSeqIsReplacedAndThePreviousCopyKept() throws {
+    let old = body(id: me, seq: 7)
+    try put(old, at: "Chopstats Backup.json")
+    let new = body(id: me, seq: 8, tables: "{\"meals\":[{\"id\":1}]}")
+    let r = try write(
+      new, to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [7, 8]),
+      keepPrevious: "Chopstats Backup (previous).json")
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(read("Chopstats Backup.json"), new)
+    XCTAssertEqual(read("Chopstats Backup (previous).json"), old)
+  }
+
+  func testAPreviousCopyOfAnotherInstallIsNotOverwritten() throws {
+    try put(body(id: me, seq: 7), at: "Chopstats Backup.json")
+    let theirs = body(id: other, seq: 3)
+    try put(theirs, at: "Chopstats Backup (previous).json")
+    let r = try write(
+      body(id: me, seq: 8), to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [7]),
+      keepPrevious: "Chopstats Backup (previous).json")
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(read("Chopstats Backup (previous).json"), theirs)
+  }
+
+  func testTheAdoptedInstallsFileIsReplacedAfterARestore() throws {
+    try put(body(id: other, seq: 30), at: "Chopstats Backup.json")
+    let mine = body(id: me, seq: 1)
+    let r = try write(
+      mine, to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [0], adoptFrom: other))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(read("Chopstats Backup.json"), mine)
+  }
+
+  func testASourceThatIsNotWhatDartWroteIsRefused() throws {
+    let data = body(id: me, seq: 1)
+    var r = try write(
+      data, to: "Chopstats Backup.json", expect: .init(installId: me, allowAbsent: true),
+      sha: String(repeating: "0", count: 64))
+    XCTAssertEqual(r["status"] as? String, "verifyFailed")
+    // A source naming another install is refused too.
+    r = try write(body(id: other, seq: 1), to: "Chopstats Backup.json", expect: .init(installId: me, allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "verifyFailed")
+    XCTAssertNil(read("Chopstats Backup.json"))
+  }
+
+  // MARK: - delete
+
+  func testDeleteRemovesOnlyThisInstallsFiles() {
+    try? put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-10.json")
+    try? put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-11.json")
+    var r = delete("Meal Pictures/2026-10.json", expect: .init(installId: me))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["deleted"] as? Int, 1)
+    XCTAssertNil(read("Meal Pictures/2026-10.json"))
+    r = delete("Meal Pictures/2026-11.json", expect: .init(installId: me))
+    XCTAssertEqual(r["status"] as? String, "ownedByOther")
+    XCTAssertNotNil(read("Meal Pictures/2026-11.json"))
+    r = delete("Meal Pictures/2026-12.json", expect: .init(installId: me))
+    XCTAssertEqual(r["deleted"] as? Int, 0, "nothing there is nothing to do")
+  }
+
+  private func deleteAll(_ paths: [String], expect: CloudFiles.Expect) -> [String: Any] {
+    let done = expectation(description: "deleteAll")
+    var reply: [String: Any] = [:]
+    files.deleteAll(paths, expect: expect, queue: queue, timeout: 10, protectedDataAvailable: true) { r in
+      reply = r
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 30)
+    return reply
+  }
+
+  /// Before iOS 17 an evicted iCloud file is a hidden `.<name>.icloud`
+  /// placeholder: on a local folder it is the one way to have a file that
+  /// exists but is not downloaded.
+  private func putPlaceholder(for path: String) throws {
+    let url = files.url(for: path)!
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let placeholder = url.deletingLastPathComponent()
+      .appendingPathComponent(".\(url.lastPathComponent).icloud")
+    try Data("placeholder".utf8).write(to: placeholder)
+  }
+
+  func testAFileNotOnThisPhoneIsLeftAndTheBatchGoesOn() throws {
+    try put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-08.json")
+    try putPlaceholder(for: "Meal Pictures/2026-09.json")
+    try put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-10.json")
+    try put(body(id: me, seq: 1), at: "Chopstats Backup.json")
+    XCTAssertTrue(CloudFiles.itemExists(files.url(for: "Meal Pictures/2026-09.json")!))
+    XCTAssertFalse(CloudFiles.isDownloaded(files.url(for: "Meal Pictures/2026-09.json")!))
+    let r = deleteAll(
+      [
+        "Meal Pictures/2026-08.json", "Meal Pictures/2026-09.json", "Meal Pictures/2026-10.json",
+        "Chopstats Backup.json",
+      ], expect: .init(installId: me))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["deleted"] as? Int, 2)
+    XCTAssertEqual(r["refused"] as? Int, 1)
+    XCTAssertEqual(r["left"] as? Int, 1)
+    XCTAssertNil(read("Meal Pictures/2026-08.json"))
+    XCTAssertNil(read("Chopstats Backup.json"), "the batch went on past the evicted month")
+    XCTAssertNotNil(read("Meal Pictures/2026-10.json"), "another install's file stays")
+  }
+
+  func testTheFolderIsRemovedOnlyWhenNothingIsInIt() throws {
+    let folder = root.appendingPathComponent("Meal Pictures", isDirectory: true)
+    try put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-10.json")
+    XCTAssertFalse(CloudFiles.removeFolderIfEmpty(folder), "a month landed: the folder stays")
+    XCTAssertNotNil(read("Meal Pictures/2026-10.json"))
+    try FileManager.default.removeItem(at: files.url(for: "Meal Pictures/2026-10.json")!)
+    try putPlaceholder(for: "Meal Pictures/2026-11.json")
+    XCTAssertFalse(CloudFiles.removeFolderIfEmpty(folder), "a placeholder is something")
+    try FileManager.default.removeItem(
+      at: folder.appendingPathComponent(".2026-11.json.icloud"))
+    XCTAssertTrue(CloudFiles.removeFolderIfEmpty(folder))
+    XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+  }
+
+  func testDeletingTheLastMonthRemovesTheFolderAndOneLeftKeepsIt() throws {
+    let folder = root.appendingPathComponent("Meal Pictures", isDirectory: true)
+    try put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-09.json")
+    try put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-10.json")
+    _ = deleteAll(["Meal Pictures/2026-09.json"], expect: .init(installId: me))
+    // The removal is its own coordination after the reply: give it time.
+    for _ in 0..<20 { RunLoop.current.run(until: Date().addingTimeInterval(0.05)) }
+    XCTAssertNotNil(read("Meal Pictures/2026-10.json"), "another install's month stays")
+    try FileManager.default.removeItem(at: files.url(for: "Meal Pictures/2026-10.json")!)
+    try put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-11.json")
+    _ = deleteAll(["Meal Pictures/2026-11.json"], expect: .init(installId: me))
+    var gone = false
+    for _ in 0..<60 where !gone {
+      RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+      gone = !FileManager.default.fileExists(atPath: folder.path)
+    }
+    XCTAssertTrue(gone, "the empty folder is removed")
+  }
+
+  // MARK: - conflicts
+
+  private func resolve(_ path: String, timeout: TimeInterval) -> [String: Any] {
+    let done = expectation(description: "resolve")
+    var reply: [String: Any] = [:]
+    files.resolveConflicts(path, installIds: [me], queue: queue, timeout: timeout) { outcome in
+      reply = CloudFiles.reply(outcome, protectedDataAvailable: true)
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 10)
+    return reply
+  }
+
+  func testResolvingAFileWithoutConflictsLeavesNone() throws {
+    try put(body(id: me, seq: 1), at: "Chopstats Backup.json")
+    let r = resolve("Chopstats Backup.json", timeout: 5)
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["left"] as? Int, 0)
+  }
+
+  func testResolvingTimesOutWhileAnotherAccessHoldsTheFile() throws {
+    try put(body(id: me, seq: 1), at: "Chopstats Backup.json")
+    let url = files.url(for: "Chopstats Backup.json")!
+    let held = expectation(description: "held")
+    let release = DispatchSemaphore(value: 0)
+    NSFileCoordinator(filePresenter: nil).coordinate(
+      with: [.writingIntent(with: url, options: .forReplacing)], queue: OperationQueue()
+    ) { _ in
+      held.fulfill()
+      release.wait()
+    }
+    wait(for: [held], timeout: 5)
+    let r = resolve("Chopstats Backup.json", timeout: 0.5)
+    release.signal()
+    XCTAssertEqual(r["status"] as? String, "timeout", "never waits forever for the claim")
+  }
+
+  // MARK: - errors and the plugin's pure parts
+
+  func testErrorsCarryCodesNeverText() {
+    let quota = NSError(domain: NSCocoaErrorDomain, code: 4354, userInfo: [NSLocalizedDescriptionKey: "/private/x"])
+    XCTAssertEqual(CloudFiles.errorReply(quota, protectedDataAvailable: true)["status"] as? String, "quota")
+    let locked = NSError(domain: NSCocoaErrorDomain, code: 257)
+    XCTAssertEqual(CloudFiles.errorReply(locked, protectedDataAvailable: false)["status"] as? String, "locked")
+    let other = CloudFiles.errorReply(locked, protectedDataAvailable: true)
+    XCTAssertEqual(other["status"] as? String, "error")
+    XCTAssertEqual(other["code"] as? Int, 257)
+    XCTAssertEqual(Set(other.keys), ["status", "domain", "code"])
+  }
+
+  func testOneFileNotAvailableYetIsNotDownloadedNeverTheContainerUnavailable() {
+    let notYet = NSError(domain: NSCocoaErrorDomain, code: 4353)
+    XCTAssertEqual(
+      CloudFiles.errorReply(notYet, protectedDataAvailable: true)["status"] as? String, "notDownloaded")
+    XCTAssertEqual(
+      CloudFiles.reply(.failure(notYet), protectedDataAvailable: true)["status"] as? String, "notDownloaded")
+  }
+
+  func testMetadataPathsAreRelativeToDocuments() {
+    let docs = URL(fileURLWithPath: "/x/Mobile Documents/iCloud~dev/Documents", isDirectory: true)
+    XCTAssertEqual(
+      CloudBackupPlugin.relativePath(docs.appendingPathComponent("Chopstats Backup.json")),
+      "Chopstats Backup.json")
+    XCTAssertEqual(
+      CloudBackupPlugin.relativePath(docs.appendingPathComponent("Meal Pictures/2026-10.json")),
+      "Meal Pictures/2026-10.json")
+    XCTAssertNil(CloudBackupPlugin.relativePath(docs.appendingPathComponent("Other/x.json")))
+  }
+
+  func testTheAccountTokenIsComparedByEquality() {
+    let defaults = UserDefaults(suiteName: "cloudfiles-\(UUID().uuidString)")!
+    XCTAssertFalse(CloudBackupPlugin.noteToken("account-a" as NSString, defaults: defaults), "first sight")
+    XCTAssertFalse(CloudBackupPlugin.noteToken("account-a" as NSString, defaults: defaults))
+    XCTAssertTrue(CloudBackupPlugin.noteToken("account-b" as NSString, defaults: defaults))
+    XCTAssertFalse(CloudBackupPlugin.noteToken("account-b" as NSString, defaults: defaults), "reported once")
+  }
+
+  func testTheContainerIdIsTheOneDartUses() {
+    XCTAssertEqual(CloudBackupPlugin.containerIdentifier, "iCloud.dev.calorietracker.calorieTracker")
   }
 }

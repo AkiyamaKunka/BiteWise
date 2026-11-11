@@ -152,6 +152,25 @@ Duration? glassesImportLag(CaptureMeta? capture,
   }
 }
 
+/// The shutter instant the guard ([glassesCapturedAt]) dates [capture]'s
+/// meal by — with OffsetTimeOriginal's zone, else the camera's wall clock
+/// read as the phone's — or null where the guard leaves the createDate in
+/// place. What the Glasses check card measures the GPS fix from (design
+/// G3), as [glassesImportLag] measures the import from it. Never throws.
+DateTime? glassesRedatedShutter(CaptureMeta? capture,
+    {required DateTime now,
+    int maxAgeDays = SharedConstants.capturedAtMaxAgeDaysDefault}) {
+  try {
+    if (glassesCapturedAt(capture, now: now, maxAgeDays: maxAgeDays) ==
+        null) {
+      return null;
+    }
+    return _exifShutter(capture!)?.shutter;
+  } catch (_) {
+    return null;
+  }
+}
+
 /// Whether [capture]'s createDate looks like the moment the photo was
 /// imported, from the evidence the intake found: the library's addedDate
 /// when known (iOS 26+) — and then only it — else the late-import pass that

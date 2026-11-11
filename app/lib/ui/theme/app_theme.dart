@@ -234,10 +234,13 @@ abstract final class AppTheme {
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.snack)),
       ),
+      // In light a menu is the same white as the cell it opens over
+      // (elevated == cell), so it floats on a shadow, as the FAB does; in
+      // dark elevated is a step lighter than the cell and stays flat.
       popupMenuTheme: PopupMenuThemeData(
         color: c.elevated,
         surfaceTintColor: Colors.transparent,
-        elevation: 0,
+        elevation: c.isDark ? 0 : 3,
         shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppRadius.l)),
       ),

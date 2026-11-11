@@ -37,7 +37,7 @@ void main() {
       ]);
       expect(body['include'], ['web_search_call.action.sources']);
       expect(body['max_tool_calls'], 2);
-      expect(body['max_output_tokens'], 1500);
+      expect(body['max_output_tokens'], 6000);
       expect(body['store'], false);
       expect(body['input'], bigMacRequest.prompt);
       expect(dataBlock(body['input'] as String), bigMacRequest.body);
@@ -99,6 +99,25 @@ void main() {
       expect(c.official, isTrue);
       expect(c.cited, isFalse);
       expect(c.reason, 'source_not_cited');
+    });
+
+    test('a citation link before or after the JSON still parses', () async {
+      // The inline ([domain](url)) form was already stripped; a link
+      // outside the object widened parseAiJson's first-to-last cut.
+      for (final (label, wrap) in <(String, String Function(String))>[
+        ('a Sources line after',
+            (t) => '$t\n\nSources: [mcdonalds.com]($_bigMac)'),
+        ('a link before', (t) => 'From [mcdonalds.com]($_bigMac):\n$t'),
+      ]) {
+        final body = fixture('openai_found.json');
+        final msg = (body['output'] as List)[1] as Map;
+        final part = (msg['content'] as List).single as Map;
+        part['text'] = wrap(part['text'] as String);
+        final o = await client(ScriptedClient([(_) => json200(body)]))
+            .submit(bigMacRequest);
+        expect(o.kind, LookupOutcomeKind.done, reason: '$label: ${o.failure}');
+        expect(o.result!.matches.single.publishedCalories, 590, reason: label);
+      }
     });
 
     test('no sources in the reply → nothing is cited', () async {
@@ -197,7 +216,7 @@ void main() {
       expect(body['model'], 'grok-4.7');
       expect(body['max_turns'], 2);
       expect(body['store'], false);
-      expect(body['max_output_tokens'], 1500);
+      expect(body['max_output_tokens'], 6000);
       // Exact: country never rides along (xAI's tool has no user_location
       // here), and the filter is capped at xAI's 5 domains.
       expect(body['tools'], [

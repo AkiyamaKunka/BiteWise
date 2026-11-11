@@ -26,6 +26,11 @@ String chainPickerLabel(SharedChain chain, {required bool zh}) {
 /// name contains what is typed, ignoring case, accents, apostrophes and
 /// spaces), sorted by the listed name, [exclude] left out.
 /// An empty query lists every chain. Only table rows, ever.
+///
+/// A name is searched with and without its leading "The": chainTokens
+/// drops it from "The Cheesecake Factory" but keeps a query of just "The"
+/// (or "Thecheese", one token), and the chain must not vanish while its
+/// name is typed.
 List<SharedChain> chainPickerMatches(
   String query, {
   String? exclude,
@@ -36,7 +41,10 @@ List<SharedChain> chainPickerMatches(
   bool matches(SharedChain c) {
     if (q.isEmpty) return true;
     for (final v in [c.name, ...c.aliases, if (c.zhName != null) c.zhName!]) {
-      if (chainTokens(v).join().contains(compact)) return true;
+      if (chainTokens(v).join().contains(compact) ||
+          chainTokens(v, keepLeadingThe: true).join().contains(compact)) {
+        return true;
+      }
     }
     return false;
   }
