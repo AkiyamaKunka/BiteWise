@@ -4,6 +4,14 @@
 /// checkOwner, which CloudFiles.swift mirrors and RunnerTests pin), checks
 /// the size and SHA-256 of every source file like Swift does, and keeps a
 /// log of writes and deletes so a test can tell "nothing was written".
+///
+/// Where Swift asks whether an install owns a file it has looked at
+/// (a conflict version, the previous copy), a file whose header cannot be
+/// read is never owned (CloudFiles.Expect.owns(nil) is false), and
+/// [startDownloads] only starts a download, as the plugin does: the paths
+/// stay not downloaded until a test calls [finishDownloads] (or a
+/// coordinated read, readHeader with allowDownload or fetch, waits for
+/// one).
 library;
 
 import 'dart:io';
@@ -111,8 +119,14 @@ class FakeCloudTransport implements BackupTransport {
   @override
   Future<void> startDownloads(List<String> paths) async {
     downloadsStarted.addAll(paths);
-    notDownloaded.removeAll(paths);
   }
+
+  /// The downloads [startDownloads] started have finished.
+  void finishDownloads() => notDownloaded.removeAll(downloadsStarted);
+
+  /// CloudFiles.Expect.owns: never true for a header that cannot be read.
+  static bool _owns(WriteExpect expect, String? id) =>
+      id != null && (id == expect.installId || id == expect.adoptFrom);
 
   @override
   Future<CloudResult> write({
@@ -145,9 +159,8 @@ class FakeCloudTransport implements BackupTransport {
       case OwnerVerdict.absentNotAllowed:
         return const CloudResult(CloudResultKind.absentNotAllowed);
     }
-    final foreign = (conflictVersions[path] ?? const <Uint8List>[]).where(
-        (v) => !{expect.installId, expect.adoptFrom}
-            .contains(parseBackupHeader(v)?.installId));
+    final foreign = (conflictVersions[path] ?? const <Uint8List>[])
+        .where((v) => !_owns(expect, parseBackupHeader(v)?.installId));
     if (foreign.isNotEmpty) return const CloudResult(CloudResultKind.twoCopies);
     conflictVersions.remove(path);
     final src = await File(sourcePath).readAsBytes();
@@ -161,9 +174,11 @@ class FakeCloudTransport implements BackupTransport {
     if (keepPreviousPath != null && exists) {
       final prev = files[keepPreviousPath];
       final prevOwner = prev == null ? null : parseBackupHeader(prev)?.installId;
+      // CloudFiles.rotatePrevious: only over a downloaded copy this install
+      // (or the adopted one) owns.
       if (prev == null ||
-          prevOwner == expect.installId ||
-          prevOwner == expect.adoptFrom) {
+          (!notDownloaded.contains(keepPreviousPath) &&
+              _owns(expect, prevOwner))) {
         files[keepPreviousPath] = files[path]!;
         log.add('rotate $keepPreviousPath');
       }
