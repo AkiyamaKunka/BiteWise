@@ -684,13 +684,15 @@ jobs:
           # The sideload APK: same signer as the bundle, the bundle's
           # versionCode (no per-ABI offset), arm64 code only.
           apk=build/app/outputs/flutter-apk/app-release.apk
-          keytool -printcert -jarfile "$apk" > "$RUNNER_TEMP/apk-cert.txt"
-          aab_sha=$(grep -m1 'SHA256:' "$RUNNER_TEMP/aab-cert.txt" | tr -d '[:space:]')
-          apk_sha=$(grep -m1 'SHA256:' "$RUNNER_TEMP/apk-cert.txt" | tr -d '[:space:]')
+          # The APK carries only APK Signature Scheme v2/v3 (minSdk >= 24, so
+          # no JAR signature): keytool -printcert cannot read it, apksigner can.
+          tools=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)
+          "${tools}apksigner" verify --print-certs "$apk" > "$RUNNER_TEMP/apk-cert.txt"
+          aab_sha=$(sed -n 's/^[[:space:]]*SHA256:[[:space:]]*//p' "$RUNNER_TEMP/aab-cert.txt" | head -n 1 | tr -d ':[:space:]' | tr 'A-F' 'a-f')
+          apk_sha=$(sed -n 's/^Signer #1 certificate SHA-256 digest:[[:space:]]*//p' "$RUNNER_TEMP/apk-cert.txt" | head -n 1 | tr -d '[:space:]')
           [ -n "$apk_sha" ] && [ "$apk_sha" = "$aab_sha" ] \
             || { echo "::error::app-release.apk is not signed with the same key as the bundle"; exit 1; }
-          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)aapt2
-          badging=$("$aapt2" dump badging "$apk")
+          badging=$("${tools}aapt2" dump badging "$apk")
           code=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$badging" | head -n 1)
           abis=$(sed -n "s/^native-code: //p" <<< "$badging" | tr -d "'")
           [ "$code" = "$BUILD_NUMBER" ] \
