@@ -547,7 +547,10 @@ String? _nonEmptyString(Object? v, int max) {
 /// every item) whose timestamp is no more than a day ahead of [now];
 /// never published, never from a meal with a leftover block
 /// (the caller checks), qty exactly 1, and at least [kUsualMinKcal]
-/// kcal.
+/// kcal. (b) is what meals typed before 1.6.0 have: rows typed since get
+/// a mark when added, and the editor's save (which sets `corrected`)
+/// writes the mark on (b) rows it leaves unchanged, at the meal's own
+/// timestamp (meal_edit_logic.dart MealItemDraft.toStoredMap).
 UsualRecord? _recordOf(Meal m, Map<String, dynamic> item, int index,
     DateTime now) {
   if (item['published'] == true) return null;
@@ -1446,7 +1449,11 @@ Map<String, dynamic> _logAnalysis(Meal template, UsualIndex index,
             (usualNameKey(item['name']) == r.key ? r.aiName : null);
         user = {
           'set': true,
-          'at': r.atRaw,
+          // The record's moment as an instant (UTC), never the text it
+          // was read from: a hand-typed meal's `timestamp` has no zone,
+          // and copied into a mark it would be read in whatever zone the
+          // phone is in later.
+          'at': usualStamp(r.at),
           'n': [
             _clamp(r.numbers.kcal, kUsualMaxKcal),
             _clamp(r.numbers.p, kUsualMaxGrams),

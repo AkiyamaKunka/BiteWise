@@ -1440,6 +1440,23 @@ void main() {
       expect(usualMarkValid(same, now), isTrue);
     });
 
+    test('a record from a hand-typed meal (no zone in its timestamp) is '
+        'copied into the mark as an instant, in UTC', () {
+      final out = logOf([
+        meal(1, [item('Oatmeal', 350, p: 12, c: 55, f: 8)],
+            date: '2026-11-03', source: MealSource.appManual),
+        meal(5, [item('Oatmeal', 300, p: 10, c: 50, f: 6)], date: '2026-11-04'),
+        meal(6, [item('Oatmeal', 300, p: 10, c: 50, f: 6)], date: '2026-11-05'),
+      ]);
+      final it = (out['food_items'] as List).single as Map;
+      expect(it['estimated_calories'], 350);
+      final at = (it['user'] as Map)['at'] as String;
+      expect(at, usualStamp(DateTime.parse('2026-11-03T08:00:00.000')));
+      expect(at, endsWith('Z'),
+          reason: 'zone-less text would be read in a later zone as a '
+              'different moment');
+    });
+
     test('a kcal-only substitution writes no set', () {
       final out = logOf([
         meal(1, [mine('Cola', [140, 0, 0, 0])],

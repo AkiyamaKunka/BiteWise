@@ -699,4 +699,123 @@ void main() {
       expect(plain.containsKey('user'), isFalse);
     });
   });
+
+  // RC 1.6.0: a meal typed by hand on 1.5.0 has no marks and taught only
+  // while never corrected; the editor's save sets corrected, so a save
+  // with the numbers as typed made the meal forget them.
+  group('a meal typed by hand before 1.6.0', () {
+    Meal typed({
+      String source = 'app_manual',
+      bool corrected = false,
+      int id = 7,
+      String timestamp = '2026-07-24T08:00:00.000Z',
+      List<Map<String, dynamic>>? items,
+      Map<String, dynamic>? extra,
+    }) =>
+        Meal(
+          id: id,
+          date: '2026-07-24',
+          time: '08:00 AM',
+          timestamp: timestamp,
+          source: source,
+          corrected: corrected,
+          analysis: {
+            'is_food': true,
+            'meal_description': 'Breakfast',
+            'total_calories': 355,
+            'food_items': items ??
+                [
+                  {
+                    'name': 'Oatmeal',
+                    'estimated_calories': 350,
+                    'protein_g': 12,
+                    'carbs_g': 55,
+                    'fat_g': 8,
+                  },
+                  {'name': 'Salt', 'estimated_calories': 5},
+                ],
+            ...?extra,
+          },
+        );
+    final now = DateTime.utc(2026, 7, 25, 9);
+
+    List<Map<String, dynamic>> save(MealDraft d) => [
+          for (final it in d.toAnalysis(now: now)['food_items'] as List)
+            (it as Map).cast<String, dynamic>()
+        ];
+
+    test('saved unchanged: each row it taught gains the mark at the meal\'s '
+        'own moment', () {
+      final d = MealDraft.fromMeal(typed())..description = 'Oats';
+      final items = save(d);
+      expect(items[0]['user'], {
+        'set': true,
+        'at': '2026-07-24T08:00:00.000Z',
+        'n': [350, 12, 55, 8],
+        'qty': 1,
+      });
+      expect(usualMarkValid(items[0], now), isTrue);
+      expect(items[1].containsKey('user'), isFalse,
+          reason: 'under the usual-foods minimum it taught nothing');
+    });
+
+    test('a rename keeps the numbers the user\'s, and the old name', () {
+      final d = MealDraft.fromMeal(typed());
+      d.items[0].name = 'Porridge';
+      final user = save(d)[0]['user'] as Map;
+      expect(user['set'], isTrue);
+      expect(user['at'], '2026-07-24T08:00:00.000Z');
+      expect(user['ai_name'], 'Oatmeal');
+    });
+
+    test('a changed number is stamped now, as on any meal', () {
+      final d = MealDraft.fromMeal(typed());
+      d.items[0].calories = '360';
+      expect((save(d)[0]['user'] as Map)['at'], usualStamp(now));
+    });
+
+    test('no mark where it taught nothing before', () {
+      for (final m in [
+        typed(corrected: true), // fixed by chat: re-estimated by a model
+        typed(source: 'app_photo'),
+        typed(source: 'manual_text'),
+        typed(id: 0), // the describe preview's synthetic row
+        typed(timestamp: 'not a time'),
+        typed(timestamp: '2026-07-27T08:00:00.000Z'), // days ahead
+        typed(extra: {'leftover': {}}),
+        typed(items: [
+          {'name': 'Eggs', 'estimated_calories': 140, 'qty': 2},
+          {'name': 'Fries', 'estimated_calories': 320, 'published': true},
+        ]),
+      ]) {
+        final items = save(MealDraft.fromMeal(m));
+        for (final it in items) {
+          final user = it['user'];
+          expect(user is Map && user['set'] == true, isFalse,
+              reason: '${m.source} corrected=${m.corrected} id=${m.id} '
+                  '${m.timestamp}: ${it['name']}');
+        }
+      }
+    });
+
+    test('a row that already has a mark keeps it byte for byte', () {
+      final mark = {
+        'set': true,
+        'at': '2026-07-24T08:01:00.000Z',
+        'n': [350, 12, 55, 8],
+        'qty': 1,
+      };
+      final d = MealDraft.fromMeal(typed(items: [
+        {
+          'name': 'Oatmeal',
+          'estimated_calories': 350,
+          'protein_g': 12,
+          'carbs_g': 55,
+          'fat_g': 8,
+          'user': mark,
+        },
+      ]));
+      expect(save(d)[0]['user'], mark);
+    });
+  });
 }

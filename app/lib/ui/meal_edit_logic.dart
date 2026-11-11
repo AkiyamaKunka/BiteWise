@@ -33,7 +33,10 @@
 ///     added here, or a stored row whose numbers the user changed, gains
 ///     `user {set, at, n, qty}`; a rename keeps the AI's old name as
 ///     `user.ai_name`. The mark is self-validating (usualMarkValid): it
-///     counts only while the row's numbers still equal `n`.
+///     counts only while the row's numbers still equal `n`. A meal typed
+///     by hand before 1.6.0 has no marks and taught only while it was
+///     never corrected; the save sets `corrected`, so its unchanged rows
+///     gain the mark at the meal's own `timestamp` and still teach.
 library;
 
 import '../core/coerce.dart';
@@ -198,13 +201,30 @@ class MealItemDraft {
   ///     written only when it says something: `set`, `ai_name`, or a
   ///     count other than 1.
   /// [now] stamps `at` (UTC, ms); null reads the device clock.
-  Map<String, dynamic> toStoredMap([DateTime? now]) {
+  ///
+  /// [typedAt]: the row is of a meal typed by hand before 1.6.0 and never
+  /// corrected since ([MealDraft.fromMeal]); its unmarked rows taught
+  /// through that alone, and this save sets `corrected`. A stored row
+  /// with no `user` map whose numbers did not change gains
+  /// `user {set: true, at: typedAt, n, qty: 1}` when it taught that way
+  /// (qty 1, not published, at least [kUsualMinKcal] kcal), so a save
+  /// with the numbers as typed keeps them the user's.
+  Map<String, dynamic> toStoredMap([DateTime? now, String? typedAt]) {
     final src = stored;
     if (src != null && untouched) {
-      return {
+      final out = {
         for (final e in src.entries) e.key: e.value,
         ...toMap(),
       };
+      if (typedAt != null && _typedRowTaught(src, out)) {
+        out['user'] = {
+          'set': true,
+          'at': typedAt,
+          'n': _numbersOf(out),
+          'qty': 1,
+        };
+      }
+      return out;
     }
     final out = toMap();
     final when = now ?? DateTime.now();
@@ -251,6 +271,10 @@ class MealItemDraft {
       user['set'] = true;
       user['at'] = storedUser['at'];
       user['n'] = List<Object?>.from(storedUser['n'] as List);
+    } else if (typedAt != null && _typedRowTaught(src, out)) {
+      user['set'] = true;
+      user['at'] = typedAt;
+      user['n'] = numbers;
     }
     final qty = usualItemQty(src);
     user['qty'] = qty;
@@ -270,6 +294,24 @@ class MealItemDraft {
     return out;
   }
 }
+
+/// The four numbers of a row as [MealItemDraft.toMap] writes them.
+List<num> _numbersOf(Map<String, dynamic> row) => [
+      row['estimated_calories'] as num,
+      row['protein_g'] as num,
+      row['carbs_g'] as num,
+      row['fat_g'] as num,
+    ];
+
+/// A stored row of a hand-typed meal that taught its numbers with no mark
+/// (usual_foods_logic _recordOf, the unmarked hand-typed path): no `user`
+/// map, not published, a count of exactly 1, and [written]'s kcal at
+/// least [kUsualMinKcal].
+bool _typedRowTaught(Map<String, dynamic> src, Map<String, dynamic> written) =>
+    src['user'] is! Map &&
+    src['published'] != true &&
+    coerceQty(src['qty']) == 1 &&
+    (written['estimated_calories'] as num) >= kUsualMinKcal;
 
 /// Longest kept `user.ai_name`, in code points.
 const int kUsualAiNameMax = 80;
@@ -362,6 +404,13 @@ class MealDraft {
   /// a new hand-typed meal ([blank]), whose totals are all the user's.
   List<num>? _loadedTotals;
 
+  /// For a stored meal typed by hand (app_manual / app_manual_photo),
+  /// never corrected, with no leftover block: its `timestamp`, the moment
+  /// its unmarked rows were the user's numbers ([MealItemDraft
+  /// .toStoredMap] `typedAt`). Null for every other draft, the describe
+  /// preview's (id 0, manual_text) included.
+  DateTime? _typedAt;
+
   static MealDraft fromMeal(Meal meal) => MealDraft(
         description: mealDescriptionRaw(meal.analysis),
         dateIso: meal.date,
@@ -376,7 +425,8 @@ class MealDraft {
                 macroScale: legacyLeftoverMacroScale(meal.analysis, m))
         ],
         base: Map<String, dynamic>.from(meal.analysis),
-      ).._loadedTotals = [
+      )
+        .._loadedTotals = [
           for (final k in const [
             'total_calories',
             'total_protein_g',
@@ -384,7 +434,14 @@ class MealDraft {
             'total_fat_g',
           ])
             _storedNumber(meal.analysis[k]),
-        ];
+        ]
+        .._typedAt = meal.id > 0 &&
+                (meal.source == MealSource.appManual ||
+                    meal.source == MealSource.appManualPhoto) &&
+                !meal.corrected &&
+                meal.analysis['leftover'] is! Map
+            ? DateTime.tryParse(meal.timestamp)
+            : null;
 
   static MealDraft blank(DateTime now) => MealDraft(
         description: '',
@@ -501,8 +558,17 @@ class MealDraft {
     out['total_fat_g'] = field(fat, maxMacroGrams);
     // A hand-curated meal is food by definition — see the library note.
     out['is_food'] = true;
+    // A typed meal's moment, as a mark's `at`, unless it is more than a
+    // day ahead (it taught nothing yet: usualMarkValid would void it).
+    final typed = _typedAt;
+    final typedAt =
+        typed == null || typed.isAfter(when.add(const Duration(days: 1)))
+            ? null
+            : usualStamp(typed);
     final kept = items.where((i) => !i.isBlank).toList();
-    out['food_items'] = [for (final it in kept) it.toStoredMap(when)];
+    out['food_items'] = [
+      for (final it in kept) it.toStoredMap(when, typedAt)
+    ];
     // A leftover deduction 1.5.0 stored kept the rows' macros whole; the
     // form showed (and these rows now hold) the eaten part, so the block
     // says so and the next load does not scale them again.
