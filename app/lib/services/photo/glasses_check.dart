@@ -21,7 +21,7 @@ import 'dart:async';
 
 import '../../core/contracts.dart';
 import '../local_store.dart';
-import 'capture_dating.dart' show glassesImportLag;
+import 'capture_dating.dart' show glassesImportLag, glassesRedatedShutter;
 import 'food_prefilter.dart';
 import 'glasses.dart' show captureAnalysis;
 
@@ -134,8 +134,13 @@ class GlassesCheckEntry {
   /// Whether its EXIF carries a GPS position (never the position itself).
   final bool hasGps;
 
-  /// The GPS fix time minus the shutter, in seconds (glasses.dart
-  /// captureAnalysis' gps_fix_delta_s); null without one.
+  /// The GPS fix time minus the shutter, in seconds; null without one.
+  /// Like [lagSeconds], the shutter is the creation date (glasses.dart
+  /// captureAnalysis' gps_fix_delta_s), or, where the dating guard dates
+  /// the photo by its EXIF shutter because createDate is only the import
+  /// time, that shutter (capture_dating.dart glassesRedatedShutter): a fix
+  /// 20 s after the shutter reads +0:20, not minus the import's 3 h.
+  /// analysis.capture keeps the creation date's difference.
   final int? gpsFixDeltaSeconds;
 
   /// The on-device food score, 0–1; null when no check ran.
@@ -208,10 +213,20 @@ class GlassesCheckEntry {
     }
     int? fixDelta;
     try {
-      final delta = capture == null
-          ? null
-          : captureAnalysis(capture)['gps_fix_delta_s'];
-      if (delta is int) fixDelta = delta;
+      final shutter = glassesRedatedShutter(capture, now: at);
+      final fix = exif?.gpsFixUtc;
+      if (shutter != null) {
+        // createDate is only the import time: measure from the shutter.
+        if (fix != null) {
+          final delta = fix.difference(shutter.toUtc()).inSeconds;
+          if (delta.abs() <= _maxSeconds) fixDelta = delta;
+        }
+      } else {
+        final delta = capture == null
+            ? null
+            : captureAnalysis(capture)['gps_fix_delta_s'];
+        if (delta is int) fixDelta = delta;
+      }
     } catch (_) {}
     final score = check?.status == FoodCheckStatus.ok ? check?.score : null;
     return GlassesCheckEntry(

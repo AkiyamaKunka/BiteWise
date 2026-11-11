@@ -106,6 +106,62 @@ void main() {
       expect(e.lagSeconds, 25 * 3600 + 20);
     });
 
+    test('a photo whose creation date is only its import time: the GPS '
+        'time is the fix minus the EXIF shutter, not minus the import', () {
+      // Shot at 18:00 (-05:00) with a fix 20 s later; imported 3 h later
+      // with creationDate = the import (the case the dating guard
+      // re-dates).
+      final importedAt = DateTime.utc(2026, 10, 24, 2, 0).toLocal();
+      final shutterUtc = DateTime.utc(2026, 10, 23, 23, 0);
+      GlassesCheckEntry entry(DateTime fixUtc) => GlassesCheckEntry.of(
+          photo('g1',
+              capture: CaptureMeta(
+                  device: CaptureDevice.metaGlasses,
+                  strength: CaptureStrength.strong,
+                  signal: CaptureSignal.filename,
+                  exif: ExifCapture(
+                      make: 'Meta AI',
+                      model: 'Ray-Ban Meta Smart Glasses',
+                      dateTimeOriginal: DateTime(2026, 10, 23, 18, 0),
+                      offsetTimeOriginal: const Duration(hours: -5),
+                      gpsPresent: true,
+                      gpsFixUtc: fixUtc),
+                  createDate: importedAt,
+                  addedDate: importedAt.add(const Duration(seconds: 20)))),
+          outcome: GlassesCheckOutcome.logged,
+          at: importedAt.add(const Duration(minutes: 1)));
+      expect(entry(shutterUtc.add(const Duration(seconds: 20)))
+          .gpsFixDeltaSeconds, 20);
+      // A position stamped at the import is 3 h from the shutter, never
+      // "fresh".
+      expect(entry(importedAt.toUtc()).gpsFixDeltaSeconds, 3 * 3600);
+    });
+
+    test('without OffsetTimeOriginal the re-dated shutter is the camera\'s '
+        'wall clock read as the phone\'s, as the meal is dated', () {
+      // A 3 h 7 min gap is no time zone: the guard dates the meal by the
+      // camera's wall clock.
+      final shutter = DateTime(2026, 10, 23, 18, 0);
+      final importedAt = shutter.add(const Duration(hours: 3, minutes: 7));
+      final e = GlassesCheckEntry.of(
+          photo('g1',
+              capture: CaptureMeta(
+                  device: CaptureDevice.metaGlasses,
+                  strength: CaptureStrength.strong,
+                  signal: CaptureSignal.filename,
+                  exif: ExifCapture(
+                      make: 'Meta AI',
+                      dateTimeOriginal: shutter,
+                      gpsPresent: true,
+                      gpsFixUtc:
+                          shutter.toUtc().add(const Duration(seconds: 20))),
+                  createDate: importedAt,
+                  addedDate: importedAt.add(const Duration(seconds: 20)))),
+          outcome: GlassesCheckOutcome.logged,
+          at: importedAt.add(const Duration(minutes: 1)));
+      expect(e.gpsFixDeltaSeconds, 20);
+    });
+
     test('a broken clock gives no lag rather than a silly one', () {
       final e = GlassesCheckEntry.of(
           photo('g1',
