@@ -495,7 +495,9 @@ void main() {
       // conflict. PR #19 and the usual-foods PR both merged on 2026-11-09;
       // the 1.6.0 review fixes, which also name the maker of the OpenRouter
       // model a lookup goes to, merged on 2026-11-10.
-      expect(policy, contains('Effective date: 2026-11-10'));
+      // 1.6.1 (release/1.6.1, from v1.6.0): the capture note in exports
+      // and backups is described, so the date moved to 2026-11-11.
+      expect(policy, contains('Effective date: 2026-11-11'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));

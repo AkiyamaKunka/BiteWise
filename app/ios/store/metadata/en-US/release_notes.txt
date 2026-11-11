@@ -1,6 +1,5 @@
-A new list of the foods you eat often.
+Fixes for 1.6.
 
-• My usual foods, under Log: meals you logged on at least 2 of the last 90 days. Tap one to log it again. No photo, no AI.
-• If you set a food's numbers yourself, the app may offer them on later photos of it. Nothing changes until you accept.
-• Restaurant nutrition (off by default, US meals only): for photo meals, your AI service can look up the nutrition a chain publishes. Needs your own server or an Anthropic or OpenRouter key.
-• Fixes: Stop Sharing now also stops photos already waiting to be sent; some Settings messages close by themselves; dates no longer slip a day when clocks change.
+• Meta glasses: a food photo checked while the app was in the background is no longer skipped as "not food".
+• Restaurant nutrition: answers with several items, or with links in them, are no longer lost. A can of A&W root beer no longer counts as the restaurant, and restaurants inside Hard Rock casinos no longer match Hard Rock Cafe. More chain names are recognized, including in Traditional Chinese.
+• Places you marked are removed from your phone after 180 days, even when you mark nothing new.
