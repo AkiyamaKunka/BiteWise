@@ -184,6 +184,22 @@ def test_unknown_job_and_ttl_expiry(services):
     assert service.submit(_request())[0] == "accepted"  # cache expired
 
 
+def test_a_slow_cli_start_is_reported_as_a_timeout_not_a_guard_failure(
+        services):
+    """guard_fail:init_timeout means the CLI printed nothing before the init
+    deadline: a slow start, not a guard mismatch. The app never asks again
+    about a meal whose job ended 'guard_fail', but retries a 'timeout'.
+    A real mismatch (guard_fail:tools, above/below) stays 'guard_fail'."""
+    runner = ScriptedRunner([LookupRun(status="guard_fail",
+                                       verdict="guard_fail:init_timeout")])
+    service = _service(runner)
+    services.append(service)
+    _, body = service.submit(_request())
+    failed = _wait_state(service, body["job_id"], {"failed"})
+    assert failed == {"state": "failed", "job_id": body["job_id"],
+                      "reason": "timeout"}
+
+
 def test_failed_run_reports_its_reason_and_a_resubmit_runs_again(services):
     runner = ScriptedRunner([LookupRun(status="guard_fail",
                                        verdict="guard_fail:tools")])

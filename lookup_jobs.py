@@ -325,6 +325,14 @@ class LookupService:
                 job.updated = self._clock()
                 self._queue.appendleft(job.job_id)
                 return "preempted"
+            if run.verdict == "guard_fail:init_timeout":
+                # A CLI that printed nothing before the init deadline was
+                # slow to start (a cold or memory-starved Node next to a
+                # photo run), not a tool or plugin mismatch. The guard still
+                # killed it; the app is told "timeout", which it retries,
+                # because it never asks again about a "guard_fail" meal.
+                self._finish_locked(job, "failed", "timeout")
+                return "failed"
             if run.status != "ok":
                 self._finish_locked(job, "failed", run.status)
                 return "failed"
