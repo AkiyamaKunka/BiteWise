@@ -1,4 +1,5 @@
 import CoreML
+import CoreVideo
 import Flutter
 import Foundation
 import ImageIO
@@ -37,12 +38,16 @@ import Vision
 /// top = the five best classes of any kind, for the diagnostics. The
 /// request runs on the CPU whenever it can: setComputeDevice on iOS 17+ for
 /// every stage supportedComputeStageDevices lists a CPU for, usesCPUOnly
-/// before. Where some stage has no CPU device and the app is in the
-/// background (iOS refuses GPU work there, the same lesson as the decode
-/// above), nothing runs: deferred_gpu, and the photo waits for the
-/// foreground. Past [imageIOFoodTimeout] the reply is error. A classifier
-/// that answers a black and a white probe alike ([ImageIOBlindCheck], the
-/// iOS 26.2 simulator's) is unsupported. Every failure
+/// before; and Vision is handed a pixel buffer drawn on the CPU
+/// ([imageIOVisionInput]), never a CGImage, whose scaling Vision does on the
+/// GPU whatever the stages say. Where some stage has no CPU device and the
+/// app is in the background (iOS refuses GPU work there, the same lesson as
+/// the decode above), nothing runs: deferred_gpu, and the photo waits for
+/// the foreground. Past [imageIOFoodTimeout] the reply is error. A
+/// classifier that answers a black and a white probe alike
+/// ([ImageIOBlindCheck], asked apart in the foreground and the background;
+/// the iOS 26.2 simulator's was blind), or answers a photo as it answered
+/// the black probe, is unsupported. Every failure
 /// is an answer, never a throw: the Dart side then lets the photo through
 /// (fail open), which is what it did before the check existed.
 ///
@@ -261,7 +266,8 @@ typealias ImageIOClassifier = (CGImage, Bool) throws -> ImageIOClassification
 
 /// Where a request runs.
 enum ImageIOFoodCompute: Equatable {
-  /// On the CPU, every stage: the same in the foreground and the background.
+  /// On the CPU, every stage, with its input drawn on the CPU
+  /// ([imageIOVisionInput]): the same in the foreground and the background.
   case cpu
   /// Wherever the OS puts it (some stage has no CPU device): foreground only.
   case defaultDevices
@@ -312,7 +318,7 @@ func imageIOUseCPU(_ request: VNRequest) {
 
 /// The production classifier: VNClassifyImageRequest, on the CPU whenever
 /// it can be ([imageIOFoodComputeChoice]), once [ImageIOBlindCheck.shared]
-/// has found that it sees what it is shown.
+/// has found that it sees what it is shown in this state.
 func imageIOVisionClassify(_ image: CGImage, background: Bool) throws -> ImageIOClassification {
   try imageIOVisionClassify(image, background: background, blindCheck: .shared)
 }
@@ -324,16 +330,95 @@ func imageIOVisionClassify(
   let compute = imageIOFoodComputeChoice(
     cpuOnEveryStage: imageIOCPUOnEveryStage(VNClassifyImageRequest()), background: background)
   if compute == .deferGPU { return .deferGPU }
-  let run = { (input: CGImage) throws -> [(String, Float)] in
-    let request = VNClassifyImageRequest()
-    if compute == .cpu { imageIOUseCPU(request) }
-    try VNImageRequestHandler(cgImage: input, options: [:]).perform([request])
-    let results: [VNClassificationObservation] = request.results ?? []
-    return results.map { ($0.identifier, $0.confidence) }
+  return try imageIOClassifySeeing(image, background: background, blindCheck: blindCheck) {
+    try imageIOVisionRun($0, compute: compute)
   }
-  guard try blindCheck.seesInput(run) else { throw imageIOBlindClassifierError }
-  return .observations(try run(image))
 }
+
+/// [run] on [image], once [blindCheck] has found that [run] sees what it is
+/// shown in this state ([background] or not). A photo [run] answers as it
+/// answered the black probe in this state was seen as a blank frame: no
+/// answer either (a black input scores near 0 as food, and "not food" would
+/// lose the photo for good). Both refusals throw
+/// [imageIOBlindClassifierError], which reads as unsupported.
+func imageIOClassifySeeing(
+  _ image: CGImage, background: Bool, blindCheck: ImageIOBlindCheck,
+  run: (CGImage) throws -> [(String, Float)]
+) throws -> ImageIOClassification {
+  guard try blindCheck.seesInput(background: background, run) else {
+    throw imageIOBlindClassifierError
+  }
+  let answer = try run(image)
+  if blindCheck.isBlackProbeAnswer(answer, background: background) {
+    throw imageIOBlindClassifierError
+  }
+  return .observations(answer)
+}
+
+/// One VNClassifyImageRequest on [image], drawn on the CPU first
+/// ([imageIOVisionInput]); every stage on the CPU when [compute] is .cpu.
+func imageIOVisionRun(_ image: CGImage, compute: ImageIOFoodCompute) throws -> [(String, Float)] {
+  guard let input = imageIOVisionInput(image) else { throw imageIOVisionInputError }
+  let request = VNClassifyImageRequest()
+  if compute == .cpu { imageIOUseCPU(request) }
+  try VNImageRequestHandler(cvPixelBuffer: input, options: [:]).perform([request])
+  let results: [VNClassificationObservation] = request.results ?? []
+  return results.map { ($0.identifier, $0.confidence) }
+}
+
+/// [image] drawn by CoreGraphics on the CPU into a plain-memory 32BGRA
+/// sRGB pixel buffer (no IOSurface): what Vision is shown.
+///
+/// WHY (2026-11-11): handed a CGImage, Vision scales and converts it with a
+/// GPU command buffer even when every stage of the request is set to the
+/// CPU. Where the GPU refuses that work, as iOS does for a background app,
+/// the request still runs and raises no error, on a frame that never
+/// arrived: a fresh one is black (outdoor / night_sky 0.49, food 0.001),
+/// a reused one holds the previous image. Measured on a Mac with the
+/// command buffers refused: a plate of food checked after a street photo
+/// got the street's answer, food 0.0009, so not food and skipped for good.
+/// A buffer drawn here reaches the classifier with no GPU command at all,
+/// and the same plate scores 0.27 (0.32 when Vision scaled the CGImage on
+/// the GPU: its resampler differs). Transparent pixels are laid over white,
+/// as the upload ([imageIOSRGB]) lays them. nil when the buffer cannot be
+/// made; the check then answers error and the photo goes on unchecked.
+func imageIOVisionInput(_ image: CGImage) -> CVPixelBuffer? {
+  guard image.width > 0, image.height > 0,
+    let srgb = CGColorSpace(name: CGColorSpace.sRGB)
+  else { return nil }
+  var made: CVPixelBuffer?
+  let attributes =
+    [
+      kCVPixelBufferCGImageCompatibilityKey: true,
+      kCVPixelBufferCGBitmapContextCompatibilityKey: true,
+    ] as CFDictionary
+  guard
+    CVPixelBufferCreate(
+      kCFAllocatorDefault, image.width, image.height, kCVPixelFormatType_32BGRA, attributes,
+      &made) == kCVReturnSuccess,
+    let buffer = made,
+    CVPixelBufferLockBaseAddress(buffer, []) == kCVReturnSuccess
+  else { return nil }
+  defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
+  guard
+    let ctx = CGContext(
+      data: CVPixelBufferGetBaseAddress(buffer), width: image.width, height: image.height,
+      bitsPerComponent: 8, bytesPerRow: CVPixelBufferGetBytesPerRow(buffer), space: srgb,
+      bitmapInfo: CGImageAlphaInfo.noneSkipFirst.rawValue
+        | CGBitmapInfo.byteOrder32Little.rawValue)
+  else { return nil }
+  let bounds = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+  ctx.setFillColor(CGColor(srgbRed: 1, green: 1, blue: 1, alpha: 1))
+  ctx.fill(bounds)  // opaque images cover it completely
+  ctx.draw(image, in: bounds)
+  return buffer
+}
+
+/// What [imageIOVisionRun] throws when it cannot draw its input: an error,
+/// not unsupported (the next photo may well be drawn).
+let imageIOVisionInputError = NSError(
+  domain: "dev.calorietracker.imageio.food", code: 2,
+  userInfo: [NSLocalizedDescriptionKey: "the classifier's input could not be drawn"])
 
 // MARK: - the blind check
 
@@ -348,32 +433,60 @@ func imageIOVisionClassify(
 /// every check on it is unsupported: the photo goes on unchecked (fail
 /// open), as it did before the check existed. A classifier that sees moves
 /// its top class by about 0.5 between the two (outdoor 0.49 → 0.00).
+///
+/// The foreground and the background each get their own verdict
+/// (2026-11-11): the app's engine and the background refresh's headless one
+/// share the process, and what the classifier sees can depend on whether
+/// the GPU takes work. One verdict for both let a foreground "sees" vouch
+/// for a background that was shown black frames (every glasses photo there
+/// not food, for good), and a background "blind" turn every later
+/// foreground check unsupported until the process ended.
 final class ImageIOBlindCheck {
   static let shared = ImageIOBlindCheck()
 
   private let lock = NSLock()
-  private var verdict: Bool?
+  /// background → whether the classifier sees there.
+  private var verdicts: [Bool: Bool] = [:]
+  /// background → what the classifier answered the black probe there.
+  private var blackAnswers: [Bool: [(String, Float)]] = [:]
 
-  /// The verdict: nil until a check ran to the end.
-  var known: Bool? {
+  /// The verdict in the background or the foreground: nil until a check
+  /// ran to the end there.
+  func known(background: Bool) -> Bool? {
     lock.lock()
     defer { lock.unlock() }
-    return verdict
+    return verdicts[background]
   }
 
-  /// Whether [classify] sees its input: the kept verdict, or [classify] on
-  /// the probes (kept only when both ran; a throw is rethrown and asks
-  /// again next time).
-  func seesInput(_ classify: (CGImage) throws -> [(String, Float)]) throws -> Bool {
-    if let known { return known }
+  /// Whether [classify] sees its input in this state ([background] or
+  /// not): the verdict kept for that state, or [classify] on the probes
+  /// (kept only when both ran; a throw is rethrown and asks again next
+  /// time).
+  func seesInput(background: Bool, _ classify: (CGImage) throws -> [(String, Float)]) throws
+    -> Bool
+  {
+    if let known = known(background: background) { return known }
     guard let black = imageIOFlatProbe(gray: 0), let white = imageIOFlatProbe(gray: 1) else {
       return true  // nothing to show it: no verdict, the check runs as before
     }
-    let sees = !imageIOSameAnswer(try classify(black), try classify(white))
+    let blackAnswer = try classify(black)
+    let sees = !imageIOSameAnswer(blackAnswer, try classify(white))
     lock.lock()
-    verdict = sees
+    verdicts[background] = sees
+    blackAnswers[background] = blackAnswer
     lock.unlock()
     return sees
+  }
+
+  /// Whether [answer] is the classifier's answer to the black probe in this
+  /// state ([imageIOSameAnswer]): the photo reached it as a black frame, or
+  /// was one. False before the probes ran there.
+  func isBlackProbeAnswer(_ answer: [(String, Float)], background: Bool) -> Bool {
+    lock.lock()
+    let black = blackAnswers[background]
+    lock.unlock()
+    guard let black else { return false }
+    return imageIOSameAnswer(answer, black)
   }
 }
 
