@@ -1,3 +1,4 @@
+import CryptoKit
 import CoreLocation
 import Flutter
 import ImageIO
@@ -2029,5 +2030,310 @@ class PlacesPluginTests: XCTestCase {
     XCTAssertEqual(
       CLLocationManager().authorizationStatus, .notDetermined,
       "the app asked for location: the places channel must never need it")
+  }
+}
+
+/// iCloud Backup's file layer (Runner/CloudFiles.swift), on a temporary
+/// folder: NSFileCoordinator coordinates local files the same way, so the
+/// owner rule, the checks before a replace, the previous-copy rotation and
+/// the delete are the real code paths. What only iCloud can show
+/// (downloads, eviction, conflict versions, the metadata query) is on the
+/// owner's device checklist (docs/RELEASING.md § iCloud container).
+class CloudFilesTests: XCTestCase {
+  private let me = "0123456789abcdef0123456789abcdef"
+  private let other = "fedcba9876543210fedcba9876543210"
+  private var root: URL!
+  private var files: CloudFiles!
+  private let queue: OperationQueue = {
+    let q = OperationQueue()
+    q.maxConcurrentOperationCount = 1
+    return q
+  }()
+
+  override func setUpWithError() throws {
+    root = FileManager.default.temporaryDirectory
+      .appendingPathComponent("cloudfiles-\(UUID().uuidString)", isDirectory: true)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    files = CloudFiles(root: root)
+  }
+
+  override func tearDownWithError() throws {
+    try? FileManager.default.removeItem(at: root)
+  }
+
+  // MARK: - fixtures
+
+  private func body(
+    kind: String = "records", id: String, seq: Any, version: Any = 2, tables: String = "{\"meals\":[]}"
+  ) -> Data {
+    let seqText = seq is String ? "\"\(seq)\"" : "\(seq)"
+    let text =
+      "{\"format\":\"calorie_tracker_export\",\"version\":\(version),"
+      + "\"exported_at\":\"2026-11-11T08:00:00.000Z\","
+      + "\"backup\":{\"kind\":\"\(kind)\",\"install_id\":\"\(id)\",\"seq\":\(seqText)},"
+      + "\"tables\":\(tables)}"
+    return Data(text.utf8)
+  }
+
+  private func sha(_ data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  }
+
+  /// A source file as Dart writes it to tmp before asking for the write.
+  private func source(_ data: Data) throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+      .appendingPathComponent("src-\(UUID().uuidString).json")
+    try data.write(to: url)
+    return url
+  }
+
+  private func put(_ data: Data, at path: String) throws {
+    let url = files.url(for: path)!
+    try FileManager.default.createDirectory(
+      at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try data.write(to: url)
+  }
+
+  private func read(_ path: String) -> Data? {
+    try? Data(contentsOf: files.url(for: path)!)
+  }
+
+  private func write(
+    _ data: Data, to path: String, expect: CloudFiles.Expect, keepPrevious: String? = nil,
+    sha override: String? = nil
+  ) throws -> [String: Any] {
+    let src = try source(data)
+    let req = CloudFiles.WriteRequest(
+      path: path, source: src, bytes: data.count, sha256: override ?? sha(data), expect: expect,
+      keepPreviousPath: keepPrevious, allowDownload: false)
+    let done = expectation(description: "write")
+    var reply: [String: Any] = [:]
+    files.write(req, queue: queue, timeout: 10) { outcome in
+      reply = CloudFiles.reply(outcome, protectedDataAvailable: true)
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 15)
+    return reply
+  }
+
+  private func delete(_ path: String, expect: CloudFiles.Expect) -> [String: Any] {
+    let done = expectation(description: "delete")
+    var reply: [String: Any] = [:]
+    files.delete(path, expect: expect, queue: queue, timeout: 10) { outcome in
+      reply = CloudFiles.reply(outcome, protectedDataAvailable: true)
+      done.fulfill()
+    }
+    wait(for: [done], timeout: 15)
+    return reply
+  }
+
+  // MARK: - the header
+
+  func testHeaderIsReadFromTheFirstBytesOnly() {
+    let big = body(
+      id: me, seq: 17,
+      tables: "{\"meals\":[" + Array(repeating: "{\"x\":1}", count: 20000).joined(separator: ",") + "]}")
+    XCTAssertGreaterThan(big.count, CloudFiles.headerLimit)
+    let header = CloudFiles.parseHeader(big.prefix(CloudFiles.headerLimit))
+    XCTAssertEqual(CloudFiles.installId(of: header), me)
+    XCTAssertEqual(CloudFiles.seq(of: header), 17)
+  }
+
+  func testAnUnknownOwnerIsAnyHeaderThatFailsOneRule() {
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: 1, version: 1)), "version 1")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: 1, version: "\"2\"")), "string version")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: "1")), "string seq")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: true)), "bool seq")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me, seq: 1.5)), "fractional seq")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: "ABC", seq: 1)), "bad id")
+    XCTAssertNil(CloudFiles.parseHeader(body(id: me.uppercased(), seq: 1)), "upper-case id")
+    XCTAssertNil(CloudFiles.parseHeader(body(kind: "everything", id: me, seq: 1)), "kind")
+    XCTAssertNil(CloudFiles.parseHeader(Data("{\"format\":\"calorie_tracker_export\"}".utf8)))
+    XCTAssertNil(CloudFiles.parseHeader(Data()))
+    XCTAssertNotNil(CloudFiles.parseHeader(body(kind: "pictures", id: me, seq: 0)))
+  }
+
+  func testOnlyBackupPathsResolve() {
+    XCTAssertNotNil(files.url(for: "Chopstats Backup.json"))
+    XCTAssertNotNil(files.url(for: "Meal Pictures/2026-10.json"))
+    for bad in [
+      "../x.json", "/etc/x.json", "Other/x.json", "Meal Pictures/../x.json", ".hidden.json",
+      "a/b/c.json", "x.txt", "Meal Pictures/.x.json",
+    ] {
+      XCTAssertNil(files.url(for: bad), bad)
+    }
+  }
+
+  func testTheOwnerRuleMatchesDart() {
+    let mine = CloudFiles.parseHeader(body(id: me, seq: 5))
+    let theirs = CloudFiles.parseHeader(body(id: other, seq: 9))
+    typealias E = CloudFiles.Expect
+    XCTAssertEqual(CloudFiles.checkOwner(exists: false, header: nil, expect: E(installId: me)), .absentNotAllowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: false, header: nil, expect: E(installId: me, allowAbsent: true)), .allowed)
+    XCTAssertEqual(CloudFiles.checkOwner(exists: true, header: mine, expect: E(installId: me, seqs: [5])), .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: mine, expect: E(installId: me, seqs: [4, 6])), .changedElsewhere)
+    XCTAssertEqual(CloudFiles.checkOwner(exists: true, header: mine, expect: E(installId: me)), .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: theirs, expect: E(installId: me, seqs: [0], allowAbsent: true)),
+      .ownedByOther)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other)),
+      .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: nil, expect: E(installId: me, allowAbsent: true)), .unknownOwner)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(exists: true, header: nil, expect: E(installId: me, replaceUnknown: true)), .allowed)
+  }
+
+  func testExpectFromDartIgnoresAnAdoptIdThatIsNotOne() {
+    let e = CloudFiles.Expect([
+      "installId": me, "seqs": [NSNumber(value: 3)], "adoptFrom": "nope", "allowAbsent": true,
+    ])
+    XCTAssertEqual(e?.seqs, [3])
+    XCTAssertNil(e?.adoptFrom)
+    XCTAssertNil(CloudFiles.Expect(["installId": "short"]))
+  }
+
+  // MARK: - write
+
+  func testTheFirstWriteCreatesTheFileAndItsFolder() throws {
+    let data = body(kind: "pictures", id: me, seq: 1)
+    let r = try write(data, to: "Meal Pictures/2026-10.json", expect: .init(installId: me, allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["bytes"] as? Int, data.count)
+    XCTAssertEqual(read("Meal Pictures/2026-10.json"), data)
+  }
+
+  func testAMissingFileIsNotCreatedWithoutPermission() throws {
+    let r = try write(body(id: me, seq: 2), to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [1]))
+    XCTAssertEqual(r["status"] as? String, "absentNotAllowed")
+    XCTAssertNil(read("Chopstats Backup.json"))
+  }
+
+  func testAnotherInstallsFileIsNeverReplaced() throws {
+    let theirs = body(id: other, seq: 9)
+    try put(theirs, at: "Chopstats Backup.json")
+    let r = try write(
+      body(id: me, seq: 1), to: "Chopstats Backup.json",
+      expect: .init(installId: me, seqs: [0], allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "ownedByOther")
+    let header = r["header"] as? [String: Any]
+    XCTAssertEqual(CloudFiles.installId(of: header), other)
+    XCTAssertEqual(read("Chopstats Backup.json"), theirs)
+  }
+
+  func testOwnFileAtAnUnexpectedSeqWasChangedElsewhere() throws {
+    let copy = body(id: me, seq: 40)
+    try put(copy, at: "Chopstats Backup.json")
+    let r = try write(body(id: me, seq: 8), to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [7]))
+    XCTAssertEqual(r["status"] as? String, "changedElsewhere")
+    XCTAssertEqual(read("Chopstats Backup.json"), copy)
+  }
+
+  func testAnUnreadableFileIsLeftAlone() throws {
+    try put(Data("my notes".utf8), at: "Chopstats Backup.json")
+    let r = try write(
+      body(id: me, seq: 1), to: "Chopstats Backup.json",
+      expect: .init(installId: me, seqs: [0], allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "unknownOwner")
+    XCTAssertEqual(read("Chopstats Backup.json"), Data("my notes".utf8))
+  }
+
+  func testOwnFileAtTheExpectedSeqIsReplacedAndThePreviousCopyKept() throws {
+    let old = body(id: me, seq: 7)
+    try put(old, at: "Chopstats Backup.json")
+    let new = body(id: me, seq: 8, tables: "{\"meals\":[{\"id\":1}]}")
+    let r = try write(
+      new, to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [7, 8]),
+      keepPrevious: "Chopstats Backup (previous).json")
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(read("Chopstats Backup.json"), new)
+    XCTAssertEqual(read("Chopstats Backup (previous).json"), old)
+  }
+
+  func testAPreviousCopyOfAnotherInstallIsNotOverwritten() throws {
+    try put(body(id: me, seq: 7), at: "Chopstats Backup.json")
+    let theirs = body(id: other, seq: 3)
+    try put(theirs, at: "Chopstats Backup (previous).json")
+    let r = try write(
+      body(id: me, seq: 8), to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [7]),
+      keepPrevious: "Chopstats Backup (previous).json")
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(read("Chopstats Backup (previous).json"), theirs)
+  }
+
+  func testTheAdoptedInstallsFileIsReplacedAfterARestore() throws {
+    try put(body(id: other, seq: 30), at: "Chopstats Backup.json")
+    let mine = body(id: me, seq: 1)
+    let r = try write(
+      mine, to: "Chopstats Backup.json", expect: .init(installId: me, seqs: [0], adoptFrom: other))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(read("Chopstats Backup.json"), mine)
+  }
+
+  func testASourceThatIsNotWhatDartWroteIsRefused() throws {
+    let data = body(id: me, seq: 1)
+    var r = try write(
+      data, to: "Chopstats Backup.json", expect: .init(installId: me, allowAbsent: true),
+      sha: String(repeating: "0", count: 64))
+    XCTAssertEqual(r["status"] as? String, "verifyFailed")
+    // A source naming another install is refused too.
+    r = try write(body(id: other, seq: 1), to: "Chopstats Backup.json", expect: .init(installId: me, allowAbsent: true))
+    XCTAssertEqual(r["status"] as? String, "verifyFailed")
+    XCTAssertNil(read("Chopstats Backup.json"))
+  }
+
+  // MARK: - delete
+
+  func testDeleteRemovesOnlyThisInstallsFiles() {
+    try? put(body(kind: "pictures", id: me, seq: 1), at: "Meal Pictures/2026-10.json")
+    try? put(body(kind: "pictures", id: other, seq: 1), at: "Meal Pictures/2026-11.json")
+    var r = delete("Meal Pictures/2026-10.json", expect: .init(installId: me))
+    XCTAssertEqual(r["status"] as? String, "ok")
+    XCTAssertEqual(r["deleted"] as? Int, 1)
+    XCTAssertNil(read("Meal Pictures/2026-10.json"))
+    r = delete("Meal Pictures/2026-11.json", expect: .init(installId: me))
+    XCTAssertEqual(r["status"] as? String, "ownedByOther")
+    XCTAssertNotNil(read("Meal Pictures/2026-11.json"))
+    r = delete("Meal Pictures/2026-12.json", expect: .init(installId: me))
+    XCTAssertEqual(r["deleted"] as? Int, 0, "nothing there is nothing to do")
+  }
+
+  // MARK: - errors and the plugin's pure parts
+
+  func testErrorsCarryCodesNeverText() {
+    let quota = NSError(domain: NSCocoaErrorDomain, code: 4354, userInfo: [NSLocalizedDescriptionKey: "/private/x"])
+    XCTAssertEqual(CloudFiles.errorReply(quota, protectedDataAvailable: true)["status"] as? String, "quota")
+    let locked = NSError(domain: NSCocoaErrorDomain, code: 257)
+    XCTAssertEqual(CloudFiles.errorReply(locked, protectedDataAvailable: false)["status"] as? String, "locked")
+    let other = CloudFiles.errorReply(locked, protectedDataAvailable: true)
+    XCTAssertEqual(other["status"] as? String, "error")
+    XCTAssertEqual(other["code"] as? Int, 257)
+    XCTAssertEqual(Set(other.keys), ["status", "domain", "code"])
+  }
+
+  func testMetadataPathsAreRelativeToDocuments() {
+    let docs = URL(fileURLWithPath: "/x/Mobile Documents/iCloud~dev/Documents", isDirectory: true)
+    XCTAssertEqual(
+      CloudBackupPlugin.relativePath(docs.appendingPathComponent("Chopstats Backup.json")),
+      "Chopstats Backup.json")
+    XCTAssertEqual(
+      CloudBackupPlugin.relativePath(docs.appendingPathComponent("Meal Pictures/2026-10.json")),
+      "Meal Pictures/2026-10.json")
+    XCTAssertNil(CloudBackupPlugin.relativePath(docs.appendingPathComponent("Other/x.json")))
+  }
+
+  func testTheAccountTokenIsComparedByEquality() {
+    let defaults = UserDefaults(suiteName: "cloudfiles-\(UUID().uuidString)")!
+    XCTAssertFalse(CloudBackupPlugin.noteToken("account-a" as NSString, defaults: defaults), "first sight")
+    XCTAssertFalse(CloudBackupPlugin.noteToken("account-a" as NSString, defaults: defaults))
+    XCTAssertTrue(CloudBackupPlugin.noteToken("account-b" as NSString, defaults: defaults))
+    XCTAssertFalse(CloudBackupPlugin.noteToken("account-b" as NSString, defaults: defaults), "reported once")
+  }
+
+  func testTheContainerIdIsTheOneDartUses() {
+    XCTAssertEqual(CloudBackupPlugin.containerIdentifier, "iCloud.dev.calorietracker.calorieTracker")
   }
 }
