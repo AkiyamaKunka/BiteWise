@@ -929,6 +929,15 @@ step. Revisit if the app is ever published with a developer-run service.
   the first upload-key APK needs an uninstall first (the GitHub Release notes
   say so); after that, upgrades are in place. Whether the GitHub APK and the
   Play build share a key is decided once, in § 6.3.
+- The GitHub APK is ONE arm64 APK (`flutter build apk --target-platform
+  android-arm64`), so its `versionCode` is the same build number as the Play
+  bundle's. Never switch it to `--split-per-abi`: Flutter gives a split APK
+  `2000 + N`, the two channels could then never upgrade into each other, and
+  going back would be a downgrade for every friend. `app/build.gradle.kts`
+  (`arm64OnlyApk`) keeps the plugins' other-ABI libraries out of it, and the
+  Release workflow checks the APK's `versionCode`, ABI and signer.
+- A `vX.Y.Z+N` tag must carry an `N` above `BUILD_NUMBER_OFFSET`; the plan
+  job refuses pubspec's own small `+N`. Tag plain `vX.Y.Z` normally.
 
 ---
 
@@ -1099,7 +1108,7 @@ git tag v1.5.1 && git push origin v1.5.1     # iOS + Android lanes, external-eli
 Artifacts kept 90 days on the run page: the IPA + dSYMs + Dart symbols
 (`flutter symbolize -d app.ios-arm64.symbols` for crash reports), the AAB
 with its own R8 mapping as `aab-mapping.txt` (the one Play received), the
-two APKs with theirs as `mapping.txt`, the Android Dart symbols.
+arm64 APK with its own as `mapping.txt`, the Android Dart symbols.
 
 ---
 

@@ -122,6 +122,14 @@ jobs:
             name=${tag%%+*}
             if [[ "$tag" == *+* ]]; then
               number=${tag#*+}; source="the tag"
+              # A +N at or below the offset is pubspec's hand-build number
+              # (v1.6.0+8): App Store Connect refuses it once CI has uploaded
+              # 1.6.0 (101), and Play would refuse it later, while the
+              # GitHub release would still go out.
+              if [[ "$number" =~ ^[0-9]+$ ]] && (( number <= offset )); then
+                echo "::error::tag v$tag carries build number $number, which is not above BUILD_NUMBER_OFFSET ($offset). Tag v$name without a +N (CI numbers the build), or use a number above every build already uploaded."
+                exit 1
+              fi
             else
               number=$((offset + GITHUB_RUN_NUMBER)); source="BUILD_NUMBER_OFFSET + run_number"
             fi
@@ -129,7 +137,13 @@ jobs:
               echo "::error::tag v$tag says $name but app/pubspec.yaml says $pub_name. Bump pubspec first (docs/RELEASING.md § Versioning), then tag that commit."
               exit 1
             fi
-            internal_only=false
+            # Only a tag PUSH releases to external testers and App Review.
+            # "Run workflow" started on a tag keeps the box's answer.
+            if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+              internal_only=false
+            else
+              internal_only=${INTERNAL_ONLY_INPUT:-true}
+            fi
           else
             is_tag=false
             name=$pub_name
@@ -643,9 +657,13 @@ jobs:
           else
             echo "::warning::no R8 mapping.txt at $mapping after the app bundle build"
           fi
-          # The APK is for the friends who sideload (scripts/build_share_apk.sh
-          # rationale: arm64 only, a third of the size of the fat APK).
-          flutter build apk --release --split-per-abi \
+          # The APK is for the friends who sideload: ONE arm64 APK, a third
+          # of the size of the fat APK. --target-platform, not
+          # --split-per-abi: a split APK's versionCode is 2000 + the build
+          # number, so it could never upgrade to or from the Play build
+          # (app/build.gradle.kts keeps the plugins' other-ABI libraries
+          # out, so a 32-bit phone refuses it instead of crashing).
+          flutter build apk --release --target-platform android-arm64 \
             --build-name "$BUILD_NAME" --build-number "$BUILD_NUMBER" \
             --split-debug-info=build/android/symbols
           ls -la build/app/outputs/bundle/release/ build/app/outputs/flutter-apk/
@@ -663,6 +681,23 @@ jobs:
             exit 1
           fi
           grep -E '^Owner:|SHA256:' "$RUNNER_TEMP/aab-cert.txt" | head -n 2
+          # The sideload APK: same signer as the bundle, the bundle's
+          # versionCode (no per-ABI offset), arm64 code only.
+          apk=build/app/outputs/flutter-apk/app-release.apk
+          keytool -printcert -jarfile "$apk" > "$RUNNER_TEMP/apk-cert.txt"
+          aab_sha=$(grep -m1 'SHA256:' "$RUNNER_TEMP/aab-cert.txt" | tr -d '[:space:]')
+          apk_sha=$(grep -m1 'SHA256:' "$RUNNER_TEMP/apk-cert.txt" | tr -d '[:space:]')
+          [ -n "$apk_sha" ] && [ "$apk_sha" = "$aab_sha" ] \
+            || { echo "::error::app-release.apk is not signed with the same key as the bundle"; exit 1; }
+          aapt2=$(ls -d "$ANDROID_HOME"/build-tools/*/ | sort -V | tail -n 1)aapt2
+          badging=$("$aapt2" dump badging "$apk")
+          code=$(sed -n "s/.*versionCode='\([0-9]*\)'.*/\1/p" <<< "$badging" | head -n 1)
+          abis=$(sed -n "s/^native-code: //p" <<< "$badging" | tr -d "'")
+          [ "$code" = "$BUILD_NUMBER" ] \
+            || { echo "::error::app-release.apk has versionCode $code, expected $BUILD_NUMBER (the Play bundle's)"; exit 1; }
+          [ "$abis" = "arm64-v8a" ] \
+            || { echo "::error::app-release.apk carries native code for '$abis', expected arm64-v8a only (app/build.gradle.kts arm64OnlyApk)"; exit 1; }
+          echo "app-release.apk: versionCode $code, $abis, same signer as the bundle"
           # The bundle's mapping is the copy taken right after the appbundle
           # build (the APK build has since overwritten
           # build/app/outputs/mapping/release/mapping.txt with its own). Play
@@ -699,8 +734,7 @@ jobs:
           path: |
             app/build/app/outputs/bundle/release/app-release.aab
             app/build/app/outputs/bundle/release/aab-mapping.txt
-            app/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            app/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            app/build/app/outputs/flutter-apk/app-release.apk
             app/build/app/outputs/mapping/release/mapping.txt
             app/build/android/symbols
           retention-days: 90
@@ -713,10 +747,15 @@ jobs:
   # ---------------------------------------------------------------------------
   # Tags only: the arm64 APK goes on a GitHub Release so the WeChat/APK channel
   # the friends already use keeps working (plus auto-generated notes).
+  # It also waits for the iOS job (always(), so a failed or skipped iOS lane
+  # does not hold the APK back) only to know whether an iOS build exists to
+  # name in the notes.
   github-release:
     name: GitHub Release (APK)
-    needs: [plan, android]
-    if: needs.plan.outputs.is_tag == 'true' && needs.android.outputs.built == 'true'
+    needs: [plan, android, ios]
+    if: >-
+      always() && needs.plan.result == 'success' && needs.plan.outputs.is_tag == 'true'
+      && needs.android.result == 'success' && needs.android.outputs.built == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -724,6 +763,7 @@ jobs:
     env:
       BUILD_NAME: ${{ needs.plan.outputs.build_name }}
       BUILD_NUMBER: ${{ needs.plan.outputs.build_number }}
+      IOS_BUILT: ${{ needs.ios.result == 'success' && needs.ios.outputs.built == 'true' }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -736,7 +776,7 @@ jobs:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          apk=$(find dist -name 'app-arm64-v8a-release.apk' | head -n 1)
+          apk=$(find dist -name 'app-release.apk' | head -n 1)
           [ -n "$apk" ] || { echo "::error::arm64 APK missing from the android artifact"; exit 1; }
           # From the build name, not $TAG: a v1.5.0+7 tag has a '+', which is
           # not a legal release-asset character (GitHub rewrites it).
@@ -744,9 +784,11 @@ jobs:
           cp "$apk" "$asset"
           cat > notes.md <<EOF
           **Android (sideload):** install \`$asset\` (arm64, every phone since ~2017). Builds before v1.5.0 were signed with a debug key, so Android refuses to upgrade over them: uninstall the old BiteWise once (export your log first: Settings → Export), then install this one. Installed from Google Play? Update there, not with this file: the Play build and this APK can carry different signatures, and switching between them needs an uninstall (export your log first).
-
-          **iOS:** TestFlight / App Store build $BUILD_NAME ($BUILD_NUMBER).
           EOF
+          # Only a build this run really uploaded is named.
+          if [ "$IOS_BUILT" = "true" ]; then
+            printf '\n**iOS:** TestFlight / App Store build %s (%s).\n' "$BUILD_NAME" "$BUILD_NUMBER" >> notes.md
+          fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$TAG" "$asset" --clobber --repo "$GITHUB_REPOSITORY"
           else
