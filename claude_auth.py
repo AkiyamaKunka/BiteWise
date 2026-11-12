@@ -26,7 +26,9 @@ import pty
 import re
 import select
 import signal
+import struct
 import subprocess
+import termios
 import threading
 import time
 from pathlib import Path
@@ -143,6 +145,10 @@ def start_session(cli_path: str, env: Dict[str, str]) -> Dict:
     """
     cancel_session()
     master, slave = pty.openpty()
+    # A wide window: with none (0x0) the CLI falls back to 80 columns and
+    # hard-wraps every line, which cut the ~350-character authorize URL
+    # (and would cut the ~108-character token) at the first row break.
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 50, 1000, 0, 0))
     try:
         proc = subprocess.Popen(
             [cli_path, "setup-token"],
@@ -214,7 +220,9 @@ def complete_session(code: str, apply_token) -> Dict:
         return {"error": "that does not look like a valid code"}
 
     try:
-        os.write(sess["fd"], (code + "\n").encode())
+        # Carriage return: the CLI reads its input raw, where only CR is
+        # Enter (a line feed is Ctrl+J and never submits the code).
+        os.write(sess["fd"], (code + "\r").encode())
     except OSError as e:
         _kill_session(sess)
         return {"error": f"could not hand the code to the CLI: {e}"}

@@ -4022,7 +4022,7 @@ abstract class AppLocalizations {
   /// Silent-delete guard: an empty or non-food analysis would hide the meal without the delete confirmation.
   ///
   /// In en, this message translates to:
-  /// **'❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.'**
+  /// **'❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “the noodles were roast duck rice, ~780 kcal”.'**
   String get nlCorrectionUnusable;
 
   /// No description provided for @nlCannotDeleteNoMeals.

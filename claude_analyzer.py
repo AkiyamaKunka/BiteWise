@@ -863,6 +863,19 @@ def analyze_text_prompt(prompt: str, backend: str = "claude",
             env=_cli_env(backend),
         )
         if proc.returncode != 0:
+            # The plan's own refusal (a closed usage window, or a model
+            # that needs credits) is said once, in the CLI's words, like
+            # the photo path does: a generic "no usable result" hid the
+            # reset time (review 1.7.0).
+            refusal = _plan_refusal(proc.stdout)
+            if refusal:
+                log.warning(
+                    f"Claude plan refused the text intent "
+                    f"({'terminal' if refusal.terminal else 'usage window'})"
+                    f": {refusal.reason}")
+                if raise_on_busy:
+                    raise refusal
+                return None
             _log_cli_exit(proc)
             return None
         try:
@@ -884,6 +897,8 @@ def analyze_text_prompt(prompt: str, backend: str = "claude",
             envelope.get("num_turns"),
         )
         return {"result": parsed}
+    except PlanRefused:
+        raise
     except subprocess.TimeoutExpired:
         log.warning(f"Claude CLI text intent timed out after {_timeout_seconds()}s.")
         if raise_on_busy:

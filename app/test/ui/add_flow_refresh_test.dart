@@ -15,6 +15,7 @@ import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/outcome_text.dart' show dayTimeLabel;
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
@@ -208,6 +209,34 @@ void main() {
   });
 
   group('the photo grid', () {
+    // Review 1.7.0: with a "selected photos" (limited) grant, the note and
+    // the scale tip sat in a fixed Column above an Expanded grid; at large
+    // text they took the whole height and no photo could be picked.
+    for (final (size, scale) in const [
+      (Size(320, 568), 53 / 17), // AX5 on an SE (1st gen)
+      (Size(375, 667), 47 / 17), // AX4 on an SE
+    ]) {
+      testWidgets(
+          'limited grant at ${scale.toStringAsFixed(2)}x on '
+          '${size.width.toInt()} pt: the photos are still reachable',
+          (tester) async {
+        final services = makeServices(
+          picker: FakePicker()
+            ..photos = [for (var i = 0; i < 6; i++) _photo('p$i')],
+          photoLibrary: _LimitedLibrary(),
+        );
+        await pumpApp(tester, AddPhotoScreen(services: services),
+            size: size, scale: scale);
+        expect(tester.takeException(), isNull);
+        final cell = find.byKey(const Key('recentPhoto0'));
+        await tester.scrollUntilVisible(cell, 120,
+            scrollable: find.byType(Scrollable).first);
+        expect(cell, findsOneWidget);
+        expect(tester.getSize(cell).height, greaterThan(40),
+            reason: 'a real cell, not a sliver of one');
+      });
+    }
+
     testWidgets('no photos: the shared empty state', (tester) async {
       final services = makeServices(picker: FakePicker()..photos = const []);
       await pumpApp(tester, AddPhotoScreen(services: services));
@@ -658,4 +687,17 @@ void main() {
           closeTo(10 * kPickerMaxTextScale, 0.01));
     });
   });
+}
+
+/// A "selected photos" grant: only [hasFullAccess] is answered.
+class _LimitedLibrary implements PhotoLibrary {
+  @override
+  Future<bool> hasFullAccess() async => false;
+
+  @override
+  Future<bool> requestPermission() async => true;
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('${invocation.memberName}');
 }

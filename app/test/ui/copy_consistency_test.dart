@@ -30,7 +30,7 @@ void main() {
   test('the Log sheet and the no-action reply name the food, not a number',
       () {
     for (final MapEntry(key: tag, value: l) in locales.entries) {
-      for (final text in [l.addFixFooter, l.nlNoActions]) {
+      for (final text in [l.addFixFooter, l.nlNoActions, l.nlCorrectionUnusable]) {
         expect(mealNumber.hasMatch(text), isFalse, reason: '$tag: $text');
       }
     }

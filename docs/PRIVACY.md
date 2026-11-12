@@ -125,8 +125,8 @@ lookup* below.
 
 - *Describe a meal* (for example "I had a bowl of noodles"): your text and
   today's date. No other meals are sent.
-- *Fix or delete a meal* (for example "meal 2 was roast duck" or "delete
-  lunch"): your text, today's date, and the descriptions, items, dates,
+- *Fix or delete a meal* (for example "the noodles were roast duck rice" or
+  "delete lunch"): your text, today's date, and the descriptions, items, dates,
   times and calorie estimates of your meals from the last 7 days so the AI
   can find the meal you mean.
 
@@ -387,7 +387,7 @@ date. Questions: open an issue at
 **随文字请求一起发送的内容：**
 
 - *文字描述一餐*（例如"我吃了一碗面"）：你输入的文字和今天的日期，不发送其他餐食。
-- *修改或删除某餐*（例如"第二餐是烤鸭"或"删掉午饭"）：你输入的文字、今天的日期，以及最近 7 天餐食的描述、食物、日期、时间和热量估算，便于 AI 找到你指的那一餐。
+- *修改或删除某餐*（例如「那碗面其实是烧鸭饭」或「删掉午饭」）：你输入的文字、今天的日期，以及最近 7 天餐食的描述、食物、日期、时间和热量估算，便于 AI 找到你指的那一餐。
 
 设置中的连接检测只会访问所选服务（或你的服务器），发送一条固定的测试消息和一张内置的测试图片；如果你填写了饮食档案，它会随测试图片一起发送。不会发送你的任何照片或餐食。
 

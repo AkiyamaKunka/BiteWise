@@ -2607,7 +2607,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get nlCorrectionUnusable =>
-      '❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.';
+      '❌ That correction didn\'t include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “the noodles were roast duck rice, ~780 kcal”.';
 
   @override
   String get nlCannotDeleteNoMeals =>

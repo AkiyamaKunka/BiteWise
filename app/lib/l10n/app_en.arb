@@ -2174,7 +2174,7 @@
     }
   },
   "nlCannotCorrectNoMeals": "❌ Cannot correct because no meals are logged recently.",
-  "nlCorrectionUnusable": "❌ That correction didn't include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “meal 2 was roast duck rice, ~780 kcal”.",
+  "nlCorrectionUnusable": "❌ That correction didn't include a usable updated analysis, so I left the meal unchanged. Try restating it, e.g. “the noodles were roast duck rice, ~780 kcal”.",
   "@nlCorrectionUnusable": {
     "description": "Silent-delete guard: an empty or non-food analysis would hide the meal without the delete confirmation."
   },

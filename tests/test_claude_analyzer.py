@@ -766,6 +766,27 @@ def test_text_intent_timeout_is_opt_in_like_busy(monkeypatch):
     assert claude_analyzer._CLI_LOCK.locked() is False
 
 
+def test_text_intent_reports_a_plan_refusal_like_the_photo_path(monkeypatch):
+    """Review 1.7.0: a closed usage window (the CLI's 429 envelope, exit 1)
+    made analyze_text_prompt return None, so /api/text_intent answered
+    retry:false 'no usable result' and hid the reset time. It raises the
+    plan's refusal when the caller opts in, as the photo path does."""
+    _configure(monkeypatch)
+    window = json.dumps({"type": "result", "is_error": True,
+                         "api_error_status": 429,
+                         "result": "You have hit your usage limit. "
+                                   "It resets at 3pm."})
+    _fake_run(monkeypatch, stdout=window, returncode=1)
+
+    assert claude_analyzer.analyze_text_prompt("hi") is None
+    assert claude_analyzer._CLI_LOCK.locked() is False
+    with pytest.raises(claude_analyzer.PlanRefused) as refused:
+        claude_analyzer.analyze_text_prompt("hi", raise_on_busy=True)
+    assert "usage limit" in refused.value.reason
+    assert refused.value.terminal is False, "the window reopens on its own"
+    assert claude_analyzer._CLI_LOCK.locked() is False
+
+
 def test_leftover_timeout_is_opt_in_like_busy(monkeypatch):
     _configure(monkeypatch)
     _fake_run(monkeypatch, raise_timeout=True)

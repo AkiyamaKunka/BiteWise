@@ -1952,6 +1952,7 @@ class BackupCoordinator {
     required Duration left,
     required Future<Directory> Function() tempDir,
     BackupTransport transport = const ICloudTransport(),
+    @visibleForTesting DateTime Function()? clock,
   }) async {
     if (left < const Duration(seconds: 8)) return;
     var timeout = left - const Duration(seconds: 5);
@@ -1963,6 +1964,7 @@ class BackupCoordinator {
         transport: transport,
         prefs: prefs,
         tempDir: tempDir,
+        clock: clock,
         uiEngine: false);
     await c._run(_Run(_Kind.headless, timeout: timeout));
   }
