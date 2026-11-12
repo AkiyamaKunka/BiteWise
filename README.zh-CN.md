@@ -3,7 +3,8 @@ Maintainer notes. Nothing in this comment is shown on GitHub.
 
 This is the Simplified Chinese README. It follows README.md section by section,
 with the same facts, links and caveats. Change both files in the same commit.
-The release-tied lines listed at the top of README.md exist here too.
+The release-tied lines and the slide notes at the top of README.md apply here
+too.
 
 Rules for this file:
 1. Screen, button and setting names are copied from app/lib/l10n/app_zh.arb and
@@ -13,9 +14,10 @@ Rules for this file:
    the line. An opening ** right before 「 must start the line or follow a
    space. So a bold label ends before its colon ("**标签**：正文"), and a
    control name in the middle of a sentence gets 「」 and no bold.
-3. The pictures are in docs/readme/zh/ and show the 1.5.0 look in Chinese.
-   Pad the six phone screenshots like the English ones: 14 transparent pixels
-   above and below, 540 x 1201.
+3. The slides are in docs/readme/zh/slides/ and show version 1.6.0 in Chinese,
+   with Chinese demo data (the dumplings, the yogurt bowl). Each slide's alt
+   text and caption describe the Chinese slide, so they are not word-for-word
+   translations of README.md.
 4. docs/PRIVACY.md has a Chinese half, linked here as docs/PRIVACY.md#中文.
    The other linked documents are in English only, and the text says so
    with （英文） after the link, or once at the top of 写给开发者.
@@ -26,7 +28,7 @@ Rules for this file:
    餐食, "portion" is 分量, "estimate" is 估算, "calories" is 热量.
 -->
 
-<p align="center"><a href="README.md">English</a> · <b>简体中文</b></p>
+<p align="center"><a href="README.md" lang="en" hreflang="en">English</a> · <b>简体中文</b></p>
 
 <div align="center">
 
@@ -34,56 +36,226 @@ Rules for this file:
 
 **让食物照片变成你的热量记录。**
 
-一款免费、开源的 iPhone 热量记录应用。像平时一样拍下每一餐，在应用里选一张照片，你选择的 AI 服务就会估算这一餐的热量、蛋白质、碳水和脂肪。每个数字你都可以核对和修改。
+免费、开源的 iPhone 热量记录应用，用你自己选的 AI。
 
 <a href="https://apps.apple.com/app/id6828989410"><img src="https://toolbox.marketingtools.apple.com/api/v2/badges/download-on-the-app-store/black/zh-cn" width="180" alt="在 App Store 下载"></a>
 
-免费 · 无 App 内购买 · iPhone，iOS&nbsp;15 或更高版本
-
-需要准备一个你所选 AI 服务的 Key。默认选中的 Google Gemini 有免费额度。
-
 </div>
 
 <p align="center">
-  <img src="docs/readme/zh/hero.png" width="100%" alt="三个筷拍页面：「记录一餐」面板，带热量圆环和餐食卡片的「今天」页面，以及显示每日总量的「历史」柱状图。">
+  <img src="docs/readme/zh/slides/01-hero.jpg" width="100%" alt="筷拍 Chopstats：让食物照片变成你的热量记录。一张酸奶碗的照片，旁边是「今天」页面，放大的餐食卡片是一个估算示例，列出热量、蛋白质、碳水、脂肪和每种食物的份量。">
 </p>
-
-<p align="center"><sub>截图来自 App Store 版本 1.5.0，内容为演示数据。</sub></p>
 
 <div align="center">
 
-筷拍不需要账户，没有广告，不做追踪。饮食记录保存在你的手机上。你记录的照片和文字描述会发送给你选择的 AI 服务，开发者不会收到你的任何数据。
+免费 · 无 App 内购买 · iPhone，iOS&nbsp;15 或更高版本
 
-[开始使用](#开始使用) · [费用](#费用) · [隐私](#隐私)
+**1.6 新增**：「我常吃的」 · 「餐厅营养」（美国连锁餐厅，默认关闭） · Meta 眼镜拍的照片
 
-<sub>支持简体中文和英文 · 未在中国大陆区 App Store 上架 · Android：未上架 Google Play，开发者可以<a href="#android">从源码构建</a></sub>
+需要准备一个你所选 AI 服务的 Key。默认选中的 Google Gemini 有免费额度。
+
+[开始使用](#开始使用) · [费用](#费用) · [隐私](#隐私) · [Android](#android)
+
+<sub>截图来自 1.6 版本，内容为演示数据。食物照片来自 Unsplash，致谢见页尾。</sub>
 
 </div>
 
-## 开始使用
-
-1. **下载应用**：从 [App Store](https://apps.apple.com/app/id6828989410) 下载筷拍（中国大陆区 App Store 未上架）。
-2. **准备一个 API Key**：Key 是你在 AI 服务商网站上创建的一串字符。应用默认选中 Google Gemini，它有免费额度。各家的 Key 在哪里创建，见[支持页面](docs/SUPPORT.md#getting-started-bring-your-own-key)（英文）。如果产生费用，你付给的是服务商，不是筷拍。
-3. **粘贴 Key**：打开「设置 › AI 服务 › API Key」，把 Key 粘贴进去。然后返回上一页，点「测试当前服务」。第一次发送任何内容之前，应用会先征求你的同意，点「允许」。
-4. **记录一餐**：打开「今天 › 记录 › 从最近照片选择」，选一张餐食照片。你的 AI 会识别菜品，并估算热量、蛋白质、碳水和脂肪。核对这些数字，看着不对的就改掉。
-
-## 主要功能
-
-- **用照片记录一餐**：从最近照片里选一张，或者从「照片」应用分享进来。
-- **需要的话，可以打开自动记录**：「监控相册」这项设置会自动记录新的食物照片，默认关闭。开启期间，每一张新照片，不管拍的是不是食物，都会发送给你的 AI 服务商，由它判断照片里是不是一餐。
-- **核对 AI 的假设**：应用要求 AI 写明估算时假设的分量，例如“米饭（~150 克）”，还要求它先读营养成分表或印出来的重量，然后才凭目测估算。
-- **每个数字都可以改**：点开某一餐直接编辑，或者输入一句修改，例如“第二餐是烤鸭”。
-- **扣除剩菜**：拍下没吃完的部分，这一餐的热量会减为你实际吃掉的量。
-- **不用照片也能记**：用文字描述一餐，例如“一碗牛肉面加一个鸡蛋”，你的 AI 能读懂的语言都可以。也可以自己输入数字，不用 AI，也不需要 Key。
-- **看清今天，也看清趋势**：「今天」把已摄入的热量和你的日常水平放在一起对照。「历史」可以回看 30 天。「身体」把体重画成趋势图，并记录腰围、胸围和臀围。每日总结通知可开可关。
+<br>
 
 <p align="center">
-  <img src="docs/readme/zh/today.png" width="250" hspace="8" alt="「今天」页面。热量圆环把今天已摄入的热量和日常水平放在一起，下面是蛋白质、碳水和脂肪的进度条。再往下是餐食卡片，列出每样食物、估算时假设的分量和热量。">
-  <img src="docs/readme/zh/editor.png" width="250" hspace="8" alt="「编辑这一餐」页面。可以填写这一餐的名称、日期和时间，以及热量、蛋白质、碳水和脂肪的总计。一条色带显示蛋白质、碳水和脂肪各占多少热量，下面每样食物一行，都可以修改。">
+  <img src="docs/readme/zh/slides/02-how.jpg" width="100%" alt="拍照，估算，核对。第一步「拍照」：照常拍照，在应用里选一张，或者从「照片」分享进来（一叠餐食照片，最上面是酸奶碗）。第二步「估算」：AI 识别每样食物，写明假设的分量，估算热量、蛋白质、碳水和脂肪（「今天」页面，酸奶碗的卡片被高亮）。第三步「核对」：看着不对的，直接改（「编辑这一餐」页面）。">
 </p>
 
+<div align="center">
+
+### 使用方法
+
+照常拍下每一餐，然后在筷拍里选一张，或者从「照片」分享进来。你的 AI 会识别每样食物，写明假设的分量，估算热量、蛋白质、碳水和脂肪，再由你核对。
+
+<sub>筷拍没有内置相机，照片来自「相机」。第一次发送前，应用会先征求你的同意。填写「饮食偏好」（例如“素食”），AI 分析每张照片时都会参考。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/03-control.jpg" width="100%" alt="分量写明白，数字随你改。每样食物都写明 AI 假设的分量，估错了一眼就能看出来。改数字：热量、蛋白质、碳水、脂肪都能改；或者打一句话，让 AI 帮你改；没吃完？拍下剩菜，扣掉没吃的部分。「编辑这一餐」页面，其中一行被放大：希腊酸奶（~200 克），150 千卡、蛋白质 20 克、碳水 8 克、脂肪 4 克，每个数字都可以改。旁边是一句打字修改：「那份沙拉其实没放酱」。">
+</p>
+
+<div align="center">
+
+### 数字由你掌握
+
+每样食物都写明 AI 假设的分量，例如“希腊酸奶（~200 克）”，估错了一眼就能看出来。每个数字都可以改，也可以直接打一句修改，例如「那份沙拉其实没放酱」。
+
+<sub>没吃完？在「今天 › 记录 › 记录剩菜」里拍下剩下的部分，这一餐会减为你实际吃掉的量。应用要求 AI 先读营养成分表或印出来的重量，再凭目测估算。估算可能有误，这款应用的准确度没有人测量过。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/10-privacy.jpg" width="100%" alt="饮食记录保存在你的手机上。无需账户，没有广告，不做追踪。开发者收不到你的任何数据。示意图：你的 iPhone 上有你的饮食记录、体重和围度、设置，以及存在 iOS 钥匙串里的 API Key。一条箭头标着“你记录的照片或文字，以及必要的上下文”，指向你选的 AI 服务商或者你自己的服务器，以它的条款为准。一条虚线标着“什么都不发”，指向虚线框：筷拍服务器：没有，没有统计分析，没有广告。上方是「设置」里的「AI 服务」（Claude）和「停止发送给 Claude」，标注“随时可以停下”。「餐厅营养」打开后另有接收方，详见隐私政策。">
+</p>
+
+<div align="center">
+
+### 无需账户，没有广告，不做追踪
+
+你的餐食、体重和设置保存在你的手机上，开发者收不到你的任何数据。你记录的照片和文字，会发送给你选的 AI 服务商，或者你自己的服务器。
+
+<sub>第一次发送前，应用会先征求同意；「停止发送给 …」随时可以停下。「监控相册」开启期间会发送每一张新照片，「餐厅营养」打开后另有接收方。详见[隐私](#隐私)。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/11-cost.jpg" width="100%" alt="应用免费，没有订阅。用你自己选的 AI 的 Key；如果收费，费用直接付给服务商，不付给应用。无 App 内购买；自己输入数字不需要 Key。卡片“可以用这些服务商的 Key”：Google Gemini、OpenAI、Anthropic、xAI、OpenRouter、DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包、GLM 智谱，或者你自己的服务器。默认的 Google Gemini 有免费额度；按 Google 的说法，使用免费额度时，它可能把你发送的内容用于改进自己的产品。DeepSeek、通义千问、豆包和智谱在中国大陆处理数据。价格会变，请查看服务商的定价页面。">
+</p>
+
+<div align="center">
+
+### 用你自己的 AI Key
+
+应用免费，没有订阅，应用内也不出售任何东西。你用自己所选 AI 服务的 Key；如果收费，费用直接付给服务商。
+
+<sub>支持 Google Gemini、OpenAI、Anthropic、xAI、OpenRouter、DeepSeek 深度求索、Qwen 通义千问、Doubao 豆包和 GLM 智谱，也可以用你自己的服务器。默认的 Gemini 有免费额度。详见[费用](#费用)。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/06-usual.jpg" width="100%" alt="1.6 新增。常吃的，点一下就记。常记的餐会出现在「我常吃的」里，点一下就再记一次：不用拍照，不用 AI，不发送任何内容。「我常吃的」页面分为「这个时间常吃的」和「其他」，每一项都有热量和营养素，例如鸡肉凯撒沙拉，最近 90 天里有 17 天记过。旁边是一张冰拿铁照片，以及下次再拍到它时出现的卡片：「你平时的数值」，冰拿铁：AI 160 → 你平时的 120 千卡，按钮是「采用我的数值」和「保留 AI 估算」。如果你自己设过某种食物的数值，之后再拍到它时，筷拍可能会建议改用；你确认之前不会改动。">
+</p>
+
+<div align="center">
+
+### 「我常吃的」 · 1.6 新增
+
+最近 90 天里至少有 2 天记过的餐，会出现在「今天 › 记录 › 我常吃的」里。点一下就再记一次：不用拍照，不用 AI，不发送任何内容。
+
+<sub>如果你自己设过某种食物的数值，之后再拍到它时，筷拍可能会以「你平时的数值」建议改用。你点「采用我的数值」之前不会改动。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/07-restaurant.jpg" width="100%" alt="1.6 新增，默认关闭。连锁餐厅？用它公布的数值。深色模式的编辑页，放大的 Chipotle 卡片显示「已采用公布的数值」：鸡肉 4 oz，180 千卡；下方是 Source: chipotle.com，以及「改用 AI 估算」和「不是这家」按钮。演示数据，与图中餐厅没有任何关联。">
+</p>
+
+<div align="center">
+
+### 「餐厅营养」 · 1.6 新增
+
+在美国连锁餐厅吃饭时拍下的餐，你的 AI 可以查找该连锁店公布的营养信息，用它代替自己的估算。这一餐会注明来源，你可以撤销，也可以点「不是这家」。
+
+<sub>默认关闭。只查在美国吃的餐，内置 403 家连锁店名单。需要 Anthropic 或 OpenRouter 的 Key，或者使用 Claude 套餐的你自己的服务器；Gemini 暂不支持。只有连锁店官网公布了数值且匹配明确时，才会替换 AI 的数值；否则只给出建议，使用你自己的服务器时也一律只给建议。公布的份量可能和你吃的量不一致。图中为演示数据，筷拍与该餐厅没有任何关联。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/08-watch.jpg" width="100%" alt="默认关闭。拍下就好，自动记录。打开「监控相册」，新的食物照片会自动记录。四张照片：煎饺、酸奶碗和冰拿铁都标着“已记录”，一张公园插画标着“已发送，不是一餐”。开启期间，每一张新照片都会发送给你的 AI，由它判断是不是一餐；后台扫描何时运行由 iOS 决定。旁边是「设置」页面：「监控相册」和「包括 Meta 眼镜拍的照片」都已打开，「补扫回溯」为 2 天。">
+</p>
+
+<div align="center">
+
+### 「监控相册」
+
+开启后，新的食物照片会自动记录，不用打开应用。开启期间，每一张新照片，不管是不是食物，都会发送给你的 AI，由它判断是不是一餐。
+
+<sub>默认关闭。后台扫描由 iOS 决定何时运行，新照片不一定马上记录；打开应用时会补扫。需要访问所有照片的权限，并打开「后台 App 刷新」。打开开关时还会发送最近的照片，往回看多少天由「补扫回溯」决定（默认 2 天）。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/09-glasses.jpg" width="100%" alt="1.6 新增。Meta 眼镜拍的照片，也能记。Meta AI 应用存进相册的眼镜照片，先在 iPhone 上检查有没有食物，再记录。流程：Meta AI 应用把眼镜拍的照片存进你的相册；筷拍发现这张新照片；食物检查在 iPhone 上完成，检查之前什么都不发送；有食物，就发送给你的 AI 并记录；没有食物，就不发送。上方是「设置 › 照片」，「监控相册」和「包括 Meta 眼镜拍的照片」都已打开。需要打开「监控相册」。如果食物检查无法运行，照片会像普通照片一样发送。筷拍不连接眼镜。">
+</p>
+
+<div align="center">
+
+### Meta 眼镜拍的照片 · 1.6 新增
+
+打开「监控相册」后，Meta AI 应用从眼镜存进相册的照片，会先在 iPhone 上检查有没有食物。有食物的发送给你的 AI 并记录，没有食物的不发送。
+
+<sub>筷拍不连接眼镜。检查在手机上进行，也可能判断错；如果检查无法运行，照片会像普通照片一样发送。可以在「设置 › 照片」里关闭「包括 Meta 眼镜拍的照片」；你自己选择或分享进来的照片仍会发送。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/05-no-photo.jpg" width="100%" alt="没有照片，也能记。用你的 AI 读得懂的任何语言描述一餐，或者自己输入数字。文字描述一餐，比如“一碗牛肉面加一个鸡蛋”；手动输入：不用 AI，不需要 Key，离线也能用。「记录一餐」面板的六行：从最近照片选择、我常吃的（不用 AI）、记录剩菜（扣除没吃完的部分）、文字描述一餐（任何语言）、手动输入（不用 AI）、修改或删除某餐，其中「文字描述一餐」和「手动输入」被高亮。">
+</p>
+
+<div align="center">
+
+### 不拍照也能记
+
+用文字描述一餐，例如“一碗牛肉面加一个鸡蛋”，你的 AI 读得懂的语言都可以。也可以自己输入数字：不用 AI，不需要 Key，离线也能用。
+
+<sub>文字描述会把你输入的文字和今天的日期发送给你的 AI。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/04-trend.jpg" width="100%" alt="看清今天，也看清趋势。「今天」对照日常水平，「历史」回看 30 天，「身体」记录体重和围度。三台深色模式的手机：「今天」显示已摄入 1,530 千卡，日常水平约 1,552 千卡；「历史」是每日热量柱状图，平均每天约 1,589 千卡；「身体」是降到 77.1 kg 的体重趋势，以及腰围、胸围和臀围。">
+</p>
+
+<div align="center">
+
+### 今天和趋势
+
+「今天」把吃了多少和你的日常水平放在一起对照，「历史」回看 30 天，「身体」记录体重以及腰围、胸围和臀围。
+
+<sub>日常水平由此前 7 天的记录算出，你也可以设定「每日热量目标」。此外还有可开可关的每日总结通知、把今天分享为一张图片，以及跟随系统的浅色和深色模式。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/12-languages.jpg" width="100%" alt="支持简体中文和英文。每个页面都有中英文。描述一餐时，用你的 AI 读得懂的任何语言都行。两台手机并排，分别标着“简体中文”和“English”，各自显示这种语言的「今天」页面，两边是煎饺和酸奶碗的照片。">
+</p>
+
+<div align="center">
+
+### 简体中文和英文
+
+每个页面都有简体中文和英文。可以在「设置 › 语言」里选择，或者选「跟随系统」；描述一餐时，用你的 AI 读得懂的任何语言都行。
+
+<sub>未在中国大陆区 App Store 上架。</sub>
+
+</div>
+
+<br>
+
+<p align="center">
+  <img src="docs/readme/zh/slides/14-get.jpg" width="100%" alt="筷拍 Chopstats。免费下载，代码公开。在 App Store 免费下载，在 GitHub 上读每一行代码。iPhone，iOS 15 或更高版本；MIT 许可；Android：GitHub 上的 APK。下方是一排深色模式的手机，显示「身体」「今天」和「历史」，两边是煎饺和鸡肉卷饼碗的照片。">
+</p>
+
+<div align="center">
+
+### 获取筷拍
+
+**[在 App Store 下载](https://apps.apple.com/app/id6828989410)** · [从源码构建](#从源码构建) · [Android APK](#android)
+
+<sub>iPhone，iOS 15 或更高版本 · MIT 许可 · Android：GitHub Releases 上有适用于 arm64 手机的签名 APK，未上架 Google Play</sub>
+
+</div>
+
+<br>
+
 <details>
-<summary><b>更多功能和截图</b></summary>
+<summary><b>更多功能</b></summary>
 
 这里列出的功能，App Store 版本里都有。
 
@@ -93,7 +265,8 @@ Rules for this file:
 - **订单、小票和营养成分表**：应用还要求 AI 读取外卖订单确认页、小票或营养成分表上的文字，据此记录一餐。效果如何，取决于你选的 AI。
 - **饮食偏好**：写一句话，例如“素食”或“家常菜，少油”，AI 分析每张照片时都会参考。
 - **剩菜的两种记法**：如果你的 AI 认出照片里是当天早些时候记录过的某一餐剩下的，应用会扣减那一餐，不会再多记一餐。你也可以在「今天 › 记录 › 记录剩菜」里自己选是哪一餐、用哪张剩菜照片，今天和昨天的餐食都可以选。
-- **用你自己的话修改**：在「今天 › 记录 › 修改或删除某餐」里输入“第二餐是烤鸭”或“删除第一餐”。删除一餐之前，应用一定会先请你确认。
+- **用你自己的话修改**：在「今天 › 记录 › 修改或删除某餐」里输入「那碗面其实是烧鸭饭」或「删除刚才那杯咖啡」。删除一餐之前，应用一定会先请你确认。
+- **隐藏不再吃的**：在「我常吃的」里点「不在列表里显示」，就能把你不再吃的食物从列表里去掉。
 
 **照片**
 
@@ -118,17 +291,14 @@ Rules for this file:
 - **导出**：「设置 › 你的数据 › 导出数据…」会生成一个 JSON 文件，里面有你的餐食、体重和身体围度，以及已处理照片的列表。设置、饮食偏好、缩略图和 API Key 不在文件里。
 - **导入**：在另一台手机上打开「导入数据…」，粘贴文件里的文字，或者点「从剪贴板导入」。导入只会补上缺少的内容，已有的餐食不会重复。
 
-<p align="center">
-  <img src="docs/readme/zh/log.png" width="250" hspace="8" alt="「记录一餐」面板，共五行：从最近照片选择、记录剩菜、文字描述一餐、手动输入、修改或删除某餐。">
-  <img src="docs/readme/zh/history.png" width="250" hspace="8" alt="「历史」页面。每日热量的柱状图和平均值，下面每天一行，显示当天的总量。">
-</p>
-
-<p align="center">
-  <img src="docs/readme/zh/body.png" width="250" hspace="8" alt="「身体」页面。最新体重和体重趋势图，下面是腰围、胸围和臀围，以及按日期排列的历史记录。">
-  <img src="docs/readme/zh/watch.png" width="250" hspace="8" alt="「设置」页面。「AI 服务」一行下面是「停止发送给 Gemini」一行。「监控相册」已打开，下方的说明写着：新照片会发送给你选择的 AI 服务，后台扫描由 iOS 决定何时运行。">
-</p>
-
 </details>
+
+## 开始使用
+
+1. **下载应用**：从 [App Store](https://apps.apple.com/app/id6828989410) 下载筷拍（中国大陆区 App Store 未上架）。
+2. **准备一个 API Key**：Key 是你在 AI 服务商网站上创建的一串字符。应用默认选中 Google Gemini，它有免费额度。各家的 Key 在哪里创建，见[支持页面](docs/SUPPORT.md#getting-started-bring-your-own-key)（英文）。如果产生费用，你付给的是服务商，不是筷拍。
+3. **粘贴 Key**：打开「设置 › AI 服务 › API Key」，把 Key 粘贴进去。然后返回上一页，点「测试当前服务」。第一次发送任何内容之前，应用会先征求你的同意，点「允许」。
+4. **记录一餐**：打开「今天 › 记录 › 从最近照片选择」，选一张餐食照片。你的 AI 会识别菜品，并估算热量、蛋白质、碳水和脂肪。核对这些数字，看着不对的就改掉。
 
 > [!NOTE]
 > 热量和营养数据是 AI 根据照片和描述做出的估算，可能有误，请核对并修改。筷拍不是医疗器械，不提供医疗或营养建议。做出健康相关决定前，请咨询医生或注册营养师。
@@ -148,48 +318,43 @@ Rules for this file:
 交给 AI 分析的照片和文字，会发送给你的 AI 服务商。如果你运行了自己的服务器，则发送到那台服务器。应用还会附上 AI 需要的上下文，例如你的饮食偏好，或当天其他餐食的简短摘要。
 
 - **照片不带位置**：应用发送的那份副本，不含拍摄地点和其他隐藏信息（元数据）。
-- **「监控相册」开启期间会发送每一张新照片**：包括不是食物的照片。
+- **「监控相册」开启期间会发送每一张新照片**：包括不是食物的照片。在 iPhone 上，Meta 眼镜拍的照片会先在手机上检查有没有食物，没有食物的不会发送。
+- **「餐厅营养」另有接收方**：它默认关闭，会在单独的页面上征求你的同意，并写明查询发给谁。
 - **先征求同意**：第一次向某家服务商发送任何内容之前，应用会弹出对话框，写明公司名称和要发送的内容。
-- **你可以停止发送**：在「设置」里点「停止发送给 …」（后面是当前服务商的名称），应用就不再向这家服务商发送任何内容，「监控相册」也会关闭。
+- **你可以停止发送**：在「设置」里点「停止发送给 …」（后面是当前服务商的名称），应用就不再向这家服务商发送任何内容，包括还在等待发送的照片和发给它的餐厅查询，「监控相册」也会关闭。
 - **以服务商自己的条款为准**：它如何处理你的数据，由它的隐私政策决定。免费额度的条款可能不一样，[Gemini 就是如此](#费用)。
 
 <details>
 <summary><b>逐项说明：每种情况下发送了什么</b></summary>
 
-这份清单针对 App Store 版本。接收方始终是你选择的 AI 服务商，或你自己的服务器。其中有两个会把数据再转交出去：OpenRouter 转交给你所选模型的厂商，你自己的服务器转交给服务器上登录的 AI 套餐。
+这份清单针对 App Store 版本。除了「餐厅营养」，接收方始终是你选择的 AI 服务商，或你自己的服务器。其中有两个会把数据再转交出去：OpenRouter 转交给你所选模型的厂商，你自己的服务器转交给服务器上登录的 AI 套餐。
 
 - **用照片记录时**：一份缩小的照片副本，不含拍摄地点和其他元数据。一起发送的还有你的饮食偏好（如果你填写了），以及当天其他餐食的简短摘要，最多五餐。
 - **打开「监控相册」时**：同上，对象是相册里的每一张新照片，不管是不是食物。打开开关时还会发送最近的照片，往回看多少天由「补扫回溯」这项设置决定。
+- **「监控相册」遇到 Meta 眼镜拍的照片时**：应用会识别 Meta AI 应用存进相册的照片。在 iPhone 上，苹果系统自带的图像分类器会先在手机上检查每一张有没有食物，没有食物的照片不会发送；如果检查无法运行，照片会像普通照片一样发送。Android 上没有这项检查。关闭「包括 Meta 眼镜拍的照片」，就不再自动记录这类照片。
 - **记录剩菜时**：剩菜照片，以及你选的那一餐。
 - **用文字描述一餐时**：你输入的文字和今天的日期。
 - **输入一句修改，或要求删除某餐时**：你输入的文字、今天的日期，以及最近 7 天的餐食。
 - **点「测试当前服务」时**：一条固定的测试消息和一张内置的测试图片。如果你填写了饮食偏好，也会一起发送。不会发送你的任何照片或餐食。
+- **打开「餐厅营养」时**：对在美国吃的餐，发送内置名单里最多三家连锁店的名称、食物名称和份量、国家代码 US 以及回复语言。它们发给你的 AI 服务，由它在网上查找该连锁店公布的营养信息：Anthropic；或者 OpenRouter，它会转交给你所选模型的厂商，并通过合作方 Exa 搜索；或者你自己的服务器，用 Claude 网页搜索。其他服务商不做查询。在附近找到的连锁店，说明你到过它附近。查询绝不发送照片、拍摄位置、饮食偏好或你的饮食记录。打开「使用照片位置」后，iPhone 会读取餐厅或外卖照片的拍摄位置；如果是在餐厅吃的，还会向 Apple 地图查询附近的餐饮场所。Apple 会收到这个位置，和你使用地图时一样。
 - **使用你自己的服务器时**：同样的数据会发送到你运行的那台服务器。只要保存了服务器地址，应用还会把日期发给它，用来请求当天的 Garmin 活动摘要。
 
 应用不会向开发者发送任何内容。API Key 保存在 iOS 钥匙串里，也就是 iPhone 上存放密码和密钥的受保护区域。在 Android 上，Key 保存在由 Android Keystore 保护的加密存储里。手机自身的备份可能包含应用的数据。
 
-餐厅营养查询还不在 App Store 版本里。它默认关闭，会在单独的页面上征求你的同意，数据的接收方也另有一份名单。隐私政策里已经列出了这些接收方。
-
 </details>
 
-你可以随时把数据导出为文件。完整细节见[隐私政策](docs/PRIVACY.md#中文)。
+你可以随时把数据导出为文件。完整细节见[隐私政策](docs/PRIVACY.md#中文)，其中也写明了[餐厅营养查询](docs/PRIVACY.md#餐厅营养查询只有你开启后才会使用)的细节。
 
 ## Android
 
-筷拍没有上架 Google Play，当前版本也还没有可以下载的 Android 安装包。本仓库里的 Android 代码是最新的，开发者可以[从源码构建应用](#从源码构建)。
+筷拍没有上架 Google Play。1.6.0 版放在 [Releases 页面](https://github.com/AkiyamaKunka/Chopstats/releases/tag/v1.6.0)上，是一个 APK（Android 的安装文件）：`Chopstats-v1.6.0-b106-arm64-v8a.apk`，约 22 MB。它由本仓库的发布流程从 `v1.6.0` 标签构建并签名，和 iPhone 版是同一份代码。
 
-<details>
-<summary><b>2026 年 8 月的一个旧预览版</b></summary>
+- **只适用于 arm64 手机**：32 位处理器的手机会拒绝安装。
+- **需要你自己安装**：Android 会要求你允许从浏览器或文件管理器安装应用。应用不会自动更新，新版本发布后，请从 Releases 页面安装新的 APK。
+- **从 1.4.0 预览版升级**：那是 2026 年 8 月的版本，用的还是旧名字 Bitewise。它发送照片时会带上照片里嵌入的元数据（如果相机记录了拍摄地点，地点也在其中），也不会先征求同意。1.6.0 不能直接覆盖安装它：先在旧版里导出记录，卸载旧版，安装 1.6.0，再打开「设置 › 你的数据 › 导入数据…」。
+- **和 iPhone 版有几处不同**：「餐厅营养」只按印出的品牌查询，绝不读取照片的拍摄位置。Meta 眼镜拍的照片不会先在手机上检查有没有食物，所以打开「监控相册」后，它们会像普通照片一样发送。本页的截图都来自 iPhone。
 
-1.4.0 版放在 [Releases 页面](https://github.com/AkiyamaKunka/Chopstats/releases/tag/v1.4.0)上，是一个 APK（Android 的安装文件），适用于 arm64 手机。它比 iPhone 版早三个月，用的还是旧名字 Bitewise，和本页介绍的应用有这些不同：
-
-- 发送照片时会带上照片里嵌入的元数据。如果相机记录了拍摄地点，地点也在其中。
-- 没有征求同意的对话框，「监控相册」开始发送照片之前不会提示，也没有「停止发送给 …」这一项。
-- 九家服务商里只有六家（没有 DeepSeek、xAI 和 OpenRouter），也没有每日热量目标。
-
-今后的 Android 版本不能直接覆盖安装。你需要先卸载这个旧版，所以升级前请先导出数据。
-
-</details>
+开发者也可以[从源码构建应用](#从源码构建)。
 
 ## 常见问题
 
@@ -200,7 +365,7 @@ Rules for this file:
 
 针对误差，应用做了三件事。第一，要求 AI 优先采用印出来的数字，其次才是猜测。第二，要求 AI 把假设的分量写进每样食物的名称里，假设错了你能看出来。第三，每个数字你都可以改。
 
-优先采用印出来的数字，是一条[写给 AI 的指令](shared/prompts/estimation_priority.txt)（英文）。效果如何，取决于你选的 AI。应用不会显示某个数字的来源，比如是来自营养成分表，还是目测估算。
+优先采用印出来的数字，是一条[写给 AI 的指令](shared/prompts/estimation_priority.txt)（英文）。效果如何，取决于你选的 AI。除了「餐厅营养」会注明数值来自连锁店的哪个页面，应用不会显示某个数字的来源，比如是来自营养成分表，还是目测估算。
 
 </details>
 
@@ -230,26 +395,20 @@ DeepSeek、Qwen、Doubao 和 GLM 在中国大陆处理数据。在你允许之�
 
 ## 即将推出
 
-已经做好，也在公开的代码里，但还不在 App Store 版本中：
+已经做好，也在 `main` 分支公开的代码里，但还不在 App Store 版本中，也都还没有发布日期：
 
-- **「我常吃的」**：你常吃的食物，点一下就能再记一次。不用拍照，也不用 AI。
-- **餐厅营养查询**：如果是美国连锁餐厅的餐食，应用可以查找餐厅公布的营养信息。这项功能默认关闭，需要 Anthropic 或 OpenRouter 的 Key，或者你自己的服务器。
+- **原生 iOS 外观**：iOS 风格的新界面。
+- **「iCloud 备份」**：把你的记录复制到你自己的 iCloud 云盘，删除应用或换新 iPhone 后记录仍在，不需要账户，也不经过我们的任何服务器。它默认开启，第一次备份前会先显示一条说明，你回答之前不会上传任何内容。
 
 ## 写给开发者
 
-筷拍是一个面向 iPhone 和 Android 的 Flutter 应用，代码在 `app/`。仓库根目录还有一个可选的 Python 服务器，由你自行部署。本节链接的文档目前只有英文。
+筷拍是一个面向 iPhone 和 Android 的 Flutter 应用，代码在 `app/`。仓库根目录还有一个可选的 Python 服务器，由你自行部署。App Store 上的 1.6.0 版由 [`v1.6.0`](https://github.com/AkiyamaKunka/Chopstats/tree/v1.6.0) 标签构建，你可以对照实际发布的代码核实本页的说法。`main` 分支上已经是下一个版本。本节链接的文档目前只有英文。
 
 <p>
   <a href="https://apps.apple.com/app/id6828989410"><img src="https://img.shields.io/itunes/v/6828989410?label=version" width="96" alt="App Store 当前版本"></a>
   <a href="https://github.com/AkiyamaKunka/Chopstats/actions/workflows/python-tests.yml"><img src="https://img.shields.io/github/actions/workflow/status/AkiyamaKunka/Chopstats/python-tests.yml?branch=main&amp;label=tests" width="88" alt="main 分支的测试状态"></a>
   <a href="LICENSE"><img src="https://img.shields.io/github/license/AkiyamaKunka/Chopstats" width="78" alt="MIT 许可证"></a>
 </p>
-
-- **两套实现，保持一致**：Dart 应用和 Python 服务器不共用任何运行时代码。一份[行为规范](docs/APP_PORT_SPEC.md)为每条规则标出文件和行号，并列出有意保留的差异。[共享的常量和提示词](shared/)会为两边分别生成代码，两套测试回放的是同一批 [golden vectors](shared/vectors/)（标准测试向量）。
-- **服务商的报错，用同一套说法**：一个[一致性测试](app/test/analyzer/provider_feedback_matrix_test.dart)把每家服务商的错误响应对照八类故障逐一检查。账户余额用完的用户，看到的提示是去充值，而不是重新创建 Key。
-- **每张照片都记入台账**：照片以原始字节的 md5 作为标识，在五种状态之间流转。同一个文件不会分析两次。你删除一餐之后，监控也不会把它再记一遍。
-
-每次推送，两套测试都会在 CI 里运行。2026-11-10 在 `main` 分支上统计，Dart 测试超过 3,500 个，Python 测试超过 2,300 个。架构图和细节见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：照片处理流程、拍摄日期的判定、剩菜的计算，以及服务器运维手册。
 
 ### 从源码构建
 
@@ -262,8 +421,19 @@ flutter run
 
 需要安装 Flutter，自带的 Dart SDK 须为 3.12.2 或更高版本。然后按[开始使用](#开始使用)里的步骤，在应用里添加 Key。
 
-- **装到 iPhone 真机**：用 Xcode 打开 `app/ios/Runner.xcworkspace`，设置你的签名团队。把两个 Bundle Identifier 和 App Group 改成你自己的，因为工程里现有的属于 App Store 上的那个应用。
+- **装到 iPhone 真机**：用 Xcode 打开 `app/ios/Runner.xcworkspace`，设置你的签名团队。把两个 Bundle Identifier、App Group 和 iCloud 容器改成你自己的，因为工程里现有的属于 App Store 上的那个应用。
 - **构建 Android APK**：在仓库根目录运行 `bash scripts/build_share_apk.sh`。脚本会在 `~/Desktop/Chopstats-share/` 里生成一个 arm64 的 APK。Android 构建需要 JDK 17。在 Linux 上，请先设置 `JAVA_HOME`。
+
+<details>
+<summary><b>它是怎么构建和测试的</b></summary>
+
+- **两套实现，保持一致**：Dart 应用和 Python 服务器不共用任何运行时代码。一份[行为规范](docs/APP_PORT_SPEC.md)为每条规则标出文件和行号，并列出有意保留的差异。[共享的常量和提示词](shared/)会为两边分别生成代码，两套测试回放的是同一批 [golden vectors](shared/vectors/)（标准测试向量）。
+- **服务商的报错，用同一套说法**：一个[一致性测试](app/test/analyzer/provider_feedback_matrix_test.dart)把每家服务商的错误响应对照八类故障逐一检查。账户余额用完的用户，看到的提示是去充值，而不是重新创建 Key。
+- **每张照片都记入台账**：照片以原始字节的 md5 作为标识，在五种状态之间流转。同一个文件不会分析两次。你删除一餐之后，监控也不会把它再记一遍。
+
+每次推送，两套测试都会在 CI 里运行。2026-11-10 在 `main` 分支上统计，Dart 测试超过 3,500 个，Python 测试超过 2,300 个。架构图和细节见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)：照片处理流程、拍摄日期的判定、剩菜的计算，以及服务器运维手册。
+
+</details>
 
 <details>
 <summary><b>你自己的服务器（可选）</b></summary>
@@ -297,7 +467,7 @@ flutter run
 scripts/test_providers_live.sh
 ```
 
-它会通过应用自己的分析器，向每一家在 `~/.bitewise/provider_keys.env` 里配了 Key 的服务商，发送一张真实的照片和一条真实的文字请求。模板是 `scripts/provider_keys.env.example`，这个文件只留在你自己的机器上。
+它会通过应用自己的分析器，向每一家在 `~/.bitewise/provider_keys.env` 里配了 Key 的服务商，发送一张真实的照片和一条真实的文字请求。模板是 `scripts/provider_keys.env.example`，这个文件保存在你自己的机器上。
 
 没有配 Key 的服务商同样会被探测。真实接口必须拒绝一个无效的 Key，应用也必须把它报告为 Key 的问题。这样可以发现写错的 URL、已经停用的接口，或者被误读的错误。
 
@@ -338,6 +508,7 @@ bash scripts/check_public_safety.sh
 - `docs/SERVER.md`：运行你自己的服务器。分析后端、Telegram 机器人和应用 API。
 - `docs/RELEASING.md`：App Store 和 Android 的签名发布流程，以及项目所有者的检查清单。
 - `docs/PRIVACY.md` 和 `docs/SUPPORT.md`：隐私政策和支持页面，App Store 的应用页面上都有链接。
+- `docs/readme/`：本页的幻灯片，以及生成它们的源文件。
 - `android/` 和 `ios/`：早期给服务器用的上传客户端（Termux、快捷指令）。它们不是这个应用。
 
 </details>
@@ -348,5 +519,6 @@ bash scripts/check_public_safety.sh
 
 [MIT](LICENSE) © 2026 AkiyamaKunka
 
+<sub>食物照片：Natalie Behn、Katka Pavlickova、Andrew Relf、Demi DeHerrera 和 Mikey Frost，来自 Unsplash，详见[致谢](docs/readme/CREDITS.md)（英文）。</sub><br>
 <sub>曾用名 Bitewise，更早叫 CalorieTracker。旧链接会跳转到这里。</sub><br>
-<sub>iPhone 是 Apple Inc. 在美国和其他国家及地区注册的商标。App Store 是 Apple Inc. 的服务标记。Android 和 Google Play 是 Google LLC 的商标。</sub>
+<sub>iPhone 是 Apple Inc. 在美国和其他国家及地区注册的商标。App Store 是 Apple Inc. 的服务标记。Android 和 Google Play 是 Google LLC 的商标。其他产品、公司和餐厅名称归各自的所有者所有，筷拍与它们没有关联。</sub>
