@@ -23,22 +23,53 @@ import database
 import telegram_bot
 
 
+# A real authorize URL is ~350 characters and a real token ~108: long
+# enough that the CLI's hard wrap at the PTY width cuts them (2026-11-11).
+FAKE_URL = ("https://claude.ai/oauth/authorize?code=true&client_id="
+            "9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code"
+            "&redirect_uri=https%3A%2F%2Fconsole.anthropic.com%2Foauth%2Fcode"
+            "%2Fcallback&scope=user%3Ainference&code_challenge="
+            "Xw2oS9kq1LrB7mT3vZp0YcE5nH8aJ4uG6dF1sQ9wR2t"
+            "&code_challenge_method=S256&state="
+            "N7bV2cX9zL4kJ1hG6fD3sA8pO5iU0yT2rE7wQ9mB1nC")
+FAKE_TOKEN = ("sk-ant-oat01-" + "aB3dE5fG7hJ9kL1mN3pQ5rS7tU9vW1xY3zA5bC7dE9fG1"
+              "hJ3kL5mN7pQ9rS1tU3vW5xY7zA9bC1dE3fG5hJ7kL9mN1pQ3rS5tU7v-AA")
+
+
 def make_fake_cli(tmp_path, behavior="ok"):
-    """A stand-in for `claude setup-token` speaking the same dialogue."""
+    """A stand-in for `claude setup-token` speaking the same dialogue, the
+    way the real CLI does: it hard-wraps every line at the PTY's width (80
+    when the PTY reports none), and reads the code in raw mode, where only
+    a carriage return submits (a line feed is Ctrl+J, not Enter)."""
     script = tmp_path / "fake_setup_token.py"
     script.write_text(textwrap.dedent(f"""
-        import sys, time
+        import os, sys, tty
         behavior = {behavior!r}
+        try:
+            cols = os.get_terminal_size(1).columns or 80
+        except OSError:
+            cols = 80
+        def show(text):
+            rows = [text[i:i + cols] for i in range(0, len(text), cols)]
+            sys.stdout.write("\\r\\n".join(rows) + "\\r\\n")
+            sys.stdout.flush()
         if behavior == "no_url":
-            print("something went wrong before any url")
+            show("something went wrong before any url")
             sys.exit(1)
-        print("Visit: https://claude.ai/oauth/authorize?code=true&x=1")
-        sys.stdout.flush()
-        line = sys.stdin.readline().strip()
-        if behavior == "bad_code" or line != "good-code#state":
-            print("Invalid code.")
+        show("Visit: " + {FAKE_URL!r})
+        tty.setraw(0)
+        code = b""
+        while True:
+            ch = os.read(0, 1)
+            if not ch or ch == b"\\r":
+                break
+            if ch == b"\\n":
+                continue  # Ctrl+J: not a submit
+            code += ch
+        if behavior == "bad_code" or code != b"good-code#state":
+            show("Invalid code.")
             sys.exit(1)
-        print("Success! Your token: sk-ant-oat01-FAKE_TOKEN_abc123")
+        show("Success! Your token: " + {FAKE_TOKEN!r})
     """))
     wrapper = tmp_path / "fakecli"
     wrapper.write_text(f"#!/bin/sh\nexec {sys.executable} {script} \"$@\"\n")
@@ -56,12 +87,11 @@ def clean_sessions():
 def test_full_flow_start_complete_applies_token(tmp_path):
     cli = make_fake_cli(tmp_path)
     started = claude_auth.start_session(cli, dict(os.environ))
-    assert started.get("url", "").startswith(
-        "https://claude.ai/oauth/authorize")
+    assert started.get("url") == FAKE_URL, "the whole URL, not one 80-column row"
     applied = []
     done = claude_auth.complete_session("good-code#state", applied.append)
     assert done == {"ok": True}
-    assert applied == ["sk-ant-oat01-FAKE_TOKEN_abc123"]
+    assert applied == [FAKE_TOKEN], "the whole token, submitted with Enter"
 
 
 def test_wrong_code_fails_without_applying(tmp_path):
@@ -188,7 +218,7 @@ def test_start_and_complete_via_http_never_leak_the_token(
     assert done.status_code == 200
     payload = done.get_json()
     assert payload["ok"] is True
-    assert applied == ["sk-ant-oat01-FAKE_TOKEN_abc123"]
+    assert applied == [FAKE_TOKEN]
     # The token must never appear in ANY response body.
     assert "sk-ant-oat" not in started.get_data(as_text=True)
     assert "sk-ant-oat" not in done.get_data(as_text=True)

@@ -120,16 +120,20 @@ final class CloudFiles {
     /// nil = any seq of this install (pictures files, deletes).
     let seqs: [Int]?
     let adoptFrom: String?
+    /// The adopted install's file only up to this seq (its records seq when
+    /// it was adopted); nil = any. A later one is another install's again.
+    let adoptMaxSeq: Int?
     let allowAbsent: Bool
     let replaceUnknown: Bool
 
     init(
       installId: String, seqs: [Int]? = nil, adoptFrom: String? = nil,
-      allowAbsent: Bool = false, replaceUnknown: Bool = false
+      adoptMaxSeq: Int? = nil, allowAbsent: Bool = false, replaceUnknown: Bool = false
     ) {
       self.installId = installId
       self.seqs = seqs
       self.adoptFrom = adoptFrom
+      self.adoptMaxSeq = adoptMaxSeq
       self.allowAbsent = allowAbsent
       self.replaceUnknown = replaceUnknown
     }
@@ -143,14 +147,20 @@ final class CloudFiles {
       seqs = (map["seqs"] as? [NSNumber])?.map { $0.intValue }
       let adopt = map["adoptFrom"] as? String
       adoptFrom = adopt.flatMap { CloudFiles.isInstallId($0) ? $0 : nil }
+      adoptMaxSeq = (map["adoptMaxSeq"] as? NSNumber)?.intValue
       allowAbsent = map["allowAbsent"] as? Bool ?? false
       replaceUnknown = map["replaceUnknown"] as? Bool ?? false
     }
 
-    /// Whether [id] is this install or the adopted one.
-    func owns(_ id: String?) -> Bool {
-      guard let id = id else { return false }
-      return id == installId || id == adoptFrom
+    /// Whether [header] is this install's or the adopted one's (up to
+    /// adoptMaxSeq); never a header that cannot be read.
+    func owns(_ header: [String: Any]?) -> Bool {
+      guard let id = CloudFiles.installId(of: header) else { return false }
+      if id == installId { return true }
+      guard id == adoptFrom else { return false }
+      guard let max = adoptMaxSeq else { return true }
+      guard let seq = CloudFiles.seq(of: header) else { return false }
+      return seq <= max
     }
   }
 
@@ -164,7 +174,10 @@ final class CloudFiles {
     guard let header = header, let id = installId(of: header), let seq = seq(of: header) else {
       return expect.replaceUnknown ? .allowed : .unknownOwner
     }
-    if let adopt = expect.adoptFrom, id == adopt { return .allowed }
+    if let adopt = expect.adoptFrom, id == adopt {
+      if let max = expect.adoptMaxSeq, seq > max { return .ownedByOther }
+      return .allowed
+    }
     if id == expect.installId {
       guard let seqs = expect.seqs else { return .allowed }
       return seqs.contains(seq) ? .allowed : .changedElsewhere
@@ -298,7 +311,7 @@ final class CloudFiles {
     guard hasConflicts(url),
       let versions = NSFileVersion.unresolvedConflictVersionsOfItem(at: url)
     else { return false }
-    return versions.contains { !expect.owns(installId(of: header(at: $0.url))) }
+    return versions.contains { !expect.owns(header(at: $0.url)) }
   }
 
   /// Unresolved versions of [dest] from this install are settled here;
@@ -323,7 +336,7 @@ final class CloudFiles {
     let prevExists = CloudFiles.itemExists(previous)
     if prevExists {
       guard CloudFiles.isDownloaded(previous),
-        expect.owns(CloudFiles.installId(of: CloudFiles.header(at: previous)))
+        expect.owns(CloudFiles.header(at: previous))
       else { return }
     }
     let staging = try fm.url(
@@ -391,7 +404,8 @@ final class CloudFiles {
       return .notDownloaded
     }
     let header = CloudFiles.header(at: url)
-    let anySeq = Expect(installId: expect.installId, adoptFrom: expect.adoptFrom)
+    let anySeq = Expect(
+      installId: expect.installId, adoptFrom: expect.adoptFrom, adoptMaxSeq: expect.adoptMaxSeq)
     let verdict = CloudFiles.checkOwner(exists: true, header: header, expect: anySeq)
     if verdict != .allowed { return .verdict(verdict, header: header) }
     // Removing the item drops its unresolved conflict versions too, and

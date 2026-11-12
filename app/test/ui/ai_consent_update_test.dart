@@ -67,12 +67,10 @@ Future<void> _leaveAndReturn(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-String _bodyOf(WidgetTester tester, Finder dialog) => tester
-    .widget<Text>(find.descendant(
-        of: find.descendant(
-            of: dialog, matching: find.byType(SingleChildScrollView)),
-        matching: find.byType(Text)))
-    .data!;
+String _bodyOf(WidgetTester tester, Finder dialog) =>
+    // The dialog's content: title and text scroll together now (A1), so
+    // the scroll view holds both.
+    (tester.widget<AlertDialog>(dialog).content! as Text).data!;
 
 Uri _link(String backend) =>
     Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'

@@ -532,7 +532,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                     icon: Icons.photo_library_rounded,
                     title: context.l10n.addNoPhotos);
               }
-              return Column(children: [
+              final header = <Widget>[
                 if (_limited) _limitedNote(context),
                 // Portion accuracy is the model's weakest link, and a scale
                 // reference in frame is the cheapest fix the USER controls.
@@ -568,8 +568,8 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                     ],
                   ),
                 ),
-                Expanded(
-                    child: GridView.builder(
+              ];
+              final grid = GridView.builder(
                 padding: const EdgeInsets.all(8),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
@@ -609,8 +609,22 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                     ),
                   ),
                 ),
-              )),
-              ]);
+              );
+              // With a "selected photos" grant the note and the tip took the
+              // whole height at large text and no photo could be picked
+              // (review 1.7.0). There the screen scrolls, and the grid keeps
+              // a full screen of its own below them.
+              return LayoutBuilder(
+                builder: (context, box) => isLargeText(context)
+                    ? SingleChildScrollView(
+                        key: const Key('addPhotoScroll'),
+                        child: Column(children: [
+                          ...header,
+                          SizedBox(height: box.maxHeight, child: grid),
+                        ]),
+                      )
+                    : Column(children: [...header, Expanded(child: grid)]),
+              );
             },
           ),
           if (_analyzing)

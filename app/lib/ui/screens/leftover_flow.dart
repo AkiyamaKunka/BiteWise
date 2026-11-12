@@ -34,8 +34,10 @@ import '../../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../ai_consent.dart';
 import '../format.dart';
 import '../l10n.dart';
+import '../large_text.dart';
 import '../meal_in_use.dart';
 import '../services.dart';
+import '../theme/app_dialog.dart';
 import '../widgets/grouped.dart';
 
 class LeftoverScreen extends StatefulWidget {
@@ -180,7 +182,7 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       if (!result.sameMeal) {
         final useAnyway = await showDialog<bool>(
           context: context,
-          builder: (ctx) => AlertDialog(
+          builder: (ctx) => appAlertDialog(
             title: Text(ctx.l10n.leftoverNotSame),
             content: Text(result.note ?? ''),
             actions: [
@@ -242,7 +244,7 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     final pct = (result.eatenFraction * 100).round();
     final ok = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) => appAlertDialog(
         title: Text(ctx.l10n.leftoverResultTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
@@ -436,7 +438,13 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
 
   Widget _photoPicker(ThemeData theme, dynamic l) {
     final meal = _selected!;
-    return Column(children: [
+    final large = isLargeText(context);
+    final changeMeal = TextButton(
+      key: const Key('leftoverChangeMeal'),
+      onPressed: _clearSelection,
+      child: Text(l.leftoverChangeMeal),
+    );
+    final header = <Widget>[
       Padding(
         // GroupedSection insets itself (see _mealPicker).
         padding: const EdgeInsets.only(top: 8),
@@ -447,24 +455,29 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
               title: mealDescription(meal.analysis,
                   fallback: l.nlUnnamedMeal),
               value: '~${l.kcalAmount(formatKcal(safeCal(meal)))}',
-              trailing: TextButton(
-                key: const Key('leftoverChangeMeal'),
-                onPressed: _clearSelection,
-                child: Text(l.leftoverChangeMeal),
-              ),
+              // At accessibility sizes the button squeezed the meal's
+              // own row; it goes under the section there instead.
+              trailing: large ? null : changeMeal,
               showChevron: false,
             ),
           ],
         ),
       ),
+      if (large)
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: changeMeal),
+        ),
       Padding(
         padding: const EdgeInsets.fromLTRB(32, 12, 32, 4),
         child: Text(l.leftoverPickPhoto,
             style: theme.textTheme.titleSmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
       ),
-      Expanded(
-        child: FutureBuilder<List<RecentAsset>>(
+    ];
+    final photos = FutureBuilder<List<RecentAsset>>(
           future: _assets,
           builder: (context, snap) {
             // A denial is NOT an empty camera roll: 'No recent photos
@@ -544,9 +557,22 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
               },
             );
           },
-        ),
-      ),
-    ]);
+        );
+    // At accessibility text sizes the chosen meal and the heading can take
+    // the whole height, which left the grid none and no photo to pick
+    // (review 1.7.0). There the step scrolls, and the grid keeps a full
+    // screen of its own below them.
+    return LayoutBuilder(
+      builder: (context, box) => large
+          ? SingleChildScrollView(
+              key: const Key('leftoverPhotoStepScroll'),
+              child: Column(children: [
+                ...header,
+                SizedBox(height: box.maxHeight, child: photos),
+              ]),
+            )
+          : Column(children: [...header, Expanded(child: photos)]),
+    );
   }
 }
 

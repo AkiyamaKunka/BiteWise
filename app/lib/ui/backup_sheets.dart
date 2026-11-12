@@ -81,14 +81,21 @@ String _statusLine(BuildContext context, BackupStatus s, {DateTime? now}) {
 bool backupHasWritten(BackupStatus s) => s.lastOkAt != null;
 
 /// The Settings › Your Data footer on iPhone, by what iCloud Backup does
-/// now: while it is off, or iCloud has no account or is not available,
-/// nothing is copied, so the footer says so and points to an export
-/// (never "they come back if you reinstall"). Otherwise it names the Files
-/// app once a backup landed.
+/// now: while it is off, iCloud has no account or is not available, or
+/// backups are blocked (another install's file, one changed outside the
+/// app or unreadable) or paused (the backup gone, a much smaller record),
+/// nothing of this iPhone's is copied, so the footer says so and points to
+/// an export (never "they come back if you reinstall"). Otherwise it names
+/// the Files app once a backup landed.
 String backupFooter(AppLocalizations l, BackupStatus s) => switch (s.state) {
       BackupState.off ||
       BackupState.noAccount ||
-      BackupState.unavailable =>
+      BackupState.unavailable ||
+      BackupState.otherDevice ||
+      BackupState.changedElsewhere ||
+      BackupState.unknownFile ||
+      BackupState.missing ||
+      BackupState.shrink =>
         l.backupICloudFooterOff,
       _ => backupHasWritten(s) ? l.backupICloudFooter : l.backupICloudFooterBefore,
     };
@@ -210,10 +217,13 @@ Future<void> showRestoreOffer(BuildContext context, BackupCoordinator backup,
       ],
     ),
   );
+  if (choice == null) {
+    // Not Now for this launch only: the catch-up it held may run.
+    await backup.dismissOffer();
+    return;
+  }
   if (!context.mounted) return;
   switch (choice) {
-    case null:
-      backup.prompt.value = null;
     case _OfferChoice.restore:
       final s = await backup.restore(candidate);
       if (!context.mounted) return;
@@ -299,10 +309,16 @@ enum _TurnOff { keep, delete }
 
 /// The switch turned off: Keep the Backup in iCloud (default) / Delete
 /// It… (red, confirmed; this install's files only) / Cancel (the switch
-/// stays on).
+/// stays on). With no backup of this iPhone's in iCloud there is nothing
+/// to keep or delete, so it turns off at once, like any switch.
 Future<void> showTurnOffSheet(
     BuildContext context, BackupCoordinator backup) async {
   final l = context.l10n;
+  final s = backup.status.value;
+  if (!backupHasWritten(s) && !s.ownsFiles) {
+    await backup.turnOff(deleteFiles: false);
+    return;
+  }
   final choice = await showGroupedSheet<_TurnOff>(
     context,
     title: l.backupTurnOffTitle,
@@ -314,15 +330,13 @@ Future<void> showTurnOffSheet(
           showChevron: false,
           onTap: () => Navigator.of(ctx).pop(_TurnOff.keep),
         ),
-        if (backupHasWritten(backup.status.value) ||
-            backup.status.value.ownsFiles)
-          GroupedRow(
-            key: const Key('backupTurnOffDelete'),
-            title: l.backupTurnOffDelete,
-            destructive: true,
-            showChevron: false,
-            onTap: () => Navigator.of(ctx).pop(_TurnOff.delete),
-          ),
+        GroupedRow(
+          key: const Key('backupTurnOffDelete'),
+          title: l.backupTurnOffDelete,
+          destructive: true,
+          showChevron: false,
+          onTap: () => Navigator.of(ctx).pop(_TurnOff.delete),
+        ),
         GroupedRow(
           key: const Key('backupTurnOffCancel'),
           title: l.cancel,

@@ -53,12 +53,10 @@ Future<void> _allow(WidgetTester tester) async {
 }
 
 /// The one Text a consent dialog's body is.
-String _dialogText(WidgetTester tester, Finder dialog) => tester
-    .widget<Text>(find.descendant(
-        of: find.descendant(
-            of: dialog, matching: find.byType(SingleChildScrollView)),
-        matching: find.byType(Text)))
-    .data!;
+String _dialogText(WidgetTester tester, Finder dialog) =>
+    // The dialog's content: title and text scroll together now (A1), so
+    // the scroll view holds both.
+    (tester.widget<AlertDialog>(dialog).content! as Text).data!;
 
 Widget _app(Widget home, {Locale? locale}) => MaterialApp(
       locale: locale,

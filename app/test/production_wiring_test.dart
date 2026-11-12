@@ -139,8 +139,12 @@ void main() {
       expect(
         init(),
         _wired(
-          r'foregroundCatchUp\(photoIntake, shouldContinue: '
-          r'Platform\.isIOS \? appEngineInForeground : null\)',
+          // iCloud Backup: held while a restore offer or a restore is open,
+          // asked inside the catch-up and again before each photo.
+          r'if \(await cloudBackup\?\.holdsCatchUp\(\) \?\? false\) return; '
+          r'await foregroundCatchUp\(photoIntake, shouldContinue: '
+          r'Platform\.isIOS \? \(\) => appEngineInForeground\(\) && '
+          r'!\(cloudBackup\?\.holdsCatchUpNow \?\? false\) : null\)',
         ),
       );
       expect(
@@ -283,8 +287,7 @@ void main() {
       expect(
         init(),
         _wired(
-          r'foregroundCatchUp\(photoIntake, shouldContinue: '
-          r'Platform\.isIOS \? appEngineInForeground : null\) '
+          r'unawaited\(launchCatchUp\(\) '
           r'\.whenComplete\(\(\) => unawaited\(mealAssist\.sweep\(\)\)\)',
         ),
       );
@@ -547,8 +550,10 @@ void main() {
       expect(
         resume,
         _wired(
-          r'foregroundCatchUp\(intake, shouldContinue: '
-          r'Platform\.isIOS \? appEngineInForeground : null\)',
+          r'if \(await backup\?\.holdsCatchUp\(\) \?\? false\) return; '
+          r'await foregroundCatchUp\(intake, shouldContinue: '
+          r'Platform\.isIOS \? \(\) => appEngineInForeground\(\) && '
+          r'!\(backup\?\.holdsCatchUpNow \?\? false\) : null\)',
         ),
       );
       expect(resume, isNot(contains('.backfillScan(')));

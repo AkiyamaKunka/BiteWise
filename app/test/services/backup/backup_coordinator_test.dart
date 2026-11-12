@@ -2,6 +2,7 @@
 // iCloud folder with the Swift owner rule (test/support/
 // fake_cloud_transport.dart): the guards G1–G10, the restore offer, the
 // takeover, combine, delete, and what the background run may not do.
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -21,6 +22,7 @@ import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import '../../support/fake_cloud_transport.dart';
 
 const _other = 'fedcba9876543210fedcba9876543210';
+const _third = 'abcdefabcdefabcdefabcdefabcdefab';
 
 Uint8List _jpeg(int tag) => Uint8List.fromList(
     [0xFF, 0xD8, 0xFF, 0xDB, 0x00, 0x04, tag, tag, 0xFF, 0xC0, 0x00, 0x04, 1, 1,
@@ -139,6 +141,23 @@ void main() {
     await dao.saveMealThumb(mine, _jpeg(7));
   }
 
+  /// The other phone, still in use, backs up again (seq 6): a November
+  /// photo meal, so its backup now has a month it did not have.
+  Future<void> otherPhoneAddsNovember() async {
+    final nov = await seed(otherDao, '2026-11-03', hash: 'o-nov');
+    await otherDao.saveMealThumb(nov, _jpeg(4));
+    final w = BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+    final prints = await otherDao.thumbMonthPrints();
+    final f = await w.writeRecords('${tmp.path}/o6.json',
+        installId: _other,
+        seq: 6,
+        months: {for (final e in prints.entries) e.key: e.value.count});
+    cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+    final p = await w.writePictures('${tmp.path}/o6-nov.json',
+        installId: _other, seq: 6, month: '2026-11');
+    cloud.files[picturesPath('2026-11')] = await File(p.path).readAsBytes();
+  }
+
   group('G1: nothing uploads before the notice', () {
     test('the default is on, but the notice comes first', () async {
       await seed(dao, '2026-11-10');
@@ -153,6 +172,25 @@ void main() {
       expect(c.status.value.state, BackupState.off);
       expect(prefs.getBool(BackupPrefs.kNoticeSeen), isTrue);
       expect(await run(), BackupState.off);
+    });
+
+    test('turned off in Settings while the notice waits to be asked (a '
+        'screen was on top): the notice is not asked', () async {
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<NoticePrompt>());
+      // "iCloud Backup is on" is no longer true, and its Keep On would turn
+      // the switch back on.
+      await c.turnOff(deleteFiles: false);
+      expect(c.prompt.value, isNull);
+    });
+
+    test('turned on while the notice waits to be asked: that answers it',
+        () async {
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<NoticePrompt>());
+      await c.setEnabled(true);
+      expect(prefs.getBool(BackupPrefs.kNoticeSeen), isTrue);
+      expect(c.prompt.value, isNull);
     });
   });
 
@@ -181,6 +219,40 @@ void main() {
       expect(await c.backUpNow(), BackupState.never);
       cloud.gathered = true;
       expect(await c.backUpNow(), BackupState.uploading);
+    });
+
+    test('Back Up Now in the query\'s first minute waits the rest of it out '
+        '(Checking iCloud…) rather than doing nothing', () async {
+      final query = _QueryWarmingUp(
+          () => now = now.add(const Duration(seconds: 10)))
+        ..watching = true
+        ..live = const Duration(seconds: 30);
+      cloud = query;
+      c = BackupCoordinator(
+          dao: dao,
+          transport: cloud,
+          prefs: prefs,
+          tempDir: () async => tmp,
+          clock: () => now,
+          gatherWait: const Duration(seconds: 90),
+          gatherPoll: Duration.zero);
+      await seed(dao, '2026-11-10');
+      await noticeAnswered();
+      var busySeen = false;
+      c.status.addListener(() => busySeen |= c.status.value.busy);
+      expect(await c.backUpNow(), BackupState.uploading);
+      expect(busySeen, isTrue, reason: 'the line said Checking iCloud…');
+      expect(c.status.value.busy, isFalse);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 1);
+      // A query that never gathers is waited for 90 s at most.
+      await prefs.clear();
+      await noticeAnswered();
+      cloud.files.clear();
+      query.gathered = false;
+      final start = now;
+      expect(await c.backUpNow(), BackupState.never);
+      expect(now.difference(start), lessThan(const Duration(seconds: 120)));
+      expect(c.status.value.busy, isFalse);
     });
 
     test('G8: a background run never writes first', () async {
@@ -298,6 +370,67 @@ void main() {
       await seed(dao, '2026-11-11');
       expect(await run(), BackupState.uploading);
       expect(cloud.headerOf(kRecordsFileName)!.seq, 3);
+    });
+
+    test('a write that landed unrecorded, then a run that failed after '
+        'taking the next seq: the file is still ours', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run(); // seq 1
+      // seq 2 landed, but the app died before it recorded it.
+      await prefs.setInt(BackupPrefs.kPendingSeq, 2);
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      final w = BackupFileWriter(dao: dao, platform: 'ios', clock: () => now);
+      final f = await w.writeRecords('${tmp.path}/s2.json',
+          installId: me, seq: 2, months: const {});
+      cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+      // The next run takes seq 3, and iCloud goes away before it lands.
+      await seed(dao, '2026-11-11');
+      cloud.onWrite = (_) async => cloud.state = CloudState.unavailable;
+      expect(await run(), BackupState.unavailable);
+      cloud.onWrite = null;
+      cloud.state = CloudState.ok;
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 2);
+      expect(await run(), BackupState.uploading);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, greaterThan(2));
+      expect(prefs.getInt(BackupPrefs.kLastSeq),
+          cloud.headerOf(kRecordsFileName)!.seq);
+    });
+
+    test('a pictures file that cannot be written ends the run as failed, '
+        'like the records file', () async {
+      final oct = await seed(dao, '2026-10-03', hash: 'h1');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      await ready();
+      BackupCoordinator other(MealsDao d, Future<Directory> Function() dir) =>
+          BackupCoordinator(
+              dao: d,
+              transport: cloud,
+              prefs: prefs,
+              tempDir: dir,
+              clock: () => now,
+              gatherWait: Duration.zero);
+      // The month's pictures cannot be read.
+      final noThumbs = other(_ThumbsFailDao(db, clock: () => now),
+          () async => tmp);
+      expect(await noThumbs.backUpNow(), BackupState.failed);
+      expect(noThumbs.status.value.state, BackupState.failed);
+      expect(prefs.getString(BackupPrefs.kLastError), 'failed');
+      // The temporary file cannot be made (here: its folder is a file).
+      final blocked = File('${tmp.path}/blocked')..writeAsStringSync('x');
+      final noTemp = other(dao, () async => Directory(blocked.path));
+      expect(await noTemp.backUpNow(), BackupState.failed);
+      // The temporary file cannot be opened (a folder is in its place): no
+      // error escapes the run either, not even one nobody awaits.
+      final inTheWay =
+          Directory('${tmp.path}/icloud_backup/pictures-2026-10.json')
+            ..createSync(recursive: true);
+      expect(await c.backUpNow(), BackupState.failed);
+      inTheWay.deleteSync();
+      expect(cloud.log, isEmpty);
+      // Nothing was left half done: the next run writes it all.
+      expect(await c.backUpNow(), BackupState.uploading);
+      expect(hashesIn('2026-10'), ['h1']);
     });
   });
 
@@ -486,6 +619,37 @@ void main() {
       expect(prefs.getInt(BackupPrefs.kLastSeq), isNull);
     });
 
+    test('signed in to another account and back: this install\'s own file '
+        'is still its own', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      expect(await run(), BackupState.uploading); // seq 1 in account A
+      await seed(dao, '2026-11-11');
+      expect(await run(), BackupState.uploading); // seq 2
+      final inA = Map.of(cloud.files);
+      // Account B: its own (empty) folder, the notice again, a backup.
+      cloud.accountChangedOnce = true;
+      expect(await run(), BackupState.needsNotice);
+      cloud.files.clear();
+      await noticeAnswered();
+      await seed(dao, '2026-11-12');
+      expect(await c.backUpNow(), BackupState.uploading);
+      // Back to account A, whose file this install wrote at seq 2.
+      cloud.accountChangedOnce = true;
+      expect(await run(), BackupState.needsNotice);
+      cloud.files
+        ..clear()
+        ..addAll(inA);
+      await noticeAnswered();
+      await seed(dao, '2026-11-13');
+      expect(await c.backUpNow(), BackupState.uploading);
+      final seq = cloud.headerOf(kRecordsFileName)!.seq;
+      expect(seq, greaterThan(3), reason: 'a seq is never taken twice');
+      await seed(dao, '2026-11-14');
+      expect(await run(), BackupState.uploading);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, seq + 1);
+    });
+
     test('no account / unavailable', () async {
       await seed(dao, '2026-11-10');
       await ready();
@@ -493,6 +657,170 @@ void main() {
       expect(await run(), BackupState.noAccount);
       cloud.state = CloudState.unavailable;
       expect(await run(), BackupState.unavailable);
+    });
+  });
+
+  group('the launch', () {
+    /// Real SQLite answers from another isolate: wait for [done].
+    Future<void> until(bool Function() done) async {
+      for (var i = 0; i < 400 && !done(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+    }
+
+    test('asks iCloud for its status before the metadata query starts, '
+        'then offers the backup', () async {
+      await otherPhoneBackup();
+      await c.start();
+      await until(() => c.prompt.value != null);
+      expect(cloud.calls.take(2), ['status', 'startWatching'],
+          reason: 'in iOS a query started before the container was fetched '
+              'can gather an empty folder: no offer, and G4 says "no backup"');
+      expect(cloud.watching, isTrue);
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+    });
+
+    test('starts the metadata query whatever the status says', () async {
+      cloud.state = CloudState.noAccount;
+      await c.start();
+      await until(() => cloud.watching);
+      expect(cloud.calls, ['status', 'startWatching']);
+      expect(c.status.value.state, BackupState.noAccount);
+    });
+  });
+
+  group('the photo catch-up and the look for a backup to offer', () {
+    Meal lunch(num kcal) => Meal(
+        id: 0,
+        date: '2026-11-11',
+        time: '12:00 PM',
+        timestamp: '2026-11-11T12:00:00.000',
+        source: MealSource.appWatch,
+        imageHash: 'h_lunch',
+        analysis: {'is_food': true, 'total_calories': kcal});
+
+    test('asked at init, before the shell starts the launch\'s look, it '
+        'answers once the look decided: the offer holds it, and the '
+        'backup\'s corrected meal is what the restore brings', () async {
+      // The old phone logged lunch at 900 kcal and corrected it to 650.
+      final id = await otherDao.saveMeal(lunch(900),
+          markStatus: IngestionStatus.saved);
+      await otherDao
+          .updateMealAnalysis(id, {'is_food': true, 'total_calories': 650});
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final f = await w.writeRecords('${tmp.path}/o.json',
+          installId: _other, seq: 4, months: const {});
+      cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+
+      // di.dart init asks before runApp; the catch-up would analyze the
+      // same photo afresh (900 kcal again).
+      var caughtUp = false;
+      final catchUp = () async {
+        if (await c.holdsCatchUp()) return;
+        caughtUp = true;
+        await dao.saveMeal(lunch(900), markStatus: IngestionStatus.saved);
+      }();
+      await c.start(); // the shell, after the first frame
+      await catchUp;
+      // Real SQLite answers from another isolate.
+      for (var i = 0; i < 400 && c.prompt.value == null; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      final s = await c.restore(offer.candidate);
+      final meals = await dao.mealsBetween('2026-11-11', '2026-11-11');
+      expect([for (final m in meals) m.analysis['total_calories']], [650],
+          reason: 'the correction survives');
+      expect(s.mealsAdded, 1);
+      expect(caughtUp, isFalse, reason: 'the offer holds the catch-up');
+    });
+
+    test('a look that ends without deciding (no iCloud) lets it go at once',
+        () async {
+      cloud.state = CloudState.unavailable;
+      final held = c.holdsCatchUp();
+      await c.start();
+      expect(await held.timeout(const Duration(seconds: 5)), isFalse);
+    });
+
+    test('a catch-up already running asks before each photo: held from the '
+        'moment the offer is raised until it is answered', () async {
+      await otherPhoneBackup();
+      expect(c.holdsCatchUpNow, isFalse);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      expect(c.holdsCatchUpNow, isTrue);
+      await c.declineOffer((c.prompt.value as RestoreOfferPrompt).candidate);
+      expect(c.holdsCatchUpNow, isFalse);
+    });
+
+    test('stopped before the look ran, it waits no longer', () async {
+      final held = c.holdsCatchUp();
+      await c.stop();
+      expect(await held.timeout(const Duration(seconds: 5)), isFalse);
+    });
+  });
+
+  group('a look for a backup to offer that ended before it decided', () {
+    /// The app leaves and comes back.
+    void leaveAndReturn() {
+      c.onLifecycle(false);
+      c.onLifecycle(true);
+    }
+
+    test('looks again at the next return to the app, and the notice is '
+        'asked then', () async {
+      cloud.gathered = false; // the query has not gathered in time
+      await c.start();
+      await c.holdsCatchUp(); // once the launch's look ended
+      expect(c.prompt.value, isNull);
+      cloud.gathered = true;
+      leaveAndReturn();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<NoticePrompt>());
+    });
+
+    test('the photo catch-up of that return waits for the look, and the '
+        'offer it raises holds it', () async {
+      await otherPhoneBackup();
+      cloud.gathered = false;
+      await c.start();
+      expect(await c.holdsCatchUp(), isFalse,
+          reason: 'nothing offered yet: the launch catch-up goes');
+      cloud.gathered = true;
+      leaveAndReturn();
+      expect(await c.holdsCatchUp(), isTrue); // app.dart _resumeCatchUp
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+    });
+
+    test('another iCloud account seen by a run looks again at the next '
+        'return', () async {
+      await noticeAnswered();
+      await c.start();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isNull, reason: 'nothing to ask');
+      cloud.accountChangedOnce = true;
+      expect(await run(), BackupState.needsNotice);
+      leaveAndReturn();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<NoticePrompt>());
+    });
+
+    test('a look that decided does not look again: a notice swiped away '
+        'comes back at the next launch, not at every return', () async {
+      await c.start();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<NoticePrompt>());
+      c.prompt.value = null; // dismissed (showBackupNotice)
+      final calls = cloud.statusCalls;
+      leaveAndReturn();
+      await c.holdsCatchUp();
+      for (var i = 0; i < 40; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 5));
+      }
+      expect(c.prompt.value, isNull);
+      expect(cloud.statusCalls, calls, reason: 'no second look');
     });
   });
 
@@ -589,6 +917,107 @@ void main() {
       expect(await c.startFresh(again.candidate), BackupDeleteResult.deleted);
       expect(cloud.files, isEmpty);
     });
+
+    test('Restore takes the backup as it is now, not as the offer saw it',
+        () async {
+      await otherPhoneBackup(meals: 2); // October only
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(offer.candidate.header.months.keys, ['2026-10']);
+      await otherPhoneAddsNovember(); // before the user taps Restore
+      final mine = await seed(dao, '2026-11-05', hash: 'mine-nov');
+      await dao.saveMealThumb(mine, _jpeg(8));
+      final s = await c.restore(offer.candidate);
+      expect(s.ok, isTrue);
+      expect(s.thumbsAdded, 3, reason: 'November came in too');
+      expect(BackupPrefs(prefs).months.keys,
+          unorderedEquals(['2026-10', '2026-11']));
+      await c.answerNotice(keepOn: true);
+      await c.backUpNow();
+      expect(hashesIn('2026-11'), unorderedEquals(['o-nov', 'mine-nov']),
+          reason: 'the other phone\'s November picture is never lost');
+    });
+
+    test('Start Fresh deletes the backup as it is now, and nothing once '
+        'another install took its file over', () async {
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      await otherPhoneAddsNovember();
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.deleted);
+      expect(cloud.files, isEmpty, reason: 'November is not left orphaned');
+      // Offered again, but a third phone wrote the file before Start Fresh.
+      await prefs.remove(BackupPrefs.kOffersAnswered);
+      await otherPhoneBackup(meals: 1);
+      c.prompt.value = null;
+      await c.launchCheckForTest();
+      final second = c.prompt.value as RestoreOfferPrompt;
+      final third = BackupHeader(
+          kind: BackupKind.records, installId: _third, seq: 1);
+      cloud.put(kRecordsFileName, '${third.envelopePrefix(now)}{}}');
+      final before = Map.of(cloud.files);
+      expect(await c.startFresh(second.candidate), BackupDeleteResult.failed);
+      expect(cloud.files, before);
+    });
+
+    test('Start Fresh on a second backup deletes only that install\'s '
+        'files, never this install\'s own month', () async {
+      // December's file is the other install's; October's is this one's.
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final odec = await seed(otherDao, '2026-12-01', hash: 'o-dec');
+      await otherDao.saveMealThumb(odec, _jpeg(5));
+      final p = await w.writePictures('${tmp.path}/o-dec.json',
+          installId: _other, seq: 5, month: '2026-12');
+      cloud.files[picturesPath('2026-12')] = await File(p.path).readAsBytes();
+      final oct = await seed(dao, '2026-10-03', hash: 'h1');
+      await dao.saveMealThumb(oct, _jpeg(1));
+      final dec = await seed(dao, '2026-12-02', hash: 'mine-dec');
+      await dao.saveMealThumb(dec, _jpeg(6));
+      await ready();
+      expect(await run(), BackupState.uploading);
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      expect(cloud.headerOf(picturesPath('2026-10'))!.installId, me);
+      expect(BackupPrefs(prefs).months['2026-12']!.state, MonthState.foreign);
+      // The other install's records file appears under another name (an
+      // iCloud name race, or a copied file), listing October too.
+      final f = await w.writeRecords('${tmp.path}/o.json',
+          installId: _other,
+          seq: 5,
+          months: const {'2026-10': 2, '2026-12': 1});
+      cloud.files['Chopstats Backup 2.json'] = await File(f.path).readAsBytes();
+      c.prompt.value = null;
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(offer.candidate.path, 'Chopstats Backup 2.json');
+      expect(await c.startFresh(offer.candidate), BackupDeleteResult.deleted);
+      expect(cloud.files.keys,
+          unorderedEquals([kRecordsFileName, picturesPath('2026-10')]));
+      expect(cloud.headerOf(picturesPath('2026-10'))!.installId, me);
+      expect(BackupPrefs(prefs).months.containsKey('2026-12'), isFalse,
+          reason: 'its file is gone: written by the next run');
+      await c.backUpNow();
+      await dao.saveBodyWeight('2026-11-10', 70);
+      await c.backUpNow();
+      expect(cloud.headerOf(kRecordsFileName)!.months,
+          {'2026-10': 1, '2026-12': 1});
+      expect(hashesIn('2026-10'), ['h1']);
+      expect(hashesIn('2026-12'), ['mine-dec']);
+    });
+
+    test('a later scan reads each backup\'s header again', () async {
+      await seed(dao, '2026-11-01');
+      await otherPhoneBackup(meals: 2); // seq 5
+      await c.launchCheckForTest();
+      await c.declineOffer((c.prompt.value as RestoreOfferPrompt).candidate);
+      c.prompt.value = null;
+      await noticeAnswered();
+      await otherPhoneAddsNovember(); // seq 6
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      final r = c.status.value.restorable.single;
+      expect(r.header.seq, 6, reason: 'what Restore From iCloud… shows');
+      expect(r.header.months, {'2026-10': 2, '2026-11': 1});
+    });
   });
 
   group('the takeover', () {
@@ -621,6 +1050,33 @@ void main() {
       expect(await c.takeOver(replace: true), isTrue);
       expect(cloud.headerOf(kRecordsFileName)!.meals, 2);
     });
+
+    test('over this install\'s own file changed elsewhere: the seq check '
+        'stays on', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run();
+      final me = prefs.getString(BackupPrefs.kInstallId)!;
+      final w = BackupFileWriter(dao: dao, platform: 'ios', clock: () => now);
+      Future<void> ownFileAt(int seq) async {
+        final f = await w.writeRecords('${tmp.path}/x$seq.json',
+            installId: me, seq: seq, months: const {});
+        cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+      }
+
+      await ownFileAt(40);
+      await seed(dao, '2026-11-11');
+      expect(await run(), BackupState.changedElsewhere);
+      expect(await c.takeOver(replace: false), isTrue);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 41);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom) ?? '', isNot(me),
+          reason: 'adopting its own id would turn the check off for good');
+      // Changed elsewhere again: still noticed.
+      await ownFileAt(90);
+      await seed(dao, '2026-11-12');
+      expect(await run(), BackupState.changedElsewhere);
+      expect(cloud.headerOf(kRecordsFileName)!.seq, 90);
+    });
   });
 
   test('combine: another phone\'s conflicting version is merged in and '
@@ -635,6 +1091,53 @@ void main() {
     expect(await c.combine(), isTrue);
     expect(cloud.conflictVersions, isEmpty);
     expect((await dao.backupCounts()).meals, 4);
+    expect(cloud.headerOf(kRecordsFileName)!.meals, 4);
+  });
+
+  test('a restore stays busy when the status is refreshed while it runs',
+      () async {
+    final gated = _FetchHeld();
+    cloud = gated;
+    c = make();
+    await seed(dao, '2026-11-10');
+    await ready();
+    expect(await run(), BackupState.uploading);
+    const path = 'Chopstats Backup 2.json';
+    await otherPhoneBackup(path: path);
+    gated.held = path;
+    final restoring =
+        c.restore(BackupCandidate(path, cloud.headerOf(path)!));
+    await gated.entered.future;
+    expect(c.status.value.busy, isTrue);
+    await c.refresh(); // Settings opened, a resume, the 30 s timer
+    expect(c.status.value.busy, isTrue,
+        reason: 'the rows stay disabled and the line says Checking iCloud…');
+    gated.gate.complete();
+    expect((await restoring).ok, isTrue);
+    expect(c.status.value.busy, isFalse);
+  });
+
+  test('combine is not said as done when the backup after the merge did not '
+      'land', () async {
+    final failing = _WritesFail();
+    cloud = failing;
+    c = make();
+    await seed(dao, '2026-11-10');
+    await ready();
+    await run();
+    await otherPhoneBackup(meals: 2, path: 'staging.json');
+    cloud.conflictVersions[kRecordsFileName] = [cloud.files.remove('staging.json')!];
+    await seed(dao, '2026-11-11');
+    expect(await run(), BackupState.twoCopies);
+    final seq = cloud.headerOf(kRecordsFileName)!.seq;
+    failing.fail = CloudResultKind.timeout;
+    expect(await c.combine(), isFalse,
+        reason: 'the row says "Combined the two copies and backed up." on true');
+    expect(c.status.value.state, BackupState.failed);
+    expect(cloud.headerOf(kRecordsFileName)!.seq, seq, reason: 'nothing landed');
+    expect((await dao.backupCounts()).meals, 4, reason: 'the merge is in');
+    failing.fail = null;
+    expect(await c.backUpNow(), BackupState.uploading);
     expect(cloud.headerOf(kRecordsFileName)!.meals, 4);
   });
 
@@ -945,13 +1448,126 @@ void main() {
     expect(paused.status.value.ownsFiles, isTrue);
   });
 
-  test('a restored backup is this install\'s to delete', () async {
-    await otherPhoneBackup(meals: 1);
+  test('the adopted install that takes its backup back is another install '
+      'again: nothing of its newer backup is written over or deleted',
+      () async {
+    await otherPhoneBackup(meals: 2); // seq 5, October
     await c.launchCheckForTest();
-    await c.restore((c.prompt.value as RestoreOfferPrompt).candidate);
-    await c.answerNotice(keepOn: false);
-    expect(c.status.value.state, BackupState.off);
-    expect(c.status.value.ownsFiles, isTrue, reason: 'adopted');
+    final offer = c.prompt.value as RestoreOfferPrompt;
+    expect((await c.restore(offer.candidate)).ok, isTrue);
+    await c.answerNotice(keepOn: true);
+    await c.backUpNow();
+    final me = prefs.getString(BackupPrefs.kInstallId)!;
+    expect(cloud.headerOf(kRecordsFileName)!.installId, me);
+    expect(cloud.headerOf(picturesPath('2026-10'))!.installId, _other,
+        reason: 'restored and unchanged: still the adopted file');
+    // The old phone, still in use, chose Back Up From This iPhone (its
+    // next seq is above any it took before): October first...
+    final late = await seed(otherDao, '2026-10-25', hash: 'o-late');
+    await otherDao.saveMealThumb(late, _jpeg(6));
+    final w = BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+    final p = await w.writePictures('${tmp.path}/o9-oct.json',
+        installId: _other, seq: 9, month: '2026-10');
+    cloud.files[picturesPath('2026-10')] = await File(p.path).readAsBytes();
+    final mine = await seed(dao, '2026-10-26', hash: 'mine');
+    await dao.saveMealThumb(mine, _jpeg(7));
+    expect(await run(), BackupState.uploading);
+    expect(hashesIn('2026-10'), unorderedEquals(['o0', 'o1', 'o-late']),
+        reason: 'its newer October is not written over');
+    expect(BackupPrefs(prefs).months['2026-10']!.state, MonthState.foreign);
+    // ...then its records file, with a meal this phone never saw.
+    final f = await w.writeRecords('${tmp.path}/o9.json',
+        installId: _other, seq: 9, months: const {'2026-10': 3});
+    cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+    final theirs = Map.of(cloud.files);
+    await seed(dao, '2026-11-10');
+    expect(await run(), BackupState.otherDevice);
+    expect(c.status.value.other!.installId, _other);
+    expect(await c.backUpNow(), BackupState.otherDevice);
+    expect(await c.deleteBackup(), isNot(BackupDeleteResult.failed));
+    expect(cloud.files, theirs, reason: 'nothing of it written or deleted');
+  });
+
+  group('a restore while this iPhone does not back up takes nothing over',
+      () {
+    test('the switch off: a plain merge, and Delete never reaches the other '
+        'iPhone\'s backup', () async {
+      await noticeAnswered();
+      await prefs.setBool(BackupPrefs.kEnabled, false);
+      await otherPhoneBackup(meals: 3);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isNull, reason: 'no offer while off');
+      final cand = c.status.value.restorable.single; // Restore From iCloud…
+      final takesOver = c.restoreTakesOver(cand);
+      final s = await c.restore(cand);
+      expect(s.ok, isTrue);
+      expect(s.mealsAdded, 3);
+      final theirs = Map.of(cloud.files);
+      await c.deleteBackup();
+      expect(cloud.files, theirs,
+          reason: 'the other iPhone still owns its backup, and may write it');
+      expect(takesOver, isFalse,
+          reason: 'the sheet does not say this iPhone takes it over');
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), isNull);
+      expect(c.status.value.ownsFiles, isFalse,
+          reason: 'no Delete iCloud Backup… row while off');
+      // Turned on later: that backup is in the way like any other
+      // install's (Back Up From This iPhone… asks first).
+      await c.setEnabled(true);
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      expect(cloud.files, theirs);
+    });
+
+    test('Turn Off on the notice after a restore gives the takeover up',
+        () async {
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect(c.restoreTakesOver(offer.candidate), isTrue,
+          reason: 'on by default: the sheet says it takes the backup over');
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      expect(c.prompt.value, isA<NoticePrompt>());
+      await c.answerNotice(keepOn: false);
+      final theirs = Map.of(cloud.files);
+      await c.deleteBackup();
+      expect(cloud.files, theirs,
+          reason: 'never written over: still the other iPhone\'s backup');
+      expect(c.status.value.state, BackupState.off);
+      expect(c.status.value.ownsFiles, isFalse);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), isNull);
+      expect(BackupPrefs(prefs).months, isEmpty);
+      await c.setEnabled(true);
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      expect(cloud.files, theirs, reason: 'not written over without asking');
+    });
+
+    test('the switch turned off before this iPhone wrote over the file gives '
+        'the takeover up; after it did, the backup is this iPhone\'s',
+        () async {
+      await noticeAnswered();
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      cloud.state = CloudState.unavailable; // the run after the restore stops
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      expect(await run(), BackupState.unavailable, reason: 'after that run');
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), _other);
+      expect(await c.turnOff(deleteFiles: false), isNull);
+      cloud.state = CloudState.ok;
+      final theirs = Map.of(cloud.files);
+      expect(c.status.value.ownsFiles, isFalse);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), isNull);
+      await c.setEnabled(true);
+      expect(await c.backUpNow(), BackupState.otherDevice);
+      expect(cloud.files, theirs);
+      // Taken over on purpose and written: this iPhone's, the switch off.
+      expect(await c.takeOver(replace: false), isTrue);
+      expect(await c.turnOff(deleteFiles: false), isNull);
+      expect(prefs.getString(BackupPrefs.kAdoptedFrom), _other);
+      expect(c.status.value.ownsFiles, isTrue);
+      expect(await c.deleteBackup(), BackupDeleteResult.deleted);
+      expect(cloud.files, isEmpty);
+    });
   });
 
   test('a delete never drops another phone\'s unresolved write to the '
@@ -1029,4 +1645,74 @@ void main() {
     expect(backupHoldsCatchUp(prefs, now.add(const Duration(minutes: 31))),
         isFalse);
   });
+}
+
+/// A metadata query in its first minute: each look at it is 10 s later
+/// ([onLook] moves the clock as far).
+class _QueryWarmingUp extends FakeCloudTransport {
+  _QueryWarmingUp(this.onLook);
+  final void Function() onLook;
+
+  @override
+  Future<CloudListing> list() async {
+    live += const Duration(seconds: 10);
+    onLook();
+    return super.list();
+  }
+}
+
+/// An iCloud folder whose fetch of [held] waits for [gate] (a long
+/// download), [entered] once it does.
+class _FetchHeld extends FakeCloudTransport {
+  String? held;
+  final Completer<void> gate = Completer();
+  final Completer<void> entered = Completer();
+
+  @override
+  Future<CloudResult> fetch(String path, String destPath,
+      {required Duration timeout}) async {
+    if (path == held) {
+      if (!entered.isCompleted) entered.complete();
+      await gate.future;
+    }
+    return super.fetch(path, destPath, timeout: timeout);
+  }
+}
+
+/// An iCloud folder whose writes answer [fail] while it is set (a timeout,
+/// a full iCloud): nothing lands.
+class _WritesFail extends FakeCloudTransport {
+  CloudResultKind? fail;
+
+  @override
+  Future<CloudResult> write({
+    required String path,
+    required String sourcePath,
+    required int bytes,
+    required String sha256,
+    required WriteExpect expect,
+    String? keepPreviousPath,
+    required bool allowDownload,
+    required Duration timeout,
+  }) async {
+    final kind = fail;
+    if (kind != null) return CloudResult(kind);
+    return super.write(
+        path: path,
+        sourcePath: sourcePath,
+        bytes: bytes,
+        sha256: sha256,
+        expect: expect,
+        keepPreviousPath: keepPreviousPath,
+        allowDownload: allowDownload,
+        timeout: timeout);
+  }
+}
+
+/// A database whose month of pictures cannot be read.
+class _ThumbsFailDao extends SqfliteMealsDao {
+  _ThumbsFailDao(super.db, {super.clock});
+  @override
+  Future<List<BackupThumb>> thumbsForMonth(String month) async =>
+      throw const FileSystemException('No space left on device');
 }

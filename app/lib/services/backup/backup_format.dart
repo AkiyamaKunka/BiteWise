@@ -236,11 +236,13 @@ class WriteExpect {
     required this.installId,
     this.seqs,
     this.adoptFrom,
+    this.adoptMaxSeq,
     this.allowAbsent = false,
     this.replaceUnknown = false,
   });
 
-  /// This install.
+  /// This install (Start Fresh: the install whose backup is deleted, so
+  /// that only its files go).
   final String installId;
 
   /// The seqs of [installId]'s own file that may be replaced; null = any
@@ -248,8 +250,14 @@ class WriteExpect {
   final List<int>? seqs;
 
   /// An install whose file the user chose to restore or take over: its
-  /// file may be replaced whatever its seq.
+  /// file may be replaced up to [adoptMaxSeq].
   final String? adoptFrom;
+
+  /// The seq of [adoptFrom]'s records file when it was adopted; null = any
+  /// seq. Its pictures files then carry that seq or a lower one. A later
+  /// file of that install (it took the backup back, and its seqs only
+  /// rise) is another install's again: never replaced or deleted.
+  final int? adoptMaxSeq;
 
   /// Whether a missing file may be created.
   final bool allowAbsent;
@@ -261,6 +269,7 @@ class WriteExpect {
         'installId': installId,
         'seqs': seqs,
         'adoptFrom': adoptFrom,
+        'adoptMaxSeq': adoptMaxSeq,
         'allowAbsent': allowAbsent,
         'replaceUnknown': replaceUnknown,
       };
@@ -277,7 +286,7 @@ enum OwnerVerdict {
 /// The owner rule (CloudFiles.swift checkOwner is the same):
 /// - a missing file may be created only with [WriteExpect.allowAbsent];
 /// - an unreadable header is never replaced, unless [replaceUnknown];
-/// - the adopted install's file may be replaced;
+/// - the adopted install's file may be replaced, up to the adopted seq;
 /// - this install's own file only at one of the expected seqs;
 /// - anything else belongs to another install.
 OwnerVerdict checkOwner({
@@ -296,7 +305,12 @@ OwnerVerdict checkOwner({
         : OwnerVerdict.unknownOwner;
   }
   final adopt = expect.adoptFrom;
-  if (adopt != null && header.installId == adopt) return OwnerVerdict.allowed;
+  if (adopt != null && header.installId == adopt) {
+    final max = expect.adoptMaxSeq;
+    return max == null || header.seq <= max
+        ? OwnerVerdict.allowed
+        : OwnerVerdict.ownedByOther;
+  }
   if (header.installId == expect.installId) {
     final seqs = expect.seqs;
     return seqs == null || seqs.contains(header.seq)
