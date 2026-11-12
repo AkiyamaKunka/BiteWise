@@ -992,6 +992,7 @@ void main() {
       await seed(dao, '2026-11-10');
       await ready();
       await BackupCoordinator.runHeadless(
+          clock: () => now,
           dao: dao,
           prefs: prefs,
           left: const Duration(seconds: 20),
@@ -1003,6 +1004,7 @@ void main() {
       await seed(dao, '2026-11-11');
       cloud.log.clear();
       await BackupCoordinator.runHeadless(
+          clock: () => now,
           dao: dao,
           prefs: prefs,
           left: const Duration(seconds: 7),
@@ -1010,6 +1012,7 @@ void main() {
           transport: cloud);
       expect(cloud.log, isEmpty);
       await BackupCoordinator.runHeadless(
+          clock: () => now,
           dao: dao,
           prefs: prefs,
           left: const Duration(seconds: 20),
