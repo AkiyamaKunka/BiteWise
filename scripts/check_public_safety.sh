@@ -8,12 +8,14 @@ fail() {
 
 tracked_forbidden=$(
   git ls-files \
-    '.env' '.env.*' \
+    '.env' '.env.*' '*/.env' '*/.env.*' \
     'logs/*' 'reports/*' \
     '*.db' '*.sqlite3' '*.pyc' '*__pycache__*' \
     'dietary_profile.txt' \
     '*.shortcut' '*.wflow' \
-    2>/dev/null | grep -v -x '.env.example' || true
+    '*.p8' '*.p12' '*.jks' '*.keystore' '*.mobileprovision' '*.cer' \
+    '*.certSigningRequest' '*key.properties' '*provider_keys.env' \
+    2>/dev/null | grep -v -E '(^|/)[^/]*\.example$' || true
 )
 
 if [ -n "$tracked_forbidden" ]; then
@@ -23,7 +25,7 @@ fi
 
 secret_matches=$(
   git grep -n -I -E \
-    '(termux-super-secret|secret-android-key|136\.112\.|8675[0-9]+|TELEGRAM_BOT_TOKEN</key>|AIza[0-9A-Za-z_-]{20,}|[0-9]{8,}:[A-Za-z0-9_-]{20,}|PUSHPLUS_TOKEN[\"'"'"' =:]+[0-9a-f]{32}|sk-ant-(api|oat)[0-9A-Za-z_-]{20,}|sk-proj-[0-9A-Za-z_-]{20,}|sk-ws-[0-9A-Za-z_-]{20,})' \
+    '(termux-super-secret|secret-android-key|136\.112\.|8675[0-9]+|TELEGRAM_BOT_TOKEN</key>|AIza[0-9A-Za-z_-]{20,}|[0-9]{8,}:[A-Za-z0-9_-]{20,}|PUSHPLUS_TOKEN[\"'"'"' =:]+[0-9a-f]{32}|sk-ant-(api|oat)[0-9A-Za-z_-]{20,}|sk-proj-[0-9A-Za-z_-]{20,}|sk-ws-[0-9A-Za-z_-]{20,}|sk-[A-Za-z0-9]{32,}|sk-or-v1-[0-9a-f]{40,}|xai-[A-Za-z0-9]{40,}|-----BEGIN ([A-Z]+ )?PRIVATE KEY-----|gh[pousr]_[A-Za-z0-9]{30,})' \
     -- . ':!*.jpg' ':!*.jpeg' ':!*.png' ':!*.heic' ':!*.heif' \
     ':!scripts/check_public_safety.sh' \
     2>/dev/null | grep -vE 'FAKE_TOKEN|oat01-NEW|EXAMPLE|placeholder' || true
