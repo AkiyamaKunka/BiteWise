@@ -15,7 +15,7 @@ your meal log stays on your phone. Privacy details are in the
   for you. Every new photo, including ones that are not food, is sent to
   your AI provider so it can tell whether it is a meal.
 - **Fix anything**: open a meal to edit its items and numbers, or use
-  *Fix or delete a meal* and type something like "meal 2 was roast duck".
+  *Fix or delete a meal* and type something like "the noodles were roast duck rice".
 - **Leftovers**: photograph what is left and the meal shrinks to what you
   ate.
 - Today, a 30-day history, weight and body measurements, and an optional

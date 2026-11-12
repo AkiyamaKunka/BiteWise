@@ -768,7 +768,7 @@
   "nlAllActionsFailed": "❌ 请求的 {count} 项操作全部失败，请重试。",
   "nlSomeActionsFailed": "⚠️ 请求的 {total} 项操作中有 {failed} 项失败——其余已生效。",
   "nlCannotCorrectNoMeals": "❌ 最近没有记录任何餐，无法修正。",
-  "nlCorrectionUnusable": "❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「第 2 顿是烧鸭饭，大约 780 千卡」。",
+  "nlCorrectionUnusable": "❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「那碗面其实是烧鸭饭，大约 780 千卡」。",
   "nlCannotDeleteNoMeals": "❌ 最近没有记录任何餐，无法删除。",
   "nlDeleteWhich": "❌ 没听清要删除哪几顿餐，请说得具体一点。",
   "nlDeleteNoMatch": "❌ 在最近的记录里没有找到对应的餐。",

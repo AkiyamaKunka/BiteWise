@@ -2412,7 +2412,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get nlCorrectionUnusable =>
-      '❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「第 2 顿是烧鸭饭，大约 780 千卡」。';
+      '❌ 这次修正没有给出可用的新分析，所以这顿餐保持不变。请换个说法，比如「那碗面其实是烧鸭饭，大约 780 千卡」。';
 
   @override
   String get nlCannotDeleteNoMeals => '❌ 最近没有记录任何餐，无法删除。';

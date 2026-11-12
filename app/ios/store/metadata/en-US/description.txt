@@ -3,7 +3,7 @@ Chopstats · 筷拍 turns your food photos into calorie and macro estimates usin
 HOW IT WORKS
 • Take meal photos the way you already do. Pick one from your recent photos, share it from the Photos app, or turn on Watch Camera Roll and new food photos are logged for you.
 • The photo goes to the AI provider you picked. It names the dishes, states the portion it assumed (for example "Steamed rice (~150 g)") and estimates calories, protein, carbs and fat.
-• Every number can be changed. Open a meal to edit its items and numbers, or just type a fix such as "meal 2 was roast duck".
+• Every number can be changed. Open a meal to edit its items and numbers, or just type a fix such as "the noodles were roast duck rice".
 
 LOG IT YOUR WAY
 • From a photo
