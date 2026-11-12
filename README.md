@@ -107,14 +107,14 @@ Take meal photos the way you already do, then pick one in Chopstats or share it 
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/03-control.jpg" width="100%" alt="See the guess. Change any number. Every food shows the portion your AI assumed, so a wrong guess is easy to spot. Edit calories, protein, carbs or fat, or type a fix in plain words. Didn't finish? Photograph the leftovers. The Edit meal screen with one food row magnified: Grilled chicken breast (~140 g), 225 kcal, 42 g protein, 0 g carbs, 5 g fat, each in an editable field. Beside it, a typed fix: “meal 2 was roast duck”.">
+  <img src="docs/readme/slides/03-control.jpg" width="100%" alt="See the guess. Change any number. Every food shows the portion your AI assumed, so a wrong guess is easy to spot. Edit calories, protein, carbs or fat, or type a fix in plain words. Didn't finish? Photograph the leftovers. The Edit meal screen with one food row magnified: Grilled chicken breast (~140 g), 225 kcal, 42 g protein, 0 g carbs, 5 g fat, each in an editable field. Beside it, a typed fix: “the salad had no dressing”.">
 </p>
 
 <div align="center">
 
 ### Numbers you control
 
-Every food shows the portion your AI assumed, such as "Grilled chicken breast (~140 g)", so a wrong guess is easy to spot. Change any number, or type a fix in plain words, such as "meal 2 was roast duck".
+Every food shows the portion your AI assumed, such as "Grilled chicken breast (~140 g)", so a wrong guess is easy to spot. Change any number, or type a fix in plain words, such as "the salad had no dressing".
 
 <sub>Didn't finish? Photograph what is left under Today › Log › Leftovers, and the meal shrinks to what you ate. The app asks the AI to read a nutrition label or printed weight before it estimates by eye. Estimates can be wrong, and nobody has measured this app's accuracy.</sub>
 
@@ -293,7 +293,7 @@ Everything here is in the App Store version.
 - **Orders, receipts and labels.** The app also asks the AI to log a takeout order confirmation, a receipt or a nutrition label by reading its text. How well this works depends on the AI you chose.
 - **Dietary profile.** Write a line such as "vegetarian" or "home cooking, light oil", and the AI reads it with every photo.
 - **Leftovers, two ways.** If your AI recognizes the remains of a meal you logged earlier that day, the app reduces that meal and adds no second one. You can also pick the meal and the leftover photo yourself under **Today › Log › Leftovers**, for meals from today and yesterday.
-- **Fixes in your own words.** Under **Today › Log › Fix or delete a meal**, type "meal 2 was roast duck" or "delete the first meal". The app always asks you to confirm before it deletes a meal.
+- **Fixes in your own words.** Under **Today › Log › Fix or delete a meal**, type "the noodles were roast duck rice" or "delete the coffee I just logged". The app always asks you to confirm before it deletes a meal.
 - **Foods you stopped eating.** In **My usual foods**, **Hide from this list** takes one off the list.
 
 **Photos**
