@@ -1,0 +1,757 @@
+{
+  "about": "Captioned App Store screenshots for Chopstats 1.6.x (the 1.6 UI). Rendered by render_store.py; rules and re-render steps in README.md. Coordinates in rings/touches/chips are SOURCE pixels of the 1320x2868 capture; crops are [x0, y0, x1, y1] in the same pixels. headline and sub are lists of explicit lines.",
+  "defaults": {
+    "theme": "light",
+    "headline_px": {
+      "en": [
+        128,
+        112
+      ],
+      "zh": [
+        132,
+        124
+      ]
+    },
+    "stage_gap": 72,
+    "bottom": 96,
+    "align": 0.5,
+    "stage_top_by_lang": {
+      "en": 700,
+      "zh": 760
+    }
+  },
+  "frames": [
+    {
+      "id": "01_snap_get_numbers",
+      "notes": "Promise: photo to numbers. facts §2 Photo logging (the AI names dishes, states the assumed portion, estimates kcal/P/C/F). The arrow lands on the meal card of that photo (not on the day total, which would read as the photo's calories). Photo: Unsplash License (photos/CREDITS.md). Numbers: ~360 = 150+25+185 kcal, P25 C40 F11 (EN and ZH).",
+      "en": {
+        "headline": [
+          "Snap a meal.",
+          "Get the <em>numbers.</em>"
+        ],
+        "sub": [
+          "Your AI estimates calories, protein, carbs and fat."
+        ],
+        "stage": [
+          {
+            "type": "photo",
+            "src": "photos/yogurt-bowl.jpg",
+            "crop": [
+              250,
+              1100,
+              2000,
+              2850
+            ]
+          },
+          {
+            "type": "connector",
+            "h": 104
+          },
+          {
+            "type": "screen",
+            "src": "screens/en/01_today.png",
+            "crop": [
+              48,
+              1386,
+              1272,
+              1890
+            ],
+            "scale": 0.934641,
+            "radius": 46
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "拍下这一餐",
+          "<em>热量</em>一目了然"
+        ],
+        "sub": [
+          "你选的 AI 估算热量、蛋白质、碳水和脂肪"
+        ],
+        "stage": [
+          {
+            "type": "photo",
+            "src": "photos/yogurt-bowl.jpg",
+            "crop": [
+              250,
+              1100,
+              2000,
+              2850
+            ]
+          },
+          {
+            "type": "connector",
+            "h": 104
+          },
+          {
+            "type": "screen",
+            "src": "screens/zh/01_today.png",
+            "crop": [
+              48,
+              1386,
+              1272,
+              1890
+            ],
+            "scale": 0.934641,
+            "radius": 46
+          }
+        ]
+      }
+    },
+    {
+      "id": "02_edit_any_number",
+      "notes": "See the guess, change it. facts §2 (portion shown; every number can be changed: totals and item fields are text fields in meal_editor_screen.dart, read-only only while a lookup runs). EN 632 = 225+115+150+60+75+7, P58 C19 F34, 38/12/50 %. ZH 360 = 150+25+185, 28/45/28 %.",
+      "en": {
+        "headline": [
+          "See the portion.",
+          "<em>Edit</em> any number."
+        ],
+        "sub": [
+          "Each food shows the portion your AI assumed."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/05_meal_editor.png",
+            "crop": [
+              0,
+              216,
+              1320,
+              2273
+            ],
+            "rings": [
+              {
+                "box": [
+                  642,
+                  1656,
+                  833,
+                  1700
+                ],
+                "pad": [
+                  12,
+                  14,
+                  12,
+                  6
+                ],
+                "chip": {
+                  "text": "Assumed portion",
+                  "at": [
+                    492,
+                    1554
+                  ]
+                }
+              }
+            ],
+            "touches": [
+              [
+                330,
+                942
+              ]
+            ],
+            "chips": [
+              {
+                "text": "Tap to change",
+                "at": [
+                  690,
+                  942
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "分量写明白",
+          "数字<em>随你改</em>"
+        ],
+        "sub": [
+          "每样食物都写明 AI 假设的分量"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/05_meal_editor.png",
+            "crop": [
+              0,
+              216,
+              1320,
+              2461
+            ],
+            "rings": [
+              {
+                "box": [
+                  332,
+                  1844,
+                  554,
+                  1889
+                ],
+                "pad": 14,
+                "chip": {
+                  "text": "AI 假设的分量",
+                  "at": [
+                    470,
+                    1744
+                  ]
+                }
+              }
+            ],
+            "touches": [
+              [
+                330,
+                1134
+              ]
+            ],
+            "chips": [
+              {
+                "text": "点一下就能改",
+                "at": [
+                  660,
+                  1134
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "03_your_ai_your_key",
+      "notes": "Your AI, no Chopstats account. facts §3 (nine providers with your own key, or your own server), §5 (no sign-up or account; key in the iOS Keychain). The ringed Settings footer is the app's own wording: the key is sent only to the provider you picked (not 'stored only on this phone': the Keychain item comes back with a phone backup). The provider list (12) is NOT used: it shows 'free tier' / VPN notes. The provider card is cropped above its footer (no billing line). Check rows name no provider (no third-party marks in added text).",
+      "deco": {
+        "d": 1640,
+        "t": 76,
+        "cy": 0.62,
+        "rot": 200
+      },
+      "en": {
+        "headline": [
+          "Your AI,",
+          "<em>your choice</em>"
+        ],
+        "sub": [
+          "Nine AI providers, or your own server.",
+          "No Chopstats account."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/11_settings_watch_camera_roll_glasses.png",
+            "crop": [
+              0,
+              690,
+              1320,
+              1212
+            ],
+            "rings": [
+              {
+                "box": [
+                  98,
+                  1080,
+                  1216,
+                  1161
+                ],
+                "pad": 14,
+                "chip": {
+                  "text": "Goes to the AI you pick",
+                  "pos": "below",
+                  "align": "end"
+                }
+              }
+            ],
+            "touches": [
+              [
+                730,
+                849
+              ]
+            ]
+          },
+          {
+            "type": "gap",
+            "h": 132
+          },
+          {
+            "type": "screen",
+            "src": "screens/en/15_ai_provider_connection.png",
+            "crop": [
+              0,
+              690,
+              1320,
+              1036
+            ]
+          },
+          {
+            "type": "gap",
+            "h": 96
+          },
+          {
+            "type": "checks",
+            "h": 440,
+            "rows": [
+              "Nine AI services to choose from",
+              "Or your own server",
+              "Switch any time in Settings"
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "你的 AI",
+          "<em>你来选</em>"
+        ],
+        "sub": [
+          "9 家 AI 服务任选，或用你自己的服务器",
+          "无需注册筷拍账户"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/11a_settings_top_welcome.png",
+            "crop": [
+              0,
+              1206,
+              1320,
+              1732
+            ],
+            "rings": [
+              {
+                "box": [
+                  98,
+                  1599,
+                  1243,
+                  1680
+                ],
+                "pad": 14,
+                "chip": {
+                  "text": "交给你选的 AI 服务",
+                  "pos": "below",
+                  "align": "end"
+                }
+              }
+            ],
+            "touches": [
+              [
+                680,
+                1371
+              ]
+            ]
+          },
+          {
+            "type": "gap",
+            "h": 132
+          },
+          {
+            "type": "screen",
+            "src": "screens/zh/15_ai_provider_connection.png",
+            "crop": [
+              0,
+              690,
+              1320,
+              1036
+            ]
+          },
+          {
+            "type": "gap",
+            "h": 96
+          },
+          {
+            "type": "checks",
+            "h": 440,
+            "rows": [
+              "9 家 AI 服务可选",
+              "也可以用你自己的服务器",
+              "随时在设置里切换"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "04_usual_foods",
+      "notes": "My usual foods (new in 1.6). facts §2: meals logged on at least 2 of the last 90 days; tap to log again with no photo and no AI; nothing is sent. Every row's kcal/macros equal the seed's item sums.",
+      "en": {
+        "headline": [
+          "Your usual foods,",
+          "<em>one tap</em> away"
+        ],
+        "sub": [
+          "No photo, no AI, nothing sent."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/10_usual_foods.png",
+            "crop": [
+              0,
+              208,
+              1320,
+              2320
+            ],
+            "touches": [
+              [
+                930,
+                840
+              ]
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "常吃的",
+          "<em>点一下</em>就记"
+        ],
+        "sub": [
+          "不用拍照，不用 AI，不发送任何内容"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/10_usual_foods.png",
+            "crop": [
+              0,
+              208,
+              1320,
+              2248
+            ],
+            "touches": [
+              [
+                975,
+                840
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "05_restaurant_numbers",
+      "notes": "Restaurant nutrition (new in 1.6). facts §2/§8.9: off by default, US chain meals only, needs your own server, an Anthropic key or an OpenRouter key; uses the numbers the chain publishes. 180/210/130/80/20 = 620, P48 C83 F14 (checked against the chain's calculator 2026-11-11). No stock photo here: the Unsplash bowl is not the chain's food.",
+      "en": {
+        "pill": "Off by default",
+        "headline": [
+          "Use the chain's",
+          "<em>own numbers</em>"
+        ],
+        "sub": [
+          "For US chain meals.",
+          "Needs a supported AI provider."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/03_restaurant_source_card.png",
+            "crop": [
+              0,
+              344,
+              1320,
+              2206
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "pill": "默认关闭",
+        "headline": [
+          "连锁餐厅<span class=\"hang\">？</span>",
+          "用它<em>公布的数值</em>"
+        ],
+        "sub": [
+          "仅限美国连锁餐厅，",
+          "需要支持此功能的 AI 服务"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/03_restaurant_source_card.png",
+            "crop": [
+              0,
+              346,
+              1320,
+              2048
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "06_trend",
+      "theme": "dark",
+      "notes": "History and Body, dark mode. facts §2 (30-day History chart with average; Body weight trend plus waist/chest/hip). EN avg ~1,577, 170.0 lb (▼0.8); ZH avg ~1,589, 77.1 kg (▼0.1).",
+      "en": {
+        "headline": [
+          "See the <em>trend</em>,",
+          "not just today"
+        ],
+        "sub": [
+          "30 days of History.",
+          "Weight and measurements in Body."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/22_dark_history.png",
+            "crop": [
+              0,
+              644,
+              1320,
+              1282
+            ],
+            "tag": "History"
+          },
+          {
+            "type": "gap",
+            "h": 96
+          },
+          {
+            "type": "screen",
+            "src": "screens/en/23_dark_body.png",
+            "crop": [
+              0,
+              608,
+              1320,
+              2056
+            ],
+            "tag": "Body"
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "不只看今天",
+          "也看清<em>趋势</em>"
+        ],
+        "sub": [
+          "「历史」回看 30 天，",
+          "「身体」记录体重和围度"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/22_dark_history.png",
+            "crop": [
+              0,
+              644,
+              1320,
+              1282
+            ],
+            "tag": "历史"
+          },
+          {
+            "type": "gap",
+            "h": 96
+          },
+          {
+            "type": "screen",
+            "src": "screens/zh/23_dark_body.png",
+            "crop": [
+              0,
+              608,
+              1320,
+              2056
+            ],
+            "tag": "身体"
+          }
+        ]
+      }
+    },
+    {
+      "id": "07_log_your_way",
+      "notes": "Log a meal sheet (1.6 rows) over the dimmed Today, as the app shows it. facts §2: Describe a meal in any language; Enter manually needs no AI; My usual foods needs no AI. EN starts below the dimmed burrito card so no chain name shows here. Crop ends above the sheet's footer, whose 1.6.0 examples still number meals.",
+      "en": {
+        "headline": [
+          "Photo, words,",
+          "or just <em>numbers</em>"
+        ],
+        "sub": [
+          "Describe a meal in any language,",
+          "or type the numbers with no AI."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/09_log_sheet.png",
+            "crop": [
+              0,
+              1120,
+              1320,
+              2652
+            ],
+            "rings": [
+              {
+                "box": [
+                  1027,
+                  1970,
+                  1140,
+                  2004
+                ],
+                "pad": [
+                  12,
+                  18
+                ]
+              },
+              {
+                "box": [
+                  830,
+                  2238,
+                  1141,
+                  2282
+                ],
+                "pad": [
+                  12,
+                  18
+                ]
+              },
+              {
+                "box": [
+                  1027,
+                  2375,
+                  1140,
+                  2409
+                ],
+                "pad": [
+                  12,
+                  18
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "拍照、描述",
+          "或者<em>只填数字</em>"
+        ],
+        "sub": [
+          "用任何语言描述一餐，",
+          "或者手动输入，不用 AI"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/09_log_sheet.png",
+            "crop": [
+              0,
+              1130,
+              1320,
+              2652
+            ],
+            "rings": [
+              {
+                "box": [
+                  984,
+                  1966,
+                  1140,
+                  2008
+                ],
+                "pad": [
+                  12,
+                  18
+                ]
+              },
+              {
+                "box": [
+                  945,
+                  2234,
+                  1140,
+                  2278
+                ],
+                "pad": [
+                  12,
+                  18
+                ]
+              },
+              {
+                "box": [
+                  984,
+                  2371,
+                  1140,
+                  2413
+                ],
+                "pad": [
+                  12,
+                  18
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "08_privacy",
+      "notes": "Privacy. facts §5: log stays on the phone; no ads, no analytics/tracking SDK; open source (MIT); the app asks first and names the company; Chopstats has no backend and the developer receives none of your data. EN shows the real consent dialog (13). ZH has no consent-dialog capture yet: it shows the log itself (day detail, 07) plus CSS check rows. When zh/13_ai_consent_dialog.png exists, switch ZH to the EN layout (README). 2026-11-11: EN switched to the same layout (the Watch Camera Roll dialog read against the headline); ZH says 保存在, not 只留在.",
+      "en": {
+        "headline": [
+          "Your log stays",
+          "on <em>your phone</em>"
+        ],
+        "sub": [
+          "No ads. No tracking. Open source."
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/en/07_day_detail.png",
+            "crop": [
+              0,
+              212,
+              1320,
+              1808
+            ]
+          },
+          {
+            "type": "gap",
+            "h": 64
+          },
+          {
+            "type": "checks",
+            "h": 440,
+            "rows": [
+              "No Chopstats account",
+              "Nothing is sent until you allow it",
+              "The developer gets none of your data"
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "headline": [
+          "饮食记录",
+          "保存在<em>你的手机上</em>"
+        ],
+        "sub": [
+          "没有广告，不做追踪，代码公开"
+        ],
+        "stage": [
+          {
+            "type": "screen",
+            "src": "screens/zh/07_day_detail.png",
+            "crop": [
+              0,
+              212,
+              1320,
+              1808
+            ]
+          },
+          {
+            "type": "gap",
+            "h": 64
+          },
+          {
+            "type": "checks",
+            "h": 440,
+            "rows": [
+              "无需注册筷拍账户",
+              "未经你同意，不发送任何内容",
+              "开发者收不到你的任何数据"
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
