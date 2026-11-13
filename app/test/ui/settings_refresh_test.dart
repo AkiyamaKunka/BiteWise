@@ -22,10 +22,14 @@ import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
+import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
+    show LookupRecipient, LookupSupport;
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart'
     show maxDailyGoalKcal;
 import 'package:calorie_tracker/ui/ai_consent.dart' show ensureAiConsent;
+import 'package:calorie_tracker/ui/restaurant_assist_controls.dart'
+    show RestaurantAssistControls;
 import 'package:calorie_tracker/ui/screens/settings/api_key_page.dart';
 import 'package:calorie_tracker/ui/screens/settings/data_section.dart';
 import 'package:calorie_tracker/ui/screens/settings/profile_page.dart';
@@ -73,7 +77,11 @@ class _AccessLibrary implements PhotoLibrary {
 
 /// The Settings tab as the shell hosts it (inside a Scaffold, for its
 /// snackbars).
-Widget _settings(FakeSettings s, {PhotoLibrary? library}) => Scaffold(
+Widget _settings(
+  FakeSettings s, {
+  PhotoLibrary? library,
+  RestaurantAssistControls? restaurantAssist,
+}) => Scaffold(
   body: SettingsScreen(
     settings: s,
     analyzer: FakeAnalyzer(),
@@ -83,6 +91,7 @@ Widget _settings(FakeSettings s, {PhotoLibrary? library}) => Scaffold(
     lastBackgroundScan: () async => DateTime(2026, 10, 30, 14, 2),
     backgroundRefreshEnabled: () async => true,
     nextSummaryAt: () async => DateTime(2026, 10, 31, 21),
+    restaurantAssist: restaurantAssist,
   ),
 );
 
@@ -604,6 +613,148 @@ void main() {
       }
       handle.dispose();
     });
+
+    // The AI provider, the own server's plan and the restaurant mode are
+    // checkmark lists too, and the AI Provider page checks the connection
+    // type in use. Their check was a bare icon, so a screen reader read
+    // every row alike: nobody could hear which one was current.
+    Finder checkIn(Finder row) => find.descendant(
+      of: row,
+      matching: find.byWidgetPredicate(
+        (w) =>
+            w is Icon &&
+            (w.icon == Icons.check_rounded || w.icon == Icons.check),
+      ),
+    );
+
+    /// The row keyed [current] is checked and announced selected, on the
+    /// row's own node (the button read with its title); the others are
+    /// neither. [rows]: key → title.
+    void expectCurrent(
+      WidgetTester tester,
+      Map<String, String> rows, {
+      required String? current,
+    }) {
+      for (final MapEntry(key: key, value: title) in rows.entries) {
+        final row = find.byKey(Key(key));
+        final selected = key == current;
+        expect(
+          checkIn(row),
+          selected ? findsOneWidget : findsNothing,
+          reason: key,
+        );
+        final node = tester.getSemantics(row);
+        expect(node.label, contains(title), reason: key);
+        expect(node.flagsCollection.isButton, isTrue, reason: key);
+        expect(
+          node.flagsCollection.isSelected,
+          selected ? Tristate.isTrue : isNot(Tristate.isTrue),
+          reason: key,
+        );
+      }
+    }
+
+    testWidgets('the AI provider list announces the provider in use', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final s = FakeSettings(apiKey: 'k')..provider = 'deepseek';
+      await pumpApp(
+        tester,
+        ApiKeyProviderPage(settings: s),
+        size: const Size(390, 1600),
+      );
+      final rows = {
+        for (final (id, name, _) in kApiKeyChoices) 'providerChoice-$id': name,
+      };
+      expectCurrent(tester, rows, current: 'providerChoice-deepseek');
+      handle.dispose();
+    });
+
+    for (final (provider, current) in const [
+      ('server', 'planChoice-glm'),
+      ('gemini', null), // the API key type is in use: no plan is current
+    ]) {
+      testWidgets('the own server plans announce the plan in use '
+          '(provider $provider)', (tester) async {
+        final handle = tester.ensureSemantics();
+        final l = lookupAppLocalizations(const Locale('en'));
+        final s = FakeSettings(apiKey: 'k')
+          ..provider = provider
+          ..serverBackend = 'glm';
+        await pumpApp(
+          tester,
+          SubscriptionProviderPage(settings: s),
+          size: const Size(390, 1600),
+        );
+        final rows = {
+          for (final (backend, _, _) in kPlanChoices)
+            'planChoice-$backend': serverPlanName(l, backend),
+        };
+        expectCurrent(tester, rows, current: current);
+        handle.dispose();
+      });
+    }
+
+    testWidgets('the restaurant mode sheet announces the mode in use', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final l = lookupAppLocalizations(const Locale('en'));
+      final s = FakeSettings(apiKey: 'k')
+        ..provider = 'anthropic'
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      await pumpApp(
+        tester,
+        _settings(
+          s,
+          restaurantAssist: RestaurantAssistControls(
+            lookupSupport: () => const LookupSupport(
+              supported: true,
+              recipient: LookupRecipient.anthropic,
+              locationAllowed: true,
+            ),
+            clearLearnedPlaces: () async => true,
+          ),
+        ),
+        size: const Size(390, 1600),
+      );
+      await _scrollTo(tester, find.byKey(const Key('restaurantModeRow')));
+      await tester.tap(find.byKey(const Key('restaurantModeRow')));
+      await tester.pumpAndSettle();
+      expectCurrent(tester, {
+        'restaurantMode-off': l.restaurantModeOff,
+        'restaurantMode-auto': l.restaurantModeAuto,
+        'restaurantMode-always': l.restaurantModeAlways,
+      }, current: 'restaurantMode-auto');
+      handle.dispose();
+    });
+
+    for (final server in const [false, true]) {
+      testWidgets('the AI Provider page announces the connection type in '
+          'use (${server ? 'own server' : 'API key'})', (tester) async {
+        final handle = tester.ensureSemantics();
+        final l = lookupAppLocalizations(const Locale('en'));
+        final s = FakeSettings(apiKey: 'k');
+        if (server) {
+          s
+            ..provider = 'server'
+            ..serverBackend = 'claude';
+        }
+        await pumpApp(
+          tester,
+          ProviderSettingsPage(settings: s, analyzer: FakeAnalyzer()),
+          size: const Size(390, 1600),
+        );
+        expectCurrent(tester, {
+          'apiKeyTypeRow': l.typeApiKey,
+          'subscriptionTypeRow': l.typeSubscription,
+        }, current: server ? 'subscriptionTypeRow' : 'apiKeyTypeRow');
+        handle.dispose();
+      });
+    }
 
     testWidgets('the lookback slider sets the window', (tester) async {
       final s = FakeSettings(apiKey: 'k');

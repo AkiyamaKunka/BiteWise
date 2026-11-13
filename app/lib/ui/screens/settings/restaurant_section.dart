@@ -30,6 +30,7 @@ import '../../theme/app_dialog.dart';
 import '../../theme/app_theme.dart' show AppButtonStyles;
 import '../../widgets/grouped.dart';
 import '../../widgets/restaurant_consent_sheet.dart';
+import 'settings_kit.dart' show announceSelected;
 
 class RestaurantAssistSection extends StatefulWidget {
   const RestaurantAssistSection({
@@ -140,16 +141,19 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
                 separatorInset: 16,
                 children: [
                   for (final mode in const ['off', 'auto', 'always'])
-                    GroupedRow(
-                      key: Key('restaurantMode-$mode'),
-                      title: _modeLabel(ctx.l10n, mode),
-                      showChevron: false,
-                      trailing: current == mode
-                          ? Icon(Icons.check,
-                              size: 20,
-                              color: Theme.of(ctx).colorScheme.primary)
-                          : const SizedBox(width: 20),
-                      onTap: () => Navigator.pop(ctx, mode),
+                    announceSelected(
+                      selected: current == mode,
+                      row: GroupedRow(
+                        key: Key('restaurantMode-$mode'),
+                        title: _modeLabel(ctx.l10n, mode),
+                        showChevron: false,
+                        trailing: current == mode
+                            ? Icon(Icons.check,
+                                size: 20,
+                                color: Theme.of(ctx).colorScheme.primary)
+                            : const SizedBox(width: 20),
+                        onTap: () => Navigator.pop(ctx, mode),
+                      ),
                     ),
                 ],
               ),
