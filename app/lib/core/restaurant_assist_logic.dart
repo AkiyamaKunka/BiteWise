@@ -1773,38 +1773,7 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
       evidence: evidence,
     );
   }
-  final evidenceText = StringBuffer();
-  final dates = <DateTime>[
-    ..._datesIn(
-      sanitizeAssistText(r['source_title'], kAssistTitleMax),
-      ctx.now,
-    ),
-    ..._datesIn(src.url, ctx.now),
-  ];
-  final claimedYear = r['source_year'];
-  if (claimedYear is int &&
-      claimedYear >= 1990 &&
-      claimedYear <= ctx.now.year + 1) {
-    dates.add(DateTime(claimedYear));
-  }
-  for (final e in lookup.evidence) {
-    if (normalizeSourceUrl(e.url) != src.url) continue;
-    if (e.verbatim) {
-      final t = e.text;
-      evidenceText
-        ..write(
-          t.length > kAssistEvidenceTextMax
-              ? t.substring(0, kAssistEvidenceTextMax)
-              : t,
-        )
-        ..write('\n');
-    }
-    dates.addAll(_datesIn(e.pageAge, ctx.now));
-  }
-  DateTime? oldest;
-  for (final d in dates) {
-    if (oldest == null || d.isBefore(oldest)) oldest = d;
-  }
+  final (:evidenceText, :oldest) = _sourceEvidence(r, lookup, src.url, ctx.now);
   final cutoff = DateTime(
     ctx.now.year,
     ctx.now.month - kAssistSourceMaxAgeMonths,
@@ -1824,51 +1793,12 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
 
   // ── Matches ──
   final rawMatches = r['matches'] is List ? r['matches'] as List : const [];
-  final parsed =
-      <
-        ({
-          int index,
-          String menuItem,
-          String matchType,
-          bool isDrinkFlag,
-          Map raw,
-        })
-      >[];
-  final seenIndex = <int>{};
-  final seenMenu = <String>{};
-  var oneToOne = true;
-  var changed = 0;
-  for (final m in rawMatches.take(kLookupMaxItems)) {
-    if (m is! Map) continue;
-    final idx = m['item_index'];
-    final type = m['match_type'];
-    final menu = sanitizeAssistText(m['menu_item'], kAssistMenuItemMax);
-    if (idx is! int || idx < 0 || idx >= itemCount || rawItems[idx] is! Map) {
-      continue;
-    }
-    if (type != 'exact_item' &&
-        type != 'closest_item' &&
-        type != 'components_sum') {
-      continue;
-    }
-    if (menu.isEmpty) continue;
-    if (!_sameRequestItem(rawItems[idx], ctx.requestItems, idx)) {
-      changed++;
-      continue;
-    }
-    if (!seenIndex.add(idx)) {
-      oneToOne = false;
-      continue;
-    }
-    if (!seenMenu.add(_menuKey(menu))) oneToOne = false;
-    parsed.add((
-      index: idx,
-      menuItem: menu,
-      matchType: type as String,
-      isDrinkFlag: m['is_drink'] == true,
-      raw: m,
-    ));
-  }
+  final (:parsed, :oneToOne, :changed) = _parseMatches(
+    rawMatches,
+    rawItems,
+    itemCount,
+    ctx.requestItems,
+  );
   if (parsed.isEmpty && changed > 0) {
     // Every match points at an item that is no longer the one the request
     // named: the result belongs to another meal state. Nothing is written.
@@ -1884,168 +1814,37 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
 
   // A published component that also stands as its own item in the meal
   // (the bowl's sour cream logged as a separate line) would count twice.
-  var overlap = false;
-  for (final p in parsed) {
-    if (p.matchType != 'components_sum') continue;
-    final comps = p.raw['components'];
-    for (final c in (comps is List ? comps : const []).take(
-      kAssistMaxComponents,
-    )) {
-      final cw = _nameWords(
-        c is Map
-            ? sanitizeAssistText(c['name'], kAssistComponentNameMax)
-            : null,
-      );
-      if (cw.isEmpty) continue;
-      for (var j = 0; j < itemCount && !overlap; j++) {
-        if (j == p.index) continue;
-        final item = rawItems[j];
-        final iw = _nameWords(item is Map ? item['name'] : null);
-        if (iw.isEmpty) continue;
-        if (iw.containsAll(cw) || cw.containsAll(iw)) overlap = true;
-      }
-    }
-  }
+  final overlap = _componentsOverlap(parsed, rawItems, itemCount);
 
   // ── Meal-level APPLY gates (any one → suggestion at most) ──
-  String? mealReason;
-  final mealAt = DateTime.tryParse(meal.timestamp);
-  if (!src.cited) {
-    mealReason = AssistReason.sourceNotCited;
-  } else if (!src.official) {
-    mealReason = AssistReason.sourceNotOfficial;
-  } else if (src.foreign) {
-    mealReason = AssistReason.sourceForeign;
-  } else if (!typeOfficial) {
-    mealReason = AssistReason.sourceTypeNotOfficial;
-  } else if (sourceOld) {
-    mealReason = AssistReason.sourceOld;
-  } else if (meal.corrected) {
-    mealReason = AssistReason.mealCorrected;
-  } else if (fields.portionState != PortionState.whole) {
-    mealReason = AssistReason.portionNotWhole;
-  } else if (fields.restaurantContext == RestaurantContext.packaged) {
-    mealReason = AssistReason.contextPackaged;
-  } else if (fields.restaurantContext != RestaurantContext.restaurant &&
-      fields.restaurantContext != RestaurantContext.takeout) {
-    // Home, unknown or a missing context (an old server, a model that
-    // skipped the field): a chain-branded product bought at a store
-    // looks the same as café food. Unknown never applies anything.
-    mealReason = AssistReason.contextNotRestaurant;
-  } else if (meal.date != isoDate(ctx.now)) {
-    mealReason = AssistReason.notToday;
-  } else if (mealAt == null) {
-    mealReason = AssistReason.mealTimeUnknown;
-  } else if (ctx.now.difference(mealAt).abs() > kAssistApplyMaxMealAge) {
-    mealReason = AssistReason.mealTooOld;
-  } else if ((ctx.country ?? '').toUpperCase() != 'US') {
-    mealReason = AssistReason.notUs;
-  } else if (!oneToOne) {
-    mealReason = AssistReason.mappingNotOneToOne;
-  } else if (overlap) {
-    mealReason = AssistReason.componentsOverlap;
-  }
+  final mealReason = _mealApplyBlock(
+    meal,
+    src,
+    typeOfficial: typeOfficial,
+    sourceOld: sourceOld,
+    restaurantContext: fields.restaurantContext,
+    portionState: fields.portionState,
+    oneToOne: oneToOne,
+    overlap: overlap,
+    ctx: ctx,
+  );
 
   // ── Per item ──
   final evaluated = <AssistItemDecision>[];
   for (final p in parsed) {
-    final item = rawItems[p.index] as Map;
-    final before = AssistNumbers.ofItem(item);
-    final vision = _visionKcal(item);
-    final pick = p.matchType == 'components_sum'
-        ? _pickComponents(item, p.raw['components'])
-        : pickOption(item, p.raw['options'], menuItem: p.menuItem);
-    if (pick == null || vision == null) continue;
-    final ratio = (pick.kcal / vision).toDouble();
-    final words = _wordSet(p.menuItem);
-    final alcohol = words.any(_alcoholWords.contains);
-    final isDrink = p.isDrinkFlag || alcohol || words.any(_drinkWords.contains);
-    final ownBrand = brandItems.contains(p.index);
-    final otherBrand = otherBrandItems.contains(p.index);
-    final figures = pick.figures;
-    final isGrounded =
-        figures.isNotEmpty &&
-        figures.every((f) => grounded(f, evidenceText.toString()));
-    final perServing = pick.published.calories ?? pick.kcal / pick.multiplier;
-    final skipMacros =
-        p.isDrinkFlag || alcohol || perServing < kAssistMacroCheckMinKcal;
-    final pub = pick.published;
-    final menuKey = _menuKey(p.menuItem);
-    final repeat = ctx.recentApplies.any(
-      (a) =>
-          a.chainKey == chainKey &&
-          _menuKey(a.menuItem) == menuKey &&
-          ctx.now.difference(a.at) < kAssistRepeatWindow,
+    final e = _evaluateItem(
+      p,
+      rawItems: rawItems,
+      chainKey: chainKey,
+      brandItems: brandItems,
+      otherBrandItems: otherBrandItems,
+      locationConfirmed: locationConfirmed,
+      evidence: evidence,
+      evidenceText: evidenceText,
+      mealReason: mealReason,
+      ctx: ctx,
     );
-    final comboText = [p.menuItem, pick.label];
-
-    String reason;
-    if (p.matchType == 'closest_item') {
-      reason = AssistReason.closestItem;
-    } else if (comboText.any(
-      (t) => _altSlashRe.hasMatch(t) || _wordSet(t).any(_comboWords.contains),
-    )) {
-      reason = AssistReason.combo;
-    } else if (pick.isRange) {
-      reason = AssistReason.range;
-    } else if (!pick.unitsAgree) {
-      reason = AssistReason.unitMismatch;
-    } else if (_packagedItem(item)) {
-      reason = AssistReason.itemPackaged;
-    } else if (!pick.sizeUnambiguous) {
-      reason = AssistReason.sizeAmbiguous;
-    } else if (otherBrand) {
-      reason = AssistReason.brandConflict;
-    } else if (isDrink && !ownBrand) {
-      reason = AssistReason.drinkUnbranded;
-    } else if (!ownBrand && !locationConfirmed) {
-      reason = switch (evidence) {
-        AssistEvidenceKind.orderMerchant => AssistReason.orderMerchantOnly,
-        AssistEvidenceKind.location => AssistReason.locationUnconfirmed,
-        AssistEvidenceKind.userPicked => AssistReason.userPicked,
-        _ => AssistReason.itemUnbranded,
-      };
-    } else if (!ownBrand && otherBrandItems.isNotEmpty) {
-      // Location-only: an item printed with another chain's brand says the
-      // place step picked the wrong restaurant.
-      reason = AssistReason.brandConflict;
-    } else if (!ownBrand && p.matchType != 'exact_item') {
-      reason = AssistReason.locationNeedsExactItem;
-    } else if (ratio < kAssistApplyRatioMin - _eps ||
-        ratio > kAssistApplyRatioMax + _eps) {
-      reason = AssistReason.ratioOutOfBand;
-    } else if (!skipMacros && !pub.hasMacros) {
-      reason = AssistReason.macrosMissing;
-    } else if (!skipMacros &&
-        (4 * pub.proteinG! + 4 * pub.carbsG! + 9 * pub.fatG! - perServing)
-                .abs() >
-            kAssistMacroTolerance * perServing) {
-      reason = AssistReason.macroMismatch;
-    } else if (!isGrounded) {
-      reason = AssistReason.notGrounded;
-    } else if (repeat) {
-      reason = AssistReason.repeat;
-    } else {
-      reason = AssistReason.ok;
-    }
-    evaluated.add(
-      AssistItemDecision(
-        itemIndex: p.index,
-        menuItem: p.menuItem,
-        matchType: p.matchType,
-        isDrink: isDrink,
-        pick: pick,
-        before: before,
-        proposed: _proposed(pick, before),
-        ratio: ratio,
-        grounded: isGrounded,
-        applyOk: mealReason == null && reason == AssistReason.ok,
-        suggestOk:
-            ratio >= kAssistSuggestRatioMin - _eps &&
-            ratio <= kAssistSuggestRatioMax + _eps,
-        reason: reason,
-      ),
-    );
+    if (e != null) evaluated.add(e);
   }
 
   AssistDecision covering(
@@ -2122,6 +1921,288 @@ AssistDecision decideAssist(Meal meal, AssistLookup lookup, AssistContext ctx) {
     AssistStatus.suggested,
     reason,
     suggesting,
+  );
+}
+
+/// What the lookup's evidence says about the source at [srcUrl]: the text
+/// quoted verbatim from that page (each snippet capped, one per line), and
+/// the oldest date the source shows (in its title or address, a plausible
+/// claimed year, or an evidence page's age), or null.
+({String evidenceText, DateTime? oldest}) _sourceEvidence(
+  Map r,
+  AssistLookup lookup,
+  String? srcUrl,
+  DateTime now,
+) {
+  final evidenceText = StringBuffer();
+  final dates = <DateTime>[
+    ..._datesIn(sanitizeAssistText(r['source_title'], kAssistTitleMax), now),
+    ..._datesIn(srcUrl, now),
+  ];
+  final claimedYear = r['source_year'];
+  if (claimedYear is int &&
+      claimedYear >= 1990 &&
+      claimedYear <= now.year + 1) {
+    dates.add(DateTime(claimedYear));
+  }
+  for (final e in lookup.evidence) {
+    if (normalizeSourceUrl(e.url) != srcUrl) continue;
+    if (e.verbatim) {
+      final t = e.text;
+      evidenceText
+        ..write(
+          t.length > kAssistEvidenceTextMax
+              ? t.substring(0, kAssistEvidenceTextMax)
+              : t,
+        )
+        ..write('\n');
+    }
+    dates.addAll(_datesIn(e.pageAge, now));
+  }
+  DateTime? oldest;
+  for (final d in dates) {
+    if (oldest == null || d.isBefore(oldest)) oldest = d;
+  }
+  return (evidenceText: evidenceText.toString(), oldest: oldest);
+}
+
+/// One usable match of a lookup, tied to a meal item.
+typedef _Match = ({
+  int index,
+  String menuItem,
+  String matchType,
+  bool isDrinkFlag,
+  Map raw,
+});
+
+/// The lookup's usable matches: each names an item of the meal, a known
+/// match type and a menu item. A match for an item that no longer composes
+/// to the request's entry is counted in `changed` instead; a second match
+/// for one item (dropped) or two items with one menu item clear
+/// `oneToOne`.
+({List<_Match> parsed, bool oneToOne, int changed}) _parseMatches(
+  List rawMatches,
+  List rawItems,
+  int itemCount,
+  List<Object?> requestItems,
+) {
+  final parsed = <_Match>[];
+  final seenIndex = <int>{};
+  final seenMenu = <String>{};
+  var oneToOne = true;
+  var changed = 0;
+  for (final m in rawMatches.take(kLookupMaxItems)) {
+    if (m is! Map) continue;
+    final idx = m['item_index'];
+    final type = m['match_type'];
+    final menu = sanitizeAssistText(m['menu_item'], kAssistMenuItemMax);
+    if (idx is! int || idx < 0 || idx >= itemCount || rawItems[idx] is! Map) {
+      continue;
+    }
+    if (type != 'exact_item' &&
+        type != 'closest_item' &&
+        type != 'components_sum') {
+      continue;
+    }
+    if (menu.isEmpty) continue;
+    if (!_sameRequestItem(rawItems[idx], requestItems, idx)) {
+      changed++;
+      continue;
+    }
+    if (!seenIndex.add(idx)) {
+      oneToOne = false;
+      continue;
+    }
+    if (!seenMenu.add(_menuKey(menu))) oneToOne = false;
+    parsed.add((
+      index: idx,
+      menuItem: menu,
+      matchType: type as String,
+      isDrinkFlag: m['is_drink'] == true,
+      raw: m,
+    ));
+  }
+  return (parsed: parsed, oneToOne: oneToOne, changed: changed);
+}
+
+/// A component of a components_sum match that also stands as another item
+/// of the meal (the bowl's sour cream logged as a separate line), so the
+/// sum would count it twice.
+bool _componentsOverlap(List<_Match> parsed, List rawItems, int itemCount) {
+  for (final p in parsed) {
+    if (p.matchType != 'components_sum') continue;
+    final comps = p.raw['components'];
+    for (final c in (comps is List ? comps : const []).take(
+      kAssistMaxComponents,
+    )) {
+      final cw = _nameWords(
+        c is Map
+            ? sanitizeAssistText(c['name'], kAssistComponentNameMax)
+            : null,
+      );
+      if (cw.isEmpty) continue;
+      for (var j = 0; j < itemCount; j++) {
+        if (j == p.index) continue;
+        final item = rawItems[j];
+        final iw = _nameWords(item is Map ? item['name'] : null);
+        if (iw.isEmpty) continue;
+        if (iw.containsAll(cw) || cw.containsAll(iw)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/// The first meal-level APPLY gate the decision fails, in policy order, or
+/// null when it passes them all. Any one makes it a suggestion at most.
+String? _mealApplyBlock(
+  Meal meal,
+  SourceVerdict src, {
+  required bool typeOfficial,
+  required bool sourceOld,
+  required RestaurantContext? restaurantContext,
+  required PortionState? portionState,
+  required bool oneToOne,
+  required bool overlap,
+  required AssistContext ctx,
+}) {
+  final mealAt = DateTime.tryParse(meal.timestamp);
+  if (!src.cited) return AssistReason.sourceNotCited;
+  if (!src.official) return AssistReason.sourceNotOfficial;
+  if (src.foreign) return AssistReason.sourceForeign;
+  if (!typeOfficial) return AssistReason.sourceTypeNotOfficial;
+  if (sourceOld) return AssistReason.sourceOld;
+  if (meal.corrected) return AssistReason.mealCorrected;
+  if (portionState != PortionState.whole) return AssistReason.portionNotWhole;
+  if (restaurantContext == RestaurantContext.packaged) {
+    return AssistReason.contextPackaged;
+  }
+  if (restaurantContext != RestaurantContext.restaurant &&
+      restaurantContext != RestaurantContext.takeout) {
+    // Home, unknown or a missing context (an old server, a model that
+    // skipped the field): a chain-branded product bought at a store
+    // looks the same as café food. Unknown never applies anything.
+    return AssistReason.contextNotRestaurant;
+  }
+  if (meal.date != isoDate(ctx.now)) return AssistReason.notToday;
+  if (mealAt == null) return AssistReason.mealTimeUnknown;
+  if (ctx.now.difference(mealAt).abs() > kAssistApplyMaxMealAge) {
+    return AssistReason.mealTooOld;
+  }
+  if ((ctx.country ?? '').toUpperCase() != 'US') return AssistReason.notUs;
+  if (!oneToOne) return AssistReason.mappingNotOneToOne;
+  if (overlap) return AssistReason.componentsOverlap;
+  return null;
+}
+
+/// One parsed match judged against its own item: the pick, the numbers
+/// applying it would write, and the first per-item APPLY rule it breaks,
+/// in policy order ([AssistReason.ok] when none). Null when no option (or
+/// component sum) is usable or the item has no estimate to compare with.
+AssistItemDecision? _evaluateItem(
+  _Match p, {
+  required List rawItems,
+  required String chainKey,
+  required Set<int> brandItems,
+  required Set<int> otherBrandItems,
+  required bool locationConfirmed,
+  required AssistEvidenceKind evidence,
+  required String evidenceText,
+  required String? mealReason,
+  required AssistContext ctx,
+}) {
+  final item = rawItems[p.index] as Map;
+  final before = AssistNumbers.ofItem(item);
+  final vision = _visionKcal(item);
+  final pick = p.matchType == 'components_sum'
+      ? _pickComponents(item, p.raw['components'])
+      : pickOption(item, p.raw['options'], menuItem: p.menuItem);
+  if (pick == null || vision == null) return null;
+  final ratio = (pick.kcal / vision).toDouble();
+  final words = _wordSet(p.menuItem);
+  final alcohol = words.any(_alcoholWords.contains);
+  final isDrink = p.isDrinkFlag || alcohol || words.any(_drinkWords.contains);
+  final ownBrand = brandItems.contains(p.index);
+  final otherBrand = otherBrandItems.contains(p.index);
+  final figures = pick.figures;
+  final isGrounded =
+      figures.isNotEmpty && figures.every((f) => grounded(f, evidenceText));
+  final perServing = pick.published.calories ?? pick.kcal / pick.multiplier;
+  final skipMacros =
+      p.isDrinkFlag || alcohol || perServing < kAssistMacroCheckMinKcal;
+  final pub = pick.published;
+  final menuKey = _menuKey(p.menuItem);
+  final repeat = ctx.recentApplies.any(
+    (a) =>
+        a.chainKey == chainKey &&
+        _menuKey(a.menuItem) == menuKey &&
+        ctx.now.difference(a.at) < kAssistRepeatWindow,
+  );
+  final comboText = [p.menuItem, pick.label];
+
+  String reason;
+  if (p.matchType == 'closest_item') {
+    reason = AssistReason.closestItem;
+  } else if (comboText.any(
+    (t) => _altSlashRe.hasMatch(t) || _wordSet(t).any(_comboWords.contains),
+  )) {
+    reason = AssistReason.combo;
+  } else if (pick.isRange) {
+    reason = AssistReason.range;
+  } else if (!pick.unitsAgree) {
+    reason = AssistReason.unitMismatch;
+  } else if (_packagedItem(item)) {
+    reason = AssistReason.itemPackaged;
+  } else if (!pick.sizeUnambiguous) {
+    reason = AssistReason.sizeAmbiguous;
+  } else if (otherBrand) {
+    reason = AssistReason.brandConflict;
+  } else if (isDrink && !ownBrand) {
+    reason = AssistReason.drinkUnbranded;
+  } else if (!ownBrand && !locationConfirmed) {
+    reason = switch (evidence) {
+      AssistEvidenceKind.orderMerchant => AssistReason.orderMerchantOnly,
+      AssistEvidenceKind.location => AssistReason.locationUnconfirmed,
+      AssistEvidenceKind.userPicked => AssistReason.userPicked,
+      _ => AssistReason.itemUnbranded,
+    };
+  } else if (!ownBrand && otherBrandItems.isNotEmpty) {
+    // Location-only: an item printed with another chain's brand says the
+    // place step picked the wrong restaurant.
+    reason = AssistReason.brandConflict;
+  } else if (!ownBrand && p.matchType != 'exact_item') {
+    reason = AssistReason.locationNeedsExactItem;
+  } else if (ratio < kAssistApplyRatioMin - _eps ||
+      ratio > kAssistApplyRatioMax + _eps) {
+    reason = AssistReason.ratioOutOfBand;
+  } else if (!skipMacros && !pub.hasMacros) {
+    reason = AssistReason.macrosMissing;
+  } else if (!skipMacros &&
+      (4 * pub.proteinG! + 4 * pub.carbsG! + 9 * pub.fatG! - perServing).abs() >
+          kAssistMacroTolerance * perServing) {
+    reason = AssistReason.macroMismatch;
+  } else if (!isGrounded) {
+    reason = AssistReason.notGrounded;
+  } else if (repeat) {
+    reason = AssistReason.repeat;
+  } else {
+    reason = AssistReason.ok;
+  }
+  return AssistItemDecision(
+    itemIndex: p.index,
+    menuItem: p.menuItem,
+    matchType: p.matchType,
+    isDrink: isDrink,
+    pick: pick,
+    before: before,
+    proposed: _proposed(pick, before),
+    ratio: ratio,
+    grounded: isGrounded,
+    applyOk: mealReason == null && reason == AssistReason.ok,
+    suggestOk:
+        ratio >= kAssistSuggestRatioMin - _eps &&
+        ratio <= kAssistSuggestRatioMax + _eps,
+    reason: reason,
   );
 }
 
