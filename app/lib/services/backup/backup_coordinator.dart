@@ -172,17 +172,13 @@ enum BackupDeleteResult {
 class RestoreSummary {
   const RestoreSummary({
     this.ok = true,
-    this.failure,
     this.mealsAdded = 0,
-    this.totalAdded = 0,
     this.thumbsAdded = 0,
     this.mealsSkippedDeleted = 0,
     this.failedMonths = 0,
   });
   final bool ok;
-  final CloudResultKind? failure;
   final int mealsAdded;
-  final int totalAdded;
   final int thumbsAdded;
   final int mealsSkippedDeleted;
 
@@ -851,7 +847,6 @@ class BackupCoordinator {
     await _prefs.setLastBytes(bytes);
     await _prefs.setLastMeals(file.header.meals);
     await _prefs.setLastError('');
-    await _prefs.setOwnedPath(kRecordsFileName);
     await _prefs.setFirstEmptyAt(null);
     await _prefs.setPaused(BackupPause.none);
     if (rotate || firstWrite) await _prefs.setPreviousDay(_today);
@@ -1502,7 +1497,7 @@ class BackupCoordinator {
     if (!f.ok) {
       await _deleteQuietly(dest);
       return (
-        RestoreSummary(ok: false, failure: f.kind),
+        const RestoreSummary(ok: false),
         const <String>[],
         before,
         null
@@ -1514,11 +1509,7 @@ class BackupCoordinator {
       final h = parseBackupHeader(await _headOf(dest));
       if (h == null || h.installId != installId) {
         return (
-          RestoreSummary(
-              ok: false,
-              failure: h == null
-                  ? CloudResultKind.unknownOwner
-                  : CloudResultKind.ownedByOther),
+          const RestoreSummary(ok: false),
           const <String>[],
           before,
           null
@@ -1528,7 +1519,7 @@ class BackupCoordinator {
       s = await _dao.importJson(await File(dest).readAsString());
     } on FormatException {
       return (
-        const RestoreSummary(ok: false, failure: CloudResultKind.unknownOwner),
+        const RestoreSummary(ok: false),
         const <String>[],
         before,
         null
@@ -1562,7 +1553,6 @@ class BackupCoordinator {
     return (
       RestoreSummary(
         mealsAdded: s.added['meals'] ?? 0,
-        totalAdded: s.totalAdded,
         thumbsAdded: thumbs,
         mealsSkippedDeleted: s.mealsSkippedDeleted,
         failedMonths: failed,

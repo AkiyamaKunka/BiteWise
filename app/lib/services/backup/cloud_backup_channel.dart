@@ -1,9 +1,9 @@
 /// The iCloud side of iCloud Backup (1.7.0), as Dart sees it:
 /// [BackupTransport], with [ICloudTransport] over the
 /// `dev.calorietracker/cloudbackup` channel (ios/Runner/
-/// CloudBackupPlugin.swift) and [NoTransport] where there is no iCloud
-/// (Android, tests that never back up). test/support/
-/// fake_cloud_transport.dart is an in-memory one with the same owner rule.
+/// CloudBackupPlugin.swift). Android builds no backup coordinator at all
+/// (di.dart). test/support/fake_cloud_transport.dart is an in-memory
+/// transport with the same owner rule.
 ///
 /// Paths are relative to iCloud Drive › Chopstats (the container's
 /// Documents folder): `Chopstats Backup.json`, `Meal Pictures/2026-10.json`.
@@ -418,60 +418,4 @@ class ICloudTransport implements BackupTransport {
     final ms = r is Map ? r['ms'] : null;
     return ms is num ? Duration(milliseconds: ms.toInt()) : null;
   }
-}
-
-/// No iCloud here: every call says so.
-class NoTransport implements BackupTransport {
-  const NoTransport();
-  @override
-  Future<CloudStatus> status() async =>
-      const CloudStatus(CloudState.unavailable);
-  @override
-  Future<String?> deviceKey() async => null;
-  @override
-  Future<void> startWatching() async {}
-  @override
-  Future<void> stopWatching() async {}
-  @override
-  Future<CloudListing> list() async => const CloudListing();
-  @override
-  Future<CloudItemState> itemState(String path) async =>
-      const CloudItemState(ItemExists.unknown);
-  @override
-  Future<CloudResult> readHeader(String path,
-          {required bool allowDownload, required Duration timeout}) async =>
-      CloudResult.unavailable;
-  @override
-  Future<CloudResult> fetch(String path, String destPath,
-          {required Duration timeout}) async =>
-      CloudResult.unavailable;
-  @override
-  Future<void> startDownloads(List<String> paths) async {}
-  @override
-  Future<CloudResult> write({
-    required String path,
-    required String sourcePath,
-    required int bytes,
-    required String sha256,
-    required WriteExpect expect,
-    String? keepPreviousPath,
-    required bool allowDownload,
-    required Duration timeout,
-  }) async =>
-      CloudResult.unavailable;
-  @override
-  Future<CloudResult> delete(List<String> paths, WriteExpect expect,
-          {Duration timeout = const Duration(seconds: 20)}) async =>
-      CloudResult.unavailable;
-  @override
-  Future<List<ConflictVersion>> conflicts(String path, String destDir) async =>
-      const [];
-  @override
-  Future<bool> resolveConflicts(String path, List<String> installIds,
-          {Duration timeout = const Duration(seconds: 30)}) async =>
-      false;
-  @override
-  Future<CloudResult> pickFiles() async => CloudResult.unavailable;
-  @override
-  Future<Duration?> backgroundTimeRemaining() async => null;
 }
