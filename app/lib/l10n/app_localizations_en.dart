@@ -3619,4 +3619,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyDeleteFailed => 'Couldn\'t delete. Try again.';
+
+  @override
+  String get addChooseAllPhotos => 'Choose from all photos…';
+
+  @override
+  String get addPickerNote =>
+      'Android\'s photo picker shows all your photos. Chopstats receives only the one you choose.';
+
+  @override
+  String get addPickerUnavailable =>
+      'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.';
 }

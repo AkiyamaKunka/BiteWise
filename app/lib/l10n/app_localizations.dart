@@ -5458,6 +5458,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t delete. Try again.'**
   String get bodyDeleteFailed;
+
+  /// Android, Log › From recent photos and Leftovers: the button that opens Android's system photo picker, where every photo on the phone can be chosen. Shown under the recent-photos grid when the app has full photo access, and as the screen's one button when it has none.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose from all photos…'**
+  String get addChooseAllPhotos;
+
+  /// Android, Log › From recent photos and Leftovers, when the app has no full photo access: the line above the Choose from all photos button. The system picker needs no permission; the app gets only the photo the user picks there.
+  ///
+  /// In en, this message translates to:
+  /// **'Android\'s photo picker shows all your photos. Chopstats receives only the one you choose.'**
+  String get addPickerNote;
+
+  /// Android, Log › From recent photos and Leftovers: shown instead of the Choose from all photos button when the system photo picker could not open. Sharing a photo into the app from the gallery needs no permission and still works.
+  ///
+  /// In en, this message translates to:
+  /// **'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.'**
+  String get addPickerUnavailable;
 }
 
 class _AppLocalizationsDelegate

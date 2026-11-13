@@ -3438,5 +3438,17 @@
   "bodyDeleteFailed": "Couldn't delete. Try again.",
   "@bodyDeleteFailed": {
     "description": "Body tab: deleting a day's weight or measurements failed. Shown under the Log body sheet's fields when its Delete failed (the sheet stays open), else in a snackbar after a history row's swipe or its screen-reader Delete action (the row stays). The raw error goes to the debug log only (its type)."
+  },
+  "addChooseAllPhotos": "Choose from all photos…",
+  "@addChooseAllPhotos": {
+    "description": "Android, Log › From recent photos and Leftovers: the button that opens Android's system photo picker, where every photo on the phone can be chosen. Shown under the recent-photos grid when the app has full photo access, and as the screen's one button when it has none."
+  },
+  "addPickerNote": "Android's photo picker shows all your photos. Chopstats receives only the one you choose.",
+  "@addPickerNote": {
+    "description": "Android, Log › From recent photos and Leftovers, when the app has no full photo access: the line above the Choose from all photos button. The system picker needs no permission; the app gets only the photo the user picks there."
+  },
+  "addPickerUnavailable": "The photo picker can't open on this phone. You can still share a photo to Chopstats from your gallery app.",
+  "@addPickerUnavailable": {
+    "description": "Android, Log › From recent photos and Leftovers: shown instead of the Choose from all photos button when the system photo picker could not open. Sharing a photo into the app from the gallery needs no permission and still works."
   }
 }
