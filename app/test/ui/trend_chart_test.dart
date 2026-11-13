@@ -16,8 +16,8 @@
 //   headline with its pinned plain text unchanged.
 import 'dart:ui' as ui;
 
+import 'package:calorie_tracker/core/coerce.dart' show addCalendarDays, isoDate;
 import 'package:calorie_tracker/core/contracts.dart';
-import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/screens/history_screen.dart';
 import 'package:calorie_tracker/ui/theme/tokens.dart';
 import 'package:calorie_tracker/ui/widgets/grouped.dart';
@@ -40,7 +40,10 @@ Meal _meal(String date, {num cal = 500, int id = 0}) => Meal(
       analysis: {'is_food': true, 'total_calories': cal},
     );
 
-String _daysAgo(int n) => isoDate(DateTime.now().subtract(Duration(days: n)));
+/// [n] CALENDAR days before today, as History counts them. Never
+/// `subtract(Duration(days: n))`: at 23:xx on the day DST ends that is
+/// still today, and both seeded days landed on one (review 1.7.1).
+String _daysAgo(int n) => isoDate(addCalendarDays(DateTime.now(), -n));
 
 FakeDao _dao(Map<int, num> kcalByDaysAgo) {
   final dao = FakeDao();
