@@ -88,6 +88,19 @@ from utils import (
     telegram_message_chunks,
     utf16_len,
 )
+# Values shared with the app via shared/constants.json (single source of
+# truth; sync_shared.py regenerates both bindings). Env overrides below
+# still win where a setting has one.
+from shared_generated import (
+    CAPTURED_AT_MAX_AGE_DAYS_DEFAULT,
+    CAPTURED_AT_MAX_FUTURE_SECONDS,
+    GEMINI_ANALYSIS_MAX_ATTEMPTS as GEMINI_ANALYSIS_MAX_ATTEMPTS_DEFAULT,
+    GEMINI_RETRY_DELAY_CAP_SECONDS,
+    NL_MAX_ACTIONS,
+    NORMALIZE_JPEG_QUALITY,
+    NORMALIZE_MAX_DIMENSION_PX,
+    TEXT_EDIT_WINDOW_DAYS_DEFAULT,
+)
 
 # ─── Constants ─────────────────────────────────────────────────────
 def _parse_chat_id(value: Optional[str]) -> int:
@@ -130,9 +143,11 @@ def _html(value) -> str:
 ALLOWED_CHAT_ID = _parse_chat_id(TELEGRAM_CHAT_ID)
 
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN') or TELEGRAM_BOT_TOKEN
-GEMINI_ANALYSIS_MAX_ATTEMPTS = _env_int("GEMINI_ANALYSIS_MAX_ATTEMPTS", 3, 1, 10)
+GEMINI_ANALYSIS_MAX_ATTEMPTS = _env_int(
+    "GEMINI_ANALYSIS_MAX_ATTEMPTS", GEMINI_ANALYSIS_MAX_ATTEMPTS_DEFAULT, 1, 10)
 GEMINI_RETRY_BASE_DELAY_SECONDS = _env_int("GEMINI_RETRY_BASE_DELAY_SECONDS", 5, 0, 3600)
-GEMINI_RETRY_MAX_DELAY_SECONDS = _env_int("GEMINI_RETRY_MAX_DELAY_SECONDS", 60, 1, 3600)
+GEMINI_RETRY_MAX_DELAY_SECONDS = _env_int(
+    "GEMINI_RETRY_MAX_DELAY_SECONDS", GEMINI_RETRY_DELAY_CAP_SECONDS, 1, 3600)
 GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS = _env_int("GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS", 12 * 3600, 60, 7 * 24 * 3600)
 # Native JSON mode for JSON-producing Gemini calls: a malformed free-form
 # response terminally burns a free-tier request, so ask the API to enforce
@@ -179,7 +194,8 @@ _DEADLINE_THREAD = threading.Thread
 # How many days of meals a natural-language correction/delete can reach back
 # over (widened from 3 so "earlier this week" resolves, not just "yesterday").
 # NOTE: HELP_TEXT's Corrections section states this number — keep them in sync.
-TEXT_EDIT_WINDOW_DAYS = _env_int("TEXT_EDIT_WINDOW_DAYS", 7, 1, 31)
+TEXT_EDIT_WINDOW_DAYS = _env_int(
+    "TEXT_EDIT_WINDOW_DAYS", TEXT_EDIT_WINDOW_DAYS_DEFAULT, 1, 31)
 ANDROID_VPN_WARNING_COOLDOWN_MINUTES = _env_int("ANDROID_VPN_WARNING_COOLDOWN_MINUTES", 30, 0, 1440)
 IOS_VPN_WARNING_COOLDOWN_MINUTES = _env_int("IOS_VPN_WARNING_COOLDOWN_MINUTES", 30, 0, 1440)
 HEARTBEAT_STALE_WARNING_HOURS = _env_float("HEARTBEAT_STALE_WARNING_HOURS", 2, 0, 168)
@@ -1169,13 +1185,13 @@ def _normalize_photo_for_analysis(image_bytes: bytes) -> Optional[bytes]:
     try:
         img = Image.open(io.BytesIO(image_bytes))
         width, height = img.size
-        scale = 1568 / max(width, height)
+        scale = NORMALIZE_MAX_DIMENSION_PX / max(width, height)
         if 0 < scale < 1:
             img.draft("RGB", (max(1, round(width * scale)), max(1, round(height * scale))))
         img = ImageOps.exif_transpose(img)
-        img.thumbnail((1568, 1568))
+        img.thumbnail((NORMALIZE_MAX_DIMENSION_PX, NORMALIZE_MAX_DIMENSION_PX))
         buf = io.BytesIO()
-        img.convert("RGB").save(buf, format="JPEG", quality=85)
+        img.convert("RGB").save(buf, format="JPEG", quality=NORMALIZE_JPEG_QUALITY)
         return buf.getvalue()
     except Exception as e:
         log.warning(f"Could not normalize photo for analysis; using originals: {e}")
@@ -1877,7 +1893,8 @@ def save_meal(chat_id: int, analysis: Dict, source: str, file_id: str = "", imag
 
 # Oldest capture time /upload will honor; anything older (or unparseable, or
 # in the future) falls back to upload-time dating rather than trusting junk.
-CAPTURED_AT_MAX_AGE_DAYS = _env_int("CAPTURED_AT_MAX_AGE_DAYS", 45, 1, 365)
+CAPTURED_AT_MAX_AGE_DAYS = _env_int(
+    "CAPTURED_AT_MAX_AGE_DAYS", CAPTURED_AT_MAX_AGE_DAYS_DEFAULT, 1, 365)
 
 
 def _looks_like_image(data: bytes) -> bool:
@@ -1897,14 +1914,15 @@ def _parse_captured_at(raw: str) -> Optional[datetime]:
     """Validate the additive captured_at form field ('YYYY-MM-DD HH:MM:SS').
 
     The value is device-local wall time taken from the camera filename, so it
-    is compared against the user-local clock, allowing an hour of skew.
+    is compared against the user-local clock, allowing an hour of skew
+    (CAPTURED_AT_MAX_FUTURE_SECONDS, shared with the app).
     """
     try:
         captured = datetime.strptime((raw or "").strip(), "%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return None
     now_local = database.user_local_now().replace(tzinfo=None)
-    if captured > now_local + timedelta(hours=1):
+    if captured > now_local + timedelta(seconds=CAPTURED_AT_MAX_FUTURE_SECONDS):
         return None
     if captured < now_local - timedelta(days=CAPTURED_AT_MAX_AGE_DAYS):
         return None
@@ -4238,9 +4256,9 @@ _NL_INTENT_HANDLERS = {
     "log_activity": _nl_log_activity,
 }
 
-# A compound message ("correct meal 2 AND delete meal 3") expands into this
-# many actions at most; anything longer is almost certainly model runaway.
-NL_MAX_ACTIONS = 5
+# A compound message ("correct meal 2 AND delete meal 3") expands into at
+# most NL_MAX_ACTIONS actions (shared with the app, imported at the top);
+# anything longer is almost certainly model runaway.
 
 
 def _normalize_nl_actions(result) -> List[Dict]:
