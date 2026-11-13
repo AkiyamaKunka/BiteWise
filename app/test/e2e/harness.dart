@@ -639,7 +639,6 @@ class _StoryShellState extends State<StoryShell>
       body: TodayScreen(
         key: _today,
         dao: s.dao,
-        executor: s.executor,
         mealInUse: s.mealInUse,
         restaurantAssist: s.restaurantAssist,
         settings: s.settings,

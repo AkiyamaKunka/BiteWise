@@ -118,6 +118,79 @@ void main() {
       }
     }
 
+    // Review 1.7.1: below the accessibility sizes the number, unit and
+    // chip shared one Row, which overflowed a 320-pt phone by 14 px at the
+    // largest standard size (xxxL, 23/17) and by 41 px at 1.5x, clipping
+    // the chip; a 360-pt Android phone by 1.4 px at 1.5x.
+    group('at the standard sizes on narrow phones', () {
+      /// The weight card's cell as drawn (the keyed GroupedCard's box also
+      /// holds its outer margin).
+      Rect cellRect(WidgetTester tester) => tester.getRect(find
+          .descendant(
+              of: find.byKey(const Key('bodyWeightCard')),
+              matching: find.byType(Material))
+          .first);
+
+      for (final width in const [320.0, 360.0]) {
+        for (final (lang, imperial) in const [
+          ('en', false),
+          ('zh', false),
+          ('en', true),
+        ]) {
+          for (final scale in const [1.0, 19 / 17, 21 / 17, 23 / 17, 1.5]) {
+            testWidgets(
+                '$lang ${imperial ? 'lb' : 'kg'} at '
+                '${scale.toStringAsFixed(2)}x on $width pt', (tester) async {
+              await pumpApp(
+                tester,
+                BodyScreen(
+                    dao: seeded(latest: 102.4, before: 101.4),
+                    settings: FakeSettings()
+                      ..units = imperial ? 'imperial' : 'metric',
+                    clock: () => clock),
+                size: Size(width, 3000),
+                locale: Locale(lang),
+                scale: scale,
+              );
+              expect(tester.takeException(), isNull,
+                  reason: 'no RenderFlex overflow');
+              final card = cellRect(tester);
+              for (final key in const [
+                'bodyWeightHeadline',
+                'bodyWeightUnit',
+                'bodyWeightDelta',
+              ]) {
+                final r = tester.getRect(find.byKey(Key(key)));
+                expect(r.right, lessThanOrEqualTo(card.right - 15.5),
+                    reason: '$key stays inside the card padding');
+                expect(r.left, greaterThanOrEqualTo(card.left + 15.5));
+              }
+              expectUncut(tester, find.byKey(const Key('bodyWeightCard')),
+                  'weight card');
+            }, skip: !haveIphoneFonts);
+          }
+        }
+      }
+
+      testWidgets('where it fits, the chip stays on the number\'s line at '
+          'the right edge', (tester) async {
+        await pumpApp(
+          tester,
+          BodyScreen(
+              dao: seeded(latest: 102.4, before: 101.4), clock: () => clock),
+          size: const Size(390, 3000),
+        );
+        final card = cellRect(tester);
+        final number =
+            tester.getRect(find.byKey(const Key('bodyWeightHeadline')));
+        final chip = tester.getRect(find.byKey(const Key('bodyWeightDelta')));
+        expect(chip.right, moreOrLessEquals(card.right - 16, epsilon: 0.5));
+        expect(chip.top, lessThan(number.bottom),
+            reason: 'beside the number, not under it');
+        expect(chip.bottom, greaterThan(number.top));
+      }, skip: !haveIphoneFonts);
+    });
+
     testWidgets('dark mode renders the same page without errors',
         (tester) async {
       await pumpApp(tester, BodyScreen(dao: seeded(), clock: () => clock),

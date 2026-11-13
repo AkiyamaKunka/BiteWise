@@ -13,6 +13,7 @@ import 'package:calorie_tracker/core/restaurant_assist_logic.dart'
         AssistReason,
         acceptAssistSuggestion,
         recordAssistDecision;
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart'
     show LookupRecipient, LookupSupport;
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
@@ -1399,6 +1400,51 @@ void main() {
       );
     });
 
+    // The other ways a manual lookup can end without writing, each with
+    // its own line (or none), pinned through the editor (review 1.7.1).
+    final en = AppLocalizationsEn();
+    for (final (code, text) in [
+      (AssistSkip.outsideUs, en.assistLookupOutsideUs),
+      (AssistSkip.regionUnknown, en.assistLookupRegionUnknown),
+      (AssistSkip.error, en.assistLookupFailed),
+      (AssistSkip.placeThrottled, en.assistLookupFailed),
+      ('lookup_bad_reply', en.assistLookupFailed),
+      ('lookup_daily_cap', en.assistLookupDailyCap),
+      ('lookup_server_outdated', en.restaurantServerOutdated),
+      ('lookup_disabled', en.restaurantServerDisabled),
+      (AssistSkip.noBrand, en.assistLookupNoChain),
+    ]) {
+      testWidgets('Look up that ends "$code" says so', (tester) async {
+        await open(
+          tester,
+          bigMacAnalysis(),
+          setUp: (a) => a.onLookup = (_, _, _) async => AssistRun(code),
+        );
+        await tester.tap(find.byKey(const Key('assistLookUp')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('assistLookupSnack')), findsOneWidget);
+        expect(find.text(text), findsOneWidget);
+      });
+    }
+
+    for (final code in const [
+      AssistSkip.consentNeeded,
+      AssistSkip.off,
+      AssistSkip.cancelled,
+    ]) {
+      testWidgets('Look up that ends "$code" says nothing', (tester) async {
+        await open(
+          tester,
+          bigMacAnalysis(),
+          setUp: (a) => a.onLookup = (_, _, _) async => AssistRun(code),
+        );
+        await tester.tap(find.byKey(const Key('assistLookUp')));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('assistLookupSnack')), findsNothing);
+        expect(find.byType(SnackBar), findsNothing);
+      });
+    }
+
     testWidgets('Look up: asked again while the server runs it; the '
         'suggestion lands; Use published numbers applies it', (tester) async {
       late FakeDao store;
@@ -1907,6 +1953,35 @@ void main() {
         const AssistRun(AssistSkip.dailyCap),
         "Today's restaurant lookups are used up. Try again tomorrow.",
       );
+    });
+
+    testWidgets('a fresh search that could not run says why, or nothing '
+        'when it was not started', (tester) async {
+      Future<void> searchAgain(String code, String? says) async {
+        final (_, assist) = await open(
+          tester,
+          acceptedSavedBigMac(),
+          settings: assistSettings(),
+          setUp: (a) => a.onLookup = (_, _, _) async => AssistRun(code),
+        );
+        await tester.tap(find.byKey(const Key('assistSearchAgain')));
+        await tester.pumpAndSettle();
+        expect(assist.lookups.single.fresh, isTrue, reason: code);
+        if (says == null) {
+          expect(find.byKey(const Key('assistLookupSnack')), findsNothing,
+              reason: code);
+        } else {
+          expect(find.text(says), findsOneWidget, reason: code);
+        }
+      }
+
+      await searchAgain(AssistSkip.outsideUs, en.assistLookupOutsideUs);
+      await searchAgain('lookup_disabled', en.restaurantServerDisabled);
+      await searchAgain(AssistSkip.error, en.assistLookupFailed);
+      await searchAgain(AssistSkip.unsupported, en.assistLookupFailed);
+      await searchAgain(AssistSkip.cancelled, null);
+      // Not a failure: no chain, so nothing better than what stands.
+      await searchAgain(AssistSkip.unavailable, en.assistSearchAgainNoChange);
     });
 
     testWidgets('a fresh search over a saved suggestion that writes nothing '

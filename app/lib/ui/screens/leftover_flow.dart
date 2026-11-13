@@ -38,6 +38,7 @@ import '../large_text.dart';
 import '../meal_in_use.dart';
 import '../services.dart';
 import '../theme/app_dialog.dart';
+import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
 
 class LeftoverScreen extends StatefulWidget {
@@ -267,12 +268,14 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
             ],
             if (duplicateId != null) ...[
               const SizedBox(height: 8),
+              // A meal is deleted with this Save: the danger colour, as
+              // the chat's delete warning. The indigo (tertiary) it had is
+              // 4.05:1 on the dark dialog, under the 4.5:1 text needs.
               Text(
                   ctx.l10n
                       .leftoverDupRemoved(formatKcal(duplicateKcal)),
                   key: const Key('leftoverDupLine'),
-                  style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.tertiary)),
+                  style: TextStyle(color: ctx.colors.danger)),
             ],
           ],
         ),
@@ -599,33 +602,41 @@ class _MealPickRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 44),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                title,
-                style: theme.textTheme.bodyLarge,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                detail,
-                style: theme.textTheme.bodyMedium
-                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
+    // A bare InkWell only adds a tap action: VoiceOver read the row as
+    // text, never 'button' (the A11 class GroupedRow and GroupedCard
+    // fixed), and with one meal it took the section header into the
+    // row's node. Its own node, read as a button.
+    return Semantics(
+      button: true,
+      container: true,
+      child: InkWell(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  title,
+                  style: theme.textTheme.bodyLarge,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  detail,
+                  style: theme.textTheme.bodyMedium
+                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ),
       ),

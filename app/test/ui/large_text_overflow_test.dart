@@ -619,7 +619,6 @@ void main() {
           return Scaffold(
             body: TodayScreen(
               dao: dao,
-              executor: FakeExecutor(),
               garminDaily: (date) async => GarminDaily(
                 activeCalories: 512,
                 steps: 8000,

@@ -162,12 +162,36 @@ bool usualUndoPersists(ScaffoldMessengerState messenger) =>
 /// Shows [bar] in place of the snackbar that is up now, ahead of the app
 /// messages waiting behind that one (main.dart showAppSnackbar: a "Logged"
 /// line per photo, a share verdict, the lookup's Undo). They are not
-/// dropped: main.dart hands them to the messenger one at a time, so they
-/// follow [bar] (owner decision 2026-11-11: the Undo jumps the queue).
+/// dropped: main.dart hands them to the messenger one at a time, and none
+/// while [bar] is up ([usualSnackClosing]), so they follow it (owner
+/// decision 2026-11-11: the Undo jumps the queue).
 void showUsualSnack(ScaffoldMessengerState messenger, SnackBar bar) {
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(bar);
+  messenger.hideCurrentSnackBar();
+  final closed = messenger.showSnackBar(bar).closed.then<void>((_) {});
+  _usualUp = (messenger: messenger, closed: closed);
+  closed.whenComplete(() {
+    if (identical(_usualUp?.closed, closed)) _usualUp = null;
+  });
+}
+
+/// The usual-foods snackbar [showUsualSnack] showed last, until it closes.
+({ScaffoldMessengerState messenger, Future<void> closed})? _usualUp;
+
+/// Completes when the usual-foods snackbar that is up on [messenger]
+/// closes; null when none is.
+///
+/// main.dart keeps the app's messages in its own list until then. Handed
+/// to the messenger, a message waited in the messenger's queue behind the
+/// snackbar that was up, and a second Use, which hides only that one, put
+/// its Undo behind the message: about 4 s late, and under a screen reader
+/// for as long as a held lookup Undo was not acted on (review 1.7.1).
+Future<void>? usualSnackClosing(ScaffoldMessengerState messenger) {
+  final up = _usualUp;
+  // A disposed messenger never reports its snackbars closed.
+  if (up == null || !identical(up.messenger, messenger) || !messenger.mounted) {
+    return null;
+  }
+  return up.closed;
 }
 
 void showUsualUsedSnack(

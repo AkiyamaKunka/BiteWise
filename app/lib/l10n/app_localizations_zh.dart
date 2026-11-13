@@ -3228,6 +3228,12 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get bodyLoadFailed => '无法加载体重和围度记录。';
+
+  @override
+  String get bodySaveFailed => '没能保存，请再试一次。';
+
+  @override
   String get diagStatusPass => '通过';
 
   @override

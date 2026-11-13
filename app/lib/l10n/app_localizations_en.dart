@@ -3580,6 +3580,12 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get bodyLoadFailed => 'Couldn\'t load your weight and measurements.';
+
+  @override
+  String get bodySaveFailed => 'Couldn\'t save. Try again.';
+
+  @override
   String get diagStatusPass => 'Passed';
 
   @override

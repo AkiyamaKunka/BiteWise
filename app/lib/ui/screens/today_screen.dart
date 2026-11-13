@@ -38,7 +38,6 @@ import '../widgets/states.dart';
 
 class TodayScreen extends StatefulWidget {
   final MealsDao dao;
-  final NlExecutor executor;
 
   /// Photo thumbnails for the cards; null (tests) renders placeholders.
   final MealThumbResolver? thumbs;
@@ -69,7 +68,6 @@ class TodayScreen extends StatefulWidget {
   const TodayScreen(
       {super.key,
       required this.dao,
-      required this.executor,
       this.thumbs,
       this.garminDaily,
       this.mealInUse,

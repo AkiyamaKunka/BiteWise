@@ -3403,6 +3403,14 @@
       }
     }
   },
+  "bodyLoadFailed": "Couldn't load your weight and measurements.",
+  "@bodyLoadFailed": {
+    "description": "Body tab error state when reading the weight or measurements fails; shown with a Retry button and no Log button (the raw error goes to the debug log only)."
+  },
+  "bodySaveFailed": "Couldn't save. Try again.",
+  "@bodySaveFailed": {
+    "description": "Log body sheet: shown under the fields when saving the weight or measurements fails. The sheet stays open with what was typed, and Save can be tapped again."
+  },
   "diagStatusPass": "Passed",
   "@diagStatusPass": {
     "description": "Test AI provider: what a screen reader says for a check's tick, read before the check's name."

@@ -10,7 +10,9 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
+import 'package:calorie_tracker/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -197,6 +199,57 @@ void main() {
     handle.dispose();
   });
 
+  // The meal-picker rows were bare InkWells: VoiceOver read each as text
+  // with a tap action, never as a button (the A11 class), and with a single
+  // meal the section header was read as part of the row (review 1.7.1).
+  group('screen reader: the meal-picker rows', () {
+    testWidgets('each row is a button of its own that picks its meal',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      dao.put(_meal(2, '08:10', 420, hash: 'h2', desc: 'Breakfast bowl'));
+      await pump(tester);
+      for (final (id, name, other) in const [
+        (1, 'Cafeteria tray', 'Breakfast bowl'),
+        (2, 'Breakfast bowl', 'Cafeteria tray'),
+      ]) {
+        final row = tester
+            .getSemantics(find.byKey(Key('leftoverMeal-$id')))
+            .getSemanticsData();
+        expect(row.flagsCollection.isButton, isTrue, reason: name);
+        expect(row.hasAction(SemanticsAction.tap), isTrue, reason: name);
+        expect(row.label, contains(name));
+        expect(row.label, contains('kcal'), reason: 'the detail line too');
+        expect(row.label, isNot(contains(other)));
+      }
+      tester.semantics.tap(find.semantics.byLabel(RegExp('^Breakfast bowl')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverChosenMeal')), findsOneWidget);
+      expect(find.text('Breakfast bowl'), findsOneWidget,
+          reason: 'the double-tapped row is the meal picked');
+      handle.dispose();
+    });
+
+    testWidgets('with one meal, the header is not read as part of the row',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      await pump(tester);
+      final row = tester
+          .getSemantics(find.byKey(const Key('leftoverMeal-1')))
+          .getSemanticsData();
+      expect(row.flagsCollection.isButton, isTrue);
+      expect(row.label, contains('Cafeteria tray'));
+      expect(row.label, isNot(contains('Which meal was this?')));
+      final header = tester
+          .getSemantics(find.text('Which meal was this?'))
+          .getSemanticsData();
+      expect(header.flagsCollection.isHeader, isTrue);
+      expect(header.flagsCollection.isButton, isFalse);
+      handle.dispose();
+    });
+  });
+
   testWidgets("yesterday's incident: the watcher-logged duplicate is "
       'removed in the same confirmation', (tester) async {
     dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
@@ -213,6 +266,60 @@ void main() {
         reason: 'the 690 kcal double-count is gone');
     expect(dao.meals.singleWhere((m) => m.id == 1).analysis['total_calories'],
         665);
+  });
+
+  // The duplicate line was drawn in the info indigo, which is 4.05:1 on
+  // the dark dialog (#2C2C2E), short of the 4.5:1 body text needs; the
+  // tokens keep that indigo off raised surfaces (review 1.7.1).
+  group('the duplicate line is readable on the dialog', () {
+    double contrast(Color a, Color b) {
+      final la = a.computeLuminance(), lb = b.computeLuminance();
+      return ((la > lb ? la : lb) + 0.05) / ((la > lb ? lb : la) + 0.05);
+    }
+
+    for (final (name, brightness, highContrast) in const [
+      ('light', Brightness.light, false),
+      ('dark', Brightness.dark, false),
+      ('light Increase Contrast', Brightness.light, true),
+      ('dark Increase Contrast', Brightness.dark, true),
+    ]) {
+      testWidgets('$name: 4.5:1 or better', (tester) async {
+        dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+        dao.put(_meal(2, '13:44', 690,
+            hash: _photoMd5, desc: 'Chinese cafeteria meal (mostly eaten)'));
+        dao.ledger[_photoMd5] = IngestionStatus.saved;
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(MaterialApp(
+            theme: AppTheme.build(brightness, highContrast: highContrast),
+            home: LeftoverScreen(
+                services: makeServices(
+                    dao: dao, analyzer: analyzer, picker: picker))));
+        await tester.pumpAndSettle();
+        await runToConfirm(tester);
+
+        final line = find.byKey(const Key('leftoverDupLine'));
+        final fg = tester
+            .widget<RichText>(
+                find.descendant(of: line, matching: find.byType(RichText)))
+            .text
+            .style!
+            .color!;
+        final bg = tester
+            .widget<Material>(find
+                .descendant(
+                    of: find.byType(AlertDialog),
+                    matching: find.byType(Material))
+                .first)
+            .color!;
+        expect(bg, AppColors.forBrightness(brightness,
+                highContrast: highContrast)
+            .elevated, reason: 'measured on the dialog surface');
+        expect(contrast(fg, bg), greaterThanOrEqualTo(4.5),
+            reason: 'fg $fg on $bg');
+      });
+    }
   });
 
   // Write safety (design R6a): the deduction is re-based on the meal as

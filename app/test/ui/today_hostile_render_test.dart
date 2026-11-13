@@ -80,7 +80,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: TodayScreen(dao: dao, executor: FakeExecutor()),
+        body: TodayScreen(dao: dao),
       ),
     ));
     await tester.pumpAndSettle();
@@ -133,7 +133,7 @@ void main() {
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: TodayScreen(dao: dao, executor: FakeExecutor()),
+        body: TodayScreen(dao: dao),
       ),
     ));
     await tester.pumpAndSettle();
@@ -151,7 +151,7 @@ void main() {
   testWidgets('empty today shows the spec empty copy', (tester) async {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-        body: TodayScreen(dao: FakeDao(), executor: FakeExecutor()),
+        body: TodayScreen(dao: FakeDao()),
       ),
     ));
     await tester.pumpAndSettle();
