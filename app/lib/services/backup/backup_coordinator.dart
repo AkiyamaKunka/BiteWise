@@ -252,7 +252,7 @@ class BackupCoordinator {
     // the first frame, and init asks about the photo catch-up before that.
     if (uiEngine) {
       _deciding = Completer<void>();
-      _decidingSince = _now;
+      _holdForLook();
     }
   }
 
@@ -322,9 +322,21 @@ class BackupCoordinator {
   /// ([holdsCatchUp]). Pending from the start in the app's engine.
   Completer<void>? _deciding;
 
-  /// When [_deciding] began ([holdsPhotosNow] waits no longer than
-  /// [holdsCatchUp] does).
-  DateTime? _decidingSince;
+  /// Until when [_deciding] holds the automatic photos ([holdsPhotosNow])
+  /// and the catch-ups waiting for it ([holdsCatchUp]), one deadline for
+  /// both: [gatherWait] + [lookSlack] after the latest of when this engine
+  /// was built, when the look began (after the first frame, however long
+  /// init took) and when a catch-up began waiting for it. A look that never
+  /// decides holds nothing past it.
+  DateTime? _lookHoldsUntil;
+
+  /// [_lookHoldsUntil] moved on to [gatherWait] + [lookSlack] from now,
+  /// never back.
+  void _holdForLook() {
+    final until = _now.add(gatherWait + lookSlack);
+    final held = _lookHoldsUntil;
+    if (held == null || until.isAfter(held)) _lookHoldsUntil = until;
+  }
 
   /// A look for a backup to offer got as far as deciding (an offer, the
   /// notice, or nothing to ask) for the iCloud account of now. One that
@@ -336,6 +348,7 @@ class BackupCoordinator {
   void _endDeciding() {
     final d = _deciding;
     _deciding = null;
+    _lookHoldsUntil = null;
     if (d != null && !d.isCompleted) d.complete();
   }
 
@@ -1088,10 +1101,11 @@ class BackupCoordinator {
   }
 
   Future<void> _launchCheck({bool startWatching = false}) async {
-    if (_deciding == null) {
-      _deciding = Completer<void>();
-      _decidingSince = _now;
-    }
+    // Its window counts from now: the launch's look begins after the first
+    // frame, however long init spent after building this engine (the
+    // Photos access sheet, say).
+    _deciding ??= Completer<void>();
+    _holdForLook();
     final bool nothingToAsk;
     try {
       nothingToAsk = await _lookForOffer(startWatching: startWatching);
@@ -1268,21 +1282,36 @@ class BackupCoordinator {
   }
 
   /// Whether the app's photo catch-up should wait: a restore offer is open
-  /// or a restore is running (the headless run reads the same lease).
+  /// or a restore is running ([holdsCatchUpNow]). The headless run cannot
+  /// see an offer: it reads only the 30-minute lease the offer and the
+  /// restore set (backupHoldsCatchUp).
   ///
   /// While the look for a backup to offer has not decided, the answer
-  /// waits for it ([gatherWait] + [lookSlack] at most): a catch-up started
-  /// before the offer exists would log the offered backup's photos afresh,
-  /// and the restore would keep those over the backup's own, maybe
-  /// corrected, meals (it merges photo meals by their photo). The launch's
-  /// look starts after the first frame: never awaited before runApp.
+  /// waits for it, until the deadline the automatic photos wait for too
+  /// ([holdsPhotosNow]: [gatherWait] + [lookSlack] after the look began, or
+  /// after this call if that is later; twice that at most in all): a
+  /// catch-up started before the offer exists would log the offered
+  /// backup's photos afresh, and the restore would keep those over the
+  /// backup's own, maybe corrected, meals (it merges photo meals by their
+  /// photo). The launch's look starts after the first frame: never awaited
+  /// before runApp.
   Future<bool> holdsCatchUp() async {
-    final deciding = _deciding;
-    if (deciding != null) {
+    final window = gatherWait + lookSlack;
+    if (_deciding != null) _holdForLook();
+    // The window moves on once if the look begins while this waits (the
+    // launch catch-up asks before the first frame); a look that never ends
+    // holds nothing past it, and no wait is longer than [window].
+    for (var waits = 0; waits < 2; waits++) {
+      final deciding = _deciding;
+      final until = _lookHoldsUntil;
+      if (deciding == null || until == null) break;
+      var left = until.difference(_now);
+      if (left <= Duration.zero) break;
+      if (left > window) left = window;
       try {
-        await deciding.future.timeout(gatherWait + lookSlack);
+        await deciding.future.timeout(left);
       } on TimeoutException {
-        // A look that never ends holds nothing.
+        // Looked at once more.
       }
     }
     await _prefs.reload();
@@ -1295,8 +1324,10 @@ class BackupCoordinator {
   /// offer is raised or a restore starts.
   ///
   /// An offer raised here holds until it is answered or dismissed, however
-  /// long it waits: the 30-minute lease is how the background run sees it,
-  /// and what a crash leaves behind, not how long an offer may stay open.
+  /// long it waits: the 30-minute lease is how the background run sees it
+  /// (renewed while a restore, takeover or combine runs, and when one ends
+  /// with the offer still open), and what a crash leaves behind, not how
+  /// long an offer may stay open.
   bool get holdsCatchUpNow {
     if (prompt.value is RestoreOfferPrompt) return true;
     final until = _prefs.holdCatchUpUntil;
@@ -1307,19 +1338,17 @@ class BackupCoordinator {
   /// releases it untouched (PhotoPipeline.intakeHeld), and a catch-up
   /// after the hold offers it again ([onCatchUpReleased]). Held while
   /// [holdsCatchUpNow], and while a look for a backup to offer has not
-  /// decided, as the catch-up waits for it ([holdsCatchUp]: [gatherWait] +
-  /// [lookSlack] at most from when the look began). The live watcher hands
-  /// photos over from the first frame on, while the launch's look is still
-  /// gathering the folder: a photo logged then would be kept over the
-  /// backup's own, maybe corrected, meal for it once the offer it raises
-  /// is answered with Restore (a restore merges photo meals by their
-  /// photo).
+  /// decided, until the deadline the catch-up waits for too ([holdsCatchUp]:
+  /// [gatherWait] + [lookSlack] after the look began, or after a catch-up
+  /// began waiting if that is later). The live watcher hands photos over
+  /// from the first frame on, while the launch's look is still gathering
+  /// the folder: a photo logged then would be kept over the backup's own,
+  /// maybe corrected, meal for it once the offer it raises is answered
+  /// with Restore (a restore merges photo meals by their photo).
   bool get holdsPhotosNow {
     if (holdsCatchUpNow) return true;
-    final since = _decidingSince;
-    return _deciding != null &&
-        since != null &&
-        _now.difference(since) < gatherWait + lookSlack;
+    final until = _lookHoldsUntil;
+    return _deciding != null && until != null && until.isAfter(_now);
   }
 
   /// This install's id once it has one (an export's header uses it).

@@ -819,6 +819,53 @@ void main() {
           reason: 'a look that never ends holds nothing');
     });
 
+    // Review r171: the window was counted from when init built the
+    // coordinator. The look begins only after the first frame, and init
+    // may wait first (the Photos access sheet): the live watcher's photos
+    // went through while the look still gathered and the launch catch-up
+    // still waited for it.
+    test('the look holds the photos from when it began after the first '
+        'frame, however long init took before it', () async {
+      final gated = _StatusHeld()..hold = true;
+      cloud = gated;
+      c = make(); // init builds it, then asks for Photos access
+      now = now.add(const Duration(seconds: 50));
+      final launchCatchUp = c.holdsCatchUp(); // the launch catch-up asks
+      now = now.add(const Duration(seconds: 1));
+      await c.start(); // the first frame: the look begins
+      await gated.entered.future;
+      now = now.add(const Duration(seconds: 30)); // 81 s after init built it
+      expect(c.holdsPhotosNow, isTrue,
+          reason: 'the look has gathered for 30 s of its 60');
+      now = now.add(const Duration(seconds: 30));
+      expect(c.holdsPhotosNow, isFalse,
+          reason: 'a look that never ends holds nothing past its window');
+      gated.gate.complete();
+      expect(await launchCatchUp, isFalse);
+    });
+
+    test('a catch-up that asks once init outlasted that window still waits '
+        'for the look, and the photos wait as long', () async {
+      final gated = _StatusHeld()..hold = true;
+      cloud = gated;
+      c = make();
+      now = now.add(BackupCoordinator.lookSlack + const Duration(seconds: 10));
+      expect(c.holdsPhotosNow, isFalse,
+          reason: 'the window counted from init lapsed');
+      var answered = false;
+      final launchCatchUp = c.holdsCatchUp();
+      unawaited(launchCatchUp.then((_) => answered = true));
+      expect(c.holdsPhotosNow, isTrue,
+          reason: 'as long as the catch-up waits for the look');
+      await c.start();
+      await gated.entered.future;
+      await pumpEventQueue();
+      expect(answered, isFalse, reason: 'the look has not decided');
+      gated.gate.complete();
+      expect(await launchCatchUp, isFalse);
+      expect(c.holdsPhotosNow, isFalse);
+    });
+
     test('the look that finds nothing to offer lets them go; the one that '
         'raises an offer holds them until it is answered', () async {
       await noticeAnswered();
