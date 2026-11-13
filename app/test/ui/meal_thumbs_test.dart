@@ -1,6 +1,6 @@
 // Thumb resolution (spec §9): stored thumb wins, library backfill persists
-// exactly once and only from the meal's own photo, text meals resolve null,
-// negative results are cached.
+// exactly once (for an Android id only from the meal's own photo), text
+// meals resolve null, negative results are cached.
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -14,7 +14,15 @@ import 'package:flutter_test/flutter_test.dart';
 import '../photo/watcher_test.dart' show FakeAsset, FakePhotoLibrary, bytesOf;
 import 'fakes.dart';
 
-Meal photoMeal(int id, {String fileId = 'asset1', String hash = 'h1'}) => Meal(
+/// An Android MediaStore id: a small integer, which repeats on another
+/// phone.
+const androidId = '1001';
+
+/// An iOS localIdentifier: it names one photo on one device.
+const iosId = 'ED7AC36B-A150-4C38-BB8C-B6D696F4F2ED/L0/001';
+
+Meal photoMeal(int id, {String fileId = androidId, String hash = 'h1'}) =>
+    Meal(
       id: id,
       date: '2026-07-26',
       time: '12:00 PM',
@@ -38,7 +46,7 @@ Meal textMeal(int id) => Meal(
 Future<String> testHash(Uint8List bytes) async => 'h${bytes.first}';
 
 /// The library photo [photoMeal] was logged from.
-FakeAsset ownPhoto({String id = 'asset1', int n = 1}) =>
+FakeAsset ownPhoto({String id = androidId, int n = 1}) =>
     FakeAsset(id, 'IMG_$n.jpg', DateTime(2026, 7, 26), bytesOf(n));
 
 void main() {
@@ -54,12 +62,12 @@ void main() {
 
   test('stored thumb wins without touching the library', () async {
     dao.thumbs[7] = Uint8List.fromList([9, 9]);
-    library.thumbnails['asset1'] = Uint8List.fromList([1]);
+    library.thumbnails[androidId] = Uint8List.fromList([1]);
     expect(await resolver.thumbFor(photoMeal(7)), [9, 9]);
   });
 
   test('library backfill persists the thumb so it happens once', () async {
-    library.thumbnails['asset1'] = Uint8List.fromList([5, 5, 5]);
+    library.thumbnails[androidId] = Uint8List.fromList([5, 5, 5]);
     library.assets = [ownPhoto()];
     final first = await resolver.thumbFor(photoMeal(3));
     expect(first, [5, 5, 5]);
@@ -76,10 +84,30 @@ void main() {
     // After an import or a restored backup, an old meal's id can name an
     // unrelated, maybe private, photo on this one, and it was shown as the
     // meal's picture and saved for good (review 171, C39).
-    library.thumbnails['asset1'] = Uint8List.fromList([7, 7, 7]);
+    library.thumbnails[androidId] = Uint8List.fromList([7, 7, 7]);
     library.assets = [ownPhoto(n: 9)]; // the same id, another photo
     expect(await resolver.thumbFor(photoMeal(3)), isNull);
     expect(dao.thumbs, isEmpty);
+  });
+
+  test('an iOS id is filled in from the library without reading its '
+      'original', () async {
+    // An iOS localIdentifier names one photo on one device: the meal's own
+    // or none. There the check could only cost: photo_manager copies the
+    // original into tmp (and fetches it from iCloud when offloaded), and a
+    // photo edited in Photos since it was logged hashes differently, so it
+    // lost its picture for good.
+    final reads = <String>[];
+    library.thumbnails[iosId] = Uint8List.fromList([6, 6]);
+    library.assets = [
+      // Edited in Photos: its original no longer hashes to the meal's h1.
+      FakeAsset(iosId, 'IMG_0042.HEIC', DateTime(2026, 7, 26), bytesOf(9),
+          onRead: () => reads.add(iosId)),
+    ];
+    expect(await resolver.thumbFor(photoMeal(3, fileId: iosId)), [6, 6]);
+    expect(dao.thumbs[3], [6, 6], reason: 'saved, so it happens once');
+    expect(reads, isEmpty);
+    expect(library.lookedUp, isEmpty);
   });
 
   test('the check is the md5 of the original against the stored hash',
@@ -87,9 +115,9 @@ void main() {
     // The production hasher (on a worker isolate), and a stored hash in
     // another case still matches (image hashes are normalized).
     final original = bytesOf(4, 64);
-    library.thumbnails['asset1'] = Uint8List.fromList([5]);
+    library.thumbnails[androidId] = Uint8List.fromList([5]);
     library.assets = [
-      FakeAsset('asset1', 'IMG_4.jpg', DateTime(2026, 7, 26), original),
+      FakeAsset(androidId, 'IMG_4.jpg', DateTime(2026, 7, 26), original),
     ];
     final real = MealThumbResolver(dao: dao, library: library);
     expect(
@@ -104,16 +132,16 @@ void main() {
       'taken', () async {
     // On Android another phone's id can name a video: thumbnailByAssetId
     // answers for it, imagesByIds does not.
-    library.thumbnails['asset1'] = Uint8List.fromList([7]);
+    library.thumbnails[androidId] = Uint8List.fromList([7]);
     expect(await resolver.thumbFor(photoMeal(3)), isNull);
     expect(dao.thumbs, isEmpty);
   });
 
   test('an original over the intake cap is never the meal photo', () async {
     // Intake refuses those (§8), so no meal was logged from one.
-    library.thumbnails['asset1'] = Uint8List.fromList([7]);
+    library.thumbnails[androidId] = Uint8List.fromList([7]);
     library.assets = [
-      FakeAsset('asset1', 'IMG_0.jpg', DateTime(2026, 7, 26),
+      FakeAsset(androidId, 'IMG_0.jpg', DateTime(2026, 7, 26),
           Uint8List(maxPhotoBytes + 1)),
     ];
     expect(await resolver.thumbFor(photoMeal(3, hash: 'h0')), isNull);
@@ -122,9 +150,9 @@ void main() {
 
   test('an original that cannot be read gives no picture rather than a '
       'guess', () async {
-    library.thumbnails['asset1'] = Uint8List.fromList([7]);
+    library.thumbnails[androidId] = Uint8List.fromList([7]);
     library.assets = [
-      FakeAsset('asset1', 'IMG_1.jpg', DateTime(2026, 7, 26), bytesOf(1),
+      FakeAsset(androidId, 'IMG_1.jpg', DateTime(2026, 7, 26), bytesOf(1),
           throwOnRead: true),
     ];
     expect(await resolver.thumbFor(photoMeal(3)), isNull);
@@ -137,30 +165,30 @@ void main() {
     final reads = <String>[];
     final hashing = <Completer<String>>[];
     for (final n in [1, 2]) {
-      library.thumbnails['a$n'] = Uint8List.fromList([n]);
+      library.thumbnails['10$n'] = Uint8List.fromList([n]);
       library.assets.add(FakeAsset(
-          'a$n', 'IMG_$n.jpg', DateTime(2026, 7, 26), bytesOf(n),
-          onRead: () => reads.add('a$n')));
+          '10$n', 'IMG_$n.jpg', DateTime(2026, 7, 26), bytesOf(n),
+          onRead: () => reads.add('10$n')));
     }
     final slow = MealThumbResolver(
         dao: dao,
         library: library,
         hasher: (_) => (hashing..add(Completer<String>())).last.future);
 
-    final first = slow.thumbFor(photoMeal(1, fileId: 'a1', hash: 'h1'));
-    final second = slow.thumbFor(photoMeal(2, fileId: 'a2', hash: 'h2'));
+    final first = slow.thumbFor(photoMeal(1, fileId: '101', hash: 'h1'));
+    final second = slow.thumbFor(photoMeal(2, fileId: '102', hash: 'h2'));
     await pumpEventQueue();
-    expect(reads, ['a1'], reason: 'the second original waits its turn');
+    expect(reads, ['101'], reason: 'the second original waits its turn');
     hashing.single.complete('h1');
     await pumpEventQueue();
-    expect(reads, ['a1', 'a2']);
+    expect(reads, ['101', '102']);
     hashing.last.complete('h2');
     expect(await first, [1]);
     expect(await second, [2]);
   });
 
   test('text meals resolve null and never query the library', () async {
-    library.thumbnails['asset1'] = Uint8List.fromList([1]);
+    library.thumbnails[androidId] = Uint8List.fromList([1]);
     expect(await resolver.thumbFor(textMeal(4)), isNull);
   });
 

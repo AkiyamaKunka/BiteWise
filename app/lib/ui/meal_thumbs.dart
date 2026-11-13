@@ -3,10 +3,10 @@
 /// Resolution order:
 ///   1. the stored meal_thumbs JPEG (written by the pipeline at save time);
 ///   2. for meals logged BEFORE thumbs existed: the photo library by the
-///      meal's fileId (asset id), once the md5 of that asset's original
-///      bytes proves it is the meal's own photo — and on success the
-///      result is written back to meal_thumbs, so the backfill happens
-///      lazily exactly once per meal;
+///      meal's fileId (asset id) — for an Android id only once the md5 of
+///      that asset's original bytes proves it is the meal's own photo — and
+///      on success the result is written back to meal_thumbs, so the
+///      backfill happens lazily exactly once per meal;
 ///   3. null → the caller renders a placeholder (text/manual meals, or the
 ///      gallery original is gone or no longer the meal's photo).
 ///
@@ -78,7 +78,7 @@ class MealThumbResolver {
       // Lazy backfill for pre-thumb meals; persists so it happens once.
       bytes = await _library.thumbnailByAssetId(meal.fileId);
       if (bytes != null && bytes.isNotEmpty) {
-        if (await _isMealPhoto(meal)) {
+        if (!_canNameAnotherPhoto(meal.fileId) || await _isMealPhoto(meal)) {
           try {
             await _dao.saveMealThumb(meal.id, bytes);
           } catch (_) {
@@ -99,6 +99,17 @@ class MealThumbResolver {
     }
     return _cache[meal.id] = bytes;
   }
+
+  /// Whether [assetId] can name a photo other than the meal's: Android's
+  /// MediaStore ids are all digits and repeat on another phone. An iOS
+  /// localIdentifier ("<UUID>/L0/001") names one photo on one device, the
+  /// meal's own or none, so there the check could only cost: photo_manager
+  /// copies each original into tmp (origin_cache.dart) and fetches an
+  /// offloaded one from iCloud, and a photo edited in Photos since it was
+  /// logged no longer hashes to the meal's image_hash.
+  static bool _canNameAnotherPhoto(String assetId) =>
+      _mediaStoreId.hasMatch(assetId);
+  static final RegExp _mediaStoreId = RegExp(r'^\d+$');
 
   /// Whether [meal]'s library asset is the photo it was logged from: an
   /// image (another phone's id can name a video) whose original bytes hash
