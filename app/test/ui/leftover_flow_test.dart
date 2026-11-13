@@ -10,6 +10,7 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
+import 'package:calorie_tracker/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -213,6 +214,60 @@ void main() {
         reason: 'the 690 kcal double-count is gone');
     expect(dao.meals.singleWhere((m) => m.id == 1).analysis['total_calories'],
         665);
+  });
+
+  // The duplicate line was drawn in the info indigo, which is 4.05:1 on
+  // the dark dialog (#2C2C2E), short of the 4.5:1 body text needs; the
+  // tokens keep that indigo off raised surfaces (review 1.7.1).
+  group('the duplicate line is readable on the dialog', () {
+    double contrast(Color a, Color b) {
+      final la = a.computeLuminance(), lb = b.computeLuminance();
+      return ((la > lb ? la : lb) + 0.05) / ((la > lb ? lb : la) + 0.05);
+    }
+
+    for (final (name, brightness, highContrast) in const [
+      ('light', Brightness.light, false),
+      ('dark', Brightness.dark, false),
+      ('light Increase Contrast', Brightness.light, true),
+      ('dark Increase Contrast', Brightness.dark, true),
+    ]) {
+      testWidgets('$name: 4.5:1 or better', (tester) async {
+        dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+        dao.put(_meal(2, '13:44', 690,
+            hash: _photoMd5, desc: 'Chinese cafeteria meal (mostly eaten)'));
+        dao.ledger[_photoMd5] = IngestionStatus.saved;
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        await tester.pumpWidget(MaterialApp(
+            theme: AppTheme.build(brightness, highContrast: highContrast),
+            home: LeftoverScreen(
+                services: makeServices(
+                    dao: dao, analyzer: analyzer, picker: picker))));
+        await tester.pumpAndSettle();
+        await runToConfirm(tester);
+
+        final line = find.byKey(const Key('leftoverDupLine'));
+        final fg = tester
+            .widget<RichText>(
+                find.descendant(of: line, matching: find.byType(RichText)))
+            .text
+            .style!
+            .color!;
+        final bg = tester
+            .widget<Material>(find
+                .descendant(
+                    of: find.byType(AlertDialog),
+                    matching: find.byType(Material))
+                .first)
+            .color!;
+        expect(bg, AppColors.forBrightness(brightness,
+                highContrast: highContrast)
+            .elevated, reason: 'measured on the dialog surface');
+        expect(contrast(fg, bg), greaterThanOrEqualTo(4.5),
+            reason: 'fg $fg on $bg');
+      });
+    }
   });
 
   // Write safety (design R6a): the deduction is re-based on the meal as

@@ -38,6 +38,7 @@ import '../large_text.dart';
 import '../meal_in_use.dart';
 import '../services.dart';
 import '../theme/app_dialog.dart';
+import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
 
 class LeftoverScreen extends StatefulWidget {
@@ -267,12 +268,14 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
             ],
             if (duplicateId != null) ...[
               const SizedBox(height: 8),
+              // A meal is deleted with this Save: the danger colour, as
+              // the chat's delete warning. The indigo (tertiary) it had is
+              // 4.05:1 on the dark dialog, under the 4.5:1 text needs.
               Text(
                   ctx.l10n
                       .leftoverDupRemoved(formatKcal(duplicateKcal)),
                   key: const Key('leftoverDupLine'),
-                  style: TextStyle(
-                      color: Theme.of(ctx).colorScheme.tertiary)),
+                  style: TextStyle(color: ctx.colors.danger)),
             ],
           ],
         ),
