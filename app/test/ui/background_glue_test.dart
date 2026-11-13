@@ -41,6 +41,7 @@ import 'package:http/testing.dart' show MockClient;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:workmanager/workmanager.dart' show ExistingPeriodicWorkPolicy;
 
+import '../support/held_timers.dart';
 import 'fakes.dart';
 
 /// Intake whose backfillScan delivers a scripted batch — mimics the real
@@ -490,6 +491,39 @@ void main() {
           isFood: true,
           wall: Duration.zero);
 
+    // Android 16's job quotas can stop a run early, and workmanager's
+    // onStopped gives Dart no signal: the next run says what happened.
+    test('a run that starts after one that never finished labels that one '
+        'stopped by the system', () async {
+      final killed =
+          BackgroundRunRecorder(prefs, platform: 'android', clock: () => t0);
+      await killed.begin();
+      await killed.stage(BackgroundRunStage.scan);
+      await killed.offered(); // stopped here, mid-photo
+      final next = BackgroundRunRecorder(prefs,
+          platform: 'android',
+          clock: () => t0.add(const Duration(minutes: 30)));
+      await next.begin();
+      final runs =
+          decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey));
+      expect(runs, hasLength(2));
+      final before = runs[1];
+      expect(before.stopReason, BackgroundStop.stoppedBySystem);
+      expect(before.finished, isFalse, reason: 'its end is unknown');
+      expect((before.stage, before.offered, before.analyzed),
+          (BackgroundRunStage.photo, 1, 0),
+          reason: 'the step it was on stays');
+      expect(runs.first.stopReason, isNull, reason: 'the new run is running');
+      // A run that did finish keeps its own reason.
+      await next.finish(BackgroundStop.done);
+      await BackgroundRunRecorder(prefs, platform: 'android', clock: () => t0)
+          .begin();
+      expect(
+          decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))[1]
+              .stopReason,
+          BackgroundStop.done);
+    });
+
     test('a full run: every count, the watermark it reached, "done"',
         () async {
       final settings = await settingsWith(key: 'k');
@@ -910,18 +944,40 @@ void main() {
             decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
                 .first;
         expect(run.stopReason, BackgroundStop.budget);
-        // Android has no such wrapper: the same hang is WorkManager's to end.
-        calls = 0;
-        final android = runHeadlessBackfill(
-          isIOS: false,
-          loadPrefs: () async => prefs,
-          clock: clock,
-          loadSettings: () => Completer<AppSettings>().future,
-        );
+      });
+
+      // Review 171 (Play push): WorkManager stops a worker after 10
+      // minutes and its onStopped tells Dart nothing — the engine is
+      // destroyed with the photo in flight still 'processing'. Android's
+      // run now ends itself first, through the same wrapper as iOS's.
+      test('runHeadlessBackfill on Android ends at its own deadline, 9 '
+          'minutes from the run start, recorded as budget', () async {
+        addTearDown(() => isHeadlessEngine = false);
+        final held = <HeldTimer>[];
+        late Future<bool> android;
+        holdingTimers(held).run(() {
+          android = runHeadlessBackfill(
+            isIOS: false,
+            loadPrefs: () async => prefs,
+            clock: () => t0,
+            loadSettings: () => Completer<AppSettings>().future,
+          );
+        });
         var ended = false;
         unawaited(android.then((_) => ended = true));
-        await Future<void>.delayed(const Duration(milliseconds: 120));
-        expect(ended, isFalse);
+        await pumpEventQueue();
+        final deadline =
+            held.where((t) => t.isActive && t.wait == androidRunDeadline);
+        expect(deadline, hasLength(1),
+            reason: 'armed for ${held.map((t) => t.wait).toList()}');
+        expect(ended, isFalse, reason: 'nothing ends it before then');
+        deadline.single.fire();
+        expect(await android, isTrue, reason: 'success: no retry storm');
+        final run =
+            decodeBackgroundRuns(prefs.getString(backgroundRunsPrefsKey))
+                .first;
+        expect(run.platform, 'android');
+        expect(run.stopReason, BackgroundStop.budget);
       });
 
       test('a run that ends first is the answer, and the deadline never '
@@ -949,6 +1005,49 @@ void main() {
         expect(iosRunDeadline, const Duration(seconds: 22));
         expect(iosRunDeadline - iosBackgroundBudget,
             greaterThanOrEqualTo(const Duration(seconds: 7)));
+      });
+
+      test('Android: 9 minutes, under WorkManager\'s 10-minute stop, after '
+          'a 7-minute offer budget', () {
+        expect(androidRunDeadline, const Duration(minutes: 9));
+        expect(androidBackgroundBudget, const Duration(minutes: 7));
+        expect(androidRunDeadline, lessThan(const Duration(minutes: 10)));
+      });
+
+      test('Android: past the offer budget, and at the run\'s pace past the '
+          'deadline, no photo is started; the rest waits', () async {
+        final settings = await settingsWith(key: 'k');
+        var now = t0;
+        final analyzer = food() as FakeAnalyzer;
+        analyzer.onAnalyze = () async {
+          now = now.add(const Duration(minutes: 5)); // a slow server
+        };
+        final dao = FakeDao();
+        final recorder =
+            BackgroundRunRecorder(prefs, platform: 'android', clock: () => now);
+        await recorder.begin();
+        final ok = await headlessBackfillWith(
+          settings: settings,
+          prefs: prefs,
+          intake: EmittingIntake()..batch = [photo(1), photo(2), photo(3)],
+          pipeline: () async => PhotoPipeline(
+              dao: dao,
+              analyzer: analyzer,
+              hasher: (b) async => md5.convert(b).toString()),
+          showMealCard: (_, _) async {},
+          clock: () => now,
+          budget: androidBackgroundBudget,
+          startedAt: t0,
+          finishBy: t0.add(androidRunDeadline),
+          recorder: recorder,
+        );
+        expect(ok, isTrue);
+        // Photo 2 is offered at 5 min, inside the 7-minute budget, but at
+        // 5 minutes a photo it would end at 10, past the 9-minute deadline.
+        expect(dao.meals, hasLength(1));
+        final r = stored();
+        expect(r.stopReason, BackgroundStop.budget);
+        expect((r.offered, r.analyzed, r.released), (1, 1, 2));
       });
 
       group('the run start (backgroundRunStart)', () {
@@ -2190,7 +2289,8 @@ void main() {
       expect(calls, before + 1);
     });
 
-    testWidgets('Android (no hook) is untouched', (tester) async {
+    testWidgets('no hook (a host with no OS scheduler) is untouched',
+        (tester) async {
       final intake = FakeIntake();
       await tester.pumpWidget(MaterialApp(
           home: HomeShell(
@@ -2206,7 +2306,7 @@ void main() {
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       signalMealsChanged();
       await tester.pump();
-      // Nothing to assert on beyond "no throw": the hook is null on Android.
+      // Nothing to assert on beyond "no throw": the hook is null there.
       expect(intake.backfillScans, 0);
     });
   });

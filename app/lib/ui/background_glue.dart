@@ -106,6 +106,13 @@ const Duration backgroundScanFrequency = Duration(minutes: 30);
 /// 2026-10-19).
 const Duration iosBackgroundBudget = Duration(seconds: 15);
 
+/// Android's offer budget (review 171, Play push): past this much of the
+/// run no new photo is offered. WorkManager stops a worker after 10
+/// minutes (long-running work doc) and gives Dart no signal
+/// ([androidRunDeadline]); one Claude Plan analysis can be held for up to
+/// about 15 minutes. Counted from the run's start, like iOS's.
+const Duration androidBackgroundBudget = Duration(minutes: 7);
+
 /// When workmanager started this run's headless engine, as an ISO instant:
 /// written natively by the AppDelegate's registrant callback, which
 /// workmanager calls right after it creates and starts the engine, before
@@ -666,8 +673,9 @@ Future<bool> runHeadlessBackfill({
       watermarkBefore:
           readStoredInstant(prefs.getString(backgroundWatermarkPrefsKey)),
       bootLead: enteredDart.difference(startedAt));
-  final inFlight = RunInFlight(
-      deadline: ios ? startedAt.add(iosRunDeadline) : null, clock: clock);
+  final runDeadline = ios ? iosRunDeadline : androidRunDeadline;
+  final inFlight =
+      RunInFlight(deadline: startedAt.add(runDeadline), clock: clock);
   final run = _runAfterLaunch(
       ios: ios,
       prefs: prefs,
@@ -675,10 +683,10 @@ Future<bool> runHeadlessBackfill({
       startedAt: startedAt,
       inFlight: inFlight,
       loadSettings: loadSettings);
-  // iOS: the whole run ends inside the grant, whatever it is stuck on.
-  if (!ios) return run;
+  // The whole run ends in its time, whatever it is stuck on: inside iOS's
+  // grant, and before WorkManager's 10-minute stop on Android.
   return finishWithinGrant(run,
-      left: startedAt.add(iosRunDeadline).difference(clock()),
+      left: startedAt.add(runDeadline).difference(clock()),
       recorder: recorder,
       abandon: inFlight.abandon);
 }
@@ -698,8 +706,8 @@ class RunInFlight {
   RunInFlight({this.deadline, DateTime Function()? clock})
       : _clock = clock ?? DateTime.now;
 
-  /// When the run must be over ([iosRunDeadline] from its start); null
-  /// where there is no such deadline (Android).
+  /// When the run must be over ([iosRunDeadline] or [androidRunDeadline]
+  /// from its start); null: no deadline (tests).
   final DateTime? deadline;
   final DateTime Function() _clock;
   PhotoPipeline? pipeline;
@@ -801,7 +809,7 @@ Future<bool> _runAfterLaunch({
         await notifier.init(); // idempotent; deferred until a card exists
         await notifier.showMealCard(title, body);
       },
-      budget: ios ? iosBackgroundBudget : null,
+      budget: ios ? iosBackgroundBudget : androidBackgroundBudget,
       startedAt: startedAt,
       finishBy: inFlight.deadline,
       photoOffered: inFlight.offered,
@@ -845,7 +853,7 @@ Future<bool> _runAfterLaunch({
 }
 
 /// The whole iOS background run, from its start ([backgroundRunStart]),
-/// ends within this (2026-10-19). iOS expires a BGAppRefresh grant about
+/// ends within this (2026-10-19); Android's is [androidRunDeadline]. iOS expires a BGAppRefresh grant about
 /// 30 s after launching it; a run still going then is killed, the task
 /// never completes (workmanager calls setTaskCompleted only on Dart's
 /// reply), its photo stays reserved, and iOS ranks the app lower for the
@@ -862,6 +870,18 @@ Future<bool> _runAfterLaunch({
 /// anyway is released (finishWithinGrant) and offered again by a later
 /// run — behind any older photo still waiting, not necessarily first.
 const Duration iosRunDeadline = Duration(seconds: 22);
+
+/// The whole Android background run, from its start, ends within this
+/// (review 171, Play push). WorkManager stops a ListenableWorker after 10
+/// minutes, and workmanager_android's onStopped then destroys the engine
+/// without a word to Dart (BackgroundWorker.kt): a photo in flight kept
+/// its 'processing' row, and the entry never said why. Ended here instead
+/// ([finishWithinGrant]), the photo is released and the entry says
+/// 'budget'. One minute short of the stop, two after the offer budget
+/// ([androidBackgroundBudget]). Android 16's job quotas can stop a run
+/// sooner still; the next run labels that one
+/// ([BackgroundStop.stoppedBySystem]).
+const Duration androidRunDeadline = Duration(minutes: 9);
 
 /// [run] or, once [left] has passed, an end to the run anyway: the
 /// diagnostics entry says 'budget' and the result is success, so

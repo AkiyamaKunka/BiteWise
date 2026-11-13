@@ -821,18 +821,30 @@ void main() {
           after(), _wired(r'includeGlasses: \(\) => settings\.watchGlasses, '));
       expect(after(), _wired(r'foodCheck: ios \? foodScoreViaImageIO : null, '));
       expect(after(), _wired(r'glassesCheckLog: recordGlassesCheckLocally, '));
-      expect(after(), _wired(r'budget: ios \? iosBackgroundBudget : null,'));
+      // Android's offer budget too (review 171, Play push).
+      expect(
+        after(),
+        _wired(r'budget: ios \? iosBackgroundBudget : androidBackgroundBudget,'),
+      );
       expect(
         after(),
         _wired(r'pipeline: \(\) async => inFlight\.pipeline = PhotoPipeline\('),
       );
+      // Both platforms go through the wrapper, each with its deadline.
       expect(
         launch(),
         _wired(
-          r'return finishWithinGrant\(run, left: startedAt\.add\(iosRunDeadline\)'
+          r'final runDeadline = ios \? iosRunDeadline : androidRunDeadline;',
+        ),
+      );
+      expect(
+        launch(),
+        _wired(
+          r'return finishWithinGrant\(run, left: startedAt\.add\(runDeadline\)'
           r'\.difference\(clock\(\)\), recorder: recorder, abandon: inFlight\.abandon\);',
         ),
       );
+      expect(launch(), isNot(contains('if (!ios) return run;')));
     });
 
     // G1b: photos other apps imported late, with the budget the scan left.
@@ -872,8 +884,8 @@ void main() {
       expect(
         launch(),
         _wired(
-          r'final inFlight = RunInFlight\( deadline: ios \? '
-          r'startedAt\.add\(iosRunDeadline\) : null, clock: clock\);',
+          r'final inFlight = RunInFlight\( deadline: '
+          r'startedAt\.add\(runDeadline\), clock: clock\);',
         ),
       );
       expect(after(), _wired(r'\n\s*finishBy: inFlight\.deadline,'));
