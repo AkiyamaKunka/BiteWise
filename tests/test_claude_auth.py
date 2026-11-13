@@ -159,6 +159,82 @@ def test_apply_token_appends_when_key_absent(tmp_path):
     assert env.read_text().endswith("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-NEW\n")
 
 
+def make_gated_cli(tmp_path, gate):
+    """A fake setup-token that prints its URL only once [gate] exists, so a
+    test can hold two starts inside the URL harvest together. Afterwards it
+    waits on stdin like the real CLI."""
+    script = tmp_path / "gated_setup_token.py"
+    script.write_text(textwrap.dedent(f"""
+        import os, sys, time
+        while not os.path.exists({str(gate)!r}):
+            time.sleep(0.02)
+        sys.stdout.write("Visit: " + {FAKE_URL!r} + "\\r\\n")
+        sys.stdout.flush()
+        sys.stdin.readline()
+        time.sleep(60)
+    """))
+    wrapper = tmp_path / "gatedcli"
+    wrapper.write_text(f"#!/bin/sh\nexec {sys.executable} {script} \"$@\"\n")
+    wrapper.chmod(0o755)
+    return str(wrapper)
+
+
+def test_concurrent_starts_leave_no_orphan_process(tmp_path, monkeypatch):
+    """Two starts racing through the URL harvest (Flask serves requests on
+    threads; the app can tap Connect again from a fresh screen) both publish
+    a session. The later publish used to overwrite the earlier one without
+    killing it: a setup-token process holding a PTY that neither cancel nor
+    the TTL reaper could see, alive until the service restarted, on a 1 GB
+    VM. Whatever the interleaving, cancel_session() must leave no process."""
+    import subprocess
+    import threading
+    import time
+
+    gate = tmp_path / "print-the-url-now"
+    cli = make_gated_cli(tmp_path, gate)
+    spawned = []
+    real_popen = claude_auth.subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        proc = real_popen(*args, **kwargs)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(claude_auth.subprocess, "Popen", recording_popen)
+    results = []
+
+    def start():
+        results.append(claude_auth.start_session(cli, dict(os.environ)))
+
+    threads = [threading.Thread(target=start) for _ in range(2)]
+    try:
+        for t in threads:
+            t.start()
+        deadline = time.monotonic() + 10
+        while len(spawned) < 2 and time.monotonic() < deadline:
+            time.sleep(0.01)
+        assert len(spawned) == 2, "both starts must be inside the harvest"
+        gate.touch()
+        for t in threads:
+            t.join(timeout=40)
+        assert ["url" in r for r in results] == [True, True], results
+
+        claude_auth.cancel_session()
+
+        for proc in spawned:
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                pytest.fail("a setup-token process outlived cancel_session(): "
+                            "an orphan no reaper can see")
+    finally:
+        gate.touch()
+        for proc in spawned:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=10)
+
+
 # ── endpoint layer ────────────────────────────────────────────────
 
 

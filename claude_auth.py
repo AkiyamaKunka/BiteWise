@@ -186,14 +186,20 @@ def start_session(cli_path: str, env: Dict[str, str]) -> Dict:
                     proc.poll())
         return {"error": "the CLI did not produce a sign-in URL"}
 
+    # Another start may have published while this one harvested its URL
+    # (the cancel above ran before either existed). Kill what this publish
+    # replaces: overwriting it would leave a process with an open PTY that
+    # neither cancel nor the reaper can ever see again.
     global _session
     with _lock:
-        _session = {
+        replaced, _session = _session, {
             "proc": proc,
             "fd": master,
             "url": url,
             "started_at": time.monotonic(),
         }
+    if replaced is not None:
+        _kill_session(replaced)
     log.info("Claude re-auth session started (URL harvested).")
     return {"url": url}
 
