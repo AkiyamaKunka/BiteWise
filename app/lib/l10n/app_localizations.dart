@@ -1890,10 +1890,10 @@ abstract class AppLocalizations {
   /// **'Everything works. If a photo still fails, it is photo-specific — try \"Analyze again\" on it.'**
   String get diagVerdictOk;
 
-  /// No description provided for @diagVerdictProblems.
+  /// Test AI provider: the verdict above the checks when some did not pass. Names no colour: the status signs are the theme's status colours, and the warning sign is amber in light mode and yellow in dark.
   ///
   /// In en, this message translates to:
-  /// **'{count, plural, =1{1 problem found — the red/orange rows below say what to do.} other{{count} problems found — the red/orange rows below say what to do.}}'**
+  /// **'{count, plural, =1{1 problem found — its row below says what to do.} other{{count} problems found — their rows below say what to do.}}'**
   String diagVerdictProblems(int count);
 
   /// No description provided for @diagStageTestRun.

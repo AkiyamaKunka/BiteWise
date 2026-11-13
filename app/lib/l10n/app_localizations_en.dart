@@ -1154,9 +1154,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count problems found — the red/orange rows below say what to do.',
-      one: '1 problem found — the red/orange rows below say what to do.',
+      other: '$count problems found — their rows below say what to do.',
+      one: '1 problem found — its row below says what to do.',
     );
     return '$_temp0';
   }

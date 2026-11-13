@@ -41,13 +41,14 @@ ProviderDiagnostics _diag({
   FakeSettings? settings,
   FakeAnalyzer? analyzer,
   http.Client? client,
+  AppLocalizations? l10n,
 }) =>
     ProviderDiagnostics(
       settings: settings ?? FakeSettings(),
       analyzer: analyzer ?? _okAnalyzer(),
       // English l10n keeps every existing stage/summary assertion below
       // byte-identical to the strings this page shipped with.
-      l10n: AppLocalizationsEn(),
+      l10n: l10n ?? AppLocalizationsEn(),
       client: client ?? MockClient((_) async => http.Response('ok', 404)),
       testImage: _img,
     );
@@ -476,6 +477,55 @@ void main() {
           reason: 'the cards are the cell colour the ratios were taken on');
       handle.dispose();
     });
+  }
+
+  // The verdict sent the reader to "the red/orange rows" (下面红色/橙色的行).
+  // The warning sign is the theme's warning colour, amber in light mode and
+  // yellow in dark, so in dark mode no row was orange; and a colour points
+  // nowhere for a colour-blind reader. The verdict names no colour now, only
+  // the problems' own rows, and each of those rows says what to do.
+  for (final dark in const [false, true]) {
+    for (final zh in const [false, true]) {
+      testWidgets('the verdict names no colour, and each row it points to '
+          "says what to do (${zh ? 'zh' : 'en'}, ${dark ? 'dark' : 'light'})",
+          (tester) async {
+        final AppLocalizations l =
+            zh ? AppLocalizationsZh() : AppLocalizationsEn();
+        final analyzer = _okAnalyzer()
+          ..nextTextIntent = null // Text analysis warns
+          ..nextPhotoOutcome = const AnalysisOutcome(
+              error: 'model not found',
+              retryable: false, // Photo analysis fails
+              wall: Duration.zero);
+        await pumpApp(tester,
+            DiagnosticsScreen(diagnostics: _diag(analyzer: analyzer, l10n: l)),
+            size: const Size(800, 2400),
+            locale: Locale(zh ? 'zh' : 'en'),
+            brightness: dark ? Brightness.dark : Brightness.light);
+        await tester.tap(find.byKey(const Key('runDiagnostics')));
+        await tester.pumpAndSettle();
+        final verdict = tester
+            .widget<Text>(find.descendant(
+                of: find.byKey(const Key('diagVerdict')),
+                matching: find.byType(Text)))
+            .data!;
+        expect(verdict, l.diagVerdictProblems(2));
+        expect(
+            verdict,
+            isNot(matches(RegExp(
+                r'\b(red|orange|yellow|amber|green)\b|[红橙黄绿]',
+                caseSensitive: false))));
+        // The rows it points to: each check that did not pass shows its fix.
+        for (final stage in [l.diagStageText, l.diagStagePhoto]) {
+          final card =
+              find.ancestor(of: find.text(stage), matching: find.byType(Card));
+          expect(
+              find.descendant(of: card, matching: find.textContaining('→ ')),
+              findsOneWidget,
+              reason: stage);
+        }
+      });
+    }
   }
 
   // 2026-10-18: what the background scans did, from their own record.

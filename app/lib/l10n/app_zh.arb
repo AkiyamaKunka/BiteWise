@@ -319,7 +319,7 @@
   "diagRunAgain": "重新测试",
   "diagRunChecks": "开始检查",
   "diagVerdictOk": "一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试“重新分析”。",
-  "diagVerdictProblems": "{count, plural, other{发现 {count} 个问题 —— 下面红色/橙色的行说明该怎么做。}}",
+  "diagVerdictProblems": "{count, plural, other{发现 {count} 个问题 —— 下面对应的行说明该怎么做。}}",
   "diagStageTestRun": "测试运行",
   "diagTestRunFailed": "检查本身中途失败了。",
   "diagFixTestRun": "重新运行；如果一直卡在这里，说明服务返回的内容应用完全无法解析。",

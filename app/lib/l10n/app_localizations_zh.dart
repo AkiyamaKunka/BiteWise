@@ -1076,7 +1076,7 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '发现 $count 个问题 —— 下面红色/橙色的行说明该怎么做。',
+      other: '发现 $count 个问题 —— 下面对应的行说明该怎么做。',
     );
     return '$_temp0';
   }
