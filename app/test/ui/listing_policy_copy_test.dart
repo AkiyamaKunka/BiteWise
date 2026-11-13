@@ -3,8 +3,11 @@
 /// - the zh App Store listing (ios/store/metadata/zh-Hans) quotes nothing
 ///   in ASCII straight quotes, and names the app's controls in 「」 as
 ///   app_zh.arb spells them (README.zh-CN rule 1). Its examples sit in
-///   “”, as README.zh-CN's do. The owner pastes this text into App Store
-///   Connect, so a fix here has to be pasted there too.
+///   “” as README.zh-CN's do, except the typed fix on line 6, which sits
+///   in 「」 as README.zh-CN's typed fixes do (the app and the policy's
+///   中文 half quote every example in 「」; one style for all of them is
+///   still the owner's to pick). The owner pastes this text into App
+///   Store Connect, so a fix here has to be pasted there too.
 /// - the privacy policy (docs/PRIVACY.md) lists everything an export holds
 ///   in both halves, says what uninstalling leaves in the iOS Keychain as
 ///   docs/SUPPORT.md does, and its 中文 half names controls in 「」 with no
