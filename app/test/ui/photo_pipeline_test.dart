@@ -1764,6 +1764,70 @@ void main() {
     });
   });
 
+  // Review r171 (medium): iCloud Backup's restore offer held only the
+  // catch-ups. The live watcher kept handing photos over, and a photo
+  // logged while the offer was open was kept over the backup's own, maybe
+  // corrected, meal for it when the user tapped Restore.
+  group('iCloud Backup holds the automatic intake (intakeHeld)', () {
+    AnalysisOutcome food() => AnalysisOutcome(
+        analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+
+    test('an automatic photo is released untouched while held: no hash, no '
+        'ledger row, nothing sent; offered again after the hold, it is '
+        'logged', () async {
+      var held = true;
+      var hashed = 0, sent = 0;
+      final dao = FakeDao();
+      final pipeline = PhotoPipeline(
+          dao: dao,
+          analyzer: FakeAnalyzer()
+            ..nextPhotoOutcome = food()
+            ..onAnalyze = () async => sent++,
+          intakeHeld: () => held,
+          hasher: (b) async {
+            hashed++;
+            return _hash;
+          });
+      final intake = _SinkCapturingIntake();
+      pipeline.bind(intake);
+      expect(await intake.sink!(_photo(), null), isFalse,
+          reason: 'released: the watcher offers it again after the hold');
+      final out = await pipeline.process(_photo());
+      expect(out.kind, PhotoOutcomeKind.failed);
+      expect(out.retryable, isTrue, reason: 'the frontier halts in front');
+      expect(out.reason, backupHoldReason);
+      expect(hashed, 0);
+      expect(sent, 0);
+      expect(dao.ledger, isEmpty);
+      expect(dao.meals, isEmpty);
+
+      held = false; // the offer answered, the restore done
+      expect(await intake.sink!(_photo(), null), isTrue);
+      expect(dao.meals, hasLength(1));
+      expect(sent, 1);
+    });
+
+    test('a photo the user picked or shared still runs', () async {
+      final dao = FakeDao();
+      final out = await PhotoPipeline(
+              dao: dao,
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = food(),
+              intakeHeld: () => true)
+          .process(_photo(deliberate: true));
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(dao.meals, hasLength(1));
+    });
+
+    test('a throwing probe holds nothing', () async {
+      final out = await PhotoPipeline(
+              dao: FakeDao(),
+              analyzer: FakeAnalyzer()..nextPhotoOutcome = food(),
+              intakeHeld: () => throw StateError('not built yet'))
+          .process(_photo());
+      expect(out.kind, PhotoOutcomeKind.saved);
+    });
+  });
+
   test('bound streams process photos ONE at a time (no Gemini burst)',
       () async {
     final dao = FakeDao();
@@ -1906,6 +1970,52 @@ void main() {
         await PhotoPipeline(dao: dao, analyzer: analyzer).process(_photo());
     expect(out.kind, PhotoOutcomeKind.failed); // contained, no throw (spec §6)
     expect(dao.ledger[_hash], IngestionStatus.failed);
+  });
+
+  // Review r171: each stage after the model call is `return await`-ed
+  // inside _process's try. A bare `return _settleFailedAnalysis(...)` lets
+  // a throw of the settle's own write escape process(), and the FIFO every
+  // intake chains onto (watcher, share sheet, coverage) stops until the app
+  // restarts. Only the save path was pinned.
+  group('a failed analysis whose settling write throws', () {
+    IntakePhoto numbered(int n) =>
+        IntakePhoto(Uint8List.fromList([n]), 'asset$n', 'IMG_$n.jpg');
+
+    Future<void> nextPhotoStillSaves(
+        PhotoPipeline pipeline, FakeAnalyzer analyzer, FakeDao dao) async {
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final next = await pipeline.enqueue(numbered(2));
+      expect(next.kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger['h2'], IngestionStatus.saved);
+    }
+
+    test('permanent, the failed mark throwing: contained, and the next photo '
+        'in the queue still saves', () async {
+      final dao = _FailedMarkThrowsOnceDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome =
+            const AnalysisOutcome(error: 'bad key', wall: Duration.zero);
+      final pipeline = PhotoPipeline(
+          dao: dao, analyzer: analyzer, hasher: (b) async => 'h${b.first}');
+      final first = await pipeline.enqueue(numbered(1));
+      expect(first.kind, PhotoOutcomeKind.failed);
+      expect(dao.ledger['h1'], IngestionStatus.failed,
+          reason: 'the containment marks it again');
+      await nextPhotoStillSaves(pipeline, analyzer, dao);
+    });
+
+    test('transient, the release throwing: contained the same way', () async {
+      final dao = _FailingReleaseDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'rate limit', retryable: true, wall: Duration.zero);
+      final pipeline = PhotoPipeline(
+          dao: dao, analyzer: analyzer, hasher: (b) async => 'h${b.first}');
+      final first = await pipeline.enqueue(numbered(1));
+      expect(first.kind, PhotoOutcomeKind.failed);
+      await nextPhotoStillSaves(pipeline, analyzer, dao);
+    });
   });
 
   group('bindStream (share sheet) announces the verdicts nobody awaits', () {
@@ -2110,6 +2220,23 @@ class _ThrowingSaveDao extends FakeDao {
   Future<int> saveMeal(Meal meal,
       {IngestionStatus? markStatus, String? ownerStamp}) async {
     throw StateError('disk full');
+  }
+}
+
+/// A store whose first 'failed' mark throws (a locked database); the
+/// containment's own mark after it goes through.
+class _FailedMarkThrowsOnceDao extends FakeDao {
+  var _thrown = false;
+
+  @override
+  Future<void> markPhotoHash(String imageHash, IngestionStatus status,
+      {int? mealId, String? ownerStamp}) {
+    if (status == IngestionStatus.failed && !_thrown) {
+      _thrown = true;
+      return Future.error(StateError('database is locked'));
+    }
+    return super.markPhotoHash(imageHash, status,
+        mealId: mealId, ownerStamp: ownerStamp);
   }
 }
 

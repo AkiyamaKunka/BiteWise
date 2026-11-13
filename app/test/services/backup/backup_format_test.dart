@@ -2,6 +2,7 @@
 // way both languages read it back, and the owner rule the Swift writer
 // mirrors (CloudFiles.swift checkOwner; RunnerTests cover that copy).
 import 'dart:convert';
+import 'dart:math' show Random;
 
 import 'package:calorie_tracker/data/meals_logic.dart';
 import 'package:calorie_tracker/services/backup/backup_format.dart';
@@ -28,7 +29,31 @@ BackupHeader _records({int seq = 3, Map<String, int> months = const {}}) =>
 String _file(BackupHeader h, {String tables = '{"meals":[]}'}) =>
     '${h.envelopePrefix(DateTime.utc(2026, 11, 11, 8))}$tables}';
 
+/// A generator that only ever draws 0: every byte needs its leading zero.
+class _Zeros implements Random {
+  @override
+  int nextInt(int max) => 0;
+  @override
+  double nextDouble() => 0;
+  @override
+  bool nextBool() => false;
+}
+
 void main() {
+  // One generator for the id the owner rule goes by (review r171): the
+  // coordinator's, and an export's when no backup gave this install one.
+  test('a new install id is 32 lowercase hex characters, as the owner rule '
+      'requires, and no two are alike', () {
+    final ids = {for (var i = 0; i < 200; i++) newInstallId()};
+    expect(ids, hasLength(200));
+    for (final id in ids) {
+      expect(isValidInstallId(id), isTrue, reason: id);
+    }
+    expect(newInstallId(Random(7)), newInstallId(Random(7)),
+        reason: 'a seeded generator repeats it');
+    expect(newInstallId(_Zeros()), '0' * 32, reason: 'each byte two digits');
+  });
+
   test('the envelope keys come in the pinned order', () {
     final text = _file(_records(months: {'2026-10': 93}));
     final decoded = jsonDecode(text) as Map<String, dynamic>;

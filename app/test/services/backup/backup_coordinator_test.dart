@@ -15,11 +15,13 @@ import 'package:calorie_tracker/services/backup/backup_files.dart';
 import 'package:calorie_tracker/services/backup/backup_format.dart';
 import 'package:calorie_tracker/services/backup/backup_prefs.dart';
 import 'package:calorie_tracker/services/backup/cloud_backup_channel.dart';
+import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../../support/fake_cloud_transport.dart';
+import '../../ui/fakes.dart' show FakeAnalyzer;
 
 const _other = 'fedcba9876543210fedcba9876543210';
 const _third = 'abcdefabcdefabcdefabcdefabcdefab';
@@ -42,7 +44,8 @@ void main() {
   late BackupCoordinator c;
   var imported = 0;
 
-  BackupCoordinator make({bool ui = true}) => BackupCoordinator(
+  BackupCoordinator make({bool ui = true, void Function()? onCatchUpReleased}) =>
+      BackupCoordinator(
         dao: dao,
         transport: cloud,
         prefs: prefs,
@@ -50,6 +53,7 @@ void main() {
         uiEngine: ui,
         clock: () => now,
         onDataImported: () => imported++,
+        onCatchUpReleased: onCatchUpReleased,
         gatherWait: Duration.zero,
       );
 
@@ -759,6 +763,316 @@ void main() {
       final held = c.holdsCatchUp();
       await c.stop();
       expect(await held.timeout(const Duration(seconds: 5)), isFalse);
+    });
+
+    // Review r171 (medium): the 30-minute lease is what a crash leaves
+    // behind and what the background run reads, not the offer itself. An
+    // offer still waiting once it ran out let the catch-ups log the
+    // backup's photos afresh.
+    test('an offer still open after its 30-minute lease ran out still holds; '
+        'answering it lets go', () async {
+      await otherPhoneBackup();
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      now = now.add(BackupCoordinator.catchUpLease + const Duration(minutes: 1));
+      expect(backupHoldsCatchUp(prefs, now), isFalse, reason: 'lease gone');
+      expect(c.holdsCatchUpNow, isTrue);
+      expect(await c.holdsCatchUp(), isTrue);
+      expect(c.holdsPhotosNow, isTrue);
+      await c.declineOffer(offer.candidate);
+      expect(c.holdsCatchUpNow, isFalse);
+      expect(c.holdsPhotosNow, isFalse);
+    });
+
+    test('Restore holds from the tap, though the offer outwaited its lease '
+        'and a backup run has the lock', () async {
+      final gated = _StatusHeld();
+      cloud = gated;
+      c = make();
+      await noticeAnswered();
+      await otherPhoneBackup();
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      now = now.add(const Duration(hours: 1));
+      gated.hold = true;
+      final running = c.runForTest(); // takes the lock, waits in status
+      await gated.entered.future;
+      final restoring = c.restore(offer.candidate); // waits for the lock
+      await pumpEventQueue();
+      expect(c.prompt.value, isNull);
+      expect(c.holdsPhotosNow, isTrue,
+          reason: 'no offer and no lease would let a photo be logged before '
+              'the backup it may be in');
+      gated.gate.complete();
+      await running;
+      expect((await restoring).ok, isTrue);
+      expect(c.holdsPhotosNow, isFalse);
+    });
+
+    test('automatic photos wait while the launch\'s look has not decided, as '
+        'the catch-up does, and no longer than it would', () async {
+      // Built at init; the look starts after the first frame.
+      expect(c.holdsPhotosNow, isTrue);
+      expect(c.holdsCatchUpNow, isFalse, reason: 'unchanged for the catch-up');
+      now = now.add(BackupCoordinator.lookSlack); // gatherWait is zero here
+      expect(c.holdsPhotosNow, isFalse,
+          reason: 'a look that never ends holds nothing');
+    });
+
+    // Review r171: the window was counted from when init built the
+    // coordinator. The look begins only after the first frame, and init
+    // may wait first (the Photos access sheet): the live watcher's photos
+    // went through while the look still gathered and the launch catch-up
+    // still waited for it.
+    test('the look holds the photos from when it began after the first '
+        'frame, however long init took before it', () async {
+      final gated = _StatusHeld()..hold = true;
+      cloud = gated;
+      c = make(); // init builds it, then asks for Photos access
+      now = now.add(const Duration(seconds: 50));
+      final launchCatchUp = c.holdsCatchUp(); // the launch catch-up asks
+      now = now.add(const Duration(seconds: 1));
+      await c.start(); // the first frame: the look begins
+      await gated.entered.future;
+      now = now.add(const Duration(seconds: 30)); // 81 s after init built it
+      expect(c.holdsPhotosNow, isTrue,
+          reason: 'the look has gathered for 30 s of its 60');
+      now = now.add(const Duration(seconds: 30));
+      expect(c.holdsPhotosNow, isFalse,
+          reason: 'a look that never ends holds nothing past its window');
+      gated.gate.complete();
+      expect(await launchCatchUp, isFalse);
+    });
+
+    test('a catch-up that asks once init outlasted that window still waits '
+        'for the look, and the photos wait as long', () async {
+      final gated = _StatusHeld()..hold = true;
+      cloud = gated;
+      c = make();
+      now = now.add(BackupCoordinator.lookSlack + const Duration(seconds: 10));
+      expect(c.holdsPhotosNow, isFalse,
+          reason: 'the window counted from init lapsed');
+      var answered = false;
+      final launchCatchUp = c.holdsCatchUp();
+      unawaited(launchCatchUp.then((_) => answered = true));
+      expect(c.holdsPhotosNow, isTrue,
+          reason: 'as long as the catch-up waits for the look');
+      await c.start();
+      await gated.entered.future;
+      await pumpEventQueue();
+      expect(answered, isFalse, reason: 'the look has not decided');
+      gated.gate.complete();
+      expect(await launchCatchUp, isFalse);
+      expect(c.holdsPhotosNow, isFalse);
+    });
+
+    test('the look that finds nothing to offer lets them go; the one that '
+        'raises an offer holds them until it is answered', () async {
+      await noticeAnswered();
+      await c.start();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isNull);
+      expect(c.holdsPhotosNow, isFalse);
+
+      await c.stop();
+      c = make();
+      await prefs.remove(BackupPrefs.kOffersAnswered);
+      await otherPhoneBackup();
+      await c.start();
+      await c.holdsCatchUp();
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      expect(c.holdsPhotosNow, isTrue);
+      await c.dismissOffer();
+      expect(c.holdsPhotosNow, isFalse);
+    });
+
+    test('once the hold lets go (dismissed, Not Now, a restore or Start '
+        'Fresh done) the app is told to catch up on what it kept back',
+        () async {
+      var told = 0;
+      c = make(onCatchUpReleased: () => told++);
+      await otherPhoneBackup();
+      await c.launchCheckForTest();
+      expect(told, 0, reason: 'held');
+      await c.dismissOffer();
+      expect(told, 1);
+
+      await c.launchCheckForTest();
+      await c.declineOffer((c.prompt.value as RestoreOfferPrompt).candidate);
+      expect(told, 2);
+
+      await prefs.remove(BackupPrefs.kOffersAnswered);
+      c.prompt.value = null;
+      await c.launchCheckForTest();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      expect(told, 3);
+
+      await prefs.remove(BackupPrefs.kOffersAnswered);
+      c.prompt.value = null;
+      await c.launchCheckForTest();
+      await c.startFresh((c.prompt.value as RestoreOfferPrompt).candidate);
+      expect(told, 4);
+    });
+
+    // Review r171: the lease is how the background run sees an open offer;
+    // the takeover's release cleared it while the offer still waited, so
+    // a background run logged photos the backup may hold.
+    test('a takeover that ends while an offer waits under Settings tells '
+        'nothing: the offer holds on, the background run\'s lease too',
+        () async {
+      var told = 0;
+      c = make(onCatchUpReleased: () => told++);
+      await seed(dao, '2026-11-10');
+      await ready();
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      now = now.add(const Duration(minutes: 20));
+      expect(await c.takeOver(replace: false), isTrue);
+      expect(c.holdsPhotosNow, isTrue);
+      expect(told, 0);
+      expect(backupHoldsCatchUp(prefs, now), isTrue);
+      expect(
+          backupHoldsCatchUp(
+              prefs, now.add(const Duration(minutes: 29, seconds: 59))),
+          isTrue,
+          reason: 'renewed from when the takeover let go, not from when the '
+              'offer was raised');
+    });
+
+    test('so does a combine that ends while an offer waits', () async {
+      var told = 0;
+      c = make(onCatchUpReleased: () => told++);
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run();
+      // iCloud kept the other phone's write as the current file, and the
+      // look offers it.
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      await c.combine();
+      expect(imported, greaterThan(0), reason: 'it was merged');
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      expect(c.holdsPhotosNow, isTrue);
+      expect(told, 0);
+      expect(backupHoldsCatchUp(prefs, now), isTrue);
+    });
+
+    test('a takeover that merged another backup\'s pictures lets the hold go '
+        'when it ends', () async {
+      var told = 0;
+      c = make(onCatchUpReleased: () => told++);
+      await seed(dao, '2026-11-10');
+      await ready();
+      await otherPhoneBackup(meals: 2); // with October's pictures
+      await prefs.setStringList(BackupPrefs.kOffersAnswered, [_other]);
+      await c.launchCheckForTest(); // answered before: nothing to offer
+      expect(await run(), BackupState.otherDevice);
+      expect(await c.takeOver(replace: false), isTrue);
+      expect(backupHoldsCatchUp(prefs, now), isFalse,
+          reason: 'not 30 more minutes of photos held for nothing');
+      expect(c.holdsCatchUpNow, isFalse);
+      expect(told, 1);
+    });
+
+    test('so does a combine that merged another backup in', () async {
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run();
+      // iCloud kept the other phone's write as the current file.
+      await otherPhoneBackup(meals: 2);
+      await c.combine();
+      expect(imported, greaterThan(0), reason: 'it was merged');
+      expect(backupHoldsCatchUp(prefs, now), isFalse);
+      expect(c.holdsCatchUpNow, isFalse);
+    });
+  });
+
+  // Review r171 (medium), end to end: the live watcher fed the pipeline
+  // while the offer was open. The photo it logged then won over the
+  // backup's own corrected meal for the same photo when the user restored.
+  group('a photo the live watcher brings while a restore is offered', () {
+    late PhotoPipeline pipeline;
+    late int sent;
+    late int told;
+    final photo = IntakePhoto(
+        Uint8List.fromList([4, 2]), 'asset-lunch', 'IMG_lunch.jpg');
+
+    setUp(() async {
+      // The old phone logged lunch at 900 kcal and corrected it to 650.
+      final id = await otherDao.saveMeal(
+          Meal(
+              id: 0,
+              date: '2026-11-11',
+              time: '12:00 PM',
+              timestamp: '2026-11-11T12:00:00.000',
+              source: MealSource.appWatch,
+              imageHash: 'h_lunch',
+              analysis: {'is_food': true, 'total_calories': 900}),
+          markStatus: IngestionStatus.saved);
+      await otherDao
+          .updateMealAnalysis(id, {'is_food': true, 'total_calories': 650});
+      final w =
+          BackupFileWriter(dao: otherDao, platform: 'ios', clock: () => now);
+      final f = await w.writeRecords('${tmp.path}/o.json',
+          installId: _other, seq: 4, months: const {});
+      cloud.files[kRecordsFileName] = await File(f.path).readAsBytes();
+      sent = 0;
+      told = 0;
+      c = make(onCatchUpReleased: () => told++);
+      pipeline = PhotoPipeline(
+          dao: dao,
+          // This phone's model reads the photo as 900 kcal again.
+          analyzer: FakeAnalyzer()
+            ..nextPhotoOutcome = const AnalysisOutcome(
+                analysis: {'is_food': true, 'total_calories': 900},
+                isFood: true,
+                wall: Duration.zero)
+            ..onAnalyze = () async => sent++,
+          intakeHeld: () => c.holdsPhotosNow,
+          hasher: (_) async => 'h_lunch');
+    });
+
+    Future<RestoreOfferPrompt> launch() async {
+      // From init, before the shell starts the look.
+      final early = await pipeline.process(photo);
+      expect(early.reason, backupHoldReason);
+      await c.start();
+      await c.holdsCatchUp();
+      final offer = c.prompt.value as RestoreOfferPrompt;
+      final meanwhile = await pipeline.process(photo);
+      expect(meanwhile.retryable, isTrue);
+      expect(meanwhile.reason, backupHoldReason);
+      expect(sent, 0);
+      expect((await dao.backupCounts()).meals, 0);
+      return offer;
+    }
+
+    test('Restore: the backup\'s corrected meal is kept, and the photo, '
+        'offered again once the hold let go, is already logged', () async {
+      final offer = await launch();
+      expect((await c.restore(offer.candidate)).ok, isTrue);
+      expect(told, 1, reason: 'the app catches up on what the hold kept');
+      expect((await pipeline.process(photo)).kind,
+          PhotoOutcomeKind.alreadyTracked);
+      expect(sent, 0);
+      final meals = await dao.mealsBetween('2026-11-11', '2026-11-11');
+      expect([for (final m in meals) m.analysis['total_calories']], [650]);
+      expect((await dao.backupCounts()).meals, 1);
+    });
+
+    test('Not Now: the photo, offered again once the hold let go, is logged '
+        'once', () async {
+      final offer = await launch();
+      await c.declineOffer(offer.candidate);
+      expect(told, 1);
+      expect((await pipeline.process(photo)).kind, PhotoOutcomeKind.saved);
+      expect((await pipeline.process(photo)).kind,
+          PhotoOutcomeKind.alreadyTracked);
+      expect(sent, 1);
+      expect((await dao.backupCounts()).meals, 1);
     });
   });
 
@@ -1676,6 +1990,23 @@ class _FetchHeld extends FakeCloudTransport {
       await gate.future;
     }
     return super.fetch(path, destPath, timeout: timeout);
+  }
+}
+
+/// An iCloud folder whose status call waits for [gate] while [hold] is set:
+/// a run that took the lock stays in it.
+class _StatusHeld extends FakeCloudTransport {
+  bool hold = false;
+  final Completer<void> gate = Completer();
+  final Completer<void> entered = Completer();
+
+  @override
+  Future<CloudStatus> status() async {
+    if (hold) {
+      if (!entered.isCompleted) entered.complete();
+      await gate.future;
+    }
+    return super.status();
   }
 }
 

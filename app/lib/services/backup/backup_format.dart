@@ -28,6 +28,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math' show Random;
 
 import '../../data/meals_logic.dart' show kExportFormat, kExportVersion;
 
@@ -80,6 +81,15 @@ String? monthOfDate(String date) {
 final RegExp _installIdRe = RegExp(r'^[0-9a-f]{32}$');
 
 bool isValidInstallId(String? id) => id != null && _installIdRe.hasMatch(id);
+
+/// A new install id: 16 random bytes as 32 lowercase hex characters, the
+/// shape [isValidInstallId] accepts. From a secure generator unless
+/// [random] is given (tests, the coordinator's own).
+String newInstallId([Random? random]) {
+  final r = random ?? Random.secure();
+  return List.generate(
+      16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0')).join();
+}
 
 enum BackupKind { records, pictures, full }
 

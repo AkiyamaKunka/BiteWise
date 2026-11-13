@@ -62,11 +62,12 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// live watcher's late-import pass reads a photo only while an automatic
 /// analysis could succeed and the app is open
 /// ([LibraryPhotoIntake.liveLateShouldContinue]), as every other automatic
-/// trigger does.
+/// trigger does. [liveHeld]: see [LibraryPhotoIntake.liveHeld].
 PhotoIntake createPhotoIntake(AppSettings settings,
     {FutureOr<void> Function(int count)? onBackfillListed,
     bool Function(String assetId)? passOver,
     Future<Set<String>> Function(List<String> assetIds)? loggedAssetIds,
+    bool Function()? liveHeld,
     @visibleForTesting bool? isIOS}) {
   final changes = platformPhotoChangeSource(isIOS: isIOS);
   return LibraryPhotoIntake(
@@ -85,6 +86,7 @@ PhotoIntake createPhotoIntake(AppSettings settings,
       liveLateShouldContinue: changes == null
           ? null
           : () => settings.canAutoAnalyze && appEngineInForeground(),
+      liveHeld: liveHeld,
       metaAlbumIds: changes == null
           ? null
           : (since) => metaAlbumAssetIds(changes, since: since),
@@ -160,6 +162,7 @@ class LibraryPhotoIntake implements PhotoIntake {
       this.loggedAssetIds,
       this.onLateImportPass,
       this.liveLateShouldContinue,
+      this.liveHeld,
       this.metaAlbumIds,
       @visibleForTesting this.metaAlbumTimeout = metaAlbumLookupTimeout,
       this.assetAddedDate,
@@ -218,6 +221,32 @@ class LibraryPhotoIntake implements PhotoIntake {
   /// advances the history token and keeps every photo in the carry; the
   /// next catch-up or pass that can analyze offers them. Null: always.
   final bool Function()? liveLateShouldContinue;
+
+  /// The live watcher (the scan after each library change, and that
+  /// change's late-import pass) reads no photo while this says yes: in
+  /// production while iCloud Backup holds the automatic intake
+  /// (BackupCoordinator.holdsPhotosNow, as the pipeline's intakeHeld does).
+  /// Otherwise each such photo's original was read in full (an iCloud
+  /// download for some) only for the pipeline to let it go untouched, and
+  /// read again at every change for as long as the hold lasts (a restore
+  /// offer waits for its answer). Left unread, a photo halts the scan's
+  /// cutoff and stays in the late-import carry; the catch-up after the
+  /// hold, or the next change, offers it. A probe that throws holds
+  /// nothing. Null: never held.
+  final bool Function()? liveHeld;
+
+  /// [liveHeld] as a read gate for [_emit] (null when there is none).
+  bool Function()? get _liveReads {
+    final held = liveHeld;
+    if (held == null) return null;
+    return () {
+      try {
+        return !held();
+      } catch (_) {
+        return true;
+      }
+    };
+  }
 
   /// The background run's photos to count covered WITHOUT reading them:
   /// the ones it has deferred too often (deferred_assets.dart), so one file
@@ -322,6 +351,7 @@ class LibraryPhotoIntake implements PhotoIntake {
       final truncated = assets.length >= 500;
       final frontier = await _emit(assets,
           reportFrontier: !truncated,
+          shouldContinue: _liveReads,
           glassesQuota: GlassesQuota(limit: glassesPerScan));
       // Advance ONLY over the contiguous run of successfully-covered
       // photos (oldest-first), and never past the wall clock: a transient
@@ -357,14 +387,20 @@ class LibraryPhotoIntake implements PhotoIntake {
       _queueLateImport(shouldContinue: shouldContinue, rescan: true);
 
   /// The live watcher's pass: no time budget, only
-  /// [liveLateShouldContinue], and no rescan by date (that one lists the
-  /// whole window; the launch/resume and background passes do it). One
-  /// waiting at most.
+  /// [liveLateShouldContinue] and [liveHeld], and no rescan by date (that
+  /// one lists the whole window; the launch/resume and background passes
+  /// do it). One waiting at most.
   void _queueLiveLateImport() {
     if (lateImports == null || _liveLateQueued) return;
     _liveLateQueued = true;
+    final gate = liveLateShouldContinue;
+    final reads = _liveReads;
     unawaited(_queueLateImport(
-        shouldContinue: liveLateShouldContinue, rescan: false, live: true));
+        shouldContinue: reads == null
+            ? gate
+            : () => (gate == null || gate()) && reads(),
+        rescan: false,
+        live: true));
   }
 
   Future<void> _queueLateImport(

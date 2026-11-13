@@ -632,6 +632,69 @@ void main() {
       expect(emitted.length, 1);
     });
 
+    // Review r171: while iCloud Backup holds the automatic intake (a
+    // restore offer waiting for its answer, for as long as it waits) the
+    // pipeline lets each automatic photo go untouched, and the live scan
+    // had read every held original in full again at each library change.
+    test('while the live watcher is held it reads no photo; its cutoff '
+        'waits, and the first change after the hold reads them', () async {
+      final library = FakePhotoLibrary();
+      var held = true;
+      final reads = <String>[];
+      final delivered = <String>[];
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          liveHeld: () => held)
+        ..attachSink((p, safe) async {
+          delivered.add(p.assetId);
+          return true;
+        });
+      await intake.start();
+      library.assets = [
+        FakeAsset('n1', 'IMG_20260717_120100.jpg',
+            now.add(const Duration(minutes: 1)), bytesOf(1),
+            onRead: () => reads.add('n1')),
+      ];
+      library.changeListener!();
+      await pumpEventQueue();
+      library.changeListener!();
+      await pumpEventQueue();
+      expect(reads, isEmpty, reason: 'nothing is read while held');
+      expect(delivered, isEmpty);
+
+      held = false;
+      library.changeListener!();
+      await pumpEventQueue();
+      expect(reads, ['n1']);
+      expect(delivered, ['n1']);
+      expect(library.queriedCutoffs.toSet(), {now},
+          reason: 'the cutoff waited for the photo it did not read');
+    });
+
+    test('a hold probe that throws holds nothing', () async {
+      final library = FakePhotoLibrary();
+      final delivered = <String>[];
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: library,
+          clock: () => now,
+          liveHeld: () => throw StateError('no coordinator yet'))
+        ..attachSink((p, safe) async {
+          delivered.add(p.assetId);
+          return true;
+        });
+      await intake.start();
+      library.assets = [
+        FakeAsset('n1', 'IMG_20260717_120100.jpg',
+            now.add(const Duration(minutes: 1)), bytesOf(1)),
+      ];
+      library.changeListener!();
+      await pumpEventQueue();
+      expect(delivered, ['n1']);
+    });
+
     test('permission denied: silent no-op, no subscription', () async {
       final library = FakePhotoLibrary()..permissionGranted = false;
       final intake = LibraryPhotoIntake(
@@ -672,7 +735,9 @@ void main() {
         clock: () => now);
 
     LibraryPhotoIntake makeIntake(
-            {DateTime Function()? clock, bool Function()? liveGate}) =>
+            {DateTime Function()? clock,
+            bool Function()? liveGate,
+            bool Function()? liveHeld}) =>
         LibraryPhotoIntake(
             lookbackDays: () => 7,
             library: library,
@@ -680,7 +745,8 @@ void main() {
             lateImports: cursor(),
             loggedAssetIds: (ids) async => logged.intersection(ids.toSet()),
             onLateImportPass: reports.add,
-            liveLateShouldContinue: liveGate);
+            liveLateShouldContinue: liveGate,
+            liveHeld: liveHeld);
 
     FakeAsset asset(String id, DateTime created) => FakeAsset(
         id, '$id.HEIC', created, bytesOf(id.length),
@@ -822,6 +888,35 @@ void main() {
       expect(delivered.map((d) => d.$1.assetId), ['p0', 'p1', 'p2']);
       expect(reads, ['p0', 'p1', 'p2']);
       expect(await carry(), isEmpty);
+    });
+
+    // Review r171: the same for iCloud Backup's hold on the intake.
+    test('the live pass reads nothing while iCloud Backup holds the intake '
+        'either: the photo waits in the carry, and the first change after '
+        'the hold delivers it', () async {
+      var held = true;
+      final live = makeIntake(liveHeld: () => held)
+        ..attachSink((p, safe) async {
+          delivered.add((p, safe));
+          return true;
+        });
+      await live.start();
+      library.assets = [asset('late', takenTuesday)];
+      insert(['late']);
+      var passes = reports.length;
+      library.changeListener!();
+      await until(() => reports.length > passes);
+      expect(reads, isEmpty, reason: 'nothing is read while held');
+      expect([for (final e in (await cursor().read())!.carry) e.id],
+          ['late']);
+
+      held = false;
+      passes = reports.length;
+      library.changeListener!();
+      await until(() => reports.length > passes);
+      expect(delivered.map((d) => d.$1.assetId), ['late']);
+      expect(reads, ['late']);
+      expect((await cursor().read())!.carry, isEmpty);
     });
 
     test('a photo this session already handled is not read again, and a '

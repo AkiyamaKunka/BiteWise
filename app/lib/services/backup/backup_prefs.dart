@@ -83,7 +83,6 @@ class BackupPrefs {
   static const String kTopSeq = '${prefix}top_seq';
   static const String kAdoptedFrom = '${prefix}adopted_from';
   static const String kAdoptedSeq = '${prefix}adopted_seq';
-  static const String kOwnedPath = '${prefix}owned_path';
   static const String kFirstEmptyAt = '${prefix}first_empty_at';
   static const String kMonths = '${prefix}months';
   static const String kLastRecordsChange = '${prefix}last_records_change';
@@ -102,7 +101,7 @@ class BackupPrefs {
   /// Every key this file owns (the reset paths and the privacy test).
   static const List<String> allKeys = [
     kEnabled, kNoticeSeen, kInstallId, kDeviceKey, kLastSeq, kPendingSeq,
-    kTopSeq, kAdoptedFrom, kAdoptedSeq, kOwnedPath, kFirstEmptyAt, kMonths,
+    kTopSeq, kAdoptedFrom, kAdoptedSeq, kFirstEmptyAt, kMonths,
     kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes, kLastError,
     kLastMeals, kPreviousDay, kOffersAnswered, kHoldCatchUpUntil, kPaused,
     kPausedCount, kSkippedMonths,
@@ -157,9 +156,6 @@ class BackupPrefs {
     await _p.remove(kAdoptedFrom);
     await _p.remove(kAdoptedSeq);
   }
-
-  String get ownedPath => _p.getString(kOwnedPath) ?? '';
-  Future<void> setOwnedPath(String v) => _p.setString(kOwnedPath, v);
 
   DateTime? get firstEmptyAt => _time(kFirstEmptyAt);
   Future<void> setFirstEmptyAt(DateTime? v) => _setTime(kFirstEmptyAt, v);
@@ -254,8 +250,7 @@ class BackupPrefs {
   /// account. [keepNotice]: the answer to the notice still holds.
   Future<void> forgetBackup({required bool keepNotice}) async {
     for (final k in [
-      kLastSeq, kPendingSeq, kAdoptedFrom, kAdoptedSeq, kOwnedPath,
-      kFirstEmptyAt,
+      kLastSeq, kPendingSeq, kAdoptedFrom, kAdoptedSeq, kFirstEmptyAt,
       kMonths, kLastRecordsChange, kLastOkAt, kLastAttemptAt, kLastBytes,
       kLastError, kLastMeals, kPreviousDay, kPaused, kPausedCount,
       kHoldCatchUpUntil, kSkippedMonths,

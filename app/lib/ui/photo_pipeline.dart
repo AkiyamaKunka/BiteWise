@@ -31,6 +31,7 @@ import '../services/photo/glasses_check.dart'
     show GlassesCheckEntry, GlassesCheckOutcome;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
+import 'meal_edit_logic.dart' show parseClock;
 
 Future<String> _computeMd5(Uint8List bytes) =>
     compute(originalBytesMd5, bytes);
@@ -158,6 +159,11 @@ const String leftoverConflictReason = 'leftover_conflict';
 /// recipient a send would reach was not allowed when its turn came
 /// ([AiSendGate]): released, nothing hashed or uploaded.
 const String notAllowedReason = 'not_allowed';
+
+/// [PhotoOutcome.reason] of an automatic photo let go, untouched, while
+/// iCloud Backup holds the intake ([PhotoPipeline.intakeHeld]): released,
+/// and offered again by the catch-up once the hold ends.
+const String backupHoldReason = 'backup_hold';
 
 /// The Glasses check card's outcome (glasses_check.dart) for [o], or null
 /// for a verdict that is not this photo's own: already logged, being
@@ -376,6 +382,18 @@ class PhotoPipeline {
   /// [glassesCheckLimit]; a throw changes nothing. Null: not recorded.
   final Future<void> Function(GlassesCheckEntry entry)? glassesCheckLog;
 
+  /// iCloud Backup, the app's own engine on iPhone (di.dart:
+  /// BackupCoordinator.holdsPhotosNow): whether a restore offer, a restore
+  /// or the look for a backup to offer holds the automatic intake right
+  /// now. A photo logged then would be kept over the backup's own, maybe
+  /// corrected, meal for the same photo (a restore merges photo meals by
+  /// their photo). An AUTOMATIC photo is therefore released before it is
+  /// hashed, reserved or given a task — retryable, so the watcher keeps it
+  /// unseen and the frontier halts — and the catch-up after the hold
+  /// offers it again. Deliberate photos (picked, shared) always run. Null
+  /// everywhere else; a throwing probe holds nothing.
+  final bool Function()? intakeHeld;
+
   /// The food check that ran on the photo in flight, for its record.
   FoodCheck? _foodChecked;
 
@@ -435,6 +453,7 @@ class PhotoPipeline {
       this.includeGlasses,
       this.foodCheck,
       this.glassesCheckLog,
+      this.intakeHeld,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
@@ -595,6 +614,15 @@ class PhotoPipeline {
     }
   }
 
+  /// [intakeHeld], contained: a throwing probe holds nothing.
+  bool _intakeIsHeld() {
+    try {
+      return intakeHeld?.call() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
   /// The clock [photo]'s meal is dated by. validateCapturedAt is NOT
   /// optional: EXIF is attacker- and junk-controlled (a 2015 stock photo, a
   /// camera with a dead clock, a forward-set date), and an unvalidated
@@ -625,6 +653,25 @@ class PhotoPipeline {
   /// guard looks for a meal of the same shutter press: the two files may
   /// have been dated differently (one by its import time).
   static const int sameShotWindowDays = 2;
+
+  /// How far a meal's clock may run ahead of the photo's and the meal still
+  /// ride along to the leftover check: the two are not read off one clock
+  /// (a meal typed by hand, another camera's EXIF).
+  static const leftoverClockSlack = Duration(minutes: 5);
+
+  /// Whether [m] was eaten no later than [when] (give or take
+  /// [leftoverClockSlack]), by the day and clock it was saved with — the
+  /// wall clock [when]'s meal would be saved with too. A meal of an
+  /// earlier day always was; one whose clock cannot be read keeps its
+  /// place, as before.
+  static bool _eatenBefore(Meal m, DateTime when) {
+    final day = isoDate(when);
+    if (m.date != day) return m.date.compareTo(day) < 0;
+    final t = parseClock(m.time);
+    if (t == null) return true;
+    return t.hour * 60 + t.minute <=
+        when.hour * 60 + when.minute + leftoverClockSlack.inMinutes;
+  }
 
   /// [photo]'s shutter key when the duplicate-capture guard (design G2b)
   /// looks at it — an AUTOMATIC Meta glasses photo whose EXIF names its
@@ -828,9 +875,11 @@ class PhotoPipeline {
       final time = backgroundTime;
       final outcome = !photo.deliberate && _inBackground()
           ? _waitsForForeground
-          : await (time == null
-              ? _process(photo)
-              : time.guard('photo', () => _process(photo)));
+          : !photo.deliberate && _intakeIsHeld()
+              ? _heldForBackup
+              : await (time == null
+                  ? _process(photo)
+                  : time.guard('photo', () => _process(photo)));
       // Settled or released by now: no reservation is held past process().
       _held = null;
       final checked = _foodChecked;
@@ -1025,12 +1074,17 @@ class PhotoPipeline {
       // (the manual flow offers yesterday too). The cap below keeps the
       // latest five, so a daytime photo's candidates are unchanged. Only
       // under a consent given for that text ([previousDayContext]).
+      // Only the meals eaten before the photo ([_eatenBefore]): one
+      // analysed late (the launch catch-up in the evening, a glasses
+      // import hours later, a pick from the grid) was offered the day's
+      // later meals, none of which it can show the remains of, and the cap
+      // then dropped the dinner the night before (B14).
       final today = isoDate(when);
       final from = when.hour < 4 && (previousDayContext?.call() ?? false)
           ? isoDate(DateTime(when.year, when.month, when.day - 1))
           : today;
-      final read = byMealClock(
-              (await dao.mealsBetween(from, today)).where(isFoodMeal))
+      final read = byMealClock((await dao.mealsBetween(from, today))
+              .where((m) => isFoodMeal(m) && _eatenBefore(m, when)))
           .toList();
 
       final revision = latch?.revision();
@@ -1072,75 +1126,15 @@ class PhotoPipeline {
       // the photo, and nothing below may write for it.
       if (_abandoned) return await _whenAbandoned();
       verdict = (outcome: outcome, recent: recent);
+      // The stages below are each awaited HERE, inside this try: a bare
+      // `return future` would let a ReservationLost or a database error
+      // escape the containment at its end, and process() never throws.
       if (outcome.analysis == null) {
-        final why = outcome.error ?? 'Analysis failed.';
-        final errorKind = classifyAnalysisError(outcome.error);
-        if (!photo.deliberate && _refusesEveryPhoto(errorKind)) {
-          // A rejected key (or a region the provider does not serve) is
-          // the USER's state, like a missing key: every photo of the
-          // automatic scan would fail the same way. Burning each to
-          // 'failed' dropped the whole backlog for good (watch intake never
-          // reclaims) and stacked one snackbar per photo. Release instead —
-          // fixing the key / VPN brings them all back — arm the latch so
-          // the rest of this scan and later scans stop uploading, and say
-          // it once per [rejectedKeyNoticeInterval], since a retryable
-          // failure is otherwise never announced. The analyzer still calls
-          // the key non-retryable (probeKey/diagnostics read that);
-          // deliberate adds keep their own verdict below.
-          await dao.releasePhotoHash(hash, ownerStamp: stamp);
-          final held = PhotoOutcome(PhotoOutcomeKind.failed, why,
-              retryable: true, errorKind: errorKind, detail: why);
-          if (latch != null && revision != null) {
-            try {
-              await latch!.block(errorKind, revision);
-            } catch (_) {}
-          }
-          final now = _clock();
-          final last = _lastRejectedKeyNotice;
-          if (last == null ||
-              now.isBefore(last) ||
-              now.difference(last) >= rejectedKeyNoticeInterval) {
-            _lastRejectedKeyNotice = now;
-            try {
-              notify?.call(held);
-            } catch (_) {}
-          }
-          return held;
-        }
-        // The analyzer's "could not process this photo (decode failed …)":
-        // nothing was sent. In the iOS background engine — or the app's
-        // own while it is in the background ([backgrounded]), or when its
-        // decode skipped dart:ui because it was then ([gpuOffDecodeSkips];
-        // the user may be back already) — that says more about the engine
-        // than the photo: defer it to a run that has every decoder
-        // ([deferUndecodable]). Everywhere else the permanent verdict below
-        // stands.
-        final deferred = (deferUndecodable ||
-                _inBackground() ||
-                gpuOffDecodeSkips != gpuOffSkips) &&
-            errorKind == AnalysisErrorKind.badPhoto;
-        if (outcome.retryable || deferred) {
-          // Transient trouble (rate limit / network / quota pause / no key):
-          // RELEASE the reservation so the next scan simply re-offers the
-          // photo. Burning it to 'failed' would drop it forever on the
-          // automated path (watch intake never reclaims, spec §2.3).
-          await dao.releasePhotoHash(hash, ownerStamp: stamp);
-          return PhotoOutcome(PhotoOutcomeKind.failed, why,
-              retryable: true, errorKind: errorKind, detail: why);
-        }
-        // Permanent failure: kept as status failed for deliberate retry
-        // (spec §6.5).
-        await dao.markPhotoHash(hash, IngestionStatus.failed,
-            ownerStamp: stamp);
-        final failed = PhotoOutcome(PhotoOutcomeKind.failed, why,
-            errorKind: errorKind, detail: why);
-        // Shielded like the save paths below: the failed mark is already
-        // committed, and a throwing snackbar must not turn this verdict
-        // into the outer catch's "Photo intake failed".
-        try {
-          notify?.call(failed);
-        } catch (_) {}
-        return failed;
+        return await _settleFailedAnalysis(photo, outcome,
+            hash: hash,
+            stamp: stamp,
+            revision: revision,
+            gpuOffSkips: gpuOffSkips);
       }
       // An answer came back, so the key and the region work: lift the
       // automatic-analysis latch (a deliberate add after the fix included).
@@ -1164,69 +1158,9 @@ class PhotoPipeline {
       final autoIdx =
           autoLeftoverIndex(analysis, candidateCount: recent.length);
       if (autoIdx != null) {
-        final candidate = recent[autoIdx];
-        // Design R6a: [recent] is as old as the model call (10–60 s). The
-        // deduction is re-based on the meal as stored NOW — same model
-        // fractions — and written only while the meal still holds exactly
-        // that text (compare-and-set). A meal changed between that read
-        // and the write (a restaurant lookup, an edit) gets one more
-        // re-based try; a second miss, or a meal deleted meanwhile,
-        // releases the photo for the next scan rather than cutting numbers
-        // that no longer exist, or logging the leftovers as a meal.
-        final appliedAt = DateTime.now().toIso8601String();
-        ({Meal meal, LeftoverResult applied})? cut;
-        var unusable = false;
-        for (var attempt = 0; attempt < 2 && cut == null; attempt++) {
-          final snap = await dao.mealSnapshot(candidate.id);
-          if (snap == null) break;
-          final applied = applyLeftover(snap.meal.analysis, analysis,
-              leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
-          if (applied == null) {
-            unusable = true;
-            break;
-          }
-          // Tombstone and deduction in ONE owner-checked transaction: a run
-          // that lost the photo (to another run, or to the user's own
-          // 手动记录) must not cut the earlier meal, and a kill or a failed
-          // update can no longer tombstone the photo without the deduction.
-          if (await dao.applyLeftoverVerdict(
-              hash, candidate.id, applied.adjusted,
-              ownerStamp: stamp, expectedRaw: snap.rawAnalysis)) {
-            cut = (meal: snap.meal, applied: applied);
-          }
-        }
-        if (cut == null && !unusable) {
-          await dao.releasePhotoHash(hash, ownerStamp: stamp);
-          _held = null;
-          return _leftoverConflict;
-        }
-        if (cut != null) {
-          final original = cut.meal;
-          final applied = cut.applied;
-          final newKcal =
-              safeNumber(applied.adjusted['total_calories']).round();
-          final name = mealDescription(original.analysis);
-          final summary = '$name — −${applied.deductedKcal} '
-              'kcal, now ~$newKcal kcal';
-          final leftover = PhotoOutcome(
-              PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
-              analysis: applied.adjusted,
-              detail: summary,
-              mealName: name,
-              kcal: '$newKcal',
-              deductedKcal: applied.deductedKcal,
-              mealId: original.id,
-              mealDate: original.date,
-              // The row as THIS application found it, not
-              // leftover.original: undoing a wrong second deduction
-              // must keep an earlier, correct one.
-              previousAnalysis: original.analysis);
-          try {
-            notify?.call(leftover);
-            onMealSaved?.call();
-          } catch (_) {}
-          return leftover;
-        }
+        final applied = await _applyAutoLeftover(recent[autoIdx], analysis,
+            hash: hash, stamp: stamp);
+        if (applied != null) return applied;
       }
       // A leftover-shaped reply nothing was applied from (unsure, a meal
       // not in the list, fractions applyLeftover cannot use) carries no
@@ -1263,62 +1197,8 @@ class PhotoPipeline {
       final capture = photo.capture;
       if (capture != null) analysis['capture'] = captureAnalysis(capture);
 
-      // Backdating: a valid capturedAt (validated by the intake module,
-      // spec §6.3) sets date/time; timestamp stays now (spec §2.2).
-      // When BOTH §6.3 sources failed (share-sheet photo, no timestamp in
-      // the filename), the JPEG's own EXIF shutter time is the last truth
-      // before intake-time dating — same validation window (§9 app-only,
-      // 2026-07-31). This is what keeps a 23:50 photo shared after
-      // midnight on YESTERDAY's total.
-      final id = await dao.saveMeal(
-        Meal(
-          id: 0, // assigned by the DAO on insert
-          date: isoDate(when),
-          // 12-hour zero-padded hh:mm AM/PM, server parity (spec §2.2).
-          time: DateFormat('hh:mm a').format(when),
-          timestamp: DateTime.now().toIso8601String(),
-          source: source,
-          imageHash: hash,
-          fileId: photo.assetId,
-          analysis: analysis,
-        ),
-        markStatus: IngestionStatus.saved, // atomic saved mark (spec §2.3)
-        ownerStamp: stamp,
-      );
-      _held = null; // saved: no longer a reservation
-      // History thumbnail from the ORIGINAL bytes we already hold (spec §9
-      // app-only). Best-effort AND awaited: the pipeline is serialized, so
-      // finishing the thumb before the next photo keeps memory flat; any
-      // failure must never un-save the meal, and in the iOS background run
-      // a thumb that never comes must not hold the verdict past
-      // [thumbnailTimeout].
-      // An abandoned run (its engine about to go) starts no thumbnail.
-      if (!_abandoned) {
-        try {
-          final pending = _thumb(photo.bytes);
-          final thumb = await (deferUndecodable
-              ? orNullAfter(pending, thumbnailTimeout)
-              : pending);
-          if (thumb != null) await dao.saveMealThumb(id, thumb);
-        } catch (_) {}
-      }
-      final name = mealDescription(analysis);
-      final kcal = displayTotalCalories(analysis);
-      final summary = '$name — ~$kcal kcal';
-      // No row id in the copy: the chat flow numbers meals by LIST position
-      // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
-      // a number that is guaranteed to miss.
-      final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-          analysis: analysis, detail: summary, mealName: name, kcal: kcal);
-      // Same shield as the thumbnail: these run AFTER the commit, so a
-      // throwing callback must not fall into the outer catch — that
-      // flipped the committed ledger row saved→failed and told the user
-      // the intake failed (pressure-test find, 2026-08-03).
-      try {
-        notify?.call(saved);
-        onMealSaved?.call();
-      } catch (_) {}
-      return saved;
+      return await _saveAnalyzedMeal(photo, analysis,
+          hash: hash, stamp: stamp, when: when, source: source);
     } on ReservationLost {
       // Our 'processing' row was reclaimed while this run was suspended
       // (or the user logged the photo by hand): the photo is somebody
@@ -1343,6 +1223,233 @@ class PhotoPipeline {
           retryable: !reserved, errorKind: AnalysisErrorKind.unknown,
           detail: '$e');
     }
+  }
+
+  /// The analyzer gave [outcome] and no analysis. A refusal that every
+  /// automatic photo would get releases the photo and arms the latch; a
+  /// transient failure, or a photo this engine should leave to one with
+  /// every decoder, is released; anything else is kept as failed.
+  Future<PhotoOutcome> _settleFailedAnalysis(
+    IntakePhoto photo,
+    AnalysisOutcome outcome, {
+    required String hash,
+    required String? stamp,
+    required int? revision,
+    required int gpuOffSkips,
+  }) async {
+    final why = outcome.error ?? 'Analysis failed.';
+    final errorKind = classifyAnalysisError(outcome.error);
+    if (!photo.deliberate && _refusesEveryPhoto(errorKind)) {
+      // A rejected key (or a region the provider does not serve) is
+      // the USER's state, like a missing key: every photo of the
+      // automatic scan would fail the same way. Burning each to
+      // 'failed' dropped the whole backlog for good (watch intake never
+      // reclaims) and stacked one snackbar per photo. Release instead —
+      // fixing the key / VPN brings them all back — arm the latch so
+      // the rest of this scan and later scans stop uploading, and say
+      // it once per [rejectedKeyNoticeInterval], since a retryable
+      // failure is otherwise never announced. The analyzer still calls
+      // the key non-retryable (probeKey/diagnostics read that);
+      // deliberate adds keep their own verdict below.
+      await dao.releasePhotoHash(hash, ownerStamp: stamp);
+      final released = PhotoOutcome(PhotoOutcomeKind.failed, why,
+          retryable: true, errorKind: errorKind, detail: why);
+      if (latch != null && revision != null) {
+        try {
+          await latch!.block(errorKind, revision);
+        } catch (_) {}
+      }
+      final now = _clock();
+      final last = _lastRejectedKeyNotice;
+      if (last == null ||
+          now.isBefore(last) ||
+          now.difference(last) >= rejectedKeyNoticeInterval) {
+        _lastRejectedKeyNotice = now;
+        try {
+          notify?.call(released);
+        } catch (_) {}
+      }
+      return released;
+    }
+    // The analyzer's "could not process this photo (decode failed …)":
+    // nothing was sent. In the iOS background engine — or the app's
+    // own while it is in the background ([backgrounded]), or when its
+    // decode skipped dart:ui because it was then ([gpuOffDecodeSkips];
+    // the user may be back already) — that says more about the engine
+    // than the photo: defer it to a run that has every decoder
+    // ([deferUndecodable]). Everywhere else the permanent verdict below
+    // stands.
+    final deferred = (deferUndecodable ||
+            _inBackground() ||
+            gpuOffDecodeSkips != gpuOffSkips) &&
+        errorKind == AnalysisErrorKind.badPhoto;
+    if (outcome.retryable || deferred) {
+      // Transient trouble (rate limit / network / quota pause / no key):
+      // RELEASE the reservation so the next scan simply re-offers the
+      // photo. Burning it to 'failed' would drop it forever on the
+      // automated path (watch intake never reclaims, spec §2.3).
+      await dao.releasePhotoHash(hash, ownerStamp: stamp);
+      return PhotoOutcome(PhotoOutcomeKind.failed, why,
+          retryable: true, errorKind: errorKind, detail: why);
+    }
+    // Permanent failure: kept as status failed for deliberate retry
+    // (spec §6.5).
+    await dao.markPhotoHash(hash, IngestionStatus.failed,
+        ownerStamp: stamp);
+    final failed = PhotoOutcome(PhotoOutcomeKind.failed, why,
+        errorKind: errorKind, detail: why);
+    // Shielded like the save paths below: the failed mark is already
+    // committed, and a throwing snackbar must not turn this verdict
+    // into the outer catch's "Photo intake failed".
+    try {
+      notify?.call(failed);
+    } catch (_) {}
+    return failed;
+  }
+
+  /// AUTOMATIC leftover application (2026-08-05): the model's leftover_of
+  /// verdict for [candidate] applied in place, under the photo's
+  /// reservation. The leftover outcome once it is applied, the released
+  /// photo's outcome once the meal kept changing, or null when the verdict
+  /// is unusable (the caller saves the reply as a meal instead).
+  Future<PhotoOutcome?> _applyAutoLeftover(
+    Meal candidate,
+    Map<String, dynamic> analysis, {
+    required String hash,
+    required String? stamp,
+  }) async {
+    // Design R6a: [recent] is as old as the model call (10–60 s). The
+    // deduction is re-based on the meal as stored NOW — same model
+    // fractions — and written only while the meal still holds exactly
+    // that text (compare-and-set). A meal changed between that read
+    // and the write (a restaurant lookup, an edit) gets one more
+    // re-based try; a second miss, or a meal deleted meanwhile,
+    // releases the photo for the next scan rather than cutting numbers
+    // that no longer exist, or logging the leftovers as a meal.
+    final appliedAt = DateTime.now().toIso8601String();
+    ({Meal meal, LeftoverResult applied})? cut;
+    var unusable = false;
+    for (var attempt = 0; attempt < 2 && cut == null; attempt++) {
+      final snap = await dao.mealSnapshot(candidate.id);
+      if (snap == null) break;
+      final applied = applyLeftover(snap.meal.analysis, analysis,
+          leftoverPhotoMd5: hash, appliedAtIso: appliedAt);
+      if (applied == null) {
+        unusable = true;
+        break;
+      }
+      // Tombstone and deduction in ONE owner-checked transaction: a run
+      // that lost the photo (to another run, or to the user's own
+      // 手动记录) must not cut the earlier meal, and a kill or a failed
+      // update can no longer tombstone the photo without the deduction.
+      if (await dao.applyLeftoverVerdict(
+          hash, candidate.id, applied.adjusted,
+          ownerStamp: stamp, expectedRaw: snap.rawAnalysis)) {
+        cut = (meal: snap.meal, applied: applied);
+      }
+    }
+    if (cut == null && !unusable) {
+      await dao.releasePhotoHash(hash, ownerStamp: stamp);
+      _held = null;
+      return _leftoverConflict;
+    }
+    if (cut != null) {
+      final original = cut.meal;
+      final applied = cut.applied;
+      final newKcal =
+          safeNumber(applied.adjusted['total_calories']).round();
+      final name = mealDescription(original.analysis);
+      final summary = '$name — −${applied.deductedKcal} '
+          'kcal, now ~$newKcal kcal';
+      final leftover = PhotoOutcome(
+          PhotoOutcomeKind.leftoverApplied, 'Leftovers deducted: $summary',
+          analysis: applied.adjusted,
+          detail: summary,
+          mealName: name,
+          kcal: '$newKcal',
+          deductedKcal: applied.deductedKcal,
+          mealId: original.id,
+          mealDate: original.date,
+          // The row as THIS application found it, not
+          // leftover.original: undoing a wrong second deduction
+          // must keep an earlier, correct one.
+          previousAnalysis: original.analysis);
+      try {
+        notify?.call(leftover);
+        onMealSaved?.call();
+      } catch (_) {}
+      return leftover;
+    }
+    return null;
+  }
+
+  /// Saves [analysis] as the photo's meal on [when]'s day, settling the
+  /// reservation in the same write, then its thumbnail and the
+  /// announcements, none of which can un-save it.
+  Future<PhotoOutcome> _saveAnalyzedMeal(
+    IntakePhoto photo,
+    Map<String, dynamic> analysis, {
+    required String hash,
+    required String? stamp,
+    required DateTime when,
+    required String source,
+  }) async {
+    // Backdating: a valid capturedAt (validated by the intake module,
+    // spec §6.3) sets date/time; timestamp stays now (spec §2.2).
+    // When BOTH §6.3 sources failed (share-sheet photo, no timestamp in
+    // the filename), the JPEG's own EXIF shutter time is the last truth
+    // before intake-time dating — same validation window (§9 app-only,
+    // 2026-07-31). This is what keeps a 23:50 photo shared after
+    // midnight on YESTERDAY's total.
+    final id = await dao.saveMeal(
+      Meal(
+        id: 0, // assigned by the DAO on insert
+        date: isoDate(when),
+        // 12-hour zero-padded hh:mm AM/PM, server parity (spec §2.2).
+        time: DateFormat('hh:mm a').format(when),
+        timestamp: DateTime.now().toIso8601String(),
+        source: source,
+        imageHash: hash,
+        fileId: photo.assetId,
+        analysis: analysis,
+      ),
+      markStatus: IngestionStatus.saved, // atomic saved mark (spec §2.3)
+      ownerStamp: stamp,
+    );
+    _held = null; // saved: no longer a reservation
+    // History thumbnail from the ORIGINAL bytes we already hold (spec §9
+    // app-only). Best-effort AND awaited: the pipeline is serialized, so
+    // finishing the thumb before the next photo keeps memory flat; any
+    // failure must never un-save the meal, and in the iOS background run
+    // a thumb that never comes must not hold the verdict past
+    // [thumbnailTimeout].
+    // An abandoned run (its engine about to go) starts no thumbnail.
+    if (!_abandoned) {
+      try {
+        final pending = _thumb(photo.bytes);
+        final thumb = await (deferUndecodable
+            ? orNullAfter(pending, thumbnailTimeout)
+            : pending);
+        if (thumb != null) await dao.saveMealThumb(id, thumb);
+      } catch (_) {}
+    }
+    final name = mealDescription(analysis);
+    final kcal = displayTotalCalories(analysis);
+    final summary = '$name — ~$kcal kcal';
+    // No row id in the copy: the chat flow numbers meals by LIST position
+    // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
+    // a number that is guaranteed to miss.
+    final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
+        analysis: analysis, detail: summary, mealName: name, kcal: kcal);
+    // Same shield as the thumbnail: these run AFTER the commit, so a
+    // throwing callback must not fall into the outer catch — that
+    // flipped the committed ledger row saved→failed and told the user
+    // the intake failed (pressure-test find, 2026-08-03).
+    try {
+      notify?.call(saved);
+      onMealSaved?.call();
+    } catch (_) {}
+    return saved;
   }
 
   /// What a run that lost its reservation says, read from the ledger NOW
@@ -1410,6 +1517,16 @@ class PhotoPipeline {
       retryable: true,
       errorKind: AnalysisErrorKind.unknown,
       detail: 'in the background');
+
+  /// An automatic photo met while iCloud Backup holds the intake
+  /// ([intakeHeld]): released untouched, offered again by the catch-up once
+  /// the hold ends.
+  static const _heldForBackup = PhotoOutcome(PhotoOutcomeKind.failed,
+      'A restore from iCloud is offered or running: this photo waits for it.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'held for iCloud Backup',
+      reason: backupHoldReason);
 
   /// An automatic glasses photo another file of whose shutter press is
   /// already a meal (design G2b): tombstoned, no model call.
