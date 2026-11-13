@@ -504,9 +504,14 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final intake = s.photoIntake;
     if (intake == null) return;
     // iCloud Backup: a restore offer is open or a restore runs (answered
-    // once a look for a backup to offer that is running decided); the next
-    // return to the app catches up. One running stops before its next
-    // photo once an offer or a restore holds it.
+    // once a look for a backup to offer that is running has decided). A
+    // catch-up held here is caught up as soon as the hold lets go
+    // (BackupCoordinator.onCatchUpReleased → di.dart catchUpAfterHold,
+    // when the app is in the foreground then), else at the next return to
+    // the app. This engine also holds for an offer that is still open,
+    // however long; the headless background run sees only the 30-minute
+    // lease. One running stops before its next photo once an offer or a
+    // restore holds it.
     final backup = s.cloudBackup;
     if (await backup?.holdsCatchUp() ?? false) return;
     await foregroundCatchUp(intake,
