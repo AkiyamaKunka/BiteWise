@@ -3241,4 +3241,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagStatusFail => '未通过';
+
+  @override
+  String get leftoverLoadFailed => '无法加载今天和昨天的记录。';
+
+  @override
+  String get leftoverSaveFailed => '没能完成剩菜扣除，请再试一次。';
 }

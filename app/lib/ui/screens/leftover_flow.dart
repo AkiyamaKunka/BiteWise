@@ -40,6 +40,7 @@ import '../services.dart';
 import '../theme/app_dialog.dart';
 import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
+import '../widgets/states.dart';
 
 class LeftoverScreen extends StatefulWidget {
   const LeftoverScreen({super.key, required this.services});
@@ -53,6 +54,10 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   List<Meal> _candidates = const [];
   Meal? _selected;
   bool _loading = true;
+
+  /// The last read of the meals failed: the screen says so and offers
+  /// Retry. It was a spinner for good (review 171).
+  bool _loadFailed = false;
   bool _analyzing = false;
   bool _permissionDenied = false;
   Future<List<RecentAsset>>? _assets;
@@ -81,14 +86,33 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     // the day DST ends (yesterday's meals were not offered for that hour),
     // and two days back at 00:xx on the day after it starts.
     final yesterday = isoDate(addCalendarDays(now, -1));
-    final meals = await widget.services.dao.mealsBetween(yesterday, today);
-    if (!mounted) return;
-    // Newest first: leftovers are almost always from the LAST meal.
-    final food = byMealClock(meals.where(isFoodMeal)).reversed.toList();
+    try {
+      final meals = await widget.services.dao.mealsBetween(yesterday, today);
+      if (!mounted) return;
+      // Newest first: leftovers are almost always from the LAST meal.
+      final food = byMealClock(meals.where(isFoodMeal)).reversed.toList();
+      setState(() {
+        _candidates = food;
+        _loading = false;
+      });
+    } catch (e) {
+      // The raw error is for the log; the screen says one sentence and
+      // offers Retry, as Today and History do.
+      debugPrint('Leftovers: load failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
+    }
+  }
+
+  void _retryLoad() {
     setState(() {
-      _candidates = food;
-      _loading = false;
+      _loading = true;
+      _loadFailed = false;
     });
+    _load();
   }
 
   Future<List<RecentAsset>> _loadAssets() async {
@@ -207,6 +231,14 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       }
       await _confirmAndApply(meal, hash, result,
           reply: reply, appliedAt: appliedAt);
+    } catch (e) {
+      // A read or write that threw said nothing, even with the deduction
+      // written and the duplicate still there. Picking the photo again
+      // finishes it: the deduction is re-based, never applied twice. The
+      // log gets the error's type only: sqflite's text carries the
+      // statement's arguments, here the meal's analysis.
+      debugPrint('Leftovers: deduction failed (${e.runtimeType})');
+      _snack(l.leftoverSaveFailed);
     } finally {
       _busy = false;
       if (mounted) setState(() => _analyzing = false);
@@ -374,6 +406,15 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       body: Stack(children: [
         if (_loading)
           const Center(child: CircularProgressIndicator())
+        else if (_loadFailed)
+          ListView(children: [
+            InlineError(
+              key: const Key('leftoverLoadError'),
+              message: l.leftoverLoadFailed,
+              onRetry: _retryLoad,
+              retryKey: const Key('leftoverRetry'),
+            ),
+          ])
         else if (_selected == null)
           _mealPicker(theme, l)
         else

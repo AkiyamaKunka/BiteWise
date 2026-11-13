@@ -3593,4 +3593,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagStatusFail => 'Failed';
+
+  @override
+  String get leftoverLoadFailed =>
+      'Couldn\'t load today\'s and yesterday\'s meals.';
+
+  @override
+  String get leftoverSaveFailed =>
+      'Couldn\'t finish deducting the leftovers. Try again.';
 }

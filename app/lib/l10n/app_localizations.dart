@@ -5434,6 +5434,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed'**
   String get diagStatusFail;
+
+  /// Leftovers screen error state when reading today's and yesterday's meals fails; shown with a Retry button (the raw error goes to the debug log only).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load today\'s and yesterday\'s meals.'**
+  String get leftoverLoadFailed;
+
+  /// Leftovers screen snackbar when reading or saving the meals fails part-way through a deduction. The screen stays on the photo step; picking the photo again repeats the deduction from the meal as it was, so nothing is deducted twice.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t finish deducting the leftovers. Try again.'**
+  String get leftoverSaveFailed;
 }
 
 class _AppLocalizationsDelegate

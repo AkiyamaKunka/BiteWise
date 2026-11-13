@@ -62,6 +62,31 @@ class _UnreadablePicker extends FakePicker {
   }
 }
 
+/// A database whose reads or writes throw (a row an old import stored
+/// untyped makes every read of its range throw; disk errors do the same).
+class _FailingDao extends FakeDao {
+  /// How many meal reads throw before reads work again.
+  int failReads = 0;
+  int reads = 0;
+  bool failDelete = false;
+
+  @override
+  Future<List<Meal>> mealsBetween(String startDate, String endDate) async {
+    reads++;
+    if (failReads > 0) {
+      failReads--;
+      throw StateError('database is locked');
+    }
+    return super.mealsBetween(startDate, endDate);
+  }
+
+  @override
+  Future<void> deleteMeal(int mealId) async {
+    if (failDelete) throw StateError('disk I/O error');
+    return super.deleteMeal(mealId);
+  }
+}
+
 String _today() {
   final n = DateTime.now();
   return '${n.year.toString().padLeft(4, '0')}-${n.month.toString().padLeft(2, '0')}-${n.day.toString().padLeft(2, '0')}';
@@ -685,6 +710,63 @@ void main() {
       expect(find.text(en.leftoverFailed), findsNothing);
       expect(analyzer.lastLeftoverCompact, isNull, reason: 'nothing was sent');
       expect(dao.updates, isEmpty);
+    });
+  });
+
+  // A read or a write that threw left the screen with no way on: a failed
+  // read of the meals was a spinner for good, and a write that failed
+  // after the estimate said nothing, its error uncaught (review 171, C26).
+  group('a failing database', () {
+    testWidgets('a failed meals read shows the error and Retry, and Retry '
+        'loads them', (tester) async {
+      final failing = _FailingDao()..failReads = 1;
+      failing.put(_meal(1, '13:34', 965));
+      dao = failing;
+      await pump(tester);
+
+      final en = AppLocalizationsEn();
+      expect(find.text(en.leftoverLoadFailed), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const Key('leftoverMeal-1')), findsNothing);
+      await tester.tap(find.byKey(const Key('leftoverRetry')));
+      await tester.pumpAndSettle();
+      expect(failing.reads, 2);
+      expect(find.text(en.leftoverLoadFailed), findsNothing);
+      expect(find.byKey(const Key('leftoverMeal-1')), findsOneWidget);
+    });
+
+    testWidgets('a write that fails after the deduction says so, and picking '
+        'the photo again finishes it without deducting twice',
+        (tester) async {
+      final failing = _FailingDao()..failDelete = true;
+      failing.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      failing.put(_meal(2, '13:44', 690,
+          hash: _photoMd5, desc: 'Chinese cafeteria meal (mostly eaten)'));
+      failing.ledger[_photoMd5] = IngestionStatus.saved;
+      dao = failing;
+      await pump(tester);
+      await runToConfirm(tester);
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+
+      final en = AppLocalizationsEn();
+      expect(find.text(en.leftoverSaveFailed), findsOneWidget);
+      expect(find.text(en.leftoverApplied), findsNothing);
+      expect(failing.byId(1).analysis['total_calories'], 665,
+          reason: 'the deduction itself had landed');
+      expect(failing.meals.where((m) => m.id == 2), hasLength(1),
+          reason: 'the duplicate could not be removed');
+      expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget,
+          reason: 'the screen stays for another try');
+
+      failing.failDelete = false;
+      await tester.tap(find.byKey(const Key('leftoverPhoto-lp1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverDupLine')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+      expect(failing.byId(1).analysis['total_calories'], 665);
+      expect(failing.meals.where((m) => m.id == 2), isEmpty);
     });
   });
 }

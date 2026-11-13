@@ -1003,5 +1003,7 @@
   "bodySaveFailed": "没能保存，请再试一次。",
   "diagStatusPass": "通过",
   "diagStatusWarn": "警告",
-  "diagStatusFail": "未通过"
+  "diagStatusFail": "未通过",
+  "leftoverLoadFailed": "无法加载今天和昨天的记录。",
+  "leftoverSaveFailed": "没能完成剩菜扣除，请再试一次。"
 }
