@@ -39,6 +39,7 @@ import 'package:flutter/services.dart' show PlatformException;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart' show MockClient;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:workmanager/workmanager.dart' show ExistingPeriodicWorkPolicy;
 
 import 'fakes.dart';
 
@@ -151,16 +152,20 @@ class RecordingScheduler implements BackgroundScheduler {
   final List<String> calls = [];
   Duration? frequency;
   Map<String, dynamic>? inputData;
+  ExistingPeriodicWorkPolicy? policy;
 
   @override
   Future<void> initialize(Function dispatcher) async => calls.add('init');
 
   @override
   Future<void> registerPeriodic(String uniqueName, String taskName,
-      {required Duration frequency, Map<String, dynamic>? inputData}) async {
+      {required Duration frequency,
+      Map<String, dynamic>? inputData,
+      ExistingPeriodicWorkPolicy? existingWorkPolicy}) async {
     calls.add('register:$uniqueName:$taskName');
     this.frequency = frequency;
     this.inputData = inputData;
+    policy = existingWorkPolicy;
   }
 
   @override
@@ -2021,15 +2026,17 @@ void main() {
       debugIsAndroidOverride = null;
     });
 
-    test('enabled → replace-registers the periodic job with settings values',
-        () async {
+    test('enabled → update-registers the periodic job with settings values, '
+        'never cancelling a run in progress', () async {
       final settings = await settingsWith(key: 'k', lookback: 5);
       await syncBackgroundScan(settings);
+      // Review 171, C7: the cancel that came first stopped a running
+      // worker (and its engine, mid-upload) at every app start.
       expect(scheduler.calls, [
         'init',
-        'cancel:$photoBackfillUniqueName',
         'register:$photoBackfillUniqueName:$photoBackfillTaskName',
       ]);
+      expect(scheduler.policy, ExistingPeriodicWorkPolicy.update);
       expect(scheduler.frequency, backgroundScanFrequency);
       expect(scheduler.inputData, {'lookbackDays': 5});
     });
@@ -2044,7 +2051,6 @@ void main() {
       await syncBackgroundScan(settings);
       expect(scheduler.calls, [
         'init',
-        'cancel:$photoBackfillUniqueName',
         'register:$photoBackfillUniqueName:$photoBackfillTaskName',
       ]);
       expect(scheduler.frequency, backgroundScanFrequency);

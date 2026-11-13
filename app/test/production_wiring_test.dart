@@ -824,6 +824,22 @@ void main() {
     });
   });
 
+  // Review 171, C7: the fake schedulers see the policy enableBackgroundScan
+  // asks for; only this line hands it to WorkManager. Without it the plugin
+  // default applies (UPDATE in workmanager_android 0.9.0+2, but a default
+  // can change under an upgrade).
+  test('WorkmanagerScheduler hands the work policy to WorkManager', () {
+    final source = _source('lib/services/photo/background.dart');
+    expect(
+      _body(source, 'class WorkmanagerScheduler implements'),
+      _wired(
+        r'Workmanager\(\)\.registerPeriodicTask\(uniqueName, taskName, '
+        r'frequency: frequency, inputData: inputData, '
+        r'existingWorkPolicy: existingWorkPolicy,',
+      ),
+    );
+  });
+
   // Review 171, C4: on Android the photo library keeps a photo imported
   // late (taken before a scan's own cutoff, added after it) while it was
   // taken inside the lookback window. Without the window's start the live
