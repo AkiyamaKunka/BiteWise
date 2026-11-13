@@ -915,6 +915,45 @@ void main() {
         '"photopicker_activity:0:required" android:value=""'));
   });
 
+  // Export › Save to device: a stock Pixel's sharesheet has no "save to
+  // Files", so the export is written where the user picks with the
+  // Storage Access Framework (no permission). The method only ever copies
+  // a file whose real path lies in the app's cache, where the export is
+  // written: never the database or anything else the app keeps.
+  test('MainActivity serves saveFile, from the cache only', () {
+    final kotlin = _mainActivity();
+    expect(kotlin, contains('"saveFile" -> saveFile('));
+    expect(kotlin, contains('const val SAVE_REQUEST = 4209'));
+    final save = RegExp(r'private fun saveFile\(.*?\n    \}\n', dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(save, isNotNull);
+    expect(save, contains('Intent(Intent.ACTION_CREATE_DOCUMENT)'));
+    expect(save, contains('addCategory(Intent.CATEGORY_OPENABLE)'));
+    expect(save, contains('putExtra(Intent.EXTRA_TITLE,'));
+    expect(save, contains('startActivityForResult(intent, SAVE_REQUEST)'));
+    final cached = save!.indexOf('cachedFile(path)');
+    expect(cached, greaterThan(0));
+    expect(cached, lessThan(save.indexOf('startActivityForResult(')),
+        reason: 'the path is checked before anything is asked');
+    final check = RegExp(r'private fun cachedFile\(.*?\n    \}\n', dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(check, contains('cacheDir.canonicalFile'));
+    expect(check, contains('.canonicalFile'));
+    expect(check, contains('startsWith(cache.path + File.separator)'));
+    final saved = RegExp(r'private fun onSaveTargetPicked\(.*?\n    \}\n',
+            dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(saved, contains('cachedFile('),
+        reason: 'checked again when the copy starts');
+    expect(saved, contains('openOutputStream(uri, "wt")'));
+    for (final status in ['ok', 'cancelled', 'busy', 'unavailable', 'failed']) {
+      expect(kotlin, contains('saveAnswer("$status")'), reason: status);
+    }
+  });
+
   // Owner decision 2026-11-13: the package stays, and the upload key the
   // GitHub APKs are signed with becomes Play's app-signing key. Both are
   // permanent once the first bundle is uploaded: a new package is a new

@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.ext.SdkExtensions
+import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
@@ -31,6 +32,11 @@ class MainActivity : FlutterActivity() {
     /// for (which contract parses the result). Main thread only.
     private var photoPickReply: MethodChannel.Result? = null
     private var photoPickMax = 1
+
+    /// The open saveFile call and the cached file it saves. Main thread
+    /// only.
+    private var saveReply: MethodChannel.Result? = null
+    private var saveSource: File? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // receive_sharing_intent reads the launch intent while
@@ -259,12 +265,20 @@ class MainActivity : FlutterActivity() {
         // ACTION_OPEN_DOCUMENT grants access to the picked files only.
         // pickImages: Log and Leftovers through the system Photo Picker,
         // which grants the picked photos only, with no permission at all.
+        // saveFile: Export › Save to device, written where the user picks
+        // (ACTION_CREATE_DOCUMENT grants that one document only).
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickFiles" -> pickFiles(result)
                     "pickImages" -> pickImages(
                         (call.argument<Any?>("max") as? Number)?.toInt() ?: 1,
+                        result,
+                    )
+                    "saveFile" -> saveFile(
+                        call.argument<Any?>("path") as? String,
+                        call.argument<Any?>("name") as? String,
+                        call.argument<Any?>("mime") as? String,
                         result,
                     )
                     else -> result.notImplemented()
@@ -434,10 +448,99 @@ class MainActivity : FlutterActivity() {
         null
     }
 
+    /// Export › Save to device: asks the user where to save [name] (the
+    /// system's create-document screen, suggested name and type [mime]),
+    /// then copies the file at [path] there (onSaveTargetPicked). Only a
+    /// file whose real path lies in the app's cache, where the export is
+    /// written, is ever copied: never the database or anything else the
+    /// app keeps. Answers {status: ok|cancelled|busy|unavailable|failed}.
+    private fun saveFile(path: String?, name: String?, mime: String?, result: MethodChannel.Result) {
+        if (saveReply != null) {
+            result.success(saveAnswer("busy"))
+            return
+        }
+        val source = cachedFile(path)
+        if (source == null) {
+            result.success(saveAnswer("failed"))
+            return
+        }
+        val intent = Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = mime?.takeIf { it.isNotBlank() } ?: "application/octet-stream"
+            putExtra(Intent.EXTRA_TITLE, baseName(name) ?: source.name)
+        }
+        saveReply = result
+        saveSource = source
+        try {
+            startActivityForResult(intent, SAVE_REQUEST)
+        } catch (e: Exception) {
+            saveReply = null
+            saveSource = null
+            result.success(saveAnswer("unavailable"))
+        }
+    }
+
+    private fun saveAnswer(status: String): Map<String, Any> = mapOf("status" to status)
+
+    /// The regular file at [path] when its real path (symbolic links
+    /// resolved) lies inside the app's cache directory; null otherwise.
+    private fun cachedFile(path: String?): File? {
+        if (path.isNullOrEmpty()) return null
+        return try {
+            val cache = cacheDir.canonicalFile
+            val file = File(path).canonicalFile
+            if (file.path.startsWith(cache.path + File.separator) && file.isFile) file else null
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /// Copies the file saveFile checked into the document the user just
+    /// created, off the UI thread (checked again first). A failed copy
+    /// removes that document rather than leave an empty or partial file.
+    private fun onSaveTargetPicked(resultCode: Int, data: Intent?) {
+        val reply = saveReply ?: return
+        val uri = data?.data
+        val source = saveSource
+        if (resultCode != Activity.RESULT_OK || uri == null || source == null) {
+            saveReply = null
+            saveSource = null
+            reply.success(saveAnswer("cancelled"))
+            return
+        }
+        Thread {
+            val ok = try {
+                val file = cachedFile(source.path) ?: throw IllegalStateException()
+                val out = try {
+                    contentResolver.openOutputStream(uri, "wt")
+                } catch (e: Exception) {
+                    null
+                } ?: contentResolver.openOutputStream(uri, "w") // new, so empty
+                out?.use { o -> file.inputStream().use { it.copyTo(o, 64 * 1024) } } != null
+            } catch (e: Exception) {
+                false
+            }
+            if (!ok) {
+                try {
+                    DocumentsContract.deleteDocument(contentResolver, uri)
+                } catch (e: Exception) {
+                }
+            }
+            runOnUiThread {
+                if (saveReply === reply) {
+                    saveReply = null
+                    saveSource = null
+                }
+                reply.success(if (ok) saveAnswer("ok") else saveAnswer("failed"))
+            }
+        }.start()
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         when (requestCode) {
             PICK_REQUEST -> onFilesPicked(resultCode, data)
             PHOTO_PICK_REQUEST -> onPhotosPicked(resultCode, data)
+            SAVE_REQUEST -> onSaveTargetPicked(resultCode, data)
             else -> super.onActivityResult(requestCode, resultCode, data)
         }
     }
@@ -532,6 +635,7 @@ class MainActivity : FlutterActivity() {
         const val FILES_CHANNEL = "dev.calorietracker/files"
         const val PICK_REQUEST = 4207
         const val PHOTO_PICK_REQUEST = 4208
+        const val SAVE_REQUEST = 4209
         const val MAX_BYTES = 100L * 1024 * 1024
 
         /// Under cacheDir; share_intake.dart's androidShareFolderName.
