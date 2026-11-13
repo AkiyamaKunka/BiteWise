@@ -3,15 +3,15 @@ Maintainer notes. Nothing in this comment is shown on GitHub.
 
 This page opens with four slides (hero, how it works, numbers you control,
 privacy), then a short feature list ("What else it does") and the reference
-sections. The owner asked for fewer slides on 2026-11-13: keep it at about
-four, and add new features to the list, not as new slides. It describes the
-App Store version, 1.6.0. Merge a change that names a new version only
+sections. On 2026-11-13 the owner found the page too much like a slide deck
+and asked for fewer slides; four were kept. Add new features to the list,
+not as new slides. It describes the App Store version, 1.6.0. Merge a change that names a new version only
 once that version is live on the App Store.
 
 Lines tied to a release. Re-read them when a new App Store version ships:
-1. "New in 1.6": the line under the hero slide, and the "(new in 1.6)" tags
-   in "What else it does". Drop them when 1.6 is no longer the newest
-   version.
+1. "New in 1.6": the line under the hero slide, and "new in 1.6" inside the
+   tags in "What else it does" (keep "off by default"). Drop them when 1.6
+   is no longer the newest version.
 2. The caption under the hero slide names the version the screens show.
 3. "Coming next" lists what is on main but not in the App Store version:
    the native iOS look and iCloud Backup. When they ship, move them into
@@ -127,7 +127,7 @@ Every food shows the portion your AI assumed, such as "Grilled chicken breast (~
 <br>
 
 <p align="center">
-  <img src="docs/readme/slides/10-privacy.jpg" width="100%" alt="Your log stays on your phone. No account, no ads, no tracking. The developer receives none of your data. A diagram: on your iPhone are your meal log, weight and measurements, settings, and your API key in the iOS Keychain. An arrow labelled “The photo or text you log, plus the context it needs” leads to your AI provider, or your own server, whose terms apply. A dotted line labelled Nothing leads to a dashed box: Chopstats server: none. No analytics. No ads. Above, the Settings rows AI Provider (Gemini) and Stop Sharing with Gemini, labelled Stop any time. Restaurant nutrition, if you turn it on, has its own recipients; the privacy policy lists them.">
+  <img src="docs/readme/slides/10-privacy.jpg" width="100%" alt="Your log stays on your phone. No account, no ads, no tracking. The developer receives none of your data. A diagram: on your iPhone are your meal log, weight and measurements, settings, and your API key in the iOS Keychain. An arrow labelled “The photo or text you log, plus the context it needs” leads to your AI provider, or your own server, whose terms apply. A dotted line labelled Nothing leads to a dashed box: Chopstats server: none. No analytics. No ads. Above, the Settings rows AI Provider (Claude) and Stop Sharing with Claude, labelled Stop any time. Restaurant nutrition, if you turn it on, has its own recipients; the privacy policy lists them.">
 </p>
 
 <div align="center">
@@ -147,11 +147,11 @@ Your meals, weight and settings stay on your phone, and the developer receives n
 - **My usual foods** (new in 1.6). Meals you logged on at least 2 of the last 90 days wait under Today › Log › My usual foods. Tap one to log it again: no photo, no AI, nothing sent. If you set a food's numbers yourself, the app may offer them as Your usual numbers on later photos of it; nothing changes until you tap Use my numbers.
 - **Restaurant nutrition** (new in 1.6, off by default). For a meal photo from a US chain restaurant, your AI can look up the nutrition the chain publishes and use it in place of its own estimate. The meal names its source, and you can undo the change or tap Wrong restaurant. US meals only, from a built-in list of 403 chains. Needs an Anthropic or OpenRouter key, or your own server on the Claude plan; not available with Gemini yet. Your AI's numbers are replaced only when the chain's own website publishes them and the match is clear; otherwise, and always with your own server, you get a suggestion. The published serving may not match what you ate.
 - **Watch Camera Roll** (off by default). New food photos are logged without opening the app. While it is on, every new photo, food or not, goes to your AI, which decides whether it shows a meal. iOS decides when background scans run, so a photo is not always logged right away; opening the app catches up. Needs full photo access and Background App Refresh. Switching it on also sends recent photos, as far back as the Backfill Lookback setting says (2 days by default).
-- **Meta glasses photos** (new in 1.6). With Watch Camera Roll on, photos that the Meta AI app saves from your glasses are checked for food on your iPhone first. Photos with food go to your AI and are logged; photos without food are not sent. Chopstats does not connect to the glasses. The check can be wrong, and if it cannot run, the photo is sent like any other. Switch it off under Settings › Photos › Meta glasses photos; photos you pick or share are still sent.
+- **Meta glasses photos** (new in 1.6). With Watch Camera Roll on, photos that the Meta AI app saves from your glasses to your library are checked for food on your iPhone first. Photos with food go to your AI and are logged; photos without food are not sent. Chopstats does not connect to the glasses. The check can be wrong, and if it cannot run, the photo is sent like any other. Switch it off under Settings › Photos › Meta glasses photos; photos you pick or share are still sent.
 - **No photo needed.** Describe a meal in words, such as "two eggs and toast with butter", in any language your AI reads; that sends your text and today's date. Or enter the numbers yourself: no AI, no key, and it works offline.
-- **Your day and your trend.** Today shows what you ate next to your typical day, which comes from your previous 7 days, or from a daily calorie goal you set. History charts the last 30 days, and Body tracks your weight along with your waist, chest and hip.
-- **English and 简体中文.** Every screen comes in both. Pick one under Settings › Language, or let it follow your iPhone. Not on the mainland China App Store.
-- **Your own AI key.** The app is free, with no subscription and nothing to buy inside it. It works with Google Gemini (the default, with a free tier), OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. If your provider charges, you pay it directly. More under [What it costs](#what-it-costs).
+- **Your day and your trend.** Today shows what you ate next to your typical day, which comes from your previous 7 days. History charts the last 30 days, and Body tracks your weight along with your waist, chest and hip. If you set a daily calorie goal, the daily summary notification compares your day with it.
+- **English and 简体中文.** Every screen comes in English and Simplified Chinese. Pick one under Settings › Language, or let it follow your iPhone. Not on the mainland China App Store.
+- **Your own AI key.** Chopstats works with Google Gemini (the default, with a free tier), OpenAI, Anthropic, xAI, OpenRouter, DeepSeek, Alibaba Qwen, ByteDance Doubao and Zhipu GLM, or your own server. The app itself is free, with no subscription; more under [What it costs](#what-it-costs).
 
 <div align="center">
 
