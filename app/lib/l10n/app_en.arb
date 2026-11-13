@@ -3422,5 +3422,9 @@
   "diagStatusFail": "Failed",
   "@diagStatusFail": {
     "description": "Test AI provider: what a screen reader says for a check's error sign, read before the check's name."
+  },
+  "covWindowLabel": "Days to check",
+  "@covWindowLabel": {
+    "description": "Photo coverage: what a screen reader calls the slider that sets how many days back the check looks. Read with its value, lookbackDays ('7 days'). Not shown on screen."
   }
 }

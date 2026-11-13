@@ -1,5 +1,8 @@
 // Coverage screen flow: run check → summary; "Log all" pushes each missing
 // photo through the injected pipeline callback and re-audits.
+import 'dart:async';
+import 'dart:ui' show Tristate;
+
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
@@ -7,6 +10,7 @@ import 'package:calorie_tracker/services/photo/coverage.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/screens/coverage_screen.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/semantics.dart' show SemanticsAction, SemanticsNode;
 import 'package:flutter_test/flutter_test.dart';
 
 import '../photo/watcher_test.dart' show FakeAsset, FakePhotoLibrary, bytesOf;
@@ -35,17 +39,26 @@ void main() {
         clock: () => DateTime(2026, 7, 26, 12, 0));
   });
 
-  Widget host() => MaterialApp(
+  Widget host({int days = 2, Future<void>? processing, Locale? locale}) =>
+      MaterialApp(
+        locale: locale,
+        localizationsDelegates:
+            locale == null ? null : AppLocalizations.localizationsDelegates,
+        supportedLocales: locale == null
+            ? const [Locale('en', 'US')]
+            : AppLocalizations.supportedLocales,
         home: CoverageScreen(
           auditor: auditor,
           processPhoto: (photo) async {
             processed.add(photo);
+            // A test that looks at the screen mid-run holds it here.
+            await processing;
             // Simulate the pipeline logging it: ledger gains the hash.
             dao.ledger[await testHash(photo.bytes)] = IngestionStatus.saved;
             return const PhotoOutcome(PhotoOutcomeKind.saved, 'ok');
           },
           requestPhotoPermission: () async => true,
-          initialLookbackDays: 2,
+          initialLookbackDays: days,
           ensureConsent: _allowed,
           library: library,
         ),
@@ -544,5 +557,112 @@ void main() {
     expect(find.byIcon(Icons.edit_outlined), findsNothing);
     expect(
         find.textContaining('"Retry all" asks the AI again'), findsOneWidget);
+  });
+
+  // Review 1.7.1: on its own the window slider read '21%' with no name on
+  // an iPhone (the Cupertino slider has no semantic formatter) and its
+  // value label '7 d' as its name on Android, for a window the intro calls
+  // 'the last 7 days'. It reads as the window and its days, as the
+  // lookback sheet's slider does (settings_refresh_test).
+  group('the window slider, to a screen reader', () {
+    /// The one slider a screen reader finds on the screen.
+    SemanticsNode slider() => find.semantics
+        .byPredicate((n) => n.flagsCollection.isSlider)
+        .evaluate()
+        .single;
+
+    testWidgets('reads as its name and its days, and moves a day a swipe',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final l = lookupAppLocalizations(const Locale('en'));
+      library.assets = [
+        FakeAsset('a2', 'IMG_2.jpg', DateTime(2026, 7, 26, 9), bytesOf(2)),
+      ];
+      final processing = Completer<void>();
+      await tester.pumpWidget(host(days: 7, processing: processing.future));
+      final node = slider();
+      expect(node.label, l.covWindowLabel);
+      expect(node.value, l.lookbackDays(7));
+      expect(node.increasedValue, l.lookbackDays(8));
+      expect(node.decreasedValue, l.lookbackDays(6));
+      expect(node.flagsCollection.isEnabled, Tristate.isTrue);
+
+      // A screen reader's swipe up / down moves it a day at a time, and
+      // the screen follows.
+      Future<void> act(SemanticsAction action) async {
+        final n = slider();
+        expect(n.getSemanticsData().hasAction(action), isTrue,
+            reason: '$action');
+        n.owner!.performAction(n.id, action);
+        await tester.pumpAndSettle();
+      }
+
+      await act(SemanticsAction.increase);
+      expect(slider().value, l.lookbackDays(8));
+      expect(find.text(l.covDaysShort(8)), findsOneWidget);
+      expect(find.text(l.covIntro(8)), findsOneWidget);
+      await act(SemanticsAction.decrease);
+      await act(SemanticsAction.decrease);
+      expect(slider().value, l.lookbackDays(6));
+      expect(find.text(l.covIntro(6)), findsOneWidget);
+
+      // While Log all runs, it is dimmed and takes no swipe, as the slider
+      // itself takes no drag.
+      await tester.tap(find.byKey(const Key('runCoverageCheck')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('logAllMissing')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmBulkAction')));
+      await tester.pumpAndSettle(); // the dialog gone, the photo held
+      expect(processed, hasLength(1), reason: 'the run is going');
+      final busy = slider();
+      expect(busy.flagsCollection.isEnabled, Tristate.isFalse);
+      expect(busy.value, l.lookbackDays(6));
+      expect(busy.getSemanticsData().hasAction(SemanticsAction.increase),
+          isFalse);
+      expect(busy.getSemanticsData().hasAction(SemanticsAction.decrease),
+          isFalse);
+      processing.complete();
+      await tester.pumpAndSettle();
+      expect(slider().flagsCollection.isEnabled, Tristate.isTrue);
+      expect(
+          slider().getSemanticsData().hasAction(SemanticsAction.increase),
+          isTrue);
+      handle.dispose();
+    }, variant: TargetPlatformVariant(const {
+      TargetPlatform.iOS,
+      TargetPlatform.android,
+    }));
+
+    testWidgets('stops at 1 and 30 days', (tester) async {
+      final handle = tester.ensureSemantics();
+      final l = lookupAppLocalizations(const Locale('en'));
+      await tester.pumpWidget(host(days: 30));
+      var data = slider().getSemanticsData();
+      expect(data.value, l.lookbackDays(30));
+      expect(data.hasAction(SemanticsAction.increase), isFalse);
+      expect(data.increasedValue, isEmpty);
+      expect(data.decreasedValue, l.lookbackDays(29));
+
+      await tester.pumpWidget(const SizedBox()); // a fresh screen
+      await tester.pumpWidget(host(days: 1));
+      data = slider().getSemanticsData();
+      expect(data.value, l.lookbackDays(1));
+      expect(data.hasAction(SemanticsAction.decrease), isFalse);
+      expect(data.decreasedValue, isEmpty);
+      expect(data.increasedValue, l.lookbackDays(2));
+      handle.dispose();
+    });
+
+    testWidgets('zh: its name and days are Chinese', (tester) async {
+      final handle = tester.ensureSemantics();
+      await tester.pumpWidget(host(days: 7, locale: const Locale('zh')));
+      await tester.pumpAndSettle();
+      final node = slider();
+      expect(node.label, '检查天数');
+      expect(node.value, '7 天');
+      expect(node.increasedValue, '8 天');
+      handle.dispose();
+    });
   });
 }

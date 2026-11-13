@@ -5434,6 +5434,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Failed'**
   String get diagStatusFail;
+
+  /// Photo coverage: what a screen reader calls the slider that sets how many days back the check looks. Read with its value, lookbackDays ('7 days'). Not shown on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Days to check'**
+  String get covWindowLabel;
 }
 
 class _AppLocalizationsDelegate

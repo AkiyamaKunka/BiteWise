@@ -1003,5 +1003,6 @@
   "bodySaveFailed": "没能保存，请再试一次。",
   "diagStatusPass": "通过",
   "diagStatusWarn": "警告",
-  "diagStatusFail": "未通过"
+  "diagStatusFail": "未通过",
+  "covWindowLabel": "检查天数"
 }
