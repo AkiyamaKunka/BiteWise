@@ -45,7 +45,6 @@ import '../services/photo/photo_location.dart';
 import '../services/photo/share_intake.dart';
 import '../services/places/places.dart' show MapKitPlaces;
 import '../services/photo/watcher.dart';
-import '../services/report/builders.dart';
 import '../services/report/notifications.dart';
 import '../services/report/daily_summary.dart';
 import '../services/usual/usual_foods.dart';
@@ -131,7 +130,6 @@ class AppServices {
     final photoIntake =
         createPhotoIntake(settings, loggedAssetIds: dao.loggedAssetIds);
     final shareIntake = createShareIntake(settings);
-    final ReportBuilder reports = createReportBuilder(dao);
 
     // Notification surface (spec §5.5/§6): init() also performs the runtime
     // permission request (Android 13+ / iOS) — without it every meal card
@@ -441,7 +439,6 @@ class AppServices {
       analyzer: analyzer,
       executor: executor,
       photoIntake: photoIntake,
-      reports: reports,
       settings: store,
       settingsChanges: settings,
       refreshDailyNotification: osSchedulesSummary ? armOsSummary : null,

@@ -2113,7 +2113,6 @@ void main() {
           settings: FakeSettings(watcherEnabled: false),
           picker: FakePicker(),
           requestPhotoPermission: () async => true,
-          reports: FakeReports(),
           refreshDailyNotification: rearm,
         );
 
@@ -2197,7 +2196,6 @@ void main() {
         settings: FakeSettings(watcherEnabled: false),
         picker: FakePicker(),
         requestPhotoPermission: () async => true,
-        reports: FakeReports(),
         refreshDailyNotification: () async => calls++,
       ))));
       await tester.pumpAndSettle();
@@ -2222,7 +2220,6 @@ void main() {
         picker: FakePicker(),
         requestPhotoPermission: () async => true,
         photoIntake: intake,
-        reports: FakeReports(),
       ))));
       tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.paused);
       signalMealsChanged();
@@ -2242,7 +2239,6 @@ void main() {
           picker: FakePicker(),
           requestPhotoPermission: () async => true,
           photoIntake: intake,
-          reports: FakeReports(),
         );
 
     testWidgets('resumed + watcher on → backfillScan', (tester) async {
