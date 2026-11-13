@@ -1972,6 +1972,52 @@ void main() {
     expect(dao.ledger[_hash], IngestionStatus.failed);
   });
 
+  // Review r171: each stage after the model call is `return await`-ed
+  // inside _process's try. A bare `return _settleFailedAnalysis(...)` lets
+  // a throw of the settle's own write escape process(), and the FIFO every
+  // intake chains onto (watcher, share sheet, coverage) stops until the app
+  // restarts. Only the save path was pinned.
+  group('a failed analysis whose settling write throws', () {
+    IntakePhoto numbered(int n) =>
+        IntakePhoto(Uint8List.fromList([n]), 'asset$n', 'IMG_$n.jpg');
+
+    Future<void> nextPhotoStillSaves(
+        PhotoPipeline pipeline, FakeAnalyzer analyzer, FakeDao dao) async {
+      analyzer.nextPhotoOutcome = AnalysisOutcome(
+          analysis: _foodAnalysis(), isFood: true, wall: Duration.zero);
+      final next = await pipeline.enqueue(numbered(2));
+      expect(next.kind, PhotoOutcomeKind.saved);
+      expect(dao.ledger['h2'], IngestionStatus.saved);
+    }
+
+    test('permanent, the failed mark throwing: contained, and the next photo '
+        'in the queue still saves', () async {
+      final dao = _FailedMarkThrowsOnceDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome =
+            const AnalysisOutcome(error: 'bad key', wall: Duration.zero);
+      final pipeline = PhotoPipeline(
+          dao: dao, analyzer: analyzer, hasher: (b) async => 'h${b.first}');
+      final first = await pipeline.enqueue(numbered(1));
+      expect(first.kind, PhotoOutcomeKind.failed);
+      expect(dao.ledger['h1'], IngestionStatus.failed,
+          reason: 'the containment marks it again');
+      await nextPhotoStillSaves(pipeline, analyzer, dao);
+    });
+
+    test('transient, the release throwing: contained the same way', () async {
+      final dao = _FailingReleaseDao();
+      final analyzer = FakeAnalyzer()
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'rate limit', retryable: true, wall: Duration.zero);
+      final pipeline = PhotoPipeline(
+          dao: dao, analyzer: analyzer, hasher: (b) async => 'h${b.first}');
+      final first = await pipeline.enqueue(numbered(1));
+      expect(first.kind, PhotoOutcomeKind.failed);
+      await nextPhotoStillSaves(pipeline, analyzer, dao);
+    });
+  });
+
   group('bindStream (share sheet) announces the verdicts nobody awaits', () {
     // A shared photo has no awaiting caller — the add flow awaits enqueue()
     // and shows a dialog, the watcher is meant to stay quiet — so a share
@@ -2174,6 +2220,23 @@ class _ThrowingSaveDao extends FakeDao {
   Future<int> saveMeal(Meal meal,
       {IngestionStatus? markStatus, String? ownerStamp}) async {
     throw StateError('disk full');
+  }
+}
+
+/// A store whose first 'failed' mark throws (a locked database); the
+/// containment's own mark after it goes through.
+class _FailedMarkThrowsOnceDao extends FakeDao {
+  var _thrown = false;
+
+  @override
+  Future<void> markPhotoHash(String imageHash, IngestionStatus status,
+      {int? mealId, String? ownerStamp}) {
+    if (status == IngestionStatus.failed && !_thrown) {
+      _thrown = true;
+      return Future.error(StateError('database is locked'));
+    }
+    return super.markPhotoHash(imageHash, status,
+        mealId: mealId, ownerStamp: ownerStamp);
   }
 }
 
