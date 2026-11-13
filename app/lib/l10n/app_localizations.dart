@@ -5042,7 +5042,7 @@ abstract class AppLocalizations {
   /// Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, iCloud Drive is not available for the app, or backups are blocked (another iPhone's backup, a file changed outside the app or unreadable) or paused (the backup gone from iCloud, a much smaller record): nothing is copied, so it says to export a file before reinstalling or changing phones.
   ///
   /// In en, this message translates to:
-  /// **'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
+  /// **'Nothing is being copied to iCloud Drive, so your meals would not come back after a reinstall, or on a new iPhone that does not get this iPhone\'s data from a backup or a transfer. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
   String get backupICloudFooterOff;
 
   /// Footer of Settings › Your Data on Android (there is no automatic backup file on Android).

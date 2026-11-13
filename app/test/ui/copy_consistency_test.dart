@@ -83,6 +83,36 @@ void main() {
     expect(zh.nlInvalidMealIndex('3', 1), '❌ 餐次编号无效（3）。你最近有 1 顿餐。');
   });
 
+  // Review r171: the footer shown while iCloud Backup copies nothing said
+  // the meals "would not come back … on a new iPhone". The meal database
+  // is in the iPhone's own backups (only the local store is excluded), so
+  // a new iPhone restored from one, or given this one's data by a
+  // transfer, does get them back.
+  test('the iCloud Backup off footer says when a new iPhone loses the meals',
+      () {
+    expect(en.backupICloudFooterOff,
+        startsWith('Nothing is being copied to iCloud Drive, so your meals '
+            'would not come back after a reinstall, or on a new iPhone that '
+            "does not get this iPhone's data from a backup or a transfer."));
+    expect(zh.backupICloudFooterOff,
+        startsWith('现在没有任何内容复制到 iCloud 云盘，所以重新安装筷拍后，'
+            '或者在没有从这台 iPhone 的备份恢复或传输数据的新 iPhone 上，'
+            '你的餐食都不会回来。'));
+    // Still points to an export first (backup_settings_test).
+    expect(en.backupICloudFooterOff, contains('export a file'));
+    expect(zh.backupICloudFooterOff, contains('导出'));
+
+    // The fact the copy rests on: the one folder kept out of device
+    // backups is the local store, and the database lives elsewhere.
+    final appDelegate =
+        File('ios/Runner/AppDelegate.swift').readAsStringSync();
+    expect('isExcludedFromBackup = true'.allMatches(appDelegate),
+        hasLength(1));
+    expect(appDelegate, contains('func prepareLocalStore('));
+    expect(File('lib/data/db.dart').readAsStringSync(),
+        contains(r"'${await getDatabasesPath()}/$kDatabaseFileName'"));
+  });
+
   test('no ALL-CAPS emphasis in the strings that used it', () {
     final shouting = RegExp(r'\b[A-Z]{3,}\b');
     for (final text in [

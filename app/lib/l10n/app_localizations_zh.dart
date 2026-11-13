@@ -3013,7 +3013,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get backupICloudFooterOff =>
-      '现在没有任何内容复制到 iCloud，所以重新安装筷拍或换新 iPhone 后，你的餐食不会回来。在那之前，请先导出一个文件，之后再导入。API Key 绝不会包含在内，开发者也收不到任何内容。';
+      '现在没有任何内容复制到 iCloud 云盘，所以重新安装筷拍后，或者在没有从这台 iPhone 的备份恢复或传输数据的新 iPhone 上，你的餐食都不会回来。在那之前，请先导出一个文件，之后再导入。API Key 绝不会包含在内，开发者也收不到任何内容。';
 
   @override
   String get backupAndroidFooter =>

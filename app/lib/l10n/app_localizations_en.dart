@@ -3270,7 +3270,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupICloudFooterOff =>
-      'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.';
+      'Nothing is being copied to iCloud Drive, so your meals would not come back after a reinstall, or on a new iPhone that does not get this iPhone\'s data from a backup or a transfer. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.';
 
   @override
   String get backupAndroidFooter =>
