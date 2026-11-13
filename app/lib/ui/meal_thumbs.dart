@@ -102,7 +102,7 @@ class MealThumbResolver {
 
   /// Whether [assetId] can name a photo other than the meal's: Android's
   /// MediaStore ids are all digits and repeat on another phone. An iOS
-  /// localIdentifier ("<UUID>/L0/001") names one photo on one device, the
+  /// localIdentifier (`<UUID>/L0/001`) names one photo on one device, the
   /// meal's own or none, so there the check could only cost: photo_manager
   /// copies each original into tmp (origin_cache.dart) and fetches an
   /// offloaded one from iCloud, and a photo edited in Photos since it was
