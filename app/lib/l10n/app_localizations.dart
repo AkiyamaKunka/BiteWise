@@ -3399,7 +3399,7 @@ abstract class AppLocalizations {
   /// No description provided for @covDone.
   ///
   /// In en, this message translates to:
-  /// **'{label} done ({count} photos).'**
+  /// **'{label} done ({count, plural, =1{1 photo} other{{count} photos}}).'**
   String covDone(String label, int count);
 
   /// No description provided for @covDoneFailures.
@@ -3417,7 +3417,7 @@ abstract class AppLocalizations {
   /// No description provided for @covLoggedAsMeals.
   ///
   /// In en, this message translates to:
-  /// **'{count} logged as meals'**
+  /// **'{count, plural, =1{1 logged as a meal} other{{count} logged as meals}}'**
   String covLoggedAsMeals(int count);
 
   /// No description provided for @covNotFoodCount.
@@ -3429,7 +3429,7 @@ abstract class AppLocalizations {
   /// No description provided for @covLeftoverCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} leftover photos (deducted from their meal)'**
+  /// **'{count, plural, =1{1 leftover photo (deducted from its meal)} other{{count} leftover photos (deducted from their meal)}}'**
   String covLeftoverCount(int count);
 
   /// No description provided for @covFailedCount.
@@ -3897,7 +3897,7 @@ abstract class AppLocalizations {
   /// shown is the model's raw meal_index, already truncated to 40 chars.
   ///
   /// In en, this message translates to:
-  /// **'❌ Invalid meal index ({shown}). You have {count} recent meals.'**
+  /// **'❌ Invalid meal index ({shown}). You have {count, plural, =1{1 recent meal} other{{count} recent meals}}.'**
   String nlInvalidMealIndex(String shown, int count);
 
   /// No description provided for @nlCorrectedMeal.

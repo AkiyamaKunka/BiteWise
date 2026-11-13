@@ -2163,7 +2163,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covDone(String label, int count) {
-    return '$label done ($count photos).';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count photos',
+      one: '1 photo',
+    );
+    return '$label done ($_temp0).';
   }
 
   @override
@@ -2178,7 +2184,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covLoggedAsMeals(int count) {
-    return '$count logged as meals';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count logged as meals',
+      one: '1 logged as a meal',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -2188,7 +2200,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covLeftoverCount(int count) {
-    return '$count leftover photos (deducted from their meal)';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count leftover photos (deducted from their meal)',
+      one: '1 leftover photo (deducted from its meal)',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -2507,7 +2525,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nlInvalidMealIndex(String shown, int count) {
-    return '❌ Invalid meal index ($shown). You have $count recent meals.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recent meals',
+      one: '1 recent meal',
+    );
+    return '❌ Invalid meal index ($shown). You have $_temp0.';
   }
 
   @override

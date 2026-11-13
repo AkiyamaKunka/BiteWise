@@ -58,6 +58,31 @@ void main() {
     expect(zh.todayEmptyHint, contains('手动输入'));
   });
 
+  // Review r171: Log all on one never-scanned photo asked "Log 1 photo?",
+  // then said "Logging done (1 photos)."; the summary card read "1 logged
+  // as meals · … · 1 leftover photos", and Fix with one recent meal said
+  // "You have 1 recent meals."
+  test('a count of one reads as one', () {
+    expect(en.covDone(en.covProgLogging, 1), 'Logging done (1 photo).');
+    expect(en.covDone(en.covProgLogging, 3), 'Logging done (3 photos).');
+    expect(en.covLoggedAsMeals(1), '1 logged as a meal');
+    expect(en.covLoggedAsMeals(0), '0 logged as meals');
+    expect(en.covLoggedAsMeals(5), '5 logged as meals');
+    expect(en.covLeftoverCount(1),
+        '1 leftover photo (deducted from its meal)');
+    expect(en.covLeftoverCount(2),
+        '2 leftover photos (deducted from their meal)');
+    expect(en.nlInvalidMealIndex('3', 1),
+        '❌ Invalid meal index (3). You have 1 recent meal.');
+    expect(en.nlInvalidMealIndex('9', 4),
+        '❌ Invalid meal index (9). You have 4 recent meals.');
+    // Chinese has no plural forms: unchanged.
+    expect(zh.covDone('记录', 1), '记录完成（1 张照片）。');
+    expect(zh.covLoggedAsMeals(1), '已记录 1 餐');
+    expect(zh.covLeftoverCount(1), '1 张剩菜照片（已从原餐扣除）');
+    expect(zh.nlInvalidMealIndex('3', 1), '❌ 餐次编号无效（3）。你最近有 1 顿餐。');
+  });
+
   test('no ALL-CAPS emphasis in the strings that used it', () {
     final shouting = RegExp(r'\b[A-Z]{3,}\b');
     for (final text in [

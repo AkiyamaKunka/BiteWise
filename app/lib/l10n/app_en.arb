@@ -1657,7 +1657,7 @@
     }
   },
   "covUnnamedPhoto": "(unnamed photo)",
-  "covDone": "{label} done ({count} photos).",
+  "covDone": "{label} done ({count, plural, =1{1 photo} other{{count} photos}}).",
   "@covDone": {
     "placeholders": {
       "label": {
@@ -1690,7 +1690,7 @@
       }
     }
   },
-  "covLoggedAsMeals": "{count} logged as meals",
+  "covLoggedAsMeals": "{count, plural, =1{1 logged as a meal} other{{count} logged as meals}}",
   "@covLoggedAsMeals": {
     "placeholders": {
       "count": {
@@ -1706,7 +1706,7 @@
       }
     }
   },
-  "covLeftoverCount": "{count} leftover photos (deducted from their meal)",
+  "covLeftoverCount": "{count, plural, =1{1 leftover photo (deducted from its meal)} other{{count} leftover photos (deducted from their meal)}}",
   "@covLeftoverCount": {
     "placeholders": {
       "count": {
@@ -2001,7 +2001,7 @@
   "nlTypeFirst": "Type what you ate first.",
   "nlErrorContactingAi": "❌ Error contacting AI. Please try again.",
   "nlNoFoodDetected": "🚫 I couldn't detect food in that description.",
-  "nlInvalidMealIndex": "❌ Invalid meal index ({shown}). You have {count} recent meals.",
+  "nlInvalidMealIndex": "❌ Invalid meal index ({shown}). You have {count, plural, =1{1 recent meal} other{{count} recent meals}}.",
   "@nlInvalidMealIndex": {
     "description": "shown is the model's raw meal_index, already truncated to 40 chars.",
     "placeholders": {
