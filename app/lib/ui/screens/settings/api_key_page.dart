@@ -122,19 +122,17 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
           separatorInset: AppSpace.separatorInset,
           children: [
             for (final (id, name, note) in kApiKeyChoices)
-              announceSelected(
+              GroupedRow(
+                key: Key('providerChoice-$id'),
+                title: name,
+                value: noteLabel(context.l10n, note),
                 selected: settings.provider == id,
-                row: GroupedRow(
-                  key: Key('providerChoice-$id'),
-                  title: name,
-                  value: noteLabel(context.l10n, note),
-                  showChevron: false,
-                  trailing: settings.provider == id
-                      ? Icon(Icons.check_rounded,
-                          size: 20, color: context.colors.accent)
-                      : const SizedBox(width: 20),
-                  onTap: () => _selectProvider(id),
-                ),
+                showChevron: false,
+                trailing: settings.provider == id
+                    ? Icon(Icons.check_rounded,
+                        size: 20, color: context.colors.accent)
+                    : const SizedBox(width: 20),
+                onTap: () => _selectProvider(id),
               ),
           ],
         ),
