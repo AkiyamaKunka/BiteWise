@@ -638,6 +638,29 @@ void main() {
         ['Lunch', 'Coffee']);
   });
 
+  // Review r171: a meal whose clock cannot be read (no time, a 24-hour
+  // clock the stored 12-hour format never has) cannot be placed before or
+  // after the photo. It keeps riding along, as before B14: dropped, a
+  // photo of its remains would be logged as a meal of its own.
+  test('a meal of the day whose clock cannot be read still rides along',
+      () async {
+    for (final m in [
+      onThe30th(51, '12:00 PM', 'Lunch'),
+      onThe30th(52, '', 'Tray with no time'),
+      onThe30th(53, '19:30', 'Bento on a 24-hour clock'),
+      onThe30th(54, '01:30 PM', 'Cake'),
+    ]) {
+      dao.put(m);
+    }
+    analyzer.nextPhotoOutcome =
+        const AnalysisOutcome(analysis: {'is_food': false}, wall: Duration.zero);
+    await pipeline.process(IntakePhoto(
+        Uint8List.fromList([7]), 'w7', 'IMG_13.jpg',
+        capturedAt: DateTime(2026, 10, 30, 13, 0)));
+    expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
+        ['Lunch', 'Tray with no time', 'Bento on a 24-hour clock']);
+  });
+
   // Re-consent (run 7): a grant from before the consent text mentioned the
   // previous night keeps sending exactly what it agreed to.
   test('without the updated consent the 00:10 photo sees only its own day',
