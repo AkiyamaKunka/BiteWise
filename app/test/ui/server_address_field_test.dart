@@ -73,6 +73,96 @@ void main() {
         findsNothing);
   });
 
+  // A screen reader (VoiceOver, TalkBack, Switch Control) activates a row
+  // with a semantics tap: no pointer, so no tap outside, and the address
+  // field keeps its focus. Connect Claude then read the saved address, not
+  // the one the field showed: it asked for an address the field held (the
+  // U3 bug run 7 fixed) or went to the old server (review 171).
+  for (final (saved, typed) in const [
+    ('', 'http://10.0.0.7'),
+    ('http://10.0.0.7', 'http://10.0.0.55'),
+  ]) {
+    testWidgets('a screen reader\'s Connect Claude right after "$typed" is '
+        'typed (saved: "$saved") uses the typed address', (tester) async {
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final semantics = tester.ensureSemantics();
+      final settings = FakeSettings(keys: {'server': 'up'})
+        ..provider = 'server'
+        ..serverBaseUrl = saved;
+      final asked = <String>[]; // the saved address at each start
+      await tester.pumpWidget(MaterialApp(
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SubscriptionProviderPage(
+          settings: settings,
+          startClaudeAuth: () async {
+            asked.add(settings.serverBaseUrl);
+            return (url: null, error: 'stop here');
+          },
+          completeClaudeAuth: (_) async => null,
+        ),
+      ));
+      await tester.pumpAndSettle();
+
+      final address = find.byKey(const Key('serverUrlField'));
+      await tester.tap(address);
+      await tester.enterText(address, typed);
+      await tester.pump();
+      expect(settings.serverBaseUrl, saved, reason: 'not committed yet');
+      tester.semantics.tap(find.semantics.byLabel(RegExp('^Connect Claude')));
+      await tester.pumpAndSettle();
+      expect(asked, [typed]);
+      expect(
+          find.text('Enter your server address and upload key above first.'),
+          findsNothing);
+      semantics.dispose();
+    });
+  }
+
+  // The same for a plan picked while Watch Camera Roll is on: its question
+  // names the host the photos would go to, and it named the saved one while
+  // the field showed the new one (saved a moment later, when the dialog
+  // took the focus).
+  testWidgets('a plan a screen reader picks right after typing names the '
+      'typed host in its question', (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final semantics = tester.ensureSemantics();
+    final settings = FakeSettings(keys: {'server': 'up'}, watcherEnabled: true)
+      ..provider = 'server'
+      ..serverBaseUrl = 'http://10.0.0.7'
+      ..aiConsent = {'server:claude'};
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: SubscriptionProviderPage(settings: settings),
+    ));
+    await tester.pumpAndSettle();
+
+    final address = find.byKey(const Key('serverUrlField'));
+    await tester.tap(address);
+    await tester.enterText(address, 'http://10.0.0.55');
+    await tester.pump();
+    tester.semantics.tap(find.semantics.byLabel(RegExp('^GLM')));
+    await tester.pumpAndSettle();
+    final dialog = find.byKey(const Key('aiConsentDialog'));
+    expect(dialog, findsOneWidget);
+    expect(
+        find.descendant(of: dialog, matching: find.textContaining('10.0.0.55')),
+        findsOneWidget);
+    expect(
+        find.descendant(of: dialog, matching: find.textContaining('10.0.0.7')),
+        findsNothing);
+    await tester.tap(find.byKey(const Key('aiConsentNotNow')));
+    await tester.pumpAndSettle();
+    expect(settings.serverBackend, 'claude');
+    expect(settings.serverBaseUrl, 'http://10.0.0.55');
+    semantics.dispose();
+  });
+
   testWidgets('a space around the address is trimmed when it is saved',
       (tester) async {
     final settings = FakeSettings(keys: {'server': 'up'})..provider = 'server';

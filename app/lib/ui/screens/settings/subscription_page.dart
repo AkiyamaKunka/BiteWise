@@ -87,6 +87,16 @@ class _SubscriptionProviderPageState
     widget.settings.update(serverBaseUrl: _serverUrlController.text.trim());
   }
 
+  /// An action about to use the address ([_connectClaude], [_selectPlan])
+  /// saves an edit still being typed first. A screen reader activates a row
+  /// with no pointer and the field keeps its focus, so nothing else had
+  /// saved it: Connect Claude asked for the address the field showed (the
+  /// U3 bug run 7 fixed) or went to the old server, and a plan's question
+  /// named the old host (review 171).
+  void _saveServerUrlEdit() {
+    if (_serverUrlEdited) _saveServerUrl();
+  }
+
   Future<void> _refreshLoginState() async {
     final probe = widget.serverLoginState;
     if (probe == null ||
@@ -130,6 +140,8 @@ class _SubscriptionProviderPageState
         widget.settings.serverBackend == backend;
     if (already) return;
     HapticFeedback.selectionClick();
+    // The question names the host the photos would go to.
+    _saveServerUrlEdit();
     // The plan is the AI company behind the server: a new recipient while
     // Watch Camera Roll is on asks now (App Store 5.1.2(i)); Not now keeps
     // the previous plan or provider.
@@ -156,6 +168,7 @@ class _SubscriptionProviderPageState
     final start = widget.startClaudeAuth;
     final complete = widget.completeClaudeAuth;
     if (start == null || complete == null) return;
+    _saveServerUrlEdit();
     // Nothing to sign in yet: the request needs the server's address and
     // upload key, and without them it only came back with an English
     // 'Set the server address and key first.' (U3). Said here instead,
