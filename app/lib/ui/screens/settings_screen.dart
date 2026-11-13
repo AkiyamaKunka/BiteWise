@@ -879,6 +879,7 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// adjusts it (the old always-visible slider gave a rarely-touched
   /// setting permanent screen space).
   Future<void> _pickLookback() async {
+    const minDays = 1, maxDays = 30; // spec §6.4 clamp 1–30
     var days = _lookbackDays;
     final picked = await showGroupedSheet<int>(
       context,
@@ -900,14 +901,35 @@ class _SettingsScreenState extends State<SettingsScreen>
                   Text(ctx.l10n.lookbackDays(days),
                       key: const Key('lookbackValue'),
                       style: ctx.nums.value.copyWith(color: ctx.colors.label)),
-                  Slider.adaptive(
-                    key: const Key('lookbackSlider'),
-                    value: days.toDouble(),
-                    min: 1,
-                    max: 30, // spec §6.4 clamp 1–30
-                    divisions: 29,
-                    label: '$days',
-                    onChanged: (v) => setSheet(() => days = v.round()),
+                  // Read as the setting and its days: on its own the slider
+                  // said '21%' with no name on an iPhone (the Cupertino
+                  // slider has no semantic formatter) and '7' on Android.
+                  // A screen reader's swipe up / down moves it a day.
+                  Semantics(
+                    container: true,
+                    excludeSemantics: true,
+                    slider: true,
+                    label: ctx.l10n.settingsRowLookback,
+                    value: ctx.l10n.lookbackDays(days),
+                    increasedValue: days < maxDays
+                        ? ctx.l10n.lookbackDays(days + 1)
+                        : null,
+                    decreasedValue: days > minDays
+                        ? ctx.l10n.lookbackDays(days - 1)
+                        : null,
+                    onIncrease:
+                        days < maxDays ? () => setSheet(() => days++) : null,
+                    onDecrease:
+                        days > minDays ? () => setSheet(() => days--) : null,
+                    child: Slider.adaptive(
+                      key: const Key('lookbackSlider'),
+                      value: days.toDouble(),
+                      min: minDays.toDouble(),
+                      max: maxDays.toDouble(),
+                      divisions: maxDays - minDays,
+                      label: '$days',
+                      onChanged: (v) => setSheet(() => days = v.round()),
+                    ),
                   ),
                 ],
               ),

@@ -19,6 +19,7 @@ import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
+import 'package:flutter/semantics.dart' show SemanticsAction, SemanticsNode;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/l10n/app_localizations.dart';
@@ -773,6 +774,58 @@ void main() {
       await tester.pumpAndSettle();
       expect(s.lookbackDays, 30);
     });
+
+    // On its own the slider read '21%' with no name on an iPhone (the
+    // Cupertino slider) and '7' on Android, for a window the sheet shows
+    // as '7 days'.
+    testWidgets('the lookback slider reads as the setting and its days', (
+      tester,
+    ) async {
+      final handle = tester.ensureSemantics();
+      final l = lookupAppLocalizations(const Locale('en'));
+      final s = FakeSettings(apiKey: 'k', lookbackDays: 7);
+      await pumpApp(tester, _settings(s), size: const Size(390, 1600));
+      await tester.tap(find.text(l.settingsRowLookback));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('lookbackSlider')), findsOneWidget);
+      // The one slider a screen reader finds on the sheet.
+      SemanticsNode slider() => find.semantics
+          .byPredicate((n) => n.flagsCollection.isSlider)
+          .evaluate()
+          .single;
+      var node = slider();
+      expect(node.label, l.settingsRowLookback);
+      expect(node.value, l.lookbackDays(7));
+      expect(node.increasedValue, l.lookbackDays(8));
+      expect(node.decreasedValue, l.lookbackDays(6));
+      expect(node.flagsCollection.isSlider, isTrue);
+      // A screen reader's swipe up / down still moves it, a day at a time,
+      // and the count on the screen follows.
+      Future<void> act(SemanticsAction action) async {
+        final n = slider();
+        expect(n.getSemanticsData().hasAction(action), isTrue);
+        n.owner!.performAction(n.id, action);
+        await tester.pumpAndSettle();
+      }
+
+      await act(SemanticsAction.increase);
+      node = slider();
+      expect(node.value, l.lookbackDays(8));
+      expect(
+        tester.widget<Text>(find.byKey(const Key('lookbackValue'))).data,
+        l.lookbackDays(8),
+      );
+      await act(SemanticsAction.decrease);
+      await act(SemanticsAction.decrease);
+      expect(slider().value, l.lookbackDays(6));
+      await tester.tap(find.byKey(const Key('lookbackSetButton')));
+      await tester.pumpAndSettle();
+      expect(s.lookbackDays, 6);
+      handle.dispose();
+    }, variant: TargetPlatformVariant(const {
+      TargetPlatform.iOS,
+      TargetPlatform.android,
+    }));
   });
 
   group('report time is displayed the phone\'s way', () {
