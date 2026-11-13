@@ -547,10 +547,6 @@ abstract class _HttpVisionAnalyzer
   }
 }
 
-/// [isJsonObjectBody], by the name server_analyzer.dart (a part of this
-/// library) calls it.
-bool _isJsonObject(String body) => isJsonObjectBody(body);
-
 class _ProviderException implements Exception {
   const _ProviderException(this.message,
       {required this.transient,

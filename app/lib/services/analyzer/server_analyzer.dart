@@ -429,7 +429,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 8));
       if (resp.statusCode == 401 || resp.statusCode == 403) {
-        return _isJsonObject(resp.body) ? 'rejected' : 'unreachable';
+        return isJsonObjectBody(resp.body) ? 'rejected' : 'unreachable';
       }
       if (resp.statusCode != 200) return 'unreachable';
       final decoded = jsonDecode(resp.body);
@@ -550,7 +550,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       if (resp.statusCode == 401 || resp.statusCode == 403) {
         // The server's own 401 is JSON; an HTML/text one is a web filter
         // or portal on the plain-HTTP path, not a verdict on the key.
-        return _isJsonObject(resp.body)
+        return isJsonObjectBody(resp.body)
             ? 'Your server rejected that key.'
             : _interceptedMessage;
       }

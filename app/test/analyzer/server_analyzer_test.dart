@@ -786,6 +786,30 @@ void main() {
     expect(await validate(500), contains('500'));
   });
 
+  test('serverLoginState: only a JSON 401/403 is a rejected key; a portal '
+      'or filter page answering one is "unreachable"', () async {
+    final s = await serverSettings();
+    Future<String?> state(http.Response reply) => ServerAnalyzer(s,
+            client: MockClient((_) async => reply))
+        .serverLoginState();
+
+    expect(await state(http.Response('{"error": "Unauthorized"}', 401)),
+        'rejected');
+    expect(await state(http.Response('{}', 403)), 'rejected');
+    expect(await state(http.Response('Login required', 401)), 'unreachable');
+    expect(
+        await state(http.Response('<html>403 Forbidden</html>', 403,
+            headers: {'content-type': 'text/html'})),
+        'unreachable');
+    expect(await state(http.Response('[]', 403)), 'unreachable',
+        reason: 'a JSON array is not the server\'s error object');
+    expect(await state(http.Response('{"claude_login": "token"}', 200)),
+        'token');
+    expect(await state(http.Response('{"ok": true}', 200)), isNull,
+        reason: 'an older server: the page hides the row');
+    expect(await state(http.Response('{}', 500)), 'unreachable');
+  });
+
   group('serverFeatures (restaurant assist R1)', () {
     Future<(ServerFeatures?, List<http.BaseRequest>)> probe(
         http.Response Function() reply,
