@@ -1,11 +1,13 @@
 // Deliberate intake (spec §6, §2.3): share-sheet stream + pickFromRecent,
 // all deliberate=true; §6.1 extension filter; §8 25 MB cap.
 import 'dart:async';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/share_intake.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'watcher_test.dart' show FakeAsset, FakePhotoLibrary;
@@ -123,6 +125,178 @@ void main() {
       await pumpEventQueue();
       expect(emitted.map((p) => p.fileName), ['ok.HEIC']);
       await sub.cancel();
+    });
+  });
+
+  // Review 171, C5: on Android the plugin hands over whatever path it
+  // made of the share — a sender-chosen name could climb out of the cache,
+  // and a share with no stream handed over its text — and the intake read
+  // it when it looked like a photo, then deleted it in every case. Only
+  // MainActivity's own copies may be read or deleted there.
+  group('Android: only the share folder\'s copies are read or deleted', () {
+    late Directory app; // stands in for the app's private data directory
+    late String folder;
+
+    setUp(() {
+      app = Directory.systemTemp.createTempSync('share_c5_');
+      folder = '${app.path}/cache/$androidShareFolderName';
+      Directory('$folder/1').createSync(recursive: true);
+    });
+    tearDown(() => app.deleteSync(recursive: true));
+
+    File appFile(String relative, List<int> bytes) =>
+        File('${app.path}/$relative')
+          ..createSync(recursive: true)
+          ..writeAsBytesSync(bytes);
+
+    test('a path outside the folder is left alone; the copy inside is read '
+        'and deleted', () async {
+      final db = appFile('databases/calorie_tracker.db', [1, 2, 3]);
+      final prefs =
+          appFile('shared_prefs/FlutterSharedPreferences.xml', [4]);
+      final private = appFile('files/private.jpg', [5]);
+      final copy = File('$folder/1/IMG_20260716_193042.jpg')
+        ..writeAsBytesSync([7, 7]);
+      final source = FakeShareSource()
+        ..initial = [
+          db.path, // a share with no stream: its text became the path
+          '$folder/1/../../../shared_prefs/FlutterSharedPreferences.xml',
+          '$folder/1/../../../files/private.jpg',
+          copy.path,
+        ];
+      final read = <String>[];
+      final intake = ShareIntake(
+          source: source,
+          library: FakePhotoLibrary(),
+          readBytes: (path) async {
+            read.add(path);
+            return File(path).readAsBytes();
+          },
+          // The production cleanup: a real delete.
+          sharedFolder: () async => folder,
+          clock: () => now);
+
+      final photo = await intake.photos().first;
+      expect(photo.fileName, 'IMG_20260716_193042.jpg');
+      expect(read, [copy.path]);
+      expect(copy.existsSync(), isFalse,
+          reason: 'the copy is still deleted once read');
+      expect(db.existsSync(), isTrue);
+      expect(prefs.existsSync(), isTrue);
+      expect(private.existsSync(), isTrue);
+    });
+
+    test('a folder that cannot be found reads and deletes nothing',
+        () async {
+      final copy = File('$folder/1/IMG_1.jpg')..writeAsBytesSync([7]);
+      final source = FakeShareSource()..initial = [copy.path];
+      final read = <String>[];
+      final intake = ShareIntake(
+          source: source,
+          library: FakePhotoLibrary(),
+          readBytes: (path) async {
+            read.add(path);
+            return File(path).readAsBytes();
+          },
+          cleanup: (path) async => cleaned.add(path),
+          sharedFolder: () async => throw const FileSystemException('none'),
+          clock: () => now);
+
+      final emitted = <IntakePhoto>[];
+      final sub = intake.photos().listen(emitted.add);
+      await pumpEventQueue();
+      expect(emitted, isEmpty);
+      expect(read, isEmpty);
+      expect(cleaned, isEmpty);
+      await sub.cancel();
+    });
+
+    test('isWithinFolder resolves . and .. and never matches a sibling',
+        () {
+      const f = '/data/user/0/app/cache/shared_photos';
+      expect(isWithinFolder('$f/123/a.jpg', f), isTrue);
+      expect(isWithinFolder('$f/./123/a.jpg', f), isTrue);
+      expect(isWithinFolder('$f/123/../456/a.jpg', f), isTrue);
+      expect(isWithinFolder(f, f), isFalse);
+      expect(isWithinFolder('$f/..', f), isFalse);
+      expect(isWithinFolder('$f/../../databases/x.db', f), isFalse);
+      expect(isWithinFolder('${f}_x/a.jpg', f), isFalse);
+      expect(isWithinFolder('/data/user/0/app/cache/a.jpg', f), isFalse);
+      expect(isWithinFolder('shared_photos/a.jpg', f), isFalse);
+      expect(isWithinFolder('/../$f/a.jpg', f), isFalse);
+    });
+
+    // The Kotlin side copies into this folder and refuses what Dart would
+    // refuse by size, before the plugin sees the launch intent (read while
+    // super.onCreate attaches it) or a later one.
+    test('MainActivity.kt copies into the same folder, under the same cap, '
+        'before the plugin sees any intent', () {
+      final kotlin = File('android/app/src/main/kotlin/dev/calorietracker/'
+              'calorie_tracker/MainActivity.kt')
+          .readAsStringSync();
+      expect(kotlin,
+          contains('const val SHARE_FOLDER = "$androidShareFolderName"'));
+      expect(maxPhotoBytes, 25 * 1024 * 1024);
+      expect(kotlin, contains('const val MAX_SHARE_BYTES = 25L * 1024 * 1024'));
+      final create = RegExp(r'override fun onCreate\(.*?\n    \}', dotAll: true)
+          .firstMatch(kotlin)
+          ?.group(0);
+      expect(create, isNotNull);
+      final copy = create!.indexOf('setIntent(withSafeShares(it))');
+      expect(copy, greaterThanOrEqualTo(0));
+      expect(create.indexOf('super.onCreate('), greaterThan(copy));
+      expect(kotlin, contains('super.onNewIntent(withSafeShares(intent))'));
+    });
+
+    // The same folder from the Dart side: the share folder in
+    // path_provider's temporary directory, which on Android is the app's
+    // cache directory (path_provider_android answers getTemporaryPath with
+    // Context.getCacheDir), the cacheDir MainActivity copies into. Were
+    // either side to move, every Android share would be refused.
+    test('androidSharedPhotoFolder is the share folder in the cache '
+        'directory MainActivity copies into', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const cache = '/data/user/0/dev.calorietracker.calorie_tracker/cache';
+      messenger.setMockMethodCallHandler(
+          channel,
+          (call) async =>
+              call.method == 'getTemporaryDirectory' ? cache : null);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      expect(await androidSharedPhotoFolder(),
+          '$cache/$androidShareFolderName');
+      final kotlin = File('android/app/src/main/kotlin/dev/calorietracker/'
+              'calorie_tracker/MainActivity.kt')
+          .readAsStringSync();
+      expect(kotlin,
+          contains('File(File(cacheDir, SHARE_FOLDER), UUID.randomUUID()'));
+    });
+
+    // Review 171, C6: a share from the sharesheet while the app runs must
+    // reach that running engine (onNewIntent, then the plugin's live stream
+    // this intake listens to) rather than start a second MainActivity with
+    // its own engine and services. Checked on the API 35 emulator: singleTop
+    // left two MainActivity tasks after a Files › Share › Chopstats.
+    test('MainActivity is singleTask and still takes image shares', () {
+      final manifest =
+          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      final activity =
+          RegExp(r'<activity\b[^>]*android:name="\.MainActivity"[^>]*>')
+              .firstMatch(manifest)
+              ?.group(0);
+      expect(activity, isNotNull);
+      expect(activity, contains('android:launchMode="singleTask"'));
+      for (final action in ['SEND', 'SEND_MULTIPLE']) {
+        expect(
+            RegExp('<action android:name="android.intent.action.$action"/>'
+                    r'\s*<category android:name="android.intent.category.'
+                    r'DEFAULT"/>\s*<data android:mimeType="image/\*"/>')
+                .hasMatch(manifest),
+            isTrue,
+            reason: action);
+      }
     });
   });
 

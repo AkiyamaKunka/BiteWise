@@ -58,7 +58,9 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// local store, and asks the same channel which photos sit in a Meta
 /// glasses album (G2a) and, for a glasses photo the dating guard could
 /// re-date, when it joined the library (G2b); elsewhere
-/// [PhotoIntake.lateImportScan] does nothing and nothing is asked. The
+/// [PhotoIntake.lateImportScan] does nothing and nothing is asked: on
+/// Android the library keeps a late import while it was taken inside the
+/// window, which it is given the start of (PhotoManagerLibrary). The
 /// live watcher's late-import pass reads a photo only while an automatic
 /// analysis could succeed and the app is open
 /// ([LibraryPhotoIntake.liveLateShouldContinue]), as every other automatic
@@ -72,7 +74,9 @@ PhotoIntake createPhotoIntake(AppSettings settings,
   final changes = platformPhotoChangeSource(isIOS: isIOS);
   return LibraryPhotoIntake(
       lookbackDays: () => settings.lookbackDays,
-      library: PhotoManagerLibrary(),
+      library: PhotoManagerLibrary(
+          windowStart: () =>
+              lookbackCutoff(DateTime.now(), settings.lookbackDays)),
       onBackfillListed: onBackfillListed,
       passOver: passOver,
       lateImports: changes == null
@@ -348,7 +352,7 @@ class LibraryPhotoIntake implements PhotoIntake {
       // Same truncation rule as backfillScan: a capped result set hides an
       // OLDER tail — the cutoff must not advance over unseen photos
       // (recovered by the full-window backfill layers meanwhile).
-      final truncated = assets.length >= 500;
+      final truncated = listedCount(assets) >= 500;
       final frontier = await _emit(assets,
           reportFrontier: !truncated,
           shouldContinue: _liveReads,
@@ -498,8 +502,9 @@ class LibraryPhotoIntake implements PhotoIntake {
     } catch (_) {}
     // Truncation is known BEFORE emission (query hit its cap): the unseen
     // tail is OLDER than everything returned, so no frontier — per-photo
-    // or final — may be reported for this scan.
-    final truncated = assets.length >= backfillQueryLimit;
+    // or final — may be reported for this scan. The cap counts what the
+    // library listed, even the photos Android then left out.
+    final truncated = listedCount(assets) >= backfillQueryLimit;
     // The newest day first (2026-10-19): a cold launch used to walk ~100
     // already-logged originals of the past week, oldest first, before the
     // first new photo — and a quick "did it log?" open was suspended long

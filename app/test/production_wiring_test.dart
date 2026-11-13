@@ -824,6 +824,44 @@ void main() {
     });
   });
 
+  // Review 171, C4: on Android the photo library keeps a photo imported
+  // late (taken before a scan's own cutoff, added after it) while it was
+  // taken inside the lookback window. Without the window's start the live
+  // watcher and the background run leave it to the next launch, and the
+  // library's own field is private to the intake.
+  test('createPhotoIntake gives the photo library the lookback window\'s '
+      'start', () {
+    expect(
+      _body(
+        _source('lib/services/photo/watcher.dart'),
+        'PhotoIntake createPhotoIntake(',
+      ),
+      _wired(
+        r'library: PhotoManagerLibrary\( windowStart: \(\) => '
+        r'lookbackCutoff\(DateTime\.now\(\), settings\.lookbackDays\)\),',
+      ),
+    );
+  });
+
+  // Review 171, C5: on Android, share intake reads and deletes only the
+  // copies MainActivity makes in the cache's share folder (share_intake
+  // _test pins the folder). Without this argument a path of the sender's
+  // making (a '..' name, a share's text) was read and deleted again: the
+  // meal database, the settings.
+  test('createShareIntake keeps Android\'s share intake to the share '
+      'folder', () {
+    expect(
+      _call(
+        _source('lib/services/photo/share_intake.dart'),
+        'createShareIntake(AppSettings settings) => ShareIntake(',
+      ),
+      _wired(
+        r'sharedFolder: Platform\.isAndroid \? androidSharedPhotoFolder '
+        r': null\)$',
+      ),
+    );
+  });
+
   // Behavioural where it can be: the factory's own fields are public.
   test(
     'createPhotoIntake hands passOver and onBackfillListed to the intake',

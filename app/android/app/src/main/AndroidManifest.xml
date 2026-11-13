@@ -32,10 +32,16 @@
         android:icon="@mipmap/ic_launcher"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules">
+        <!-- singleTask (review 171, C6): a share while the app runs reaches
+             the running engine through onNewIntent (MainActivity.kt, then
+             receive_sharing_intent's live stream). singleTop started a second
+             MainActivity for a share from the sharesheet, with its own engine
+             and a second set of services, in a task of its own. A share with
+             no instance running still starts one, as before. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:launchMode="singleTop"
+            android:launchMode="singleTask"
             android:taskAffinity=""
             android:theme="@style/LaunchTheme"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
