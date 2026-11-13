@@ -1,17 +1,44 @@
-/// HTTP failure classification for the lookup clients — the SAME rules, in
-/// the same order, as `_HttpVisionAnalyzer._post` in
-/// services/analyzer/provider_analyzers.dart (that class is library-private,
-/// so the rules are mirrored here and pinned to it by the group 'parity
-/// with the photo analyzers (probeKey)' in
-/// test/assist/clients/http_failure_test.dart, which runs one status/body
-/// matrix through both).
+/// HTTP failure classification for the lookup clients, in the same order
+/// as `_HttpVisionAnalyzer._post` in
+/// services/analyzer/provider_analyzers.dart, and the reply rules both of
+/// them read: what a status and body say about billing, the region, the
+/// key and the model is written once, below, so a new vendor signature is
+/// added in one place. Each ladder keeps its own order, outcomes and
+/// messages; test/assist/clients/http_failure_test.dart pins both (the
+/// group 'parity with the photo analyzers (probeKey)' runs one status/body
+/// matrix through both, and 'every rule of both ladders' each one's whole
+/// answer).
 library;
 
 import 'dart:convert';
 
 import 'lookup_client.dart';
 
-bool _isJsonObject(String body) {
+/// The key authenticated but the account cannot pay. The providers
+/// disagree on the status code: OpenAI 429 insufficient_quota, Zhipu GLM
+/// 429 code "1113" (余额不足, not a rate limit), Ark/Doubao 403
+/// AccountOverdueError (not an auth failure), 402 Payment Required
+/// (DeepSeek "Insufficient Balance", OpenRouter's out-of-credits answer),
+/// DashScope 400 Arrearage and Anthropic 400 "credit balance is too low"
+/// (not client bugs).
+bool isBillingExhausted(int status, String body) =>
+    (status == 429 &&
+        (body.contains('insufficient_quota') || body.contains('"1113"'))) ||
+    (status == 403 && body.contains('AccountOverdue')) ||
+    status == 402 ||
+    (status == 400 &&
+        (body.contains('Arrearage') ||
+            body.contains('credit balance is too low')));
+
+/// The provider does not serve the network's region (OpenAI's documented
+/// code `unsupported_country_region_territory`, at any status): the key was
+/// never judged.
+bool isRegionBlocked(String body) =>
+    body.contains('unsupported_country_region_territory');
+
+/// [body] decodes as a JSON object, as every provider's (and the owner's
+/// server's) error reply does.
+bool isJsonObjectBody(String body) {
   try {
     return jsonDecode(body) is Map;
   } on FormatException {
@@ -19,29 +46,30 @@ bool _isJsonObject(String body) {
   }
 }
 
+/// The provider rejected the key: a 401 or 403, or xAI's HTTP 400
+/// "Incorrect API key provided".
+bool isKeyRejected(int status, String body) =>
+    status == 401 ||
+    status == 403 ||
+    (status == 400 && body.contains('Incorrect API key'));
+
+/// Zhipu GLM's code "1211" (模型不存在): a wrong or retired model id, which
+/// it answers as a 400. Matched on the documented code only.
+bool isModelMissingCode(String body) => body.contains('"1211"');
+
 /// A non-200 answer from [providerLabel], classified.
 LookupFailure classifyHttpFailure(int status, String body,
     {required String providerLabel}) {
-  // Exhausted billing first: the providers disagree on the status code
-  // (OpenAI 429 insufficient_quota, DeepSeek/OpenRouter 402, Anthropic 400
-  // "credit balance is too low"). The key authenticated; the account
-  // cannot pay. Transient: a recharge fixes it.
-  final billingDead =
-      (status == 429 &&
-              (body.contains('insufficient_quota') ||
-                  body.contains('"1113"'))) ||
-          (status == 403 && body.contains('AccountOverdue')) ||
-          status == 402 ||
-          (status == 400 &&
-              (body.contains('Arrearage') ||
-                  body.contains('credit balance is too low')));
-  if (billingDead) {
+  // Exhausted billing first: the providers disagree on the status code.
+  // The key authenticated; the account cannot pay. Transient: a recharge
+  // fixes it.
+  if (isBillingExhausted(status, body)) {
     return LookupFailure(LookupFailureCode.billing,
         transient: true,
         message: 'Provider balance or credits exhausted — check your '
             '$providerLabel billing.');
   }
-  if (body.contains('unsupported_country_region_territory')) {
+  if (isRegionBlocked(body)) {
     return LookupFailure(LookupFailureCode.regionBlocked,
         transient: true,
         message: '$providerLabel is not available from your current network '
@@ -49,14 +77,12 @@ LookupFailure classifyHttpFailure(int status, String body,
   }
   // A non-JSON 401/403 is a portal or proxy answering for the provider:
   // the key was never judged.
-  if ((status == 401 || status == 403) && !_isJsonObject(body)) {
+  if ((status == 401 || status == 403) && !isJsonObjectBody(body)) {
     return LookupFailure(LookupFailureCode.captivePortal,
         transient: true,
         message: 'HTTP $status non-JSON reply (captive portal or proxy page)');
   }
-  if (status == 401 ||
-      status == 403 ||
-      (status == 400 && body.contains('Incorrect API key'))) {
+  if (isKeyRejected(status, body)) {
     return const LookupFailure(LookupFailureCode.auth,
         transient: false, message: 'key rejected');
   }
@@ -90,7 +116,7 @@ LookupFailure classifyHttpFailure(int status, String body,
           message: 'Web search is disabled for this $providerLabel '
               'organization.');
     }
-    if (body.contains('"1211"')) {
+    if (isModelMissingCode(body)) {
       return LookupFailure(LookupFailureCode.modelNotFound,
           transient: false,
           message: '$providerLabel model not found (unknown or retired).');

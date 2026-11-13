@@ -21,6 +21,13 @@ import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show formatRecentMealsBlock;
 import '../../core/prompts.dart';
+import '../assist/clients/http_failure.dart'
+    show
+        isBillingExhausted,
+        isJsonObjectBody,
+        isKeyRejected,
+        isModelMissingCode,
+        isRegionBlocked;
 import '../assist/clients/lookup_client.dart';
 import '../assist/clients/lookup_clients.dart';
 import '../assist/clients/lookup_contract_adapter.dart' show LookupRequest;
@@ -177,30 +184,17 @@ abstract class _HttpVisionAnalyzer
       throw _ProviderException('connection error: $e', transient: true);
     }
     if (resp.statusCode != 200) {
-      // Exhausted-billing signatures, checked BEFORE the auth
-      // classification because the providers disagree on the status code:
-      //   OpenAI    429 insufficient_quota
-      //   Zhipu GLM 429 code "1113" (余额不足 — also NOT a rate limit)
-      //   Ark/Doubao 403 AccountOverdueError — a 403 that is NOT auth;
-      //     treating it as "key rejected" burned the photo non-retryably
-      //     and told the user to fix a key that works (review 2026-07-29)
-      //   DashScope 400 Arrearage — a 400 that is NOT a client bug
-      //   Anthropic 400 "credit balance is too low" — likewise
-      // All mean "the key authenticated but the account needs money":
-      // transient (the photo stays eligible; a recharge fixes it) and
-      // quota-classed (validateKey accepts — the key itself is proven).
+      // Exhausted-billing signatures ([isBillingExhausted]), checked
+      // BEFORE the auth classification because the providers disagree on
+      // the status code: Ark/Doubao's 403 AccountOverdueError is NOT auth
+      // (treating it as "key rejected" burned the photo non-retryably and
+      // told the user to fix a key that works, review 2026-07-29), and
+      // DashScope's and Anthropic's 400s are NOT client bugs. All mean "the
+      // key authenticated but the account needs money": transient (the
+      // photo stays eligible; a recharge fixes it) and quota-classed
+      // (validateKey accepts — the key itself is proven).
       final body = resp.body;
-      final billingDead = (resp.statusCode == 429 &&
-              (body.contains('insufficient_quota') ||
-                  body.contains('"1113"'))) ||
-          (resp.statusCode == 403 && body.contains('AccountOverdue')) ||
-          // 402 Payment Required: DeepSeek "Insufficient Balance" and
-          // OpenRouter's out-of-credits answer. Never an auth failure.
-          resp.statusCode == 402 ||
-          (resp.statusCode == 400 &&
-              (body.contains('Arrearage') ||
-                  body.contains('credit balance is too low')));
-      if (billingDead) {
+      if (isBillingExhausted(resp.statusCode, body)) {
         throw _ProviderException(
             'Provider balance or credits exhausted — check your '
             '$providerLabel billing.',
@@ -215,7 +209,7 @@ abstract class _HttpVisionAnalyzer
       // "key rejected" sent the user — every ten minutes — to fix a key
       // that works. Matched on the documented code only. Retryable (a
       // different VPN node fixes it) but never in place.
-      if (body.contains('unsupported_country_region_territory')) {
+      if (isRegionBlocked(body)) {
         throw _ProviderException(
             '$providerLabel is not available from your current network '
             'region (check the VPN).',
@@ -231,17 +225,14 @@ abstract class _HttpVisionAnalyzer
       // interception as the 3xx below — never 'key rejected', which parks
       // the automatic scan for a day (review 2026-10-12).
       if ((resp.statusCode == 401 || resp.statusCode == 403) &&
-          !_isJsonObject(body)) {
+          !isJsonObjectBody(body)) {
         throw _ProviderException(
             'HTTP ${resp.statusCode} non-JSON reply (captive portal or proxy '
             'page)',
             transient: true,
             retryInPlace: false);
       }
-      if (resp.statusCode == 401 ||
-          resp.statusCode == 403 ||
-          // xAI reports a bad key as HTTP 400 "Incorrect API key provided".
-          (resp.statusCode == 400 && body.contains('Incorrect API key'))) {
+      if (isKeyRejected(resp.statusCode, body)) {
         throw const _ProviderException('key rejected',
             transient: false, auth: true);
       }
@@ -279,11 +270,10 @@ abstract class _HttpVisionAnalyzer
           throw _ProviderException(custom,
               transient: false, verbatimMessage: true);
         }
-        // A wrong / retired model id answered as a 400, not a 404: Zhipu
-        // GLM code "1211" (模型不存在). Matched on the documented code
-        // only, like "1113" above — the vendor's prose never reaches the
+        // A wrong / retired model id answered as a 400, not a 404
+        // ([isModelMissingCode]) — the vendor's prose never reaches the
         // message.
-        if (body.contains('"1211"')) {
+        if (isModelMissingCode(body)) {
           throw _ProviderException(
               notFound ??
                   '$providerLabel model not found — check the model name '
@@ -549,15 +539,9 @@ abstract class _HttpVisionAnalyzer
   }
 }
 
-/// True when [body] decodes as a JSON object — what every provider's (and
-/// the owner's server's) error reply is.
-bool _isJsonObject(String body) {
-  try {
-    return jsonDecode(body) is Map;
-  } on FormatException {
-    return false;
-  }
-}
+/// [isJsonObjectBody], by the name server_analyzer.dart (a part of this
+/// library) calls it.
+bool _isJsonObject(String body) => isJsonObjectBody(body);
 
 class _ProviderException implements Exception {
   const _ProviderException(this.message,
