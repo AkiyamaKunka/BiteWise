@@ -621,6 +621,7 @@ void main() {
         expect(dartCalls, 0, reason: 'the engine codec decoded it');
         final viaEngine = img.decodeJpg(out!)!;
         final viaDart = img.decodeJpg(pureDart(png)!)!;
+        expect((viaEngine.width, viaEngine.height), (64, 16));
         for (var band = 0; band < alphas.length; band++) {
           final e = viaEngine.getPixel(16 * band + 8, 8);
           final d = viaDart.getPixel(16 * band + 8, 8);
@@ -631,6 +632,91 @@ void main() {
           }
         }
       }
+    });
+
+    /// [original]'s history thumbnail through the Android chain, asserting
+    /// the engine codec made it (pure Dart never ran).
+    Future<img.Image> engineThumb(
+        WidgetTester tester, Uint8List original) async {
+      var dartCalls = 0;
+      final out = await tester.runAsync(() => decodeForUpload(original,
+          pureDart: makeMealThumb,
+          longSidePx: kThumbLongSidePx,
+          jpegQuality: kThumbJpegQuality,
+          isolate: (_, _) async {
+            dartCalls++;
+            return Uint8List(1);
+          },
+          ios: false,
+          headless: false));
+      expect(dartCalls, 0, reason: 'the engine codec made the thumbnail');
+      return img.decodeJpg(out!)!;
+    }
+
+    // Review 171, second pass: the codec subsamples a JPEG by at most 8x
+    // while it decodes, and shrinks the rest bilinearly with no mipmaps,
+    // reading only the pixels nearest each output pixel. For the 160 px
+    // thumbnail of a 4000 px photo that last step shrank it about 3x more,
+    // so a pattern finer than the thumbnail (a striped tablecloth, a woven
+    // placemat, a grill) folded into wide false stripes at full contrast:
+    // grey 9..246 here. Pure Dart averages every pixel a thumbnail pixel
+    // covers, and so does the engine path now (kEngineMinDecodeLongSidePx).
+    testWidgets('the thumbnail averages every pixel it covers: stripes too '
+        'fine for it come out flat grey, not moire', (tester) async {
+      // 12 px black, 12 px white across 4000 px: each thumbnail pixel
+      // covers 25 of them, about one whole black-and-white pair.
+      final src = img.Image(width: 4000, height: 200);
+      for (final p in src) {
+        final v = (p.x ~/ 12).isEven ? 0 : 255;
+        p.setRgb(v, v, v);
+      }
+      final jpeg = Uint8List.fromList(img.encodeJpg(src, quality: 95));
+      final thumb = await engineThumb(tester, jpeg);
+      expect((thumb.width, thumb.height), (kThumbLongSidePx, 8),
+          reason: 'the size pure Dart makes');
+      var (lo, hi) = (255, 0);
+      for (final p in thumb) {
+        final v = p.r.toInt();
+        if (v < lo) lo = v;
+        if (v > hi) hi = v;
+      }
+      expect(lo, greaterThan(100), reason: 'grey from $lo to $hi');
+      expect(hi, lessThan(156), reason: 'grey from $lo to $hi');
+    });
+
+    testWidgets('a cut-out on transparency is laid over white BEFORE it is '
+        'averaged down: no grey fringe', (tester) async {
+      // Opaque white and fully transparent (stored black) columns in turn,
+      // finer than the thumbnail: over white the whole picture is white.
+      // Averaged first (white at alpha 255 with black at alpha 0: mid-grey
+      // at half alpha) and laid over white after, each thumbnail pixel came
+      // out (191, 191, 191).
+      final src = img.Image(width: 320, height: 320, numChannels: 4);
+      for (final p in src) {
+        if (p.x.isEven) {
+          p
+            ..r = 255
+            ..g = 255
+            ..b = 255
+            ..a = 255;
+        } else {
+          p
+            ..r = 0
+            ..g = 0
+            ..b = 0
+            ..a = 0;
+        }
+      }
+      final thumb =
+          await engineThumb(tester, Uint8List.fromList(img.encodePng(src)));
+      expect((thumb.width, thumb.height), (kThumbLongSidePx, kThumbLongSidePx));
+      var darkest = 255;
+      for (final p in thumb) {
+        for (final c in [p.r, p.g, p.b]) {
+          if (c < darkest) darkest = c.toInt();
+        }
+      }
+      expect(darkest, greaterThan(250), reason: 'white everywhere');
     });
   });
 

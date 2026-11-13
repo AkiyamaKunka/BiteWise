@@ -36,7 +36,8 @@
 /// included: about 2 s of desktop CPU each for a 12 MP JPEG, and 4.5-8 s
 /// with a 0.75-1.3 GB peak each at 50 MP. The engine codec subsamples a
 /// JPEG while it decodes: 0.3-0.8 s for that 12 MP photo's analysis copy
-/// and about 50 ms for its thumbnail, on the same machine. Its output is
+/// and about 0.1 s for its thumbnail (box-averaged from
+/// [kEngineMinDecodeLongSidePx]), on the same machine. Its output is
 /// upright (the codec applies the EXIF Orientation), capped, and encoded
 /// from bare pixels, so it carries no EXIF ([decodeViaPlatform]).
 ///
@@ -73,6 +74,24 @@ const MethodChannel imageIOChannel = MethodChannel(imageIOChannelName);
 /// undecodable for this attempt (null), instead of holding its reservation
 /// until the OS kills the process.
 const Duration kPlatformDecodeTimeout = Duration(seconds: 8);
+
+/// The smallest long side the engine codec is asked for ([decodeViaPlatform]).
+/// A smaller one, the 160 px history thumbnail, is box-averaged down from
+/// this size in Dart.
+///
+/// The codec subsamples a JPEG by at most 8x while it decodes, and the
+/// engine shrinks the rest bilinearly from full size with no mipmaps
+/// (Skia's scalePixels; under Impeller a linear blit), so each output pixel
+/// reads only its nearest neighbours. Asked straight for the thumbnail of a
+/// 12-50 MP photo, that step shrank it 3-6x more, and a pattern finer than
+/// the thumbnail (a striped tablecloth, a woven placemat, a grill) folded
+/// into false stripes at full contrast (review 171, second pass). From four
+/// times the thumbnail, the box average ([img.Interpolation.average], the
+/// filter of pure Dart's [makeMealThumb]) reads every pixel: a 12 MP
+/// photo's thumbnail measures 35 dB PSNR against pure Dart's (27 dB
+/// before), in 80-130 ms of desktop CPU against pure Dart's 2 s. The
+/// analysis copy (1568 px) is still asked for at its own size.
+const int kEngineMinDecodeLongSidePx = 4 * kThumbLongSidePx;
 
 /// The native call's deadline in the app's engine: generous (ImageIO is
 /// CPU-only and finishes), but a reply that never comes must not hang the
@@ -241,9 +260,11 @@ Future<Uint8List?> normalizeAnyForAnalysis(Uint8List original) =>
         longSidePx: kAnalysisLongSidePx,
         jpegQuality: kAnalysisJpegQuality);
 
-/// The history thumbnail, through the same chain: ImageIO or the engine
-/// codec decode at the thumbnail size, never a second full-resolution
-/// decode of the original (pure Dart, their fallback, still makes one).
+/// The history thumbnail, through the same chain: ImageIO decodes at the
+/// thumbnail size, the engine codec at [kEngineMinDecodeLongSidePx] and
+/// box-averages the rest, as pure Dart does. Neither makes a second
+/// full-resolution decode of the original (pure Dart, their fallback,
+/// still makes one).
 Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
     decodeForUpload(original,
         pureDart: makeMealThumb,
@@ -401,6 +422,11 @@ Future<Uint8List?> downscaleViaImageIO(Uint8List original,
 /// a transparent pixel is laid over white once ([_encodeRgbaJpeg]), as
 /// pure Dart's encoder and ImageIO lay it.
 ///
+/// The codec is never asked for less than [kEngineMinDecodeLongSidePx]:
+/// below it (the history thumbnail) the pixels are box-averaged down to
+/// [longSidePx] in Dart, as pure Dart's thumbnail is, instead of being
+/// skipped by the codec's bilinear shrink.
+///
 /// Can wait forever where the engine's GPU is off (the iOS background
 /// engine; see the library docs) — callers go through [decodeForUpload],
 /// which never calls it there and bounds it everywhere else.
@@ -415,12 +441,15 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
     descriptor = await ui.ImageDescriptor.encoded(buffer);
     final w = descriptor.width, h = descriptor.height;
     if (w <= 0 || h <= 0) return null;
+    final decodePx = longSidePx > kEngineMinDecodeLongSidePx
+        ? longSidePx
+        : kEngineMinDecodeLongSidePx;
     int? targetW, targetH;
-    if ((w > h ? w : h) > longSidePx) {
+    if ((w > h ? w : h) > decodePx) {
       if (w >= h) {
-        targetW = longSidePx;
+        targetW = decodePx;
       } else {
-        targetH = longSidePx;
+        targetH = decodePx;
       }
     }
     codec = await descriptor.instantiateCodec(
@@ -431,8 +460,8 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
     if (data == null) return null;
     final rgba =
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    return await compute(
-        _encodeRgbaJpeg, (rgba, image.width, image.height, jpegQuality));
+    return await compute(_encodeRgbaJpeg,
+        (rgba, image.width, image.height, longSidePx, jpegQuality));
   } catch (_) {
     return null;
   } finally {
@@ -443,7 +472,8 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
   }
 }
 
-/// The codec's premultiplied RGBA → a JPEG at the given quality.
+/// The codec's premultiplied RGBA → a JPEG whose long side is at most the
+/// one asked, at the given quality.
 ///
 /// A JPEG has no alpha, so every pixel is laid over white first, once:
 /// from premultiplied values that is c + (255 − a) per channel, the same
@@ -451,9 +481,14 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
 /// and ImageIO's white fill gives. Until review 171's second pass these
 /// bytes went to the encoder as straight RGBA, and it laid them over white
 /// by their alpha a second time: half-transparent pixels came out too dark.
-Uint8List? _encodeRgbaJpeg((Uint8List, int, int, int) a) {
+///
+/// Pixels past the long side asked ([kEngineMinDecodeLongSidePx]) are then
+/// box-averaged down, as [makeMealThumb] does: after the white, so a
+/// transparent pixel averages in as the white it shows, not as the black
+/// the codec stores.
+Uint8List? _encodeRgbaJpeg((Uint8List, int, int, int, int) a) {
   try {
-    final (premultiplied, width, height, quality) = a;
+    final (premultiplied, width, height, longSidePx, quality) = a;
     // Clamped: a premultiplied channel never exceeds its alpha, so a sum
     // over 255 would only come from a malformed pixel; it must not wrap.
     final rgb = Uint8ClampedList(width * height * 3);
@@ -463,8 +498,16 @@ Uint8List? _encodeRgbaJpeg((Uint8List, int, int, int) a) {
       rgb[o + 1] = premultiplied[i + 1] + white;
       rgb[o + 2] = premultiplied[i + 2] + white;
     }
-    final opaque = img.Image.fromBytes(
+    var opaque = img.Image.fromBytes(
         width: width, height: height, bytes: rgb.buffer, numChannels: 3);
+    if ((width > height ? width : height) > longSidePx) {
+      // normalize.dart's _reencode, with makeMealThumb's filter.
+      opaque = width >= height
+          ? img.copyResize(opaque,
+              width: longSidePx, interpolation: img.Interpolation.average)
+          : img.copyResize(opaque,
+              height: longSidePx, interpolation: img.Interpolation.average);
+    }
     return Uint8List.fromList(img.encodeJpg(opaque, quality: quality));
   } catch (_) {
     return null;
