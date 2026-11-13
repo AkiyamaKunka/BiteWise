@@ -388,7 +388,7 @@ void main() {
     await tester.pumpWidget(host());
     await tester.tap(find.byKey(const Key('runCoverageCheck')));
     await tester.pumpAndSettle();
-    expect(find.textContaining('1 leftover photos (deducted from their meal)'),
+    expect(find.textContaining('1 leftover photo (deducted from its meal)'),
         findsOneWidget);
     expect(find.textContaining('0 not food'), findsOneWidget);
     expect(find.byKey(const Key('reanalyzeAllSkipped')), findsNothing);

@@ -332,12 +332,13 @@ When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
 - `app/test/ui/usual_copy_test.dart` pins the number of keys in each ARB
-  file: 809 on `main` since #22 merged, 882 on the iCloud Backup branch
+  file: 809 on `main` since #22 merged, 881 on the iCloud Backup branch
   merged with #33 (`feat/icloud-backup` adds 72 `backup*` and `import*`
-  keys, #33's source-link label 1, none shared). If either side adds keys
-  before both merge, change the number in that test to the merged count,
-  and here too (the test checks this line); both files must still have
-  the same keys. Do not drop the check.
+  keys, #33's source-link label 1, none shared; review r171 deleted
+  `bodyEmptyHintImperial`, the same text as `bodyEmptyHint`). If either
+  side adds keys before both merge, change the number in that test to the
+  merged count, and here too (the test checks this line); both files must
+  still have the same keys. Do not drop the check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
   with "the next photo you log that day (and with one taken before 4 a.m.
   the next day)", because #22 also sends the day before's meals with a
@@ -1196,7 +1197,8 @@ GitHub release notes warn about it either way.
 ## 8. Running a release (cheat sheet)
 
 (Before the first 1.7.0 tag: § 11, the iCloud container, or the iOS lane
-stops at "Check the Runner profile allows the iCloud container".)
+stops at "Check the Runner profile allows the iCloud container". Once
+1.7.0 is in the App Store: § 12, the support page.)
 
 ```bash
 # 1. in the shipping PR: app/pubspec.yaml  version: 1.7.0+9   (the +N is for hand builds only)
@@ -1463,3 +1465,50 @@ phone, with Part B and § 11.1 done:
     first).
 13. A file another device has not uploaded yet (error 4353) never makes
     Settings say *iCloud Drive is not available for Chopstats*.
+
+---
+
+## 12. When 1.7.0 ships: the support page
+
+`docs/SUPPORT.md` is the support URL of both store listings, so, like the
+README, it describes the version in the App Store (1.6.0 today). What only
+`main` has is written here instead and goes onto the page in a PR once
+1.7.0 is in the App Store. The labels are the app's on `main`:
+`app/test/ui/copy_consistency_test.dart` checks them against `app_en.arb`,
+and checks that `SUPPORT.md` does not name them yet; drop that check
+("names no 1.7.0 control …") in the same PR. If 1.7.0 ships without Part B
+(§ 11), leave out the iCloud Backup text (steps 1, 3 and 4) and keep
+step 2.
+
+1. **Intro**: "your meal log stays on your phone" becomes "your meal log
+   stays on your phone (and, with iCloud Backup, in your own iCloud
+   Drive)".
+2. **Export and import**, under *Your data*: Settings › Your Data ›
+   **Export Data…** "saves your meals and their pictures, weight, body
+   measurements, workouts and activities, fitness profile and the list of
+   processed photos to a file you can share or keep (API keys are not
+   included)": an export now carries the meal pictures, with the data a
+   camera can embed in them removed. The Import sentence becomes:
+   "**Import Data…** restores it: tap **Choose File…** and pick the file
+   (a full export with its pictures is too big for the clipboard), paste a
+   small export's text, or tap **Import from clipboard**. Meals already
+   here are kept, and pictures are added to meals that have none."
+3. **A new bullet after Export**: "**iCloud Backup** (Settings › Your
+   Data): on by default, after a notice; nothing is uploaded before you
+   answer it. It copies everything an export holds, the meal pictures
+   included, to a *Chopstats* folder in your own iCloud Drive, and after
+   a reinstall, or on a new iPhone with the same Apple Account, Chopstats
+   offers to restore the backup. API keys are never included, and the
+   developer receives nothing. Turning the **iCloud Backup** switch off
+   asks whether to **Keep the Backup in iCloud** or **Delete It…**."
+4. **Delete everything** gains, after the backups sentence: "The copy
+   iCloud Backup keeps in your iCloud Drive stays too. Uninstalling does
+   not delete it: delete it in Settings › Your Data (turning **iCloud
+   Backup** off offers **Delete It…**; with the switch already off, tap
+   **Delete iCloud Backup…**), or in the Files app under iCloud Drive ›
+   Chopstats."
+
+The README has its own list (*Lines tied to a release*, in its maintainer
+notes; go through all of it, for README.zh-CN.md too) and so do the slides
+(`docs/readme/src/README.md`, *Slides tied to a release*);
+`docs/PRIVACY.md` already describes 1.7.0.

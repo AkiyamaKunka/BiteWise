@@ -885,7 +885,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectionTypeFooter.
   ///
   /// In en, this message translates to:
-  /// **'An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.'**
+  /// **'An API key stays on this phone. Some providers have a free tier; others charge your account for each request. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.'**
   String get connectionTypeFooter;
 
   /// No description provided for @typeApiKey.
@@ -1101,7 +1101,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiInactiveFooter.
   ///
   /// In en, this message translates to:
-  /// **'Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.'**
+  /// **'Your own server is currently active. Pick a provider above to switch to an API key.'**
   String get apiInactiveFooter;
 
   /// No description provided for @subPageTitle.
@@ -1457,12 +1457,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'How body weight and measurements are shown and entered. Food stays in grams and kcal either way.'**
   String get unitsFooter;
-
-  /// bodyEmptyHint for imperial units (en-only surface; zh never renders imperial).
-  ///
-  /// In en, this message translates to:
-  /// **'Tap Log to record your weight or your waist, chest and hip measurements.'**
-  String get bodyEmptyHintImperial;
 
   /// No description provided for @bodySince.
   ///
@@ -3336,7 +3330,7 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get covVerbRetry;
 
-  /// No description provided for @covProgLogging.
+  /// The bulk action's name at the start of its done or stopped snackbar (covDone, covDoneFailures, covStopped, covStoppedBecause, covStoppedLast). Chinese uses the verb itself (记录), not an in-progress form.
   ///
   /// In en, this message translates to:
   /// **'Logging'**
@@ -3399,13 +3393,13 @@ abstract class AppLocalizations {
   /// No description provided for @covDone.
   ///
   /// In en, this message translates to:
-  /// **'{label} done ({count} photos).'**
+  /// **'{label} done ({count, plural, =1{1 photo} other{{count} photos}}).'**
   String covDone(String label, int count);
 
   /// No description provided for @covDoneFailures.
   ///
   /// In en, this message translates to:
-  /// **'{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).'**
+  /// **'{label} done — {failures} of {count} could not be processed (kept in the Failed earlier list for retry).'**
   String covDoneFailures(String label, int failures, int count);
 
   /// No description provided for @covDaysShort.
@@ -3417,7 +3411,7 @@ abstract class AppLocalizations {
   /// No description provided for @covLoggedAsMeals.
   ///
   /// In en, this message translates to:
-  /// **'{count} logged as meals'**
+  /// **'{count, plural, =1{1 logged as a meal} other{{count} logged as meals}}'**
   String covLoggedAsMeals(int count);
 
   /// No description provided for @covNotFoodCount.
@@ -3429,7 +3423,7 @@ abstract class AppLocalizations {
   /// No description provided for @covLeftoverCount.
   ///
   /// In en, this message translates to:
-  /// **'{count} leftover photos (deducted from their meal)'**
+  /// **'{count, plural, =1{1 leftover photo (deducted from its meal)} other{{count} leftover photos (deducted from their meal)}}'**
   String covLeftoverCount(int count);
 
   /// No description provided for @covFailedCount.
@@ -3897,7 +3891,7 @@ abstract class AppLocalizations {
   /// shown is the model's raw meal_index, already truncated to 40 chars.
   ///
   /// In en, this message translates to:
-  /// **'❌ Invalid meal index ({shown}). You have {count} recent meals.'**
+  /// **'❌ Invalid meal index ({shown}). You have {count, plural, =1{1 recent meal} other{{count} recent meals}}.'**
   String nlInvalidMealIndex(String shown, int count);
 
   /// No description provided for @nlCorrectedMeal.
@@ -5042,7 +5036,7 @@ abstract class AppLocalizations {
   /// Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, iCloud Drive is not available for the app, or backups are blocked (another iPhone's backup, a file changed outside the app or unreadable) or paused (the backup gone from iCloud, a much smaller record): nothing is copied, so it says to export a file before reinstalling or changing phones.
   ///
   /// In en, this message translates to:
-  /// **'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
+  /// **'Nothing is being copied to iCloud Drive, so your meals would not come back after a reinstall, or on a new iPhone that does not get this iPhone\'s data from a backup or a transfer. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.'**
   String get backupICloudFooterOff;
 
   /// Footer of Settings › Your Data on Android (there is no automatic backup file on Android).

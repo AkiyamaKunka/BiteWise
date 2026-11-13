@@ -544,7 +544,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectionTypeFooter =>
-      'An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.';
+      'An API key stays on this phone. Some providers have a free tier; others charge your account for each request. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.';
 
   @override
   String get typeApiKey => 'API Key';
@@ -679,7 +679,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiInactiveFooter =>
-      'Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.';
+      'Your own server is currently active. Pick a provider above to switch to an API key.';
 
   @override
   String get subPageTitle => 'Your own server';
@@ -882,10 +882,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get unitsFooter =>
       'How body weight and measurements are shown and entered. Food stays in grams and kcal either way.';
-
-  @override
-  String get bodyEmptyHintImperial =>
-      'Tap Log to record your weight or your waist, chest and hip measurements.';
 
   @override
   String bodySince(String date) {
@@ -2163,12 +2159,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covDone(String label, int count) {
-    return '$label done ($count photos).';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count photos',
+      one: '1 photo',
+    );
+    return '$label done ($_temp0).';
   }
 
   @override
   String covDoneFailures(String label, int failures, int count) {
-    return '$label done — $failures of $count could not be processed (kept in the Failed list for retry).';
+    return '$label done — $failures of $count could not be processed (kept in the Failed earlier list for retry).';
   }
 
   @override
@@ -2178,7 +2180,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covLoggedAsMeals(int count) {
-    return '$count logged as meals';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count logged as meals',
+      one: '1 logged as a meal',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -2188,7 +2196,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covLeftoverCount(int count) {
-    return '$count leftover photos (deducted from their meal)';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count leftover photos (deducted from their meal)',
+      one: '1 leftover photo (deducted from its meal)',
+    );
+    return '$_temp0';
   }
 
   @override
@@ -2507,7 +2521,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String nlInvalidMealIndex(String shown, int count) {
-    return '❌ Invalid meal index ($shown). You have $count recent meals.';
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recent meals',
+      one: '1 recent meal',
+    );
+    return '❌ Invalid meal index ($shown). You have $_temp0.';
   }
 
   @override
@@ -3246,7 +3266,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupICloudFooterOff =>
-      'Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.';
+      'Nothing is being copied to iCloud Drive, so your meals would not come back after a reinstall, or on a new iPhone that does not get this iPhone\'s data from a backup or a transfer. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.';
 
   @override
   String get backupAndroidFooter =>
