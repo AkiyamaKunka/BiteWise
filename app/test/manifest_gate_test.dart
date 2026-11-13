@@ -665,7 +665,7 @@ void main() {
   // from <application>. Exclude-only: an <include> would silently stop
   // backing up everything else the app keeps.
   test('Android excludes the local store from cloud backup and device '
-      'transfer, and nothing else', () {
+      'transfer, and includes nothing', () {
     final main = '${_appRoot().path}/android/app/src/main';
     final manifest = File('$main/AndroidManifest.xml').readAsStringSync();
     final application =
@@ -705,6 +705,71 @@ void main() {
     expect(exclude.hasMatch(full), isTrue,
         reason: 'fullBackupContent does not exclude $localStoreDirName/');
     expect(full, isNot(contains('<include')));
+  });
+
+  // flutter_secure_storage's files hold the API keys encrypted with a key
+  // in this phone's Android Keystore, which never leaves the phone: a copy
+  // restored from a cloud backup or carried to a new phone can never be
+  // read there (and the plugin's README asks apps to exclude them). Every
+  // one of its shared_prefs files stays out of both backup schemes and the
+  // Android 11-and-lower rules, so a restored phone starts with no keys
+  // and asks for them (AndroidSecureKeyStore covers a copy that already
+  // got through). Paths take no wildcards, hence each file by name. No
+  // disableIfNoEncryptionCapabilities: an owner decision of its own.
+  test("Android keeps flutter_secure_storage's files out of backup and "
+      'device transfer', () {
+    final main = '${_appRoot().path}/android/app/src/main';
+    const files = [
+      'FlutterSecureStorage.xml',
+      'FlutterSecureKeyStorage.xml',
+      'FlutterSecureStorageConfiguration.xml',
+      'FlutterSecureStorageConfiguration:FlutterSecureStorage.xml',
+    ];
+    String section(String xml, String tag) {
+      final body = RegExp('<$tag(?:\\s[^>]*)?>(.*?)</$tag>', dotAll: true)
+          .firstMatch(_uncommented(xml))
+          ?.group(1);
+      expect(body, isNotNull, reason: '<$tag> missing');
+      return body!;
+    }
+
+    final extraction =
+        File('$main/res/xml/data_extraction_rules.xml').readAsStringSync();
+    final legacy = File('$main/res/xml/backup_rules.xml').readAsStringSync();
+    final sections = {
+      'cloud-backup': section(extraction, 'cloud-backup'),
+      'device-transfer': section(extraction, 'device-transfer'),
+      'full-backup-content': section(legacy, 'full-backup-content'),
+    };
+    sections.forEach((name, body) {
+      for (final file in files) {
+        expect(
+            RegExp('<exclude\\s+domain="sharedpref"\\s+'
+                    'path="${RegExp.escape(file)}"\\s*/>')
+                .hasMatch(body),
+            isTrue,
+            reason: '$name does not exclude $file');
+      }
+      expect(body, isNot(contains('<include')), reason: name);
+    });
+    expect(extraction, isNot(contains('disableIfNoEncryptionCapabilities')));
+
+    // The names, in the plugin version pub resolved: the data and the
+    // wrapped-key files (FlutterSecureStorageConfig.java), the saved
+    // cipher settings (NamespacedConfigSource.java).
+    final java = '${_pluginRoot('flutter_secure_storage')}/android/src/main/'
+        'java/com/it_nomads/fluttersecurestorage';
+    final config =
+        File('$java/FlutterSecureStorageConfig.java').readAsStringSync();
+    expect(config,
+        contains('DEFAULT_PREF_NAME = "FlutterSecureStorage";'));
+    expect(config, contains(': "FlutterSecureKeyStorage";'));
+    final source =
+        File('$java/NamespacedConfigSource.java').readAsStringSync();
+    expect(source,
+        contains('LEGACY_GLOBAL_CONFIG_NAME = "FlutterSecureStorageConfiguration";'));
+    expect(source,
+        contains('return "FlutterSecureStorageConfiguration:" + sharedPreferencesName;'));
   });
 
   // Design R7a: while restaurant lookup uses the photo location, the app

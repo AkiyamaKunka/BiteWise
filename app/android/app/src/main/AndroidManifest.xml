@@ -30,9 +30,10 @@
          permission. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Backup: everything is backed up as before except files/bitewise_local/,
-         the backup-excluded local store (lib/services/local_store.dart):
-         res/xml/data_extraction_rules.xml on Android 12+, backup_rules.xml
-         below it. -->
+         the backup-excluded local store (lib/services/local_store.dart),
+         and flutter_secure_storage's files (the API keys, which no other
+         phone could decrypt): res/xml/data_extraction_rules.xml on Android
+         12+, backup_rules.xml below it. -->
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"

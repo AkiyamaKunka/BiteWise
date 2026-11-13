@@ -3,14 +3,28 @@
      store (lib/services/local_store.dart, getApplicationSupportDirectory()
      = files/) holds state that hints at location or is only valid on this
      device, so it never goes to a cloud backup or to a new phone.
+     flutter_secure_storage's shared_prefs files hold the API keys,
+     encrypted with a key in this phone's Android Keystore, which never
+     leaves it: a copy could never be read elsewhere, so they stay here too
+     and a restored phone asks for its keys (the plugin's README, "Disabling
+     Auto Backup"). Paths take no wildcards: each file by name, from
+     FlutterSecureStorageConfig.java and NamespacedConfigSource.java.
      Exclude-only on purpose: with no <include>, everything else is backed
      up and transferred exactly as before. backup_rules.xml says the same
      for Android 11 and lower. -->
 <data-extraction-rules>
     <cloud-backup>
         <exclude domain="file" path="bitewise_local/"/>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+        <exclude domain="sharedpref" path="FlutterSecureKeyStorage.xml"/>
+        <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration.xml"/>
+        <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration:FlutterSecureStorage.xml"/>
     </cloud-backup>
     <device-transfer>
         <exclude domain="file" path="bitewise_local/"/>
+        <exclude domain="sharedpref" path="FlutterSecureStorage.xml"/>
+        <exclude domain="sharedpref" path="FlutterSecureKeyStorage.xml"/>
+        <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration.xml"/>
+        <exclude domain="sharedpref" path="FlutterSecureStorageConfiguration:FlutterSecureStorage.xml"/>
     </device-transfer>
 </data-extraction-rules>
