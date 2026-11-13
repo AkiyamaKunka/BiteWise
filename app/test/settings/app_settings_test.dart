@@ -157,6 +157,100 @@ void main() {
     expect(s.model, AppSettings.defaultModel);
   });
 
+  // Spec §8's rule for every provider's model string: trimmed, blank means
+  // that provider's default, kept under its own key. All nine are pinned
+  // (only Gemini, Qwen and OpenRouter were), so one shared setter cannot
+  // cross two providers' keys or defaults (review 171).
+  group("every provider's model string", () {
+    final models = <(
+      String key,
+      String fallback,
+      String Function(AppSettings) get,
+      Future<void> Function(AppSettings, String) set,
+    )>[
+      ('settings.model', AppSettings.defaultModel, (s) => s.model,
+          (s, v) => s.setModel(v)),
+      ('settings.openai_model', AppSettings.defaultOpenaiModel,
+          (s) => s.openaiModel, (s, v) => s.setOpenaiModel(v)),
+      ('settings.anthropic_model', AppSettings.defaultAnthropicModel,
+          (s) => s.anthropicModel, (s, v) => s.setAnthropicModel(v)),
+      ('settings.qwen_model', AppSettings.defaultQwenModel,
+          (s) => s.qwenModel, (s, v) => s.setQwenModel(v)),
+      ('settings.doubao_model', AppSettings.defaultDoubaoModel,
+          (s) => s.doubaoModel, (s, v) => s.setDoubaoModel(v)),
+      ('settings.glm_model', AppSettings.defaultGlmModel,
+          (s) => s.glmModel, (s, v) => s.setGlmModel(v)),
+      ('settings.deepseek_model', AppSettings.defaultDeepseekModel,
+          (s) => s.deepseekModel, (s, v) => s.setDeepseekModel(v)),
+      ('settings.xai_model', AppSettings.defaultXaiModel,
+          (s) => s.xaiModel, (s, v) => s.setXaiModel(v)),
+      ('settings.openrouter_model', AppSettings.defaultOpenrouterModel,
+          (s) => s.openrouterModel, (s, v) => s.setOpenrouterModel(v)),
+    ];
+
+    test('a fresh install has each default', () async {
+      final (s, _, _) = await freshSettings();
+      for (final (key, fallback, get, _) in models) {
+        expect(get(s), fallback, reason: key);
+      }
+    });
+
+    test("a value is trimmed, kept under its own key and read back by a "
+        "second load, and leaves every other provider's alone", () async {
+      final (s, prefs, keys) = await freshSettings();
+      for (final (key, _, _, set) in models) {
+        await set(s, '  $key-custom  ');
+      }
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      for (final (key, _, get, _) in models) {
+        expect(get(s), '$key-custom', reason: key);
+        expect(prefs.getString(key), '$key-custom', reason: key);
+        expect(get(again), '$key-custom', reason: key);
+      }
+    });
+
+    test('blank resets to the default, which is what is stored', () async {
+      final (s, prefs, keys) = await freshSettings();
+      for (final (key, fallback, get, set) in models) {
+        await set(s, '$key-custom');
+        await set(s, ' \t ');
+        expect(get(s), fallback, reason: key);
+        expect(prefs.getString(key), fallback, reason: key);
+      }
+      final again = await AppSettings.load(prefs: prefs, keyStore: keys);
+      for (final (key, fallback, get, _) in models) {
+        expect(get(again), fallback, reason: key);
+      }
+    });
+
+    test('a blank stored value loads as the default, a padded one trimmed',
+        () async {
+      for (final stored in ['', '   ']) {
+        final (s, _, _) = await freshSettings(
+            initial: {for (final (key, _, _, _) in models) key: stored});
+        for (final (key, fallback, get, _) in models) {
+          expect(get(s), fallback, reason: '$key = "$stored"');
+        }
+      }
+      final (s, _, _) = await freshSettings(
+          initial: {for (final (key, _, _, _) in models) key: ' $key-x '});
+      for (final (key, _, get, _) in models) {
+        expect(get(s), '$key-x', reason: key);
+      }
+    });
+
+    test('each edit notifies once', () async {
+      final (s, _, _) = await freshSettings();
+      var notified = 0;
+      s.addListener(() => notified++);
+      for (final (key, _, _, set) in models) {
+        notified = 0;
+        await set(s, 'm');
+        expect(notified, 1, reason: key);
+      }
+    });
+  });
+
   test('blank dietary profile reads back as null', () async {
     final (s, prefs, keys) = await freshSettings();
     await s.setDietaryProfile('  ');

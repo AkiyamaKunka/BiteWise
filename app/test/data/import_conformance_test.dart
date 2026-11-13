@@ -443,6 +443,69 @@ void main() {
     expect(rows, hasLength(2));
   });
 
+  // No screen writes workouts or fitness_profile (they arrive in a file
+  // from the server era), and no test re-imported them or manual
+  // activities, so those identity rules were unpinned (review 171).
+  group('workouts, activities and the fitness profile', () {
+    Future<void> workout(String date, String loggedAt, String? type) =>
+        dbA.insert('workouts', {
+          'chat_id': localChatId,
+          'date': date,
+          'workout_type': type,
+          'duration_min': 45,
+          'logged_at': loggedAt,
+        });
+
+    test('the same file twice adds nothing, and neither does importing it '
+        'back', () async {
+      await workout('2026-07-30', '2026-07-30T07:00:00', 'run');
+      // The same day, later: a second workout, not a copy of the first.
+      await workout('2026-07-30', '2026-07-30T18:00:00', 'run');
+      // The same instant, another kind: its own row too.
+      await workout('2026-07-30', '2026-07-30T18:00:00', 'strength');
+      // No kind at all still dedupes (NULL reads as '').
+      await workout('2026-07-31', '2026-07-31T07:00:00', null);
+      // Manual activities carry a NULL external_id, so no UNIQUE catches
+      // a second copy: only the import's own identity does.
+      await daoA.saveActivity('2026-07-30', steps: 3000, activeCalories: 120);
+      await daoA.saveActivity('2026-07-30', steps: 9000, activeCalories: 480);
+      await dbA.insert('fitness_profile',
+          {'chat_id': localChatId, 'target_calories': 2100});
+      final payload = await daoA.exportJson();
+
+      final first = await daoB.importJson(payload);
+      expect(first.added['workouts'], 4);
+      expect(first.added['activities'], 2);
+      expect(first.added['fitness_profile'], 1);
+
+      final again = await daoB.importJson(payload);
+      expect(again.totalAdded, 0);
+      expect(again.skipped['workouts'], 4);
+      expect(again.skipped['activities'], 2);
+      expect(again.skipped['fitness_profile'], 1);
+      expect(await dbB.query('workouts'), hasLength(4));
+      expect(await dbB.query('activities'), hasLength(2));
+
+      final back = await daoA.importJson(await daoB.exportJson());
+      expect(back.totalAdded, 0);
+      expect(await dbA.query('workouts'), hasLength(4));
+      expect(await dbA.query('activities'), hasLength(2));
+    });
+
+    test('an imported profile never replaces the one already here',
+        () async {
+      await dbA.insert('fitness_profile',
+          {'chat_id': localChatId, 'target_calories': 2500});
+      await dbB.insert('fitness_profile',
+          {'chat_id': localChatId, 'target_calories': 2000});
+      final summary = await daoB.importJson(await daoA.exportJson());
+      expect(summary.added['fitness_profile'], 0);
+      expect(summary.skipped['fitness_profile'], 1);
+      expect((await dbB.query('fitness_profile')).single['target_calories'],
+          2000);
+    });
+  });
+
   test('a row rejected by SQLite counts as skipped, never as added',
       () async {
     // INSERT OR IGNORE swallows constraint violations and returns 0
