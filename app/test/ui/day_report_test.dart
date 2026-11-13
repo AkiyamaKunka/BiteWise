@@ -269,7 +269,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: TodayScreen(
-                key: UniqueKey(), dao: dao, executor: FakeExecutor()))));
+                key: UniqueKey(), dao: dao))));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shareDayButton')), findsNothing,
         reason: 'an empty day has nothing to report');
@@ -281,7 +281,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
         home: Scaffold(
             body: TodayScreen(
-                key: UniqueKey(), dao: dao, executor: FakeExecutor()))));
+                key: UniqueKey(), dao: dao))));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('shareDayButton')), findsOneWidget);
   });

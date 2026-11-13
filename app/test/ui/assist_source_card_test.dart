@@ -905,7 +905,6 @@ void main() {
           home: Scaffold(
             body: TodayScreen(
               dao: dao,
-              executor: FakeExecutor(),
               restaurantAssist: assist.controls(),
               settings: FakeSettings(),
             ),

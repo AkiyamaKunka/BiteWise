@@ -554,7 +554,6 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
           TodayScreen(
               key: _todayKey,
               dao: s.dao,
-              executor: s.executor,
               thumbs: s.thumbs,
               garminDaily: s.garminDaily,
               mealInUse: s.mealInUse,

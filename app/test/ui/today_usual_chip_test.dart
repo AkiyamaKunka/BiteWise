@@ -139,7 +139,6 @@ void main() {
         body: TodayScreen(
           key: UniqueKey(),
           dao: dao,
-          executor: FakeExecutor(),
           usual: usual,
           now: now,
         ),

@@ -76,7 +76,6 @@ Widget _today(String lang) {
   return Scaffold(
     body: TodayScreen(
       dao: d,
-      executor: FakeExecutor(),
       thumbs: MealThumbResolver(dao: d),
       garminDaily: (date) async => const GarminDaily(
           activeCalories: 512, steps: 8000, distanceM: 6200, activityCount: 1),
@@ -231,7 +230,7 @@ void main() {
         ..seed(_meal(2, 1, 2010))
         ..seed(_meal(3, 2, 1760));
       await pumpApp(
-          tester, Scaffold(body: TodayScreen(dao: dao, executor: FakeExecutor())));
+          tester, Scaffold(body: TodayScreen(dao: dao)));
       expect(find.byKey(const Key('todayTotalKcal')), findsNothing);
       expect(find.text('500 kcal'), findsNothing);
       expect(find.text('500'), findsNWidgets(2));
@@ -251,7 +250,7 @@ void main() {
     testWidgets('an empty first day: the ring, the meal count and the empty '
         'state, with no Eaten row repeating the centre', (tester) async {
       await pumpApp(tester,
-          Scaffold(body: TodayScreen(dao: FakeDao(), executor: FakeExecutor())));
+          Scaffold(body: TodayScreen(dao: FakeDao())));
       expect(tester.takeException(), isNull);
       expect(find.byType(ArithmeticRow), findsNothing);
       expect(find.text('0 meals today'), findsOneWidget);
@@ -308,7 +307,7 @@ void main() {
         final dao = _FailingDao();
         await pumpApp(
             tester,
-            Scaffold(body: TodayScreen(dao: dao, executor: FakeExecutor())),
+            Scaffold(body: TodayScreen(dao: dao)),
             locale: Locale(lang));
         expect(find.byKey(const Key('todayLoadError')), findsOneWidget);
         expect(
@@ -365,7 +364,7 @@ void main() {
       final handle = tester.ensureSemantics();
       final dao = FakeDao()..seed(_meal(1, 0, 450, title: 'Tomato egg rice'));
       await pumpApp(
-          tester, Scaffold(body: TodayScreen(dao: dao, executor: FakeExecutor())));
+          tester, Scaffold(body: TodayScreen(dao: dao)));
       final node = tester.getSemantics(_inMeal(1, 'mealCardTitle'));
       expect(node.flagsCollection.isButton, isTrue);
       expect('Tomato egg rice'.allMatches(node.label), hasLength(1));
@@ -432,7 +431,6 @@ void main() {
           Scaffold(
             body: TodayScreen(
                 dao: d,
-                executor: FakeExecutor(),
                 thumbs: MealThumbResolver(dao: d)),
           ),
           size: _se,
