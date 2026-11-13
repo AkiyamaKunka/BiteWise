@@ -497,13 +497,19 @@ void main() {
   // the sheet on 'Saving…' with Save and Delete disabled and nothing said.
   group('when the database fails', () {
     Future<_FlakyBodyDao> pumpFlaky(WidgetTester tester,
-        {bool failReads = false, Locale? locale}) async {
+        {bool failReads = false,
+        Locale? locale,
+        bool withMeasurements = false}) async {
       tester.view.physicalSize = const Size(800, 2400);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final dao = _FlakyBodyDao()..failReads = failReads;
       dao.weightsByDate['2026-07-28'] =
           const WeightEntry('2026-07-28', 82.4, source: 'manual');
+      if (withMeasurements) {
+        dao.measurementsByDate['2026-07-28'] =
+            const BodyMeasurements('2026-07-28', waistCm: 84);
+      }
       await tester.pumpWidget(MaterialApp(
         locale: locale,
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -688,6 +694,169 @@ void main() {
         }
       });
     }
+
+    // Review 1.7.1, second pass: a failed DELETE had no failure path
+    // either. From a history row's swipe or its VoiceOver Delete the error
+    // went uncaught and the row slid back with nothing said; from the
+    // sheet's Delete, the same, with the sheet left as it was.
+    const deleteFailed = "Couldn't delete. Try again.";
+
+    Future<void> swipeDelete(WidgetTester tester, String date) async {
+      await tester.drag(
+          find.byKey(Key('bodyDay$date')), const Offset(-500, 0));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a failed delete from a swipe keeps the day and says so',
+        (tester) async {
+      final dao = await pumpFlaky(tester);
+      dao.failWeightDeletes = true;
+      await swipeDelete(tester, '2026-07-28');
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('bodyDay2026-07-28')), findsOneWidget,
+          reason: 'the row is back in place');
+      expect(find.text(deleteFailed), findsOneWidget);
+      expect(find.textContaining('disk I/O'), findsNothing,
+          reason: 'the raw error belongs in the log');
+      expect(dao.weightsByDate.keys, ['2026-07-28']);
+
+      dao.failWeightDeletes = false;
+      await swipeDelete(tester, '2026-07-28');
+      expect(dao.weightsByDate, isEmpty);
+      expect(find.byKey(const Key('bodyEmpty')), findsOneWidget);
+    });
+
+    testWidgets('a failed delete from the VoiceOver action says so too',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final dao = await pumpFlaky(tester);
+      dao.failWeightDeletes = true;
+      final node =
+          tester.getSemantics(find.byKey(const Key('bodyDay2026-07-28')));
+      node.owner!.performAction(
+          node.id,
+          SemanticsAction.customAction,
+          CustomSemanticsAction.getIdentifier(
+              const CustomSemanticsAction(label: 'Delete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.text(deleteFailed), findsOneWidget);
+      expect(find.byKey(const Key('bodyDay2026-07-28')), findsOneWidget);
+      expect(dao.weightsByDate.keys, ['2026-07-28']);
+      handle.dispose();
+    });
+
+    testWidgets('a failed delete from the sheet keeps the sheet open, says '
+        'so in it, and Delete works again', (tester) async {
+      final dao = await pumpFlaky(tester);
+      await tester.tap(find.byKey(const Key('bodyDay2026-07-28')));
+      await tester.pumpAndSettle();
+      dao.failWeightDeletes = true;
+      await tester.tap(find.byKey(const Key('bodySheetDelete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(LogBodySheet), findsOneWidget,
+          reason: 'the sheet stays open');
+      expect(tester.widget<Text>(find.byKey(const Key('bodySheetError'))).data,
+          deleteFailed);
+      expect(find.byType(SnackBar), findsNothing,
+          reason: 'said in the sheet, not under it');
+      expect(find.textContaining('disk I/O'), findsNothing);
+      expect(dao.weightsByDate.keys, ['2026-07-28']);
+
+      dao.failWeightDeletes = false;
+      await tester.tap(find.byKey(const Key('bodySheetDelete')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LogBodySheet), findsNothing);
+      expect(dao.weightsByDate, isEmpty);
+      expect(find.byKey(const Key('bodyEmpty')), findsOneWidget);
+    });
+
+    testWidgets('a delete that fails part-way shows what is left',
+        (tester) async {
+      final dao = await pumpFlaky(tester, withMeasurements: true);
+      expect(find.byKey(const Key('bodyWeightCard')), findsOneWidget);
+      dao.failMeasurementDeletes = true;
+      await swipeDelete(tester, '2026-07-28');
+      expect(tester.takeException(), isNull);
+      expect(find.text(deleteFailed), findsOneWidget);
+      expect(dao.weightsByDate, isEmpty, reason: 'the weight went first');
+      expect(find.byKey(const Key('bodyWeightCard')), findsNothing,
+          reason: 'the page shows it gone');
+      expect(find.byKey(const Key('bodyMeasurementsCard')), findsOneWidget);
+      expect(find.byKey(const Key('bodyDay2026-07-28')), findsOneWidget);
+    });
+
+    testWidgets('zh: the delete failure is Chinese', (tester) async {
+      final dao = await pumpFlaky(tester, locale: const Locale('zh'));
+      dao.failWeightDeletes = true;
+      await swipeDelete(tester, '2026-07-28');
+      expect(find.text('没能删除，请再试一次。'), findsOneWidget);
+    });
+
+    // sqflite's text for a failed delete carries the statement and its
+    // arguments too (the day). As the save path, the delete logs only the
+    // error's type.
+    testWidgets('a failed delete logs its type, never the statement or the '
+        'day', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      sqfliteFfiInit();
+      databaseFactoryOrNull = createDatabaseFactoryFfi(noIsolate: true);
+      final db = await openAppDatabase(path: inMemoryDatabasePath);
+      try {
+        final dao = SqfliteMealsDao(db, clock: () => clock);
+        await dao.saveBodyWeight('2026-08-02', 81.6, source: 'manual');
+        await db.execute('CREATE TRIGGER refuse_delete BEFORE DELETE ON '
+            "body_weight BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END");
+
+        // The premise: the error's own text holds the statement and day.
+        var raw = '';
+        try {
+          await dao.deleteBodyWeight('2026-08-02');
+        } catch (e) {
+          raw = '$e';
+        }
+        expect(raw, contains('DELETE'), reason: raw);
+        expect(raw, contains('2026-08-02'), reason: raw);
+
+        final logged = <String>[];
+        final debugPrintBefore = debugPrint;
+        debugPrint = (String? message, {int? wrapWidth}) {
+          if (message != null) logged.add(message);
+        };
+        try {
+          await tester.pumpWidget(MaterialApp(
+            localizationsDelegates: AppLocalizations.localizationsDelegates,
+            supportedLocales: AppLocalizations.supportedLocales,
+            home: BodyScreen(dao: dao, clock: () => clock),
+          ));
+          await tester.pumpAndSettle();
+          await swipeDelete(tester, '2026-08-02');
+        } finally {
+          debugPrint = debugPrintBefore;
+        }
+        expect(tester.takeException(), isNull);
+        expect(find.text(deleteFailed), findsOneWidget);
+        expect(find.byKey(const Key('bodyDay2026-08-02')), findsOneWidget);
+        final log = logged.join('\n');
+        expect(log, contains('Body: delete failed'),
+            reason: 'the failure itself is still logged');
+        expect(log, isNot(contains('DELETE')), reason: log);
+        expect(log, isNot(contains('2026-08-02')), reason: log);
+      } finally {
+        await db.close();
+      }
+    });
   });
 
   // ── Measurements rows at accessibility text sizes (2026-10-07) ────────
@@ -806,6 +975,8 @@ void main() {
 class _FlakyBodyDao extends FakeDao {
   bool failReads = false;
   bool failWrites = false;
+  bool failWeightDeletes = false;
+  bool failMeasurementDeletes = false;
 
   @override
   Future<List<WeightEntry>> listBodyWeights(
@@ -819,5 +990,17 @@ class _FlakyBodyDao extends FakeDao {
       {String source = 'nl'}) async {
     if (failWrites) throw StateError('disk I/O error');
     return super.saveBodyWeight(date, kg, source: source);
+  }
+
+  @override
+  Future<void> deleteBodyWeight(String date) async {
+    if (failWeightDeletes) throw StateError('disk I/O error');
+    return super.deleteBodyWeight(date);
+  }
+
+  @override
+  Future<void> deleteBodyMeasurements(String date) async {
+    if (failMeasurementDeletes) throw StateError('disk I/O error');
+    return super.deleteBodyMeasurements(date);
   }
 }

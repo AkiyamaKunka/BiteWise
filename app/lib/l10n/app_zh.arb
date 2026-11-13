@@ -1004,5 +1004,6 @@
   "diagStatusPass": "通过",
   "diagStatusWarn": "警告",
   "diagStatusFail": "未通过",
-  "covWindowLabel": "检查天数"
+  "covWindowLabel": "检查天数",
+  "bodyDeleteFailed": "没能删除，请再试一次。"
 }

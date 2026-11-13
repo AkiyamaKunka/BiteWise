@@ -5440,6 +5440,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Days to check'**
   String get covWindowLabel;
+
+  /// Body tab: deleting a day's weight or measurements failed. Shown under the Log body sheet's fields when its Delete failed (the sheet stays open), else in a snackbar after a history row's swipe or its screen-reader Delete action (the row stays). The raw error goes to the debug log only (its type).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete. Try again.'**
+  String get bodyDeleteFailed;
 }
 
 class _AppLocalizationsDelegate

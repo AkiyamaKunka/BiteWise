@@ -81,7 +81,8 @@ class LogBodySheet extends StatefulWidget {
   final bool imperial;
 
   /// For a day that already has data: asks, deletes the whole day and
-  /// resolves true when it did (the sheet then closes). Null hides the
+  /// resolves true when it did (the sheet then closes). A delete that
+  /// failed throws: the sheet says so and stays open. Null hides the
   /// Delete button. It is also the accessible way to delete a day.
   final Future<bool> Function()? onDelete;
 
@@ -256,7 +257,16 @@ class _LogBodySheetState extends State<LogBodySheet> {
   }
 
   Future<void> _delete() async {
-    final deleted = await widget.onDelete!();
+    final l = context.l10n;
+    final bool deleted;
+    try {
+      deleted = await widget.onDelete!();
+    } catch (_) {
+      // Logged by the screen, which shows what is left. Said here, where
+      // the user is looking: a snackbar would sit under the sheet.
+      if (mounted) setState(() => _error = l.bodyDeleteFailed);
+      return;
+    }
     // The page reloaded already; false tells it not to reload again.
     if (deleted && mounted) Navigator.pop(context, false);
   }

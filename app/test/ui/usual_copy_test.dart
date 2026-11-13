@@ -9,7 +9,7 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 887 keys, and the generated classes say what
+/// - Both files have the same 888 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
 /// - Keys added or changed after review (fix list U3, U5, C5) follow the
 ///   same rules; the iOS Off box names the saved answers it also clears.
@@ -155,10 +155,11 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// more with the 1.7.0 iCloud Backup branch (feat/icloud-backup), then
 /// #33's source-link label (assistSourceLinkLabel), then the Test AI
 /// provider page's three check states (diagStatusPass/Warn/Fail) and the
-/// Body tab's failure lines (bodyLoadFailed, bodySaveFailed) and the
-/// coverage window slider's screen-reader name (covWindowLabel), less
-/// bodyEmptyHintImperial (review r171: the same text as bodyEmptyHint).
-const _keyCount = 887;
+/// Body tab's failure lines (bodyLoadFailed, bodySaveFailed,
+/// bodyDeleteFailed) and the coverage window slider's screen-reader name
+/// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
+/// text as bodyEmptyHint).
+const _keyCount = 888;
 
 Directory _appRoot() {
   var dir = Directory.current;
