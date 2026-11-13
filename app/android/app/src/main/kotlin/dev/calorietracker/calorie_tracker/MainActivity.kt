@@ -13,6 +13,7 @@ import android.os.ext.SdkExtensions
 import android.provider.DocumentsContract
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import android.provider.Settings
 import android.webkit.MimeTypeMap
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -251,10 +252,12 @@ class MainActivity : FlutterActivity() {
         // nothing else in the app could explain the frozen 尚未运行. Only
         // the UI engine goes through this activity; the background engine
         // never needs the answer. No manifest permission is involved.
+        // openNotificationSettings: Settings' notifications-off remedy.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "isBackgroundRestricted" -> result.success(isBackgroundRestricted())
+                    "openNotificationSettings" -> result.success(openNotificationSettings())
                     else -> result.notImplemented()
                 }
             }
@@ -290,6 +293,30 @@ class MainActivity : FlutterActivity() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
         val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
         return am.isBackgroundRestricted
+    }
+
+    /// Opens the system's notification page for this app (API 26+), else
+    /// its App info page. False when neither could be opened.
+    private fun openNotificationSettings(): Boolean {
+        val pages = mutableListOf<Intent>()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            pages.add(
+                Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName),
+            )
+        }
+        pages.add(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)),
+        )
+        for (page in pages) {
+            try {
+                startActivity(page)
+                return true
+            } catch (e: Exception) {
+                // Not on this device: the next page.
+            }
+        }
+        return false
     }
 
     private fun pickFiles(result: MethodChannel.Result) {

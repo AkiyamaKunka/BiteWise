@@ -954,6 +954,35 @@ void main() {
     }
   });
 
+  // Settings' notifications-off remedy lands on the app's own
+  // notification page (API 26+), not App info two taps away; App info
+  // stays the fallback. The background lane calls it and falls back to
+  // openAppSettings when it is not implemented.
+  test('MainActivity serves openNotificationSettings', () {
+    final kotlin = _mainActivity();
+    final channel = RegExp(
+            r'MethodChannel\(flutterEngine\.dartExecutor\.binaryMessenger, '
+            r'CHANNEL\)(.*?)\n            \}',
+            dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(1);
+    expect(channel, contains('"openNotificationSettings" -> '
+        'result.success(openNotificationSettings())'));
+    expect(kotlin, contains('const val CHANNEL = "dev.calorietracker/background"'));
+    final open = RegExp(r'private fun openNotificationSettings\(.*?\n    \}\n',
+            dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(open, isNotNull);
+    final app = open!.indexOf('Settings.ACTION_APP_NOTIFICATION_SETTINGS');
+    expect(app, greaterThan(0));
+    expect(open, contains('Settings.EXTRA_APP_PACKAGE, packageName'));
+    expect(open, contains('Build.VERSION_CODES.O'));
+    expect(open.indexOf('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'),
+        greaterThan(app), reason: 'App info is the fallback');
+    expect(open, contains('Uri.fromParts("package", packageName, null)'));
+  });
+
   // Owner decision 2026-11-13: the package stays, and the upload key the
   // GitHub APKs are signed with becomes Play's app-signing key. Both are
   // permanent once the first bundle is uploaded: a new package is a new
