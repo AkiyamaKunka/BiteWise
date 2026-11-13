@@ -99,6 +99,19 @@ void main() {
   List<Meal> relogs(FakeDao dao) =>
       [for (final m in dao.meals) if (m.source == MealSource.appRepeat) m];
 
+  testWidgets('a row prints whole grams bare, else to 0.1 g', (tester) async {
+    final dao = FakeDao();
+    for (final (id, date) in [(10, '2026-11-03'), (11, '2026-11-05')]) {
+      dao.seed(foodMeal(
+          id: id,
+          date: date,
+          description: 'Greek yogurt',
+          items: [foodItem('Greek yogurt', 150, p: 8.5, c: 12.34, f: 4.0)]));
+    }
+    await pump(tester, await makeUsualFoods(dao, clock: clock));
+    expect(find.text('150 kcal · P: 8.5g · C: 12.3g · F: 4g'), findsOneWidget);
+  });
+
   testWidgets('rows: the title, the numbers a log writes, how often and '
       'when; Around this time first; logged today says so', (tester) async {
     final dao = usualDao();

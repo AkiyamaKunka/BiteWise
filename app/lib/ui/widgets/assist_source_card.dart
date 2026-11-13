@@ -33,7 +33,7 @@ library;
 import 'package:flutter/material.dart';
 
 import '../assist_view.dart';
-import '../format.dart' show formatKcal;
+import '../format.dart' show formatKcal, formatOneDecimal;
 import '../l10n.dart';
 import 'small_spinner.dart';
 
@@ -415,9 +415,6 @@ class _ItemLines extends StatelessWidget {
   /// A suggestion: every published size is listed (the user decides).
   final bool showSizes;
 
-  static String _grams(num v) =>
-      v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
-
   @override
   Widget build(BuildContext context) {
     final l = context.l10n;
@@ -435,9 +432,11 @@ class _ItemLines extends StatelessWidget {
     final numbers = [
       ?kcal,
       if (item.proteinG != null)
-        '${l.macroProteinShort} ${_grams(item.proteinG!)} g',
-      if (item.carbsG != null) '${l.macroCarbsShort} ${_grams(item.carbsG!)} g',
-      if (item.fatG != null) '${l.macroFatShort} ${_grams(item.fatG!)} g',
+        '${l.macroProteinShort} ${formatOneDecimal(item.proteinG!)} g',
+      if (item.carbsG != null)
+        '${l.macroCarbsShort} ${formatOneDecimal(item.carbsG!)} g',
+      if (item.fatG != null)
+        '${l.macroFatShort} ${formatOneDecimal(item.fatG!)} g',
     ].join(' · ');
     final detail = [
       if (item.option.isNotEmpty) item.option,

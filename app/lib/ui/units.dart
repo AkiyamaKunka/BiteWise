@@ -12,6 +12,7 @@ library;
 
 import 'package:flutter/widgets.dart';
 
+import 'format.dart' show formatOneDecimal;
 import 'services.dart' show SettingsStore;
 
 const double _kgPerLb = 0.45359237; // exact, by definition
@@ -46,5 +47,4 @@ double girthFromInput(double value, bool imperial) =>
     imperial ? inToCm(value) : value;
 
 /// Whole numbers bare, otherwise one decimal — the Body screen's format.
-String fmtBodyValue(double v) =>
-    v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
+String fmtBodyValue(double v) => formatOneDecimal(v);

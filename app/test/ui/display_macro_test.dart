@@ -22,4 +22,17 @@ void main() {
     expect(grams(0.0), '0');
     expect(displayMacro(const {}, 'total_protein_g'), '0');
   });
+
+  // formatOneDecimal: the macro legend, usual foods, the restaurant card
+  // and the Body screen (fmtBodyValue) share it.
+  test('formatOneDecimal: whole numbers bare, anything else to 0.1', () {
+    expect(formatOneDecimal(0), '0');
+    expect(formatOneDecimal(12), '12');
+    expect(formatOneDecimal(12.0), '12');
+    expect(formatOneDecimal(12.5), '12.5');
+    expect(formatOneDecimal(12.34), '12.3');
+    expect(formatOneDecimal(179.8933), '179.9');
+    expect(formatOneDecimal(-3.5), '-3.5');
+    expect(formatOneDecimal(1e6), '1000000');
+  });
 }

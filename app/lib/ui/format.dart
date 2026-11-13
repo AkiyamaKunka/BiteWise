@@ -23,6 +23,13 @@ final NumberFormat _thousands = NumberFormat('#,##0');
 String formatKcal(num v) =>
     _thousands.format(v is double && !v.isFinite ? 0 : v.round());
 
+/// Whole numbers bare, anything else to one decimal (12.0 → '12', 12.34 →
+/// '12.3'): grams on the macro legend, usual foods and the restaurant
+/// card, and the Body screen's values. Finite input only (`round()` throws
+/// on Infinity).
+String formatOneDecimal(num v) =>
+    v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
+
 bool isFoodMeal(Meal m) => isFoodTruthy(m.analysis['is_food']);
 
 /// Meal description with a plain fallback (renderers never assume a string).
