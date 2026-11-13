@@ -683,7 +683,7 @@
     },
     {
       "id": "08_privacy",
-      "notes": "Privacy. facts §5: log stays on the phone; no ads, no analytics/tracking SDK; open source (MIT); the app asks first and names the company; Chopstats has no backend and the developer receives none of your data. EN shows the real consent dialog (13). ZH has no consent-dialog capture yet: it shows the log itself (day detail, 07) plus CSS check rows. When zh/13_ai_consent_dialog.png exists, switch ZH to the EN layout (README). 2026-11-11: EN switched to the same layout (the Watch Camera Roll dialog read against the headline); ZH says 保存在, not 只留在.",
+      "notes": "Privacy. facts §5: log stays on the phone; no ads, no analytics/tracking SDK; open source (MIT); the app asks first and names the company; Chopstats has no backend and the developer receives none of your data. Both languages show the log itself (day detail, 07) plus CSS check rows. The English consent-dialog version was dropped on 2026-11-11 (the Watch Camera Roll dialog read against the headline). ZH says 保存在, not 只留在.",
       "en": {
         "headline": [
           "Your log stays",

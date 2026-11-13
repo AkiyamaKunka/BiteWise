@@ -9,8 +9,13 @@ Use this set only while the App Store build keeps the 1.6 look (1.6.0, 1.6.1).
 A release with a new look (1.7.0, the native iOS design) needs new captures first:
 App Review guideline 2.3 wants screenshots that match the current version.
 
-Nobody uploads from here. The owner previews the set and uploads it in
-App Store Connect (Media Manager) when the next version is prepared.
+On the owner's OK (2026-11-12) the en-US set went to App Store version
+**1.6.1** through the App Store Connect API, in two size classes: the 6.9-inch
+set (1320×2868, this folder's renders) and the 6.3-inch copies in
+`../screenshots-marketing-medium/en-US/` (1206×2622, made the `--medium` way
+from the same PNGs). The listing has only the en-US locale, so the zh-Hans set
+is not on the store. The live 1.6.0 keeps the plain set. Upload again only with
+the owner's OK.
 
 ## The frames
 
@@ -18,12 +23,12 @@ App Store Connect (Media Manager) when the next version is prepared.
 |---|---|---|---|
 | `01_snap_get_numbers` | Snap a meal. / Get the numbers. — *Your AI estimates calories, protein, carbs and fat.* | 拍下这一餐 / 热量一目了然 — *你选的 AI 估算热量、蛋白质、碳水和脂肪* | Unsplash photo of the yogurt bowl → its meal card on Today (~360 kcal, P/C/F, portions) |
 | `02_edit_any_number` | See the portion. / Edit any number. — *Each food shows the portion your AI assumed.* | 分量写明白 / 数字随你改 — *每样食物都写明 AI 假设的分量* | Meal editor; ring on the assumed portion, touch point on the calories field |
-| `03_your_ai_your_key` | Your AI, / your key — *Nine AI providers, or your own server. No Chopstats account.* | 你的 AI / 你的 Key — *9 家 AI 服务任选，或用你自己的服务器；无需注册筷拍账户* | Settings › AI (ring on "its key is stored only on this phone…") and the AI Provider page |
+| `03_your_ai_your_key` | Your AI, / your choice — *Nine AI providers, or your own server. No Chopstats account.* | 你的 AI / 你来选 — *9 家 AI 服务任选，或用你自己的服务器；无需注册筷拍账户* | Settings › AI (ring on "Photos are analyzed by the provider you pick…", label *Goes to the AI you pick* / 交给你选的 AI 服务), the connection type rows, and three check rows: Nine AI services to choose from / Or your own server / Switch any time in Settings (9 家 AI 服务可选 / 也可以用你自己的服务器 / 随时在设置里切换) |
 | `04_usual_foods` | Your usual foods, / one tap away — *No photo, no AI, nothing sent.* | 常吃的 / 点一下就记 — *不用拍照，不用 AI，不发送任何内容* | My usual foods (new in 1.6), touch point on a row |
 | `05_restaurant_numbers` | pill *Off by default*; Use the chain's / own numbers — *For US chain meals. Needs a supported AI provider.* | pill *默认关闭*; 连锁餐厅？/ 用它公布的数值 — *仅限美国连锁餐厅，需要支持此功能的 AI 服务* | The restaurant source card (new in 1.6) |
 | `06_trend` (dark) | See the trend, / not just today — *30 days of History. Weight and measurements in Body.* | 不只看今天 / 也看清趋势 — *「历史」回看 30 天，「身体」记录体重和围度* | History chart and Body cards, dark mode |
 | `07_log_your_way` | Photo, words, / or just numbers — *Describe a meal in any language, or type the numbers with no AI.* | 拍照、描述 / 或者只填数字 — *用任何语言描述一餐，或者手动输入，不用 AI* | The Log a meal sheet over the dimmed Today; rings on "no AI" / "any language" |
-| `08_privacy` | Your log stays / on your phone — *No ads. No tracking. Open source.* | 饮食记录 / 只留在你的手机上 — *没有广告，不做追踪，代码公开* | EN: the real consent dialog, ring on "no server of its own … nothing is sent until you allow it". ZH: the day log plus three check rows (see "Chinese privacy frame") |
+| `08_privacy` | Your log stays / on your phone — *No ads. No tracking. Open source.* | 饮食记录 / 保存在你的手机上 — *没有广告，不做追踪，代码公开* | The day log (Day detail) plus three check rows: No Chopstats account / Nothing is sent until you allow it / The developer gets none of your data (see "Privacy frame") |
 
 `frames.json` holds every caption, crop, ring, touch point and label, and a
 `notes` line per frame naming the facts behind it.
@@ -90,17 +95,17 @@ Chinese: Simplified only, 「」 around UI names, no mainland-China or VPN text
 (the 11a crop starts below the welcome card for that reason), no line-end
 commas in headlines.
 
-## Chinese privacy frame
+## Privacy frame
 
-There is no Chinese capture of the consent dialog yet, so `08_privacy` (ZH)
-shows the day log plus three check rows drawn in CSS (无需注册筷拍账户 /
-未经你同意，不发送任何内容 / 开发者收不到你的任何数据, all in the fact sheet).
-Once `screens/zh/13_ai_consent_dialog.png` exists (same steps as the English
-one, Chinese UI), give ZH the English layout: one `screen` item with the dialog
-cropped to its own edges (`radius` 74 at full width), measure the paragraph
-that says nothing is sent until you allow it, ring it, and label it
-「未经同意不发送」 (not "asks before every send": after you allow it, Watch Camera
-Roll sends new photos without asking again).
+Both languages show the day log plus three check rows drawn in CSS (No
+Chopstats account / Nothing is sent until you allow it / The developer gets
+none of your data; 无需注册筷拍账户 / 未经你同意，不发送任何内容 /
+开发者收不到你的任何数据, all in the fact sheet). An earlier English version
+cropped the real consent dialog. If a dialog version comes back, crop it to its
+own edges (`radius` 74 at full width), ring the paragraph that says nothing is
+sent until you allow it, and label it "Asks first" / 「未经同意不发送」 (never
+"asks before every send": after you allow it, Watch Camera Roll sends new
+photos without asking again).
 
 ## Next version (re-shoot and re-render)
 
@@ -112,7 +117,7 @@ Roll sends new photos without asking again).
    with the same names: `01_today`, `05_meal_editor`, `11_settings_…` /
    `11a_settings_top_welcome`, `15_ai_provider_connection`, `10_usual_foods`,
    `03_restaurant_source_card`, `22_dark_history`, `23_dark_body`,
-   `09_log_sheet`, `13_ai_consent_dialog`, `07_day_detail` (ZH).
+   `09_log_sheet`, `07_day_detail`.
 3. Re-measure every crop, ring and touch point in `frames.json` (source
    pixels). Crops end in empty background, never through text; a quick way is
    to list rows whose pixels all equal the screen background, then pick y
@@ -128,9 +133,9 @@ Roll sends new photos without asking again).
 The 6.9-inch set (1320×2868) is the one built here. Apple's specification page
 (read 2026-11-11) also lists a 6.3-inch "medium Dynamic Island" class
 (1206×2622) as required, while `docs/RELEASING.md` (2026-10-25) calls it
-optional. Check Media Manager when preparing the version; if it asks for that
-class, `--medium` writes 1206×2622 copies (same aspect within 0.1 %) to
-`../screenshots-marketing-medium/`.
+optional. Version 1.6.0 went through review with a 6.3-inch set only, so 1.6.1
+carries both classes: `--medium` writes 1206×2622 copies (same aspect within
+0.1 %) to `../screenshots-marketing-medium/`.
 
 ## Credits
 
