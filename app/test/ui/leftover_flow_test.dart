@@ -12,6 +12,7 @@ import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
 import 'package:calorie_tracker/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'fakes.dart';
@@ -196,6 +197,57 @@ void main() {
     expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget,
         reason: 'the labeled node carries the tap');
     handle.dispose();
+  });
+
+  // The meal-picker rows were bare InkWells: VoiceOver read each as text
+  // with a tap action, never as a button (the A11 class), and with a single
+  // meal the section header was read as part of the row (review 1.7.1).
+  group('screen reader: the meal-picker rows', () {
+    testWidgets('each row is a button of its own that picks its meal',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      dao.put(_meal(2, '08:10', 420, hash: 'h2', desc: 'Breakfast bowl'));
+      await pump(tester);
+      for (final (id, name, other) in const [
+        (1, 'Cafeteria tray', 'Breakfast bowl'),
+        (2, 'Breakfast bowl', 'Cafeteria tray'),
+      ]) {
+        final row = tester
+            .getSemantics(find.byKey(Key('leftoverMeal-$id')))
+            .getSemanticsData();
+        expect(row.flagsCollection.isButton, isTrue, reason: name);
+        expect(row.hasAction(SemanticsAction.tap), isTrue, reason: name);
+        expect(row.label, contains(name));
+        expect(row.label, contains('kcal'), reason: 'the detail line too');
+        expect(row.label, isNot(contains(other)));
+      }
+      tester.semantics.tap(find.semantics.byLabel(RegExp('^Breakfast bowl')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverChosenMeal')), findsOneWidget);
+      expect(find.text('Breakfast bowl'), findsOneWidget,
+          reason: 'the double-tapped row is the meal picked');
+      handle.dispose();
+    });
+
+    testWidgets('with one meal, the header is not read as part of the row',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      await pump(tester);
+      final row = tester
+          .getSemantics(find.byKey(const Key('leftoverMeal-1')))
+          .getSemanticsData();
+      expect(row.flagsCollection.isButton, isTrue);
+      expect(row.label, contains('Cafeteria tray'));
+      expect(row.label, isNot(contains('Which meal was this?')));
+      final header = tester
+          .getSemantics(find.text('Which meal was this?'))
+          .getSemanticsData();
+      expect(header.flagsCollection.isHeader, isTrue);
+      expect(header.flagsCollection.isButton, isFalse);
+      handle.dispose();
+    });
   });
 
   testWidgets("yesterday's incident: the watcher-logged duplicate is "
