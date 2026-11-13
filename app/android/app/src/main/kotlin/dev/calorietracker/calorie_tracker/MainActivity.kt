@@ -25,7 +25,20 @@ class MainActivity : FlutterActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         // receive_sharing_intent reads the launch intent while
         // super.onCreate attaches it: the copies must be there already.
-        intent?.let { setIntent(withSafeShares(it)) }
+        // A share is delivered once. An activity Android recreates (saved
+        // state: its process was stopped while it sat in the background)
+        // or relaunches from Recents still carries the intent that first
+        // started its task, so the plugins get an empty one, with nothing
+        // copied; that also keeps a bitewise://setup link from reopening
+        // its dialog. New shares arrive through onNewIntent, as before. A
+        // several-photo share cut short by the stop is not resumed.
+        val replay = savedInstanceState != null ||
+            ((intent?.flags ?: 0) and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0
+        if (replay) {
+            intent?.let { setIntent(emptyShare(it)) }
+        } else {
+            intent?.let { setIntent(withSafeShares(it)) }
+        }
         super.onCreate(savedInstanceState)
     }
 

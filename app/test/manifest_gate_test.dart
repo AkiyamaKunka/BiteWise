@@ -53,6 +53,10 @@ String _pbxObject(
   return match!.group(1)!;
 }
 
+String _mainActivity() => File('${_appRoot().path}/android/app/src/main/'
+        'kotlin/dev/calorietracker/calorie_tracker/MainActivity.kt')
+    .readAsStringSync();
+
 /// Release-manifest drift gate.
 ///
 /// Flutter auto-injects INTERNET into the DEBUG and PROFILE manifests (for
@@ -732,6 +736,40 @@ void main() {
     expect(releasing, contains('the lookup adds no data type'));
   });
 
+  // A share is delivered once. After Android stops the process, reopening
+  // the app from Recents or the icon recreates MainActivity with the
+  // intent that first started its task (and the sender's grant), and
+  // receive_sharing_intent reads activity.intent as a new share while
+  // super.onCreate attaches it: a deleted meal came back, a not-food photo
+  // went to the AI again. A recreated activity (saved state) or a launch
+  // from Recents therefore hands the plugins an empty intent — no copy —
+  // which also keeps a bitewise://setup link from reopening its dialog.
+  // New shares still arrive through onNewIntent, unchanged.
+  test('a recreated MainActivity never re-delivers its launch share', () {
+    final kotlin = _mainActivity();
+    final create = RegExp(r'override fun onCreate\(.*?\n    \}', dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(create, isNotNull);
+    final replay = RegExp(r'val replay = (.*?)\n\s*if \(replay\)', dotAll: true)
+        .firstMatch(create!)
+        ?.group(1);
+    expect(replay, isNotNull, reason: 'onCreate decides replay first');
+    expect(replay, contains('savedInstanceState != null ||'));
+    expect(replay,
+        contains('and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY) != 0'));
+    final empty = create.indexOf('setIntent(emptyShare(it))');
+    final safe = create.indexOf('setIntent(withSafeShares(it))');
+    final branch = create.indexOf('if (replay)');
+    final superCall = create.indexOf('super.onCreate(savedInstanceState)');
+    expect(branch, greaterThan(0));
+    expect(empty, greaterThan(branch), reason: 'replay → empty, no copy');
+    expect(safe, greaterThan(empty), reason: 'otherwise → the safe copies');
+    expect(superCall, greaterThan(safe),
+        reason: 'the plugins read the intent inside super.onCreate');
+    expect(kotlin, contains('super.onNewIntent(withSafeShares(intent))'));
+  });
+
   // Owner decision 2026-11-13: the package stays, and the upload key the
   // GitHub APKs are signed with becomes Play's app-signing key. Both are
   // permanent once the first bundle is uploaded: a new package is a new
@@ -749,9 +787,6 @@ void main() {
     expect(gradle, isNot(contains('TODO: Specify your own unique Application ID')),
         reason: 'the template TODO invites a change that would orphan '
             'every installed copy');
-    final kotlin = File('${_appRoot().path}/android/app/src/main/kotlin/'
-            'dev/calorietracker/calorie_tracker/MainActivity.kt')
-        .readAsStringSync();
-    expect(kotlin, startsWith('package $package\n'));
+    expect(_mainActivity(), startsWith('package $package\n'));
   });
 }
