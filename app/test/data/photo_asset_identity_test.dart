@@ -422,6 +422,18 @@ void main() {
           assetId: 'asset-x',
           capturedAt: DateTime(2026, 10, 31, 9));
       expect(twoDaysAfter.kind, PhotoReservation.reserved);
+      // The meal's date can also sit a day after the capture's (a photo
+      // taken late in a zone ahead of the device's), and no more.
+      final dayBefore = await dao.reservePhotoHash('d' * 32,
+          source: MealSource.appWatch,
+          assetId: 'asset-x',
+          capturedAt: DateTime(2026, 10, 28, 23, 30));
+      expect(dayBefore.kind, PhotoReservation.claimed);
+      final twoDaysBefore = await dao.reservePhotoHash('e' * 32,
+          source: MealSource.appWatch,
+          assetId: 'asset-x',
+          capturedAt: DateTime(2026, 10, 27, 12));
+      expect(twoDaysBefore.kind, PhotoReservation.reserved);
     });
 
     test('needs both the asset and the capture time, and never applies to '
