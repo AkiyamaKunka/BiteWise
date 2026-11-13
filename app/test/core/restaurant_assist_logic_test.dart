@@ -443,6 +443,29 @@ void main() {
         outcome: AssistOutcome.suggest,
         reason: AssistReason.orderMerchantOnly,
       ),
+      (
+        name:
+            'the brand printed on another item, none on the matched one '
+            '→ suggest',
+        run: () => decide(
+          a: analysis(
+            items: [
+              food(
+                name: 'Chips (~100 g)',
+                kcal: 540,
+                p: 7,
+                c: 73,
+                f: 25,
+                unit: 'bag',
+              ),
+              food(brand: ''),
+            ],
+          ),
+          r: result(matches: [match(index: 1)]),
+        ),
+        outcome: AssistOutcome.suggest,
+        reason: AssistReason.itemUnbranded,
+      ),
       // A printed name with a standalone store number is read the way the
       // request read it (chainNameOnly): the lookup it sent is not thrown
       // away as no_evidence.

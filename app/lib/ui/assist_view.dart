@@ -104,14 +104,8 @@ List<AssistSize> _sizes(Object? raw) {
   final out = <AssistSize>[];
   for (final z in (raw is List ? raw : const []).take(kAssistMaxOptions)) {
     if (z is! Map) continue;
-    final range = z['calories_range'];
-    List<int>? caloriesRange;
-    if (range is List && range.length == 2) {
-      final lo = _kcal(range[0]);
-      final hi = _kcal(range[1]);
-      if (lo != null && hi != null && lo <= hi) caloriesRange = [lo, hi];
-    }
-    final calories = _kcal(z['calories']);
+    final caloriesRange = publishedKcalRange(z['calories_range']);
+    final calories = publishedKcal(z['calories']);
     if (calories == null && caloriesRange == null) continue;
     out.add(
       AssistSize(
@@ -123,20 +117,6 @@ List<AssistSize> _sizes(Object? raw) {
     );
   }
   return out.length > 1 ? List.unmodifiable(out) : const [];
-}
-
-int? _kcal(Object? v) {
-  if (v is bool || v is! num || !v.isFinite) return null;
-  if (v < 0 || v > kAssistMaxPublishedKcal || v != v.roundToDouble()) {
-    return null;
-  }
-  return v.toInt();
-}
-
-num? _grams(Object? v) {
-  if (v is bool || v is! num || !v.isFinite) return null;
-  if (v < 0 || v > kAssistMaxPublishedGrams) return null;
-  return v;
 }
 
 final class AssistView {
@@ -273,24 +253,17 @@ final class AssistView {
       if (m is! Map) continue;
       final pub = m['published'];
       final p = pub is Map ? pub : const {};
-      final range = m['calories_range'];
-      List<int>? caloriesRange;
-      if (range is List && range.length == 2) {
-        final lo = _kcal(range[0]);
-        final hi = _kcal(range[1]);
-        if (lo != null && hi != null && lo <= hi) caloriesRange = [lo, hi];
-      }
       items.add(
         AssistItemView(
           menuItem: sanitizeAssistText(m['menu_item'], kAssistMenuItemMax),
           option: sanitizeAssistText(m['option_label'], kAssistOptionLabelMax),
           serving: sanitizeAssistText(m['serving'], kAssistServingMax),
           qty: coerceQty(m['qty']),
-          calories: _kcal(p['calories']),
-          caloriesRange: caloriesRange,
-          proteinG: _grams(p['protein_g']),
-          carbsG: _grams(p['carbs_g']),
-          fatG: _grams(p['fat_g']),
+          calories: publishedKcal(p['calories']),
+          caloriesRange: publishedKcalRange(m['calories_range']),
+          proteinG: publishedGrams(p['protein_g']),
+          carbsG: publishedGrams(p['carbs_g']),
+          fatG: publishedGrams(p['fat_g']),
           sizes: _sizes(m['sizes']),
         ),
       );
