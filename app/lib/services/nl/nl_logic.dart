@@ -255,14 +255,6 @@ const List<String> _weekdayNames = [
   'Sunday',
 ];
 
-/// strftime("%I:%M %p") parity: 12-hour, zero-padded, space, AM/PM (spec §2.2).
-String _time12(DateTime t) {
-  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-  final ampm = t.hour < 12 ? 'AM' : 'PM';
-  return '${h.toString().padLeft(2, '0')}:'
-      '${t.minute.toString().padLeft(2, '0')} $ampm';
-}
-
 /// Python round(x, 1) equivalent for weight display/storage.
 /// Python's `round(x, 1)`, not Dart's `.round()`.
 ///

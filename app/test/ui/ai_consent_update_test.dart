@@ -43,7 +43,6 @@ UiServices _services(SettingsStore settings, {Stream<Uri>? links}) =>
       settings: settings,
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       setupLinks: links,
     );
 

@@ -584,11 +584,6 @@ Sources
 • unknown: 1''');
     });
   });
-
-  test('createReportBuilder returns a working ReportBuilder', () async {
-    final ReportBuilder b = createReportBuilder(dao);
-    expect(await b.todaySummary(), contains('Summary'));
-  });
 }
 
 

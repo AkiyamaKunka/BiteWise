@@ -42,20 +42,16 @@ class _ProfileSettingsPageState extends State<ProfileSettingsPage> {
         GroupedSection(
           footer: context.l10n.profileFooter,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              child: TextField(
-                key: const Key('dietaryProfileField'),
-                controller: _controller,
-                maxLines: 5,
-                onChanged: (v) =>
-                    widget.settings.update(dietaryProfile: v),
-                decoration: cellFieldDecoration(
-                  context,
-                  hintText: context.l10n.profileHint,
-                ),
+            cellField(TextField(
+              key: const Key('dietaryProfileField'),
+              controller: _controller,
+              maxLines: 5,
+              onChanged: (v) => widget.settings.update(dietaryProfile: v),
+              decoration: cellFieldDecoration(
+                context,
+                hintText: context.l10n.profileHint,
               ),
-            ),
+            )),
           ],
         ),
       ],

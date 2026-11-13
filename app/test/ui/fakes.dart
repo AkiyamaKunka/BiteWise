@@ -432,17 +432,6 @@ class FakeIntake implements PhotoIntake {
   Future<void> stop() async => started = false;
 }
 
-class FakeReports implements ReportBuilder {
-  @override
-  Future<String> todaySummary() async => '';
-  @override
-  Future<String> history({int days = 30}) async => '';
-  @override
-  Future<String> dailyReport(String date) async => '';
-  @override
-  Future<String> stats() async => '';
-}
-
 UiServices makeServices({
   FakeDao? dao,
   FakeAnalyzer? analyzer,
@@ -470,7 +459,6 @@ UiServices makeServices({
     settingsChanges: s,
     picker: picker ?? FakePicker(),
     photoIntake: intake ?? FakeIntake(),
-    reports: FakeReports(),
     requestPhotoPermission: () async => grantPhotoPermission,
     processPhoto: processPhoto,
     announceOutcome: announceOutcome,

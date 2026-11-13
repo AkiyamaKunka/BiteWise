@@ -27,7 +27,6 @@ import '../../theme/tokens.dart';
 import '../../widgets/grouped.dart';
 import '../diagnostics_screen.dart';
 import 'api_key_page.dart';
-import 'settings_kit.dart' show announceSelected;
 import 'subscription_page.dart';
 
 export '../../provider_names.dart';
@@ -247,59 +246,52 @@ class _ProviderSettingsPageState extends State<ProviderSettingsPage> {
           header: context.l10n.connectionTypeHeader,
           footer: context.l10n.connectionTypeFooter,
           children: [
-            announceSelected(
+            GroupedRow(
+              key: const Key('apiKeyTypeRow'),
+              icon: Icons.vpn_key_outlined,
+              iconColor: scheme.primary,
+              title: context.l10n.typeApiKey,
+              value: planActive ? null : providerLabel(settings.provider),
               selected: !planActive,
-              row: GroupedRow(
-                key: const Key('apiKeyTypeRow'),
-                icon: Icons.vpn_key_outlined,
-                iconColor: scheme.primary,
-                title: context.l10n.typeApiKey,
-                value: planActive
-                    ? null
-                    : providerLabel(settings.provider),
-                trailing: planActive
-                    ? null
-                    : Icon(Icons.check, size: 20, color: scheme.primary),
-                showChevron: true,
-                onTap: () async {
-                  await Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) =>
-                        ApiKeyProviderPage(settings: settings),
-                  ));
-                  if (mounted) setState(() {});
-                },
-              ),
+              trailing: planActive
+                  ? null
+                  : Icon(Icons.check, size: 20, color: scheme.primary),
+              showChevron: true,
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => ApiKeyProviderPage(settings: settings),
+                ));
+                if (mounted) setState(() {});
+              },
             ),
             // The user's own server (owner decision R-F5, 2026-10-29): a
             // server icon, "Your own server", and the bare AI name as the
             // value — the title already says where it runs.
-            announceSelected(
+            GroupedRow(
+              key: const Key('subscriptionTypeRow'),
+              icon: Icons.dns_outlined,
+              iconColor: scheme.tertiary,
+              title: context.l10n.typeSubscription,
+              value: planActive
+                  ? serverPlanName(context.l10n, settings.serverBackend)
+                  : null,
               selected: planActive,
-              row: GroupedRow(
-                key: const Key('subscriptionTypeRow'),
-                icon: Icons.dns_outlined,
-                iconColor: scheme.tertiary,
-                title: context.l10n.typeSubscription,
-                value: planActive
-                    ? serverPlanName(context.l10n, settings.serverBackend)
-                    : null,
-                trailing: planActive
-                    ? Icon(Icons.check, size: 20, color: scheme.primary)
-                    : null,
-                showChevron: true,
-                onTap: () async {
-                  await Navigator.of(context).push(MaterialPageRoute(
-                    builder: (_) => SubscriptionProviderPage(
-                      settings: settings,
-                      startClaudeAuth: widget.startClaudeAuth,
-                      completeClaudeAuth: widget.completeClaudeAuth,
-                      serverLoginState: widget.serverLoginState,
-                      openUrl: widget.openUrl,
-                    ),
-                  ));
-                  if (mounted) setState(() {});
-                },
-              ),
+              trailing: planActive
+                  ? Icon(Icons.check, size: 20, color: scheme.primary)
+                  : null,
+              showChevron: true,
+              onTap: () async {
+                await Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => SubscriptionProviderPage(
+                    settings: settings,
+                    startClaudeAuth: widget.startClaudeAuth,
+                    completeClaudeAuth: widget.completeClaudeAuth,
+                    serverLoginState: widget.serverLoginState,
+                    openUrl: widget.openUrl,
+                  ),
+                ));
+                if (mounted) setState(() {});
+              },
             ),
           ],
         ),

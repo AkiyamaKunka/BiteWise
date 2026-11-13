@@ -29,7 +29,6 @@ void main() {
         settings: settings,
         picker: FakePicker(),
         requestPhotoPermission: () async => true,
-        reports: FakeReports(),
         setupLinks: links.stream,
       ),
       settings,
@@ -125,7 +124,6 @@ void main() {
       settings: settings,
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       initialSetupLink: () async => good,
     );
     await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));
@@ -147,7 +145,6 @@ void main() {
       settings: settings,
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       setupLinks: links.stream,
       initialSetupLink: () async => good,
     );
@@ -209,7 +206,6 @@ void main() {
       settings: settings,
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       initialSetupLink: () async => shareBounce,
     );
     await tester.pumpWidget(MaterialApp(home: HomeShell(services: services)));

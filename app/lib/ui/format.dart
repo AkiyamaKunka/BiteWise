@@ -10,7 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
-import 'meal_edit_logic.dart' show isRealIsoDate, parseClock;
+import 'meal_edit_logic.dart' show isRealIsoDate;
 
 export '../core/coerce.dart' show isFoodTruthy, isoDate;
 
@@ -22,6 +22,13 @@ final NumberFormat _thousands = NumberFormat('#,##0');
 /// hostile value must degrade, never crash the screen (spec §1.2).
 String formatKcal(num v) =>
     _thousands.format(v is double && !v.isFinite ? 0 : v.round());
+
+/// Whole numbers bare, anything else to one decimal (12.0 → '12', 12.34 →
+/// '12.3'): grams on the macro legend, usual foods and the restaurant
+/// card, and the Body screen's values. Finite input only (`round()` throws
+/// on Infinity).
+String formatOneDecimal(num v) =>
+    v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
 
 bool isFoodMeal(Meal m) => isFoodTruthy(m.analysis['is_food']);
 

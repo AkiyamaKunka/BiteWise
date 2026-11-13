@@ -1005,5 +1005,7 @@
   "diagStatusWarn": "警告",
   "diagStatusFail": "未通过",
   "leftoverLoadFailed": "无法加载今天和昨天的记录。",
-  "leftoverSaveFailed": "没能完成剩菜扣除，请再试一次。"
+  "leftoverSaveFailed": "没能完成剩菜扣除，请再试一次。",
+  "covWindowLabel": "检查天数",
+  "bodyDeleteFailed": "没能删除，请再试一次。"
 }

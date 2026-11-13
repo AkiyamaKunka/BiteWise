@@ -84,7 +84,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../support/assist_fixtures.dart' show assistMcdUrl, bigMacFound;
-import '../ui/fakes.dart' show FakeIntake, FakePicker, FakeReports;
+import '../ui/fakes.dart' show FakeIntake, FakePicker;
 
 export 'package:calorie_tracker/l10n/app_localizations.dart'
     show AppLocalizations, lookupAppLocalizations;
@@ -460,7 +460,6 @@ class Phone {
       settingsChanges: p.settings,
       picker: FakePicker(),
       photoIntake: FakeIntake(),
-      reports: FakeReports(),
       requestPhotoPermission: () async => true,
       processPhoto: p.pipeline.enqueue,
       mealInUse: p.mealInUse,

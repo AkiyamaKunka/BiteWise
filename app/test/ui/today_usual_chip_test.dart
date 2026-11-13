@@ -6,6 +6,7 @@
 import 'dart:async';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/services/usual/usual_foods.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/l10n.dart';
@@ -14,7 +15,7 @@ import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:calorie_tracker/ui/widgets/meal_card.dart';
 import 'package:calorie_tracker/ui/widgets/usual_chip.dart';
 import 'package:calorie_tracker/ui/widgets/usual_offer_card.dart'
-    show kUsualUndoSnackDuration;
+    show kUsualUndoSnackDuration, usualItemText;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -293,6 +294,26 @@ void main() {
     final item = (dao.byId(1).analysis['food_items'] as List).single as Map;
     expect(item['protein_g'], 25, reason: 'Use wrote the macros');
     expect(item['estimated_calories'], 350);
+  });
+
+  test('a macro line prints whole grams bare, else to 0.1 g', () {
+    final item = UsualOfferItem(
+      index: 0,
+      name: 'Oatmeal',
+      key: 'oatmeal',
+      learnedName: 'Oatmeal',
+      viaAlias: false,
+      ai: (kcal: 350, p: 10.5, c: 50.0, f: 14),
+      mine: (kcal: 350, p: 25, c: 40.34, f: 10),
+      kcalOnly: false,
+      mineAt: DateTime(2026, 11, 5),
+      fromMealId: 2,
+      fromDate: '2026-11-05',
+    );
+    expect(
+        usualItemText(AppLocalizationsEn(), item, 'Oatmeal'),
+        'Oatmeal: AI P 10.5g · C 50g · F 14g → your usual '
+        'P 25g · C 40.3g · F 10g');
   });
 
   testWidgets('a kcal change under the threshold names the macros too, and '

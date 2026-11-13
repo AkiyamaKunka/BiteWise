@@ -699,7 +699,6 @@ void main() {
         settings: settings,
         picker: FakePicker(),
         requestPhotoPermission: () async => true,
-        reports: FakeReports(),
         sharedPhotoConsent: gate,
       );
       await tester.pumpWidget(_app(HomeShell(services: services)));
@@ -736,7 +735,6 @@ void main() {
       settings: settings,
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       setupLinks: links.stream,
     );
     await tester.pumpWidget(_app(HomeShell(services: services)));
@@ -769,7 +767,6 @@ void main() {
       settings: settings,
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       setupLinks: links.stream,
     );
     await tester

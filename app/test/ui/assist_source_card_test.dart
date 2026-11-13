@@ -320,6 +320,34 @@ void main() {
       expect(used, 1);
     });
 
+    testWidgets('published grams print whole bare, else to 0.1 g',
+        (tester) async {
+      final analysis = appliedBigMac();
+      final block = Map<String, dynamic>.from(analysis['assist'] as Map);
+      final match = Map<String, dynamic>.from(
+          (block['matches'] as List).single as Map);
+      match['published'] = {
+        ...(match['published'] as Map),
+        'protein_g': 25.54,
+        'carbs_g': 46.0,
+      };
+      block['matches'] = [match];
+      await tester.pumpWidget(
+        _app(
+          AssistSourceCard(
+            view: AssistView.of(
+                Map<String, dynamic>.from(analysis)..['assist'] = block),
+            onUseEstimate: () {},
+            onWrongRestaurant: () {},
+            onNotRestaurant: () {},
+            onCorrect: () {},
+          ),
+        ),
+      );
+      expect(find.text('590 kcal · P 25.5 g · C 46 g · F 34 g'),
+          findsOneWidget);
+    });
+
     testWidgets('applied (zh)', (tester) async {
       await tester.pumpWidget(
         _app(

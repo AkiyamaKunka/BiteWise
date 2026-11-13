@@ -32,6 +32,12 @@ class HistoryScreen extends StatefulWidget {
   /// R7b), with the assist's mode and consent; null in tests.
   final RestaurantAssistControls? restaurantAssist;
   final SettingsStore? settings;
+
+  /// Test seam; defaults to [DateTime.now]. The window, the Today label and
+  /// the gap rows all read it, so a test can seed its days from the same
+  /// instant.
+  @visibleForTesting
+  final DateTime Function()? clock;
   const HistoryScreen(
       {super.key,
       required this.dao,
@@ -39,7 +45,8 @@ class HistoryScreen extends StatefulWidget {
       this.thumbs,
       this.mealInUse,
       this.restaurantAssist,
-      this.settings});
+      this.settings,
+      this.clock});
 
   @override
   State<HistoryScreen> createState() => HistoryScreenState();
@@ -60,8 +67,10 @@ class HistoryScreenState extends State<HistoryScreen> {
     reload();
   }
 
+  DateTime _now() => (widget.clock ?? DateTime.now)();
+
   Future<void> reload() async {
-    final now = DateTime.now();
+    final now = _now();
     try {
       // [today - (days - 1), today] by CALENDAR days. A Duration here
       // started the window a day late at 23:xx for four weeks from the day
@@ -96,6 +105,7 @@ class HistoryScreenState extends State<HistoryScreen> {
           DayDetailScreen(
               dao: widget.dao,
               date: date,
+              now: widget.clock,
               thumbs: widget.thumbs,
               mealInUse: widget.mealInUse,
               restaurantAssist: widget.restaurantAssist,
@@ -116,11 +126,11 @@ class HistoryScreenState extends State<HistoryScreen> {
     final base =
         Theme.of(context).textTheme.bodyLarge?.copyWith(color: colors.label);
     const strong = TextStyle(fontWeight: FontWeight.w600);
-    final text = context.friendlyDay(date);
+    final text = context.friendlyDay(date, now: _now());
     if (dimmed) {
       return Text(text, style: base?.copyWith(color: colors.secondaryLabel));
     }
-    if (date == isoDate(DateTime.now())) {
+    if (date == isoDate(_now())) {
       return Text(text, style: base?.merge(strong));
     }
     final comma = text.indexOf(', ');
@@ -303,7 +313,7 @@ class HistoryScreenState extends State<HistoryScreen> {
     // newest edge extends to TODAY: "nothing logged yet today/yesterday"
     // is exactly the gap worth noticing.
     final logged = _perDay.keys.toList()..sort();
-    final today = DateTime.now();
+    final today = _now();
     var end = DateTime(today.year, today.month, today.day);
     // The §5.3 query window ends at today, so logged.last can exceed
     // `end` only through clock skew between reload and this build — the

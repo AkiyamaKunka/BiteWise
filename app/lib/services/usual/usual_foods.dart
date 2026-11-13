@@ -27,7 +27,6 @@ import 'package:flutter/foundation.dart';
 import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/usual_foods_logic.dart';
-import '../../ui/meal_edit_logic.dart' show formatClock, parseClock;
 import '../assist/clients/lookup_client.dart' show LookupSupport;
 import '../assist/meal_assist.dart'
     show AssistMode, AssistSettingsView, assistTriggerFor;

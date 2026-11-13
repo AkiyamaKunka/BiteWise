@@ -147,6 +147,13 @@ class BodyScreenState extends State<BodyScreen> {
   Future<void> _openSheet({String? date}) async {
     final imperial = _imperial; // resolved before the sheet detaches
     final now = _now;
+    // A save that failed part-way (the weight written, the measurements
+    // not) keeps the sheet open, and the page re-reads the day at once:
+    // the sheet's Delete and its date row read the page, which kept the
+    // values from before the save until the sheet closed (a Delete then
+    // left the new weight behind). Closed then with a swipe or a tap
+    // outside, the page reloads too.
+    var wrote = false;
     // showGroupedSheet's title is fixed when the sheet opens, and this one
     // follows the picked date, so the route builds the same GroupedSheet
     // itself (with showGroupedSheet's route settings).
@@ -163,13 +170,18 @@ class BodyScreenState extends State<BodyScreen> {
         weightOn: (day) => _weightOn(day)?.kg,
         measurementsOn: _measurementsOn,
         onDelete: _confirmDelete,
+        onWrote: () => wrote = true,
+        onPartlySaved: reload,
       ),
     );
-    if (saved == true) await reload();
+    // false: the sheet deleted the day, and the page reloaded then.
+    if (saved == true || (saved == null && wrote)) await reload();
   }
 
   /// Asks, then deletes [date]'s weight and measurements. True when
-  /// deleted (the page has already reloaded).
+  /// deleted (the page has already reloaded). A delete that fails is
+  /// logged and thrown on, with the page reloaded to what is left: the
+  /// sheet says so in place, a history row through [_deleteFromRow].
   Future<bool> _confirmDelete(String date) async {
     final hasWeight = _weightOn(date) != null;
     final hasMeasurements = _measurementsOn(date) != null;
@@ -198,10 +210,34 @@ class BodyScreenState extends State<BodyScreen> {
       ),
     );
     if (ok != true) return false;
-    if (hasWeight) await widget.dao.deleteBodyWeight(date);
-    if (hasMeasurements) await widget.dao.deleteBodyMeasurements(date);
+    try {
+      if (hasWeight) await widget.dao.deleteBodyWeight(date);
+      if (hasMeasurements) await widget.dao.deleteBodyMeasurements(date);
+    } catch (e) {
+      // The error's type only, as a failed save: sqflite's text carries
+      // the statement and its arguments, and debugPrint stays in release
+      // builds. The weight may be gone while the measurements stayed.
+      debugPrint('Body: delete failed (${e.runtimeType})');
+      await reload();
+      rethrow;
+    }
     await reload();
     return true;
+  }
+
+  /// A history row's delete (its swipe and its VoiceOver action): a
+  /// failure says so on the page and the row stays. It went uncaught, and
+  /// the row slid back with nothing said.
+  Future<bool> _deleteFromRow(String date) async {
+    try {
+      return await _confirmDelete(date);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.bodyDeleteFailed)));
+      }
+      return false;
+    }
   }
 
   @override
@@ -302,12 +338,12 @@ class BodyScreenState extends State<BodyScreen> {
           ),
         ),
       ),
-      confirmDismiss: (_) => _confirmDelete(date),
+      confirmDismiss: (_) => _deleteFromRow(date),
       // A named 'Delete' in VoiceOver's actions rotor: the swipe is only a
       // three-finger scroll to a screen-reader user (A11).
       child: Semantics(
         customSemanticsActions: {
-          CustomSemanticsAction(label: l.delete): () => _confirmDelete(date),
+          CustomSemanticsAction(label: l.delete): () => _deleteFromRow(date),
         },
         child: GroupedRow.custom(
           key: Key('bodyDay$date'),
@@ -345,6 +381,8 @@ class _BodySheetHost extends StatefulWidget {
     required this.weightOn,
     required this.measurementsOn,
     required this.onDelete,
+    required this.onWrote,
+    required this.onPartlySaved,
   });
   final MealsDao dao;
   final String initialDate;
@@ -360,6 +398,13 @@ class _BodySheetHost extends StatefulWidget {
 
   /// The screen's delete confirm for a day; true when it deleted.
   final Future<bool> Function(String date) onDelete;
+
+  /// A write went through, on any day the sheet showed (LogBodySheet).
+  final VoidCallback onWrote;
+
+  /// The screen's re-read after a save that failed part-way; the sheet
+  /// then re-reads its own day from it (LogBodySheet.onPartlySaved).
+  final Future<void> Function() onPartlySaved;
 
   @override
   State<_BodySheetHost> createState() => _BodySheetHostState();
@@ -468,6 +513,14 @@ class _BodySheetHostState extends State<_BodySheetHost> {
           dateLabel: shown,
           onChangeDate: _changeDate,
           onDelete: hasData ? () => widget.onDelete(day) : null,
+          onWrote: widget.onWrote,
+          onPartlySaved: () async {
+            await widget.onPartlySaved();
+            // The same day as stored now. The sheet keeps what was typed;
+            // its title, its Delete and what a cleared field deletes go
+            // by the weight that was written (or deleted).
+            if (mounted) setState(() => _load(_day));
+          },
         ),
       ],
     );

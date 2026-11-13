@@ -23,6 +23,8 @@ import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
     show kApiKeyChoices, kKnownModels, modelChoiceLabel, noteLabel;
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/store_listing_files.dart';
+
 Directory _appRoot() {
   var dir = Directory.current;
   while (!File('${dir.path}/pubspec.yaml').existsSync()) {
@@ -467,9 +469,14 @@ void main() {
       expectNoOldName(_readRepo('docs/PRIVACY.md'));
       expectNoOldName(_readRepo('docs/SUPPORT.md'));
       expectNoOldName(_read('lib/ui/app.dart'));
-      for (final file in Directory(
-        '${_appRoot().path}/ios/store/metadata',
-      ).listSync(recursive: true).whereType<File>()) {
+      // The listing's own files, not a checkout's .DS_Store (binary) or
+      // git mergetool's .orig (see store_listing_files.dart).
+      final listing = storeListingFiles(
+        Directory('${_appRoot().path}/ios/store/metadata'),
+        recursive: true,
+      );
+      expect(listing, isNotEmpty);
+      for (final file in listing) {
         expectNoOldName(file.readAsStringSync(), reason: file.path);
       }
       for (final locale in ['en-US', 'zh-Hans']) {
@@ -497,8 +504,12 @@ void main() {
       // model a lookup goes to, merged on 2026-11-10; run 7 (PR #22: the
       // day before's meals with a photo taken before 4 a.m., under the
       // consent text that says so) merged on 2026-11-11, and so did the
-      // 1.7.0 iCloud Backup (PR #36: the iCloud Backup section).
-      expect(policy, contains('Effective date: 2026-11-11'));
+      // 1.7.0 iCloud Backup (PR #36: the iCloud Backup section). Review
+      // r171 changed it on 2026-11-13: activities in what an export holds,
+      // and that iOS can keep API keys in the Keychain after uninstalling.
+      // If that branch merges on a later day, set the date and this pin to
+      // the merge date.
+      expect(policy, contains('Effective date: 2026-11-13'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));

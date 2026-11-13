@@ -332,16 +332,17 @@ When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
 - `app/test/ui/usual_copy_test.dart` pins the number of keys in each ARB
-  file: 809 on `main` since #22 merged, 888 on the iCloud Backup branch
+  file: 809 on `main` since #22 merged, 890 on the iCloud Backup branch
   merged with #33 and the review-171 fixes (`feat/icloud-backup` adds 72
   `backup*` and `import*` keys, #33's source-link label 1, the Test AI
-  provider page's three `diagStatus*` check states 3, the Body tab's two
-  failure lines 2, the Leftovers screen's two failure lines 2, none shared;
-  review r171 deleted `bodyEmptyHintImperial`, the same text as
-  `bodyEmptyHint`). If either side adds keys before both
-  merge, change the number in that test to the merged count, and here too
-  (the test checks this line); both files must still have the same keys.
-  Do not drop the check.
+  provider page's three `diagStatus*` check states 3, the Body tab's three
+  failure lines 3, the coverage window slider's screen-reader name
+  `covWindowLabel` 1, the Leftovers screen's two failure lines 2, none
+  shared; review r171 deleted `bodyEmptyHintImperial`, the same text as
+  `bodyEmptyHint`). If either side adds keys before both merge, change the
+  number in that test to the merged count, and here too (the test checks
+  this line); both files must still have the same keys. Do not drop the
+  check.
 - The policy's *My usual foods* bullet says a meal changed with them goes
   with "the next photo you log that day (and with one taken before 4 a.m.
   the next day)", because #22 also sends the day before's meals with a

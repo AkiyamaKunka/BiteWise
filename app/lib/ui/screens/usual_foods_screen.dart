@@ -21,7 +21,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/contracts.dart';
 import '../../services/usual/usual_foods.dart';
-import '../format.dart' show formatKcal;
+import '../format.dart' show formatKcal, formatOneDecimal;
 import '../l10n.dart';
 import '../large_text.dart';
 import '../theme/app_dialog.dart';
@@ -389,10 +389,6 @@ class _UsualFoodsScreenState extends State<UsualFoodsScreen> {
   }
 }
 
-/// Grams as the meal card writes them: whole, else to 0.1 g.
-String _grams(num v) =>
-    v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
-
 /// One meal: its title, the numbers a log writes, how often and when it
 /// was last logged; ⋯ holds Hide from this list. A tap logs it (no
 /// chevron: nothing opens).
@@ -421,9 +417,9 @@ class _UsualRow extends StatelessWidget {
     final colors = context.colors;
     final n = meal.numbers;
     final numbers = '${l.kcalAmount(formatKcal(n.kcal))} · '
-        '${l.macroProteinShort}: ${_grams(n.p)}g · '
-        '${l.macroCarbsShort}: ${_grams(n.c)}g · '
-        '${l.macroFatShort}: ${_grams(n.f)}g';
+        '${l.macroProteinShort}: ${formatOneDecimal(n.p)}g · '
+        '${l.macroCarbsShort}: ${formatOneDecimal(n.c)}g · '
+        '${l.macroFatShort}: ${formatOneDecimal(n.f)}g';
     final actions = Row(
       mainAxisSize: MainAxisSize.min,
       children: [

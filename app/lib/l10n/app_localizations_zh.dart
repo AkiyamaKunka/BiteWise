@@ -3247,4 +3247,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get leftoverSaveFailed => '没能完成剩菜扣除，请再试一次。';
+
+  @override
+  String get covWindowLabel => '检查天数';
+
+  @override
+  String get bodyDeleteFailed => '没能删除，请再试一次。';
 }

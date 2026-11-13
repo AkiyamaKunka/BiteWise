@@ -3771,13 +3771,13 @@ abstract class AppLocalizations {
   /// No description provided for @importDone.
   ///
   /// In en, this message translates to:
-  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).'**
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows, plural, =1{1 row} other{{rows} rows}} total).'**
   String importDone(int meals, int rows);
 
   /// No description provided for @importDoneKept.
   ///
   /// In en, this message translates to:
-  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.'**
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows, plural, =1{1 row} other{{rows} rows}} total); {kept} already here.'**
   String importDoneKept(int meals, int rows, int kept);
 
   /// No description provided for @importFailed.
@@ -5446,6 +5446,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t finish deducting the leftovers. Try again.'**
   String get leftoverSaveFailed;
+
+  /// Photo coverage: what a screen reader calls the slider that sets how many days back the check looks. Read with its value, lookbackDays ('7 days'). Not shown on screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Days to check'**
+  String get covWindowLabel;
+
+  /// Body tab: deleting a day's weight or measurements failed. Shown under the Log body sheet's fields when its Delete failed (the sheet stays open), else in a snackbar after a history row's swipe or its screen-reader Delete action (the row stays). The raw error goes to the debug log only (its type).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete. Try again.'**
+  String get bodyDeleteFailed;
 }
 
 class _AppLocalizationsDelegate

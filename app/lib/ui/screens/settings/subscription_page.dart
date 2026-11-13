@@ -205,11 +205,6 @@ class _SubscriptionProviderPageState
     }
   }
 
-  Widget _cellField(Widget field) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        child: field,
-      );
-
   String _modelLabel(BuildContext context, String v) => switch (v) {
         'fable' => 'Fable',
         'opus' => 'Opus',
@@ -265,20 +260,17 @@ class _SubscriptionProviderPageState
           separatorInset: AppSpace.separatorInset,
           children: [
             for (final (backend, _, note) in kPlanChoices)
-              announceSelected(
+              GroupedRow(
+                key: Key('planChoice-$backend'),
+                title: serverPlanName(context.l10n, backend),
+                value: noteLabel(context.l10n, note),
                 selected: _planActive && settings.serverBackend == backend,
-                row: GroupedRow(
-                  key: Key('planChoice-$backend'),
-                  title: serverPlanName(context.l10n, backend),
-                  value: noteLabel(context.l10n, note),
-                  showChevron: false,
-                  trailing: _planActive &&
-                          settings.serverBackend == backend
-                      ? Icon(Icons.check_rounded,
-                          size: 20, color: context.colors.accent)
-                      : const SizedBox(width: 20),
-                  onTap: () => _selectPlan(backend),
-                ),
+                showChevron: false,
+                trailing: _planActive && settings.serverBackend == backend
+                    ? Icon(Icons.check_rounded,
+                        size: 20, color: context.colors.accent)
+                    : const SizedBox(width: 20),
+                onTap: () => _selectPlan(backend),
               ),
           ],
         ),
@@ -288,7 +280,7 @@ class _SubscriptionProviderPageState
             footer: context.l10n.serverFooter,
             separatorInset: AppSpace.separatorInset,
             children: [
-              _cellField(TextField(
+              cellField(TextField(
                 key: const Key('serverUrlField'),
                 controller: _serverUrlController,
                 autocorrect: false,
@@ -308,7 +300,7 @@ class _SubscriptionProviderPageState
                 onTapOutside: (_) => settings.update(
                     serverBaseUrl: _serverUrlController.text.trim()),
               )),
-              _cellField(TextField(
+              cellField(TextField(
                 key: const Key('serverUploadKeyField'),
                 controller: _keyController,
                 obscureText: true,
