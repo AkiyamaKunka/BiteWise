@@ -47,6 +47,10 @@ class _SubscriptionProviderPageState
     extends State<SubscriptionProviderPage> {
   late final TextEditingController _keyController;
   late final TextEditingController _serverUrlController;
+  final FocusNode _serverUrlFocus = FocusNode();
+
+  /// The address field holds an edit that is not saved yet.
+  bool _serverUrlEdited = false;
   bool _authBusy = false;
 
   /// 'token' | 'none' | null (unknown / not applicable). Fetched on open
@@ -64,7 +68,23 @@ class _SubscriptionProviderPageState
         text: _planActive ? widget.settings.apiKey : '');
     _serverUrlController =
         TextEditingController(text: widget.settings.serverBaseUrl);
+    _serverUrlFocus.addListener(() {
+      if (!_serverUrlFocus.hasFocus && _serverUrlEdited) _saveServerUrl();
+    });
     _refreshLoginState();
+  }
+
+  /// Saves what the address field holds as the server's address — only
+  /// when the edit is committed: Done, a tap outside, focus moving to
+  /// another field (Flutter does not count a tap into the upload key under
+  /// it as outside) or leaving the page. Never per keystroke: the analyzer,
+  /// the Garmin fetch and the lookups read the saved address at each
+  /// request, so an automatic photo and the upload key went to whatever
+  /// host a half-typed address named (http://10.0.0.5 on the way to .55,
+  /// review 171).
+  void _saveServerUrl() {
+    _serverUrlEdited = false;
+    widget.settings.update(serverBaseUrl: _serverUrlController.text.trim());
   }
 
   Future<void> _refreshLoginState() async {
@@ -90,6 +110,15 @@ class _SubscriptionProviderPageState
 
   @override
   void dispose() {
+    // Leaving the page with an edit not saved yet saves it, once this
+    // frame is done: a store notifying from here would rebuild its
+    // listeners while the tree is locked.
+    if (_serverUrlEdited) {
+      final settings = widget.settings;
+      final url = _serverUrlController.text.trim();
+      scheduleMicrotask(() => settings.update(serverBaseUrl: url));
+    }
+    _serverUrlFocus.dispose();
     _keyController.dispose();
     _serverUrlController.dispose();
     super.dispose();
@@ -291,6 +320,7 @@ class _SubscriptionProviderPageState
               _cellField(TextField(
                 key: const Key('serverUrlField'),
                 controller: _serverUrlController,
+                focusNode: _serverUrlFocus,
                 autocorrect: false,
                 keyboardType: TextInputType.url,
                 decoration: cellFieldDecoration(
@@ -298,15 +328,10 @@ class _SubscriptionProviderPageState
                   labelText: context.l10n.serverAddressLabel,
                   hintText: 'http://your.server.ip',
                 ),
-                // Saved as typed, like the upload key under it: Done and a
-                // tap outside alone lost the address when the next tap was
-                // the upload key — Flutter does not count a tap into
-                // another text field as outside.
-                onChanged: (v) => settings.update(serverBaseUrl: v.trim()),
-                onSubmitted: (v) =>
-                    settings.update(serverBaseUrl: v.trim()),
-                onTapOutside: (_) => settings.update(
-                    serverBaseUrl: _serverUrlController.text.trim()),
+                // Saved when committed ([_saveServerUrl]), not as typed.
+                onChanged: (_) => _serverUrlEdited = true,
+                onSubmitted: (_) => _saveServerUrl(),
+                onTapOutside: (_) => _saveServerUrl(),
               )),
               _cellField(TextField(
                 key: const Key('serverUploadKeyField'),
