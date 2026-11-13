@@ -8,7 +8,13 @@
 ///   does, and offers the no-AI path too;
 /// - plain emphasis instead of ALL CAPS in the strings that shouted;
 /// - Chinese quotes a button name or an example in corner brackets 「」,
-///   never ASCII straight quotes (L7).
+///   never ASCII straight quotes (L7) nor curly ones (review r171);
+/// - review r171 also: a count of one reads as one; no provider-page
+///   footer bills every photo; the iCloud-off footer does not say a new
+///   iPhone always loses the meals;
+/// - the support page (docs/SUPPORT.md, the store listings' support URL)
+///   describes the App Store version, and what only 1.7.0 has waits in
+///   docs/RELEASING.md § 12, naming the controls as the app does.
 library;
 
 import 'dart:convert';
@@ -233,5 +239,65 @@ void main() {
     expect(zh.covDoneFailures('重试', 1, 3), contains('「之前失败」'));
     expect(zh.diagBgRunKilled('读取照片'), contains('最后一步：'));
     expect(zh.diagBgRunsIntro, contains('「最后一步」'));
+  });
+
+  // Review r171: docs/SUPPORT.md is the support URL of both store listings
+  // and describes the App Store version, 1.6.0. Its export list left out
+  // activities (1.6.0's export has them), and "uninstall Chopstats; that
+  // removes everything it stored on the phone" is not so: iOS can keep
+  // Keychain items after an app is deleted. iCloud Backup, the pictures in
+  // an export and Choose File… are 1.7.0's, so their text waits in
+  // docs/RELEASING.md § 12 until 1.7.0 is in the App Store.
+  group('the support page', () {
+    String flat(String path) =>
+        File(path).readAsStringSync().replaceAll(RegExp(r'\s+'), ' ');
+    final support = flat('../docs/SUPPORT.md');
+    final releasing = flat('../docs/RELEASING.md');
+
+    test('lists what a 1.6.0 export holds, and what uninstalling leaves',
+        () {
+      expect(support, contains('workouts and activities'));
+      expect(support,
+          isNot(contains('that removes everything it stored on the phone')));
+      expect(support,
+          contains('iOS can keep API keys in the Keychain after an app is '
+              'deleted'));
+      expect(support,
+          contains('first clear each key you entered in Settings › AI '
+              'Provider'));
+    });
+
+    test('names no 1.7.0 control before 1.7.0 is in the App Store', () {
+      for (final label in [
+        en.backupRowICloud,
+        en.backupRowDelete,
+        en.importChooseFile,
+      ]) {
+        expect(support, isNot(contains(label)), reason: label);
+      }
+    });
+
+    test('RELEASING.md § 12 holds the 1.7.0 text, with the app\'s labels',
+        () {
+      const heading = '## 12. When 1.7.0 ships: the support page';
+      expect(releasing, contains(heading));
+      final s12 = releasing.substring(releasing.indexOf(heading));
+      for (final label in [
+        en.backupRowICloud,
+        en.backupRowDelete,
+        en.backupTurnOffDelete,
+        en.backupTurnOffKeep,
+        en.importChooseFile,
+        en.importFromClipboard,
+        en.settingsRowImport,
+        en.settingsRowExport,
+        en.settingsSectionData,
+      ]) {
+        expect(s12, contains(label), reason: label);
+      }
+      expect(s12, contains('Uninstalling does not delete it'));
+      expect(s12, contains('iCloud Drive › Chopstats'));
+      expect(s12, contains('app/test/ui/copy_consistency_test.dart'));
+    });
   });
 }

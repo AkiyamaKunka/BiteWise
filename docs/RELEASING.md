@@ -1196,7 +1196,8 @@ GitHub release notes warn about it either way.
 ## 8. Running a release (cheat sheet)
 
 (Before the first 1.7.0 tag: § 11, the iCloud container, or the iOS lane
-stops at "Check the Runner profile allows the iCloud container".)
+stops at "Check the Runner profile allows the iCloud container". Once
+1.7.0 is in the App Store: § 12, the support page.)
 
 ```bash
 # 1. in the shipping PR: app/pubspec.yaml  version: 1.7.0+9   (the +N is for hand builds only)
@@ -1463,3 +1464,49 @@ phone, with Part B and § 11.1 done:
     first).
 13. A file another device has not uploaded yet (error 4353) never makes
     Settings say *iCloud Drive is not available for Chopstats*.
+
+---
+
+## 12. When 1.7.0 ships: the support page
+
+`docs/SUPPORT.md` is the support URL of both store listings, so, like the
+README, it describes the version in the App Store (1.6.0 today). What only
+`main` has is written here instead and goes onto the page in a PR once
+1.7.0 is in the App Store. The labels are the app's on `main`:
+`app/test/ui/copy_consistency_test.dart` checks them against `app_en.arb`,
+and checks that `SUPPORT.md` does not name them yet; drop that check
+("names no 1.7.0 control …") in the same PR. If 1.7.0 ships without Part B
+(§ 11), leave out the iCloud Backup text (steps 1 and 3, and the iCloud
+sentence in step 4) and keep the rest.
+
+1. **Intro**: "your meal log stays on your phone" becomes "your meal log
+   stays on your phone (and, with iCloud Backup, in your own iCloud
+   Drive)".
+2. **Export and import**, under *Your data*: Settings › Your Data ›
+   **Export Data…** "saves your meals and their pictures, weight, body
+   measurements, workouts and activities, fitness profile and the list of
+   processed photos to a file you can share or keep (API keys are not
+   included)": an export now carries the meal pictures, with the data a
+   camera can embed in them removed. The Import sentence becomes:
+   "**Import Data…** restores it: tap **Choose File…** and pick the file
+   (a full export with its pictures is too big for the clipboard), paste a
+   small export's text, or tap **Import from clipboard**. Meals already
+   here are kept, and pictures are added to meals that have none."
+3. **A new bullet after Export**: "**iCloud Backup** (Settings › Your
+   Data): on by default, after a notice; nothing is uploaded before you
+   answer it. It copies your meals, weight, body measurements, workouts and
+   meal pictures to a *Chopstats* folder in your own iCloud Drive, and
+   after a reinstall, or on a new iPhone with the same Apple Account,
+   Chopstats offers to restore them. API keys are never included, and the
+   developer receives nothing. Turning the **iCloud Backup** switch off
+   asks whether to **Keep the Backup in iCloud** or **Delete It…**."
+4. **Delete everything** gains, after the backups sentence: "The copy
+   iCloud Backup keeps in your iCloud Drive stays too. Uninstalling does
+   not delete it: delete it in Settings › Your Data (turning **iCloud
+   Backup** off offers **Delete It…**; with the switch already off, tap
+   **Delete iCloud Backup…**), or in the Files app under iCloud Drive ›
+   Chopstats."
+
+The README has its own release-tied lines (its maintainer notes, items
+1–4) and so do the slides (`docs/readme/src/README.md`, *Slides tied to a
+release*); `docs/PRIVACY.md` already describes 1.7.0.
