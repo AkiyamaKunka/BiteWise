@@ -544,7 +544,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get connectionTypeFooter =>
-      'An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.';
+      'An API key stays on this phone. Some providers have a free tier; others charge your account for each request. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.';
 
   @override
   String get typeApiKey => 'API Key';
@@ -679,7 +679,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get apiInactiveFooter =>
-      'Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.';
+      'Your own server is currently active. Pick a provider above to switch to an API key.';
 
   @override
   String get subPageTitle => 'Your own server';

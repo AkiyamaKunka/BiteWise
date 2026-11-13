@@ -479,7 +479,7 @@
   },
   "providerPageTitle": "AI Provider",
   "connectionTypeHeader": "Connection type",
-  "connectionTypeFooter": "An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.",
+  "connectionTypeFooter": "An API key stays on this phone. Some providers have a free tier; others charge your account for each request. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.",
   "typeApiKey": "API Key",
   "typeSubscription": "Your own server",
   "@typeSubscription": {
@@ -573,7 +573,7 @@
       }
     }
   },
-  "apiInactiveFooter": "Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.",
+  "apiInactiveFooter": "Your own server is currently active. Pick a provider above to switch to an API key.",
   "subPageTitle": "Your own server",
   "planHeader": "AI on your server",
   "planFooter": "Pick the AI your server is signed in to. The sign-in stays on your server, never on this phone.",

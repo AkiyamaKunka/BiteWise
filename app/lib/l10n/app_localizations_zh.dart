@@ -507,7 +507,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectionTypeFooter =>
-      'API Key 保存在这台手机上，每张照片由你选择的服务商按你的账户计费。你自己的服务器用它上面配置的 AI 分析照片；这台手机只保存它的地址和上传密钥。';
+      'API Key 保存在这台手机上。有的服务商提供免费额度，有的按次向你的账户计费。你自己的服务器用它上面配置的 AI 分析照片；这台手机只保存它的地址和上传密钥。';
 
   @override
   String get typeApiKey => 'API Key';
@@ -638,7 +638,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get apiInactiveFooter => '当前使用的是你自己的服务器。在上方选择一家服务商即可切换为按张计费的 API Key。';
+  String get apiInactiveFooter => '当前使用的是你自己的服务器。在上方选择一家服务商即可切换为 API Key。';
 
   @override
   String get subPageTitle => '你自己的服务器';

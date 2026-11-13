@@ -885,7 +885,7 @@ abstract class AppLocalizations {
   /// No description provided for @connectionTypeFooter.
   ///
   /// In en, this message translates to:
-  /// **'An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.'**
+  /// **'An API key stays on this phone. Some providers have a free tier; others charge your account for each request. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.'**
   String get connectionTypeFooter;
 
   /// No description provided for @typeApiKey.
@@ -1101,7 +1101,7 @@ abstract class AppLocalizations {
   /// No description provided for @apiInactiveFooter.
   ///
   /// In en, this message translates to:
-  /// **'Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.'**
+  /// **'Your own server is currently active. Pick a provider above to switch to an API key.'**
   String get apiInactiveFooter;
 
   /// No description provided for @subPageTitle.

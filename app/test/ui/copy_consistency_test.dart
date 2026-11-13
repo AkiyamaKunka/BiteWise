@@ -49,6 +49,37 @@ void main() {
     expect(zh.apiProviderFooter, contains('免费额度'));
   });
 
+  // Review r171: U23 made the API Key page's footer neutral, but the
+  // Connection type footer one screen up still said the provider "bills
+  // each photo to your account", and the own-server page offered "a
+  // pay-per-photo API key" — to a free-tier Gemini or GLM user too.
+  test('no provider-page footer says every photo is billed', () {
+    for (final text in [en.connectionTypeFooter, en.apiInactiveFooter]) {
+      expect(text, isNot(contains('each photo')), reason: text);
+      expect(text, isNot(contains('per-photo')), reason: text);
+      expect(text, isNot(contains('bills')), reason: text);
+    }
+    for (final text in [zh.connectionTypeFooter, zh.apiInactiveFooter]) {
+      expect(text, isNot(contains('每张照片')), reason: text);
+      expect(text, isNot(contains('按张计费')), reason: text);
+    }
+    expect(en.connectionTypeFooter,
+        startsWith('An API key stays on this phone. Some providers have a '
+            'free tier; others charge your account for each request.'));
+    expect(zh.connectionTypeFooter,
+        startsWith('API Key 保存在这台手机上。有的服务商提供免费额度，有的按次向你的账户计费。'));
+    // The own-server sentence is unchanged.
+    expect(en.connectionTypeFooter,
+        endsWith(' Your own server analyzes photos with the AI configured '
+            'on it; this phone keeps only its address and upload key.'));
+    expect(zh.connectionTypeFooter,
+        endsWith('你自己的服务器用它上面配置的 AI 分析照片；这台手机只保存它的地址和上传密钥。'));
+    expect(en.apiInactiveFooter,
+        'Your own server is currently active. Pick a provider above to '
+        'switch to an API key.');
+    expect(zh.apiInactiveFooter, '当前使用的是你自己的服务器。在上方选择一家服务商即可切换为 API Key。');
+  });
+
   test('the Today empty state names Watch Camera Roll as Settings does', () {
     for (final MapEntry(key: tag, value: l) in locales.entries) {
       expect(l.todayEmptyHint, contains(l.settingsRowWatch), reason: tag);
