@@ -5410,6 +5410,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 meal you deleted on this phone was} other{{count} meals you deleted on this phone were}} left out.'**
   String importDeletedLeftOut(int count);
+
+  /// Test AI provider: what a screen reader says for a check's tick, read before the check's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Passed'**
+  String get diagStatusPass;
+
+  /// Test AI provider: what a screen reader says for a check's warning sign, read before the check's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Warning'**
+  String get diagStatusWarn;
+
+  /// Test AI provider: what a screen reader says for a check's error sign, read before the check's name.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get diagStatusFail;
 }
 
 class _AppLocalizationsDelegate

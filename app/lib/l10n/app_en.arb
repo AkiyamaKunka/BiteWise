@@ -3402,5 +3402,17 @@
         "type": "int"
       }
     }
+  },
+  "diagStatusPass": "Passed",
+  "@diagStatusPass": {
+    "description": "Test AI provider: what a screen reader says for a check's tick, read before the check's name."
+  },
+  "diagStatusWarn": "Warning",
+  "@diagStatusWarn": {
+    "description": "Test AI provider: what a screen reader says for a check's warning sign, read before the check's name."
+  },
+  "diagStatusFail": "Failed",
+  "@diagStatusFail": {
+    "description": "Test AI provider: what a screen reader says for a check's error sign, read before the check's name."
   }
 }

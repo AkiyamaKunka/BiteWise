@@ -3559,4 +3559,13 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0 left out.';
   }
+
+  @override
+  String get diagStatusPass => 'Passed';
+
+  @override
+  String get diagStatusWarn => 'Warning';
+
+  @override
+  String get diagStatusFail => 'Failed';
 }
