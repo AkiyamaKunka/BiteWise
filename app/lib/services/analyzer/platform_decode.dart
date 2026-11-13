@@ -397,7 +397,9 @@ Future<Uint8List?> downscaleViaImageIO(Uint8List original,
 /// and the size is measured on the upright picture; a JPEG larger than
 /// that size is subsampled while it decodes, never held at full
 /// resolution. The JPEG is encoded from those bare pixels, so none of the
-/// original's EXIF (GPS, camera, times) goes with it.
+/// original's EXIF (GPS, camera, times) goes with it. A JPEG has no alpha:
+/// a transparent pixel is laid over white once ([_encodeRgbaJpeg]), as
+/// pure Dart's encoder and ImageIO lay it.
 ///
 /// Can wait forever where the engine's GPU is off (the iOS background
 /// engine; see the library docs) — callers go through [decodeForUpload],
@@ -424,6 +426,7 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
     codec = await descriptor.instantiateCodec(
         targetWidth: targetW, targetHeight: targetH);
     image = (await codec.getNextFrame()).image;
+    // rawRgba is PREMULTIPLIED: [_encodeRgbaJpeg] relies on it.
     final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (data == null) return null;
     final rgba =
@@ -440,16 +443,29 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
   }
 }
 
+/// The codec's premultiplied RGBA → a JPEG at the given quality.
+///
+/// A JPEG has no alpha, so every pixel is laid over white first, once:
+/// from premultiplied values that is c + (255 − a) per channel, the same
+/// colour pure Dart's encoder makes from a straight one (c·a + 255·(1 − a))
+/// and ImageIO's white fill gives. Until review 171's second pass these
+/// bytes went to the encoder as straight RGBA, and it laid them over white
+/// by their alpha a second time: half-transparent pixels came out too dark.
 Uint8List? _encodeRgbaJpeg((Uint8List, int, int, int) a) {
   try {
-    final (rgba, width, height, quality) = a;
-    final decoded = img.Image.fromBytes(
-        width: width,
-        height: height,
-        bytes: rgba.buffer,
-        bytesOffset: rgba.offsetInBytes,
-        numChannels: 4);
-    return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+    final (premultiplied, width, height, quality) = a;
+    // Clamped: a premultiplied channel never exceeds its alpha, so a sum
+    // over 255 would only come from a malformed pixel; it must not wrap.
+    final rgb = Uint8ClampedList(width * height * 3);
+    for (var i = 0, o = 0; o < rgb.length; i += 4, o += 3) {
+      final white = 255 - premultiplied[i + 3];
+      rgb[o] = premultiplied[i] + white;
+      rgb[o + 1] = premultiplied[i + 1] + white;
+      rgb[o + 2] = premultiplied[i + 2] + white;
+    }
+    final opaque = img.Image.fromBytes(
+        width: width, height: height, bytes: rgb.buffer, numChannels: 3);
+    return Uint8List.fromList(img.encodeJpg(opaque, quality: quality));
   } catch (_) {
     return null;
   }

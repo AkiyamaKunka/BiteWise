@@ -586,6 +586,52 @@ void main() {
       expectUpright(out);
       expectUpright(dartOut); // the same picture pure Dart made
     });
+
+    // Review 171, second pass: the codec's pixels were read premultiplied
+    // and handed to the JPEG encoder as straight RGBA, and the encoder lays
+    // a pixel over white by its alpha (a JPEG has none): a second time. The
+    // soft shadow or anti-aliased edge of a cut-out PNG came out too dark.
+    // Pure Dart, like ImageIO on iOS, lays it over white once.
+    testWidgets('a half-transparent PNG is laid over white once, as pure '
+        'Dart lays it', (tester) async {
+      // Sauce red in four bands, at alpha 0, 64, 128 and 192.
+      const alphas = [0, 64, 128, 192];
+      final src = img.Image(width: 64, height: 16, numChannels: 4);
+      for (final p in src) {
+        p
+          ..r = 200
+          ..g = 40
+          ..b = 40
+          ..a = alphas[p.x ~/ 16];
+      }
+      final png = Uint8List.fromList(img.encodePng(src));
+      for (final thumb in [false, true]) {
+        final pureDart = thumb ? makeMealThumb : normalizeForAnalysis;
+        var dartCalls = 0;
+        final out = await tester.runAsync(() => decodeForUpload(png,
+            pureDart: pureDart,
+            longSidePx: thumb ? kThumbLongSidePx : kAnalysisLongSidePx,
+            jpegQuality: thumb ? kThumbJpegQuality : kAnalysisJpegQuality,
+            isolate: (_, _) async {
+              dartCalls++;
+              return Uint8List(1);
+            },
+            ios: false,
+            headless: false));
+        expect(dartCalls, 0, reason: 'the engine codec decoded it');
+        final viaEngine = img.decodeJpg(out!)!;
+        final viaDart = img.decodeJpg(pureDart(png)!)!;
+        for (var band = 0; band < alphas.length; band++) {
+          final e = viaEngine.getPixel(16 * band + 8, 8);
+          final d = viaDart.getPixel(16 * band + 8, 8);
+          for (final (got, want) in [(e.r, d.r), (e.g, d.g), (e.b, d.b)]) {
+            expect((got - want).abs(), lessThanOrEqualTo(3),
+                reason: 'thumb: $thumb, alpha ${alphas[band]}: the engine '
+                    'gave ${(e.r, e.g, e.b)}, pure Dart ${(d.r, d.g, d.b)}');
+          }
+        }
+      }
+    });
   });
 
   group('orNullAfter', () {
