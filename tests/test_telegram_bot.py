@@ -6179,8 +6179,8 @@ def test_api_only_mode_skips_polling_but_keeps_stamping_and_reaping(
 
     assert polled == [], "chat polling must not run in API-only mode"
     assert sleeps == [30, 30, 30]
-    assert events == ["stamp", "reap"] * 3, \
-        "each tick stamps (first) and reaps"
+    assert events == ["stamp", "reap"] * 3 + ["stamp"], \
+        "each tick stamps (first) and reaps; the clean stop stamps once more"
 
 
 def test_api_only_mode_survives_a_failing_reaper(monkeypatch):
@@ -6203,7 +6203,54 @@ def test_api_only_mode_survives_a_failing_reaper(monkeypatch):
 
     _stub_main_boot(monkeypatch, FakeBot)
     assert _run_main_for_ticks(monkeypatch, 2) == [30, 30]
-    assert len(stamps) == 2
+    assert len(stamps) == 3, "two ticks, then the clean stop's stamp"
+
+
+def test_api_only_mode_stops_cleanly_so_restarts_are_not_crash_boots(
+        monkeypatch, tmp_path):
+    """SIGTERM in API-only mode (TELEGRAM_POLLING=0, the VM's setting) is
+    the same orderly stop as in the polling loop: STOPPING=1 and a
+    clean-shutdown stamp. Without the stamp every `systemctl restart` or
+    deploy counted as a crash boot, and three of them inside ten minutes
+    sent the "crash-restarted 3 times" alert.
+
+    Drives the real main() three times with the real tripwire and the real
+    stamp: only the first boot (no stamp before it) may count as a crash."""
+    monkeypatch.setenv("TELEGRAM_POLLING", "0")
+    monkeypatch.setattr(telegram_bot, "_stamp_progress", lambda: None)
+    monkeypatch.setattr(telegram_bot.claude_auth, "reap_expired_session",
+                        lambda: False)
+    sent = []
+
+    class FakeBot:
+        def __init__(self, token):
+            pass
+
+        def send_message(self, chat_id, text, **kw):
+            sent.append(text)
+            return {"ok": True}
+
+    real_tripwire = telegram_bot._record_boot_and_maybe_alert
+    real_clean_stamp = telegram_bot._record_clean_shutdown
+    _stub_main_boot(monkeypatch, FakeBot)
+    monkeypatch.setattr(telegram_bot, "_record_boot_and_maybe_alert",
+                        real_tripwire)
+    monkeypatch.setattr(telegram_bot, "_record_clean_shutdown",
+                        real_clean_stamp)
+    notified = []
+    monkeypatch.setattr(telegram_bot, "_sd_notify", notified.append)
+    health = tmp_path / "health.json"
+    monkeypatch.setattr(telegram_bot, "SERVICE_HEALTH_PATH", health)
+
+    for _ in range(3):  # an ordinary deploy-and-tweak session
+        _run_main_for_ticks(monkeypatch, 1)
+
+    data = service_health.load(health)
+    assert len(data["recent_crash_boots"]) == 1, \
+        "a restart after a SIGTERM stop must not count as a crash boot"
+    assert sent == [], "three restarts are not a crash loop"
+    assert "last_clean_shutdown" in data, "the last stop stamped too"
+    assert notified == ["READY=1", "STOPPING=1"] * 3
 
 
 def test_api_only_mode_kills_an_abandoned_setup_token_process(

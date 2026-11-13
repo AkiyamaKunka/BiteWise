@@ -6052,6 +6052,21 @@ def _record_clean_shutdown():
     service_health.update(mutate, SERVICE_HEALTH_PATH, warn=log.warning)
 
 
+def _stop_cleanly():
+    """The orderly stop both main loops end in (SIGTERM is routed to
+    KeyboardInterrupt), so systemctl stop/restart and deploys stamp a clean
+    shutdown and the crash-loop tripwire ignores them — with the chat bot
+    polling or not (TELEGRAM_POLLING=0).
+
+    Fresh progress stamp first: the interpreter still joins non-daemon
+    upload threads (bounded by TimeoutStopSec=180), and the daemon
+    heartbeat keeps petting through that join on this stamp's budget.
+    """
+    _stamp_progress()
+    _sd_notify("STOPPING=1")
+    _record_clean_shutdown()
+
+
 def _record_boot_and_maybe_alert(bot: TelegramBot):
     """Crash-loop tripwire: 3+ CRASH boots inside 10 minutes, alerted once.
 
@@ -6461,6 +6476,7 @@ def main():
         try:
             _api_only_idle_loop()
         except KeyboardInterrupt:
+            _stop_cleanly()
             log.info("Shutting down.")
             return
 
@@ -6509,14 +6525,7 @@ def main():
                 _stamp_progress()
 
     except KeyboardInterrupt:
-        # SIGTERM is routed here too, so systemctl stop/restart and deploys
-        # stamp a clean shutdown — the crash-loop tripwire ignores them.
-        # Fresh progress stamp first: the interpreter still joins non-daemon
-        # upload threads (bounded by TimeoutStopSec=180), and the daemon
-        # heartbeat keeps petting through that join on this stamp's budget.
-        _stamp_progress()
-        _sd_notify("STOPPING=1")
-        _record_clean_shutdown()
+        _stop_cleanly()
         log.info("\n👋 Bot stopped.")
 
 
