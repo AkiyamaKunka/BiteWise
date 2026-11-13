@@ -32,6 +32,38 @@ import '../../widgets/grouped.dart';
 import '../../widgets/restaurant_consent_sheet.dart';
 import 'settings_kit.dart' show announceSelected;
 
+/// Who a lookup would reach now, by [controls]; unsupported when asking
+/// fails, so a broken answer never breaks Settings.
+LookupSupport restaurantLookupSupport(RestaurantAssistControls controls) {
+  try {
+    return controls.lookupSupport();
+  } catch (_) {
+    return const LookupSupport.unsupported('error');
+  }
+}
+
+/// After the AI provider page: when the recipient a lookup would reach
+/// changed there ([stampBefore] is [restaurantLookupSupport]'s stamp from
+/// before) and a mode is on, ask now — the assist is paused until this is
+/// answered. Settings calls it, not [RestaurantAssistSection]: its list
+/// builds groups as they scroll near, and at the larger text sizes this
+/// group is not built while the user is at the top, where the page opens.
+Future<void> promptIfRestaurantRecipientChanged(
+  BuildContext context, {
+  required SettingsStore settings,
+  required RestaurantAssistControls controls,
+  required String stampBefore,
+}) async {
+  if (settings.restaurantAssist == 'off') return;
+  final support = restaurantLookupSupport(controls);
+  if (!support.supported || support.recipientStamp == stampBefore) return;
+  if (restaurantConsentCovers(settings, support)) return;
+  await askRestaurantConsent(context,
+      settings: settings,
+      controls: controls,
+      kind: RestaurantConsentKind.recipientChanged);
+}
+
 class RestaurantAssistSection extends StatefulWidget {
   const RestaurantAssistSection({
     super.key,
@@ -95,13 +127,7 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
     }());
   }
 
-  LookupSupport _support() {
-    try {
-      return _c.lookupSupport();
-    } catch (_) {
-      return const LookupSupport.unsupported('error');
-    }
-  }
+  LookupSupport _support() => restaurantLookupSupport(_c);
 
   String _modeLabel(AppLocalizations l, String mode) => switch (mode) {
         'auto' => l.restaurantModeAuto,
@@ -209,20 +235,6 @@ class RestaurantAssistSectionState extends State<RestaurantAssistSection> {
         kind: RestaurantConsentKind.recipientChanged);
     if (mounted) setState(() {});
   }
-
-  /// After the AI provider page: when the recipient a lookup would reach
-  /// changed there ([stampBefore] is the one before) and the mode is on,
-  /// ask now — the assist is paused until this is answered.
-  Future<void> promptIfRecipientChanged(String stampBefore) async {
-    if (!mounted || _s.restaurantAssist == 'off') return;
-    final support = _support();
-    if (!support.supported || support.recipientStamp == stampBefore) return;
-    if (restaurantConsentCovers(_s, support)) return;
-    await _review();
-  }
-
-  /// The stamp of the recipient a lookup would reach now.
-  String currentRecipientStamp() => _support().recipientStamp;
 
   Future<void> _confirmClearPlaces() async {
     final go = await showDialog<bool>(

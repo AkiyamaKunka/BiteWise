@@ -189,9 +189,6 @@ class _SettingsScreenState extends State<SettingsScreen>
   /// The recorded runs show no progress (backgroundScanLooksStuck).
   bool _backgroundStuck = false;
 
-  final GlobalKey<RestaurantAssistSectionState> _restaurantKey =
-      GlobalKey<RestaurantAssistSectionState>();
-
   @override
   void initState() {
     super.initState();
@@ -554,7 +551,9 @@ class _SettingsScreenState extends State<SettingsScreen>
             ..._photoSection(theme),
             if (widget.restaurantAssist != null)
               RestaurantAssistSection(
-                key: _restaurantKey,
+                // The list matches unkeyed rows by place: keyed, the group
+                // keeps its state when the first-run card above it leaves.
+                key: const ValueKey('restaurantAssistSection'),
                 settings: widget.settings,
                 controls: widget.restaurantAssist!,
               ),
@@ -635,8 +634,17 @@ class _SettingsScreenState extends State<SettingsScreen>
     );
   }
 
-  /// The AI Provider page, as the AI Provider row opens it.
+  /// The AI Provider page, from the AI Provider row and the first-run card
+  /// alike (the card's own copy had no assist: Test This Provider lost its
+  /// restaurant and confidence sections, and nothing asked on the way back).
   Future<void> _openProviderPage() async {
+    // Who a restaurant lookup would reach before the visit: a new provider
+    // or server pauses the assist until the user agrees to it (design R7a).
+    // Read from the assist itself, not its group's state: the list builds
+    // that group lazily, and at large text sizes it is not built up here.
+    final assist = widget.restaurantAssist;
+    final stampBefore =
+        assist == null ? null : restaurantLookupSupport(assist).recipientStamp;
     await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => ProviderSettingsPage(
         settings: widget.settings,
@@ -645,9 +653,17 @@ class _SettingsScreenState extends State<SettingsScreen>
         completeClaudeAuth: widget.completeClaudeAuth,
         serverLoginState: widget.serverLoginState,
         openUrl: widget.openUrl,
+        dao: widget.dao,
+        restaurantAssist: widget.restaurantAssist,
       ),
     ));
-    if (mounted) setState(() {}); // the card hides once a key is set
+    if (!mounted) return;
+    // The provider label; the card hides once a key is set.
+    setState(() {});
+    if (assist == null || stampBefore == null) return;
+    await promptIfRestaurantRecipientChanged(context,
+        settings: widget.settings, controls: assist, stampBefore: stampBefore);
+    if (mounted) setState(() {}); // the group's paused row, if answered
   }
 
   /// One row of STATE (Apple progressive disclosure): choosing and
@@ -670,30 +686,7 @@ class _SettingsScreenState extends State<SettingsScreen>
               title: context.l10n.settingsRowAiProvider,
               value: providerDisplayLabel(context.l10n,
                   widget.settings.provider, widget.settings.serverBackend),
-              onTap: () async {
-                // Who a restaurant lookup would reach before the visit: a
-                // new provider or server pauses the assist until the user
-                // agrees to it (design R7a).
-                final stampBefore =
-                    _restaurantKey.currentState?.currentRecipientStamp();
-                await Navigator.of(context).push(MaterialPageRoute(
-                  builder: (_) => ProviderSettingsPage(
-                    settings: widget.settings,
-                    analyzer: widget.analyzer,
-                    startClaudeAuth: widget.startClaudeAuth,
-                    completeClaudeAuth: widget.completeClaudeAuth,
-                    serverLoginState: widget.serverLoginState,
-                    openUrl: widget.openUrl,
-                    dao: widget.dao,
-                    restaurantAssist: widget.restaurantAssist,
-                  ),
-                ));
-                if (mounted) setState(() {}); // provider label refresh
-                if (stampBefore != null) {
-                  await _restaurantKey.currentState
-                      ?.promptIfRecipientChanged(stampBefore);
-                }
-              },
+              onTap: _openProviderPage,
             ),
             // Only while the current recipient is allowed: withdrawing a
             // consent that was never given would be a dead row.
