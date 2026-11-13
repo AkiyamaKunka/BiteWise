@@ -151,7 +151,7 @@
   "lookbackSet": "设为 {count} 天",
   "providerPageTitle": "AI 服务",
   "connectionTypeHeader": "连接方式",
-  "connectionTypeFooter": "API Key 保存在这台手机上，每张照片由你选择的服务商按你的账户计费。你自己的服务器用它上面配置的 AI 分析照片；这台手机只保存它的地址和上传密钥。",
+  "connectionTypeFooter": "API Key 保存在这台手机上。有的服务商提供免费额度，有的按次向你的账户计费。你自己的服务器用它上面配置的 AI 分析照片；这台手机只保存它的地址和上传密钥。",
   "typeApiKey": "API Key",
   "typeSubscription": "你自己的服务器",
   "testProvider": "测试当前服务",
@@ -187,7 +187,7 @@
   "modelFreeMark": "FREE 免费",
   "modelHelperDeepseek": "默认：{model} — DeepSeek 唯一能识别照片的模型。",
   "modelHelperOpenrouter": "默认：{model}。openrouter.ai/models 里任何支持图片的 厂商/模型 名称都可以。",
-  "apiInactiveFooter": "当前使用的是你自己的服务器。在上方选择一家服务商即可切换为按张计费的 API Key。",
+  "apiInactiveFooter": "当前使用的是你自己的服务器。在上方选择一家服务商即可切换为 API Key。",
   "subPageTitle": "你自己的服务器",
   "planHeader": "服务器上的 AI",
   "planFooter": "选择你的服务器已登录的 AI。登录凭证保存在你的服务器上，不在这台手机上。",
@@ -247,7 +247,6 @@
   "unitsImperialDetail": "英制 — 磅 · 英寸",
   "unitsSheetTitle": "单位",
   "unitsFooter": "身体体重与围度的显示和输入单位。食物始终使用克与千卡。",
-  "bodyEmptyHintImperial": "点击「记录」来记体重或腰围、胸围、臀围。",
   "bodySince": "自 {date}",
   "addLeftover": "记录剩菜",
   "addLeftoverNote": "扣除没吃完的部分",
@@ -318,8 +317,8 @@
   "diagRunning": "测试中…",
   "diagRunAgain": "重新测试",
   "diagRunChecks": "开始检查",
-  "diagVerdictOk": "一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试“重新分析”。",
-  "diagVerdictProblems": "{count, plural, other{发现 {count} 个问题 —— 下面红色/橙色的行说明该怎么做。}}",
+  "diagVerdictOk": "一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试「重新分析」。",
+  "diagVerdictProblems": "{count, plural, other{发现 {count} 个问题 —— 下面对应的行说明该怎么做。}}",
   "diagStageTestRun": "测试运行",
   "diagTestRunFailed": "检查本身中途失败了。",
   "diagFixTestRun": "重新运行；如果一直卡在这里，说明服务返回的内容应用完全无法解析。",
@@ -335,7 +334,7 @@
   "diagNoApiKey": "这个服务还没有设置 API Key。",
   "diagFixPasteKey": "把 Key 粘贴到设置里，然后重新测试。",
   "diagServerConfigured": "服务器地址和上传 Key 都已设置（后端：{backend}）。",
-  "diagProviderConfigured": "服务“{provider}”已配置 Key，模型为“{model}”。",
+  "diagProviderConfigured": "服务「{provider}」已配置 Key，模型为「{model}」。",
   "diagTargetServer": "服务器",
   "diagTargetYourServer": "你的服务器",
   "diagEndpointAnswered": "{target}的接口有响应。",
@@ -350,17 +349,17 @@
   "diagFixWaitRateLimit": "等一分钟再试；期间照片会被保留并自动重试。",
   "diagKeyRejected": "Key 未被接受。",
   "diagFixRecopyKey": "从服务商控制台重新复制 Key —— 并确认它属于当前这个服务（不同服务的 Key 不能混用）。",
-  "diagModelNotFound": "Key 有效，但找不到模型“{model}”。",
-  "diagTextOk": "模型返回了 JSON —— “文字描述一餐”和“修改或删除某餐”都可用。",
+  "diagModelNotFound": "Key 有效，但找不到模型「{model}」。",
+  "diagTextOk": "模型返回了 JSON —— 「文字描述一餐」和「修改或删除某餐」都可用。",
   "diagTextBad": "文字请求没有成功（服务器忙、限流或额度窗口未开、超时，或模型没有返回 JSON）。",
-  "diagTextBadDetail": "“文字描述一餐”和“修改或删除某餐”可能失败；照片分析仍然可以正常工作。",
+  "diagTextBadDetail": "「文字描述一餐」和「修改或删除某餐」可能失败；照片分析仍然可以正常工作。",
   "diagFixPickModel": "如果一直这样，在设置里换一个模型。",
-  "diagTextBadPhotoAlsoFailed": "“文字描述一餐”和“修改或删除某餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。",
+  "diagTextBadPhotoAlsoFailed": "「文字描述一餐」和「修改或删除某餐」可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。",
   "diagFixTextPickModel": "如果照片分析正常而这里一直失败，再在设置里换一个模型。",
   "diagFixTextFollowPhoto": "先按照片那一行的建议处理，再重新测试。",
   "diagPhotoOk": "模型分析了测试图片，并按用餐格式返回。",
   "diagPhotoThoughtFood": "它甚至认为测试图案是食物。",
-  "diagPhotoNotFood": "判定为“不是食物”—— 对这张测试图片来说是正确的。",
+  "diagPhotoNotFood": "判定为「不是食物」—— 对这张测试图片来说是正确的。",
   "diagPhotoTempFail": "照片分析失败，属于临时性问题。",
   "diagPhotoPermFail": "照片分析失败，重试也无法解决。",
   "diagFixPhotoTemp": "通常是限流或服务器繁忙 —— 照片会被保留并自动重试。",
@@ -370,7 +369,7 @@
   "diagFixQuota": "等待恢复（照片会保留），或更换 Key / 服务立即恢复。",
   "diagQuotaOk": "没有额度暂停。",
   "diagBgRunsTitle": "最近的后台扫描",
-  "diagBgRunsIntro": "最近几次后台扫描做了什么，最新的在前。没有结束时间的一次是被系统中途停止的，“最后一步”说明停在了哪里。",
+  "diagBgRunsIntro": "最近几次后台扫描做了什么，最新的在前。没有结束时间的一次是被系统中途停止的，「最后一步」说明停在了哪里。",
   "diagBgRunsNone": "还没有后台扫描记录。",
   "diagBgRunUnfinished": "未完成",
   "diagBgRunSeconds": "{seconds} 秒",
@@ -472,13 +471,13 @@
   "errQuotaPaused": "分析已暂停：今天的额度已用完。照片已保留，稍后会自动重试。",
   "errNetwork": "连不上服务（网络或服务问题）。照片已保留，稍后会自动重试。",
   "errBadModel": "服务不接受这个模型 —— 请在设置里检查模型名。",
-  "errBadModelDoubao": "豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的“开通管理”里开通。",
+  "errBadModelDoubao": "豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的「开通管理」里开通。",
   "errBadModelOpenRouter": "OpenRouter 找不到这个模型 —— 请用 openrouter.ai/models 上的完整模型 ID（厂商/模型），并选择支持图片的模型。",
   "errBilling": "账户余额或额度已用完 —— 请到服务商控制台充值。充值后可以重新分析这张照片。",
   "errBillingText": "账户余额或额度已用完 —— 请到服务商控制台充值。",
   "errBadResponse": "AI 返回的内容应用无法使用。",
   "errBadPhoto": "无法处理这张照片（解码失败）。",
-  "errLeftoverUnsure": "这张像是之前某一餐的剩菜，但 AI 不确定是哪一餐，所以没有记录，也没有扣除。可以用“记录剩菜”来扣除。",
+  "errLeftoverUnsure": "这张像是之前某一餐的剩菜，但 AI 不确定是哪一餐，所以没有记录，也没有扣除。可以用「记录剩菜」来扣除。",
   "errServerBusy": "你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。",
   "mealCardAutoTitle": "🍽️ 已自动记录一餐",
   "mealCardLeftoverTitle": "🍽️ 已扣除剩菜",
@@ -559,9 +558,9 @@
   "covTruncated": "注意：这个窗口内超过 2000 张照片 —— 更早的没有检查。缩短窗口可得到完整结果。",
   "covVerbLog": "记录",
   "covVerbRetry": "重试",
-  "covProgLogging": "记录中",
-  "covProgReanalyzing": "重新分析中",
-  "covProgRetrying": "重试中",
+  "covProgLogging": "记录",
+  "covProgReanalyzing": "重新分析",
+  "covProgRetrying": "重试",
   "covStopped": "{label}在第 {attempted}/{total} 张后停止：现在无法分析（额度暂停或缺少 Key）。剩下的 {remaining, plural, other{{remaining} 张}}没有处理 —— 稍后再运行一次。",
   "covStoppedBecause": "{label}在第 {attempted}/{total} 张后停止：{reason}剩下的 {remaining, plural, other{{remaining} 张}}没有处理 —— 稍后再运行一次。",
   "covStoppedLast": "{label}在第 {attempted}/{total} 张后停止：{reason}",
@@ -569,7 +568,7 @@
   "covMoreNotFood": "…还有 {count} 张。",
   "covUnnamedPhoto": "（未命名照片）",
   "covDone": "{label}完成（{count} 张照片）。",
-  "covDoneFailures": "{label}完成 —— {count} 张中有 {failures} 张无法处理（已保留在“之前失败”列表中以便重试）。",
+  "covDoneFailures": "{label}完成 —— {count} 张中有 {failures} 张无法处理（已保留在「之前失败」列表中以便重试）。",
   "covDaysShort": "{days} 天",
   "covLoggedAsMeals": "已记录 {count} 餐",
   "covNotFoodCount": "{count} 张非食物",
@@ -591,7 +590,7 @@
   "serverLoginMissing": "未登录",
   "serverLoginUnknown": "无法检查",
   "serverLoginChecking": "检查中…",
-  "serverLoginFooter": "已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。",
+  "serverLoginFooter": "已登录：无需再连接。未登录：用下方「连接 Claude」。无法检查：服务器不可达或密钥被拒。",
   "errServerFailed": "你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。",
   "errServerFailedFinal": "你的服务器没能分析这张照片：{reason}。可在 设置 › 照片覆盖检查 里重试。",
   "@errServerFailedFinal": {
@@ -618,7 +617,7 @@
       }
     }
   },
-  "outcomeRetryLaterMsg": "这次没有分析成功（{reason}）—— 可以点“重试”，或稍后再选这张照片。",
+  "outcomeRetryLaterMsg": "这次没有分析成功（{reason}）—— 可以点「重试」，或稍后再选这张照片。",
   "@outcomeRetryLaterMsg": {
     "placeholders": {
       "reason": {
@@ -690,7 +689,7 @@
   "watcherPermissionDenied": "自动记录需要相册访问权限。",
   "watcherOnQuotaPaused": "监控已打开，但分析因当日额度已暂停 —— 新照片会先保留。",
   "watcherOnNoKey": "监控已打开，但要等上方设置好可用的 API Key 后，照片才会被分析。",
-  "autoScanPausedKey": "监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（{time} 自动再试）。",
+  "autoScanPausedKey": "监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或「测试当前服务」通过后立即恢复（{time} 自动再试）。",
   "@autoScanPausedKey": {
     "placeholders": {
       "time": {
@@ -698,7 +697,7 @@
       }
     }
   },
-  "autoScanPausedRegion": "监控相册已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
+  "autoScanPausedRegion": "监控相册已暂停：{provider} 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后「测试当前服务」或在「记录 › 从最近照片选择」里添加一张照片即可立即恢复（{time} 自动再试）。",
   "@autoScanPausedRegion": {
     "placeholders": {
       "provider": {
@@ -709,7 +708,7 @@
       }
     }
   },
-  "autoScanPausedBilling": "监控相册已暂停：{provider} 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（{time} 自动再试）。",
+  "autoScanPausedBilling": "监控相册已暂停：{provider} 账户的余额或额度已用完。照片都会保留 —— 充值后「测试当前服务」通过、或在「记录 › 从最近照片选择」里添加一张照片即可立即恢复（{time} 自动再试）。",
   "@autoScanPausedBilling": {
     "placeholders": {
       "provider": {
@@ -880,7 +879,7 @@
   "diagRestaurantIntro": "最近 20 个决定：原因代码、千卡（之前 → 之后）、服务。不保存餐厅名称或地点。",
   "diagRestaurantNone": "还没有餐厅查询的决定。",
   "diagConfidenceTitle": "AI 把握程度（14 天）",
-  "diagConfidenceIntro": "AI 对每餐照片估算的把握程度。“不确定时”会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。",
+  "diagConfidenceIntro": "AI 对每餐照片估算的把握程度。「不确定时」会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。",
   "diagConfidenceLine": "低 {low} · 中 {medium} · 高 {high} · 未给出 {unknown}",
   "assistViaSaved": "通过 {provider} · {date} 保存的结果",
   "assistContextSaved": "{date} 保存的结果。",
@@ -938,7 +937,7 @@
   "backupRowDelete": "删除 iCloud 备份…",
   "backupICloudFooterBefore": "你的餐食、体重、身体围度、运动记录和餐食图片会复制到你自己的 iCloud，重新安装筷拍或换新 iPhone 后都能找回。API Key 绝不会包含在内，开发者也收不到任何内容。",
   "backupICloudFooter": "你的餐食、体重、身体围度、运动记录和餐食图片会复制到 iCloud 云盘 › Chopstats，你可以在「文件」App 里查看、复制或删除。API Key 绝不会包含在内，开发者也收不到任何内容。",
-  "backupICloudFooterOff": "现在没有任何内容复制到 iCloud，所以重新安装筷拍或换新 iPhone 后，你的餐食不会回来。在那之前，请先导出一个文件，之后再导入。API Key 绝不会包含在内，开发者也收不到任何内容。",
+  "backupICloudFooterOff": "现在没有任何内容复制到 iCloud 云盘，所以重新安装筷拍后，或者在没有从这台 iPhone 的备份恢复或传输数据的新 iPhone 上，你的餐食都不会回来。在那之前，请先导出一个文件，之后再导入。API Key 绝不会包含在内，开发者也收不到任何内容。",
   "backupAndroidFooter": "Android 自带的备份可以把应用数据保存在你的 Google 账户里。换手机之前，请导出一个文件，再在新手机上导入。导入会合并：已有的餐不会被改动。",
   "backupStatusOff": "已关闭",
   "backupStatusNotStarted": "尚未开始",
@@ -1001,5 +1000,8 @@
   "importPickUnavailable": "这里无法打开文件，请改用「从剪贴板导入」粘贴文件内容。",
   "importDeletedLeftOut": "你在这台手机上删除过的 {count} 餐没有被恢复。",
   "bodyLoadFailed": "无法加载体重和围度记录。",
-  "bodySaveFailed": "没能保存，请再试一次。"
+  "bodySaveFailed": "没能保存，请再试一次。",
+  "diagStatusPass": "通过",
+  "diagStatusWarn": "警告",
+  "diagStatusFail": "未通过"
 }

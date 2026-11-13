@@ -21,9 +21,21 @@ def _clean_env(name: str, default: Optional[str] = None) -> Optional[str]:
     return value or None
 
 
+# ─── Prompts and shared values ─────────────────────────────────────
+# Single source of truth: shared/prompts/*.txt and shared/constants.json,
+# generated into shared_generated.py by scripts/sync_shared.py (drift-gated
+# in tests). The mobile app consumes the SAME sources via its generated
+# Dart binding.
+from shared_generated import (  # noqa: E402
+    FOOD_DETECTION_PROMPT_RAW,
+    GEMINI_MODEL_DEFAULT,
+    LEFTOVER_PROMPT_TEMPLATE,  # noqa: F401  (re-exported for telegram_bot)
+    TEXT_HANDLER_PROMPT_TEMPLATE,
+)
+
 # ─── Gemini API Settings ──────────────────────────────────────────
 GEMINI_API_KEY = _clean_env("GEMINI_API_KEY")
-GEMINI_MODEL = _clean_env("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_MODEL = _clean_env("GEMINI_MODEL", GEMINI_MODEL_DEFAULT)
 
 # ─── Telegram Bot Settings ────────────────────────────────────────
 TELEGRAM_BOT_TOKEN = _clean_env("TELEGRAM_BOT_TOKEN")
@@ -48,15 +60,7 @@ REPORTS_DIR = Path.home() / "CalorieTracker" / "reports"
 SUPPORTED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".heic", ".heif", ".tiff"}
 
 # ─── Prompts ───────────────────────────────────────────────────────
-# Single source of truth: shared/prompts/*.txt, generated into
-# shared_generated.py by scripts/sync_shared.py (drift-gated in tests).
-# The mobile app consumes the SAME sources via its generated Dart binding.
-from shared_generated import (  # noqa: E402
-    FOOD_DETECTION_PROMPT_RAW,
-    LEFTOVER_PROMPT_TEMPLATE,  # noqa: F401  (re-exported for telegram_bot)
-    TEXT_HANDLER_PROMPT_TEMPLATE,
-)
-
+# From shared/prompts/*.txt (imported with the shared values above).
 FOOD_DETECTION_PROMPT = FOOD_DETECTION_PROMPT_RAW
 
 # Load Dietary Preferences

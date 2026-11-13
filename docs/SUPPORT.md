@@ -83,15 +83,18 @@ people who run the open-source server from the app's GitHub repository
 ## Your data: export, delete, stop sharing
 
 - **Export**: Settings › Your Data › **Export Data…** saves your meals,
-  weight, body measurements, workouts, fitness profile and the list of
-  processed photos to a file you can share or keep (API keys are not
-  included).
+  weight, body measurements, workouts and activities, fitness profile and
+  the list of processed photos to a file you can share or keep (API keys
+  are not included).
   **Import Data…** restores it: paste the file's text, or tap **Import
   from clipboard**.
 - **Delete a meal**: open it and tap the delete button.
-- **Delete everything**: uninstall Chopstats; that removes everything it
-  stored on the phone. Your iCloud or computer backups and exported files
-  may still hold a copy.
+- **Delete everything**: uninstall Chopstats; that removes your meal log,
+  settings and the rest of the app's data from the phone. Your iCloud or
+  computer backups and exported files may still hold a copy. iOS can keep
+  API keys in the Keychain after an app is deleted, so to remove them too,
+  first clear each key you entered in Settings › AI Provider (and the
+  **Server upload key** under *Your own server*).
 - **Stop sharing with a provider**: Settings › **Stop Sharing with …**
   stops all sending to it and turns off Watch Camera Roll (and restaurant
   lookups that go to it). What was already sent is handled under that

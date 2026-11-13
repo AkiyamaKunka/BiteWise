@@ -59,28 +59,27 @@ def _load_service_health():
     return service_health.load(SERVICE_HEALTH_PATH, warn=_warn)
 
 
-def _save_service_health(data):
-    service_health.save(data, SERVICE_HEALTH_PATH, warn=_warn)
+def _update_service_health(mutate):
+    """Apply a mutation under the ledger's inter-process lock (the bot
+    process writes the same file). Every write goes through here: a plain
+    save() would skip the lock and could drop the bot's records."""
+    service_health.update(mutate, SERVICE_HEALTH_PATH, warn=_warn)
 
 
 def _record_daily_report_health(ok: bool, target_date: str, source: str = "cron", report_path: str = "", error_summary: str = ""):
-    service_health.update(
+    _update_service_health(
         lambda data: service_health.apply_report_health(
             data, ok, target_date,
             source=source, report_path=report_path, error_summary=error_summary,
-        ),
-        SERVICE_HEALTH_PATH,
-        warn=_warn,
+        )
     )
 
 
 def _record_activity_health(ok: bool, target_date: str, source: str = "garmin", error_summary: str = ""):
-    service_health.update(
+    _update_service_health(
         lambda data: service_health.apply_activity_health(
             data, ok, target_date, source=source, error_summary=error_summary,
-        ),
-        SERVICE_HEALTH_PATH,
-        warn=_warn,
+        )
     )
 
 

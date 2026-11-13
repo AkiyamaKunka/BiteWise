@@ -45,6 +45,11 @@ _ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07")
 
 _lock = threading.Lock()
 _session: Optional[Dict] = None  # {proc, fd, url, started_at}
+# Bumped by every start and every cancel. A start publishes only while it
+# still holds the newest number, so the newest tap's URL is the one that
+# can complete whichever CLI prints first, and a cancel also stops a start
+# that is still harvesting its URL.
+_generation = 0
 
 
 def _strip_ansi(text: str) -> str:
@@ -92,9 +97,12 @@ def _expired(sess: Dict) -> bool:
 
 
 def cancel_session() -> bool:
-    """Kill any in-flight session; True if one existed."""
-    global _session
+    """Kill the published session, and make any start still harvesting its
+    URL kill its own CLI instead of publishing; True if a published session
+    existed."""
+    global _session, _generation
     with _lock:
+        _generation += 1
         sess, _session = _session, None
     if sess is None:
         return False
@@ -142,8 +150,21 @@ def start_session(cli_path: str, env: Dict[str, str]) -> Dict:
     Replaces any prior session — its PKCE verifier dies with its process,
     so a stale session's code can never be completed (by design: one
     in-flight consent at a time keeps the attack surface at one code).
+
+    The newest start wins. Two can overlap (Flask serves requests on
+    threads, and the app can tap Connect again from a fresh screen while a
+    slow CLI still starts); the screen that tapped first is gone by then,
+    so the user signs in with the newer URL. A start that finishes its
+    harvest after a newer start (or a cancel) began therefore kills its own
+    CLI and answers an error instead of publishing over that session.
     """
-    cancel_session()
+    global _session, _generation
+    with _lock:
+        _generation += 1
+        generation = _generation
+        prior, _session = _session, None
+    if prior is not None:
+        _kill_session(prior)
     master, slave = pty.openpty()
     # A wide window: with none (0x0) the CLI falls back to 80 columns and
     # hard-wraps every line, which cut the ~350-character authorize URL
@@ -186,14 +207,29 @@ def start_session(cli_path: str, env: Dict[str, str]) -> Dict:
                     proc.poll())
         return {"error": "the CLI did not produce a sign-in URL"}
 
-    global _session
+    replaced = None
     with _lock:
-        _session = {
-            "proc": proc,
-            "fd": master,
-            "url": url,
-            "started_at": time.monotonic(),
-        }
+        superseded = generation != _generation
+        if not superseded:
+            # Nothing is published at this point: this start's bump took
+            # any earlier session, and only the holder of the newest number
+            # publishes. Kill rather than overwrite should that ever
+            # change: an overwritten process keeps its PTY open where
+            # neither cancel nor the reaper can ever see it again.
+            replaced, _session = _session, {
+                "proc": proc,
+                "fd": master,
+                "url": url,
+                "started_at": time.monotonic(),
+            }
+    if superseded:
+        _kill_session({"proc": proc, "fd": master})
+        log.info("A newer sign-in start or a cancel came in while this "
+                 "start harvested its URL; its CLI was stopped.")
+        return {"error": "a newer sign-in (or a cancel) replaced this one "
+                         "before its link was ready"}
+    if replaced is not None:
+        _kill_session(replaced)
     log.info("Claude re-auth session started (URL harvested).")
     return {"url": url}
 

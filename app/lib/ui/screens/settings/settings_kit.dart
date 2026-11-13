@@ -14,6 +14,9 @@
 ///   (the section header above the cell still names the field).
 /// - [showChoiceSheet]: a grouped sheet with one checkmark row per option
 ///   (Language, Units, the own server's Model and Thinking effort).
+/// - [announceSelected]: the same "selected" for screen readers on rows
+///   that draw their own checkmark (the AI provider, the own server's
+///   plan, the restaurant mode, the connection type).
 library;
 
 import 'package:flutter/material.dart';
@@ -41,6 +44,13 @@ InputDecoration cellFieldDecoration(
     contentPadding: const EdgeInsets.symmetric(vertical: 6),
   );
 }
+
+/// [row], announced selected when [selected]: for a row whose checkmark is
+/// its own trailing icon, which screen readers do not read, so without
+/// this VoiceOver and TalkBack read every choice alike. An unselected row
+/// stays unmarked, as in [showChoiceSheet].
+Widget announceSelected({required bool selected, required Widget row}) =>
+    Semantics(selected: selected ? true : null, child: row);
 
 /// A grouped sheet titled [title] listing (value, label) [options], the
 /// [current] one checked (and announced selected). Resolves to the tapped

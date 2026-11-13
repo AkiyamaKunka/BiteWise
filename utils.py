@@ -10,6 +10,14 @@ from typing import List, Optional
 import requests
 
 from config import PUSHPLUS_TOKEN
+# Shared with the app via shared/constants.json (shared_generated imports
+# nothing, so this adds no cycle).
+from shared_generated import (
+    API_LEFTOVER_MAX_CHARS,
+    CALORIE_MAGNITUDE_LIMIT,
+    MEAL_MISMATCH_MIN_KCAL,
+    MEAL_MISMATCH_PCT,
+)
 
 
 def parse_ai_json(text: str) -> dict:
@@ -42,7 +50,7 @@ def _as_number(value):
     # Magnitude guard: absurd values from hallucinated JSON (400-digit ints,
     # 1e400 -> inf) overflow int/float arithmetic downstream, and inf/NaN are
     # never real calorie counts. NaN fails this range test too.
-    if not (-1e9 < value < 1e9):
+    if not (-CALORIE_MAGNITUDE_LIMIT < value < CALORIE_MAGNITUDE_LIMIT):
         return None
     return value
 
@@ -92,7 +100,8 @@ def meal_calorie_mismatch(analysis: dict):
     total = _as_number(analysis.get("total_calories")) if isinstance(analysis, dict) else None
     if not counted or item_sum <= 0 or total is None:
         return None
-    if abs(total - item_sum) > max(100, 0.2 * max(total, item_sum)):
+    if abs(total - item_sum) > max(MEAL_MISMATCH_MIN_KCAL,
+                                   MEAL_MISMATCH_PCT * max(total, item_sum)):
         return int(item_sum)
     return None
 
@@ -203,14 +212,12 @@ def compact_leftover_original(raw) -> "Optional[str]":
     stringified and length-capped), so no smuggled keys or oversized
     strings ride into the prompt. None = unusable input (caller 400s).
     """
-    import shared_generated
-
     if isinstance(raw, (dict,)):
         parsed = raw
     else:
         if not isinstance(raw, str) or not raw.strip():
             return None
-        if len(raw) > shared_generated.API_LEFTOVER_MAX_CHARS:
+        if len(raw) > API_LEFTOVER_MAX_CHARS:
             return None
         try:
             parsed = json.loads(raw)
@@ -246,7 +253,7 @@ def compact_leftover_original(raw) -> "Optional[str]":
         ],
     }
     out = json.dumps(compact, ensure_ascii=False)
-    if len(out) > shared_generated.API_LEFTOVER_MAX_CHARS:
+    if len(out) > API_LEFTOVER_MAX_CHARS:
         compact["food_items"] = []
         out = json.dumps(compact, ensure_ascii=False)
     return out

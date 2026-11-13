@@ -235,7 +235,7 @@ void main() {
     final action = [{'intent': 'correction', 'meal_index': 9, 'analysis': roastDuckAnalysis}];
     await settings.setAppLanguage('en');
     expect((await live.executeParsed(action, 'x', snapshot)).single.text,
-        '❌ Invalid meal index (9). You have 1 recent meals.');
+        '❌ Invalid meal index (9). You have 1 recent meal.');
     await settings.setAppLanguage('zh'); // switched at runtime, same executor
     expect((await live.executeParsed(action, 'x', snapshot)).single.text,
         '❌ 餐次编号无效（9）。你最近有 1 顿餐。');

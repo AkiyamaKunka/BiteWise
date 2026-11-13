@@ -3,6 +3,7 @@
 // these tests prove each class lands in the right stage with an
 // actionable fix — the page exists because a refused backend spent an
 // hour looking like "the API is broken" (2026-07-31).
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -19,26 +20,35 @@ import 'package:calorie_tracker/ui/provider_names.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart'
     show RestaurantLookupsDiagnostics;
 import 'package:calorie_tracker/ui/screens/diagnostics_screen.dart';
+import 'package:calorie_tracker/ui/theme/tokens.dart' show AppColors;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
+import '../support/app_theme_harness.dart' show pumpApp;
 import 'fakes.dart';
 
 Uint8List _img() => Uint8List.fromList(List.filled(32, 9));
+
+/// WCAG contrast ratio of [a] on [b].
+double _contrast(Color a, Color b) {
+  final la = a.computeLuminance(), lb = b.computeLuminance();
+  return (math.max(la, lb) + 0.05) / (math.min(la, lb) + 0.05);
+}
 
 ProviderDiagnostics _diag({
   FakeSettings? settings,
   FakeAnalyzer? analyzer,
   http.Client? client,
+  AppLocalizations? l10n,
 }) =>
     ProviderDiagnostics(
       settings: settings ?? FakeSettings(),
       analyzer: analyzer ?? _okAnalyzer(),
       // English l10n keeps every existing stage/summary assertion below
       // byte-identical to the strings this page shipped with.
-      l10n: AppLocalizationsEn(),
+      l10n: l10n ?? AppLocalizationsEn(),
       client: client ?? MockClient((_) async => http.Response('ok', 404)),
       testImage: _img,
     );
@@ -417,6 +427,106 @@ void main() {
     expect(find.textContaining('1 problem'), findsOneWidget);
     expect(find.textContaining('temporary problem'), findsOneWidget);
   });
+
+  // Each check's state was a Material green or orange icon, 2.78:1 and
+  // 2.16:1 on the white card, and nothing a screen reader could read: the
+  // card was read as the check's name and summary only.
+  for (final dark in const [false, true]) {
+    testWidgets('each check says whether it passed, warned or failed, in '
+        "the theme's status colours (${dark ? 'dark' : 'light'})",
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final analyzer = _okAnalyzer()
+        ..nextTextIntent = null // Text analysis warns
+        ..nextPhotoOutcome = const AnalysisOutcome(
+            error: 'model not found',
+            retryable: false, // Photo analysis fails
+            wall: Duration.zero);
+      await pumpApp(
+          tester, DiagnosticsScreen(diagnostics: _diag(analyzer: analyzer)),
+          size: const Size(800, 2400),
+          brightness: dark ? Brightness.dark : Brightness.light);
+      await tester.tap(find.byKey(const Key('runDiagnostics')));
+      await tester.pumpAndSettle();
+      final l = AppLocalizationsEn();
+      final c = dark ? AppColors.dark : AppColors.light;
+      final problems = <String>[];
+      for (final (stage, status, color) in [
+        ('Configuration', l.diagStatusPass, c.success),
+        ('Text analysis', l.diagStatusWarn, c.warning),
+        ('Photo analysis', l.diagStatusFail, c.danger),
+      ]) {
+        final card = find.ancestor(
+            of: find.text(stage), matching: find.byType(Card));
+        final icon = tester.widget<Icon>(
+            find.descendant(of: card, matching: find.byType(Icon)));
+        if (icon.color != color) problems.add('$stage: ${icon.color}');
+        final ratio = _contrast(icon.color!, c.cell);
+        if (ratio < 3) {
+          problems.add('$stage: ${ratio.toStringAsFixed(2)}:1 on the card');
+        }
+        // Said first, then the check's name: "Failed, Photo analysis, …".
+        final label = tester.getSemantics(card).label;
+        if (!label.startsWith('$status\n$stage')) {
+          problems.add('$stage reads "$label"');
+        }
+      }
+      expect(problems, isEmpty);
+      expect(Theme.of(tester.element(find.byType(Card).first)).cardTheme.color,
+          c.cell,
+          reason: 'the cards are the cell colour the ratios were taken on');
+      handle.dispose();
+    });
+  }
+
+  // The verdict sent the reader to "the red/orange rows" (下面红色/橙色的行).
+  // The warning sign is the theme's warning colour, amber in light mode and
+  // yellow in dark, so in dark mode no row was orange; and a colour points
+  // nowhere for a colour-blind reader. The verdict names no colour now, only
+  // the problems' own rows, and each of those rows says what to do.
+  for (final dark in const [false, true]) {
+    for (final zh in const [false, true]) {
+      testWidgets('the verdict names no colour, and each row it points to '
+          "says what to do (${zh ? 'zh' : 'en'}, ${dark ? 'dark' : 'light'})",
+          (tester) async {
+        final AppLocalizations l =
+            zh ? AppLocalizationsZh() : AppLocalizationsEn();
+        final analyzer = _okAnalyzer()
+          ..nextTextIntent = null // Text analysis warns
+          ..nextPhotoOutcome = const AnalysisOutcome(
+              error: 'model not found',
+              retryable: false, // Photo analysis fails
+              wall: Duration.zero);
+        await pumpApp(tester,
+            DiagnosticsScreen(diagnostics: _diag(analyzer: analyzer, l10n: l)),
+            size: const Size(800, 2400),
+            locale: Locale(zh ? 'zh' : 'en'),
+            brightness: dark ? Brightness.dark : Brightness.light);
+        await tester.tap(find.byKey(const Key('runDiagnostics')));
+        await tester.pumpAndSettle();
+        final verdict = tester
+            .widget<Text>(find.descendant(
+                of: find.byKey(const Key('diagVerdict')),
+                matching: find.byType(Text)))
+            .data!;
+        expect(verdict, l.diagVerdictProblems(2));
+        expect(
+            verdict,
+            isNot(matches(RegExp(
+                r'\b(red|orange|yellow|amber|green)\b|[红橙黄绿]',
+                caseSensitive: false))));
+        // The rows it points to: each check that did not pass shows its fix.
+        for (final stage in [l.diagStageText, l.diagStagePhoto]) {
+          final card =
+              find.ancestor(of: find.text(stage), matching: find.byType(Card));
+          expect(
+              find.descendant(of: card, matching: find.textContaining('→ ')),
+              findsOneWidget,
+              reason: stage);
+        }
+      });
+    }
+  }
 
   // 2026-10-18: what the background scans did, from their own record.
   group('recent background scans', () {
@@ -855,7 +965,7 @@ void main() {
       ),
       (
         Locale('zh'),
-        'AI 对每餐照片估算的把握程度。“不确定时”会查询把握低的餐厅餐，'
+        'AI 对每餐照片估算的把握程度。「不确定时」会查询把握低的餐厅餐，'
             '以及把握中等且印有连锁品牌的餐厅餐。',
       ),
     ]) {

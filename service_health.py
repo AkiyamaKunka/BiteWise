@@ -11,6 +11,7 @@ import os
 import threading
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 DEFAULT_PATH = Path.home() / "CalorieTracker" / "logs" / "service_health.json"
 
@@ -68,68 +69,60 @@ def update(mutate, path=DEFAULT_PATH, warn=print) -> dict:
     return data
 
 
-def apply_report_health(data: dict, ok: bool, target_date: str, *, source: str,
-                        report_path: str = "", error_summary: str = "") -> dict:
-    """Mutate `data` in place with a daily_report attempt record."""
-    report = data.setdefault("daily_report", {})
+def _apply_attempt(data: dict, key: str, ok: bool, target_date: str, *,
+                   source: str, error_summary: str = "",
+                   extra: Optional[dict] = None) -> dict:
+    """Mutate `data` in place with one attempt record under ``data[key]``.
+
+    The daily_report and activity records share this schema, so a fix to
+    it (the event cap, the summary truncation) lands once. [extra] holds
+    record-specific fields written with the attempt.
+    """
+    record = data.setdefault(key, {})
     now = timestamp()
-    report["last_attempt_at"] = now
-    report["last_target_date"] = target_date
-    report["last_source"] = source
-    report["last_ok"] = ok
-    if report_path:
-        report["last_report_path"] = report_path
+    record["last_attempt_at"] = now
+    record["last_target_date"] = target_date
+    record["last_source"] = source
+    record["last_ok"] = ok
+    record.update(extra or {})
 
     if ok:
-        report["last_success_at"] = now
-        report["consecutive_failures"] = 0
-        report.pop("last_error_summary", None)
+        record["last_success_at"] = now
+        record["consecutive_failures"] = 0
+        record.pop("last_error_summary", None)
     else:
-        report["last_error_at"] = now
-        report["last_error_summary"] = str(error_summary or "")[:500]
-        report["consecutive_failures"] = int(report.get("consecutive_failures", 0)) + 1
+        record["last_error_at"] = now
+        record["last_error_summary"] = str(error_summary or "")[:500]
+        record["consecutive_failures"] = int(record.get("consecutive_failures", 0)) + 1
 
-    events = report.setdefault("events", [])
+    events = record.setdefault("events", [])
     events.append({
         "at": now,
         "ok": ok,
         "target_date": target_date,
         "source": source,
     })
-    report["events"] = events[-MAX_EVENTS:]
+    record["events"] = events[-MAX_EVENTS:]
     return data
+
+
+def apply_report_health(data: dict, ok: bool, target_date: str, *, source: str,
+                        report_path: str = "", error_summary: str = "") -> dict:
+    """Mutate `data` in place with a daily_report attempt record."""
+    return _apply_attempt(
+        data, "daily_report", ok, target_date, source=source,
+        error_summary=error_summary,
+        extra={"last_report_path": report_path} if report_path else None)
 
 
 def apply_activity_health(data: dict, ok: bool, target_date: str, *, source: str,
                           error_summary: str = "") -> dict:
     """Mutate `data` in place with an activity-sync attempt record.
 
-    Mirrors :func:`apply_report_health` but writes ``data['activity']`` so the
-    Garmin (or other source) daily pull is observable in the shared health
-    ledger without colliding with the daily_report record.
+    The same schema as :func:`apply_report_health`, written to
+    ``data['activity']`` so the Garmin (or other source) daily pull is
+    observable in the shared health ledger without colliding with the
+    daily_report record.
     """
-    activity = data.setdefault("activity", {})
-    now = timestamp()
-    activity["last_attempt_at"] = now
-    activity["last_target_date"] = target_date
-    activity["last_source"] = source
-    activity["last_ok"] = ok
-
-    if ok:
-        activity["last_success_at"] = now
-        activity["consecutive_failures"] = 0
-        activity.pop("last_error_summary", None)
-    else:
-        activity["last_error_at"] = now
-        activity["last_error_summary"] = str(error_summary or "")[:500]
-        activity["consecutive_failures"] = int(activity.get("consecutive_failures", 0)) + 1
-
-    events = activity.setdefault("events", [])
-    events.append({
-        "at": now,
-        "ok": ok,
-        "target_date": target_date,
-        "source": source,
-    })
-    activity["events"] = events[-MAX_EVENTS:]
-    return data
+    return _apply_attempt(data, "activity", ok, target_date, source=source,
+                          error_summary=error_summary)

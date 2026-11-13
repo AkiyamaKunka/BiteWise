@@ -479,7 +479,7 @@
   },
   "providerPageTitle": "AI Provider",
   "connectionTypeHeader": "Connection type",
-  "connectionTypeFooter": "An API key lives on this phone, and the provider you pick bills each photo to your account. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.",
+  "connectionTypeFooter": "An API key stays on this phone. Some providers have a free tier; others charge your account for each request. Your own server analyzes photos with the AI configured on it; this phone keeps only its address and upload key.",
   "typeApiKey": "API Key",
   "typeSubscription": "Your own server",
   "@typeSubscription": {
@@ -573,7 +573,7 @@
       }
     }
   },
-  "apiInactiveFooter": "Your own server is currently active. Pick a provider above to switch to a pay-per-photo API key.",
+  "apiInactiveFooter": "Your own server is currently active. Pick a provider above to switch to an API key.",
   "subPageTitle": "Your own server",
   "planHeader": "AI on your server",
   "planFooter": "Pick the AI your server is signed in to. The sign-in stays on your server, never on this phone.",
@@ -667,10 +667,6 @@
   "unitsImperialDetail": "Imperial — lb · in",
   "unitsSheetTitle": "Units",
   "unitsFooter": "How body weight and measurements are shown and entered. Food stays in grams and kcal either way.",
-  "bodyEmptyHintImperial": "Tap Log to record your weight or your waist, chest and hip measurements.",
-  "@bodyEmptyHintImperial": {
-    "description": "bodyEmptyHint for imperial units (en-only surface; zh never renders imperial)."
-  },
   "bodySince": "since {date}",
   "@bodySince": {
     "placeholders": {
@@ -853,8 +849,9 @@
   "diagRunAgain": "Run again",
   "diagRunChecks": "Run the checks",
   "diagVerdictOk": "Everything works. If a photo still fails, it is photo-specific — try \"Analyze again\" on it.",
-  "diagVerdictProblems": "{count, plural, =1{1 problem found — the red/orange rows below say what to do.} other{{count} problems found — the red/orange rows below say what to do.}}",
+  "diagVerdictProblems": "{count, plural, =1{1 problem found — its row below says what to do.} other{{count} problems found — their rows below say what to do.}}",
   "@diagVerdictProblems": {
+    "description": "Test AI provider: the verdict above the checks when some did not pass. Names no colour: the status signs are the theme's status colours, and the warning sign is amber in light mode and yellow in dark.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -1579,6 +1576,9 @@
   "covVerbLog": "Log",
   "covVerbRetry": "Retry",
   "covProgLogging": "Logging",
+  "@covProgLogging": {
+    "description": "The bulk action's name at the start of its done or stopped snackbar (covDone, covDoneFailures, covStopped, covStoppedBecause, covStoppedLast). Chinese uses the verb itself (记录), not an in-progress form."
+  },
   "covProgReanalyzing": "Re-analyzing",
   "covProgRetrying": "Retrying",
   "covStopped": "{label} stopped after {attempted} of {total}: analysis is unavailable right now (quota pause or missing key). The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.",
@@ -1657,7 +1657,7 @@
     }
   },
   "covUnnamedPhoto": "(unnamed photo)",
-  "covDone": "{label} done ({count} photos).",
+  "covDone": "{label} done ({count, plural, =1{1 photo} other{{count} photos}}).",
   "@covDone": {
     "placeholders": {
       "label": {
@@ -1668,7 +1668,7 @@
       }
     }
   },
-  "covDoneFailures": "{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).",
+  "covDoneFailures": "{label} done — {failures} of {count} could not be processed (kept in the Failed earlier list for retry).",
   "@covDoneFailures": {
     "placeholders": {
       "label": {
@@ -1690,7 +1690,7 @@
       }
     }
   },
-  "covLoggedAsMeals": "{count} logged as meals",
+  "covLoggedAsMeals": "{count, plural, =1{1 logged as a meal} other{{count} logged as meals}}",
   "@covLoggedAsMeals": {
     "placeholders": {
       "count": {
@@ -1706,7 +1706,7 @@
       }
     }
   },
-  "covLeftoverCount": "{count} leftover photos (deducted from their meal)",
+  "covLeftoverCount": "{count, plural, =1{1 leftover photo (deducted from its meal)} other{{count} leftover photos (deducted from their meal)}}",
   "@covLeftoverCount": {
     "placeholders": {
       "count": {
@@ -2001,7 +2001,7 @@
   "nlTypeFirst": "Type what you ate first.",
   "nlErrorContactingAi": "❌ Error contacting AI. Please try again.",
   "nlNoFoodDetected": "🚫 I couldn't detect food in that description.",
-  "nlInvalidMealIndex": "❌ Invalid meal index ({shown}). You have {count} recent meals.",
+  "nlInvalidMealIndex": "❌ Invalid meal index ({shown}). You have {count, plural, =1{1 recent meal} other{{count} recent meals}}.",
   "@nlInvalidMealIndex": {
     "description": "shown is the model's raw meal_index, already truncated to 40 chars.",
     "placeholders": {
@@ -3078,7 +3078,7 @@
   "@backupICloudFooter": {
     "description": "Footer of Settings › Your Data on iPhone once a backup has been written."
   },
-  "backupICloudFooterOff": "Nothing is being copied to iCloud, so your meals would not come back after a reinstall or on a new iPhone. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.",
+  "backupICloudFooterOff": "Nothing is being copied to iCloud Drive, so your meals would not come back after a reinstall, or on a new iPhone that does not get this iPhone's data from a backup or a transfer. Before either, export a file, then import it afterwards. API keys are never included, and the developer receives nothing.",
   "@backupICloudFooterOff": {
     "description": "Footer of Settings › Your Data on iPhone while iCloud Backup is off, the iPhone has no iCloud account, iCloud Drive is not available for the app, or backups are blocked (another iPhone's backup, a file changed outside the app or unreadable) or paused (the backup gone from iCloud, a much smaller record): nothing is copied, so it says to export a file before reinstalling or changing phones."
   },
@@ -3410,5 +3410,17 @@
   "bodySaveFailed": "Couldn't save. Try again.",
   "@bodySaveFailed": {
     "description": "Log body sheet: shown under the fields when saving the weight or measurements fails. The sheet stays open with what was typed, and Save can be tapped again."
+  },
+  "diagStatusPass": "Passed",
+  "@diagStatusPass": {
+    "description": "Test AI provider: what a screen reader says for a check's tick, read before the check's name."
+  },
+  "diagStatusWarn": "Warning",
+  "@diagStatusWarn": {
+    "description": "Test AI provider: what a screen reader says for a check's warning sign, read before the check's name."
+  },
+  "diagStatusFail": "Failed",
+  "@diagStatusFail": {
+    "description": "Test AI provider: what a screen reader says for a check's error sign, read before the check's name."
   }
 }

@@ -18,6 +18,7 @@ Usage:
 
 import base64
 import binascii
+import functools
 import io
 import ipaddress
 import json
@@ -88,6 +89,19 @@ from utils import (
     telegram_message_chunks,
     utf16_len,
 )
+# Values shared with the app via shared/constants.json (single source of
+# truth; sync_shared.py regenerates both bindings). Env overrides below
+# still win where a setting has one.
+from shared_generated import (
+    CAPTURED_AT_MAX_AGE_DAYS_DEFAULT,
+    CAPTURED_AT_MAX_FUTURE_SECONDS,
+    GEMINI_ANALYSIS_MAX_ATTEMPTS as GEMINI_ANALYSIS_MAX_ATTEMPTS_DEFAULT,
+    GEMINI_RETRY_DELAY_CAP_SECONDS,
+    NL_MAX_ACTIONS,
+    NORMALIZE_JPEG_QUALITY,
+    NORMALIZE_MAX_DIMENSION_PX,
+    TEXT_EDIT_WINDOW_DAYS_DEFAULT,
+)
 
 # ─── Constants ─────────────────────────────────────────────────────
 def _parse_chat_id(value: Optional[str]) -> int:
@@ -130,9 +144,11 @@ def _html(value) -> str:
 ALLOWED_CHAT_ID = _parse_chat_id(TELEGRAM_CHAT_ID)
 
 BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN') or TELEGRAM_BOT_TOKEN
-GEMINI_ANALYSIS_MAX_ATTEMPTS = _env_int("GEMINI_ANALYSIS_MAX_ATTEMPTS", 3, 1, 10)
+GEMINI_ANALYSIS_MAX_ATTEMPTS = _env_int(
+    "GEMINI_ANALYSIS_MAX_ATTEMPTS", GEMINI_ANALYSIS_MAX_ATTEMPTS_DEFAULT, 1, 10)
 GEMINI_RETRY_BASE_DELAY_SECONDS = _env_int("GEMINI_RETRY_BASE_DELAY_SECONDS", 5, 0, 3600)
-GEMINI_RETRY_MAX_DELAY_SECONDS = _env_int("GEMINI_RETRY_MAX_DELAY_SECONDS", 60, 1, 3600)
+GEMINI_RETRY_MAX_DELAY_SECONDS = _env_int(
+    "GEMINI_RETRY_MAX_DELAY_SECONDS", GEMINI_RETRY_DELAY_CAP_SECONDS, 1, 3600)
 GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS = _env_int("GEMINI_DAILY_QUOTA_COOLDOWN_SECONDS", 12 * 3600, 60, 7 * 24 * 3600)
 # Native JSON mode for JSON-producing Gemini calls: a malformed free-form
 # response terminally burns a free-tier request, so ask the API to enforce
@@ -179,7 +195,8 @@ _DEADLINE_THREAD = threading.Thread
 # How many days of meals a natural-language correction/delete can reach back
 # over (widened from 3 so "earlier this week" resolves, not just "yesterday").
 # NOTE: HELP_TEXT's Corrections section states this number — keep them in sync.
-TEXT_EDIT_WINDOW_DAYS = _env_int("TEXT_EDIT_WINDOW_DAYS", 7, 1, 31)
+TEXT_EDIT_WINDOW_DAYS = _env_int(
+    "TEXT_EDIT_WINDOW_DAYS", TEXT_EDIT_WINDOW_DAYS_DEFAULT, 1, 31)
 ANDROID_VPN_WARNING_COOLDOWN_MINUTES = _env_int("ANDROID_VPN_WARNING_COOLDOWN_MINUTES", 30, 0, 1440)
 IOS_VPN_WARNING_COOLDOWN_MINUTES = _env_int("IOS_VPN_WARNING_COOLDOWN_MINUTES", 30, 0, 1440)
 HEARTBEAT_STALE_WARNING_HOURS = _env_float("HEARTBEAT_STALE_WARNING_HOURS", 2, 0, 168)
@@ -940,10 +957,6 @@ def _load_service_health() -> Dict:
     return service_health.load(SERVICE_HEALTH_PATH, warn=log.warning)
 
 
-def _save_service_health(data: Dict):
-    service_health.save(data, SERVICE_HEALTH_PATH, warn=log.warning)
-
-
 def _health_timestamp() -> str:
     return service_health.timestamp()
 
@@ -1049,7 +1062,7 @@ def _record_gemini_health(
             "type": "" if ok else (error_type or "unknown"),
             "probe": probe,
         })
-        gemini["events"] = events[-50:]
+        gemini["events"] = events[-service_health.MAX_EVENTS:]
 
     _update_service_health(mutate)
 
@@ -1169,13 +1182,13 @@ def _normalize_photo_for_analysis(image_bytes: bytes) -> Optional[bytes]:
     try:
         img = Image.open(io.BytesIO(image_bytes))
         width, height = img.size
-        scale = 1568 / max(width, height)
+        scale = NORMALIZE_MAX_DIMENSION_PX / max(width, height)
         if 0 < scale < 1:
             img.draft("RGB", (max(1, round(width * scale)), max(1, round(height * scale))))
         img = ImageOps.exif_transpose(img)
-        img.thumbnail((1568, 1568))
+        img.thumbnail((NORMALIZE_MAX_DIMENSION_PX, NORMALIZE_MAX_DIMENSION_PX))
         buf = io.BytesIO()
-        img.convert("RGB").save(buf, format="JPEG", quality=85)
+        img.convert("RGB").save(buf, format="JPEG", quality=NORMALIZE_JPEG_QUALITY)
         return buf.getvalue()
     except Exception as e:
         log.warning(f"Could not normalize photo for analysis; using originals: {e}")
@@ -1493,6 +1506,22 @@ def _finish_api_upload_processing(image_hash: str):
 _parse_boolish = parse_boolish
 
 
+def _request_json_object() -> Optional[Dict]:
+    """The request's JSON body as an object for callers that .get() from it.
+
+    {} when there is no JSON body, it does not parse, or it is JSON null
+    (each caller's missing-field answer covers that); None when it parsed
+    to an array, a string, a number or a boolean, the falsy ones ([], "",
+    0, false) included. .get on those raised, and an authenticated caller
+    got a 500 with a traceback where a 400 belongs: callers answer None
+    with 400 bad_request_shape (or, for optional hints, read it as {}).
+    """
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return {}
+    return payload if isinstance(payload, dict) else None
+
+
 def _vpn_status_from_request() -> tuple[Optional[bool], str]:
     """Read client VPN status from headers, JSON body, or form fields."""
     vpn_active = _parse_boolish(request.headers.get("X-VPN-Active"))
@@ -1500,7 +1529,7 @@ def _vpn_status_from_request() -> tuple[Optional[bool], str]:
 
     if vpn_active is None:
         if request.is_json:
-            data = request.get_json(silent=True) or {}
+            data = _request_json_object() or {}
             vpn_active = _parse_boolish(data.get("vpn_active"))
             vpn_check = data.get("vpn_check", vpn_check)
         elif request.form:
@@ -1537,7 +1566,7 @@ def _vpn_check_reliable_from_request(vpn_active: Optional[bool], vpn_check: str)
     explicit = _parse_boolish(request.headers.get("X-VPN-Check-Reliable"))
     if explicit is None:
         if request.is_json:
-            data = request.get_json(silent=True) or {}
+            data = _request_json_object() or {}
             explicit = _parse_boolish(data.get("vpn_check_reliable"))
         elif request.form:
             explicit = _parse_boolish(request.form.get("vpn_check_reliable"))
@@ -1572,7 +1601,7 @@ def _vpn_required_from_request() -> bool:
         return vpn_required
 
     if request.is_json:
-        data = request.get_json(silent=True) or {}
+        data = _request_json_object() or {}
         vpn_required = _parse_boolish(data.get("vpn_required"))
     elif request.form:
         vpn_required = _parse_boolish(request.form.get("vpn_required"))
@@ -1862,7 +1891,8 @@ def save_meal(chat_id: int, analysis: Dict, source: str, file_id: str = "", imag
 
 # Oldest capture time /upload will honor; anything older (or unparseable, or
 # in the future) falls back to upload-time dating rather than trusting junk.
-CAPTURED_AT_MAX_AGE_DAYS = _env_int("CAPTURED_AT_MAX_AGE_DAYS", 45, 1, 365)
+CAPTURED_AT_MAX_AGE_DAYS = _env_int(
+    "CAPTURED_AT_MAX_AGE_DAYS", CAPTURED_AT_MAX_AGE_DAYS_DEFAULT, 1, 365)
 
 
 def _looks_like_image(data: bytes) -> bool:
@@ -1882,14 +1912,15 @@ def _parse_captured_at(raw: str) -> Optional[datetime]:
     """Validate the additive captured_at form field ('YYYY-MM-DD HH:MM:SS').
 
     The value is device-local wall time taken from the camera filename, so it
-    is compared against the user-local clock, allowing an hour of skew.
+    is compared against the user-local clock, allowing an hour of skew
+    (CAPTURED_AT_MAX_FUTURE_SECONDS, shared with the app).
     """
     try:
         captured = datetime.strptime((raw or "").strip(), "%Y-%m-%d %H:%M:%S")
     except (TypeError, ValueError):
         return None
     now_local = database.user_local_now().replace(tzinfo=None)
-    if captured > now_local + timedelta(hours=1):
+    if captured > now_local + timedelta(seconds=CAPTURED_AT_MAX_FUTURE_SECONDS):
         return None
     if captured < now_local - timedelta(days=CAPTURED_AT_MAX_AGE_DAYS):
         return None
@@ -4223,9 +4254,9 @@ _NL_INTENT_HANDLERS = {
     "log_activity": _nl_log_activity,
 }
 
-# A compound message ("correct meal 2 AND delete meal 3") expands into this
-# many actions at most; anything longer is almost certainly model runaway.
-NL_MAX_ACTIONS = 5
+# A compound message ("correct meal 2 AND delete meal 3") expands into at
+# most NL_MAX_ACTIONS actions (shared with the app, imported at the top);
+# anything longer is almost certainly model runaway.
 
 
 def _normalize_nl_actions(result) -> List[Dict]:
@@ -4906,25 +4937,56 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
     def payload_too_large(error):
         return jsonify({"error": "Photo too large"}), 413
 
-    @app.route('/ping', methods=['POST'])
-    def ping():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
+    def _api_bad_request(endpoint, code):
+        """A 400 the app can act on — and LOGGED. These branches used to
+        answer silently: the journal for 2026-09-29 showed one
+        `analyze_photo 400` from the owner's phone and nothing else, so
+        the phone's "photo analysis failed" had no server-side story at
+        all. One line per refusal, with the code and the client platform
+        (never the payload), is all a later reader needs.
+        """
+        log.warning(
+            f"{endpoint} refused (400 {code}); client="
+            f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
+        return jsonify({"error": code}), 400
 
+    def _require_api_key(view):
+        """Every route's first gate: the exact 401 body for a missing or
+        wrong key, before any of the route's work runs. One decorator, not
+        a copied check per route, so a new route cannot ship without it
+        (tests walk app.url_map to hold every route to it). functools.wraps
+        keeps the view's name, which Flask uses as the endpoint name;
+        _authorized_api_request still reads both keys at call time.
+        """
+        @functools.wraps(view)
+        def guarded(*args, **kwargs):
+            if not _authorized_api_request():
+                return jsonify({"error": "Unauthorized"}), 401
+            return view(*args, **kwargs)
+        return guarded
+
+    @app.route('/ping', methods=['POST'])
+    @_require_api_key
+    def ping():
         maybe_warn_android_vpn_inactive(bot, "/ping")
 
         # None preserves the stored offset; meal dating depends on it.
         tz = None
         if request.is_json:
-            data = request.get_json(silent=True)
-            if data and "timezone" in data:
-                tz = data["timezone"]
+            data = _request_json_object()
+            # The offset column dates every meal: a string or nothing. A
+            # list failed to bind in sqlite (500); a number was stored.
+            if data is None or not isinstance(data.get("timezone"),
+                                              (str, type(None))):
+                return _api_bad_request("ping", "bad_request_shape")
+            tz = data.get("timezone")
 
         database.update_android_heartbeat(timezone=tz)
         log.info(f"📡 Heartbeat ping received from Android Watcher (TZ: {tz or 'unchanged'})")
         return jsonify({"status": "ok"})
 
     @app.route('/api/auth_check', methods=['POST'])
+    @_require_api_key
     def api_auth_check():
         """Pure key/reachability probe for the app's "Test connection".
 
@@ -4933,8 +4995,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         forge watcher liveness and suppress the stale-watcher outage alert
         (the exact alert that caught the 2026-07-23 outage).
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         # "backends" lets the phone's Test connection diagnose a missing
         # server-side plan key (GLM_PLAN_KEY / DOUBAO_PLAN_KEY) remotely.
         # "features" (additive) tells a new app which newer contracts this
@@ -4945,6 +5005,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "features": _api_features()})
 
     @app.route('/api/garmin_daily', methods=['POST'])
+    @_require_api_key
     def api_garmin_daily():
         """One user-local day's Garmin summary for the app's energy-balance
         line. Body: {"date": "YYYY-MM-DD"}.
@@ -4955,11 +5016,11 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         covers every miss (unconfigured, network down, no data yet) — the
         app renders the day unchanged, exactly like the report integrator.
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         if not garmin.is_configured():
             return jsonify({"available": False, "reason": "not_configured"})
-        payload = request.get_json(silent=True) or {}
+        payload = _request_json_object()
+        if payload is None:
+            return _api_bad_request("garmin_daily", "bad_request_shape")
         date_str = str(payload.get("date") or "").strip()
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
             return jsonify({"error": "bad_date"}), 400
@@ -4986,6 +5047,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         })
 
     @app.route('/api/claude_auth/start', methods=['POST'])
+    @_require_api_key
     def api_claude_auth_start():
         """Begin the phone-driven OAuth re-connect: spawn the CLI's own
         setup-token flow and hand back Anthropic's OFFICIAL authorize URL
@@ -4993,8 +5055,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         process on this machine; the token this flow mints authorizes the
         genuine Claude Code client here — nothing is impersonated and no
         credential ever travels to the phone."""
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         cli = claude_analyzer._cli_path()
         if cli is None:
             return jsonify({"error": "claude_cli_missing"}), 503
@@ -5006,10 +5066,12 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "expires_in": claude_auth.SESSION_TTL_SECONDS})
 
     @app.route('/api/claude_auth/complete', methods=['POST'])
+    @_require_api_key
     def api_claude_auth_complete():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-        payload = request.get_json(silent=True) or {}
+        payload = _request_json_object()
+        if payload is None:
+            return _api_bad_request("claude_auth/complete",
+                                    "bad_request_shape")
         code = payload.get("code")
         if not isinstance(code, str) or not code.strip():
             return jsonify({"error": "no_code"}), 400
@@ -5022,25 +5084,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "analyzer": claude_analyzer.status_label()})
 
     @app.route('/api/claude_auth/cancel', methods=['POST'])
+    @_require_api_key
     def api_claude_auth_cancel():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         return jsonify({"ok": True,
                         "cancelled": claude_auth.cancel_session()})
-
-
-    def _api_bad_request(endpoint, code):
-        """A 400 the app can act on — and LOGGED. These branches used to
-        answer silently: the journal for 2026-09-29 showed one
-        `analyze_photo 400` from the owner's phone and nothing else, so
-        the phone's "photo analysis failed" had no server-side story at
-        all. One line per refusal, with the code and the client platform
-        (never the payload), is all a later reader needs.
-        """
-        log.warning(
-            f"{endpoint} refused (400 {code}); client="
-            f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
-        return jsonify({"error": code}), 400
 
     def _api_come_back_later(reason):
         """503 for a TEMPORARY refusal: the plan's closed usage window, a
@@ -5106,7 +5153,67 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return None, None, _api_bad_request("analyze", "bad_effort")
         return model, effort, None
 
+    def _decode_image_b64(payload, endpoint):
+        """The JSON shape's image: (bytes, None), or (None, a logged 400):
+        no_image for a missing or blank field, bad_image_encoding for text
+        that is not strict base64."""
+        raw = payload.get("image_b64")
+        if not isinstance(raw, str) or not raw.strip():
+            return None, _api_bad_request(endpoint, "no_image")
+        try:
+            return base64.b64decode(raw, validate=True), None
+        except (binascii.Error, ValueError):
+            return None, _api_bad_request(endpoint, "bad_image_encoding")
+
+    def _backend_unavailable(endpoint, backend):
+        """503 for a backend this server cannot run. It keeps old-app
+        compat for claude, and the reason string tells a new app WHICH
+        server-side knob is missing. LOGGED: a burst of these was
+        invisible in the journal on 2026-07-31 and cost an hour of "why is
+        my API broken"."""
+        reason = claude_analyzer.backend_status().get(backend)
+        log.warning(
+            f"{endpoint} refused: backend '{backend}' unavailable "
+            f"({reason}).")
+        return jsonify({"error": "claude_unavailable",
+                        "reason": reason}), 503
+
+    def _cli_result(run, busy_reason, empty_reason):
+        """Run one CLI call: (result, None), or (None, the 503 installed
+        apps key on via ServerAnalyzer.unavailableRetry).
+
+          AnalyzerBusy    retry True: another photo owns the single-flight
+                          CLI, and seconds fix that.
+          PlanRefused     _api_plan_refused: credits are terminal, a closed
+                          usage window comes back later.
+          AnalyzerTimeout retry "later": the model never answered, a slow
+                          run and not a verdict on the photo; an immediate
+                          re-run meets the same slow model and spends
+                          another full CLI limit.
+          empty result    retry False: the run HAPPENED and failed (a reply
+                          that broke the contract, a blind GLM run).
+                          Retrying spends another full CLI run (up to 120 s
+                          of the subscription) on a request that already
+                          answered, so the app stops at one.
+        """
+        try:
+            result = run()
+        except claude_analyzer.AnalyzerBusy:
+            return None, (jsonify({"error": "claude_unavailable",
+                                   "reason": busy_reason,
+                                   "retry": True}), 503)
+        except claude_analyzer.PlanRefused as refusal:
+            return None, _api_plan_refused(refusal)
+        except claude_analyzer.AnalyzerTimeout as timeout:
+            return None, _api_come_back_later(timeout.reason)
+        if not result:
+            return None, (jsonify({"error": "claude_unavailable",
+                                   "reason": empty_reason,
+                                   "retry": False}), 503)
+        return result, None
+
     @app.route('/api/analyze_photo', methods=['POST'])
+    @_require_api_key
     def api_analyze_photo():
         """Analyze a photo with the Claude Code CLI and RETURN the analysis.
 
@@ -5116,8 +5223,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         PURE — no meal row, no ledger entry, no Telegram card: the app owns
         its own database and decides what to keep.
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         prompt = None
         backend = "claude"
         if request.is_json:
@@ -5127,14 +5232,12 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             # bounded profile appendix. A caller-authored prompt would be
             # an instruction channel into the CLI (see analyze_food_photo's
             # allow_file_fallback note), which is not worth a settings knob.
-            payload = request.get_json(silent=True) or {}
-            raw = payload.get("image_b64")
-            if not isinstance(raw, str) or not raw.strip():
-                return _api_bad_request("analyze_photo", "no_image")
-            try:
-                data = base64.b64decode(raw, validate=True)
-            except (binascii.Error, ValueError):
-                return _api_bad_request("analyze_photo", "bad_image_encoding")
+            payload = _request_json_object()
+            if payload is None:
+                return _api_bad_request("analyze_photo", "bad_request_shape")
+            data, refused = _decode_image_b64(payload, "analyze_photo")
+            if refused is not None:
+                return refused
             profile = payload.get("dietary_profile")
             if isinstance(profile, str) and profile.strip():
                 if len(profile) > API_PROFILE_MAX_CHARS:
@@ -5177,48 +5280,22 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
             return _api_bad_request("analyze_photo", "bad_backend")
         if not claude_analyzer.backend_available(backend, for_photo=True):
-            # 503 keeps old-app compat for claude; the reason string tells
-            # a new app WHICH server-side knob is missing. LOGGED: a burst
-            # of these was invisible in the journal on 2026-07-31 and cost
-            # an hour of "why is my API broken".
-            reason = claude_analyzer.backend_status().get(backend)
-            log.warning(
-                f"analyze_photo refused: backend '{backend}' unavailable "
-                f"({reason}).")
-            return jsonify({"error": "claude_unavailable",
-                            "reason": reason}), 503
+            return _backend_unavailable("analyze_photo", backend)
         # allow_file_fallback=False: never run a network-influenced prompt
         # on the Read-tool path.
-        try:
-            analysis = claude_analyzer.analyze_food_photo(
+        analysis, refused = _cli_result(
+            lambda: claude_analyzer.analyze_food_photo(
                 data, prompt, allow_file_fallback=False, backend=backend,
-                raise_on_busy=True, model=model, effort=effort)
-        except claude_analyzer.AnalyzerBusy:
-            # Another photo owns the single-flight CLI — seconds fix this.
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analyzer is busy with another "
-                                      "photo",
-                            "retry": True}), 503
-        except claude_analyzer.PlanRefused as refusal:
-            return _api_plan_refused(refusal)
-        except claude_analyzer.AnalyzerTimeout as timeout:
-            # The model never answered — a slow run, not a verdict on the
-            # photo. Not retry:True either: an immediate re-run meets the
-            # same slow model and spends another full CLI limit.
-            return _api_come_back_later(timeout.reason)
-        if not analysis:
-            # The run HAPPENED and failed: a reply that broke the is_food
-            # contract, or a blind GLM run. Retrying spends another full
-            # CLI run (up to 120 s of the subscription) on a request that
-            # already answered — say so, so the app stops at one.
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analysis ran but produced no "
-                                      "usable result",
-                            "retry": False}), 503
+                raise_on_busy=True, model=model, effort=effort),
+            busy_reason="the analyzer is busy with another photo",
+            empty_reason="the analysis ran but produced no usable result")
+        if refused is not None:
+            return refused
         return jsonify({"ok": True, "analysis": analysis,
                         "analyzed_by": backend})
 
     @app.route('/api/analyze_leftover', methods=['POST'])
+    @_require_api_key
     def api_analyze_leftover():
         """Estimate leftover fractions for a previously analyzed meal.
 
@@ -5230,20 +5307,14 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         whitelist, never embedded verbatim), and the CLI run never takes
         the Read-tool fallback.
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-        payload = request.get_json(silent=True) or {}
-        if not isinstance(payload, dict):
+        payload = _request_json_object()
+        if payload is None:
             # A JSON array/scalar body crashed .get with a 500
             # (pressure-test find) — it is a client error, say so.
             return _api_bad_request("analyze_leftover", "bad_request_shape")
-        raw = payload.get("image_b64")
-        if not isinstance(raw, str) or not raw.strip():
-            return _api_bad_request("analyze_leftover", "no_image")
-        try:
-            data = base64.b64decode(raw, validate=True)
-        except (binascii.Error, ValueError):
-            return _api_bad_request("analyze_leftover", "bad_image_encoding")
+        data, refused = _decode_image_b64(payload, "analyze_leftover")
+        if refused is not None:
+            return refused
         if not data:
             return _api_bad_request("analyze_leftover", "no_image")
         if len(data) > API_ANALYZE_MAX_BYTES:
@@ -5261,47 +5332,33 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if bad:
             return bad
         if not claude_analyzer.backend_available(backend, for_photo=True):
-            reason = claude_analyzer.backend_status().get(backend)
-            log.warning(
-                f"analyze_leftover refused: backend '{backend}' unavailable "
-                f"({reason}).")
-            return jsonify({"error": "claude_unavailable",
-                            "reason": reason}), 503
+            return _backend_unavailable("analyze_leftover", backend)
         # Deliberately NO "lang" here: every item in this reply is a
         # back-reference the app matches by exact (then case-insensitive)
         # name against the ORIGINAL meal, which may be English — asking
         # for Chinese invites translated names that silently match nothing
         # and fall back to the meal-level fraction.
         prompt = LEFTOVER_PROMPT_TEMPLATE.format(original_analysis=compact)
-        try:
-            leftover = claude_analyzer.analyze_leftover_photo(
+        leftover, refused = _cli_result(
+            lambda: claude_analyzer.analyze_leftover_photo(
                 data, prompt, backend=backend, raise_on_busy=True,
-                model=model, effort=effort)
-        except claude_analyzer.AnalyzerBusy:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analyzer is busy with another "
-                                      "photo",
-                            "retry": True}), 503
-        except claude_analyzer.PlanRefused as refusal:
-            return _api_plan_refused(refusal)
-        except claude_analyzer.AnalyzerTimeout as timeout:
-            return _api_come_back_later(timeout.reason)
-        if not leftover:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the estimation ran but produced no "
-                                      "usable result",
-                            "retry": False}), 503
+                model=model, effort=effort),
+            busy_reason="the analyzer is busy with another photo",
+            empty_reason="the estimation ran but produced no usable result")
+        if refused is not None:
+            return refused
         return jsonify({"ok": True, "leftover": leftover,
                         "analyzed_by": backend})
 
     @app.route('/api/text_intent', methods=['POST'])
+    @_require_api_key
     def api_text_intent():
         """Run the app's natural-language prompt through the CLI and return
         the model's JSON. Same subscription rationale as /api/analyze_photo;
         the app keeps its own executor semantics (this only supplies JSON)."""
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-        payload = request.get_json(silent=True) or {}
+        payload = _request_json_object()
+        if payload is None:
+            return _api_bad_request("text_intent", "bad_request_shape")
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
             return _api_bad_request("text_intent", "no_prompt")
@@ -5316,30 +5373,17 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         model, effort, bad = _plan_model_effort(payload, backend)
         if bad:
             return bad
+        # No for_photo: a text request needs no GLM vision server (npx).
         if not claude_analyzer.backend_available(backend):
-            reason = claude_analyzer.backend_status().get(backend)
-            log.warning(
-                f"text_intent refused: backend '{backend}' unavailable "
-                f"({reason}).")
-            return jsonify({"error": "claude_unavailable",
-                            "reason": reason}), 503
-        try:
-            out = claude_analyzer.analyze_text_prompt(
+            return _backend_unavailable("text_intent", backend)
+        out, refused = _cli_result(
+            lambda: claude_analyzer.analyze_text_prompt(
                 prompt, backend=backend, raise_on_busy=True,
-                model=model, effort=effort)
-        except claude_analyzer.AnalyzerBusy:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analyzer is busy",
-                            "retry": True}), 503
-        except claude_analyzer.PlanRefused as refusal:
-            return _api_plan_refused(refusal)
-        except claude_analyzer.AnalyzerTimeout as timeout:
-            return _api_come_back_later(timeout.reason)
-        if not out:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analysis ran but produced no "
-                                      "usable result",
-                            "retry": False}), 503
+                model=model, effort=effort),
+            busy_reason="the analyzer is busy",
+            empty_reason="the analysis ran but produced no usable result")
+        if refused is not None:
+            return refused
         return jsonify({"ok": True, "result": out["result"],
                         "analyzed_by": backend})
 
@@ -5360,6 +5404,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return lookup_jobs.get_service(lambda: SERVICE_HEALTH_PATH)
 
     @app.route('/api/restaurant_lookup', methods=['POST'])
+    @_require_api_key
     def api_restaurant_lookup():
         """Queue a published-nutrition lookup for chain-restaurant items.
 
@@ -5372,8 +5417,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         {state: done, ...} from the 24 h cache with no CLI run.
         Off unless CLAUDE_LOOKUP_ENABLED (403 {reason: disabled}).
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         if not lookup_jobs.is_enabled():
             return _lookup_refused(403, "disabled")
         payload = request.get_json(silent=True)
@@ -5400,11 +5443,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             429, kind, retry=True if kind == "queue_full" else "later")
 
     @app.route('/api/restaurant_lookup/status', methods=['POST'])
+    @_require_api_key
     def api_restaurant_lookup_status():
         """{job_id} → {state: queued|running|done|failed|unknown, ...}.
         unknown = never seen, expired, or lost in a restart: resubmit."""
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         if not lookup_jobs.is_enabled():
             return _lookup_refused(403, "disabled")
         payload = request.get_json(silent=True)
@@ -5415,17 +5457,25 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return jsonify(_lookup_service().status(job_id)), 200
 
     @app.route('/reconcile', methods=['POST'])
+    @_require_api_key
     def reconcile():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-
         maybe_warn_android_vpn_inactive(bot, "/reconcile")
 
-        data = request.get_json(silent=True)
-        if not data or 'hashes' not in data:
+        data = _request_json_object()
+        if data is None:
+            return _api_bad_request("reconcile", "bad_request_shape")
+        if 'hashes' not in data:
             return jsonify({"error": "Missing hashes array"}), 400
+        hashes = data['hashes']
+        # A list of strings only (the watcher sends md5 hex digests; their
+        # format is not checked): set() of a number or of unhashable
+        # entries raised (500), and a string split into one-character
+        # "hashes".
+        if not isinstance(hashes, list) or not all(
+                isinstance(h, str) for h in hashes):
+            return _api_bad_request("reconcile", "bad_request_shape")
 
-        android_hashes = set(data['hashes'])
+        android_hashes = set(hashes)
         server_hashes = set(database.get_today_hashes(ALLOWED_CHAT_ID))
         reserved_hashes = set(database.get_reserved_photo_hashes(ALLOWED_CHAT_ID))
 
@@ -5436,10 +5486,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return jsonify({"missing_hashes": missing_hashes})
 
     @app.route('/upload', methods=['POST'])
+    @_require_api_key
     def upload():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-
         if request.content_length and request.content_length > MAX_API_UPLOAD_BYTES:
             return jsonify({"error": "Photo too large"}), 413
 
@@ -6052,6 +6100,21 @@ def _record_clean_shutdown():
     service_health.update(mutate, SERVICE_HEALTH_PATH, warn=log.warning)
 
 
+def _stop_cleanly():
+    """The orderly stop both main loops end in (SIGTERM is routed to
+    KeyboardInterrupt), so systemctl stop/restart and deploys stamp a clean
+    shutdown and the crash-loop tripwire ignores them — with the chat bot
+    polling or not (TELEGRAM_POLLING=0).
+
+    Fresh progress stamp first: the interpreter still joins non-daemon
+    upload threads (bounded by TimeoutStopSec=180), and the daemon
+    heartbeat keeps petting through that join on this stamp's budget.
+    """
+    _stamp_progress()
+    _sd_notify("STOPPING=1")
+    _record_clean_shutdown()
+
+
 def _record_boot_and_maybe_alert(bot: TelegramBot):
     """Crash-loop tripwire: 3+ CRASH boots inside 10 minutes, alerted once.
 
@@ -6461,6 +6524,7 @@ def main():
         try:
             _api_only_idle_loop()
         except KeyboardInterrupt:
+            _stop_cleanly()
             log.info("Shutting down.")
             return
 
@@ -6509,14 +6573,7 @@ def main():
                 _stamp_progress()
 
     except KeyboardInterrupt:
-        # SIGTERM is routed here too, so systemctl stop/restart and deploys
-        # stamp a clean shutdown — the crash-loop tripwire ignores them.
-        # Fresh progress stamp first: the interpreter still joins non-daemon
-        # upload threads (bounded by TimeoutStopSec=180), and the daemon
-        # heartbeat keeps petting through that join on this stamp's budget.
-        _stamp_progress()
-        _sd_notify("STOPPING=1")
-        _record_clean_shutdown()
+        _stop_cleanly()
         log.info("\n👋 Bot stopped.")
 
 
