@@ -507,7 +507,7 @@ class DefaultNlExecutor implements NlExecutor {
     await dao.saveMeal(Meal(
       id: 0, // assigned by the DAO
       date: isoDate(now),
-      time: _time12(now),
+      time: formatClock(now),
       timestamp: now.toIso8601String(),
       source: MealSource.manualText, // spec §4.6
       imageHash: '',

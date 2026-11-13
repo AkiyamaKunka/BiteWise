@@ -201,6 +201,32 @@ int calendarDaysBetween(DateTime from, DateTime to) =>
         .difference(DateTime.utc(from.year, from.month, from.day))
         .inDays;
 
+/// The stored meal clock (meals.time) for [t]: 12-hour, zero-padded, a
+/// space, AM/PM — Python's `strftime("%I:%M %p")`, the server's format
+/// (spec §2.2). The one writer for every layer. Like [isoDate] it is ASCII
+/// whatever the device locale: intl's `DateFormat('hh:mm a')` follows
+/// Intl.defaultLocale and would write 下午 markers [parseClock] rejects.
+String formatClock(DateTime t) {
+  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
+  final m = t.minute.toString().padLeft(2, '0');
+  return '${h.toString().padLeft(2, '0')}:$m ${t.hour < 12 ? 'AM' : 'PM'}';
+}
+
+/// A stored meal clock back to (hour, minute); null when unusable. The one
+/// reader for every layer: lenient on spacing, case and dots ('1:05 p.m.'),
+/// strict on range ('13:00 PM' and '12:60 PM' are null).
+({int hour, int minute})? parseClock(String raw) {
+  final m = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]\.?\s*$')
+      .firstMatch(raw);
+  if (m == null) return null;
+  var h = int.parse(m.group(1)!);
+  final min = int.parse(m.group(2)!);
+  if (h < 1 || h > 12 || min > 59) return null;
+  final pm = m.group(3)!.toLowerCase() == 'p';
+  if (h == 12) h = 0;
+  return (hour: pm ? h + 12 : h, minute: min);
+}
+
 /// Lowercased, hex-normalized image hash (port of _normalize_image_hash).
 String normalizeImageHash(String? hash) => (hash ?? '').trim().toLowerCase();
 

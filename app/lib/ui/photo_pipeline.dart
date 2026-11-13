@@ -10,7 +10,6 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show compute;
-import 'package:intl/intl.dart';
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
@@ -31,7 +30,6 @@ import '../services/photo/glasses_check.dart'
     show GlassesCheckEntry, GlassesCheckOutcome;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
-import 'meal_edit_logic.dart' show parseClock;
 
 Future<String> _computeMd5(Uint8List bytes) =>
     compute(originalBytesMd5, bytes);
@@ -1406,7 +1404,7 @@ class PhotoPipeline {
         id: 0, // assigned by the DAO on insert
         date: isoDate(when),
         // 12-hour zero-padded hh:mm AM/PM, server parity (spec §2.2).
-        time: DateFormat('hh:mm a').format(when),
+        time: formatClock(when),
         timestamp: DateTime.now().toIso8601String(),
         source: source,
         imageHash: hash,

@@ -20,7 +20,7 @@ import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 
 import '../app_formats.dart';
-import '../format.dart' show formatKcal, isoDate;
+import '../format.dart' show formatKcal, formatOneDecimal, isoDate;
 import '../l10n.dart';
 import '../theme/tokens.dart';
 
@@ -152,7 +152,7 @@ class MacroBreakdownBar extends StatelessWidget {
             for (final s in slices)
               _LegendEntry(
                 color: s.color,
-                text: '${s.label} ${_g(s.grams)} g'
+                text: '${s.label} ${formatOneDecimal(s.grams)} g'
                     ' · ${(s.kcal / totalKcal * 100).round()}%',
               ),
           ],
@@ -160,9 +160,6 @@ class MacroBreakdownBar extends StatelessWidget {
       ],
     );
   }
-
-  static String _g(num v) =>
-      v == v.roundToDouble() ? v.round().toString() : v.toStringAsFixed(1);
 }
 
 class _LegendEntry extends StatelessWidget {

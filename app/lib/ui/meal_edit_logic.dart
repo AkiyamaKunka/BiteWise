@@ -46,6 +46,10 @@ import '../core/usual_foods_logic.dart';
 import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 
+// The stored meal clock's codec lives in core; the editor's importers still
+// find it here.
+export '../core/coerce.dart' show formatClock, parseClock;
+
 /// UI bounds. Deliberately generous — the point is to reject typos and
 /// hostile input (1e9 breaks the coercion layer's accumulation guarantees),
 /// not to police unusual meals.
@@ -648,24 +652,4 @@ bool isRealIsoDate(String raw) {
   if (mo < 1 || mo > 12 || d < 1 || d > 31) return false;
   final dt = DateTime(y, mo, d);
   return dt.year == y && dt.month == mo && dt.day == d;
-}
-
-/// 12-hour zero-padded clock, matching the stored/server format.
-String formatClock(DateTime t) {
-  final h = t.hour % 12 == 0 ? 12 : t.hour % 12;
-  final m = t.minute.toString().padLeft(2, '0');
-  return '${h.toString().padLeft(2, '0')}:$m ${t.hour < 12 ? 'AM' : 'PM'}';
-}
-
-/// Parse the stored 12-hour clock back to (hour, minute); null when unusable.
-({int hour, int minute})? parseClock(String raw) {
-  final m = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]\.?\s*$')
-      .firstMatch(raw);
-  if (m == null) return null;
-  var h = int.parse(m.group(1)!);
-  final min = int.parse(m.group(2)!);
-  if (h < 1 || h > 12 || min > 59) return null;
-  final pm = m.group(3)!.toLowerCase() == 'p';
-  if (h == 12) h = 0;
-  return (hour: pm ? h + 12 : h, minute: min);
 }

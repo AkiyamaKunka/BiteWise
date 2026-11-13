@@ -517,4 +517,17 @@ void main() {
     ));
     expect(find.byKey(const Key('macroBarEmpty')), findsOneWidget);
   });
+
+  testWidgets('the macro legend prints whole grams bare, else to 0.1 g',
+      (tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(
+        body: MacroBreakdownBar(proteinG: 25, carbsG: 12.54, fatG: 10.0),
+      ),
+    ));
+    // 100 + 50.16 + 90 kcal: 42%, 21%, 37%.
+    expect(find.text('Protein 25 g · 42%'), findsOneWidget);
+    expect(find.text('Carbs 12.5 g · 21%'), findsOneWidget);
+    expect(find.text('Fat 10 g · 37%'), findsOneWidget);
+  });
 }

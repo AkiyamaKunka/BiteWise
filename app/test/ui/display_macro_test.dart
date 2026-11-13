@@ -22,4 +22,30 @@ void main() {
     expect(grams(0.0), '0');
     expect(displayMacro(const {}, 'total_protein_g'), '0');
   });
+
+  // formatOneDecimal: the macro legend, usual foods, the restaurant card
+  // and the Body screen (fmtBodyValue) share it.
+  test('formatOneDecimal: whole numbers bare, anything else to 0.1', () {
+    expect(formatOneDecimal(0), '0');
+    expect(formatOneDecimal(12), '12');
+    expect(formatOneDecimal(12.0), '12');
+    expect(formatOneDecimal(12.5), '12.5');
+    expect(formatOneDecimal(12.34), '12.3');
+    expect(formatOneDecimal(179.8933), '179.9');
+    expect(formatOneDecimal(-3.5), '-3.5');
+    expect(formatOneDecimal(1e6), '1000000');
+  });
+
+  // OPEN OWNER DECISION (review 171, 2026-11-13). Wholeness is checked on
+  // the RAW value, as in the five copies formatOneDecimal replaced, so a
+  // value just off a whole number keeps its '.0' (the '12.0g beside 9g'
+  // look displayMacro fixed on 2026-11-09). Checking after rounding to 0.1
+  // would print '12' and '80' on the macro legend, My usual foods, the
+  // usual offer card, the restaurant card and Body values: change these
+  // pins only with the owner's choice.
+  test('formatOneDecimal: a value just off a whole number keeps its ".0"',
+      () {
+    expect(formatOneDecimal(12.04), '12.0');
+    expect(formatOneDecimal(79.99999), '80.0');
+  });
 }

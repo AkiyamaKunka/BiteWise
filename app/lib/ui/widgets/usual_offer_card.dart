@@ -18,20 +18,16 @@ library;
 import 'package:flutter/material.dart';
 
 import '../../services/usual/usual_foods.dart';
-import '../format.dart' show formatKcal;
+import '../format.dart' show formatKcal, formatOneDecimal;
 import '../l10n.dart';
 import '../theme/tokens.dart';
 import 'grouped.dart' show GroupedCard;
 
-/// Grams as the meal card writes them: whole, else to 0.1 g.
-String _grams(num v) =>
-    v == v.roundToDouble() ? '${v.round()}' : v.toStringAsFixed(1);
-
 /// The three macros of [n] on one line: "P 10g · C 54g · F 6g".
 String _macros(AppLocalizations l, UsualNumbers n) =>
-    '${l.macroProteinShort} ${_grams(n.p)}g · '
-    '${l.macroCarbsShort} ${_grams(n.c)}g · '
-    '${l.macroFatShort} ${_grams(n.f)}g';
+    '${l.macroProteinShort} ${formatOneDecimal(n.p)}g · '
+    '${l.macroCarbsShort} ${formatOneDecimal(n.c)}g · '
+    '${l.macroFatShort} ${formatOneDecimal(n.f)}g';
 
 /// The line that says what Use changes for [item], named [name]: the AI's
 /// kcal and yours, or, when the kcal hardly moves (an offer on the macros

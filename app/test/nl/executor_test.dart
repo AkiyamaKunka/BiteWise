@@ -3,6 +3,7 @@
 /// 2026-07-16 production crash-loop payloads.
 library;
 
+import 'package:calorie_tracker/core/coerce.dart' show formatClock, isoDate;
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/nl/executor.dart';
 import 'package:calorie_tracker/services/photo/glasses.dart'
@@ -779,6 +780,16 @@ void main() {
           '    P: 35g | C: 90g | F: 28g'));
       expect(replies.single.text, contains('📊 This meal: ~780 kcal\n'
           '🥩 P: 35g | 🍞 C: 90g | 🧈 F: 28g'));
+    });
+
+    test('is stored at the hh:mm AM/PM clock of its own timestamp', () async {
+      await exec.executeParsed(
+          {'intent': 'new_meal', 'analysis': roastDuckAnalysis}, 'duck', []);
+      final saved = dao.savedMeals.single;
+      final at = DateTime.parse(saved.timestamp);
+      expect(saved.time, matches(RegExp(r'^(0[1-9]|1[0-2]):[0-5]\d [AP]M$')));
+      expect(saved.time, formatClock(at));
+      expect(saved.date, isoDate(at));
     });
 
     test('an item sum that misses the total warns without Telegram wording',

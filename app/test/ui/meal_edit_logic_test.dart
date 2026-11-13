@@ -91,23 +91,6 @@ void main() {
     });
   });
 
-  group('clock round-trip', () {
-    test('formats and parses the stored 12-hour format', () {
-      expect(formatClock(DateTime(2026, 7, 24, 13, 5)), '01:05 PM');
-      expect(formatClock(DateTime(2026, 7, 24, 0, 30)), '12:30 AM');
-      expect(formatClock(DateTime(2026, 7, 24, 12, 0)), '12:00 PM');
-      expect(parseClock('01:05 PM'), (hour: 13, minute: 5));
-      expect(parseClock('12:30 AM'), (hour: 0, minute: 30));
-      expect(parseClock('12:00 PM'), (hour: 12, minute: 0));
-    });
-
-    test('rejects junk', () {
-      for (final s in ['', '25:00 PM', '13:00 PM', '07:60 AM', 'noon']) {
-        expect(parseClock(s), isNull, reason: s);
-      }
-    });
-  });
-
   group('MealDraft.fromMeal', () {
     test('loads totals, items and leaves an unset description blank', () {
       final draft = MealDraft.fromMeal(mealWith({
