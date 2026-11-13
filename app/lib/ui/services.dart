@@ -212,7 +212,6 @@ class UiServices {
   final AnalyzerService analyzer;
   final NlExecutor executor;
   final PhotoIntake? photoIntake; // null in tests that never toggle the watcher
-  final ReportBuilder? reports;
   final SettingsStore settings;
   final RecentPhotoPicker picker;
   final Future<bool> Function() requestPhotoPermission;
@@ -315,7 +314,6 @@ class UiServices {
     required this.picker,
     required this.requestPhotoPermission,
     this.photoIntake,
-    this.reports,
     this.thumbs,
     this.coverage,
     this.processPhoto,

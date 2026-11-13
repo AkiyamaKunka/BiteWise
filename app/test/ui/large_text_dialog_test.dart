@@ -205,7 +205,6 @@ void main() {
       settings: FakeSettings(apiKey: 'old', watcherEnabled: false),
       picker: FakePicker(),
       requestPhotoPermission: () async => true,
-      reports: FakeReports(),
       setupLinks: links.stream,
     );
     await pumpApp(tester, HomeShell(services: services),
