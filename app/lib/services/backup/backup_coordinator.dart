@@ -41,6 +41,7 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../core/coerce.dart' show isoDate;
 import '../../core/contracts.dart';
 import 'backup_files.dart';
 import 'backup_format.dart';
@@ -453,16 +454,7 @@ class BackupCoordinator {
   }
 
   DateTime get _now => _clock();
-  String get _today {
-    final d = _now.toLocal();
-    return '${d.year.toString().padLeft(4, '0')}-'
-        '${d.month.toString().padLeft(2, '0')}-'
-        '${d.day.toString().padLeft(2, '0')}';
-  }
-
-  String _newInstallId() =>
-      List.generate(16, (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'))
-          .join();
+  String get _today => isoDate(_now.toLocal());
 
   Future<String> _tmpPath(String name) async {
     final dir = Directory('${(await tempDir()).path}/icloud_backup');
@@ -513,7 +505,7 @@ class BackupCoordinator {
         await _prefs.forgetBackup(keepNotice: true);
       }
       await _prefs.setDeviceKey(key);
-      await _prefs.setInstallId(_newInstallId());
+      await _prefs.setInstallId(newInstallId(_random));
       await _prefs.setTopSeq(0);
     }
     return _prefs.installId;
