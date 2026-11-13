@@ -157,7 +157,8 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       final photo = await services.picker.loadOriginal(asset);
       if (!mounted) return;
       if (photo == null) {
-        _snack(l.leftoverFailed);
+        // Nothing was estimated: the add flow's words for the same photo.
+        _snack(l.addPhotoUnreadable);
         return;
       }
       final compact = compactOriginalAnalysis(meal.analysis);
@@ -165,7 +166,12 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
           await services.analyzer.leftoverIntent(photo.bytes, compact);
       if (!mounted) return;
       if (reply == null) {
-        _snack(l.leftoverFailed);
+        // leftoverIntent gives no reason, but a call that used up the daily
+        // quota armed the pause (Gemini): say that, not "from that photo",
+        // which sent the user trying other photos (review 171).
+        _snack(services.settings.isQuotaPaused
+            ? l.leftoverQuotaPaused
+            : l.leftoverFailed);
         return;
       }
       final hash = normalizeImageHash(originalBytesMd5(photo.bytes));

@@ -8,17 +8,59 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
+import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
+import 'package:calorie_tracker/ui/services.dart'
+    show RecentAsset, UiServices;
 import 'package:calorie_tracker/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
 
 final _photoBytes = Uint8List.fromList([9, 9, 9, 9]);
 final _photoMd5 = originalBytesMd5(_photoBytes);
+
+/// Gemini's answer once the free tier's daily requests are used up.
+const _dailyQuotaBody =
+    '{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": '
+    '"Quota exceeded for quota metric generate_content_free_tier_requests '
+    'limit GenerateRequestsPerDayPerProjectPerModel-FreeTier"}}';
+
+class _MemoryKeys implements SecureKeyStore {
+  final Map<String, String> data = {};
+  @override
+  Future<String?> read(String key) async => data[key];
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+}
+
+/// The screen's settings, with the quota pause read from [store]: the
+/// AppSettings the analyzer arms it on, as the app's own adapter does.
+class _PauseFromStore extends FakeSettings {
+  _PauseFromStore(this.store);
+  final AppSettings store;
+
+  @override
+  bool get isQuotaPaused => store.isQuotaPaused;
+}
+
+/// A photo the library cannot hand over (too large, or removed meanwhile).
+class _UnreadablePicker extends FakePicker {
+  @override
+  Future<IntakePhoto?> loadOriginal(RecentAsset asset) async {
+    loadedOriginals.add(asset.id);
+    return null;
+  }
+}
 
 String _today() {
   final n = DateTime.now();
@@ -70,14 +112,14 @@ void main() {
       ..photos = [IntakePhoto(_photoBytes, 'lp1', 'IMG_L.jpg')];
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {UiServices? services}) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(
         home: LeftoverScreen(
-            services: makeServices(
-                dao: dao, analyzer: analyzer, picker: picker))));
+            services: services ??
+                makeServices(dao: dao, analyzer: analyzer, picker: picker))));
     await tester.pumpAndSettle();
   }
 
@@ -588,6 +630,61 @@ void main() {
       await tapPhoto(tester, FakeSettings());
       expect(picker.loadedOriginals, ['lp1']);
       expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget);
+    });
+  });
+
+  // Every failure said "Couldn't estimate the leftovers from that photo.",
+  // and the user went on trying other photos (review 171, C23). The
+  // analyzer hands back no reason, but two causes the screen can see.
+  group('a failed estimate names the cause the screen can see', () {
+    testWidgets("Gemini's daily quota, hit by this very call: the pause on "
+        'the first tap', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: _MemoryKeys());
+      await store.setGeminiApiKey('test-key');
+      var calls = 0;
+      final gemini = GeminiAnalyzer(store,
+          client: MockClient((_) async {
+            calls++;
+            return http.Response(_dailyQuotaBody, 429);
+          }),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      dao.put(_meal(1, '13:34', 965));
+      await pump(tester,
+          services: UiServices(
+              dao: dao,
+              analyzer: gemini,
+              executor: FakeExecutor(),
+              settings: _PauseFromStore(store),
+              picker: picker,
+              requestPhotoPermission: () async => true));
+      await runToConfirm(tester);
+
+      final en = AppLocalizationsEn();
+      expect(calls, 1);
+      expect(store.isQuotaPaused, isTrue, reason: 'the call armed the pause');
+      expect(find.text(en.leftoverQuotaPaused), findsOneWidget);
+      expect(find.text(en.leftoverFailed), findsNothing);
+      expect(dao.updates, isEmpty);
+    });
+
+    testWidgets('a photo that cannot be read says so, as the add flow does',
+        (tester) async {
+      picker = _UnreadablePicker()
+        ..photos = [IntakePhoto(_photoBytes, 'lp1', 'IMG_L.jpg')];
+      dao.put(_meal(1, '13:34', 965));
+      await pump(tester);
+      await runToConfirm(tester);
+
+      final en = AppLocalizationsEn();
+      expect(picker.loadedOriginals, ['lp1']);
+      expect(find.text(en.addPhotoUnreadable), findsOneWidget);
+      expect(find.text(en.leftoverFailed), findsNothing);
+      expect(analyzer.lastLeftoverCompact, isNull, reason: 'nothing was sent');
+      expect(dao.updates, isEmpty);
     });
   });
 }
