@@ -2438,7 +2438,13 @@ class AppLocalizationsEn extends AppLocalizations {
       other: '$meals meals',
       one: '1 meal',
     );
-    return 'Imported $_temp0 ($rows rows total).';
+    String _temp1 = intl.Intl.pluralLogic(
+      rows,
+      locale: localeName,
+      other: '$rows rows',
+      one: '1 row',
+    );
+    return 'Imported $_temp0 ($_temp1 total).';
   }
 
   @override
@@ -2449,7 +2455,13 @@ class AppLocalizationsEn extends AppLocalizations {
       other: '$meals meals',
       one: '1 meal',
     );
-    return 'Imported $_temp0 ($rows rows total); $kept already here.';
+    String _temp1 = intl.Intl.pluralLogic(
+      rows,
+      locale: localeName,
+      other: '$rows rows',
+      one: '1 row',
+    );
+    return 'Imported $_temp0 ($_temp1 total); $kept already here.';
   }
 
   @override

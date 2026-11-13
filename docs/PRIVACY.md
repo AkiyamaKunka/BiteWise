@@ -1,6 +1,6 @@
 # Chopstats · 筷拍 — Privacy Policy
 
-Effective date: 2026-11-11
+Effective date: 2026-11-13
 
 [English](#english) · [中文](#中文)
 
@@ -14,7 +14,7 @@ accounts, and receives none of your data.**
 ### What stays on your phone
 
 - Your meal log, the small meal thumbnails, your weight, body
-  measurements, workouts and fitness profile, and the record of which
+  measurements, workouts, activities and fitness profile, and the record of which
   photos were already processed live in a database inside the app on your
   phone. On iPhone, **iCloud Backup** also keeps a copy of them in your own
   iCloud Drive (see *iCloud Backup* below).
@@ -35,7 +35,7 @@ accounts, and receives none of your data.**
   spot two copies of one shot. Unlike the Meta glasses record, this note
   is part of the meal: it is in your exports and your phone's backups.
 - Only if you turn on **Restaurant nutrition** lookup: the restaurants you
-  confirmed or marked as wrong and the spots you marked as "not a
+  confirmed or marked as wrong and the spots you marked as "Not from a
   restaurant" (each kept as an area of roughly 100 m, for up to 180 days;
   only on iPhone, where photo locations are used), lookups still waiting
   for an answer, saved lookup answers (an answer that found a chain's
@@ -260,8 +260,8 @@ server holding it, Chopstats copies it to **your own iCloud Drive**.
 ### Export, import and backups
 
 - Export and import happen only when you tap them. An export is a file of
-  your records (meals, weight, body measurements, workouts, fitness
-  profile and the processed-photo list; API keys are not included) and
+  your records (meals, weight, body measurements, workouts, activities,
+  fitness profile and the processed-photo list; API keys are not included) and
   the meal pictures (with the data a camera can embed in them removed)
   that you send wherever you choose with the system share sheet. Import
   merges a file you pick, or text you paste, into the phone.
@@ -277,10 +277,14 @@ Delete meals inside the app (My usual foods and your usual numbers are
 worked out from them, so they change with them), use
 **Clear learned places** (Settings › Restaurant nutrition; on Android
 **Clear saved lookup answers**) to delete the places the restaurant lookup
-learned and its saved answers, or uninstall the app to delete everything it stored on the phone. On iPhone,
-delete the iCloud backup in Settings › Your Data (turning iCloud Backup
-off offers it) or in the Files app (iCloud Drive › Chopstats); uninstalling
-the app does not delete it. Copies you exported or that sit in your own backups,
+learned and its saved answers, or uninstall the app to delete what it
+stored on the phone. iOS can keep API keys in the Keychain after an app is
+deleted, so to remove them too, first clear each key you entered in
+Settings › AI Provider (and the **Server upload key** under
+*Your own server*). On iPhone, delete the iCloud backup in Settings › Your
+Data (turning iCloud Backup off offers it) or in the Files app (iCloud
+Drive › Chopstats); uninstalling the app does not delete it. Copies you
+exported or that sit in your own backups,
 and anything already sent to the AI service you chose, are governed by
 where they now live (your files, your backup, or that provider's policy).
 
@@ -354,13 +358,13 @@ date. Questions: open an issue at
 
 ### 留在你手机上的数据
 
-- 你的饮食记录、每餐的小缩略图、体重、身体围度、运动记录和健身档案，以及"哪些照片已经处理过"的记录，都保存在手机上应用内部的数据库里。在 iPhone 上，「**iCloud 备份**」还会在你自己的 iCloud 云盘里保存一份副本（见下文「**iCloud 备份**」）。
+- 你的饮食记录、每餐的小缩略图、体重、身体围度、运动记录、活动和健身档案，以及哪些照片已经处理过的记录，都保存在手机上应用内部的数据库里。在 iPhone 上，「**iCloud 备份**」还会在你自己的 iCloud 云盘里保存一份副本（见下文「**iCloud 备份**」）。
 - 设置保存在手机上应用自己的偏好设置中。
 - API Key（以及你自己服务器的密钥，如果你使用的话）保存在 iOS 钥匙串中；在 Android 上保存在由 Android Keystore 保护的加密存储中。
 - 通知（餐食卡片、每日总结）在手机上生成。
 - 最近 20 张 Meta 眼镜照片的简短记录（每张是怎样识别出来的、相机型号、是否带有位置——绝不记录位置本身——在手机上算出的食物分，以及处理结果），显示在诊断页面上。这份记录不会进入手机的备份。
 - 每一条用照片记录的餐食都会保存一条照片如何拍摄的简短说明：是否来自 Meta 眼镜、是怎样识别出来的，照片是否带有位置、位置的精度，以及定位时间与拍摄时间相差多久——绝不记录位置本身——还有一个由拍摄时间和相机生成的简短代码，用来识别同一次拍摄的两份副本。与上面的 Meta 眼镜记录不同，这条说明是餐食的一部分：会包含在导出文件和手机的备份中。
-- 仅当你开启「**餐厅营养**」查询时：你确认过或标记为不对的餐厅，以及你标记为"不是餐厅"的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；每条都记录最后一次使用的时间，空间不够时先删除最久没用的；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的「**清除已记住的地点**」会删除这些地点、保存的查询结果和还在等待的查询。在不保存地点的 Android 上，「**清除保存的查询结果**」会删除保存的查询结果和还在等待的查询。
+- 仅当你开启「**餐厅营养**」查询时：你确认过或标记为不对的餐厅，以及你用「不是餐厅的」标记过的地点（每个都按约 100 米的范围保存，最长 180 天；只在会使用照片位置的 iPhone 上才有）、还在等待结果的查询、保存的查询结果（找到连锁店公布数值的最长保存一年，其他的最长 30 天；每条都记录最后一次使用的时间，空间不够时先删除最久没用的；你拒绝过的会被标记，之后只作为建议）、哪些被更新的餐你还没有打开过，以及最近 20 次查询决定的记录（只有结果代码和热量数字）。这些不会进入手机的备份，也不会被导出。设置中的「**清除已记住的地点**」会删除这些地点、保存的查询结果和还在等待的查询。在不保存地点的 Android 上，「**清除保存的查询结果**」会删除保存的查询结果和还在等待的查询。
 - 「**我常吃的**」和「**你平时的数值**」都是在手机上根据你最近 90 天记录的餐食算出来的：哪些食物你常吃，以及你自己为某种食物设定的数值（在编辑页里，或点按「**采用**」）。这一餐会在该食物上保存一个小标记，说明数值是你设定的，以及你改过名的食物最初由 AI 给出的名称。算出这些内容不会发送任何东西：不调用 AI，也不查询。用它们记录或修改的餐食之后和其他餐食一样：当天你再记录照片时（第二天凌晨 4 点前拍的照片也一样），它的简短摘要会一起发送，见「发送了什么、发给谁」。你在「我常吃的」里隐藏了哪些食物、拒绝过哪些建议，会以简短代码（不是食物名称）和设置一起保存。
 
 应用不包含任何统计分析、崩溃上报、广告或追踪 SDK，也不会利用你的数据在其他应用或网站之间追踪你。
@@ -370,7 +374,7 @@ date. Questions: open an issue at
 数据离开手机是为了连接你在设置中选择的 AI 服务，并使用**你自己的 API Key**（使用「你自己的服务器」时，是你自己运行的服务器）。除了 iPhone 上「**iCloud 备份**」保存在你自己 iCloud 里的副本（见下文「**iCloud 备份**」），除非你开启「**餐厅营养**」查询，否则不会有其他数据离开手机；开启后，在 iPhone 上照片的拍摄位置会发送给 Apple 地图，查询会发送给该 AI 服务的网页搜索，详见下文「**餐厅营养查询**」。
 
 - Google Gemini、OpenAI、Anthropic（Claude）、DeepSeek 深度求索、xAI（Grok）、OpenRouter、阿里云（Qwen 通义千问）、火山引擎 / 字节跳动（Doubao 豆包）或智谱（GLM）。它们如何处理你发送的内容，以它们各自的隐私政策和条款为准。
-- **你自己的服务器**（设置 › AI 服务 › 你自己的服务器）会把同样的数据发送到**你自己运行**、由你亲自填写地址的服务器，再由它转给你在该服务器上配置的 AI 套餐。填写了服务器地址后，应用还会向这台服务器请求当天的 Garmin 活动摘要，用于"今天"页面（只发送日期）。
+- **你自己的服务器**（设置 › AI 服务 › 你自己的服务器）会把同样的数据发送到**你自己运行**、由你亲自填写地址的服务器，再由它转给你在该服务器上配置的 AI 套餐。填写了服务器地址后，应用还会向这台服务器请求当天的 Garmin 活动摘要，用于「今天」页面（只发送日期）。
 
 **哪些照片会被发送：**
 
@@ -386,7 +390,7 @@ date. Questions: open an issue at
 
 **随文字请求一起发送的内容：**
 
-- *文字描述一餐*（例如"我吃了一碗面"）：你输入的文字和今天的日期，不发送其他餐食。
+- *文字描述一餐*（例如「我吃了一碗面」）：你输入的文字和今天的日期，不发送其他餐食。
 - *修改或删除某餐*（例如「那碗面其实是烧鸭饭」或「删掉午饭」）：你输入的文字、今天的日期，以及最近 7 天餐食的描述、食物、日期、时间和热量估算，便于 AI 找到你指的那一餐。
 
 设置中的连接检测只会访问所选服务（或你的服务器），发送一条固定的测试消息和一张内置的测试图片；如果你填写了饮食档案，它会随测试图片一起发送。不会发送你的任何照片或餐食。
@@ -425,12 +429,12 @@ date. Questions: open an issue at
 
 ### 导出、导入与备份
 
-- 只有在你点击时才会导出或导入。导出的是一份记录文件（餐食、体重、身体围度、运动、健身档案和已处理照片列表；不包含 API Key）和餐食图片（相机可能写入其中的数据会被删除），由你通过系统分享面板发送到你选择的地方。导入会把你选择的文件或粘贴的文字合并进手机。
+- 只有在你点击时才会导出或导入。导出的是一份记录文件（餐食、体重、身体围度、运动记录、活动、健身档案和已处理照片列表；不包含 API Key）和餐食图片（相机可能写入其中的数据会被删除），由你通过系统分享面板发送到你选择的地方。导入会把你选择的文件或粘贴的文字合并进手机。
 - 手机自身的备份可能包含应用数据：iPhone 上的 iCloud 或电脑备份，以及 Android 的系统备份（可能会在你自己的 Google 账户中保存一份副本）。上文说明不会进入备份的记录（Meta 眼镜记录和餐厅查询的文件）不在其中，也不在「iCloud 备份」里。
 
 ### 删除数据
 
-在应用内删除餐食（「我常吃的」和你平时的数值都根据餐食算出，会随之改变），用「**清除已记住的地点**」（设置 › 餐厅营养；Android 上是「**清除保存的查询结果**」）删除餐厅查询记住的地点和保存的查询结果，或卸载应用以删除它在手机上保存的全部数据。在 iPhone 上，可以在 设置 › 你的数据 里删除 iCloud 备份（关闭「iCloud 备份」时也会询问），或在「文件」App 的 iCloud 云盘 › Chopstats 里删除；卸载应用不会删除它。你导出的文件、你自己备份中的副本，以及已经发送给你所选 AI 服务的内容，分别由它们现在所在的位置（你的文件、你的备份或该服务商的政策）决定。
+在应用内删除餐食（「我常吃的」和你平时的数值都根据餐食算出，会随之改变），用「**清除已记住的地点**」（设置 › 餐厅营养；Android 上是「**清除保存的查询结果**」）删除餐厅查询记住的地点和保存的查询结果，或卸载应用以删除它在手机上保存的数据。iOS 可能会在应用删除后仍把 API Key 留在钥匙串中，所以如果也要删除它们，请先在 设置 › AI 服务 里清除你填写的每一个 Key（以及「你自己的服务器」里的「**服务器上传密钥**」）。在 iPhone 上，可以在 设置 › 你的数据 里删除 iCloud 备份（关闭「iCloud 备份」时也会询问），或在「文件」App 的 iCloud 云盘 › Chopstats 里删除；卸载应用不会删除它。你导出的文件、你自己备份中的副本，以及已经发送给你所选 AI 服务的内容，分别由它们现在所在的位置（你的文件、你的备份或该服务商的政策）决定。
 
 ### 第三方与你的同意
 

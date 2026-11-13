@@ -20,7 +20,8 @@ import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 
 import 'fakes.dart';
 
-/// One locale's expected copy. The en record IS the pre-l10n literal set.
+/// One locale's expected copy. The en record IS the pre-l10n literal set,
+/// except that one imported row now reads "1 row" (review r171).
 typedef _Copy = ({
   Locale locale,
   String denied,
@@ -58,7 +59,7 @@ const _en = (
       'meals are kept; only new ones are added.',
   cancel: 'Cancel',
   importBtn: 'Import',
-  imported: 'Imported 1 meal (1 rows total).',
+  imported: 'Imported 1 meal (1 row total).',
   importedKept: 'Imported 2 meals (2 rows total); 1 already here.',
   nothingNew: 'Nothing new to import — everything in that file is already '
       'here.',
@@ -346,5 +347,23 @@ void main() {
     await tester.tap(find.byKey(const Key('watcherToggle')));
     await tester.pumpAndSettle();
     expect(find.text(_en.denied), findsOneWidget);
+  });
+
+  // Review r171: one imported row read "Imported 1 meal (1 rows total).".
+  // The row count has plural forms now, as the meal count already had.
+  test('both import sentences say 1 row, and N rows for any other count',
+      () {
+    final en = lookupAppLocalizations(const Locale('en'));
+    expect(en.importDone(1, 1), 'Imported 1 meal (1 row total).');
+    expect(en.importDone(0, 1), 'Imported 0 meals (1 row total).');
+    expect(en.importDone(2, 5), 'Imported 2 meals (5 rows total).');
+    expect(en.importDoneKept(1, 1, 3),
+        'Imported 1 meal (1 row total); 3 already here.');
+    expect(en.importDoneKept(2, 2, 1),
+        'Imported 2 meals (2 rows total); 1 already here.');
+    // Chinese has no plural forms: unchanged.
+    final zh = lookupAppLocalizations(const Locale('zh'));
+    expect(zh.importDone(1, 1), '已导入 1 餐（共 1 行）。');
+    expect(zh.importDoneKept(1, 1, 3), '已导入 1 餐（共 1 行）；3 条已存在。');
   });
 }

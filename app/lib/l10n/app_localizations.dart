@@ -3771,13 +3771,13 @@ abstract class AppLocalizations {
   /// No description provided for @importDone.
   ///
   /// In en, this message translates to:
-  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).'**
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows, plural, =1{1 row} other{{rows} rows}} total).'**
   String importDone(int meals, int rows);
 
   /// No description provided for @importDoneKept.
   ///
   /// In en, this message translates to:
-  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.'**
+  /// **'Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows, plural, =1{1 row} other{{rows} rows}} total); {kept} already here.'**
   String importDoneKept(int meals, int rows, int kept);
 
   /// No description provided for @importFailed.

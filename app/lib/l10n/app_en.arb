@@ -1930,7 +1930,7 @@
   },
   "importAction": "Import",
   "importNothingNew": "Nothing new to import — everything in that file is already here.",
-  "importDone": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total).",
+  "importDone": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows, plural, =1{1 row} other{{rows} rows}} total).",
   "@importDone": {
     "placeholders": {
       "meals": {
@@ -1941,7 +1941,7 @@
       }
     }
   },
-  "importDoneKept": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows} rows total); {kept} already here.",
+  "importDoneKept": "Imported {meals, plural, =1{1 meal} other{{meals} meals}} ({rows, plural, =1{1 row} other{{rows} rows}} total); {kept} already here.",
   "@importDoneKept": {
     "placeholders": {
       "meals": {

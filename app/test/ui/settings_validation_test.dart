@@ -897,7 +897,7 @@ void importExportTests() {
       expect(
           find.text(locale.languageCode == 'zh'
               ? '已导入 1 餐（共 1 行）。'
-              : 'Imported 1 meal (1 rows total).'),
+              : 'Imported 1 meal (1 row total).'),
           findsOneWidget);
     });
   }
