@@ -642,4 +642,70 @@ void main() {
       expect(classifyAnalysisError(out.error), AnalysisErrorKind.unknown);
     });
   });
+
+  group('an image Gemini could not read is about the photo, not the model '
+      'name (review 171, C28)', () {
+    // Gemini answers 400 INVALID_ARGUMENT for an image it could not read.
+    // Read as any other INVALID_ARGUMENT, that was "check the model name in
+    // Settings" (a setting that was fine), and the photo failed at once
+    // although Google's own text asks for a retry.
+    const unableBody = '{"error": {"code": 400, "message": "Unable to '
+        'process input image. Please retry or report in '
+        'https://developers.generativeai.google/guide/troubleshooting", '
+        '"status": "INVALID_ARGUMENT"}}';
+    const invalidBody = '{"error": {"code": 400, "message": "Provided image '
+        'is not valid.", "status": "INVALID_ARGUMENT"}}';
+
+    test('only the two image sentences: any other INVALID_ARGUMENT stays a '
+        'model error', () {
+      expect(classifyGeminiError('HTTP 400: $unableBody'),
+          GeminiErrorClass.imageRejected);
+      expect(classifyGeminiError('HTTP 400: $invalidBody'),
+          GeminiErrorClass.imageRejected);
+      expect(
+          classifyGeminiError('HTTP 400: {"error": {"code": 400, "message": '
+              '"JSON mode is not enabled for models/gemma-3-27b-it", '
+              '"status": "INVALID_ARGUMENT"}}'),
+          GeminiErrorClass.modelError);
+      expect(isRetryableGeminiError('HTTP 400: $unableBody'), isFalse,
+          reason: 'one retry in place, never the transient classes');
+    });
+
+    test('"Please retry": one more try in place, then the photo verdict',
+        () async {
+      final s = await freshSettings();
+      final h = Harness(s, [
+        http.Response(unableBody, 400),
+        http.Response(unableBody, 400),
+      ]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(h.requests, hasLength(2));
+      expect(h.sleeps, [const Duration(seconds: 5)]);
+      expect(out.retryable, isFalse,
+          reason: 'refused twice: re-sending it on every scan is waste');
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.badPhoto,
+          reason: out.error);
+      expect(out.error, isNot(contains('model')));
+    });
+
+    test('the retry can succeed', () async {
+      final s = await freshSettings();
+      final h = Harness(s, [http.Response(unableBody, 400), ok(foodJson)]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(out.isFood, isTrue, reason: out.error);
+      expect(h.requests, hasLength(2));
+    });
+
+    test('"Provided image is not valid." asks for no retry: one call',
+        () async {
+      final s = await freshSettings();
+      final h = Harness(s, [http.Response(invalidBody, 400)]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(h.requests, hasLength(1));
+      expect(h.sleeps, isEmpty);
+      expect(out.retryable, isFalse);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.badPhoto,
+          reason: out.error);
+    });
+  });
 }

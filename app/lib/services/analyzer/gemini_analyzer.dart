@@ -43,6 +43,12 @@ enum GeminiErrorClass {
   networkService,
   modelError,
 
+  /// 400 INVALID_ARGUMENT "Unable to process input image. Please retry …"
+  /// or "Provided image is not valid.": Gemini could not read the PHOTO.
+  /// The model name is fine, so "check the model name" was the wrong fix
+  /// (review 171, C28).
+  imageRejected,
+
   /// An HTTP 200 whose answer Gemini withheld (finishReason SAFETY /
   /// RECITATION / PROHIBITED_CONTENT / BLOCKLIST / SPII, or a prompt
   /// blockReason). The same photo is refused again, so it is permanent.
@@ -115,6 +121,13 @@ GeminiErrorClass classifyGeminiError(String errorText) {
       up.contains('503')) {
     return GeminiErrorClass.networkService;
   }
+  // Before INVALID_ARGUMENT, which these arrive as. Matched on Google's
+  // two image sentences only: any other INVALID_ARGUMENT (JSON mode on a
+  // Gemma model, say) stays a model error, as the spec has it.
+  if (up.contains('UNABLE TO PROCESS INPUT IMAGE') ||
+      up.contains('PROVIDED IMAGE IS NOT VALID')) {
+    return GeminiErrorClass.imageRejected;
+  }
   if (up.contains('INVALID_ARGUMENT') ||
       up.contains('MODEL_NOT_FOUND') ||
       up.contains('NOT_FOUND')) {
@@ -150,6 +163,12 @@ bool isRetryableGeminiError(String errorText) {
       up.contains('CONNECTION') ||
       RegExp(r'HTTP 5\d\d').hasMatch(up);
 }
+
+/// An image refusal ([GeminiErrorClass.imageRejected]) whose text asks for
+/// a retry, as "Unable to process input image. Please retry …" does.
+bool _imageRefusalAsksRetry(String errorText) =>
+    classifyGeminiError(errorText) == GeminiErrorClass.imageRejected &&
+    errorText.toUpperCase().contains('PLEASE RETRY');
 
 /// Parse the server's retry hint — `retryDelay: "Ns"`, `retry in Ns`,
 /// `retry in Nms` — ceil to int seconds, clamp [1, 60]; default 5
@@ -321,6 +340,10 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
             'Please try again.';
       case GeminiErrorClass.modelError:
         return 'Gemini model error — check the model name in Settings.';
+      // classifyAnalysisError reads 'could not process this photo' as
+      // badPhoto, the localized "this photo could not be processed".
+      case GeminiErrorClass.imageRejected:
+        return 'Gemini could not process this photo.';
       case GeminiErrorClass.unknown:
         return 'Gemini request failed. Please try again.';
     }
@@ -390,11 +413,19 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
           await _sleep(Duration(seconds: parseRetryDelaySeconds(e.message)));
           continue;
         }
+        // An image refusal that asks for a retry ("Unable to process input
+        // image. Please retry …") gets one, in place. Refused again, it is
+        // the photo's verdict, not something every later scan re-sends.
+        if (attempt == 1 && _imageRefusalAsksRetry(e.message)) {
+          await _sleep(Duration(seconds: parseRetryDelaySeconds(e.message)));
+          continue;
+        }
         // Exhausted in-place retries on a transient class (429/5xx/network),
         // the key is simply not configured yet, or the network exits in a
         // region Gemini does not serve (no in-place retry: seconds do not
         // move a VPN node): the PHOTO is fine either way — a later scan may
-        // succeed. Auth/model/parse/withheld failures are not.
+        // succeed. Auth/model/parse/withheld/unreadable-image failures are
+        // not.
         // An HTML 401/403 (a front end or web filter answering in Google's
         // place) is network-class too: no in-place retry, photo kept.
         final cls = classifyGeminiError(e.message);
@@ -591,7 +622,10 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
         case GeminiErrorClass.regionBlocked:
           return KeyProbe(KeyProbeResult.regionBlocked,
               message: _userMessageFor(e.message));
+        // A 'ping' carries no photo: an image refusal or a withheld answer
+        // cannot answer it, so these keep the verbatim evidence.
         case GeminiErrorClass.contentBlocked:
+        case GeminiErrorClass.imageRejected:
         case GeminiErrorClass.unknown:
           return KeyProbe(KeyProbeResult.rejected,
               message: _userMessageFor(e.message));
