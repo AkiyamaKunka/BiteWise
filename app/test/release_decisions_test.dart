@@ -23,6 +23,8 @@ import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
     show kApiKeyChoices, kKnownModels, modelChoiceLabel, noteLabel;
 import 'package:flutter_test/flutter_test.dart';
 
+import 'support/store_listing_files.dart';
+
 Directory _appRoot() {
   var dir = Directory.current;
   while (!File('${dir.path}/pubspec.yaml').existsSync()) {
@@ -467,9 +469,14 @@ void main() {
       expectNoOldName(_readRepo('docs/PRIVACY.md'));
       expectNoOldName(_readRepo('docs/SUPPORT.md'));
       expectNoOldName(_read('lib/ui/app.dart'));
-      for (final file in Directory(
-        '${_appRoot().path}/ios/store/metadata',
-      ).listSync(recursive: true).whereType<File>()) {
+      // The listing's own files, not a checkout's .DS_Store (binary) or
+      // git mergetool's .orig (see store_listing_files.dart).
+      final listing = storeListingFiles(
+        Directory('${_appRoot().path}/ios/store/metadata'),
+        recursive: true,
+      );
+      expect(listing, isNotEmpty);
+      for (final file in listing) {
         expectNoOldName(file.readAsStringSync(), reason: file.path);
       }
       for (final locale in ['en-US', 'zh-Hans']) {

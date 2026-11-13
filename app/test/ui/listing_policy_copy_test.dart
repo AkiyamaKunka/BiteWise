@@ -18,6 +18,8 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import '../support/store_listing_files.dart';
+
 void main() {
   final en = AppLocalizationsEn();
   final zh = AppLocalizationsZh();
@@ -28,9 +30,43 @@ void main() {
         File('${dir.path}/description.txt').readAsStringSync();
 
     test('quotes nothing in ASCII straight quotes', () {
-      final files = dir.listSync().whereType<File>().toList();
+      final files = storeListingFiles(dir);
       expect(files, isNotEmpty);
       for (final f in files) {
+        expect(f.readAsStringSync(), isNot(contains('"')), reason: f.path);
+      }
+    });
+
+    // Review r171, second pass: the check above read every file in the
+    // folder, so on a checkout with Finder's .DS_Store (git-ignored) it
+    // failed to decode it, and the description.txt.orig git mergetool
+    // leaves after a conflict failed it on the old quotes. CI's checkout
+    // has neither.
+    test('reads the listing files only, not what Finder, an editor or a '
+        'merge leaves beside them', () {
+      final tmp = Directory.systemTemp.createTempSync('listing_files_');
+      addTearDown(() => tmp.deleteSync(recursive: true));
+      final locale = Directory('${tmp.path}/zh-Hans')..createSync();
+      // A .DS_Store header (Bud1), then bytes that are not UTF-8.
+      const binary = [0, 0, 0, 1, 0x42, 0x75, 0x64, 0x31, 0xff, 0xfe, 0x80];
+      for (final d in [tmp, locale]) {
+        File('${d.path}/description.txt').writeAsStringSync('例如“素食”');
+        File('${d.path}/description.txt.orig').writeAsStringSync('例如"素食"');
+        File('${d.path}/description.txt~').writeAsStringSync('例如"素食"');
+        for (final name in [
+          '.DS_Store',
+          '._description.txt',
+          '.description.txt.swp',
+        ]) {
+          File('${d.path}/$name').writeAsBytesSync(binary);
+        }
+      }
+      String rel(File f) => f.path.substring(tmp.path.length + 1);
+      expect(storeListingFiles(locale).map(rel), ['zh-Hans/description.txt']);
+      final all = storeListingFiles(tmp, recursive: true);
+      expect(all.map(rel),
+          unorderedEquals(['description.txt', 'zh-Hans/description.txt']));
+      for (final f in all) {
         expect(f.readAsStringSync(), isNot(contains('"')), reason: f.path);
       }
     });
