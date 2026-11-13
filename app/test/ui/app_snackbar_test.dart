@@ -30,11 +30,16 @@ Future<bool> _seenWithin(WidgetTester tester, String text, int seconds) async {
 
 const _used = 'Used your usual numbers: 300 → 350 kcal';
 
-SnackBar _usedSnack(ScaffoldMessengerState messenger) => SnackBar(
-    duration: kUsualUndoSnackDuration,
-    persist: usualUndoPersists(messenger),
-    content: const Text(_used),
-    action: SnackBarAction(label: 'Undo', onPressed: () {}));
+SnackBar _usedSnack(ScaffoldMessengerState messenger) =>
+    _usualSnack(messenger, _used);
+
+/// A usual-foods result with Undo, as showUsualUsedSnack builds it.
+SnackBar _usualSnack(ScaffoldMessengerState messenger, String text) =>
+    SnackBar(
+        duration: kUsualUndoSnackDuration,
+        persist: usualUndoPersists(messenger),
+        content: Text(text),
+        action: SnackBarAction(label: 'Undo', onPressed: () {}));
 
 /// The snackbar texts on screen now, for a failure message.
 String _onScreen() => [
@@ -158,6 +163,84 @@ void main() {
     expect(await _seenWithin(tester, 'Logged: Latte', 5), isTrue);
     expect(find.text(_used), findsNothing);
     expect(await _seenWithin(tester, 'Logged: Banana', 6), isTrue);
+  });
+
+  // Review 1.7.1: an app message that arrived while a usual-foods snackbar
+  // was up went straight into the messenger's own queue, behind it. A
+  // second Use then hid the first snackbar, the queued message came next,
+  // and the second Undo waited behind it: about 4 s late, or for good
+  // under a screen reader behind a held lookup Undo.
+  testWidgets('a second Use while a message that arrived during the first '
+      'waits: the second Undo is next, and the message follows it',
+      (tester) async {
+    await tester.pumpWidget(_app());
+    final messenger = messengerKey.currentState!;
+    showUsualSnack(messenger, _usualSnack(messenger, 'Used A'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Used A'), findsOneWidget);
+    // A background save lands while Used A is up.
+    showAppSnackbar('Logged: Latte');
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Used A'), findsOneWidget);
+    // Use on a second meal.
+    showUsualSnack(messenger, _usualSnack(messenger, 'Used B'));
+    expect(await _seenWithin(tester, 'Used B', 2), isTrue,
+        reason: 'on screen instead: ${_onScreen()}');
+    expect(find.text('Logged: Latte'), findsNothing);
+    // Used B keeps its full time, then the message follows, not dropped.
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('Used B'), findsOneWidget);
+    expect(await _seenWithin(tester, 'Logged: Latte', 5), isTrue);
+  });
+
+  testWidgets('screen reader: a second Use is not held behind a lookup '
+      'Undo that arrived during the first', (tester) async {
+    tester.platformDispatcher.accessibilityFeaturesTestValue =
+        const FakeAccessibilityFeatures(accessibleNavigation: true);
+    addTearDown(tester.platformDispatcher.clearAccessibilityFeaturesTestValue);
+    await tester.pumpWidget(_app());
+    final messenger = messengerKey.currentState!;
+    showUsualSnack(messenger, _usualSnack(messenger, 'Used A'));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    var lookupUndone = 0;
+    showAppSnackbarWithAction(
+        'Used published numbers', 'Undo', () => lookupUndone++);
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+    showUsualSnack(messenger, _usualSnack(messenger, 'Used B'));
+    expect(await _seenWithin(tester, 'Used B', 2), isTrue,
+        reason: 'on screen instead: ${_onScreen()}');
+    // Held for the screen-reader user, with its own Undo.
+    for (var i = 0; i < 20; i++) {
+      await tester.pump(const Duration(seconds: 1));
+    }
+    expect(find.text('Used B'), findsOneWidget);
+    expect(find.text('Used published numbers'), findsNothing);
+    // Acting on it lets the lookup's line and Undo through.
+    await tester.tap(find.text('Undo'));
+    expect(await _seenWithin(tester, 'Used published numbers', 2), isTrue,
+        reason: 'the lookup Undo is not dropped');
+    await tester.tap(find.text('Undo'));
+    await tester.pump();
+    expect(lookupUndone, 1);
+  });
+
+  testWidgets('a message sent while a usual-foods snackbar is up waits for '
+      'it, then shows', (tester) async {
+    await tester.pumpWidget(_app());
+    final messenger = messengerKey.currentState!;
+    showUsualSnack(messenger, _usedSnack(messenger));
+    await tester.pump();
+    showAppSnackbar('Logged: Toast');
+    expect(await _seenWithin(tester, 'Logged: Toast', 7), isFalse,
+        reason: 'the Undo keeps its 8 s');
+    expect(find.text(_used), findsOneWidget);
+    expect(await _seenWithin(tester, 'Logged: Toast', 4), isTrue);
   });
 
   testWidgets('a messenger that went away does not hold later messages '

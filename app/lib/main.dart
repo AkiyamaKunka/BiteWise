@@ -7,6 +7,7 @@ import 'package:flutter/services.dart' show PlatformException;
 
 import 'ui/app.dart';
 import 'ui/di.dart';
+import 'ui/widgets/usual_offer_card.dart' show usualSnackClosing;
 
 final GlobalKey<ScaffoldMessengerState> messengerKey =
     GlobalKey<ScaffoldMessengerState>();
@@ -29,6 +30,12 @@ void showAppSnackbarWithAction(
 
 void _holdSnackbar(String message, SnackBarAction? action) {
   _pendingSnackbars.add((message: message, action: action));
+  _flushSoon();
+}
+
+/// [_flushSnackbars] now, or after the next frame when the messenger is
+/// not mounted yet.
+void _flushSoon() {
   if (!_flushSnackbars()) {
     WidgetsBinding.instance.addPostFrameCallback((_) => _flushSnackbars());
   }
@@ -45,6 +52,9 @@ const Duration kAppActionSnackDuration = Duration(seconds: 8);
   ScaffoldFeatureController<SnackBar, SnackBarClosedReason> controller,
 })? _shown;
 
+/// The usual-foods snackbar's closing that [_flushSnackbars] waits for.
+Future<void>? _waitingFor;
+
 /// True once the messenger is mounted (the next pending message is on it,
 /// or waits for the one it holds). Not mounted (startup error screen):
 /// kept for the next message or frame.
@@ -54,6 +64,11 @@ const Duration kAppActionSnackDuration = Duration(seconds: 8);
 /// messages still pending here follow it (owner decision 2026-11-11, RC
 /// 1.6.0 finding 4). Handed over all at once, a catch-up's "Logged" lines
 /// sat in the messenger's own queue, ahead of the Undo, 4 s each.
+///
+/// None is handed over while a usual-foods snackbar is up either
+/// (usualSnackClosing): in the messenger's queue the message would wait
+/// behind it, and a second Use, which replaces only the snackbar that is
+/// up, would put its own Undo behind the message.
 ///
 /// A snackbar with an action never times out by default (SnackBar.persist
 /// defaults to `action != null`): the lookup's Undo stayed up until tapped,
@@ -73,6 +88,17 @@ bool _flushSnackbars() {
   }
   _shown = null;
   if (_pendingSnackbars.isEmpty) return true;
+  final usual = usualSnackClosing(messenger);
+  if (usual != null) {
+    if (!identical(_waitingFor, usual)) {
+      _waitingFor = usual;
+      usual.whenComplete(() {
+        if (identical(_waitingFor, usual)) _waitingFor = null;
+        _flushSoon();
+      });
+    }
+    return true;
+  }
   final s = _pendingSnackbars.removeAt(0);
   final controller = messenger.showSnackBar(s.action == null
       ? SnackBar(content: Text(s.message))
@@ -86,9 +112,7 @@ bool _flushSnackbars() {
   controller.closed.whenComplete(() {
     if (!identical(_shown?.controller, controller)) return;
     _shown = null;
-    if (!_flushSnackbars()) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _flushSnackbars());
-    }
+    _flushSoon();
   });
   return true;
 }
