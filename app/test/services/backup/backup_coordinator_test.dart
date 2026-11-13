@@ -868,8 +868,12 @@ void main() {
       expect(told, 4);
     });
 
+    // Review r171: the lease is how the background run sees an open offer;
+    // the takeover's release cleared it while the offer still waited, so
+    // a background run logged photos the backup may hold.
     test('a takeover that ends while an offer waits under Settings tells '
-        'nothing: the offer holds on', () async {
+        'nothing: the offer holds on, the background run\'s lease too',
+        () async {
       var told = 0;
       c = make(onCatchUpReleased: () => told++);
       await seed(dao, '2026-11-10');
@@ -877,9 +881,36 @@ void main() {
       await otherPhoneBackup(meals: 2);
       await c.launchCheckForTest();
       expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      now = now.add(const Duration(minutes: 20));
       expect(await c.takeOver(replace: false), isTrue);
       expect(c.holdsPhotosNow, isTrue);
       expect(told, 0);
+      expect(backupHoldsCatchUp(prefs, now), isTrue);
+      expect(
+          backupHoldsCatchUp(
+              prefs, now.add(const Duration(minutes: 29, seconds: 59))),
+          isTrue,
+          reason: 'renewed from when the takeover let go, not from when the '
+              'offer was raised');
+    });
+
+    test('so does a combine that ends while an offer waits', () async {
+      var told = 0;
+      c = make(onCatchUpReleased: () => told++);
+      await seed(dao, '2026-11-10');
+      await ready();
+      await run();
+      // iCloud kept the other phone's write as the current file, and the
+      // look offers it.
+      await otherPhoneBackup(meals: 2);
+      await c.launchCheckForTest();
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      await c.combine();
+      expect(imported, greaterThan(0), reason: 'it was merged');
+      expect(c.prompt.value, isA<RestoreOfferPrompt>());
+      expect(c.holdsPhotosNow, isTrue);
+      expect(told, 0);
+      expect(backupHoldsCatchUp(prefs, now), isTrue);
     });
 
     test('a takeover that merged another backup\'s pictures lets the hold go '

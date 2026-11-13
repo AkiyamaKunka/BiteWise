@@ -1455,8 +1455,15 @@ class BackupCoordinator {
       _prefs.setHoldCatchUpUntil(_now.add(catchUpLease));
 
   /// Lets the lease go, and the app catch up on what it held back once
-  /// nothing else holds it ([onCatchUpReleased]).
+  /// nothing else holds it ([onCatchUpReleased]). Not while a restore offer
+  /// still waits to be answered (a takeover or combine from Settings that
+  /// ends under one): the lease is the background run's only view of that
+  /// offer, so it is renewed instead.
   Future<void> _releaseCatchUp() async {
+    if (prompt.value is RestoreOfferPrompt) {
+      await _holdCatchUp();
+      return;
+    }
     await _prefs.setHoldCatchUpUntil(null);
     if (!uiEngine || holdsPhotosNow) return;
     try {
