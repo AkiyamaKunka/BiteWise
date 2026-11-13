@@ -1508,6 +1508,7 @@ step 2.
    **Delete iCloud Backup…**), or in the Files app under iCloud Drive ›
    Chopstats."
 
-The README has its own release-tied lines (its maintainer notes, items
-1–4) and so do the slides (`docs/readme/src/README.md`, *Slides tied to a
-release*); `docs/PRIVACY.md` already describes 1.7.0.
+The README has its own list (*Lines tied to a release*, in its maintainer
+notes; go through all of it, for README.zh-CN.md too) and so do the slides
+(`docs/readme/src/README.md`, *Slides tied to a release*);
+`docs/PRIVACY.md` already describes 1.7.0.

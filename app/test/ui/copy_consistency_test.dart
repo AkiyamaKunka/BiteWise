@@ -14,8 +14,9 @@
 ///   iPhone always loses the meals;
 /// - the support page (docs/SUPPORT.md, the store listings' support URL)
 ///   describes the App Store version, and what only 1.7.0 has waits in
-///   docs/RELEASING.md § 12, naming the controls as the app does and
-///   saying a backup holds what an export does.
+///   docs/RELEASING.md § 12, naming the controls as the app does, saying
+///   a backup holds what an export does, and naming the README's and the
+///   slides' release lists by their headings.
 library;
 
 import 'dart:convert';
@@ -362,6 +363,21 @@ void main() {
       final backup =
           part('3. **A new bullet after Export**', '4. **Delete everything**');
       expect(backup, contains('It copies everything an export holds'));
+    });
+
+    // Review r171, second pass: § 12 sent the releaser to "items 1–4" of
+    // the README's release-tied lines. That list has seven, and the
+    // Android release (5) and the tag under For developers (6) change with
+    // 1.7.0 too, so § 12 names each list by its heading, not by numbers.
+    test("§ 12 points to the README's and the slides' whole lists", () {
+      expect(flat('../README.md'),
+          contains('Lines tied to a release. Re-read them when a new App '
+              'Store version ships:'));
+      expect(flat('../docs/readme/src/README.md'),
+          contains('## Slides tied to a release'));
+      expect(s12, contains('*Lines tied to a release*'));
+      expect(s12, contains('*Slides tied to a release*'));
+      expect(s12, isNot(contains(RegExp(r'\bitems? \d'))));
     });
   });
 }
