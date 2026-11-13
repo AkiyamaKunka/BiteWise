@@ -3330,7 +3330,7 @@ abstract class AppLocalizations {
   /// **'Retry'**
   String get covVerbRetry;
 
-  /// No description provided for @covProgLogging.
+  /// The bulk action's name at the start of its done or stopped snackbar (covDone, covDoneFailures, covStopped, covStoppedBecause, covStoppedLast). Chinese uses the verb itself (记录), not an in-progress form.
   ///
   /// In en, this message translates to:
   /// **'Logging'**
@@ -3399,7 +3399,7 @@ abstract class AppLocalizations {
   /// No description provided for @covDoneFailures.
   ///
   /// In en, this message translates to:
-  /// **'{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).'**
+  /// **'{label} done — {failures} of {count} could not be processed (kept in the Failed earlier list for retry).'**
   String covDoneFailures(String label, int failures, int count);
 
   /// No description provided for @covDaysShort.

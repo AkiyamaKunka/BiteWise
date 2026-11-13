@@ -1575,6 +1575,9 @@
   "covVerbLog": "Log",
   "covVerbRetry": "Retry",
   "covProgLogging": "Logging",
+  "@covProgLogging": {
+    "description": "The bulk action's name at the start of its done or stopped snackbar (covDone, covDoneFailures, covStopped, covStoppedBecause, covStoppedLast). Chinese uses the verb itself (记录), not an in-progress form."
+  },
   "covProgReanalyzing": "Re-analyzing",
   "covProgRetrying": "Retrying",
   "covStopped": "{label} stopped after {attempted} of {total}: analysis is unavailable right now (quota pause or missing key). The remaining {remaining, plural, =1{1 photo was} other{{remaining} photos were}} not touched — run this again later.",
@@ -1664,7 +1667,7 @@
       }
     }
   },
-  "covDoneFailures": "{label} done — {failures} of {count} could not be processed (kept in the Failed list for retry).",
+  "covDoneFailures": "{label} done — {failures} of {count} could not be processed (kept in the Failed earlier list for retry).",
   "@covDoneFailures": {
     "placeholders": {
       "label": {

@@ -150,6 +150,24 @@ void main() {
         contains(r"'${await getDatabasesPath()}/$kDatabaseFileName'"));
   });
 
+  // Review r171: after a bulk action the Chinese snackbar read
+  // 记录中完成（3 张照片） or 重试中在第 2/5 张后停止. The label is the
+  // action's name said before 完成 / 停止, so in Chinese it is the verb
+  // itself; and the English one sent failures to "the Failed list", which
+  // the screen calls Failed earlier.
+  test('the coverage snackbars name the action and the list as the screen '
+      'does', () {
+    expect(zh.covDone(zh.covProgLogging, 3), '记录完成（3 张照片）。');
+    expect(zh.covDoneFailures(zh.covProgRetrying, 1, 3),
+        '重试完成 —— 3 张中有 1 张无法处理（已保留在「之前失败」列表中以便重试）。');
+    expect(zh.covStoppedLast(zh.covProgReanalyzing, 2, 5, '原因'),
+        '重新分析在第 2/5 张后停止：原因');
+    expect(en.covFailedEarlier(3), startsWith('Failed earlier'));
+    expect(en.covDoneFailures(en.covProgRetrying, 1, 3),
+        'Retrying done — 1 of 3 could not be processed (kept in the Failed '
+        'earlier list for retry).');
+  });
+
   test('no ALL-CAPS emphasis in the strings that used it', () {
     final shouting = RegExp(r'\b[A-Z]{3,}\b');
     for (final text in [

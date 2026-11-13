@@ -2170,7 +2170,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String covDoneFailures(String label, int failures, int count) {
-    return '$label done — $failures of $count could not be processed (kept in the Failed list for retry).';
+    return '$label done — $failures of $count could not be processed (kept in the Failed earlier list for retry).';
   }
 
   @override

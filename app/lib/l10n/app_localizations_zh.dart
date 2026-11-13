@@ -1940,13 +1940,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get covVerbRetry => '重试';
 
   @override
-  String get covProgLogging => '记录中';
+  String get covProgLogging => '记录';
 
   @override
-  String get covProgReanalyzing => '重新分析中';
+  String get covProgReanalyzing => '重新分析';
 
   @override
-  String get covProgRetrying => '重试中';
+  String get covProgRetrying => '重试';
 
   @override
   String covStopped(String label, int attempted, int total, int remaining) {
