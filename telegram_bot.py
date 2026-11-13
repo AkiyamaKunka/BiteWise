@@ -1509,9 +1509,10 @@ _parse_boolish = parse_boolish
 def _request_json_object() -> Optional[Dict]:
     """The request's JSON body as an object for callers that .get() from it.
 
-    {} when there is no JSON body or it does not parse (each caller's
-    missing-field answer covers that); None when it parsed to an array, a
-    string or a number. .get on those raised, and an authenticated caller
+    {} when there is no JSON body, it does not parse, or it is JSON null
+    (each caller's missing-field answer covers that); None when it parsed
+    to an array, a string, a number or a boolean, the falsy ones ([], "",
+    0, false) included. .get on those raised, and an authenticated caller
     got a 500 with a traceback where a 400 belongs: callers answer None
     with 400 bad_request_shape (or, for optional hints, read it as {}).
     """
@@ -5466,8 +5467,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if 'hashes' not in data:
             return jsonify({"error": "Missing hashes array"}), 400
         hashes = data['hashes']
-        # Hex digests only: set() of a number or of unhashable entries
-        # raised (500), and a string split into one-character "hashes".
+        # A list of strings only (the watcher sends md5 hex digests; their
+        # format is not checked): set() of a number or of unhashable
+        # entries raised (500), and a string split into one-character
+        # "hashes".
         if not isinstance(hashes, list) or not all(
                 isinstance(h, str) for h in hashes):
             return _api_bad_request("reconcile", "bad_request_shape")

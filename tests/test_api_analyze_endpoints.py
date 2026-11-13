@@ -740,10 +740,13 @@ _JSON_OBJECT_ENDPOINTS = [
 
 @pytest.mark.parametrize("path", _JSON_OBJECT_ENDPOINTS)
 def test_a_non_object_json_body_is_a_400_not_a_500(client, monkeypatch, path):
-    """A JSON array, string or number where an object belongs raised on
-    .get (or `in`) and answered 500 with a traceback. Only a caller holding
-    the key gets that far, but it is a client error all the same: a coded,
-    logged 400 — and nothing behind it runs (no CLI, no heartbeat)."""
+    """A JSON array, string, number or boolean where an object belongs
+    raised on .get (or `in`) and answered 500 with a traceback. Only a
+    caller holding the key gets that far, but it is a client error all the
+    same: a coded, logged 400 — and nothing behind it runs (no CLI, no
+    heartbeat). The falsy ones too: `get_json() or {}` read [], 0, false
+    and "" as an empty body, so /ping answered 200 and stamped the
+    heartbeat, and the other routes gave their missing-field answers."""
     import garmin
     import claude_auth
 
@@ -761,12 +764,30 @@ def test_a_non_object_json_body_is_a_400_not_a_500(client, monkeypatch, path):
                          (telegram_bot.database, "get_today_hashes")):
         monkeypatch.setattr(module, name,
                             lambda *a, _n=name, **k: ran.append(_n))
-    for body in ([1, 2], ["timezone", "hashes"], "timezone", 5):
+    for body in ([1, 2], ["timezone", "hashes"], "timezone", 5, True,
+                 [], 0, False, ""):
         resp = client.http.post(path, headers={"X-API-Key": "secret-key"},
                                 json=body)
         assert resp.status_code == 400, (path, body, resp.status_code)
         assert resp.get_json()["error"] == "bad_request_shape", (path, body)
     assert ran == []
+
+
+def test_a_null_or_missing_json_body_reads_as_no_body(client):
+    """JSON null is not refused as a shape: like a missing or unparseable
+    body it reads as {}, so each route gives its own missing-field answer
+    and the watcher's bodiless ping still records the heartbeat."""
+    h = {"X-API-Key": "secret-key"}
+    null = {"data": "null", "content_type": "application/json"}
+    for kwargs in (null, {}):
+        resp = client.http.post("/reconcile", headers=h, **kwargs)
+        assert resp.status_code == 400, kwargs
+        assert resp.get_json() == {"error": "Missing hashes array"}, kwargs
+        resp = client.http.post("/api/text_intent", headers=h, **kwargs)
+        assert resp.status_code == 400, kwargs
+        assert resp.get_json()["error"] == "no_prompt", kwargs
+    assert client.http.post("/ping", headers=h, **null).status_code == 200
+    assert telegram_bot.database.get_last_android_heartbeat() is not None
 
 
 def test_reconcile_hashes_must_be_a_list_of_strings(client, monkeypatch):
