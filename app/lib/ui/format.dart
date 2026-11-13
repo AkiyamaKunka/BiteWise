@@ -10,7 +10,7 @@ import 'package:intl/intl.dart';
 
 import '../core/coerce.dart';
 import '../core/contracts.dart';
-import 'meal_edit_logic.dart' show isRealIsoDate, parseClock;
+import 'meal_edit_logic.dart' show isRealIsoDate;
 
 export '../core/coerce.dart' show isFoodTruthy, isoDate;
 

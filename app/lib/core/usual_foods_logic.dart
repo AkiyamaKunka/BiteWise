@@ -499,17 +499,10 @@ final class UsualIndex {
   }
 }
 
-/// Clock minutes of a stored hh:mm AM/PM time, or null.
+/// Clock minutes of a stored hh:mm AM/PM time ([parseClock]), or null.
 int? _clockMinutes(String raw) {
-  final m = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]\.?\s*$')
-      .firstMatch(raw);
-  if (m == null) return null;
-  var h = int.parse(m.group(1)!);
-  final min = int.parse(m.group(2)!);
-  if (h < 1 || h > 12 || min > 59) return null;
-  final pm = m.group(3)!.toLowerCase() == 'p';
-  if (h == 12) h = 0;
-  return (pm ? h + 12 : h) * 60 + min;
+  final t = parseClock(raw);
+  return t == null ? null : t.hour * 60 + t.minute;
 }
 
 /// Orders two (date, time, id) positions in the log, oldest first.
