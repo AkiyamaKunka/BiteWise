@@ -12,11 +12,9 @@
 ///   accessibility text sizes a floating label is one line and was cut
 ///   to 'Gemini …', so there the label becomes a wrapping placeholder
 ///   (the section header above the cell still names the field).
+/// - [cellField]: the padding around such a field in its cell.
 /// - [showChoiceSheet]: a grouped sheet with one checkmark row per option
 ///   (Language, Units, the own server's Model and Thinking effort).
-/// - [announceSelected]: the same "selected" for screen readers on rows
-///   that draw their own checkmark (the AI provider, the own server's
-///   plan, the restaurant mode, the connection type).
 library;
 
 import 'package:flutter/material.dart';
@@ -45,12 +43,12 @@ InputDecoration cellFieldDecoration(
   );
 }
 
-/// [row], announced selected when [selected]: for a row whose checkmark is
-/// its own trailing icon, which screen readers do not read, so without
-/// this VoiceOver and TalkBack read every choice alike. An unselected row
-/// stays unmarked, as in [showChoiceSheet].
-Widget announceSelected({required bool selected, required Widget row}) =>
-    Semantics(selected: selected ? true : null, child: row);
+/// [field] in its grouped cell: the cell's 16-pt side inset, so the label
+/// lines up with the rows and headers, and 10 pt above and below.
+Widget cellField(Widget field) => Padding(
+  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+  child: field,
+);
 
 /// A grouped sheet titled [title] listing (value, label) [options], the
 /// [current] one checked (and announced selected). Resolves to the tapped

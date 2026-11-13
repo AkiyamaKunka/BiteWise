@@ -27,11 +27,6 @@ import '../theme/tokens.dart';
 Color groupedBackground(ColorScheme scheme) =>
     AppColors.forBrightness(scheme.brightness).page;
 
-/// secondarySystemGroupedBackground: the cells (#FFFFFF / #1C1C1E).
-/// Prefer [cellColor], which also knows when it is inside a sheet.
-Color cellBackground(ColorScheme scheme) =>
-    AppColors.forBrightness(scheme.brightness).cell;
-
 /// The page colour at [context] (the sheet colour inside a grouped sheet).
 Color pageColor(BuildContext context) => AppColors.of(context).page;
 
@@ -242,17 +237,15 @@ class GroupedRow extends StatelessWidget {
     this.enabled = true,
     this.linkUrl,
     this.subtitle,
+    this.selected = false,
   })  : child = null,
-        selected = false,
         semanticsLabel = null;
 
   /// The row frame — padding, minimum height, press highlight, haptic,
   /// chevron and Semantics(button, selected) — around bespoke [child]
   /// content (History days, Body days, checkmark choices in a sheet).
   ///
-  /// [selected] marks the row selected for screen readers and, when no
-  /// [trailing] is given, shows the accent checkmark. [semanticsLabel]
-  /// replaces what the content would read.
+  /// [semanticsLabel] replaces what the content would read.
   const GroupedRow.custom({
     super.key,
     required Widget this.child,
@@ -293,6 +286,12 @@ class GroupedRow extends StatelessWidget {
 
   /// [GroupedRow.custom]'s content.
   final Widget? child;
+
+  /// Marks the row selected for screen readers (an unselected row stays
+  /// unmarked) and, when no [trailing] is given, shows the accent
+  /// checkmark. A row that draws its own check as [trailing] still sets
+  /// it: screen readers do not read that icon, so without it every choice
+  /// read alike.
   final bool selected;
   final String? semanticsLabel;
 
@@ -302,7 +301,7 @@ class GroupedRow extends StatelessWidget {
     final colors = AppColors.of(context);
     final tappable = enabled && onTap != null;
     final custom = child;
-    final checkmark = custom != null && selected && trailing == null;
+    final checkmark = selected && trailing == null;
     final chevron = showChevron ??
         (onTap != null && trailing == null && !checkmark);
     // Accessibility text sizes: the value moves UNDER the title and both
@@ -395,7 +394,7 @@ class GroupedRow extends StatelessWidget {
       button: tappable && linkUrl == null ? true : null,
       link: tappable && linkUrl != null ? true : null,
       linkUrl: tappable ? linkUrl : null,
-      selected: custom != null && selected ? true : null,
+      selected: selected ? true : null,
       label: semanticsLabel,
       child: InkWell(
         onTap: !tappable

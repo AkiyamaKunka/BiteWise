@@ -13,17 +13,9 @@ import '../../core/contracts.dart';
 
 export '../../core/coerce.dart' show isFoodTruthy, mealCalorieMismatch;
 
-/// Factory the integrator wires (INTEGRATION CONTRACT).
-ReportBuilder createReportBuilder(MealsDao dao) => ReportBuilderImpl(dao);
-
 // ─── Coercions the spec pins beyond core/coerce.dart ───────────────
 // (isFoodTruthy and mealCalorieMismatch live in core/coerce.dart and are
 // re-exported above, so existing imports of this file keep compiling.)
-
-/// utils._as_number port (spec §3.5): null — not a default — for non-numeric,
-/// bool, NaN/Infinity, and |x| >= 1e9 values, so callers can distinguish
-/// "junk" from a real 0.
-num? boundedNumber(dynamic value) => safeNumberOr(value, null);
 
 /// Python round(): banker's rounding (half-to-even), returning int — Dart's
 /// .round() is half-away-from-zero and would drift on exact .5 ties.
@@ -201,8 +193,10 @@ DateTime? _parseIsoDay(String s) {
 
 // ─── The builder ───────────────────────────────────────────────────
 
-/// NOTE ON REACH: only [dailyReport] is wired in the shipping app (di.dart
-/// feeds it to the daily notification). [todaySummary], [history] and
+/// NOTE ON REACH: nothing in the shipping app calls this builder. The daily
+/// notification stopped going through [dailyReport] when the coach
+/// notification replaced it (0f55ee4); it is built in daily_summary.dart
+/// and coach_summary.dart. [todaySummary], [history], [dailyReport] and
 /// [stats] are the ported server formatters kept deliberately: they are the
 /// parity surface for spec §5 and are pinned by builders_test, so the day a
 /// Reports screen or a /stats-style command appears they are already correct

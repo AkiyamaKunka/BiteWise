@@ -881,8 +881,11 @@ abstract class PhotoIntake {
   Future<void> stop();
 }
 
-/// Report/summary builders (spec §5). Pure functions over DAO reads; the
-/// notification scheduler consumes dailyReport at the user's chosen time.
+/// Report/summary formatters (spec §5), pure functions over DAO reads. No
+/// shipping code calls them; they are kept as the spec's parity surface
+/// (see NOTE ON REACH in services/report/builders.dart). The daily
+/// notification is built in services/report/daily_summary.dart and
+/// coach_summary.dart.
 abstract class ReportBuilder {
   Future<String> todaySummary();
   Future<String> history({int days = 30});

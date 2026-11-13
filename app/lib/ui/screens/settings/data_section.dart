@@ -6,7 +6,6 @@ library;
 
 import 'dart:convert' show utf8;
 import 'dart:io';
-import 'dart:math' show Random;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show Clipboard, HapticFeedback;
@@ -34,14 +33,6 @@ String exportFileName(DateTime now) => 'chopstats-${isoDate(now)}.json';
 /// from before the rename (the sweep before each export removes both).
 bool isExportFileName(String name) =>
     name.startsWith('chopstats-') || name.startsWith('calorietracker-');
-
-/// A random 32-hex id for an export written without an install id (the
-/// header needs a valid one; the importer only reads the kind).
-String exportInstallId([Random? random]) {
-  final r = random ?? Random.secure();
-  return List.generate(16, (_) => r.nextInt(256).toRadixString(16).padLeft(2, '0'))
-      .join();
-}
 
 class DataSection extends StatefulWidget {
   const DataSection({
@@ -180,8 +171,9 @@ class _DataSectionState extends State<DataSection> {
                       clipboardNote = l10n.importClipboardEmpty;
                     } else {
                       clipboardPayload = text;
-                      clipboardNote =
-                          l10n.importClipboardRead(_sizeLabel(text));
+                      // What 从剪贴板导入 shows instead of the text.
+                      clipboardNote = l10n.importClipboardRead(
+                          backupSizeLabel(utf8.encode(text).length));
                     }
                   });
                 },
@@ -332,13 +324,6 @@ class _DataSectionState extends State<DataSection> {
         .showSnackBar(SnackBar(content: Text(lines.join(' '))));
   }
 
-  /// '1.2 MB' / '84 KB' — what 从剪贴板导入 shows instead of the text.
-  static String _sizeLabel(String payload) {
-    final bytes = utf8.encode(payload).length;
-    if (bytes < 1024 * 1024) return '${(bytes / 1024).ceil()} KB';
-    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
-  }
-
   /// The parser's refusal in the user's language. [ExportFormatException]
   /// carries WHY; a plain FormatException (nothing throws one today, but
   /// the DAO contract allows it) gets the generic failure line with its
@@ -383,7 +368,9 @@ class _DataSectionState extends State<DataSection> {
       // another phone brings the pictures too.
       final file = File('${dir.path}/${exportFileName(DateTime.now())}');
       await writer.writeFull(file.path,
-          installId: widget.backup?.installIdOrNull ?? exportInstallId(),
+          // Without iCloud Backup's own id, a fresh one: the header needs a
+          // valid id, and the importer reads only the kind.
+          installId: widget.backup?.installIdOrNull ?? newInstallId(),
           snapshot: snapshot);
       await SharePlus.instance.share(ShareParams(
           files: [XFile(file.path)], subject: l10n.exportShareSubject));

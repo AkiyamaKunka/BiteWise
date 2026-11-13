@@ -20,7 +20,6 @@ class EmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     this.message,
-    this.action,
     this.actionLabel,
     this.onAction,
   }) : _sliver = false;
@@ -30,7 +29,6 @@ class EmptyState extends StatelessWidget {
     required this.icon,
     required this.title,
     this.message,
-    this.action,
     this.actionLabel,
     this.onAction,
   }) : _sliver = true;
@@ -39,9 +37,8 @@ class EmptyState extends StatelessWidget {
   final String title;
   final String? message;
 
-  /// A custom action widget; or pass [actionLabel] + [onAction] for the
-  /// standard tonal button.
-  final Widget? action;
+  /// The action: [actionLabel] + [onAction] give the standard tonal
+  /// button (both, or no button).
   final String? actionLabel;
   final VoidCallback? onAction;
   final bool _sliver;
@@ -81,10 +78,9 @@ class EmptyState extends StatelessWidget {
     final theme = Theme.of(context);
     final colors = AppColors.of(context);
     final type = AppTypography.of(context);
-    final button = action ??
-        (actionLabel != null && onAction != null
-            ? FilledButton.tonal(onPressed: onAction, child: Text(actionLabel!))
-            : null);
+    final button = actionLabel != null && onAction != null
+        ? FilledButton.tonal(onPressed: onAction, child: Text(actionLabel!))
+        : null;
     return Padding(
       padding: const EdgeInsets.all(AppSpace.s32),
       child: Column(
