@@ -21,6 +21,7 @@ import '../l10n.dart';
 import '../large_text.dart';
 import '../theme/tokens.dart';
 import '../units.dart';
+import '../widgets/discard_guard.dart';
 import '../widgets/grouped.dart' show GroupedCard, GroupedRow, cellColor;
 
 /// App-only sanity bounds for girth values (cm). Weight uses the shared
@@ -129,6 +130,18 @@ class _LogBodySheetState extends State<LogBodySheet> {
     _waist = TextEditingController(text: draft?.waist ?? _storedWaist);
     _chest = TextEditingController(text: draft?.chest ?? _storedChest);
     _hip = TextEditingController(text: draft?.hip ?? _storedHip);
+    for (final c in [_weight, _waist, _chest, _hip]) {
+      c.addListener(_watchTyped);
+    }
+  }
+
+  /// Whether the last build held back for typed values: a field edit that
+  /// changes it rebuilds, so back (or a tap outside the sheet) asks before
+  /// it drops them. Values carried over from another day count as typed.
+  bool _shownTyped = false;
+
+  void _watchTyped() {
+    if (mounted && !_typed().isEmpty != _shownTyped) setState(() {});
   }
 
   /// The fields whose text is not the day's stored value.
@@ -347,70 +360,78 @@ class _LogBodySheetState extends State<LogBodySheet> {
     ];
     final onDelete = widget.onDelete;
     final dateLabel = widget.dateLabel;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s8),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (widget.onChangeDate != null && dateLabel != null) ...[
-            // An in-sheet cell like the fields below it. GroupedRow reads
-            // as one button, 'Date, Oct 30', and stacks the date under
-            // the label at accessibility sizes.
-            GroupedCard(
-              margin: EdgeInsets.zero,
-              child: GroupedRow(
-                key: const Key('bodySheetDateRow'),
-                icon: Icons.calendar_today_rounded,
-                title: l.bodySheetDate,
-                value: dateLabel,
-                onTap: _saving ? null : _changeDate,
+    _shownTyped = !_typed().isEmpty;
+    // Save and Delete pop with Navigator.pop, which is never held. A drag
+    // down on the sheet's handle closes it without asking (Flutter's
+    // modal sheet pops there directly); see body_screen.dart.
+    return DiscardChangesGuard(
+      dirty: _shownTyped,
+      busy: _saving,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(
+            AppSpace.gutter, 0, AppSpace.gutter, AppSpace.s8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            if (widget.onChangeDate != null && dateLabel != null) ...[
+              // An in-sheet cell like the fields below it. GroupedRow reads
+              // as one button, 'Date, Oct 30', and stacks the date under
+              // the label at accessibility sizes.
+              GroupedCard(
+                margin: EdgeInsets.zero,
+                child: GroupedRow(
+                  key: const Key('bodySheetDateRow'),
+                  icon: Icons.calendar_today_rounded,
+                  title: l.bodySheetDate,
+                  value: dateLabel,
+                  onTap: _saving ? null : _changeDate,
+                ),
               ),
+              const SizedBox(height: AppSpace.s12),
+            ],
+            Text(
+              l.bodySheetHint,
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: colors.secondaryLabel),
             ),
-            const SizedBox(height: AppSpace.s12),
-          ],
-          Text(
-            l.bodySheetHint,
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: colors.secondaryLabel),
-          ),
-          const SizedBox(height: AppSpace.s16),
-          // Two fields a row; ONE at accessibility sizes, where a half-width
-          // field cut its label to 'We…' and hid the typed weight behind
-          // its unit (A7).
-          _grid(fields, isLargeText(context) ? 1 : 2),
-          if (_error != null) ...[
-            const SizedBox(height: AppSpace.s12),
-            Semantics(
-              liveRegion: true,
-              child: Text(_error!,
-                  key: const Key('bodySheetError'),
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: colors.danger)),
-            ),
-          ],
-          const SizedBox(height: AppSpace.s20),
-          FilledButton(
-            key: const Key('bodySheetSave'),
-            onPressed: _saving ? null : _save,
-            child: Text(_saving ? l.saving : l.save),
-          ),
-          if (onDelete != null) ...[
-            const SizedBox(height: AppSpace.s8),
-            TextButton(
-              key: const Key('bodySheetDelete'),
-              style: ButtonStyle(
-                foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                    states.contains(WidgetState.pressed)
-                        ? colors.danger.withValues(alpha: 0.4)
-                        : colors.danger),
+            const SizedBox(height: AppSpace.s16),
+            // Two fields a row; ONE at accessibility sizes, where a half-width
+            // field cut its label to 'We…' and hid the typed weight behind
+            // its unit (A7).
+            _grid(fields, isLargeText(context) ? 1 : 2),
+            if (_error != null) ...[
+              const SizedBox(height: AppSpace.s12),
+              Semantics(
+                liveRegion: true,
+                child: Text(_error!,
+                    key: const Key('bodySheetError'),
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: colors.danger)),
               ),
-              onPressed: _saving ? null : _delete,
-              child: Text(l.delete),
+            ],
+            const SizedBox(height: AppSpace.s20),
+            FilledButton(
+              key: const Key('bodySheetSave'),
+              onPressed: _saving ? null : _save,
+              child: Text(_saving ? l.saving : l.save),
             ),
+            if (onDelete != null) ...[
+              const SizedBox(height: AppSpace.s8),
+              TextButton(
+                key: const Key('bodySheetDelete'),
+                style: ButtonStyle(
+                  foregroundColor: WidgetStateProperty.resolveWith((states) =>
+                      states.contains(WidgetState.pressed)
+                          ? colors.danger.withValues(alpha: 0.4)
+                          : colors.danger),
+                ),
+                onPressed: _saving ? null : _delete,
+                child: Text(l.delete),
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

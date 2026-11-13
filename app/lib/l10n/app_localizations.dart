@@ -5458,6 +5458,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t delete. Try again.'**
   String get bodyDeleteFailed;
+
+  /// Android push (ui lane): asked when back (gesture, button, app-bar back or a tap outside a sheet) would close Edit meal, Fix meals or the Body log sheet with unsaved typing.
+  ///
+  /// In en, this message translates to:
+  /// **'Discard changes?'**
+  String get discardChangesTitle;
+
+  /// No description provided for @discardChangesBody.
+  ///
+  /// In en, this message translates to:
+  /// **'What you changed here has not been saved.'**
+  String get discardChangesBody;
+
+  /// Discard-changes dialog: stays on the screen with the typing kept.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Editing'**
+  String get discardChangesKeep;
+
+  /// Discard-changes dialog: closes the screen and drops the unsaved typing (destructive style).
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discardChangesDiscard;
+
+  /// Added to the setup-link dialog when the link's server is a plain http:// address (Play User Data policy: personal data travels with modern cryptography). Neutral on purpose: whether such an address is refused is the privacy lane's kRequireHttpsServer switch.
+  ///
+  /// In en, this message translates to:
+  /// **'This address starts with http://, so the connection to it is not encrypted. Your own server needs an https:// address.'**
+  String get setupLinkCleartext;
 }
 
 class _AppLocalizationsDelegate

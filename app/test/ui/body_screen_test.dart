@@ -633,6 +633,11 @@ void main() {
 
         await tester.tapAt(const Offset(10, 10)); // dismiss the sheet
         await tester.pumpAndSettle();
+        // The waist typed was not saved: a tap outside asks before it goes
+        // (Android push, ui lane), and Discard closes the sheet.
+        expect(find.byKey(const Key('discardChangesDialog')), findsOneWidget);
+        await tester.tap(find.byKey(const Key('discardChangesDiscard')));
+        await tester.pumpAndSettle();
         expect(find.byType(LogBodySheet), findsNothing);
         expect(shown(), headline, reason: 'the page reloaded');
         expect(find.byKey(const Key('bodyDay2026-08-02')),

@@ -1007,5 +1007,10 @@
   "leftoverLoadFailed": "无法加载今天和昨天的记录。",
   "leftoverSaveFailed": "没能完成剩菜扣除，请再试一次。",
   "covWindowLabel": "检查天数",
-  "bodyDeleteFailed": "没能删除，请再试一次。"
+  "bodyDeleteFailed": "没能删除，请再试一次。",
+  "discardChangesTitle": "放弃更改？",
+  "discardChangesBody": "你在这里的更改尚未保存。",
+  "discardChangesKeep": "继续编辑",
+  "discardChangesDiscard": "放弃",
+  "setupLinkCleartext": "此地址以 http:// 开头，与它的连接未加密。你自己的服务器需要使用 https:// 地址。"
 }

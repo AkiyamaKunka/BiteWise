@@ -159,8 +159,10 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// bodyDeleteFailed) and the coverage window slider's screen-reader name
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
-/// (leftoverLoadFailed, leftoverSaveFailed).
-const _keyCount = 890;
+/// (leftoverLoadFailed, leftoverSaveFailed), then the Android push's ui
+/// lane: the discard-changes question (discardChangesTitle, Body, Keep,
+/// Discard) and the setup link's plain-http line (setupLinkCleartext).
+const _keyCount = 895;
 
 Directory _appRoot() {
   var dir = Directory.current;

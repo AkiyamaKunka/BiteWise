@@ -3438,5 +3438,22 @@
   "bodyDeleteFailed": "Couldn't delete. Try again.",
   "@bodyDeleteFailed": {
     "description": "Body tab: deleting a day's weight or measurements failed. Shown under the Log body sheet's fields when its Delete failed (the sheet stays open), else in a snackbar after a history row's swipe or its screen-reader Delete action (the row stays). The raw error goes to the debug log only (its type)."
+  },
+  "discardChangesTitle": "Discard changes?",
+  "@discardChangesTitle": {
+    "description": "Android push (ui lane): asked when back (gesture, button, app-bar back or a tap outside a sheet) would close Edit meal, Fix meals or the Body log sheet with unsaved typing."
+  },
+  "discardChangesBody": "What you changed here has not been saved.",
+  "discardChangesKeep": "Keep Editing",
+  "@discardChangesKeep": {
+    "description": "Discard-changes dialog: stays on the screen with the typing kept."
+  },
+  "discardChangesDiscard": "Discard",
+  "@discardChangesDiscard": {
+    "description": "Discard-changes dialog: closes the screen and drops the unsaved typing (destructive style)."
+  },
+  "setupLinkCleartext": "This address starts with http://, so the connection to it is not encrypted. Your own server needs an https:// address.",
+  "@setupLinkCleartext": {
+    "description": "Added to the setup-link dialog when the link's server is a plain http:// address (Play User Data policy: personal data travels with modern cryptography). Neutral on purpose: whether such an address is refused is the privacy lane's kRequireHttpsServer switch."
   }
 }

@@ -3253,4 +3253,20 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bodyDeleteFailed => '没能删除，请再试一次。';
+
+  @override
+  String get discardChangesTitle => '放弃更改？';
+
+  @override
+  String get discardChangesBody => '你在这里的更改尚未保存。';
+
+  @override
+  String get discardChangesKeep => '继续编辑';
+
+  @override
+  String get discardChangesDiscard => '放弃';
+
+  @override
+  String get setupLinkCleartext =>
+      '此地址以 http:// 开头，与它的连接未加密。你自己的服务器需要使用 https:// 地址。';
 }
