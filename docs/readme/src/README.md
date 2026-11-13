@@ -76,13 +76,18 @@ and look at every slide again.
 
 ## Slides tied to a release
 
+Since 2026-11-13 the README shows only `01-hero`, `02-how`, `03-control` and
+`10-privacy`. The items below for `06-usual`, `07-restaurant`, `09-glasses`
+and `13-next` matter only if one of those slides goes back on the page.
+
 - `01-hero`, `02-how` and every slide with a phone: screenshots of 1.6.0.
   The footer says "Version 1.6 · demo data".
 - `06-usual`, `07-restaurant` and `09-glasses` carry the "New in 1.6" pill.
   Drop it once 1.6 is no longer the newest version.
 - `13-next` shows what is on `main` but not in the App Store build (the
   native iOS look, iCloud Backup). It has no screenshots and no date. When
-  1.7.0 ships, turn it into a normal feature slide and shoot its screens.
+  1.7.0 ships, its features go into the README's list (What else it does),
+  not onto a slide.
 - `07-restaurant` shows Chipotle's published numbers as demo data, with
   "not affiliated" in the footer. All calorie, protein, carb and fat values
   match Chipotle's US nutrition PDF (July 2022); the 1.6.0 shots show the
