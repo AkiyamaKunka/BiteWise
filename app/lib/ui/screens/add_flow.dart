@@ -118,7 +118,8 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
             services: services, systemPicker: platformSystemPhotoPicker())));
   } else if (choice == 'leftover') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => LeftoverScreen(services: services)));
+        builder: (_) => LeftoverScreen(
+            services: services, systemPicker: platformSystemPhotoPicker())));
   } else if (choice == 'text') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => AddTextScreen(

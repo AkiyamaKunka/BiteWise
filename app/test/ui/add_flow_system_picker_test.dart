@@ -16,6 +16,7 @@ import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/system_photo_picker.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:calorie_tracker/ui/screens/add_flow.dart';
+import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
 import 'package:calorie_tracker/ui/screens/meal_editor_screen.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:flutter/material.dart';
@@ -414,7 +415,7 @@ void main() {
     expect(find.byKey(const Key('addChooseAllPhotos')), findsNothing);
   });
 
-  testWidgets('openAddFlow hands the photo screen the platform picker',
+  testWidgets('openAddFlow hands both photo screens the platform picker',
       (tester) async {
     final system = FakeSystemPicker(broad: true);
     debugSystemPhotoPicker = () => system;
@@ -431,11 +432,23 @@ void main() {
         ),
       ),
     ));
-    await tester.tap(find.byKey(const Key('fab')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('addFromPhotos')));
-    await tester.pumpAndSettle();
-    final screen = tester.widget<AddPhotoScreen>(find.byType(AddPhotoScreen));
-    expect(identical(screen.systemPicker, system), isTrue);
+    for (final (row, type) in [
+      ('addFromPhotos', AddPhotoScreen),
+      ('addLeftover', LeftoverScreen),
+    ]) {
+      await tester.tap(find.byKey(const Key('fab')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(Key(row)));
+      await tester.pumpAndSettle();
+      final screen = tester.widget(find.byType(type));
+      final passed = switch (screen) {
+        AddPhotoScreen(:final systemPicker) => systemPicker,
+        LeftoverScreen(:final systemPicker) => systemPicker,
+        _ => null,
+      };
+      expect(identical(passed, system), isTrue, reason: row);
+      await tester.pageBack();
+      await tester.pumpAndSettle();
+    }
   });
 }
