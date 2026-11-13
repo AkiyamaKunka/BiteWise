@@ -375,8 +375,8 @@ void main() {
       expect(find.byKey(Key('historyDay${_daysAgo(0, now)}')), findsOneWidget);
     });
 
-    testWidgets('the screen reads its clock: the window and Today follow it',
-        (tester) async {
+    testWidgets('the screen reads its clock: the window, the Today row, the '
+        'gap rows and the day it opens follow it', (tester) async {
       // The evening of a 25-hour day in the US (DST ended that morning),
       // and far from any real run: on the real clock the window would hold
       // none of these meals.
@@ -387,13 +387,27 @@ void main() {
               body: _history(_dao({0: 1900, 1: 1918, 30: 5000}, now), now)),
           size: const Size(390, 1400));
       final today = find.byKey(const Key('historyDay2025-11-02'));
-      expect(find.descendant(of: today, matching: find.text('Today')),
-          findsOneWidget);
+      final todayTitle =
+          find.descendant(of: today, matching: find.text('Today'));
+      expect(todayTitle, findsOneWidget);
+      expect(tester.widget<Text>(todayTitle).style?.fontWeight,
+          FontWeight.w600,
+          reason: "the clock's today is the bold row");
       expect(find.byKey(const Key('historyDay2025-11-01')), findsOneWidget,
           reason: 'yesterday is its own row');
       expect(find.byKey(const Key('historyDay2025-10-03')), findsNothing,
           reason: '30 days back is outside the 30-day window');
+      expect(find.byKey(const Key('historyDay2025-11-03')), findsNothing,
+          reason: "the gap rows end at the clock's today, not the real one");
       expect(find.text('Average: ~1,909 kcal / day'), findsOneWidget);
+
+      await tester.tap(today);
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(
+              of: find.byType(AppBar), matching: find.text('Today')),
+          findsOneWidget,
+          reason: 'the day it opens reads the same clock');
     });
 
     testWidgets('zh: the error sentence is Chinese', (tester) async {
