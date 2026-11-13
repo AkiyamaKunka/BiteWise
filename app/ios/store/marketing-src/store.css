@@ -1,0 +1,181 @@
+/* Chopstats App Store frames, 1320 x 2868 (portrait, iPhone 6.9-inch class).
+   Tokens are copied from the README slide system (readme170/slides/template/
+   slides.css): colours from the app icon and the 1.6.0 theme, Mac system
+   fonts only (SF Pro via system-ui, PingFang SC for Chinese).
+   NOT copied on purpose: the README's CSS phone (.phone, .island, side
+   buttons). Apple's marketing rules allow only Apple-provided bezels, so the
+   app appears here as plain rounded "screen cards" with no device details. */
+
+:root {
+  --W: 1320px;
+  --H: 2868px;
+  --side: 88px;              /* safe side margin */
+  --cream: #F8F3EE;
+  --clay: #B25D3A;
+  --clay-deep: #8F4C38;
+  --clay-soft: #F4E4DA;
+  --peach: #F2A07B;
+  --ink: #221915;
+  --ink-2: #5C4E47;
+  --ink-3: #8A7B73;
+  --espresso: #1D1411;
+  --espresso-2: #2A1C17;
+  --blue: #2A78D6;
+  --orange: #EB6834;
+  --green: #1BAF7A;
+  --font: system-ui, BlinkMacSystemFont, -apple-system, "SF Pro Display", "SF Pro", "PingFang SC", "Hiragino Sans GB", sans-serif;
+  --font-zh: system-ui, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: var(--W); height: var(--H); overflow: hidden; background: var(--cream); }
+body { font-family: var(--font); -webkit-font-smoothing: antialiased; text-rendering: geometricPrecision; font-kerning: normal; }
+html:lang(zh-Hans) body { font-family: var(--font-zh); }
+
+/* ------------------------------------------------------------ themes */
+.frame { position: relative; width: var(--W); height: var(--H); overflow: hidden; color: var(--fg); }
+.t-light {
+  --fg: var(--ink); --fg-2: var(--ink-2); --fg-3: var(--ink-3);
+  --accent: var(--clay);
+  --pill-line: rgba(92, 78, 71, .45); --pill-fg: var(--ink-2);
+  --card-line: rgba(34, 25, 21, .08);
+  --card-shadow: 0 40px 90px -30px rgba(70, 35, 20, .35), 0 6px 18px -8px rgba(70, 35, 20, .10);
+  --tag-bg: #FFFFFF; --tag-fg: var(--ink-2);
+  --ring: rgba(178, 93, 58, .10); --ring-track: rgba(150, 120, 100, .07);
+  background:
+    radial-gradient(1500px 1300px at 92% 58%, rgba(235, 104, 52, .12), transparent 62%),
+    radial-gradient(1300px 1100px at 0% 100%, rgba(178, 93, 58, .10), transparent 65%),
+    radial-gradient(1500px 900px at 28% -4%, rgba(255, 255, 255, .92), transparent 70%),
+    var(--cream);
+}
+.t-dark {
+  --fg: #F7EFE8; --fg-2: #CDBCB1; --fg-3: #9C8A80;
+  --accent: var(--peach);
+  --pill-line: rgba(247, 194, 168, .5); --pill-fg: #F7C2A8;
+  --card-line: rgba(255, 255, 255, .13);
+  --card-shadow: 0 40px 90px -30px rgba(0, 0, 0, .65), 0 6px 18px -8px rgba(0, 0, 0, .35);
+  --tag-bg: #3F2A22; --tag-fg: #F7C2A8;    /* opaque: the card edge must not show through */
+  --ring: rgba(242, 160, 123, .12); --ring-track: rgba(255, 255, 255, .04);
+  background:
+    radial-gradient(1300px 1200px at 95% 42%, rgba(198, 98, 58, .40), transparent 62%),
+    radial-gradient(1200px 1000px at 0% 104%, rgba(235, 104, 52, .16), transparent 60%),
+    radial-gradient(1600px 800px at 30% -8%, rgba(255, 220, 200, .05), transparent 70%),
+    linear-gradient(165deg, var(--espresso-2), var(--espresso) 55%);
+}
+
+/* ------------------------------------------------------------ caption block */
+.copy {
+  position: absolute; left: var(--side); right: var(--side); top: 170px;
+  text-align: center; z-index: 30;
+}
+.pill {
+  position: absolute; left: 50%; bottom: 100%; transform: translate(-50%, -28px);
+  display: inline-flex; align-items: center; gap: 16px; white-space: nowrap;
+  padding: 12px 30px 12px 26px; border-radius: 999px;
+  border: 3px solid var(--pill-line); color: var(--pill-fg);
+  font-size: 42px; font-weight: 600; letter-spacing: -0.005em; line-height: 1.15;
+}
+.pill::before { content: ""; width: 14px; height: 14px; border-radius: 50%; background: var(--pill-line); }
+html:lang(zh-Hans) .pill { letter-spacing: .04em; }
+
+.headline {
+  font-size: 128px; line-height: 1.04; font-weight: 700; letter-spacing: -0.025em;
+  color: var(--fg);
+}
+.headline .ln { white-space: nowrap; }
+.headline .hang { margin-right: -0.42em; }   /* hang a line-end full-width ？ so the line centres optically */
+.headline em, .sub em { font-style: normal; color: var(--accent); }
+html:lang(zh-Hans) .headline { font-weight: 600; letter-spacing: .02em; line-height: 1.18; }
+
+.sub {
+  margin: 32px auto 0; max-width: 1144px;
+  font-size: 58px; line-height: 1.28; font-weight: 400; letter-spacing: -0.01em;
+  color: var(--fg-2); text-wrap: balance;
+}
+html:lang(zh-Hans) .sub { font-size: 56px; line-height: 1.45; letter-spacing: .02em; }
+
+/* ------------------------------------------------------------ stage (picture zone) */
+.stage { position: absolute; left: 0; width: var(--W); z-index: 10; }
+.deco {
+  position: absolute; border-radius: 50%; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(closest-side, transparent calc(100% - var(--t)), var(--ring) calc(100% - var(--t) + 1px), var(--ring) 99%, transparent 100%);
+  -webkit-mask: conic-gradient(from var(--rot, 0deg), #000 0 290deg, transparent 290deg 360deg);
+}
+.deco.track {
+  background: radial-gradient(closest-side, transparent calc(100% - var(--t)), var(--ring-track) calc(100% - var(--t) + 1px), var(--ring-track) 99%, transparent 100%);
+  -webkit-mask: none;
+}
+
+/* A screen card: a slice of a real capture, no device art. */
+.card {
+  position: absolute; overflow: hidden; z-index: 5;
+  box-shadow: 0 0 0 2px var(--card-line), var(--card-shadow);
+}
+.card img, .photo img { display: block; width: 100%; height: 100%; }
+.photo {
+  position: absolute; overflow: hidden; z-index: 6;
+  box-shadow: 0 0 0 2px var(--card-line), var(--card-shadow);
+}
+
+/* Connector between a photo and the app: clay circle with a down chevron. */
+.connector {
+  position: absolute; z-index: 8; width: 120px; height: 120px; border-radius: 50%;
+  background: var(--clay); display: grid; place-items: center;
+  box-shadow: 0 0 0 10px var(--cream), 0 18px 36px -12px rgba(70, 35, 20, .55);
+}
+.t-dark .connector { box-shadow: 0 0 0 10px var(--espresso), 0 18px 36px -12px rgba(0, 0, 0, .6); }
+.connector svg { width: 56px; height: 56px; stroke: #fff; }
+
+/* Highlight ring around part of a capture. */
+.hl {
+  position: absolute; z-index: 12; border: 6px solid var(--clay); border-radius: 24px;
+  box-shadow: 0 0 0 4px rgba(255, 255, 255, .78), inset 0 0 0 3px rgba(255, 255, 255, .55);
+}
+.t-dark .hl { border-color: var(--peach); box-shadow: 0 0 0 4px rgba(0, 0, 0, .35); }
+
+/* Touch point (allowed by guideline 2.3.3: "touch point" overlays). */
+.touch {
+  position: absolute; z-index: 13; width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(178, 93, 58, .30);
+  box-shadow: inset 0 0 0 5px rgba(178, 93, 58, .45), 0 0 0 5px rgba(255, 255, 255, .70), 0 10px 26px -8px rgba(70, 35, 20, .35);
+}
+
+/* Label chip next to a ring (positioned by the page script). */
+.chip {
+  position: absolute; z-index: 20; display: inline-flex; align-items: center; gap: 16px;
+  white-space: nowrap; padding: 16px 30px 16px 24px; border-radius: 999px;
+  background: #FFFFFF; color: var(--ink);
+  font-size: 48px; font-weight: 600; line-height: 1.2; letter-spacing: -0.01em;
+  box-shadow: 0 0 0 2px rgba(80, 45, 30, .08), 0 18px 40px -14px rgba(70, 35, 20, .42);
+  visibility: hidden;   /* shown once placed */
+}
+.chip.placed { visibility: visible; }
+.chip i { flex: none; width: 18px; height: 18px; border-radius: 50%; background: var(--clay); }
+.chip i.blue { background: var(--blue); } .chip i.orange { background: var(--orange); } .chip i.green { background: var(--green); }
+html:lang(zh-Hans) .chip { letter-spacing: .03em; }
+
+/* Small tab-name tag above a card (e.g. History / Body). */
+.tag {
+  position: absolute; z-index: 20; display: inline-flex; align-items: center; gap: 14px;
+  white-space: nowrap; padding: 12px 28px 12px 22px; border-radius: 999px;
+  background: var(--tag-bg); color: var(--tag-fg);
+  font-size: 44px; font-weight: 600; line-height: 1.2; letter-spacing: -0.005em;
+  box-shadow: 0 0 0 2px var(--card-line);
+}
+.tag i { width: 14px; height: 14px; border-radius: 50%; background: var(--accent); }
+html:lang(zh-Hans) .tag { letter-spacing: .06em; }
+
+/* Check rows drawn in CSS (only where no capture can carry the point). */
+.checks { position: absolute; z-index: 15; display: grid; gap: 22px; }
+.checks .row {
+  display: grid; grid-template-columns: 64px 1fr; gap: 26px; align-items: center;
+  padding: 30px 40px 30px 32px; border-radius: 36px; background: #FFFFFF;
+  box-shadow: 0 0 0 2px rgba(80, 45, 30, .07), 0 22px 50px -26px rgba(70, 35, 20, .35);
+  font-size: 54px; font-weight: 600; line-height: 1.25; color: var(--ink); letter-spacing: -0.01em;
+}
+html:lang(zh-Hans) .checks .row { letter-spacing: .03em; font-size: 52px; }
+.checks .row::before {
+  content: ""; width: 64px; height: 64px; border-radius: 50%;
+  background: var(--clay-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M6.5 12.5l3.6 3.6L17.5 8.6' fill='none' stroke='%23B25D3A' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / 44px no-repeat;
+}

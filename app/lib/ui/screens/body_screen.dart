@@ -228,7 +228,7 @@ class BodyScreenState extends State<BodyScreen> {
               key: const Key('bodyEmpty'),
               icon: Icons.monitor_weight_rounded,
               title: l.bodyEmptyTitle,
-              message: imperial ? l.bodyEmptyHintImperial : l.bodyEmptyHint,
+              message: l.bodyEmptyHint,
             ),
           )
         else
