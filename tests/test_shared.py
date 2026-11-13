@@ -152,6 +152,79 @@ def test_record_daily_report_health_uses_locked_update(tmp_path, monkeypatch):
     assert (tmp_path / "health.json.lock").exists()
 
 
+def test_record_activity_health_uses_locked_update(tmp_path, monkeypatch):
+    monkeypatch.setattr(daily_report, "SERVICE_HEALTH_PATH", tmp_path / "health.json")
+
+    daily_report._record_activity_health(False, "2026-07-07",
+                                         error_summary="garmin down")
+
+    data = service_health.load(tmp_path / "health.json")
+    assert data["activity"]["last_ok"] is False
+    assert data["activity"]["last_error_summary"] == "garmin down"
+    assert (tmp_path / "health.json.lock").exists()
+
+
+def test_attempt_records_keep_their_exact_shape(monkeypatch):
+    """Byte-level pin for the daily_report and activity records (the status
+    page and the next cron run read them): a failure truncates its summary
+    at 500 characters and counts the streak, a success clears the summary
+    but keeps last_error_at, and only the report carries a report path."""
+    at = "2026-07-01T09:00:00"
+    monkeypatch.setattr(service_health, "timestamp", lambda: at)
+    data = {}
+    service_health.apply_report_health(
+        data, False, "2026-06-30", source="cron", report_path="/r/x.txt",
+        error_summary="e" * 600)
+    service_health.apply_activity_health(
+        data, False, "2026-06-30", source="garmin", error_summary="down")
+    service_health.apply_activity_health(data, True, "2026-07-01",
+                                         source="garmin")
+    assert data == {
+        "daily_report": {
+            "last_attempt_at": at, "last_target_date": "2026-06-30",
+            "last_source": "cron", "last_ok": False,
+            "last_report_path": "/r/x.txt",
+            "last_error_at": at, "last_error_summary": "e" * 500,
+            "consecutive_failures": 1,
+            "events": [{"at": at, "ok": False, "target_date": "2026-06-30",
+                        "source": "cron"}],
+        },
+        "activity": {
+            "last_attempt_at": at, "last_target_date": "2026-07-01",
+            "last_source": "garmin", "last_ok": True,
+            "last_error_at": at, "last_success_at": at,
+            "consecutive_failures": 0,
+            "events": [
+                {"at": at, "ok": False, "target_date": "2026-06-30",
+                 "source": "garmin"},
+                {"at": at, "ok": True, "target_date": "2026-07-01",
+                 "source": "garmin"}],
+        },
+    }
+
+
+def test_every_event_list_stops_at_max_events(tmp_path, monkeypatch):
+    """The report, activity and gemini histories keep only the newest
+    service_health.MAX_EVENTS entries, so the ledger cannot grow forever."""
+    cap = service_health.MAX_EVENTS
+    data = {}
+    for i in range(cap + 5):
+        service_health.apply_report_health(data, True, f"d{i}", source="cron")
+        service_health.apply_activity_health(data, True, f"d{i}",
+                                             source="garmin")
+    for key in ("daily_report", "activity"):
+        events = data[key]["events"]
+        assert len(events) == cap, key
+        assert events[0]["target_date"] == "d5", "oldest entries go first"
+        assert events[-1]["target_date"] == f"d{cap + 4}"
+
+    path = tmp_path / "health.json"
+    monkeypatch.setattr(telegram_bot, "SERVICE_HEALTH_PATH", path)
+    for i in range(cap + 5):
+        telegram_bot._record_gemini_health(i % 2 == 0, error_type="quota")
+    assert len(service_health.load(path)["gemini"]["events"]) == cap
+
+
 def test_get_processing_photo_hashes_filters_by_status(tmp_path, monkeypatch):
     monkeypatch.setattr(database, "DB_PATH", tmp_path / "meals.db")
     database.init_db()

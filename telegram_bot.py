@@ -957,10 +957,6 @@ def _load_service_health() -> Dict:
     return service_health.load(SERVICE_HEALTH_PATH, warn=log.warning)
 
 
-def _save_service_health(data: Dict):
-    service_health.save(data, SERVICE_HEALTH_PATH, warn=log.warning)
-
-
 def _health_timestamp() -> str:
     return service_health.timestamp()
 
@@ -1066,7 +1062,7 @@ def _record_gemini_health(
             "type": "" if ok else (error_type or "unknown"),
             "probe": probe,
         })
-        gemini["events"] = events[-50:]
+        gemini["events"] = events[-service_health.MAX_EVENTS:]
 
     _update_service_health(mutate)
 
