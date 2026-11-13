@@ -843,6 +843,25 @@ void main() {
     );
   });
 
+  // Review 171, C5: on Android, share intake reads and deletes only the
+  // copies MainActivity makes in the cache's share folder (share_intake
+  // _test pins the folder). Without this argument a path of the sender's
+  // making (a '..' name, a share's text) was read and deleted again: the
+  // meal database, the settings.
+  test('createShareIntake keeps Android\'s share intake to the share '
+      'folder', () {
+    expect(
+      _call(
+        _source('lib/services/photo/share_intake.dart'),
+        'createShareIntake(AppSettings settings) => ShareIntake(',
+      ),
+      _wired(
+        r'sharedFolder: Platform\.isAndroid \? androidSharedPhotoFolder '
+        r': null\)$',
+      ),
+    );
+  });
+
   // Behavioural where it can be: the factory's own fields are public.
   test(
     'createPhotoIntake hands passOver and onBackfillListed to the intake',

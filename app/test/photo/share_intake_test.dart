@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/share_intake.dart';
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
 
 import 'watcher_test.dart' show FakeAsset, FakePhotoLibrary;
@@ -245,6 +246,32 @@ void main() {
       expect(copy, greaterThanOrEqualTo(0));
       expect(create.indexOf('super.onCreate('), greaterThan(copy));
       expect(kotlin, contains('super.onNewIntent(withSafeShares(intent))'));
+    });
+
+    // The same folder from the Dart side: the share folder in
+    // path_provider's temporary directory, which on Android is the app's
+    // cache directory (path_provider_android answers getTemporaryPath with
+    // Context.getCacheDir), the cacheDir MainActivity copies into. Were
+    // either side to move, every Android share would be refused.
+    test('androidSharedPhotoFolder is the share folder in the cache '
+        'directory MainActivity copies into', () async {
+      TestWidgetsFlutterBinding.ensureInitialized();
+      const channel = MethodChannel('plugins.flutter.io/path_provider');
+      final messenger =
+          TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+      const cache = '/data/user/0/dev.calorietracker.calorie_tracker/cache';
+      messenger.setMockMethodCallHandler(
+          channel,
+          (call) async =>
+              call.method == 'getTemporaryDirectory' ? cache : null);
+      addTearDown(() => messenger.setMockMethodCallHandler(channel, null));
+      expect(await androidSharedPhotoFolder(),
+          '$cache/$androidShareFolderName');
+      final kotlin = File('android/app/src/main/kotlin/dev/calorietracker/'
+              'calorie_tracker/MainActivity.kt')
+          .readAsStringSync();
+      expect(kotlin,
+          contains('File(File(cacheDir, SHARE_FOLDER), UUID.randomUUID()'));
     });
 
     // Review 171, C6: a share from the sharesheet while the app runs must
