@@ -98,4 +98,54 @@ void main() {
     expect(zh.fixIntro, contains('（「那碗面」、「早餐」、「600 千卡那个」）'));
     expect(zh.fixHint, '例如：「那碗面其实是烧鸭饭」\n或「删除刚才那杯咖啡」');
   });
+
+  // Review r171 (2026-11-12): the check above sees only ASCII quotes, so
+  // fifteen control names still sat in curly quotes — Test This Provider
+  // read 「测试当前服务」 in six strings and “测试当前服务” in three, and
+  // autoScanPausedBilling and errLeftoverUnsure are new on main.
+  test('Chinese quotes in corner brackets, never curly quotes either', () {
+    final arb = jsonDecode(File('lib/l10n/app_zh.arb').readAsStringSync())
+        as Map<String, dynamic>;
+    final curly = [
+      for (final e in arb.entries)
+        if (!e.key.startsWith('@') &&
+            e.value is String &&
+            (e.value as String).contains(RegExp('[“”]')))
+          e.key,
+    ];
+    expect(curly, isEmpty);
+
+    // Each bracketed name is the control's own label, so the two cannot
+    // drift apart unnoticed.
+    final fromPhotos = '「${zh.fabLog} › ${zh.addFromPhotos}」';
+    expect(zh.autoScanPausedKey('9:00'), contains('「${zh.testProvider}」'));
+    for (final text in [
+      zh.autoScanPausedRegion('OpenAI', '9:00'),
+      zh.autoScanPausedBilling('OpenAI', '9:00'),
+    ]) {
+      expect(text, contains('「${zh.testProvider}」'));
+      expect(text, contains(fromPhotos));
+    }
+    expect(zh.errLeftoverUnsure, contains('「${zh.addLeftover}」'));
+    expect(zh.diagVerdictOk, contains('「${zh.covAnalyzeAgain}」'));
+    for (final text in [
+      zh.diagTextOk,
+      zh.diagTextBadDetail,
+      zh.diagTextBadPhotoAlsoFailed,
+    ]) {
+      expect(text, contains('「${zh.addDescribe}」'));
+      expect(text, contains('「${zh.addFix}」'));
+    }
+    expect(zh.serverLoginFooter, contains('「${zh.connectClaude}」'));
+    expect(zh.outcomeRetryLaterMsg('超时'), contains('「${zh.retry}」'));
+    expect(zh.diagConfidenceIntro, contains('「${zh.restaurantModeAuto}」'));
+    expect(zh.diagPhotoNotFood,
+        contains('「${zh.diagGlassesOutcomeNotFood}」'));
+    // Labels shown with a value after them are named without it: the
+    // 之前失败（3） header and the background scans' 最后一步：… line.
+    expect(zh.covFailedEarlier(3), startsWith('之前失败'));
+    expect(zh.covDoneFailures('重试', 1, 3), contains('「之前失败」'));
+    expect(zh.diagBgRunKilled('读取照片'), contains('最后一步：'));
+    expect(zh.diagBgRunsIntro, contains('「最后一步」'));
+  });
 }

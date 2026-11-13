@@ -1069,7 +1069,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagRunChecks => '开始检查';
 
   @override
-  String get diagVerdictOk => '一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试“重新分析”。';
+  String get diagVerdictOk => '一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试「重新分析」。';
 
   @override
   String diagVerdictProblems(int count) {
@@ -1130,7 +1130,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String diagProviderConfigured(String provider, String model) {
-    return '服务“$provider”已配置 Key，模型为“$model”。';
+    return '服务「$provider」已配置 Key，模型为「$model」。';
   }
 
   @override
@@ -1183,24 +1183,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String diagModelNotFound(String model) {
-    return 'Key 有效，但找不到模型“$model”。';
+    return 'Key 有效，但找不到模型「$model」。';
   }
 
   @override
-  String get diagTextOk => '模型返回了 JSON —— “文字描述一餐”和“修改或删除某餐”都可用。';
+  String get diagTextOk => '模型返回了 JSON —— 「文字描述一餐」和「修改或删除某餐」都可用。';
 
   @override
   String get diagTextBad => '文字请求没有成功（服务器忙、限流或额度窗口未开、超时，或模型没有返回 JSON）。';
 
   @override
-  String get diagTextBadDetail => '“文字描述一餐”和“修改或删除某餐”可能失败；照片分析仍然可以正常工作。';
+  String get diagTextBadDetail => '「文字描述一餐」和「修改或删除某餐」可能失败；照片分析仍然可以正常工作。';
 
   @override
   String get diagFixPickModel => '如果一直这样，在设置里换一个模型。';
 
   @override
   String get diagTextBadPhotoAlsoFailed =>
-      '“文字描述一餐”和“修改或删除某餐”可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
+      '「文字描述一餐」和「修改或删除某餐」可能失败。下面的照片请求也失败了，那一行的原因很可能就是两者共同的原因。';
 
   @override
   String get diagFixTextPickModel => '如果照片分析正常而这里一直失败，再在设置里换一个模型。';
@@ -1215,7 +1215,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get diagPhotoThoughtFood => '它甚至认为测试图案是食物。';
 
   @override
-  String get diagPhotoNotFood => '判定为“不是食物”—— 对这张测试图片来说是正确的。';
+  String get diagPhotoNotFood => '判定为「不是食物」—— 对这张测试图片来说是正确的。';
 
   @override
   String get diagPhotoTempFail => '照片分析失败，属于临时性问题。';
@@ -1248,7 +1248,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagBgRunsIntro =>
-      '最近几次后台扫描做了什么，最新的在前。没有结束时间的一次是被系统中途停止的，“最后一步”说明停在了哪里。';
+      '最近几次后台扫描做了什么，最新的在前。没有结束时间的一次是被系统中途停止的，「最后一步」说明停在了哪里。';
 
   @override
   String get diagBgRunsNone => '还没有后台扫描记录。';
@@ -1605,7 +1605,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errBadModelDoubao =>
-      '豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的“开通管理”里开通。';
+      '豆包找不到这个模型 —— 方舟需要模型列表里带版本号的完整 ID，并要先在火山引擎控制台的「开通管理」里开通。';
 
   @override
   String get errBadModelOpenRouter =>
@@ -1625,7 +1625,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errLeftoverUnsure =>
-      '这张像是之前某一餐的剩菜，但 AI 不确定是哪一餐，所以没有记录，也没有扣除。可以用“记录剩菜”来扣除。';
+      '这张像是之前某一餐的剩菜，但 AI 不确定是哪一餐，所以没有记录，也没有扣除。可以用「记录剩菜」来扣除。';
 
   @override
   String get errServerBusy => '你的服务器正在处理另一张照片 —— 照片已保留，稍后会自动重试。';
@@ -2002,7 +2002,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String covDoneFailures(String label, int failures, int count) {
-    return '$label完成 —— $count 张中有 $failures 张无法处理（已保留在“之前失败”列表中以便重试）。';
+    return '$label完成 —— $count 张中有 $failures 张无法处理（已保留在「之前失败」列表中以便重试）。';
   }
 
   @override
@@ -2092,7 +2092,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get serverLoginFooter =>
-      '已登录：无需再连接。未登录：用下方“连接 Claude”。无法检查：服务器不可达或密钥被拒。';
+      '已登录：无需再连接。未登录：用下方「连接 Claude」。无法检查：服务器不可达或密钥被拒。';
 
   @override
   String get errServerFailed => '你的服务器这次没能分析这张照片 —— 已保留，稍后会自动重试。';
@@ -2117,7 +2117,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String outcomeRetryLaterMsg(String reason) {
-    return '这次没有分析成功（$reason）—— 可以点“重试”，或稍后再选这张照片。';
+    return '这次没有分析成功（$reason）—— 可以点「重试」，或稍后再选这张照片。';
   }
 
   @override
@@ -2201,17 +2201,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String autoScanPausedKey(String time) {
-    return '监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或“测试当前服务”通过后立即恢复（$time 自动再试）。';
+    return '监控相册已暂停：服务拒绝了 API Key。照片都会保留 —— 在 AI 服务里更换 Key、或「测试当前服务」通过后立即恢复（$time 自动再试）。';
   }
 
   @override
   String autoScanPausedRegion(String provider, String time) {
-    return '监控相册已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后“测试当前服务”或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
+    return '监控相册已暂停：$provider 在当前网络地区不可用。照片都会保留 —— 换好 VPN 节点后「测试当前服务」或在「记录 › 从最近照片选择」里添加一张照片即可立即恢复（$time 自动再试）。';
   }
 
   @override
   String autoScanPausedBilling(String provider, String time) {
-    return '监控相册已暂停：$provider 账户的余额或额度已用完。照片都会保留 —— 充值后“测试当前服务”通过、或在“记录 › 从最近照片选择”里添加一张照片即可立即恢复（$time 自动再试）。';
+    return '监控相册已暂停：$provider 账户的余额或额度已用完。照片都会保留 —— 充值后「测试当前服务」通过、或在「记录 › 从最近照片选择」里添加一张照片即可立即恢复（$time 自动再试）。';
   }
 
   @override
@@ -2802,7 +2802,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get diagConfidenceIntro =>
-      'AI 对每餐照片估算的把握程度。“不确定时”会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。';
+      'AI 对每餐照片估算的把握程度。「不确定时」会查询把握低的餐厅餐，以及把握中等且印有连锁品牌的餐厅餐。';
 
   @override
   String diagConfidenceLine(int low, int medium, int high, int unknown) {
