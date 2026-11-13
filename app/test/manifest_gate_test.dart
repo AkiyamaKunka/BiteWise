@@ -731,4 +731,27 @@ void main() {
     expect(releasing, contains('NSPrivacyCollectedDataTypes'));
     expect(releasing, contains('the lookup adds no data type'));
   });
+
+  // Owner decision 2026-11-13: the package stays, and the upload key the
+  // GitHub APKs are signed with becomes Play's app-signing key. Both are
+  // permanent once the first bundle is uploaded: a new package is a new
+  // app on Play, and a phone can only update between builds of one
+  // package and one signer (the log lives only on the phone, so an
+  // uninstall loses it).
+  test('the Android package is permanent', () {
+    final gradle =
+        File('${_appRoot().path}/android/app/build.gradle.kts')
+            .readAsStringSync();
+    const package = 'dev.calorietracker.calorie_tracker';
+    expect(gradle, contains('applicationId = "$package"'));
+    expect(gradle, contains('namespace = "$package"'));
+    expect(gradle, isNot(contains('applicationIdSuffix')));
+    expect(gradle, isNot(contains('TODO: Specify your own unique Application ID')),
+        reason: 'the template TODO invites a change that would orphan '
+            'every installed copy');
+    final kotlin = File('${_appRoot().path}/android/app/src/main/kotlin/'
+            'dev/calorietracker/calorie_tracker/MainActivity.kt')
+        .readAsStringSync();
+    expect(kotlin, startsWith('package $package\n'));
+  });
 }
