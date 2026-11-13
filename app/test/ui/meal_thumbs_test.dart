@@ -7,7 +7,7 @@ import 'dart:typed_data';
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart'
-    show maxPhotoBytes;
+    show LibraryAsset, maxPhotoBytes;
 import 'package:calorie_tracker/ui/meal_thumbs.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -48,6 +48,26 @@ Future<String> testHash(Uint8List bytes) async => 'h${bytes.first}';
 /// The library photo [photoMeal] was logged from.
 FakeAsset ownPhoto({String id = androidId, int n = 1}) =>
     FakeAsset(id, 'IMG_$n.jpg', DateTime(2026, 7, 26), bytesOf(n));
+
+/// A library that also holds non-images, as Android's fromId finds any
+/// media by id: thumbnailByAssetId and originBytesByAssetId answer for
+/// them, and only imagesByIds says they are not images.
+class _LibraryWithVideos extends FakePhotoLibrary {
+  final Map<String, FakeAsset> videos = {};
+
+  @override
+  Future<Uint8List?> originBytesByAssetId(String assetId) async =>
+      videos.containsKey(assetId)
+          ? videos[assetId]!.originBytes()
+          : super.originBytesByAssetId(assetId);
+
+  @override
+  Future<Map<String, LibraryAsset?>> imagesByIds(List<String> ids) async => {
+        ...await super.imagesByIds(ids),
+        for (final id in ids)
+          if (videos.containsKey(id)) id: null,
+      };
+}
 
 void main() {
   late FakeDao dao;
@@ -129,11 +149,19 @@ void main() {
   });
 
   test('a thumbnail of what the library does not call an image is not '
-      'taken', () async {
-    // On Android another phone's id can name a video: thumbnailByAssetId
-    // answers for it, imagesByIds does not.
-    library.thumbnails[androidId] = Uint8List.fromList([7]);
-    expect(await resolver.thumbFor(photoMeal(3)), isNull);
+      'taken, and its original is never read', () async {
+    // On Android another phone's id can name a video, which can be far
+    // over the cap: it would be read whole before the size test.
+    final reads = <String>[];
+    final withVideo = _LibraryWithVideos()
+      ..thumbnails[androidId] = Uint8List.fromList([7])
+      ..videos[androidId] = FakeAsset(
+          androidId, 'VID_1.mp4', DateTime(2026, 7, 26), bytesOf(1),
+          onRead: () => reads.add(androidId)); // hashes to the meal's h1
+    final r =
+        MealThumbResolver(dao: dao, library: withVideo, hasher: testHash);
+    expect(await r.thumbFor(photoMeal(3)), isNull);
+    expect(reads, isEmpty);
     expect(dao.thumbs, isEmpty);
   });
 
