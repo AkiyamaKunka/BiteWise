@@ -291,6 +291,66 @@ void main() {
     });
   });
 
+  // The watcher is off by default, so no catch-up ledgers the edited copy
+  // of a photo added from Photos. The coverage check found no row for the
+  // new hash and listed the photo as never scanned, and "Log all" sends
+  // deliberate photos, which skip the asset rule: the lunch was logged a
+  // second time (review 171, C38).
+  group('a photo added from Photos, then edited, with the watcher off', () {
+    CoverageAuditor auditor() => CoverageAuditor(
+        library: library,
+        dao: dao,
+        hasher: (b) async => originalBytesMd5(b),
+        clock: () => now);
+
+    test('counts as logged in the coverage check, so "Log all" leaves it '
+        'alone', () async {
+      final asset = lunch();
+      final added = await pipeline().process(IntakePhoto(
+          asset.bytes, asset.id, 'IMG_0042.HEIC',
+          capturedAt: asset.createDateTime, deliberate: true));
+      expect(added.kind, PhotoOutcomeKind.saved);
+      asset.bytes = _bytes(7); // cropped in Photos
+
+      final audit = auditor();
+      final report = await audit.audit(lookbackDays: 2);
+      expect(report.missing, isEmpty);
+      expect(report.logged.map((i) => i.assetId), [asset.id]);
+      expect(report.logged.single.mealId, (await mealsOf(asset.id)).single.id);
+      expect(report.fullyCovered, isTrue);
+
+      // Coverage › Log all: every photo the check calls missing.
+      for (final item in report.missing) {
+        await pipeline().process((await audit.loadForProcessing(item))!);
+      }
+      expect(await mealsOf(asset.id), hasLength(1), reason: 'one lunch');
+      expect(analyzer.calls, 1);
+    });
+
+    test("another day's meal with the same asset id does not count",
+        () async {
+      // The asset rule's day bound: a restored backup's Android asset ids
+      // repeat on another phone.
+      await dao.saveMeal(
+          Meal(
+            id: 0,
+            date: '2026-10-25',
+            time: '12:00 PM',
+            timestamp: '2026-10-25T12:00:00.000',
+            source: MealSource.appWatch,
+            imageHash: 'f' * 32,
+            fileId: '1234',
+            analysis: const {'is_food': true, 'total_calories': 400},
+          ),
+          markStatus: IngestionStatus.saved);
+      lunch(id: '1234', seed: 3);
+
+      final report = await auditor().audit(lookbackDays: 2);
+      expect(report.missing.map((i) => i.assetId), ['1234']);
+      expect(report.logged, isEmpty);
+    });
+  });
+
   test('a deliberate add of an edited copy is decided by its bytes, as '
       'before', () async {
     final asset = lunch();
@@ -362,6 +422,18 @@ void main() {
           assetId: 'asset-x',
           capturedAt: DateTime(2026, 10, 31, 9));
       expect(twoDaysAfter.kind, PhotoReservation.reserved);
+      // The meal's date can also sit a day after the capture's (a photo
+      // taken late in a zone ahead of the device's), and no more.
+      final dayBefore = await dao.reservePhotoHash('d' * 32,
+          source: MealSource.appWatch,
+          assetId: 'asset-x',
+          capturedAt: DateTime(2026, 10, 28, 23, 30));
+      expect(dayBefore.kind, PhotoReservation.claimed);
+      final twoDaysBefore = await dao.reservePhotoHash('e' * 32,
+          source: MealSource.appWatch,
+          assetId: 'asset-x',
+          capturedAt: DateTime(2026, 10, 27, 12));
+      expect(twoDaysBefore.kind, PhotoReservation.reserved);
     });
 
     test('needs both the asset and the capture time, and never applies to '

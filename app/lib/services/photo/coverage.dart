@@ -163,6 +163,8 @@ class CoverageAuditor {
     // to a meal dated just outside it.
     final leftoverHashes = await _leftoverPhotoHashes(
         DateTime(cutoff.year, cutoff.month, cutoff.day - 1), _clock());
+    // Each capture day's meals, read once per audit (_mealOfAsset).
+    final mealsAround = <String, Future<List<Meal>>>{};
 
     for (final asset in assets) {
       onProgress?.call(done++, assets.length);
@@ -191,7 +193,23 @@ class CoverageAuditor {
       final hash = await _hasher(bytes);
       final row = await _dao.photoStatus(hash);
       if (row == null) {
-        missing.add(item);
+        // An edit in Photos gives a logged photo new bytes, so a hash no
+        // ledger row knows. Automatic intake settles that copy by its asset
+        // (reservePhotoHash's asset rule), but with the watcher off nothing
+        // has, and "Log all" sends deliberate photos, which skip the rule,
+        // so it logged the meal a second time. The audit applies the rule.
+        final mealId =
+            await _mealOfAsset(asset.id, _capturedAt(item), mealsAround);
+        if (mealId != null) {
+          logged.add(CoverageItem(
+            assetId: asset.id,
+            fileName: name,
+            createDate: asset.createDateTime,
+            mealId: mealId,
+          ));
+        } else {
+          missing.add(item);
+        }
         continue;
       }
       switch (row.status) {
@@ -247,6 +265,35 @@ class CoverageAuditor {
     };
   }
 
+  /// The meal [assetId] already became, dated within a day of [capturedAt]
+  /// (reservePhotoHash's asset rule, data/meals_dao_impl.dart); null when
+  /// there is none. The day bound keeps a restored backup's asset ids
+  /// (Android's are small integers that repeat on another phone) from
+  /// vouching for a new photo. [around] holds each day's meals for one
+  /// audit.
+  Future<int?> _mealOfAsset(String assetId, DateTime? capturedAt,
+      Map<String, Future<List<Meal>>> around) async {
+    if (assetId.isEmpty || capturedAt == null) return null;
+    final c = capturedAt;
+    final meals = await around.putIfAbsent(
+        isoDate(c),
+        () => _dao.mealsBetween(isoDate(DateTime(c.year, c.month, c.day - 1)),
+            isoDate(DateTime(c.year, c.month, c.day + 1))));
+    int? id;
+    for (final m in meals) {
+      if (m.fileId == assetId && (id == null || m.id < id)) id = m.id;
+    }
+    return id;
+  }
+
+  /// When [item] was taken, as intake dates it (spec §6.3).
+  DateTime? _capturedAt(CoverageItem item) => deriveCapturedAt(
+        fileName: item.fileName,
+        assetCreateDate: item.createDate,
+        now: _clock(),
+        maxAgeDays: 45,
+      );
+
   /// Re-fetch one audited photo as an [IntakePhoto] for processing —
   /// DIRECTLY by asset id (a windowed re-query capped at 2000 newest could
   /// miss the target in a large library). [deliberate] true: the user
@@ -258,14 +305,8 @@ class CoverageAuditor {
     if (bytes == null || bytes.isEmpty || bytes.length > maxPhotoBytes) {
       return null; // vanished, unreadable, or refused by the §8 cap
     }
-    final capturedAt = deriveCapturedAt(
-      fileName: item.fileName,
-      assetCreateDate: item.createDate,
-      now: _clock(),
-      maxAgeDays: 45,
-    );
     return IntakePhoto(bytes, item.assetId, item.fileName,
-        capturedAt: capturedAt,
+        capturedAt: _capturedAt(item),
         deliberate: deliberate,
         // How it was taken (design G2a), as the scan would have read it.
         capture: captureMetaFor(bytes, item.fileName,

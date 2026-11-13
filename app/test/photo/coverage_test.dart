@@ -33,6 +33,19 @@ void main() {
       FakeAsset('a$n', name ?? 'IMG_$n.jpg',
           at ?? DateTime(2026, 7, 26, 8, n), bytes ?? bytesOf(n));
 
+  /// A meal logged from [fileId] before the photo was edited in Photos:
+  /// its image_hash is not the photo's hash now.
+  Meal namesAsset(int id, String date, String fileId) => Meal(
+        id: id,
+        date: date,
+        time: '11:50 PM',
+        timestamp: 'x',
+        source: 'app_photo',
+        imageHash: 'h-before-edit-$id',
+        fileId: fileId,
+        analysis: const {'is_food': true},
+      );
+
   test('classifies every ledger state and finds the missing photo', () async {
     library.assets = [
       asset(1), // saved → logged
@@ -67,6 +80,50 @@ void main() {
     expect(report.missing.single.assetId, 'a6');
     expect(report.missing.single.fileName, 'IMG_6.jpg');
     expect(report.fullyCovered, isFalse);
+  });
+
+  test('a photo no ledger row knows counts as logged when a meal dated '
+      'within a day of its capture names its asset', () async {
+    // An edit in Photos gives a logged photo new bytes, so a new hash
+    // (review 171, C38). The audit applies reservePhotoHash's asset rule,
+    // day bound included.
+    library.assets = [
+      asset(1, at: DateTime(2026, 7, 26, 0, 30)), // edited after logging
+      asset(2), // a meal names it too, but three days off
+    ];
+    dao.seed(namesAsset(9, '2026-07-25', 'a1'));
+    dao.seed(namesAsset(10, '2026-07-23', 'a2'));
+
+    final report = await auditor.audit(lookbackDays: 2);
+    expect(report.logged.single.assetId, 'a1');
+    expect(report.logged.single.mealId, 9);
+    expect(report.missing.single.assetId, 'a2');
+  });
+
+  test('a meal that names the asset counts only when dated a day either '
+      'side of the capture, as in reservePhotoHash', () async {
+    // A meal's date is the capture day in the zone the photo was taken in,
+    // which can sit a day either side of the device's. Two days off is
+    // another meal, such as a restored backup's (Android ids repeat on
+    // another phone). The DAO's _mealOfAsset has the same bound.
+    final day = DateTime(2026, 7, 22, 12);
+    library.assets = [
+      asset(1, at: day), // its meal: the next day
+      asset(2, at: day), // the day before
+      asset(3, at: day), // two days after
+      asset(4, at: day), // two days before
+      asset(5, at: DateTime(2026, 7, 25, 9)), // another day: its own range
+    ];
+    dao.seed(namesAsset(11, '2026-07-23', 'a1'));
+    dao.seed(namesAsset(12, '2026-07-21', 'a2'));
+    dao.seed(namesAsset(13, '2026-07-24', 'a3'));
+    dao.seed(namesAsset(14, '2026-07-20', 'a4'));
+    dao.seed(namesAsset(15, '2026-07-26', 'a5'));
+
+    final report = await auditor.audit(lookbackDays: 7);
+    expect({for (final i in report.logged) i.assetId: i.mealId},
+        {'a1': 11, 'a2': 12, 'a5': 15});
+    expect(report.missing.map((i) => i.assetId), ['a3', 'a4']);
   });
 
   test('fully covered when everything is accounted for', () async {

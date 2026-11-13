@@ -921,20 +921,20 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           // the links are rebuilt from chat_id + image_hash below.
           row.remove('id');
           if (table == 'photo_ingestions') row['meal_id'] = null;
-          if (await _importRowExists(txn, table, row)) {
-            s++;
-            continue;
-          }
-          // A photo meal the user deleted HERE stays deleted (1.7.0):
-          // deleteMeal leaves the ledger row 'deleted' and no meal, and an
-          // older backup or a second phone's file would otherwise bring it
-          // back on every restore or combine.
-          if (table == 'meals' && await _deletedHere(txn, row)) {
-            s++;
-            mealsSkippedDeleted++;
-            continue;
-          }
           try {
+            if (await _importRowExists(txn, table, row)) {
+              s++;
+              continue;
+            }
+            // A photo meal the user deleted HERE stays deleted (1.7.0):
+            // deleteMeal leaves the ledger row 'deleted' and no meal, and
+            // an older backup or a second phone's file would otherwise
+            // bring it back on every restore or combine.
+            if (table == 'meals' && await _deletedHere(txn, row)) {
+              s++;
+              mealsSkippedDeleted++;
+              continue;
+            }
             // OR IGNORE swallows EVERY constraint violation (NOT NULL
             // included) and returns 0 instead of throwing — counting
             // unconditionally would report rows that never landed, and
@@ -949,7 +949,11 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
             }
           } catch (_) {
             // A row whose shape does not fit this schema version is
-            // skipped, never fatal: a partial import beats none.
+            // skipped, never fatal: a partial import beats none. The
+            // lookups above are inside too: a badly typed value (a number
+            // for image_hash, a list for a date) threw from them and took
+            // the whole import down. They only read, so nothing is half
+            // written.
             s++;
           }
         }
@@ -1015,10 +1019,11 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
 
   /// One `meal_thumbs` row of a file: `{chat_id, image_hash, jpeg_b64}`.
   /// (inserted, matched a local meal). A row that is not base64 of a JPEG
-  /// under 64 KB is refused before any lookup.
+  /// under 64 KB, or whose hash is not text, is refused before any lookup.
   Future<(bool, bool)> _importThumb(
       DatabaseExecutor txn, Map<String, Object?> raw) async {
-    final hash = normalizeImageHash(raw['image_hash'] as String?);
+    final rawHash = raw['image_hash'];
+    final hash = rawHash is String ? normalizeImageHash(rawHash) : '';
     final chat = raw['chat_id'];
     final b64 = raw['jpeg_b64'];
     if (hash.isEmpty || chat is! int || b64 is! String) return (false, false);
@@ -1171,6 +1176,11 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
   /// matches nothing.
   static (String, List<Object?>) _importIdentity(
       String table, Map<String, Object?> row) {
+    // A column the file leaves out is stored as its schema DEFAULT
+    // (data/db.dart), a null one as NULL (read as ''). Binding '' for an
+    // absent column matched nothing, so each re-import added the row again.
+    Object column(String name, String schemaDefault) =>
+        row.containsKey(name) ? row[name] ?? '' : schemaDefault;
     return switch (table) {
       // A PHOTO meal's identity is its photo (chat+hash): editing its
       // numbers must NOT make an older backup re-import it as a second
@@ -1227,7 +1237,7 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           [
             row['chat_id'],
             row['date'],
-            row['source'] ?? '',
+            column('source', 'manual'),
             row['external_id'] ?? '',
             row['logged_at'] ?? '',
             // The NUMBERS too: two manual saves in the same second share a
@@ -1245,7 +1255,7 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
             row['chat_id'],
             row['date'],
             row['logged_at'],
-            row['workout_type'] ?? '',
+            column('workout_type', 'strength'),
           ]
         ),
       _ => ('1 = 0', const <Object?>[]),

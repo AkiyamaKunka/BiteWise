@@ -492,6 +492,51 @@ void main() {
       expect(await dbA.query('activities'), hasLength(2));
     });
 
+    test('rows that leave out workout_type or source add nothing the second '
+        'time', () async {
+      // A hand-made or foreign file can leave a column out. The insert then
+      // stores the schema DEFAULT ('strength', 'manual'), while the identity
+      // compared '' and matched nothing, so the same file imported twice
+      // added each such row twice (review 171).
+      final payload = jsonEncode({
+        'format': kExportFormat,
+        'version': 1,
+        'tables': {
+          'workouts': [
+            {
+              'chat_id': localChatId,
+              'date': '2026-07-30',
+              'duration_min': 45,
+              'logged_at': '2026-07-30T07:00:00',
+            },
+          ],
+          'activities': [
+            {
+              'chat_id': localChatId,
+              'date': '2026-07-30',
+              'active_calories': 300,
+              'logged_at': '2026-07-30T19:00:00',
+            },
+          ],
+        },
+      });
+      final first = await daoB.importJson(payload);
+      expect(first.added['workouts'], 1);
+      expect(first.added['activities'], 1);
+
+      final again = await daoB.importJson(payload);
+      expect(again.totalAdded, 0);
+      expect(again.skipped['workouts'], 1);
+      expect(again.skipped['activities'], 1);
+      final workouts = await dbB.query('workouts');
+      final activities = await dbB.query('activities');
+      expect(workouts, hasLength(1));
+      expect(activities, hasLength(1));
+      // What lands is the schema's default, as before.
+      expect(workouts.single['workout_type'], 'strength');
+      expect(activities.single['source'], 'manual');
+    });
+
     test('an imported profile never replaces the one already here',
         () async {
       await dbA.insert('fitness_profile',
@@ -535,6 +580,80 @@ void main() {
     expect(summary.added['meals'], 1);
     expect(summary.skipped['meals'], 1);
     expect(await daoB.mealsBetween('2026-07-01', '2026-07-31'), hasLength(1));
+  });
+
+  group('one badly typed value skips its row, never the whole import', () {
+    // importJson's own rule: a row that does not fit is skipped, never
+    // fatal. The lookups BEFORE the insert (is it here already, was it
+    // deleted here) and the picture rows ran outside the per-row try, so
+    // one wrongly typed value in a hand-made or foreign file threw out of
+    // the transaction: not even the good rows landed, and Settings said
+    // the import failed (review 171).
+    Map<String, Object?> lunch(String hash) => {
+          'chat_id': localChatId,
+          'date': '2026-07-30',
+          'time': '01:00 PM',
+          'timestamp': '2026-07-30T13:00:00.000',
+          'source': 'app_photo',
+          'image_hash': hash,
+          'analysis': '{"is_food":true,"total_calories":300}',
+        };
+    String file(Map<String, Object?> tables) => jsonEncode(
+        {'format': kExportFormat, 'version': 1, 'tables': tables});
+
+    test('a meal whose image_hash is a number', () async {
+      final summary = await daoB.importJson(file({
+        'meals': [
+          {...lunch('bad'), 'image_hash': 12345},
+          lunch('good'),
+        ],
+      }));
+      expect(summary.added['meals'], 1);
+      expect(summary.skipped['meals'], 1);
+      final meals = await daoB.mealsBetween('2026-07-01', '2026-07-31');
+      expect(meals.single.imageHash, 'good');
+    });
+
+    test('a weigh-in whose date is a list', () async {
+      final summary = await daoB.importJson(file({
+        'meals': [lunch('good')],
+        'body_weight': [
+          {
+            'chat_id': localChatId,
+            'date': ['2026-07-30'],
+            'weight_kg': 72.4,
+            'logged_at': '2026-07-30T08:00:00',
+          },
+          {
+            'chat_id': localChatId,
+            'date': '2026-07-31',
+            'weight_kg': 72.1,
+            'logged_at': '2026-07-31T08:00:00',
+          },
+        ],
+      }));
+      expect(summary.added['meals'], 1);
+      expect(summary.added['body_weight'], 1);
+      expect(summary.skipped['body_weight'], 1);
+      expect(await daoB.listBodyWeights('2026-07-01', '2026-07-31'),
+          hasLength(1));
+    });
+
+    test('a picture whose image_hash is a number', () async {
+      final summary = await daoB.importJson(file({
+        'meals': [lunch('good')],
+        'meal_thumbs': [
+          {
+            'chat_id': localChatId,
+            'image_hash': 12345,
+            'jpeg_b64': base64Encode([0xFF, 0xD8, 0xFF, 0xD9]),
+          },
+        ],
+      }));
+      expect(summary.added['meals'], 1);
+      expect(summary.thumbsAdded, 0);
+      expect(summary.thumbsSkipped, 1);
+    });
   });
 
   group('refusal', () {
