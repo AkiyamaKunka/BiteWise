@@ -239,10 +239,12 @@ class _LogBodySheetState extends State<LogBodySheet> {
             waistCm: waist, chestCm: chest, hipCm: hip);
       }
     } catch (e) {
-      // The raw error is for the log. The sheet keeps what was typed,
-      // says so and can save again: it stayed on 'Saving…' with Save and
-      // Delete disabled, and said nothing.
-      debugPrint('Body: save failed: $e');
+      // The sheet keeps what was typed, says so and can save again: it
+      // stayed on 'Saving…' with Save and Delete disabled, and said
+      // nothing. The log gets the error's type, never its text: sqflite's
+      // text carries the statement's arguments, which are the weight and
+      // girths just typed, and debugPrint stays in release builds.
+      debugPrint('Body: save failed (${e.runtimeType})');
       if (!mounted) return;
       setState(() {
         _saving = false;

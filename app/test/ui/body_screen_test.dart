@@ -6,6 +6,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/data/db.dart' show openAppDatabase;
+import 'package:calorie_tracker/data/meals_dao_impl.dart' show SqfliteMealsDao;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/log_body_sheet.dart';
@@ -16,6 +18,12 @@ import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter/semantics.dart';
 import 'package:flutter/services.dart' show FontLoader;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart'
+    show
+        createDatabaseFactoryFfi,
+        databaseFactoryOrNull,
+        inMemoryDatabasePath,
+        sqfliteFfiInit;
 
 import 'fakes.dart';
 
@@ -591,6 +599,95 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('没能保存，请再试一次。'), findsOneWidget);
     });
+
+    // sqflite's error text carries the statement AND its arguments
+    // ("sql 'INSERT INTO body_weight …' args [local, 2026-08-02, 81.6,
+    // manual, …]", on iOS and Android alike), and debugPrint is not
+    // compiled out of a release build. The save path logged '$e', so a
+    // failed save wrote the typed weight or girths to the phone's log
+    // (review 1.7.1, second pass). These fail a real write in the real DAO
+    // (SQLite in this isolate, as test/e2e/harness.dart runs it, so its
+    // futures finish in fake time) and read every line the save logs.
+    const typed = [
+      ('bodyWeightField', '81.6'),
+      ('bodyWaistField', '91.5'),
+      ('bodyChestField', '103.5'),
+      ('bodyHipField', '99.5'),
+    ];
+    for (final table in const ['body_weight', 'body_measurements']) {
+      testWidgets('a failed $table write keeps what was typed out of the log',
+          (tester) async {
+        tester.view.physicalSize = const Size(800, 2400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        sqfliteFfiInit();
+        databaseFactoryOrNull = createDatabaseFactoryFfi(noIsolate: true);
+        final db = await openAppDatabase(path: inMemoryDatabasePath);
+        try {
+          final dao = SqfliteMealsDao(db, clock: () => clock);
+          // SQLite refuses the insert inside the statement, as a locked or
+          // full database does, so sqflite's own error comes back.
+          await db.execute('CREATE TRIGGER refuse_insert BEFORE INSERT ON '
+              "$table BEGIN SELECT RAISE(ABORT, 'disk I/O error'); END");
+
+          // The premise, so this cannot pass for nothing: the error's own
+          // text holds the values that were written.
+          var raw = '';
+          try {
+            if (table == 'body_weight') {
+              await dao.saveBodyWeight('2026-08-02', 81.6, source: 'manual');
+            } else {
+              await dao.saveBodyMeasurements('2026-08-02',
+                  waistCm: 91.5, chestCm: 103.5, hipCm: 99.5);
+            }
+          } catch (e) {
+            raw = '$e';
+          }
+          final written = table == 'body_weight'
+              ? const ['81.6']
+              : const ['91.5', '103.5', '99.5'];
+          for (final v in written) {
+            expect(raw, contains(v),
+                reason: "sqflite's error text carries the arguments: $raw");
+          }
+
+          final logged = <String>[];
+          final debugPrintBefore = debugPrint;
+          debugPrint = (String? message, {int? wrapWidth}) {
+            if (message != null) logged.add(message);
+          };
+          try {
+            await tester.pumpWidget(MaterialApp(
+              localizationsDelegates: AppLocalizations.localizationsDelegates,
+              supportedLocales: AppLocalizations.supportedLocales,
+              home: BodyScreen(dao: dao, clock: () => clock),
+            ));
+            await tester.pumpAndSettle();
+            await tester.tap(find.byKey(const Key('logBodyButton')));
+            await tester.pumpAndSettle();
+            for (final (key, text) in typed) {
+              await tester.enterText(find.byKey(Key(key)), text);
+            }
+            await tester.tap(find.byKey(const Key('bodySheetSave')));
+            await tester.pumpAndSettle();
+          } finally {
+            debugPrint = debugPrintBefore;
+          }
+          expect(find.text("Couldn't save. Try again."), findsOneWidget);
+          final log = logged.join('\n');
+          expect(log, contains('Body: save failed'),
+              reason: 'the failure itself is still logged');
+          for (final (_, text) in typed) {
+            expect(log, isNot(contains(text)),
+                reason: 'a typed value reached the log: $log');
+          }
+          expect(log, isNot(contains('INSERT')),
+              reason: 'nor the statement: $log');
+        } finally {
+          await db.close();
+        }
+      });
+    }
   });
 
   // ── Measurements rows at accessibility text sizes (2026-10-07) ────────
