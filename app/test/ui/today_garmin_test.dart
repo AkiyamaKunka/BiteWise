@@ -1,14 +1,21 @@
 // Today's Garmin energy-balance line (2026-08-02, spec §9): the active
 // burn arrives via the user's OWN server and is strictly cosmetic — it
 // must never block, error, or mislead the screen.
+import 'dart:convert';
+
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/services/garmin_client.dart';
+import 'package:calorie_tracker/services/settings/app_settings.dart';
 import 'package:calorie_tracker/ui/format.dart' show isoDate;
 import 'package:calorie_tracker/ui/l10n.dart';
 import 'package:calorie_tracker/ui/screens/today_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import '../analyzer/server_analyzer_test.dart' show MemoryKeyStore;
 import 'fakes.dart';
 
 /// A food meal dated TODAY (computed — a pinned date is a time bomb).
@@ -145,6 +152,107 @@ void main() {
         garmin: (date) async => throw Exception('server down'));
     expect(find.byKey(const Key('ringCenterValue')), findsOneWidget);
     expect(find.byKey(const Key('garminBurnLine')), findsNothing);
+  });
+
+  // Settings › Stop Sharing with your own server withdraws its consent and
+  // says nothing more is sent there — and every Today reload still POSTed
+  // the date with the upload key to the server (review 171, C13). The fetch
+  // asks the server only while the server, on its current plan, is a
+  // recipient the user allows.
+  group('the fetch from your own server', () {
+    late List<http.Request> requests;
+    late AppSettings s;
+    http.Client server() => MockClient((req) async {
+          requests.add(req);
+          return http.Response(
+              jsonEncode({
+                'available': true,
+                'active_calories': 512,
+                'steps': 8000,
+                'distance_m': 6200,
+                'activity_count': 1,
+              }),
+              200);
+        });
+
+    Future<AppSettings> allowedServer() async {
+      SharedPreferences.setMockInitialValues({});
+      final app = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: MemoryKeyStore());
+      await app.setProvider(AiProvider.server);
+      await app.setServerBaseUrl('http://10.0.0.7');
+      await app.setServerApiKey('upload-key');
+      await app.setAiConsent('server:claude', granted: true);
+      return app;
+    }
+
+    setUp(() async {
+      requests = [];
+      s = await allowedServer();
+    });
+
+    test('asks for the day while the server is allowed', () async {
+      final daily =
+          await makeGarminDailyFetch(s, client: server())('2026-11-13');
+      expect(daily?.activeCalories, 512);
+      final req = requests.single;
+      expect(req.url.toString(), 'http://10.0.0.7/api/garmin_daily');
+      expect(req.headers['X-API-Key'], 'upload-key');
+      expect(jsonDecode(req.body), {'date': '2026-11-13'});
+    });
+
+    test('asks nothing once sharing with the server is stopped', () async {
+      final fetch = makeGarminDailyFetch(s, client: server());
+      // What Settings › Stop Sharing does: the current route is withdrawn.
+      await s.setAiConsent(s.activeAiConsentRoute, granted: false);
+      expect(await fetch('2026-11-13'), isNull);
+      // Nor after a switch to another provider.
+      await s.setProvider(AiProvider.gemini);
+      expect(await fetch('2026-11-13'), isNull);
+      expect(requests, isEmpty);
+    });
+
+    test('nor while the plan it would serve is not allowed', () async {
+      // Switched to GLM with Watch Camera Roll off: nothing asked yet.
+      await s.setServerBackend('glm');
+      expect(await makeGarminDailyFetch(s, client: server())('2026-11-13'),
+          isNull);
+      expect(requests, isEmpty);
+    });
+
+    test('another provider in use with the server still allowed: asked as '
+        'before (PRIVACY.md: while the address is set)', () async {
+      await s.setProvider(AiProvider.gemini);
+      expect(await makeGarminDailyFetch(s, client: server())('2026-11-13'),
+          isNotNull);
+      expect(requests, hasLength(1));
+    });
+
+    testWidgets('Today: a reload after Stop Sharing sends nothing and drops '
+        'the line', (tester) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      late AppSettings app;
+      await tester.runAsync(() async => app = await allowedServer());
+      await tester.pumpWidget(MaterialApp(
+          supportedLocales: const [Locale('en', 'US')],
+          home: Scaffold(
+              body: TodayScreen(
+                  dao: FakeDao(),
+                  garminDaily: makeGarminDailyFetch(app, client: server())))));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('garminBurnLine')), findsOneWidget);
+      expect(requests, hasLength(1));
+
+      await tester.runAsync(
+          () => app.setAiConsent(app.activeAiConsentRoute, granted: false));
+      await tester.state<TodayScreenState>(find.byType(TodayScreen)).reload();
+      await tester.pumpAndSettle();
+      expect(requests, hasLength(1), reason: 'no date, no upload key');
+      expect(find.byKey(const Key('garminBurnLine')), findsNothing);
+    });
   });
 
   group('parseGarminDailyBody', () {

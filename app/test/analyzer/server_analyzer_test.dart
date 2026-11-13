@@ -14,6 +14,7 @@ import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/ui/background_glue.dart' show aiSendGateFor;
 import 'package:calorie_tracker/ui/outcome_text.dart';
 import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -1414,6 +1415,115 @@ void main() {
       for (final n in notes) {
         expect(n.message, isNot(contains('update the server')));
       }
+    });
+
+    // The plan was read again for each attempt, after the decode and after
+    // every retry's wait: a plan switched meanwhile got the photo or the
+    // typed text, though the consent check had passed for the plan before
+    // it — GLM or Doubao, whose consent and mainland-China note the user
+    // never saw (review 171, C11). A call keeps the plan it started with,
+    // and the plan's model and effort choice follows that plan.
+    String busy() => jsonEncode({
+          'error': 'claude_unavailable',
+          'reason': 'the analyzer is busy with another request',
+          'retry': true,
+        });
+    Map<String, dynamic> bodyOf(http.Request req) =>
+        jsonDecode(req.body) as Map<String, dynamic>;
+
+    test('a photo keeps its plan through the decode and a busy retry',
+        () async {
+      final s = await serverSettings();
+      await s.setServerModel('haiku');
+      final bodies = <Map<String, dynamic>>[];
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async {
+          await s.setServerBackend('doubao'); // during the decode
+          return b;
+        },
+        sleep: (_) => s.setServerBackend('glm'), // during the retry's wait
+        client: MockClient((req) async {
+          bodies.add(bodyOf(req));
+          return bodies.length == 1
+              ? http.Response(busy(), 503)
+              : http.Response(reply(sentBackendOf(req)), 200);
+        }),
+      );
+      final out = await analyzer.analyzePhoto(jpeg());
+      expect([for (final b in bodies) b['backend']], ['claude', 'claude']);
+      expect([for (final b in bodies) b['model']], ['haiku', 'haiku']);
+      expect(out.isFood, isTrue);
+    });
+
+    test('a text intent keeps its plan through the busy wait', () async {
+      final s = await serverSettings();
+      final sent = <String>[];
+      final analyzer = ServerAnalyzer(
+        s,
+        sleep: (_) => s.setServerBackend('glm'),
+        client: MockClient((req) async {
+          sent.add(sentBackendOf(req));
+          return sent.length < 3
+              ? http.Response(busy(), 503)
+              : http.Response(reply(sentBackendOf(req), text: true), 200);
+        }),
+      );
+      final out = await analyzer.textIntentOutcome('I had 2 eggs');
+      expect(sent, ['claude', 'claude', 'claude']);
+      expect(out.json, {'intent': 'chat'});
+
+      // textIntent (the plain reply) is the same call.
+      await s.setServerBackend('claude');
+      sent.clear();
+      expect(await analyzer.textIntent('I had 2 eggs'), {'intent': 'chat'});
+      expect(sent, ['claude', 'claude', 'claude']);
+    });
+
+    test('a leftover estimate keeps its plan through the decode', () async {
+      final s = await serverSettings();
+      await s.setServerModel('haiku');
+      final bodies = <Map<String, dynamic>>[];
+      final analyzer = ServerAnalyzer(
+        s,
+        normalizer: (b) async {
+          await s.setServerBackend('glm');
+          return b;
+        },
+        client: MockClient((req) async {
+          bodies.add(bodyOf(req));
+          return http.Response(reply(sentBackendOf(req)), 200);
+        }),
+      );
+      expect(await analyzer.leftoverIntent(jpeg(), '{}'),
+          {'eaten_fraction': 0.5});
+      expect(bodies.single['backend'], 'claude');
+      expect(bodies.single['model'], 'haiku');
+    });
+
+    test('pipeline: a photo let through for the Claude plan never reaches '
+        'the GLM plan picked during its retry wait', () async {
+      final s = await serverSettings();
+      await s.setAiConsent('server:claude', granted: true);
+      final sent = <String>[];
+      final dao = FakeDao();
+      final out = await PhotoPipeline(
+        dao: dao,
+        analyzer: ServerAnalyzer(s,
+            normalizer: (b) async => b,
+            sleep: (_) => s.setServerBackend('glm'),
+            client: MockClient((req) async {
+              sent.add(sentBackendOf(req));
+              return sent.length == 1
+                  ? http.Response(busy(), 503)
+                  : http.Response(reply(sentBackendOf(req)), 200);
+            })),
+        sendGate: aiSendGateFor(s),
+      ).process(IntakePhoto(jpeg(), 'a1', 'IMG_1.HEIC'));
+      expect(s.hasAiConsent('server:glm'), isFalse);
+      expect(sent, ['claude', 'claude']);
+      expect(out.kind, PhotoOutcomeKind.saved);
+      expect(dao.meals, hasLength(1));
     });
   });
 

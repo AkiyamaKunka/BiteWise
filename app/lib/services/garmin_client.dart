@@ -12,6 +12,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 
+import '../core/ai_consent.dart' show aiConsentRoute;
 import '../core/coerce.dart' show safeNumber;
 import 'settings/app_settings.dart';
 
@@ -33,6 +34,11 @@ typedef GarminDailyFetch = Future<GarminDaily?> Function(String date);
 
 /// Build the fetch, or return null when the server is not configured —
 /// callers treat null-fetch and null-result identically (no line drawn).
+///
+/// It asks only while the server, on its current plan, is a recipient the
+/// user allows: Settings › Stop Sharing with your own server says nothing
+/// more is sent there, and this request carries the date and the upload
+/// key — Today sent them on every reload after it (review 171).
 GarminDailyFetch makeGarminDailyFetch(AppSettings settings,
     {http.Client? client}) {
   final http.Client c = client ?? http.Client();
@@ -40,6 +46,10 @@ GarminDailyFetch makeGarminDailyFetch(AppSettings settings,
     final base = settings.serverBaseUrl.trim();
     final key = settings.serverApiKey?.trim() ?? '';
     if (base.isEmpty || key.isEmpty) return null;
+    if (!settings.hasAiConsent(
+        aiConsentRoute('server', settings.serverBackend))) {
+      return null;
+    }
     try {
       final resp = await c
           .post(Uri.parse('$base/api/garmin_daily'),

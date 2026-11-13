@@ -125,6 +125,25 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     }
   }
 
+  /// The plan ('claude', 'glm' or 'doubao') a photo or text call is bound
+  /// to: read once, as the call starts — in the same turn as the consent
+  /// check that let it through (the pipeline's AiSendGate awaits nothing
+  /// before the analyzer call) — and sent with every attempt. Each attempt
+  /// used to read it again, after the decode and the retry waits, so a plan
+  /// switched to meanwhile got the photo or the typed text: GLM or Doubao,
+  /// whose consent and mainland-China note the user never saw (review
+  /// 171). A zone value, not a field: the chat, diagnostics and leftover
+  /// calls share this instance with the photo in flight.
+  static final Object _callPlan = Object();
+
+  /// The plan of the call this runs in; the live setting outside one.
+  String get _plan =>
+      Zone.current[_callPlan] as String? ?? settings.serverBackend;
+
+  /// Runs [call] bound to the plan selected now ([_callPlan]).
+  Future<T> _onPlanNow<T>(Future<T> Function() call) =>
+      runZoned(call, zoneValues: {_callPlan: settings.serverBackend});
+
   /// An address that cannot become a URL used to throw out of analyzePhoto
   /// (the pipeline then burned every automatic photo to 'failed'). Checked
   /// before the photo is decoded: until the address is fixed, each scan
@@ -136,8 +155,15 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       return const AnalysisOutcome(
           error: _badAddressMessage, retryable: true, wall: Duration.zero);
     }
-    return super.analyzePhoto(originalBytes, recentMeals: recentMeals);
+    return _onPlanNow(
+        () => super.analyzePhoto(originalBytes, recentMeals: recentMeals));
   }
+
+  /// Bound to the plan selected as it starts ([_callPlan]): its busy wait
+  /// can last about 105 s. [textIntent] comes through here too.
+  @override
+  Future<TextIntentOutcome> textIntentOutcome(String prompt) =>
+      _onPlanNow(() => super.textIntentOutcome(prompt));
 
   /// The `backend` each request carried. The analyzed_by receipt is
   /// checked against THAT, not the live setting: a plan switched while a
@@ -150,8 +176,9 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   /// The user's Claude-plan model/effort choice (2026-08-05). Sent ONLY
   /// on the claude backend ('' = omit = server default): the vendor plans
   /// map model names server-side and the API 400s overrides for them.
-  Map<String, String> _planChoice() {
-    if (settings.serverBackend != 'claude') return const {};
+  /// [plan] is the backend the request carries.
+  Map<String, String> _planChoice(String plan) {
+    if (plan != 'claude') return const {};
     return {
       if (settings.serverModel.isNotEmpty) 'model': settings.serverModel,
       if (settings.serverEffort.isNotEmpty) 'effort': settings.serverEffort,
@@ -166,16 +193,17 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     // its own shared/ copy (same posture as analyze_photo).
     final key = (apiKey ?? '').trim();
     if (key.isEmpty || settings.serverBaseUrl.isEmpty) return null;
+    // The plan as the call starts, before the decode ([_callPlan]).
+    final sentBackend = settings.serverBackend;
     final sendBytes = await _normalize(originalBytes) ??
         unprocessedFallback(originalBytes,
             maxBytes: _HttpVisionAnalyzer.maxOriginalFallbackBytes);
     if (sendBytes == null) return null;
-    final sentBackend = settings.serverBackend;
     final body = jsonEncode({
       'image_b64': base64Encode(sendBytes),
       'original_analysis': originalCompact,
       'backend': sentBackend,
-      ..._planChoice(),
+      ..._planChoice(sentBackend),
     });
     try {
       http.Response resp;
@@ -251,7 +279,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       throw const _ProviderException(_badAddressMessage,
           transient: true, retryInPlace: false, verbatimMessage: true);
     }
-    final backend = settings.serverBackend;
+    final backend = _plan;
     final req = http.Request('POST', url)
       ..headers['content-type'] = 'application/json'
       ..headers['X-API-Key'] = key
@@ -271,13 +299,13 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
               // keys live in the SERVER's .env — never on the phone.
               'backend': backend,
               if (recentMeals.isNotEmpty) 'recent_meals': recentMeals,
-              ..._planChoice(),
+              ..._planChoice(backend),
               ..._replyLanguage(),
             }
           : {
               'prompt': prompt,
               'backend': backend,
-              ..._planChoice(),
+              ..._planChoice(backend),
               ..._replyLanguage(),
             });
     _sentBackend[req] = backend;
