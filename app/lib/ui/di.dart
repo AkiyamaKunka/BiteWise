@@ -124,11 +124,17 @@ class AppServices {
     final serverAnalyzer = ServerAnalyzer(settings);
     final appLinks = AppLinks();
     final executor = createExecutor(dao, analyzer, settings);
+    // iCloud Backup (iPhone; built below, after the screens' services).
+    late final BackupCoordinator? cloudBackup;
     // The photo module reads lookbackDays through the live settings object,
     // so slider edits apply to the next scan without rewiring (spec §6.4).
     // Late imports skip photos a meal already names, without a read (G1b).
-    final photoIntake =
-        createPhotoIntake(settings, loggedAssetIds: dao.loggedAssetIds);
+    // While iCloud Backup holds the automatic intake the live watcher reads
+    // no photo: the pipeline would let each one go untouched (intakeHeld
+    // below), and the scan would read it again at every library change.
+    final photoIntake = createPhotoIntake(settings,
+        loggedAssetIds: dao.loggedAssetIds,
+        liveHeld: () => cloudBackup?.holdsPhotosNow ?? false);
     final shareIntake = createShareIntake(settings);
 
     // Notification surface (spec §5.5/§6): init() also performs the runtime
@@ -231,8 +237,6 @@ class AppServices {
         ? null
         : (o) =>
             notify(outcomeSnackbar(localizationsFor(settings.appLanguage), o));
-    // iCloud Backup (iPhone; built below, after the screens' services).
-    late final BackupCoordinator? cloudBackup;
     final pipeline = PhotoPipeline(
         dao: dao,
         analyzer: analyzer,

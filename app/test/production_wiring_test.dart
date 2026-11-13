@@ -215,11 +215,15 @@ void main() {
     });
 
     // G1b: without it every late import is read in full, logged or not.
-    test('late imports skip photos a meal already names, without a read', () {
+    // Review r171: without liveHeld the live watcher read every photo an
+    // iCloud Backup hold kept back again at each library change.
+    test('late imports skip photos a meal already names, without a read, '
+        'and the live watcher reads nothing while iCloud Backup holds it', () {
       expect(
         init(),
         _wired(
-          r'createPhotoIntake\(settings, loggedAssetIds: dao\.loggedAssetIds\)',
+          r'createPhotoIntake\(settings, loggedAssetIds: dao\.loggedAssetIds, '
+          r'liveHeld: \(\) => cloudBackup\?\.holdsPhotosNow \?\? false\)',
         ),
       );
     });
@@ -853,10 +857,17 @@ void main() {
         keyStore: _Keys(),
       );
       Future<Set<String>> logged(List<String> ids) async => {};
+      bool held() => false;
       final ios =
-          createPhotoIntake(settings, loggedAssetIds: logged, isIOS: true)
+          createPhotoIntake(
+                settings,
+                loggedAssetIds: logged,
+                liveHeld: held,
+                isIOS: true,
+              )
               as LibraryPhotoIntake;
       expect(ios.loggedAssetIds, same(logged));
+      expect(ios.liveHeld, same(held));
       expect(ios.lateImports, isNotNull);
       expect(ios.lateImports!.store, isNotNull);
       expect(ios.onLateImportPass, equals(recordLateImportPass));
