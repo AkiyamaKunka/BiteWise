@@ -150,7 +150,7 @@ class CoverageAuditor {
     final cutoff = lookbackCutoff(_clock(), days);
     final assets =
         await _library.imagesCreatedAfter(cutoff, limit: backfillQueryLimit);
-    final truncated = assets.length >= backfillQueryLimit;
+    final truncated = listedCount(assets) >= backfillQueryLimit;
 
     final logged = <CoverageItem>[];
     final failed = <CoverageItem>[];

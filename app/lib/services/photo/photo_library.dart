@@ -6,6 +6,7 @@
 /// implementation.
 library;
 
+import 'dart:collection' show ListBase;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
@@ -46,7 +47,9 @@ abstract class PhotoLibrary {
   Future<bool> hasFullAccess();
 
   /// Images whose createDate is at/after [cutoff] (spec §6.4 backfill
-  /// window). Order unspecified — callers sort for emission.
+  /// window). Order unspecified — callers sort for emission. At most
+  /// [limit] are listed; [listedCount] of the result reaching [limit]
+  /// means older ones may have gone unseen.
   Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
       {int limit = 500});
 
@@ -64,6 +67,38 @@ abstract class PhotoLibrary {
   Future<void> startChangeNotify(void Function() onChange);
   Future<void> stopChangeNotify();
 }
+
+/// What [PhotoLibrary.imagesCreatedAfter] kept of what the library listed
+/// (Android leaves some out, see [PhotoManagerLibrary.imagesCreatedAfter]),
+/// and how many the library listed: the query's cap applies to those, so a
+/// listing filled with photos left out (a phone transfer of old ones) is
+/// still a capped one.
+class LibraryListing extends ListBase<LibraryAsset> {
+  LibraryListing(this._kept, {required this.listed});
+
+  final List<LibraryAsset> _kept;
+
+  /// How many images the library listed, before any was left out.
+  final int listed;
+
+  @override
+  int get length => _kept.length;
+
+  @override
+  set length(int length) => _kept.length = length;
+
+  @override
+  LibraryAsset operator [](int index) => _kept[index];
+
+  @override
+  void operator []=(int index, LibraryAsset value) => _kept[index] = value;
+}
+
+/// How many images the library listed for [assets] (review 171, C4): its
+/// [LibraryListing.listed], else its length. A scan compares this, not the
+/// photos it kept, with its cap to tell whether the listing was truncated.
+int listedCount(List<LibraryAsset> assets) =>
+    assets is LibraryListing ? assets.listed : assets.length;
 
 /// Where the photo library says an asset was taken (design R4, restaurant
 /// assist): PHAsset.location on iOS, the position the Photos app shows. A
@@ -210,7 +245,9 @@ class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
   /// taken before a scan's cutoff but added after it is left to a scan
   /// whose cutoff it is not before: the launch/resume catch-up over the
   /// whole window. Both dates are whole seconds there. [limit] caps what
-  /// the query lists, before any is left out.
+  /// the query lists, before any is left out; the [LibraryListing] says how
+  /// many it listed, so a listing filled with old copies still reads as
+  /// truncated.
   @override
   Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
       {int limit = 500}) async {
@@ -226,10 +263,10 @@ class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
     if (!_isAndroid) return listed;
     final since = DateTime.fromMillisecondsSinceEpoch(
         cutoff.millisecondsSinceEpoch ~/ 1000 * 1000);
-    return [
+    return LibraryListing([
       for (final asset in listed)
         if (!asset.createDateTime.isBefore(since)) asset,
-    ];
+    ], listed: listed.length);
   }
 
   @override

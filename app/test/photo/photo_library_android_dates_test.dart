@@ -13,10 +13,13 @@ library;
 import 'dart:math' as math;
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/services/photo/coverage.dart';
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/watcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+import '../ui/fakes.dart' show FakeDao;
 
 /// photo_manager's own channel (its PMMethodChannel only adds a cancelToken
 /// key to the argument map).
@@ -98,7 +101,8 @@ void _answerLikeAndroid(List<_Row> rows) {
 }
 
 /// The real adapter's listing, with bytes and names served from memory
-/// (reading an original goes through files the test host does not have).
+/// (reading an original goes through files the test host does not have),
+/// and with the count the library listed.
 class _ReadableLibrary implements PhotoLibrary {
   _ReadableLibrary(this.real);
   final PhotoManagerLibrary real;
@@ -106,14 +110,17 @@ class _ReadableLibrary implements PhotoLibrary {
 
   @override
   Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
-          {int limit = 500}) async =>
-      [
-        for (final a in await real.imagesCreatedAfter(cutoff, limit: limit))
-          _ReadableAsset(a),
-      ];
+      {int limit = 500}) async {
+    final listed = await real.imagesCreatedAfter(cutoff, limit: limit);
+    return LibraryListing([for (final a in listed) _ReadableAsset(a)],
+        listed: listedCount(listed));
+  }
 
   @override
   Future<bool> requestPermission() async => true;
+
+  @override
+  Future<bool> hasFullAccess() async => true;
 
   @override
   Future<void> startChangeNotify(void Function() onChange) async =>
@@ -259,6 +266,131 @@ void main() {
       library.onChange!();
       await pumpEventQueue(times: 50);
       expect(offered.map((p) => p.assetId), ['snack']);
+      await intake.stop();
+    });
+  });
+
+  // Review 171, C4 second pass: the listing is capped before any photo is
+  // left out, so a phone transfer of 2000 old photos, added after the
+  // window's own photos, fills it. Judged by what was kept, such a scan
+  // read as complete: no "backlog is very large" warning, a watermark free
+  // to move, and a green coverage check over a dinner photo nobody looked
+  // at. Truncation is judged by what the library listed.
+  group('a listing the old copies fill', () {
+    final morning = DateTime(2026, 7, 17, 9, 0);
+    // Yesterday's dinner: inside the 2-day window, not logged yet.
+    _Row dinner() => _Row('dinner',
+        added: DateTime(2026, 7, 16, 19, 0, 1),
+        taken: DateTime(2026, 7, 16, 19, 0));
+    // This morning, from the old phone: added today, taken in 2020.
+    List<_Row> copies(int n) => [
+          for (var i = 0; i < n; i++)
+            _Row('old_$i',
+                added: DateTime(2026, 7, 17, 8, 0).add(Duration(seconds: i)),
+                taken: DateTime(2020, 5, 1).add(Duration(minutes: i))),
+        ];
+
+    test('Android: the listing says how many photos the library listed',
+        () async {
+      _answerLikeAndroid([dinner(), ...copies(backfillQueryLimit)]);
+      final capped = await PhotoManagerLibrary(isAndroid: true)
+          .imagesCreatedAfter(lookbackCutoff(morning, 2),
+              limit: backfillQueryLimit);
+      expect(capped, isEmpty);
+      expect(listedCount(capped), backfillQueryLimit);
+
+      _answerLikeAndroid([dinner(), ...copies(3)]);
+      final whole = await PhotoManagerLibrary(isAndroid: true)
+          .imagesCreatedAfter(lookbackCutoff(morning, 2),
+              limit: backfillQueryLimit);
+      expect(whole.map((a) => a.id), ['dinner']);
+      expect(listedCount(whole), 4);
+    });
+
+    test('the catch-up reports the window truncated', () async {
+      _answerLikeAndroid([dinner(), ...copies(backfillQueryLimit)]);
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: PhotoManagerLibrary(isAndroid: true),
+          clock: () => morning);
+      final offered = <IntakePhoto>[];
+      intake.photos.listen(offered.add);
+      await expectLater(
+          intake.backfillScan(), throwsA(isA<BackfillWindowTruncated>()));
+      expect(offered, isEmpty, reason: 'no old copy is offered either');
+    });
+
+    test('the coverage check reports the window truncated, never fully '
+        'covered', () async {
+      _answerLikeAndroid([dinner(), ...copies(backfillQueryLimit)]);
+      final report = await CoverageAuditor(
+              library: PhotoManagerLibrary(isAndroid: true),
+              dao: FakeDao(),
+              hasher: (bytes) async => 'h${bytes.first}',
+              clock: () => morning)
+          .audit(lookbackDays: 2);
+      expect(report.scanned, 0);
+      expect(report.truncated, isTrue);
+      expect(report.fullyCovered, isFalse);
+    });
+
+    test('a listing under the cap: the dinner photo is still found, and '
+        'nothing is truncated', () async {
+      // 1998 copies and the dinner: one short of the cap.
+      _answerLikeAndroid([dinner(), ...copies(backfillQueryLimit - 2)]);
+      final report = await CoverageAuditor(
+              library: _ReadableLibrary(PhotoManagerLibrary(isAndroid: true)),
+              dao: FakeDao(),
+              hasher: (bytes) async => 'h${bytes.first}',
+              clock: () => morning)
+          .audit(lookbackDays: 2);
+      expect(report.truncated, isFalse);
+      expect(report.scanned, 1);
+      expect(report.missing.map((i) => i.assetId), ['dinner']);
+    });
+
+    // The live watcher's own cap (500): a listing the copies fill must not
+    // move its cutoff over a photo the cap hid, which it could then never
+    // list again.
+    test('the live watcher keeps its cutoff behind a photo the copies hid',
+        () async {
+      final rows = <_Row>[];
+      _answerLikeAndroid(rows);
+      final library = _ReadableLibrary(PhotoManagerLibrary(isAndroid: true));
+      var clock = morning; // the app opens at 9:00
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2, library: library, clock: () => clock);
+      final offered = <IntakePhoto>[];
+      intake.photos.listen(offered.add);
+      await intake.start();
+      clock = morning.add(const Duration(minutes: 30));
+      final copied = [
+        for (var i = 0; i < 500; i++)
+          _Row('old_$i',
+              added: morning.add(Duration(minutes: 1, seconds: i)),
+              taken: DateTime(2020, 5, 1).add(Duration(minutes: i))),
+      ];
+      rows.addAll([
+        // Taken and added just after the app opened…
+        _Row('breakfast',
+            added: morning.add(const Duration(seconds: 31)),
+            taken: morning.add(const Duration(seconds: 30))),
+        // …then 500 old photos copied in, then a snack.
+        ...copied,
+        _Row('snack',
+            added: morning.add(const Duration(minutes: 20, seconds: 1)),
+            taken: morning.add(const Duration(minutes: 20))),
+      ]);
+      library.onChange!();
+      await pumpEventQueue(times: 50);
+      expect(offered.map((p) => p.assetId), ['snack'],
+          reason: 'the cap hid breakfast behind the copies');
+      // The copies go again (duplicates the user deletes): the listing is
+      // no longer capped, and breakfast is still inside the cutoff.
+      rows.removeWhere((r) => r.id.startsWith('old_'));
+      library.onChange!();
+      await pumpEventQueue(times: 50);
+      expect(offered.map((p) => p.assetId), ['snack', 'breakfast']);
       await intake.stop();
     });
   });
