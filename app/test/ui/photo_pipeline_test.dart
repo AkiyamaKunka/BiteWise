@@ -10,6 +10,8 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/testing.dart';
+import 'package:intl/date_symbol_data_local.dart' show initializeDateFormatting;
+import 'package:intl/intl.dart' show Intl;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -717,6 +719,23 @@ void main() {
         final meal = await saved(
             lateCopy(added: imported.add(const Duration(seconds: 20))));
         expect(meal.date, isoDay(lunch));
+        expect(meal.time, '12:37 PM');
+      });
+
+      // The photo path writes meals.time with core's formatClock. Until
+      // 2026-11-13 it used intl's DateFormat('hh:mm a'), which follows
+      // Intl.defaultLocale: once the date symbols are loaded (Flutter's
+      // localizations load them all) a Chinese locale stored '12:37 下午',
+      // which parseClock reads as no time at all. Nothing sets the locale
+      // today; this keeps the save path ASCII if something ever does.
+      test('the stored clock stays hh:mm AM/PM under a Chinese intl locale',
+          () async {
+        await initializeDateFormatting('zh');
+        final previous = Intl.defaultLocale;
+        addTearDown(() => Intl.defaultLocale = previous);
+        Intl.defaultLocale = 'zh';
+        final meal = await saved(
+            lateCopy(added: imported.add(const Duration(seconds: 20))));
         expect(meal.time, '12:37 PM');
       });
 
