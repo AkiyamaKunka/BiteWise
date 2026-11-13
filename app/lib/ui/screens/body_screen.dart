@@ -147,6 +147,10 @@ class BodyScreenState extends State<BodyScreen> {
   Future<void> _openSheet({String? date}) async {
     final imperial = _imperial; // resolved before the sheet detaches
     final now = _now;
+    // A save that failed part-way (the weight written, the measurements
+    // not) keeps the sheet open; closed then with a swipe or a tap outside,
+    // the page reloads too. It kept the old values until its next reload.
+    var wrote = false;
     // showGroupedSheet's title is fixed when the sheet opens, and this one
     // follows the picked date, so the route builds the same GroupedSheet
     // itself (with showGroupedSheet's route settings).
@@ -163,9 +167,11 @@ class BodyScreenState extends State<BodyScreen> {
         weightOn: (day) => _weightOn(day)?.kg,
         measurementsOn: _measurementsOn,
         onDelete: _confirmDelete,
+        onWrote: () => wrote = true,
       ),
     );
-    if (saved == true) await reload();
+    // false: the sheet deleted the day, and the page reloaded then.
+    if (saved == true || (saved == null && wrote)) await reload();
   }
 
   /// Asks, then deletes [date]'s weight and measurements. True when
@@ -371,6 +377,7 @@ class _BodySheetHost extends StatefulWidget {
     required this.weightOn,
     required this.measurementsOn,
     required this.onDelete,
+    required this.onWrote,
   });
   final MealsDao dao;
   final String initialDate;
@@ -386,6 +393,9 @@ class _BodySheetHost extends StatefulWidget {
 
   /// The screen's delete confirm for a day; true when it deleted.
   final Future<bool> Function(String date) onDelete;
+
+  /// A write went through, on any day the sheet showed (LogBodySheet).
+  final VoidCallback onWrote;
 
   @override
   State<_BodySheetHost> createState() => _BodySheetHostState();
@@ -494,6 +504,7 @@ class _BodySheetHostState extends State<_BodySheetHost> {
           dateLabel: shown,
           onChangeDate: _changeDate,
           onDelete: hasData ? () => widget.onDelete(day) : null,
+          onWrote: widget.onWrote,
         ),
       ],
     );

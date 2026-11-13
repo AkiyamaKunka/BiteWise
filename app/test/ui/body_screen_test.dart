@@ -595,6 +595,49 @@ void main() {
       expect(find.text('81.6'), findsOneWidget, reason: 'page reloaded');
     });
 
+    // Review 1.7.1, second pass: a save that failed part-way (the weight
+    // written, the measurements not) kept the sheet open, as it should,
+    // but closed then with a swipe or a tap outside, it left the page on
+    // the old weight until its next reload.
+    for (final (what, typed, headline) in const [
+      ('a new weight', '81.6', '81.6'),
+      // Today's weigh-in gone: the page falls back to Jul 28's.
+      ('a cleared weight', '', '82.4'),
+    ]) {
+      testWidgets('$what written, the measurements not, then the sheet '
+          'dismissed: the page shows what was written', (tester) async {
+        final dao = await pumpFlaky(tester);
+        dao.weightsByDate['2026-08-02'] =
+            const WeightEntry('2026-08-02', 83.2, source: 'manual');
+        await tester.state<BodyScreenState>(find.byType(BodyScreen)).reload();
+        await tester.pumpAndSettle();
+        String shown() => tester
+            .widget<Text>(find.byKey(const Key('bodyWeightHeadline')))
+            .data!;
+        expect(shown(), '83.2');
+
+        await tester.tap(find.byKey(const Key('logBodyButton')));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byKey(const Key('bodyWeightField')), typed);
+        await tester.enterText(find.byKey(const Key('bodyWaistField')), '90');
+        dao.failMeasurementWrites = true;
+        await tester.tap(find.byKey(const Key('bodySheetSave')));
+        await tester.pumpAndSettle();
+        expect(find.text("Couldn't save. Try again."), findsOneWidget);
+        expect(dao.weightsByDate['2026-08-02']?.kg,
+            typed.isEmpty ? isNull : 81.6,
+            reason: 'the weight went through');
+        expect(dao.measurementsByDate, isEmpty);
+
+        await tester.tapAt(const Offset(10, 10)); // dismiss the sheet
+        await tester.pumpAndSettle();
+        expect(find.byType(LogBodySheet), findsNothing);
+        expect(shown(), headline, reason: 'the page reloaded');
+        expect(find.byKey(const Key('bodyDay2026-08-02')),
+            typed.isEmpty ? findsNothing : findsOneWidget);
+      });
+    }
+
     testWidgets('zh: the save failure is Chinese', (tester) async {
       final dao = await pumpFlaky(tester, locale: const Locale('zh'));
       await tester.tap(find.byKey(const Key('logBodyButton')));
@@ -975,6 +1018,7 @@ void main() {
 class _FlakyBodyDao extends FakeDao {
   bool failReads = false;
   bool failWrites = false;
+  bool failMeasurementWrites = false;
   bool failWeightDeletes = false;
   bool failMeasurementDeletes = false;
 
@@ -990,6 +1034,14 @@ class _FlakyBodyDao extends FakeDao {
       {String source = 'nl'}) async {
     if (failWrites) throw StateError('disk I/O error');
     return super.saveBodyWeight(date, kg, source: source);
+  }
+
+  @override
+  Future<void> saveBodyMeasurements(String date,
+      {double? waistCm, double? chestCm, double? hipCm}) async {
+    if (failMeasurementWrites) throw StateError('disk I/O error');
+    return super.saveBodyMeasurements(date,
+        waistCm: waistCm, chestCm: chestCm, hipCm: hipCm);
   }
 
   @override

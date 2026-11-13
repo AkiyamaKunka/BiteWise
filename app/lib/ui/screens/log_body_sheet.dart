@@ -60,6 +60,7 @@ class LogBodySheet extends StatefulWidget {
     this.draft,
     this.dateLabel,
     this.onChangeDate,
+    this.onWrote,
   });
   final MealsDao dao;
   final String date;
@@ -85,6 +86,11 @@ class LogBodySheet extends StatefulWidget {
   /// failed throws: the sheet says so and stays open. Null hides the
   /// Delete button. It is also the accessible way to delete a day.
   final Future<bool> Function()? onDelete;
+
+  /// Told after each write that went through, also when a later one in
+  /// the same save failed and the sheet stays open: closed then, however
+  /// it closes, the screen still shows what was written.
+  final VoidCallback? onWrote;
 
   @override
   State<LogBodySheet> createState() => _LogBodySheetState();
@@ -230,14 +236,17 @@ class _LogBodySheetState extends State<LogBodySheet> {
       // load.
       if (kg != null) {
         await widget.dao.saveBodyWeight(widget.date, kg, source: 'manual');
+        widget.onWrote?.call();
       } else if (widget.existingWeight != null) {
         await widget.dao.deleteBodyWeight(widget.date);
+        widget.onWrote?.call();
       }
       // Measurements: full-row upsert; all-empty deletes (DAO contract).
       if (waist != null || chest != null || hip != null ||
           widget.existing != null) {
         await widget.dao.saveBodyMeasurements(widget.date,
             waistCm: waist, chestCm: chest, hipCm: hip);
+        widget.onWrote?.call();
       }
     } catch (e) {
       // The sheet keeps what was typed, says so and can save again: it
