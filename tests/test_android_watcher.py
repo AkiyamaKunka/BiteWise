@@ -8,6 +8,7 @@ milliseconds. One session covers the whole lifecycle to keep the suite fast.
 
 import os
 import shutil
+import signal
 import subprocess
 import time
 from pathlib import Path
@@ -328,6 +329,38 @@ def test_scan_prunes_fail_counters_for_deleted_photos(tmp_path):
         proc.wait(timeout=10)
 
 
+def _start_watcher_in_own_group(env, groups):
+    """Run the widget start shortcut as the leader of a new session.
+
+    Run like the other shortcuts, it would join pytest's own process group,
+    and so would the watcher it backgrounds and every loop the watcher
+    forks. In a group of its own (pgid = the shortcut's pid, added to
+    [groups] before anything can fail) the finally can SIGKILL all of them
+    without a process list, which a sandbox can forbid: there pkill exits 3
+    ("Cannot get process list") and the shimmed ping loop spun forever."""
+    starter = subprocess.Popen(
+        [BASH, str(REPO_ROOT / "android" / "shortcuts" / "calorie-start.sh")],
+        env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        start_new_session=True,
+    )
+    groups.append(starter.pid)
+    stdout, stderr = starter.communicate(timeout=30)
+    return subprocess.CompletedProcess(
+        starter.args, starter.returncode, stdout, stderr)
+
+
+def _kill_groups(groups):
+    """SIGKILL whatever is left in each watcher group: kill -9 orphans the
+    ping/sync loops, but they never leave the group. Never pytest's own."""
+    for pgid in groups:
+        if pgid == os.getpgrp():
+            continue
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
 def test_widget_shortcuts_start_status_stop(tmp_path):
     """The Termux:Widget one-tap scripts drive the real watcher: start brings
     it up (and reports the PID), status reflects running/stopped, and stop
@@ -346,12 +379,13 @@ def test_widget_shortcuts_start_status_stop(tmp_path):
     status = run_shortcut("calorie-status.sh")
     assert "🔴 Watcher stopped" in status.stdout
 
-    start = run_shortcut("calorie-start.sh")
-    assert start.returncode == 0
-    assert "🟢 Watcher running (PID" in start.stdout
-    pid = int((home / ".calorie_watcher.pid").read_text().strip())
-
+    groups = []
     try:
+        start = _start_watcher_in_own_group(env, groups)
+        assert start.returncode == 0
+        assert "🟢 Watcher running (PID" in start.stdout
+        pid = int((home / ".calorie_watcher.pid").read_text().strip())
+
         status = run_shortcut("calorie-status.sh")
         assert "🟢 Watcher running" in status.stdout
 
@@ -365,7 +399,7 @@ def test_widget_shortcuts_start_status_stop(tmp_path):
         )
 
         # Double-tap on start is a no-op: same watcher instance keeps the lock.
-        again = run_shortcut("calorie-start.sh")
+        again = _start_watcher_in_own_group(env, groups)
         assert again.returncode == 0
         assert int((home / ".calorie_watcher.pid").read_text().strip()) == pid
 
@@ -408,8 +442,21 @@ def test_widget_shortcuts_start_status_stop(tmp_path):
             decoy.kill()
             decoy.wait()
     finally:
+        _kill_groups(groups)
         # Belt and braces: reap anything still holding this test's temp HOME.
         subprocess.run(["pkill", "-9", "-f", str(home)], capture_output=True)
+
+
+def _ps_lists_processes():
+    """True when `ps -ef` works here: calorie-stop.sh sweeps the orphaned
+    loops with it, and _watcher_processes_alive checks with it. A sandbox
+    can forbid it (the exec fails with PermissionError)."""
+    try:
+        out = subprocess.run(["ps", "-ef"], capture_output=True, text=True,
+                             timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return out.returncode == 0 and len(out.stdout.splitlines()) > 1
 
 
 def _watcher_processes_alive(home):
@@ -428,6 +475,13 @@ def test_widget_stop_escalates_and_reaps_orphaned_loops(tmp_path):
     bypasses the watcher's cleanup trap. The stop shortcut must then reap the
     orphaned ping/sync subshells (and the stuck uploader) instead of leaving
     a 'stopped' watcher heartbeating forever."""
+    # Checked before anything starts: without ps the sweep under test finds
+    # nothing and the test cannot pass. Inside the Bash sandbox it failed on
+    # its own ps check, and since pkill could not list processes either,
+    # the loops it started spun the shimmed 0.05 s ping loop for days.
+    if not _ps_lists_processes():
+        pytest.skip("ps -ef is not permitted here (a sandbox?): the stop "
+                    "shortcut's orphan sweep needs it")
     env, home, camera, fake_proc = _make_env(tmp_path)
     shortcuts = REPO_ROOT / "android" / "shortcuts"
     shutil.copy(WATCHER, home / "android_watcher.sh")
@@ -442,11 +496,12 @@ def test_widget_stop_escalates_and_reaps_orphaned_loops(tmp_path):
             capture_output=True, text=True, timeout=30,
         )
 
-    start = run_shortcut("calorie-start.sh")
-    assert start.returncode == 0
-    pid = int((home / ".calorie_watcher.pid").read_text().strip())
-
+    groups = []
     try:
+        start = _start_watcher_in_own_group(env, groups)
+        assert start.returncode == 0
+        pid = int((home / ".calorie_watcher.pid").read_text().strip())
+
         # Mirror the real /proc so the shortcuts can identify the watcher.
         cmdline_dir = fake_proc / str(pid)
         cmdline_dir.mkdir()
@@ -475,6 +530,7 @@ def test_widget_stop_escalates_and_reaps_orphaned_loops(tmp_path):
         time.sleep(0.35)
         assert calls.stat().st_size == size_after_stop
     finally:
+        _kill_groups(groups)
         # Belt and braces: reap anything still holding this test's temp HOME.
         subprocess.run(["pkill", "-9", "-f", str(home)], capture_output=True)
 
