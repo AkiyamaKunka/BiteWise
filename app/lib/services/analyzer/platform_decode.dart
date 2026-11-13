@@ -1,23 +1,28 @@
-/// Second-chance image decodes for what the pure-Dart `image` package
-/// (normalize.dart) cannot read.
+/// The decode chain behind every photo sent for analysis and every history
+/// thumbnail: a platform decoder first (ImageIO on iOS, the engine codec on
+/// Android), the pure-Dart `image` package (normalize.dart) as their
+/// fallback, and the rule for what may be sent when every decoder fails.
 ///
-/// That package has no HEIC/HEIF decoder, and every iPhone camera photo is
-/// HEIC. Until 2026-09-30 a failed decode fell back to "send the original
-/// bytes" — raw HEIC, which every provider path labels image/jpeg. The
-/// model cannot read that and answers `is_food: false`, so on the owner's
-/// iPhone 94 of 102 photos were silently "not food" (the same test image:
-/// JPEG → food, HEIC → not food).
+/// It began as a second chance for what that package cannot read: it has
+/// no HEIC/HEIF decoder, and every iPhone camera photo is HEIC. Until
+/// 2026-09-30 a failed decode fell back to "send the original bytes" — raw
+/// HEIC, which every provider path labels image/jpeg. The model cannot
+/// read that and answers `is_food: false`, so on the owner's iPhone 94 of
+/// 102 photos were silently "not food" (the same test image: JPEG → food,
+/// HEIC → not food).
 ///
 /// The chain, in order ([decodeForUpload]):
-///   1. iOS only: ImageIO over a platform channel
-///      (ios/Runner/ImageIOPlugin.swift) — CPU only;
-///   2. pure Dart in an isolate;
-///   3. the engine codec (dart:ui), which decodes whatever the OS can
-///      (HEIC/HEIF/AVIF on iOS and modern Android), with orientation
-///      applied, at a reduced target size — never in the iOS background
-///      engine, and always under [kPlatformDecodeTimeout].
-/// On Android the engine codec runs FIRST, and pure Dart is the fallback
-/// for what it could not decode.
+///   iOS: 1. ImageIO over a platform channel
+///           (ios/Runner/ImageIOPlugin.swift) — CPU only;
+///        2. pure Dart in an isolate;
+///        3. the engine codec (dart:ui), which decodes whatever the OS can
+///           (HEIC/HEIF/AVIF), with orientation applied, at a reduced
+///           target size — never in the background engine or while the
+///           app is in the background, and always under
+///           [kPlatformDecodeTimeout].
+///   Android: 1. the engine codec, the same way (HEIC/HEIF/AVIF on modern
+///               Android), under the same deadline, in both engines;
+///            2. pure Dart in an isolate, for what it could not decode.
 ///
 /// WHY IMAGEIO FIRST ON iOS (run 7, P1): until then pure Dart ran first
 /// everywhere, so on iOS only HEIC (which it cannot read) reached ImageIO,
@@ -41,11 +46,11 @@
 /// upright (the codec applies the EXIF Orientation), capped, and encoded
 /// from bare pixels, so it carries no EXIF ([decodeViaPlatform]).
 ///
-/// WHY 2 AND THE RULES ON 3 (2026-10-18): the background scan runs in a
-/// headless engine, and on iOS that engine's GPU switch is off for the whole
-/// BGAppRefresh run (FlutterEngine.mm sets it from the application state;
-/// only entering the foreground clears it). dart:ui decodes the pixels on
-/// the CPU but parks the texture upload until the GPU returns, so
+/// WHY iOS's 2 AND THE RULES ON ITS 3 (2026-10-18): the background scan
+/// runs in a headless engine, and on iOS that engine's GPU switch is off for
+/// the whole BGAppRefresh run (FlutterEngine.mm sets it from the application
+/// state; only entering the foreground clears it). dart:ui decodes the
+/// pixels on the CPU but parks the texture upload until the GPU returns, so
 /// `getNextFrame()` neither completed nor threw. The photo was already
 /// reserved, no request ever left the phone, iOS expired the run, and every
 /// run after it reclaimed the same photo and hung again — the background
@@ -70,9 +75,12 @@ const MethodChannel imageIOChannel = MethodChannel(imageIOChannelName);
 
 /// The engine codec's deadline. A healthy decode of a phone photo at the
 /// analysis size takes well under a second; a texture upload parked behind
-/// a disabled GPU never finishes at all. Past this the photo counts as
-/// undecodable for this attempt (null), instead of holding its reservation
-/// until the OS kills the process.
+/// a disabled GPU never finishes at all. Past it the engine step answers
+/// null, instead of the photo holding its reservation until the OS kills
+/// the process. On Android, where that step runs first for every photo,
+/// pure Dart then decodes the photo (the abandoned engine decode may still
+/// be holding its memory while it does); on iOS, where it is the last
+/// resort, the photo counts as undecodable for this attempt.
 const Duration kPlatformDecodeTimeout = Duration(seconds: 8);
 
 /// The smallest long side the engine codec is asked for ([decodeViaPlatform]).
@@ -170,7 +178,7 @@ bool looksLikeJpeg(Uint8List b) =>
 /// visibly instead of asking a model about bytes it cannot read, and a JPEG
 /// whose segments cannot be walked is never sent with its GPS intact).
 ///
-/// Only reached when both decoders failed, so nothing re-encodes the pixels:
+/// Only reached when every decoder failed, so nothing re-encodes the pixels:
 /// the EXIF Orientation goes with the rest of the EXIF and a rotated photo
 /// arrives sideways. Sideways is still readable; its location is not sent.
 Uint8List? unprocessedFallback(Uint8List original, {required int maxBytes}) =>

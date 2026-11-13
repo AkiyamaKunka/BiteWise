@@ -1,5 +1,7 @@
-// The second-chance decode that makes iPhone (HEIC) photos analyzable, and
-// the rule for what may be sent when every decoder fails.
+// The decode chain behind every upload and history thumbnail (ImageIO on
+// iOS or the engine codec on Android first, pure Dart as their fallback),
+// which makes iPhone (HEIC) photos analyzable, and the rule for what may
+// be sent when every decoder fails.
 import 'dart:async';
 
 import 'package:calorie_tracker/services/analyzer/normalize.dart';
