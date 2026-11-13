@@ -510,23 +510,34 @@ class _WeightCard extends StatelessWidget {
               ],
             ],
           )
-        : Row(
-            children: [
-              MergeSemantics(
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.baseline,
-                  textBaseline: TextBaseline.alphabetic,
-                  children: [
-                    number,
-                    const SizedBox(width: AppSpace.s4),
-                    unitText,
-                  ],
+        // The chip at the right edge, on the number's line where both fit;
+        // where they do not (320-pt phones at the largest standard sizes,
+        // 1.5x on a 360-pt Android phone) it wraps under the number — one
+        // Row overflowed there and clipped the chip. Full width, or the
+        // Wrap is only as wide as its line and spaceBetween has no room.
+        : SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: AppSpace.s8,
+              runSpacing: AppSpace.s8,
+              children: [
+                MergeSemantics(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      number,
+                      const SizedBox(width: AppSpace.s4),
+                      unitText,
+                    ],
+                  ),
                 ),
-              ),
-              const Spacer(),
-              ?chip,
-            ],
+                ?chip,
+              ],
+            ),
           );
     final labelScaler =
         MediaQuery.textScalerOf(context).clamp(maxScaleFactor: 2.0);
