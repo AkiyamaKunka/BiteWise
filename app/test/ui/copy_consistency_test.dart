@@ -14,12 +14,14 @@
 ///   iPhone always loses the meals;
 /// - the support page (docs/SUPPORT.md, the store listings' support URL)
 ///   describes the App Store version, and what only 1.7.0 has waits in
-///   docs/RELEASING.md § 12, naming the controls as the app does.
+///   docs/RELEASING.md § 12, naming the controls as the app does and
+///   saying a backup holds what an export does.
 library;
 
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:calorie_tracker/data/db.dart' show kExportTables;
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
@@ -271,6 +273,22 @@ void main() {
         File(path).readAsStringSync().replaceAll(RegExp(r'\s+'), ' ');
     final support = flat('../docs/SUPPORT.md');
     final releasing = flat('../docs/RELEASING.md');
+    const heading = '## 12. When 1.7.0 ships: the support page';
+    // § 12 up to the next level-2 heading (" ## " once flattened).
+    final s12 = () {
+      final at = releasing.indexOf(heading);
+      if (at < 0) return '';
+      final next = releasing.indexOf(' ## ', at + heading.length);
+      return releasing.substring(at, next < 0 ? releasing.length : next);
+    }();
+
+    /// The text of § 12 from [from] up to [to].
+    String part(String from, String to) {
+      final at = s12.indexOf(from);
+      if (at < 0) return '';
+      final end = s12.indexOf(to, at);
+      return s12.substring(at, end < 0 ? s12.length : end);
+    }
 
     test('lists what a 1.6.0 export holds, and what uninstalling leaves',
         () {
@@ -297,9 +315,7 @@ void main() {
 
     test('RELEASING.md § 12 holds the 1.7.0 text, with the app\'s labels',
         () {
-      const heading = '## 12. When 1.7.0 ships: the support page';
       expect(releasing, contains(heading));
-      final s12 = releasing.substring(releasing.indexOf(heading));
       for (final label in [
         en.backupRowICloud,
         en.backupRowDelete,
@@ -316,6 +332,36 @@ void main() {
       expect(s12, contains('Uninstalling does not delete it'));
       expect(s12, contains('iCloud Drive › Chopstats'));
       expect(s12, contains('app/test/ui/copy_consistency_test.dart'));
+    });
+
+    // Review r171, second pass: step 3 said iCloud Backup copies "your
+    // meals, weight, body measurements, workouts and meal pictures", right
+    // under an export (step 2) that also holds activities, the fitness
+    // profile and the processed-photo list. A backup copies every export
+    // table (MealsDaoImpl.backupRecordTables) and the same pictures as an
+    // export (BackupFileWriter.writeFull), as docs/PRIVACY.md says.
+    test('§ 12 says iCloud Backup copies everything an export holds', () {
+      // What the page calls each export table.
+      const names = {
+        'meals': 'meals',
+        'photo_ingestions': 'processed photos',
+        'body_weight': 'weight',
+        'body_measurements': 'body measurements',
+        'workouts': 'workouts',
+        'activities': 'activities',
+        'fitness_profile': 'fitness profile',
+      };
+      expect(names.keys, unorderedEquals(kExportTables),
+          reason: 'a new export table needs its name here and in § 12');
+      final export =
+          part('2. **Export and import**', '3. **A new bullet after Export**');
+      expect(export, isNotEmpty);
+      for (final name in [...names.values, 'their pictures']) {
+        expect(export, contains(name), reason: name);
+      }
+      final backup =
+          part('3. **A new bullet after Export**', '4. **Delete everything**');
+      expect(backup, contains('It copies everything an export holds'));
     });
   });
 }

@@ -1495,10 +1495,10 @@ step 2.
    here are kept, and pictures are added to meals that have none."
 3. **A new bullet after Export**: "**iCloud Backup** (Settings › Your
    Data): on by default, after a notice; nothing is uploaded before you
-   answer it. It copies your meals, weight, body measurements, workouts and
-   meal pictures to a *Chopstats* folder in your own iCloud Drive, and
-   after a reinstall, or on a new iPhone with the same Apple Account,
-   Chopstats offers to restore them. API keys are never included, and the
+   answer it. It copies everything an export holds, the meal pictures
+   included, to a *Chopstats* folder in your own iCloud Drive, and after
+   a reinstall, or on a new iPhone with the same Apple Account, Chopstats
+   offers to restore the backup. API keys are never included, and the
    developer receives nothing. Turning the **iCloud Backup** switch off
    asks whether to **Keep the Backup in iCloud** or **Delete It…**."
 4. **Delete everything** gains, after the backups sentence: "The copy
