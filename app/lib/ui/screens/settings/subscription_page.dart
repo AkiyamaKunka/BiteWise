@@ -75,13 +75,14 @@ class _SubscriptionProviderPageState
   }
 
   /// Saves what the address field holds as the server's address — only
-  /// when the edit is committed: Done, a tap outside, focus moving to
-  /// another field (Flutter does not count a tap into the upload key under
-  /// it as outside) or leaving the page. Never per keystroke: the analyzer,
-  /// the Garmin fetch and the lookups read the saved address at each
-  /// request, so an automatic photo and the upload key went to whatever
-  /// host a half-typed address named (http://10.0.0.5 on the way to .55,
-  /// review 171).
+  /// when the edit is over: Done, focus leaving the field (for the upload
+  /// key under it, or a sheet or dialog on top), leaving the page, or an
+  /// action about to use the address ([_saveServerUrlEdit]). Never per
+  /// keystroke, nor when a pointer goes down outside while the field keeps
+  /// its focus (a scroll, a tap beside it): the analyzer, the Garmin fetch
+  /// and the lookups read the saved address at each request, so an
+  /// automatic photo and the upload key went to whatever host a half-typed
+  /// address named (http://10.0.0.5 on the way to .55, review 171).
   void _saveServerUrl() {
     _serverUrlEdited = false;
     widget.settings.update(serverBaseUrl: _serverUrlController.text.trim());
@@ -341,10 +342,15 @@ class _SubscriptionProviderPageState
                   labelText: context.l10n.serverAddressLabel,
                   hintText: 'http://your.server.ip',
                 ),
-                // Saved when committed ([_saveServerUrl]), not as typed.
+                // Saved when the edit is over ([_saveServerUrl]), not as
+                // typed.
                 onChanged: (_) => _serverUrlEdited = true,
                 onSubmitted: (_) => _saveServerUrl(),
-                onTapOutside: (_) => _saveServerUrl(),
+                // A pointer going down outside leaves the edit going, as
+                // before (the field keeps its focus, the keyboard stays
+                // up), and saves nothing: a scroll or a tap beside the
+                // field is not the end of the edit (review 171).
+                onTapOutside: (_) {},
               )),
               _cellField(TextField(
                 key: const Key('serverUploadKeyField'),

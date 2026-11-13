@@ -10,8 +10,11 @@
 // analyzer, the Garmin fetch and the lookups all read the saved address at
 // each request: an automatic photo sent while the user retyped the address
 // went, with the upload key, to whatever host the half-typed text named
-// (review 171, C10). The address is saved now when the edit is committed —
-// Done, a tap outside, focus moving to another field, or leaving the page.
+// (review 171, C10). The address is saved now when the edit is over — Done,
+// focus moving to another field (or a sheet or dialog), leaving the page,
+// or an action about to use it (Connect Claude, a plan pick) — and never
+// when a pointer goes down outside while the field keeps its focus (a
+// scroll, a tap beside it), nor as typed.
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -77,91 +80,110 @@ void main() {
   // with a semantics tap: no pointer, so no tap outside, and the address
   // field keeps its focus. Connect Claude then read the saved address, not
   // the one the field showed: it asked for an address the field held (the
-  // U3 bug run 7 fixed) or went to the old server (review 171).
-  for (final (saved, typed) in const [
-    ('', 'http://10.0.0.7'),
-    ('http://10.0.0.7', 'http://10.0.0.55'),
-  ]) {
-    testWidgets('a screen reader\'s Connect Claude right after "$typed" is '
-        'typed (saved: "$saved") uses the typed address', (tester) async {
+  // U3 bug run 7 fixed) or went to the old server (review 171). A finger's
+  // tap must keep working too, now that a pointer going down outside the
+  // field saves nothing.
+  for (final reader in const [false, true]) {
+    final by = reader ? 'a screen reader' : 'a tap';
+    Future<void> activate(
+        WidgetTester tester, String key, Pattern label) async {
+      if (reader) {
+        tester.semantics.tap(find.semantics.byLabel(label));
+      } else {
+        await tester.tap(find.byKey(Key(key)));
+      }
+    }
+
+    for (final (saved, typed) in const [
+      ('', 'http://10.0.0.7'),
+      ('http://10.0.0.7', 'http://10.0.0.55'),
+    ]) {
+      testWidgets('Connect Claude by $by right after "$typed" is typed '
+          '(saved: "$saved") uses the typed address', (tester) async {
+        tester.view.physicalSize = const Size(800, 2000);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+        final semantics = tester.ensureSemantics();
+        final settings = FakeSettings(keys: {'server': 'up'})
+          ..provider = 'server'
+          ..serverBaseUrl = saved;
+        final asked = <String>[]; // the saved address at each start
+        await tester.pumpWidget(MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: SubscriptionProviderPage(
+            settings: settings,
+            startClaudeAuth: () async {
+              asked.add(settings.serverBaseUrl);
+              return (url: null, error: 'stop here');
+            },
+            completeClaudeAuth: (_) async => null,
+          ),
+        ));
+        await tester.pumpAndSettle();
+
+        final address = find.byKey(const Key('serverUrlField'));
+        await tester.tap(address);
+        await tester.enterText(address, typed);
+        await tester.pump();
+        expect(settings.serverBaseUrl, saved, reason: 'not committed yet');
+        await activate(
+            tester, 'connectClaudeButton', RegExp('^Connect Claude'));
+        await tester.pumpAndSettle();
+        expect(asked, [typed]);
+        expect(
+            find.text(
+                'Enter your server address and upload key above first.'),
+            findsNothing);
+        semantics.dispose();
+      });
+    }
+
+    // The same for a plan picked while Watch Camera Roll is on: its
+    // question names the host the photos would go to, and it named the
+    // saved one while the field showed the new one (saved a moment later,
+    // when the dialog took the focus).
+    testWidgets('a plan picked by $by right after typing names the typed '
+        'host in its question', (tester) async {
       tester.view.physicalSize = const Size(800, 2000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
       final semantics = tester.ensureSemantics();
-      final settings = FakeSettings(keys: {'server': 'up'})
-        ..provider = 'server'
-        ..serverBaseUrl = saved;
-      final asked = <String>[]; // the saved address at each start
+      final settings =
+          FakeSettings(keys: {'server': 'up'}, watcherEnabled: true)
+            ..provider = 'server'
+            ..serverBaseUrl = 'http://10.0.0.7'
+            ..aiConsent = {'server:claude'};
       await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
         supportedLocales: AppLocalizations.supportedLocales,
-        home: SubscriptionProviderPage(
-          settings: settings,
-          startClaudeAuth: () async {
-            asked.add(settings.serverBaseUrl);
-            return (url: null, error: 'stop here');
-          },
-          completeClaudeAuth: (_) async => null,
-        ),
+        home: SubscriptionProviderPage(settings: settings),
       ));
       await tester.pumpAndSettle();
 
       final address = find.byKey(const Key('serverUrlField'));
       await tester.tap(address);
-      await tester.enterText(address, typed);
+      await tester.enterText(address, 'http://10.0.0.55');
       await tester.pump();
-      expect(settings.serverBaseUrl, saved, reason: 'not committed yet');
-      tester.semantics.tap(find.semantics.byLabel(RegExp('^Connect Claude')));
+      await activate(tester, 'planChoice-glm', RegExp('^GLM'));
       await tester.pumpAndSettle();
-      expect(asked, [typed]);
+      final dialog = find.byKey(const Key('aiConsentDialog'));
+      expect(dialog, findsOneWidget);
       expect(
-          find.text('Enter your server address and upload key above first.'),
+          find.descendant(
+              of: dialog, matching: find.textContaining('10.0.0.55')),
+          findsOneWidget);
+      expect(
+          find.descendant(
+              of: dialog, matching: find.textContaining('10.0.0.7')),
           findsNothing);
+      await tester.tap(find.byKey(const Key('aiConsentNotNow')));
+      await tester.pumpAndSettle();
+      expect(settings.serverBackend, 'claude');
+      expect(settings.serverBaseUrl, 'http://10.0.0.55');
       semantics.dispose();
     });
   }
-
-  // The same for a plan picked while Watch Camera Roll is on: its question
-  // names the host the photos would go to, and it named the saved one while
-  // the field showed the new one (saved a moment later, when the dialog
-  // took the focus).
-  testWidgets('a plan a screen reader picks right after typing names the '
-      'typed host in its question', (tester) async {
-    tester.view.physicalSize = const Size(800, 2000);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(tester.view.reset);
-    final semantics = tester.ensureSemantics();
-    final settings = FakeSettings(keys: {'server': 'up'}, watcherEnabled: true)
-      ..provider = 'server'
-      ..serverBaseUrl = 'http://10.0.0.7'
-      ..aiConsent = {'server:claude'};
-    await tester.pumpWidget(MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      home: SubscriptionProviderPage(settings: settings),
-    ));
-    await tester.pumpAndSettle();
-
-    final address = find.byKey(const Key('serverUrlField'));
-    await tester.tap(address);
-    await tester.enterText(address, 'http://10.0.0.55');
-    await tester.pump();
-    tester.semantics.tap(find.semantics.byLabel(RegExp('^GLM')));
-    await tester.pumpAndSettle();
-    final dialog = find.byKey(const Key('aiConsentDialog'));
-    expect(dialog, findsOneWidget);
-    expect(
-        find.descendant(of: dialog, matching: find.textContaining('10.0.0.55')),
-        findsOneWidget);
-    expect(
-        find.descendant(of: dialog, matching: find.textContaining('10.0.0.7')),
-        findsNothing);
-    await tester.tap(find.byKey(const Key('aiConsentNotNow')));
-    await tester.pumpAndSettle();
-    expect(settings.serverBackend, 'claude');
-    expect(settings.serverBaseUrl, 'http://10.0.0.55');
-    semantics.dispose();
-  });
 
   testWidgets('a space around the address is trimmed when it is saved',
       (tester) async {
@@ -211,6 +233,43 @@ void main() {
     expect(settings.serverBaseUrl, 'http://10.0.0.55');
     expect(settings.updateCalls, before + 1,
         reason: 'Done saves once, and losing focus with it saves nothing more');
+  });
+
+  // A pointer going down outside the field is not the end of the edit: on
+  // a phone the field keeps its focus and the keyboard stays up. A scroll
+  // of the page or a tap just beside the field, mid-edit, saved the
+  // half-typed address while the user went on typing (review 171).
+  testWidgets('a scroll or a tap beside the field mid-edit saves nothing; '
+      'the edit goes on', (tester) async {
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final settings = FakeSettings(keys: {'server': 'up'})
+      ..provider = 'server'
+      ..serverBaseUrl = 'http://10.0.0.7';
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      home: SubscriptionProviderPage(settings: settings),
+    ));
+    await tester.pumpAndSettle();
+    final field = find.byKey(const Key('serverUrlField'));
+    final before = settings.updateCalls;
+    await tester.tap(field);
+    await tester.enterText(field, 'http://10.0.0.5');
+    await tester.pump();
+
+    await scrollAndMissField(tester, field);
+    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.updateCalls, before);
+    expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue,
+        reason: 'still editing, the keyboard up');
+
+    await tester.enterText(field, 'http://10.0.0.55');
+    await tester.testTextInput.receiveAction(TextInputAction.done);
+    await tester.pumpAndSettle();
+    expect(settings.serverBaseUrl, 'http://10.0.0.55');
+    expect(settings.updateCalls, before + 1);
   });
 
   testWidgets('leaving the page saves an edit not committed yet; a visit '
@@ -322,6 +381,17 @@ void main() {
     expect(uploads, List.filled(3, '10.0.0.7 <- upload-key'));
     expect(app.serverBaseUrl, 'http://10.0.0.7');
 
+    // Nor after a scroll or a tap beside the field while it is retyped.
+    await tester.enterText(field, 'http://10.0.0.5');
+    await tester.pump();
+    await scrollAndMissField(tester, field);
+    await tester.runAsync(() async {}); // a save, had one started, finishes
+    await automaticPhoto();
+    expect(uploads, List.filled(4, '10.0.0.7 <- upload-key'));
+    expect(app.serverBaseUrl, 'http://10.0.0.7');
+
+    await tester.enterText(field, 'http://10.0.0.55');
+    await tester.pump();
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     await tester.runAsync(() async {}); // the store's save finishes
@@ -329,4 +399,17 @@ void main() {
     await automaticPhoto();
     expect(uploads.last, '10.0.0.55 <- upload-key');
   });
+}
+
+/// Two pointers going down outside the focused address [field], neither of
+/// them a commit: a scroll that starts on the plan list's footer, then a
+/// tap that just misses the field (in its cell, above it).
+Future<void> scrollAndMissField(WidgetTester tester, Finder field) async {
+  final l = lookupAppLocalizations(const Locale('en'));
+  await tester.dragFrom(
+      tester.getCenter(find.text(l.planFooter)), const Offset(0, -40));
+  await tester.pumpAndSettle();
+  final rect = tester.getRect(field);
+  await tester.tapAt(Offset(rect.left + 8, rect.top - 6));
+  await tester.pumpAndSettle();
 }
