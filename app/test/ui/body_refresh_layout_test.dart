@@ -7,6 +7,7 @@
 // hid the typed weight behind its unit.
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
+import 'package:calorie_tracker/ui/theme/tokens.dart' show AppSpace;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_test/flutter_test.dart';
@@ -42,6 +43,17 @@ void main() {
 
   setUpAll(loadIphoneFonts);
 
+  /// The cell of the card keyed [card] as drawn: the keyed GroupedCard's
+  /// own box also holds its outer margin (16 pt a side), so a check
+  /// against that box is looser than it reads.
+  Rect cellOf(WidgetTester tester, String card) => tester.getRect(find
+      .descendant(of: find.byKey(Key(card)), matching: find.byType(Material))
+      .first);
+
+  /// The cell of the card keyed [card] inside its 16-pt padding.
+  Rect insideOf(WidgetTester tester, String card) =>
+      cellOf(tester, card).deflate(AppSpace.cardPadding);
+
   /// Every paragraph under [of] reads in full (no ellipsis, no mid-word
   /// wrap).
   void expectUncut(WidgetTester tester, Finder of, String why) {
@@ -71,7 +83,7 @@ void main() {
             );
             expect(tester.takeException(), isNull,
                 reason: 'no RenderFlex overflow (stress shot 40: 185 px)');
-            final card = tester.getRect(find.byKey(const Key('bodyWeightCard')));
+            final inside = insideOf(tester, 'bodyWeightCard');
             for (final key in const [
               'bodyWeightHeadline',
               'bodyWeightUnit',
@@ -79,9 +91,9 @@ void main() {
               'bodyWeightDate',
             ]) {
               final r = tester.getRect(find.byKey(Key(key)));
-              expect(r.right, lessThanOrEqualTo(card.right - 15.5),
+              expect(r.right, lessThanOrEqualTo(inside.right + 0.5),
                   reason: '$key stays inside the card padding');
-              expect(r.left, greaterThanOrEqualTo(card.left + 15.5));
+              expect(r.left, greaterThanOrEqualTo(inside.left - 0.5));
             }
             expectUncut(tester, find.byKey(const Key('bodyWeightCard')),
                 'weight card');
@@ -105,12 +117,12 @@ void main() {
                 tester.getSize(find.byKey(const Key('weightTrendChart'))).height,
                 greaterThan(104));
 
-            final measurements =
-                tester.getRect(find.byKey(const Key('bodyMeasurementsCard')));
+            final measurements = insideOf(tester, 'bodyMeasurementsCard');
             for (final k in const ['bodyWaist', 'bodyChest', 'bodyHip']) {
               final row = find.byKey(Key('${k}Row'));
               expect(tester.getRect(row).right,
-                  lessThanOrEqualTo(measurements.right));
+                  lessThanOrEqualTo(measurements.right + 0.5),
+                  reason: '$k stays inside the card padding');
               expectUncut(tester, row, k);
             }
           }, skip: !haveIphoneFonts);
@@ -123,14 +135,6 @@ void main() {
     // largest standard size (xxxL, 23/17) and by 41 px at 1.5x, clipping
     // the chip; a 360-pt Android phone by 1.4 px at 1.5x.
     group('at the standard sizes on narrow phones', () {
-      /// The weight card's cell as drawn (the keyed GroupedCard's box also
-      /// holds its outer margin).
-      Rect cellRect(WidgetTester tester) => tester.getRect(find
-          .descendant(
-              of: find.byKey(const Key('bodyWeightCard')),
-              matching: find.byType(Material))
-          .first);
-
       for (final width in const [320.0, 360.0]) {
         for (final (lang, imperial) in const [
           ('en', false),
@@ -154,16 +158,16 @@ void main() {
               );
               expect(tester.takeException(), isNull,
                   reason: 'no RenderFlex overflow');
-              final card = cellRect(tester);
+              final inside = insideOf(tester, 'bodyWeightCard');
               for (final key in const [
                 'bodyWeightHeadline',
                 'bodyWeightUnit',
                 'bodyWeightDelta',
               ]) {
                 final r = tester.getRect(find.byKey(Key(key)));
-                expect(r.right, lessThanOrEqualTo(card.right - 15.5),
+                expect(r.right, lessThanOrEqualTo(inside.right + 0.5),
                     reason: '$key stays inside the card padding');
-                expect(r.left, greaterThanOrEqualTo(card.left + 15.5));
+                expect(r.left, greaterThanOrEqualTo(inside.left - 0.5));
               }
               expectUncut(tester, find.byKey(const Key('bodyWeightCard')),
                   'weight card');
@@ -180,11 +184,11 @@ void main() {
               dao: seeded(latest: 102.4, before: 101.4), clock: () => clock),
           size: const Size(390, 3000),
         );
-        final card = cellRect(tester);
+        final inside = insideOf(tester, 'bodyWeightCard');
         final number =
             tester.getRect(find.byKey(const Key('bodyWeightHeadline')));
         final chip = tester.getRect(find.byKey(const Key('bodyWeightDelta')));
-        expect(chip.right, moreOrLessEquals(card.right - 16, epsilon: 0.5));
+        expect(chip.right, moreOrLessEquals(inside.right, epsilon: 0.5));
         expect(chip.top, lessThan(number.bottom),
             reason: 'beside the number, not under it');
         expect(chip.bottom, greaterThan(number.top));
