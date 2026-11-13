@@ -1,7 +1,12 @@
 // The size and date labels of Settings › Your Data (1.7.0): one size
 // formula for the iCloud Backup status line and the clipboard import, and a
 // backup's date as the LOCAL calendar day of its exported_at.
-import 'package:calorie_tracker/core/coerce.dart' show isoDate;
+//
+// A zone at UTC cannot tell a local day from a UTC day, so under TZ=UTC
+// (CI, and how the UI tests run here) the 'off UTC' group is skipped and
+// says so in the output. Run this file in a zone on each side of UTC too:
+//   TZ=America/Chicago flutter test test/ui/backup_labels_test.dart
+//   TZ=Asia/Shanghai flutter test test/ui/backup_labels_test.dart
 import 'package:calorie_tracker/services/backup/backup_format.dart';
 import 'package:calorie_tracker/ui/app_formats.dart';
 import 'package:calorie_tracker/ui/backup_sheets.dart';
@@ -20,6 +25,39 @@ BackupHeader _header({String? exportedAt, String? lastDate}) => BackupHeader(
     exportedAt: exportedAt,
     lastDate: lastDate);
 
+Future<BuildContext> _pumpContext(WidgetTester tester) async {
+  late BuildContext ctx;
+  await tester.pumpWidget(MaterialApp(home: Builder(builder: (c) {
+    ctx = c;
+    return const SizedBox();
+  })));
+  return ctx;
+}
+
+/// An exported_at as backups write it (in UTC) whose LOCAL day in the zone
+/// the tests run in is not its UTC day, with both days spelled out: 00:30Z
+/// is still the day before west of UTC, 23:30Z already the day after east
+/// of it. Null in a zone at UTC, where the two days are always one.
+({String stamp, String localDay, String utcDay})? _stampOffItsUtcDay() {
+  final west = DateTime.utc(2026, 3, 6, 0, 30);
+  if (west.toLocal().day != west.day) {
+    return (
+      stamp: west.toIso8601String(),
+      localDay: '2026-03-05',
+      utcDay: '2026-03-06'
+    );
+  }
+  final east = DateTime.utc(2026, 3, 5, 23, 30);
+  if (east.toLocal().day != east.day) {
+    return (
+      stamp: east.toIso8601String(),
+      localDay: '2026-03-06',
+      utcDay: '2026-03-05'
+    );
+  }
+  return null;
+}
+
 void main() {
   test('backupSizeLabel: whole KB rounded up under 1 MB, then MB to one '
       'decimal', () {
@@ -32,20 +70,16 @@ void main() {
     expect(backupSizeLabel(3 * 1024 * 1024 ~/ 2), '1.5 MB');
   });
 
-  testWidgets('backupDateLabel: the local day of exported_at, as shortDate '
-      'shows it; else the raw last day', (tester) async {
-    late BuildContext ctx;
-    await tester.pumpWidget(MaterialApp(home: Builder(builder: (c) {
-      ctx = c;
-      return const SizedBox();
-    })));
+  testWidgets('backupDateLabel: the day of exported_at, as shortDate shows '
+      'it; else the raw last day', (tester) async {
+    final ctx = await _pumpContext(tester);
     // A one-digit month and day (unpadded, shortDate hands the raw string
-    // back), and an offset that puts the instant on the next UTC day.
-    final stamp = '${DateTime.now().year}-03-05T23:30:00.000-05:00';
-    final want = AppFormats.shortDate(
-        ctx, isoDate(DateTime.parse(stamp).toLocal()));
-    expect(want, isNot(contains('-')), reason: 'a real day, not raw text');
-    expect(backupDateLabel(ctx, _header(exportedAt: stamp)), want);
+    // back). No offset: a local time, so the same day in every zone.
+    final march5 = AppFormats.shortDate(ctx, '2026-03-05');
+    expect(march5, isNot(contains('-')), reason: 'a real day, not raw text');
+    expect(
+        backupDateLabel(ctx, _header(exportedAt: '2026-03-05T12:00:00.000')),
+        march5);
     expect(backupDateLabel(ctx, _header(lastDate: '2026-10-30')),
         '2026-10-30');
     expect(
@@ -54,6 +88,22 @@ void main() {
         '2026-10-30');
     expect(backupDateLabel(ctx, _header()), '');
   });
+
+  final offUtc = _stampOffItsUtcDay();
+  group('off UTC', () {
+    testWidgets('backupDateLabel: a UTC exported_at shows its LOCAL day',
+        (tester) async {
+      final ctx = await _pumpContext(tester);
+      final label = backupDateLabel(ctx, _header(exportedAt: offUtc!.stamp));
+      expect(label, AppFormats.shortDate(ctx, offUtc.localDay));
+      expect(label, isNot(AppFormats.shortDate(ctx, offUtc.utcDay)),
+          reason: 'not the day the stamp has in UTC');
+    });
+  },
+      skip: offUtc == null
+          ? 'a zone at UTC cannot tell a local day from a UTC day; run '
+              'this file with TZ=America/Chicago and TZ=Asia/Shanghai'
+          : false);
 
   testWidgets('the clipboard import counts UTF-8 bytes, not characters',
       (tester) async {
