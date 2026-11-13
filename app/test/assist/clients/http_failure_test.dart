@@ -314,12 +314,19 @@ KeyProbeResult _expectedProbe(LookupFailureCode code, bool transient) =>
       _ => KeyProbeResult.rejected,
     };
 
+/// A row's test name: its status and its whole body. A body cut short gave
+/// three 400 rows one name, and an empty body left a name that starts its
+/// neighbours' names, so neither a failure nor `--plain-name` could single
+/// out the row.
+String _rowName(int status, String body) =>
+    '$status ${body.isEmpty ? '(empty body)' : body}';
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('classifyHttpFailure', () {
     for (final (status, body, code, transient) in matrix) {
-      test('$status ${body.length > 40 ? body.substring(0, 40) : body}', () {
+      test(_rowName(status, body), () {
         final f = classifyHttpFailure(status, body, providerLabel: 'Anthropic');
         expect(f.code, code);
         expect(f.transient, transient);
@@ -393,8 +400,7 @@ void main() {
     }
 
     for (final (status, body, lookup, plain, hinted) in _ladderRows) {
-      test('$status ${body.length > 50 ? body.substring(0, 50) : body}',
-          () async {
+      test(_rowName(status, body), () async {
         final f = classifyHttpFailure(status, body, providerLabel: 'Vendor');
         expect((code: f.code, transient: f.transient, message: f.message),
             lookup,
@@ -424,6 +430,24 @@ void main() {
         }
       });
     }
+  });
+
+  // A failing row's test name must say which row broke, and `--plain-name`
+  // with that name must run that row alone.
+  test("each row's test name picks out that row alone", () {
+    final clashes = [
+      for (final names in [
+        [for (final (status, body, _, _) in matrix) _rowName(status, body)],
+        [
+          for (final (status, body, _, _, _) in _ladderRows)
+            _rowName(status, body)
+        ],
+      ])
+        for (final name in names)
+          if (names.where((other) => other.contains(name)).length > 1) name,
+    ];
+    expect(clashes, isEmpty,
+        reason: "each is another row's name too, or inside another's");
   });
 
   group('parity with the photo analyzers (probeKey)', () {
