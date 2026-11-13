@@ -246,6 +246,31 @@ void main() {
       expect(create.indexOf('super.onCreate('), greaterThan(copy));
       expect(kotlin, contains('super.onNewIntent(withSafeShares(intent))'));
     });
+
+    // Review 171, C6: a share from the sharesheet while the app runs must
+    // reach that running engine (onNewIntent, then the plugin's live stream
+    // this intake listens to) rather than start a second MainActivity with
+    // its own engine and services. Checked on the API 35 emulator: singleTop
+    // left two MainActivity tasks after a Files › Share › Chopstats.
+    test('MainActivity is singleTask and still takes image shares', () {
+      final manifest =
+          File('android/app/src/main/AndroidManifest.xml').readAsStringSync();
+      final activity =
+          RegExp(r'<activity\b[^>]*android:name="\.MainActivity"[^>]*>')
+              .firstMatch(manifest)
+              ?.group(0);
+      expect(activity, isNotNull);
+      expect(activity, contains('android:launchMode="singleTask"'));
+      for (final action in ['SEND', 'SEND_MULTIPLE']) {
+        expect(
+            RegExp('<action android:name="android.intent.action.$action"/>'
+                    r'\s*<category android:name="android.intent.category.'
+                    r'DEFAULT"/>\s*<data android:mimeType="image/\*"/>')
+                .hasMatch(manifest),
+            isTrue,
+            reason: action);
+      }
+    });
   });
 
   group('§6.1 extension filter', () {
