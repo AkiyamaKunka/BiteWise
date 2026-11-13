@@ -9,7 +9,7 @@
 ///   still waiting, and the Chinese quotes the control as 「不是餐厅的」.
 /// - `assistFoundSaved` never says "Used": on Claude Plan a saved answer is
 ///   only a suggestion.
-/// - Both files have the same 888 keys, and the generated classes say what
+/// - Both files have the same 890 keys, and the generated classes say what
 ///   the ARB files say (gen-l10n was run).
 /// - Keys added or changed after review (fix list U3, U5, C5) follow the
 ///   same rules; the iOS Off box names the saved answers it also clears.
@@ -158,8 +158,9 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// Body tab's failure lines (bodyLoadFailed, bodySaveFailed,
 /// bodyDeleteFailed) and the coverage window slider's screen-reader name
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
-/// text as bodyEmptyHint).
-const _keyCount = 888;
+/// text as bodyEmptyHint), then the Leftovers screen's failure lines
+/// (leftoverLoadFailed, leftoverSaveFailed).
+const _keyCount = 890;
 
 Directory _appRoot() {
   var dir = Directory.current;

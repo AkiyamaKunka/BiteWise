@@ -2,23 +2,107 @@
 // pick the photo, confirm — and the exact incident that motivated the
 // feature (the watcher already logged the leftover photo as a new meal)
 // must repair itself in the same confirmation.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
+import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
+import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
+import 'package:calorie_tracker/ui/services.dart'
+    show RecentAsset, UiServices;
 import 'package:calorie_tracker/ui/theme/app_theme.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show SemanticsAction;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes.dart';
 
 final _photoBytes = Uint8List.fromList([9, 9, 9, 9]);
 final _photoMd5 = originalBytesMd5(_photoBytes);
+
+/// Gemini's answer once the free tier's daily requests are used up.
+const _dailyQuotaBody =
+    '{"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "message": '
+    '"Quota exceeded for quota metric generate_content_free_tier_requests '
+    'limit GenerateRequestsPerDayPerProjectPerModel-FreeTier"}}';
+
+class _MemoryKeys implements SecureKeyStore {
+  final Map<String, String> data = {};
+  @override
+  Future<String?> read(String key) async => data[key];
+  @override
+  Future<void> write(String key, String value) async => data[key] = value;
+  @override
+  Future<void> delete(String key) async => data.remove(key);
+}
+
+/// The screen's settings, with the quota pause read from [store]: the
+/// AppSettings the analyzer arms it on, as the app's own adapter does.
+class _PauseFromStore extends FakeSettings {
+  _PauseFromStore(this.store);
+  final AppSettings store;
+
+  @override
+  bool get isQuotaPaused => store.isQuotaPaused;
+}
+
+/// A photo the library cannot hand over (too large, or removed meanwhile).
+class _UnreadablePicker extends FakePicker {
+  @override
+  Future<IntakePhoto?> loadOriginal(RecentAsset asset) async {
+    loadedOriginals.add(asset.id);
+    return null;
+  }
+}
+
+/// A database whose reads or writes throw (a row an old import stored
+/// untyped makes every read of its range throw; disk errors do the same).
+class _FailingDao extends FakeDao {
+  /// How many meal reads throw before reads work again.
+  int failReads = 0;
+  int reads = 0;
+  bool failDelete = false;
+
+  @override
+  Future<List<Meal>> mealsBetween(String startDate, String endDate) async {
+    reads++;
+    if (failReads > 0) {
+      failReads--;
+      throw StateError('database is locked');
+    }
+    return super.mealsBetween(startDate, endDate);
+  }
+
+  @override
+  Future<void> deleteMeal(int mealId) async {
+    if (failDelete) throw StateError('disk I/O error');
+    return super.deleteMeal(mealId);
+  }
+}
+
+/// The model call held open until [gate] completes: the estimate in
+/// flight, the analyzing overlay up.
+class _HeldAnalyzer extends FakeAnalyzer {
+  final gate = Completer<Map<String, dynamic>?>();
+  int calls = 0;
+
+  @override
+  Future<Map<String, dynamic>?> leftoverIntent(
+      Uint8List originalBytes, String originalCompact) {
+    calls++;
+    lastLeftoverCompact = originalCompact;
+    return gate.future;
+  }
+}
 
 String _today() {
   final n = DateTime.now();
@@ -70,14 +154,14 @@ void main() {
       ..photos = [IntakePhoto(_photoBytes, 'lp1', 'IMG_L.jpg')];
   });
 
-  Future<void> pump(WidgetTester tester) async {
+  Future<void> pump(WidgetTester tester, {UiServices? services}) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
     await tester.pumpWidget(MaterialApp(
         home: LeftoverScreen(
-            services: makeServices(
-                dao: dao, analyzer: analyzer, picker: picker))));
+            services: services ??
+                makeServices(dao: dao, analyzer: analyzer, picker: picker))));
     await tester.pumpAndSettle();
   }
 
@@ -588,6 +672,205 @@ void main() {
       await tapPhoto(tester, FakeSettings());
       expect(picker.loadedOriginals, ['lp1']);
       expect(find.byKey(const Key('leftoverResultLine')), findsOneWidget);
+    });
+  });
+
+  // Every failure said "Couldn't estimate the leftovers from that photo.",
+  // and the user went on trying other photos (review 171, C23). The
+  // analyzer hands back no reason, but two causes the screen can see.
+  group('a failed estimate names the cause the screen can see', () {
+    testWidgets("Gemini's daily quota, hit by this very call: the pause on "
+        'the first tap', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final store = await AppSettings.load(
+          prefs: await SharedPreferences.getInstance(),
+          keyStore: _MemoryKeys());
+      await store.setGeminiApiKey('test-key');
+      var calls = 0;
+      final gemini = GeminiAnalyzer(store,
+          client: MockClient((_) async {
+            calls++;
+            return http.Response(_dailyQuotaBody, 429);
+          }),
+          sleep: (_) async {},
+          normalizer: (b) async => b);
+      dao.put(_meal(1, '13:34', 965));
+      await pump(tester,
+          services: UiServices(
+              dao: dao,
+              analyzer: gemini,
+              executor: FakeExecutor(),
+              settings: _PauseFromStore(store),
+              picker: picker,
+              requestPhotoPermission: () async => true));
+      await runToConfirm(tester);
+
+      final en = AppLocalizationsEn();
+      expect(calls, 1);
+      expect(store.isQuotaPaused, isTrue, reason: 'the call armed the pause');
+      expect(find.text(en.leftoverQuotaPaused), findsOneWidget);
+      expect(find.text(en.leftoverFailed), findsNothing);
+      expect(dao.updates, isEmpty);
+    });
+
+    testWidgets('a photo that cannot be read says so, as the add flow does',
+        (tester) async {
+      picker = _UnreadablePicker()
+        ..photos = [IntakePhoto(_photoBytes, 'lp1', 'IMG_L.jpg')];
+      dao.put(_meal(1, '13:34', 965));
+      await pump(tester);
+      await runToConfirm(tester);
+
+      final en = AppLocalizationsEn();
+      expect(picker.loadedOriginals, ['lp1']);
+      expect(find.text(en.addPhotoUnreadable), findsOneWidget);
+      expect(find.text(en.leftoverFailed), findsNothing);
+      expect(analyzer.lastLeftoverCompact, isNull, reason: 'nothing was sent');
+      expect(dao.updates, isEmpty);
+    });
+  });
+
+  // A read or a write that threw left the screen with no way on: a failed
+  // read of the meals was a spinner for good, and a write that failed
+  // after the estimate said nothing, its error uncaught (review 171, C26).
+  group('a failing database', () {
+    testWidgets('a failed meals read shows the error and Retry, and Retry '
+        'loads them', (tester) async {
+      final failing = _FailingDao()..failReads = 1;
+      failing.put(_meal(1, '13:34', 965));
+      dao = failing;
+      await pump(tester);
+
+      final en = AppLocalizationsEn();
+      expect(find.text(en.leftoverLoadFailed), findsOneWidget);
+      expect(find.byType(CircularProgressIndicator), findsNothing);
+      expect(find.byKey(const Key('leftoverMeal-1')), findsNothing);
+      await tester.tap(find.byKey(const Key('leftoverRetry')));
+      await tester.pumpAndSettle();
+      expect(failing.reads, 2);
+      expect(find.text(en.leftoverLoadFailed), findsNothing);
+      expect(find.byKey(const Key('leftoverMeal-1')), findsOneWidget);
+    });
+
+    testWidgets('a write that fails after the deduction says so, and picking '
+        'the photo again finishes it without deducting twice',
+        (tester) async {
+      final failing = _FailingDao()..failDelete = true;
+      failing.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      failing.put(_meal(2, '13:44', 690,
+          hash: _photoMd5, desc: 'Chinese cafeteria meal (mostly eaten)'));
+      failing.ledger[_photoMd5] = IngestionStatus.saved;
+      dao = failing;
+      await pump(tester);
+      await runToConfirm(tester);
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+
+      final en = AppLocalizationsEn();
+      expect(find.text(en.leftoverSaveFailed), findsOneWidget);
+      expect(find.text(en.leftoverApplied), findsNothing);
+      expect(failing.byId(1).analysis['total_calories'], 665,
+          reason: 'the deduction itself had landed');
+      expect(failing.meals.where((m) => m.id == 2), hasLength(1),
+          reason: 'the duplicate could not be removed');
+      expect(find.byKey(const Key('leftoverPhoto-lp1')), findsOneWidget,
+          reason: 'the screen stays for another try');
+
+      failing.failDelete = false;
+      await tester.tap(find.byKey(const Key('leftoverPhoto-lp1')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverDupLine')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('leftoverConfirm')));
+      await tester.pumpAndSettle();
+      expect(failing.byId(1).analysis['total_calories'], 665);
+      expect(failing.meals.where((m) => m.id == 2), isEmpty);
+    });
+  });
+
+  // The analyzing overlay was a plain Text over the photo step: silent to
+  // a screen reader, and its scrim stopped a finger but not VoiceOver.
+  // 'Change' under it let go of the meal's hold mid-estimate and brought
+  // back the meal picker; a meal picked there showed as chosen while the
+  // confirm deducted the first one (review 171, C30).
+  group('while a photo is analyzed', () {
+    late MealInUseRegistry registry;
+    late _HeldAnalyzer held;
+
+    /// Meal 2 picked, its leftover photo tapped, the model call in flight.
+    Future<void> startEstimate(WidgetTester tester) async {
+      registry = MealInUseRegistry();
+      held = _HeldAnalyzer();
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      dao.put(_meal(2, '12:30', 965, hash: 'h2', desc: 'Beef noodles'));
+      await pump(tester,
+          services: makeServices(
+              dao: dao, analyzer: held, picker: picker, mealInUse: registry));
+      await tester.tap(find.byKey(const Key('leftoverMeal-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('leftoverPhoto-lp1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(held.calls, 1, reason: 'the model call is in flight');
+      expect(registry.isInUse(2), isTrue);
+    }
+
+    /// The estimate comes back for meal 2; its confirm, then Cancel.
+    Future<void> finishEstimate(WidgetTester tester) async {
+      held.gate.complete(analyzer.nextLeftover);
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.text('Beef noodles')),
+          findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a screen reader hears it: the label is a live region',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final en = AppLocalizationsEn();
+      await startEstimate(tester);
+      expect(tester.getSemantics(find.text(en.analyzing)),
+          isSemantics(label: en.analyzing, isLiveRegion: true));
+      await finishEstimate(tester);
+      handle.dispose();
+    });
+
+    testWidgets('a screen reader cannot reach the step under it, and gets '
+        'it back after', (tester) async {
+      final handle = tester.ensureSemantics();
+      final en = AppLocalizationsEn();
+      await startEstimate(tester);
+      expect(find.semantics.byLabel(en.leftoverChangeMeal), findsNothing);
+      expect(find.semantics.byLabel(RegExp('^Photo 1 of 1')), findsNothing);
+      await finishEstimate(tester);
+      expect(find.semantics.byLabel(en.leftoverChangeMeal), findsOne);
+      expect(find.semantics.byLabel(RegExp('^Photo 1 of 1')), findsOne);
+      handle.dispose();
+    },
+        variant: TargetPlatformVariant(
+            {TargetPlatform.iOS, TargetPlatform.android}));
+
+    testWidgets('Change does nothing until the estimate is done, however it '
+        'is pressed', (tester) async {
+      await startEstimate(tester);
+      // A hardware keyboard or Switch Control presses the button itself,
+      // with no hit test for the scrim to stop.
+      tester
+          .widget<TextButton>(find.byKey(const Key('leftoverChangeMeal')))
+          .onPressed!();
+      await tester.pump();
+      expect(find.byKey(const Key('leftoverChosenMeal')), findsOneWidget);
+      expect(registry.isInUse(2), isTrue, reason: 'the meal is still held');
+      await finishEstimate(tester);
+
+      await tester.tap(find.byKey(const Key('leftoverChangeMeal')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverMeal-1')), findsOneWidget,
+          reason: 'once it is done, Change works again');
+      expect(registry.isInUse(2), isFalse);
     });
   });
 }

@@ -40,6 +40,7 @@ import '../services.dart';
 import '../theme/app_dialog.dart';
 import '../theme/tokens.dart';
 import '../widgets/grouped.dart';
+import '../widgets/states.dart';
 
 class LeftoverScreen extends StatefulWidget {
   const LeftoverScreen({super.key, required this.services});
@@ -53,6 +54,10 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   List<Meal> _candidates = const [];
   Meal? _selected;
   bool _loading = true;
+
+  /// The last read of the meals failed: the screen says so and offers
+  /// Retry. It was a spinner for good (review 171).
+  bool _loadFailed = false;
   bool _analyzing = false;
   bool _permissionDenied = false;
   Future<List<RecentAsset>>? _assets;
@@ -81,14 +86,33 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     // the day DST ends (yesterday's meals were not offered for that hour),
     // and two days back at 00:xx on the day after it starts.
     final yesterday = isoDate(addCalendarDays(now, -1));
-    final meals = await widget.services.dao.mealsBetween(yesterday, today);
-    if (!mounted) return;
-    // Newest first: leftovers are almost always from the LAST meal.
-    final food = byMealClock(meals.where(isFoodMeal)).reversed.toList();
+    try {
+      final meals = await widget.services.dao.mealsBetween(yesterday, today);
+      if (!mounted) return;
+      // Newest first: leftovers are almost always from the LAST meal.
+      final food = byMealClock(meals.where(isFoodMeal)).reversed.toList();
+      setState(() {
+        _candidates = food;
+        _loading = false;
+      });
+    } catch (e) {
+      // The raw error is for the log; the screen says one sentence and
+      // offers Retry, as Today and History do.
+      debugPrint('Leftovers: load failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
+    }
+  }
+
+  void _retryLoad() {
     setState(() {
-      _candidates = food;
-      _loading = false;
+      _loading = true;
+      _loadFailed = false;
     });
+    _load();
   }
 
   Future<List<RecentAsset>> _loadAssets() async {
@@ -114,6 +138,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   }
 
   void _clearSelection() {
+    // Not while a photo is estimated against this meal: its hold lasts
+    // until the result, and the confirm is for the meal shown.
+    if (_busy) return;
     _hold?.release();
     _hold = null;
     setState(() => _selected = null);
@@ -157,7 +184,8 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       final photo = await services.picker.loadOriginal(asset);
       if (!mounted) return;
       if (photo == null) {
-        _snack(l.leftoverFailed);
+        // Nothing was estimated: the add flow's words for the same photo.
+        _snack(l.addPhotoUnreadable);
         return;
       }
       final compact = compactOriginalAnalysis(meal.analysis);
@@ -165,7 +193,12 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
           await services.analyzer.leftoverIntent(photo.bytes, compact);
       if (!mounted) return;
       if (reply == null) {
-        _snack(l.leftoverFailed);
+        // leftoverIntent gives no reason, but a call that used up the daily
+        // quota armed the pause (Gemini): say that, not "from that photo",
+        // which sent the user trying other photos (review 171).
+        _snack(services.settings.isQuotaPaused
+            ? l.leftoverQuotaPaused
+            : l.leftoverFailed);
         return;
       }
       final hash = normalizeImageHash(originalBytesMd5(photo.bytes));
@@ -201,6 +234,14 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
       }
       await _confirmAndApply(meal, hash, result,
           reply: reply, appliedAt: appliedAt);
+    } catch (e) {
+      // A read or write that threw said nothing, even with the deduction
+      // written and the duplicate still there. Picking the photo again
+      // finishes it: the deduction is re-based, never applied twice. The
+      // log gets the error's type only: sqflite's text carries the
+      // statement's arguments, here the meal's analysis.
+      debugPrint('Leftovers: deduction failed (${e.runtimeType})');
+      _snack(l.leftoverSaveFailed);
     } finally {
       _busy = false;
       if (mounted) setState(() => _analyzing = false);
@@ -366,28 +407,31 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l.leftoverTitle)),
       body: Stack(children: [
-        if (_loading)
-          const Center(child: CircularProgressIndicator())
-        else if (_selected == null)
-          _mealPicker(theme, l)
-        else
-          _photoPicker(theme, l),
+        // The scrim stops a finger, not a screen reader: while a photo is
+        // analyzed the step is out of its reach too ('Change' under the
+        // spinner let go of the meal mid-estimate; review 171).
+        ExcludeSemantics(excluding: _analyzing, child: _step(theme, l)),
         if (_analyzing)
-          Container(
-            color: theme.colorScheme.surface.withValues(alpha: 0.7),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 12),
-                  Text(l.analyzing),
-                ],
-              ),
-            ),
-          ),
+          // The shared overlay: its label is a live region, so the round
+          // trip is not silent to a screen reader until the result.
+          AnalyzingOverlay(label: l.analyzing),
       ]),
     );
+  }
+
+  Widget _step(ThemeData theme, AppLocalizations l) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadFailed) {
+      return ListView(children: [
+        InlineError(
+          key: const Key('leftoverLoadError'),
+          message: l.leftoverLoadFailed,
+          onRetry: _retryLoad,
+          retryKey: const Key('leftoverRetry'),
+        ),
+      ]);
+    }
+    return _selected == null ? _mealPicker(theme, l) : _photoPicker(theme, l);
   }
 
   Widget _mealPicker(ThemeData theme, dynamic l) {

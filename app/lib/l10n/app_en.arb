@@ -3423,6 +3423,14 @@
   "@diagStatusFail": {
     "description": "Test AI provider: what a screen reader says for a check's error sign, read before the check's name."
   },
+  "leftoverLoadFailed": "Couldn't load today's and yesterday's meals.",
+  "@leftoverLoadFailed": {
+    "description": "Leftovers screen error state when reading today's and yesterday's meals fails; shown with a Retry button (the raw error goes to the debug log only)."
+  },
+  "leftoverSaveFailed": "Couldn't finish deducting the leftovers. Try again.",
+  "@leftoverSaveFailed": {
+    "description": "Leftovers screen snackbar when reading or saving the meals fails part-way through a deduction. The screen stays on the photo step; picking the photo again repeats the deduction from the meal as it was, so nothing is deducted twice."
+  },
   "covWindowLabel": "Days to check",
   "@covWindowLabel": {
     "description": "Photo coverage: what a screen reader calls the slider that sets how many days back the check looks. Read with its value, lookbackDays ('7 days'). Not shown on screen."
