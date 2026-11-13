@@ -89,11 +89,12 @@ class _SubscriptionProviderPageState
   }
 
   /// An action about to use the address ([_connectClaude], [_selectPlan])
-  /// saves an edit still being typed first. A screen reader activates a row
-  /// with no pointer and the field keeps its focus, so nothing else had
-  /// saved it: Connect Claude asked for the address the field showed (the
-  /// U3 bug run 7 fixed) or went to the old server, and a plan's question
-  /// named the old host (review 171).
+  /// saves an edit still being typed first. Activating its row leaves the
+  /// field its focus, whether by a finger (a pointer going down outside
+  /// saves nothing) or by a screen reader (no pointer at all), so nothing
+  /// else has saved it: with a screen reader, Connect Claude asked for the
+  /// address the field showed (the U3 bug run 7 fixed) or went to the old
+  /// server, and a plan's question named the old host (review 171).
   void _saveServerUrlEdit() {
     if (_serverUrlEdited) _saveServerUrl();
   }
