@@ -1477,8 +1477,8 @@ README, it describes the version in the App Store (1.6.0 today). What only
 `app/test/ui/copy_consistency_test.dart` checks them against `app_en.arb`,
 and checks that `SUPPORT.md` does not name them yet; drop that check
 ("names no 1.7.0 control …") in the same PR. If 1.7.0 ships without Part B
-(§ 11), leave out the iCloud Backup text (steps 1 and 3, and the iCloud
-sentence in step 4) and keep the rest.
+(§ 11), leave out the iCloud Backup text (steps 1, 3 and 4) and keep
+step 2.
 
 1. **Intro**: "your meal log stays on your phone" becomes "your meal log
    stays on your phone (and, with iCloud Backup, in your own iCloud
