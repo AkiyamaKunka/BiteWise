@@ -341,7 +341,9 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
       case GeminiErrorClass.modelError:
         return 'Gemini model error — check the model name in Settings.';
       // classifyAnalysisError reads 'could not process this photo' as
-      // badPhoto, the localized "this photo could not be processed".
+      // badPhoto, the localized "this photo could not be processed". An
+      // iPhone run in the background defers a badPhoto; analyzePhoto says
+      // what that costs here.
       case GeminiErrorClass.imageRejected:
         return 'Gemini could not process this photo.';
       case GeminiErrorClass.unknown:
@@ -414,8 +416,15 @@ class GeminiAnalyzer implements AnalyzerService, TextIntentExplainer {
           continue;
         }
         // An image refusal that asks for a retry ("Unable to process input
-        // image. Please retry …") gets one, in place. Refused again, it is
-        // the photo's verdict, not something every later scan re-sends.
+        // image. Please retry …") gets one, in place; refused again, this
+        // analyzer's verdict is final (retryable: false). Its badPhoto
+        // wording is also the pipeline's mark of a photo an engine could
+        // not decode, though, so an iPhone run in the background
+        // (PhotoPipeline.deferUndecodable, backgrounded) defers it instead
+        // of failing it: each background run sends it again, up to twice,
+        // until DeferredAssets passes it over (deferralsBeforePassOver in
+        // deferred_assets.dart), and a foreground run then fails it.
+        // gemini_analyzer_test pins this.
         if (attempt == 1 && _imageRefusalAsksRetry(e.message)) {
           await _sleep(Duration(seconds: parseRetryDelaySeconds(e.message)));
           continue;
