@@ -479,12 +479,13 @@ void main() {
           );
         });
 
-        // The owner's own Settings root: Claude Plan, a last background
-        // scan, an armed summary, a goal — every row that shows a value.
+        // The owner's own Settings root: Claude Plan, Watch Camera Roll on
+        // with a last background scan (the row needs the watcher), an
+        // armed summary, a goal — every row that shows a value.
         Widget settingsRoot() {
           final now = DateTime.now();
           return SettingsScreen(
-            settings: FakeSettings(apiKey: 'k')
+            settings: FakeSettings(apiKey: 'k', watcherEnabled: true)
               ..provider = 'server'
               ..serverBackend = 'claude'
               ..calorieGoal = 1800

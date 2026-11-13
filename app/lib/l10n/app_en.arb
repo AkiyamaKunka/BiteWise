@@ -3438,5 +3438,9 @@
   "bodyDeleteFailed": "Couldn't delete. Try again.",
   "@bodyDeleteFailed": {
     "description": "Body tab: deleting a day's weight or measurements failed. Shown under the Log body sheet's fields when its Delete failed (the sheet stays open), else in a snackbar after a history row's swipe or its screen-reader Delete action (the row stays). The raw error goes to the debug log only (its type)."
+  },
+  "summaryBatteryRestrictedHint": "Battery use is Restricted — the daily summary can't be delivered.",
+  "@summaryBatteryRestrictedHint": {
+    "description": "Settings › Daily summary, Android only: red hint shown while the summary is on and the app's battery usage is set to Restricted (App info › App battery usage), under which Android fires none of the app's alarms, the summary's included. Followed by the 'Open system settings' button. Worded like notificationsOffHint."
   }
 }

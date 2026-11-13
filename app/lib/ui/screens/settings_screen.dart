@@ -207,15 +207,20 @@ class _SettingsScreenState extends State<SettingsScreen>
     _probePhotoAccess();
   }
 
+  /// The last run, and whether the OS still lets the app work in the
+  /// background. The second is read even without the first: on Android
+  /// the battery 'Restricted' setting also blocks the summary's alarm,
+  /// which the report section says (the Play push, 2026-11-13).
   Future<void> _probeBackgroundScan() async {
     final probe = widget.lastBackgroundScan;
-    if (probe == null) return;
+    final refreshProbe = widget.backgroundRefreshEnabled;
+    if (probe == null && refreshProbe == null) return;
     DateTime? when;
     bool? refresh;
     var stuck = false;
     try {
-      when = await probe();
-      refresh = await widget.backgroundRefreshEnabled?.call();
+      when = await probe?.call();
+      refresh = await refreshProbe?.call();
       stuck = await widget.backgroundScanStuck?.call() ?? false;
     } catch (_) {
       return;
@@ -744,15 +749,23 @@ class _SettingsScreenState extends State<SettingsScreen>
     return [?limited, ?paused, ?stuck, footer].join('\n');
   }
 
-  /// Whether the 后台扫描 row (and its iOS footer line) shows. On iOS only
-  /// while Watch Camera Roll is on (U21): with it off the background job
-  /// still records its launches, so a fresh install showed 'Not run yet',
-  /// a time, or a red 'Off' for a scan it does not want — each read as a
-  /// fault. Android keeps the row: its Restricted remedy also covers the
-  /// nightly summary, which runs on the same job.
+  /// Whether the 后台扫描 row (and its iOS footer line) shows: only while
+  /// Watch Camera Roll is on. On iOS (U21) the background job still
+  /// records its launches with it off, so a fresh install showed 'Not run
+  /// yet', a time, or a red 'Off' for a scan it does not want — each read
+  /// as a fault. On Android (review 171, C8) no job runs with it off. The
+  /// battery 'Restricted' remedy for the summary, whose alarm it blocks
+  /// too, is the report section's ([_summaryRestricted]).
   bool get _showBackgroundScanRow =>
-      widget.lastBackgroundScan != null &&
-      (_watcherEnabled || defaultTargetPlatform != TargetPlatform.iOS);
+      widget.lastBackgroundScan != null && _watcherEnabled;
+
+  /// Android: the summary is on and the battery setting is 'Restricted',
+  /// under which Android fires none of the app's alarms — the summary's
+  /// own included (os_summary.dart). iOS cards need no background refresh.
+  bool get _summaryRestricted =>
+      _summaryEnabled &&
+      _backgroundRefreshOff &&
+      defaultTargetPlatform == TargetPlatform.android;
 
   /// Why the automatic scan is latched, with its next try; null when not.
   String? _autoScanPausedText() {
@@ -818,10 +831,10 @@ class _SettingsScreenState extends State<SettingsScreen>
                 // Settings' cut the English title to 'Background sc…'
                 // (loop find 2026-10-08, test/ui/row_fit_layout_test.dart).
                 // Android's 电池 › 受限 (App battery usage › Restricted)
-                // parks the periodic job — the scan AND the nightly
-                // summary — for days, and until 2026-10-10 the row showed
-                // 尚未运行 / a frozen time with no hint; the chevron now
-                // lands on App info, where that switch is one tap away.
+                // parks the periodic job for days, and until 2026-10-10
+                // the row showed 尚未运行 / a frozen time with no hint; the
+                // chevron now lands on App info, where that switch is one
+                // tap away.
                 value: _backgroundRefreshOff
                     ? _backgroundOffLabel()
                     : _lastBackgroundProbed
@@ -974,6 +987,14 @@ class _SettingsScreenState extends State<SettingsScreen>
                 onTap: _pickReportTime,
               ),
               if (_notificationsOff) _notificationsOffRow(theme),
+              if (_summaryRestricted)
+                _summaryWarningRow(
+                  theme,
+                  icon: Icons.battery_alert_outlined,
+                  hint: context.l10n.summaryBatteryRestrictedHint,
+                  hintKey: const Key('summaryRestrictedHint'),
+                  buttonKey: const Key('summaryRestrictedOpenSettings'),
+                ),
               if (widget.nextSummaryAt != null)
                 GroupedRow(
                   key: const Key('nextSummaryRow'),
@@ -1004,7 +1025,23 @@ class _SettingsScreenState extends State<SettingsScreen>
 
   /// Shown only when the OS reports notifications OFF: without this the
   /// daily summary simply never arrives and nothing on the phone says why.
-  Widget _notificationsOffRow(ThemeData theme) {
+  Widget _notificationsOffRow(ThemeData theme) => _summaryWarningRow(
+        theme,
+        icon: Icons.notifications_off_outlined,
+        hint: context.l10n.notificationsOffHint,
+        hintKey: const Key('notificationsOffHint'),
+        buttonKey: const Key('notificationsOffOpenSettings'),
+      );
+
+  /// Why the daily summary cannot arrive, in red, with the system-settings
+  /// button that fixes it.
+  Widget _summaryWarningRow(
+    ThemeData theme, {
+    required IconData icon,
+    required String hint,
+    required Key hintKey,
+    required Key buttonKey,
+  }) {
     final open = widget.openSystemSettings;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
@@ -1014,13 +1051,12 @@ class _SettingsScreenState extends State<SettingsScreen>
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.notifications_off_outlined,
-                  size: 18, color: context.colors.danger),
+              Icon(icon, size: 18, color: context.colors.danger),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  context.l10n.notificationsOffHint,
-                  key: const Key('notificationsOffHint'),
+                  hint,
+                  key: hintKey,
                   style: theme.textTheme.bodySmall
                       ?.copyWith(color: context.colors.danger),
                 ),
@@ -1030,7 +1066,7 @@ class _SettingsScreenState extends State<SettingsScreen>
           if (open != null) ...[
             const SizedBox(height: 8),
             FilledButton.tonal(
-              key: const Key('notificationsOffOpenSettings'),
+              key: buttonKey,
               onPressed: () => open(),
               child: Text(context.l10n.openSystemSettings),
             ),

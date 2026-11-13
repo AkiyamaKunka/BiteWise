@@ -5458,6 +5458,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Couldn\'t delete. Try again.'**
   String get bodyDeleteFailed;
+
+  /// Settings › Daily summary, Android only: red hint shown while the summary is on and the app's battery usage is set to Restricted (App info › App battery usage), under which Android fires none of the app's alarms, the summary's included. Followed by the 'Open system settings' button. Worded like notificationsOffHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery use is Restricted — the daily summary can\'t be delivered.'**
+  String get summaryBatteryRestrictedHint;
 }
 
 class _AppLocalizationsDelegate

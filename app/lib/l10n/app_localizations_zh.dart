@@ -3253,4 +3253,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bodyDeleteFailed => '没能删除，请再试一次。';
+
+  @override
+  String get summaryBatteryRestrictedHint => '电池使用受限 —— 每日总结无法送达。';
 }

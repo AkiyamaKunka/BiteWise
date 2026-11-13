@@ -1100,7 +1100,7 @@ void planTuningTests() {
         (tester) async {
       Widget bg(Future<DateTime?> Function()? last) => _wrap(SettingsScreen(
             key: UniqueKey(),
-            settings: FakeSettings(apiKey: 'k'),
+            settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
             analyzer: FakeAnalyzer(),
             dao: FakeDao(),
             requestPhotoPermission: () async => true,
@@ -1162,18 +1162,11 @@ void planTuningTests() {
         await tester.pumpAndSettle();
         expect(find.textContaining(hint), findsNothing);
       }
-      // Watcher off: no red row either, since nothing would explain it.
+      // Watcher off: no red row either — no row at all (review 171, C8:
+      // Android runs no job then; iOS waits for the watcher, U21).
       await tester.pumpWidget(bg(watcher: false));
       await tester.pumpAndSettle();
-      final calm = tester.widget<RowBadge>(find.descendant(
-          of: find.byKey(const Key('backgroundScanRow')),
-          matching: find.byType(RowBadge)));
-      expect(
-          calm.color,
-          isNot(Theme.of(tester.element(
-                  find.byKey(const Key('backgroundScanRow'))))
-              .colorScheme
-              .error));
+      expect(find.byKey(const Key('backgroundScanRow')), findsNothing);
     });
 
     // 2026-10-10: iOS alone decides when BGAppRefresh launches the scan (a
@@ -1227,7 +1220,7 @@ void planTuningTests() {
       final yesterday = DateTime(now.year, now.month, now.day - 1, 14, 2);
       await tester.pumpWidget(_wrap(SettingsScreen(
         key: UniqueKey(),
-        settings: FakeSettings(apiKey: 'k'),
+        settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
         analyzer: FakeAnalyzer(),
         dao: FakeDao(),
         requestPhotoPermission: () async => true,
@@ -1280,21 +1273,31 @@ void planTuningTests() {
       expect(find.text('Off'), findsOneWidget, reason: 'refresh is off');
     }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
-    testWidgets('Android keeps the row with the watcher off (its Restricted '
-        'remedy covers the nightly summary too)', (tester) async {
-      await tester.pumpWidget(_wrap(SettingsScreen(
-        key: UniqueKey(),
-        settings: FakeSettings(apiKey: 'k'),
-        analyzer: FakeAnalyzer(),
-        dao: FakeDao(),
-        requestPhotoPermission: () async => true,
-        lastBackgroundScan: () async => null,
-        backgroundRefreshEnabled: () async => false,
-        openSystemSettings: () async {},
-      )));
-      await tester.pumpAndSettle();
-      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
-      expect(find.text('Restricted'), findsOneWidget);
+    // Review 171, C8: with the watcher off Android registers no job (the
+    // summary is an OS alarm, os_summary.dart), so a last-run time says
+    // nothing; the Restricted setting still blocks the summary's alarm,
+    // and the summary's own group says so (the next group).
+    testWidgets('Android: the row waits for Watch Camera Roll too',
+        (tester) async {
+      _tallView(tester);
+      for (final refreshOn in [true, false]) {
+        await tester.pumpWidget(_wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: FakeSettings(apiKey: 'k'),
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          lastBackgroundScan: () async => DateTime.now(),
+          backgroundRefreshEnabled: () async => refreshOn,
+          openSystemSettings: () async {},
+        )));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('backgroundScanRow')), findsNothing,
+            reason: 'restricted: ${!refreshOn}');
+        expect(find.text('Not run yet'), findsNothing);
+      }
+      // The summary's warning still says Restricted (it is on by default).
+      expect(find.byKey(const Key('summaryRestrictedHint')), findsOneWidget);
     }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
     testWidgets('Background App Refresh off → the row becomes the remedy',
@@ -1333,7 +1336,7 @@ void planTuningTests() {
       var opened = 0;
       await tester.pumpWidget(_wrap(SettingsScreen(
         key: UniqueKey(),
-        settings: FakeSettings(apiKey: 'k'),
+        settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
         analyzer: FakeAnalyzer(),
         dao: FakeDao(),
         requestPhotoPermission: () async => true,
@@ -1359,7 +1362,7 @@ void planTuningTests() {
       var opened = 0;
       await tester.pumpWidget(_wrap(SettingsScreen(
         key: UniqueKey(),
-        settings: FakeSettings(apiKey: 'k'),
+        settings: FakeSettings(apiKey: 'k', watcherEnabled: true),
         analyzer: FakeAnalyzer(),
         dao: FakeDao(),
         requestPhotoPermission: () async => true,
@@ -1449,5 +1452,91 @@ void planTuningTests() {
       await tester.pumpAndSettle();
       expect(find.byKey(const Key('notificationsOffHint')), findsNothing);
     });
+  });
+
+  // The Play push (2026-11-13): Android's summary is an OS alarm, and
+  // Android's battery 'Restricted' setting blocks alarms as well as jobs.
+  // The warning belongs to the summary, so it shows with the watcher off
+  // (and in a build without photo watching), but only while the summary
+  // is on, and only on Android (iOS cards need no background refresh).
+  group('Android: the summary under a Restricted battery setting', () {
+    Widget screen({
+      bool summary = true,
+      bool watcher = false,
+      Future<bool?> Function()? refresh,
+      Future<void> Function()? open,
+      bool withLastRun = true,
+    }) =>
+        _wrap(SettingsScreen(
+          key: UniqueKey(),
+          settings: FakeSettings(
+              apiKey: 'k', summaryEnabled: summary, watcherEnabled: watcher),
+          analyzer: FakeAnalyzer(),
+          dao: FakeDao(),
+          requestPhotoPermission: () async => true,
+          lastBackgroundScan: withLastRun ? () async => null : null,
+          backgroundRefreshEnabled: refresh,
+          openSystemSettings: open,
+        ));
+
+    testWidgets('Restricted → the summary says it cannot arrive, and the '
+        'button opens App info', (tester) async {
+      _tallView(tester);
+      var opened = 0;
+      await tester.pumpWidget(screen(
+          refresh: () async => false, open: () async => opened++));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('summaryRestrictedHint')), findsOneWidget);
+      expect(find.textContaining('Restricted'), findsOneWidget);
+      await tester.ensureVisible(
+          find.byKey(const Key('summaryRestrictedOpenSettings')));
+      await tester.tap(find.byKey(const Key('summaryRestrictedOpenSettings')));
+      await tester.pump();
+      expect(opened, 1);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('without the last-run probe the setting is still read',
+        (tester) async {
+      _tallView(tester);
+      await tester.pumpWidget(screen(
+          refresh: () async => false, open: () async {}, withLastRun: false));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('summaryRestrictedHint')), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('not Restricted, unknown, or the summary off → no warning',
+        (tester) async {
+      _tallView(tester);
+      for (final quiet in [
+        screen(refresh: () async => true),
+        screen(refresh: () async => null),
+        screen(),
+        screen(refresh: () async => false, summary: false),
+      ]) {
+        await tester.pumpWidget(quiet);
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('summaryRestrictedHint')), findsNothing);
+      }
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('both on → the Photos row and the summary each say it',
+        (tester) async {
+      _tallView(tester);
+      await tester.pumpWidget(screen(
+          watcher: true, refresh: () async => false, open: () async {}));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backgroundScanRow')), findsOneWidget);
+      expect(find.byKey(const Key('summaryRestrictedHint')), findsOneWidget);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+
+    testWidgets('iOS: Background App Refresh off says nothing about the '
+        'summary', (tester) async {
+      _tallView(tester);
+      await tester.pumpWidget(screen(
+          watcher: true, refresh: () async => false, open: () async {}));
+      await tester.pumpAndSettle();
+      expect(find.text('Off'), findsOneWidget, reason: 'the scan row');
+      expect(find.byKey(const Key('summaryRestrictedHint')), findsNothing);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
   });
 }

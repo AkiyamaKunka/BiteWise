@@ -142,6 +142,21 @@ bool? debugIsAndroidOverride;
 @visibleForTesting
 bool? debugIsIOSOverride;
 
+/// Whether the periodic job is wanted at all (review 171, C8).
+///
+/// iOS: always. Its background refresh also carries iCloud Backup and the
+/// summary card's re-arm, and the scan guards itself when the watcher is
+/// off.
+///
+/// Android: only while Watch Camera Roll is on. The daily summary is an OS
+/// alarm there (ui/os_summary.dart) and needs no job, so with the watcher
+/// off a run had nothing to do but boot an engine every 30 minutes, write
+/// its launch stamp and stop. A build without photo watching (a Play
+/// build that hides Watch Camera Roll) passes false for [watcherEnabled]
+/// and never registers the job; the summary is unaffected.
+bool backgroundJobWanted({required bool watcherEnabled}) =>
+    (debugIsIOSOverride ?? Platform.isIOS) || watcherEnabled;
+
 /// Integration-contract registration API. Android and iOS; anything else
 /// (desktop test hosts) is a no-op. On iOS the Dart-side frequency is
 /// advisory — the cadence is the one AppDelegate.swift registered

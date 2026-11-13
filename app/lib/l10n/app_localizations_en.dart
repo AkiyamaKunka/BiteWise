@@ -3619,4 +3619,8 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bodyDeleteFailed => 'Couldn\'t delete. Try again.';
+
+  @override
+  String get summaryBatteryRestrictedHint =>
+      'Battery use is Restricted — the daily summary can\'t be delivered.';
 }

@@ -460,8 +460,10 @@ Future<bool> headlessBackfillWith({
   // already wrote it before loading the settings — one launch, one stamp.
   if (!launchRecorded) await recordBackgroundLaunch(prefs, clock);
   await recorder?.stage(BackgroundRunStage.settings);
-  // Belt and braces: disabling the watcher cancels the job, but a stale
-  // chain must never scan against the user's setting.
+  // Belt and braces: on Android disabling the watcher cancels the job, but
+  // a stale chain must never scan against the user's setting. On iOS the
+  // job stays registered (iCloud Backup, the summary's re-arm), so this is
+  // where a run with the watcher off stops.
   if (!settings.watcherEnabled) {
     await recorder?.finish(BackgroundStop.watcherOff);
     return true;
@@ -924,19 +926,17 @@ void appBackgroundDispatcher() {
 /// and whenever watcherEnabled/lookbackDays change. Android WorkManager
 /// or iOS BGAppRefresh inside (enableBackgroundScan picks).
 ///
-/// ALWAYS registered, deliberately. The job carries TWO passengers: the
-/// photo backfill and the daily coach summary. Passing watcherEnabled here
-/// cancelled the whole job when the watcher was off, which silently killed
-/// the notification while its own setting still looked enabled — the user
-/// had no way to see why nothing arrived (2026-08-16). The scan half is
-/// already self-guarding (headlessBackfillWith returns early when the
-/// watcher is off), so an always-on job scans nothing extra; it only keeps
-/// the summary's delivery path alive.
-Future<void> syncBackgroundScan(AppSettings settings) =>
-    enableBackgroundScan(true,
-        lookbackDays: settings.lookbackDays,
-        frequency: backgroundScanFrequency,
-        dispatcher: appBackgroundDispatcher);
+/// Android registers it only while Watch Camera Roll is on and cancels it
+/// otherwise; iOS keeps it always ([backgroundJobWanted]). It used to stay
+/// registered on Android with the watcher off, because the job carried the
+/// daily summary too — cancelling it silently killed the notification
+/// (2026-08-16). The summary is an OS alarm now (os_summary.dart), so it
+/// no longer needs the job.
+Future<void> syncBackgroundScan(AppSettings settings) => enableBackgroundScan(
+    backgroundJobWanted(watcherEnabled: settings.watcherEnabled),
+    lookbackDays: settings.lookbackDays,
+    frequency: backgroundScanFrequency,
+    dispatcher: appBackgroundDispatcher);
 
 /// Settings' "the background scan is stuck" probe (2026-10-19): the
 /// stored runs and the watermark, both read FRESH (the background engine

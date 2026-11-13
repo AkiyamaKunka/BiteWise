@@ -2041,16 +2041,43 @@ void main() {
       expect(scheduler.inputData, {'lookbackDays': 5});
     });
 
-    test('watcher off → the job STAYS registered, because the daily '
-        'summary rides it too', () async {
-      // Regression, 2026-08-16: this used to cancel the periodic job, which
-      // silently killed the daily coach notification while its own setting
-      // still read as enabled. The scan half self-guards inside
-      // headlessBackfillWith, so keeping the job costs no extra scanning.
+    // Review 171, C8. Until the Play push the job also carried Android's
+    // daily summary, so it stayed registered with the watcher off (the
+    // 2026-08-16 regression: cancelling it silently killed the summary).
+    // The summary is an OS alarm now (os_summary.dart) and needs no job,
+    // so a job with nothing to scan no longer boots an engine every 30
+    // minutes to write a launch stamp and stop.
+    test('Android, watcher off → the job is cancelled, and the summary '
+        'does not need it', () async {
+      final settings = await settingsWith(key: 'k', watcher: false);
+      expect(settings.summaryEnabled, isTrue);
+      await syncBackgroundScan(settings);
+      expect(scheduler.calls, ['cancel:$photoBackfillUniqueName']);
+    });
+
+    test('Android, watcher switched on and off → registered, then '
+        'cancelled', () async {
+      final settings = await settingsWith(key: 'k', watcher: true);
+      await syncBackgroundScan(settings);
+      await settings.setWatcherEnabled(false);
+      await syncBackgroundScan(settings);
+      expect(scheduler.calls, [
+        'init',
+        'register:$photoBackfillUniqueName:$photoBackfillTaskName',
+        'cancel:$photoBackfillUniqueName',
+      ]);
+    });
+
+    test('iOS, watcher off → the job STAYS registered: its background '
+        'refresh also carries iCloud Backup', () async {
+      debugIsAndroidOverride = false;
+      debugIsIOSOverride = true;
+      addTearDown(() => debugIsIOSOverride = null);
       final settings = await settingsWith(key: 'k', watcher: false);
       await syncBackgroundScan(settings);
       expect(scheduler.calls, [
         'init',
+        'cancel:$photoBackfillUniqueName',
         'register:$photoBackfillUniqueName:$photoBackfillTaskName',
       ]);
       expect(scheduler.frequency, backgroundScanFrequency);
