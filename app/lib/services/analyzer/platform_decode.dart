@@ -1,21 +1,28 @@
-/// Second-chance image decodes for what the pure-Dart `image` package
-/// (normalize.dart) cannot read.
+/// The decode chain behind every photo sent for analysis and every history
+/// thumbnail: a platform decoder first (ImageIO on iOS, the engine codec on
+/// Android), the pure-Dart `image` package (normalize.dart) as their
+/// fallback, and the rule for what may be sent when every decoder fails.
 ///
-/// That package has no HEIC/HEIF decoder, and every iPhone camera photo is
-/// HEIC. Until 2026-09-30 a failed decode fell back to "send the original
-/// bytes" — raw HEIC, which every provider path labels image/jpeg. The
-/// model cannot read that and answers `is_food: false`, so on the owner's
-/// iPhone 94 of 102 photos were silently "not food" (the same test image:
-/// JPEG → food, HEIC → not food).
+/// It began as a second chance for what that package cannot read: it has
+/// no HEIC/HEIF decoder, and every iPhone camera photo is HEIC. Until
+/// 2026-09-30 a failed decode fell back to "send the original bytes" — raw
+/// HEIC, which every provider path labels image/jpeg. The model cannot
+/// read that and answers `is_food: false`, so on the owner's iPhone 94 of
+/// 102 photos were silently "not food" (the same test image: JPEG → food,
+/// HEIC → not food).
 ///
 /// The chain, in order ([decodeForUpload]):
-///   1. iOS only: ImageIO over a platform channel
-///      (ios/Runner/ImageIOPlugin.swift) — CPU only;
-///   2. pure Dart in an isolate (the only first step on Android);
-///   3. the engine codec (dart:ui), which decodes whatever the OS can
-///      (HEIC/HEIF/AVIF on iOS and modern Android), with orientation
-///      applied, at a reduced target size — never in the iOS background
-///      engine, and always under [kPlatformDecodeTimeout].
+///   iOS: 1. ImageIO over a platform channel
+///           (ios/Runner/ImageIOPlugin.swift) — CPU only;
+///        2. pure Dart in an isolate;
+///        3. the engine codec (dart:ui), which decodes whatever the OS can
+///           (HEIC/HEIF/AVIF), with orientation applied, at a reduced
+///           target size — never in the background engine or while the
+///           app is in the background, and always under
+///           [kPlatformDecodeTimeout].
+///   Android: 1. the engine codec, the same way (HEIC/HEIF/AVIF on modern
+///               Android), under the same deadline, in both engines;
+///            2. pure Dart in an isolate, for what it could not decode.
 ///
 /// WHY IMAGEIO FIRST ON iOS (run 7, P1): until then pure Dart ran first
 /// everywhere, so on iOS only HEIC (which it cannot read) reached ImageIO,
@@ -27,11 +34,23 @@
 /// JPEG while decoding. Its output is upright, sRGB, capped, and stripped
 /// by [stripJpegMetadata] like every upload.
 ///
-/// WHY 2 AND THE RULES ON 3 (2026-10-18): the background scan runs in a
-/// headless engine, and on iOS that engine's GPU switch is off for the whole
-/// BGAppRefresh run (FlutterEngine.mm sets it from the application state;
-/// only entering the foreground clears it). dart:ui decodes the pixels on
-/// the CPU but parks the texture upload until the GPU returns, so
+/// WHY THE ENGINE CODEC FIRST ON ANDROID (review 171, C0): pure Dart ran
+/// first there until then, so every Android photo paid the same two
+/// full-resolution decodes (the copy sent for analysis, then the history
+/// thumbnail, which the Add flow's spinner waits for), the WorkManager run
+/// included: about 2 s of desktop CPU each for a 12 MP JPEG, and 4.5-8 s
+/// with a 0.75-1.3 GB peak each at 50 MP. The engine codec subsamples a
+/// JPEG while it decodes: 0.3-0.8 s for that 12 MP photo's analysis copy
+/// and about 0.1 s for its thumbnail (box-averaged from
+/// [kEngineMinDecodeLongSidePx]), on the same machine. Its output is
+/// upright (the codec applies the EXIF Orientation), capped, and encoded
+/// from bare pixels, so it carries no EXIF ([decodeViaPlatform]).
+///
+/// WHY iOS's 2 AND THE RULES ON ITS 3 (2026-10-18): the background scan
+/// runs in a headless engine, and on iOS that engine's GPU switch is off for
+/// the whole BGAppRefresh run (FlutterEngine.mm sets it from the application
+/// state; only entering the foreground clears it). dart:ui decodes the
+/// pixels on the CPU but parks the texture upload until the GPU returns, so
 /// `getNextFrame()` neither completed nor threw. The photo was already
 /// reserved, no request ever left the phone, iOS expired the run, and every
 /// run after it reclaimed the same photo and hung again — the background
@@ -56,10 +75,31 @@ const MethodChannel imageIOChannel = MethodChannel(imageIOChannelName);
 
 /// The engine codec's deadline. A healthy decode of a phone photo at the
 /// analysis size takes well under a second; a texture upload parked behind
-/// a disabled GPU never finishes at all. Past this the photo counts as
-/// undecodable for this attempt (null), instead of holding its reservation
-/// until the OS kills the process.
+/// a disabled GPU never finishes at all. Past it the engine step answers
+/// null, instead of the photo holding its reservation until the OS kills
+/// the process. On Android, where that step runs first for every photo,
+/// pure Dart then decodes the photo (the abandoned engine decode may still
+/// be holding its memory while it does); on iOS, where it is the last
+/// resort, the photo counts as undecodable for this attempt.
 const Duration kPlatformDecodeTimeout = Duration(seconds: 8);
+
+/// The smallest long side the engine codec is asked for ([decodeViaPlatform]).
+/// A smaller one, the 160 px history thumbnail, is box-averaged down from
+/// this size in Dart.
+///
+/// The codec subsamples a JPEG by at most 8x while it decodes, and the
+/// engine shrinks the rest bilinearly from full size with no mipmaps
+/// (Skia's scalePixels; under Impeller a linear blit), so each output pixel
+/// reads only its nearest neighbours. Asked straight for the thumbnail of a
+/// 12-50 MP photo, that step shrank it 3-6x more, and a pattern finer than
+/// the thumbnail (a striped tablecloth, a woven placemat, a grill) folded
+/// into false stripes at full contrast (review 171, second pass). From four
+/// times the thumbnail, the box average ([img.Interpolation.average], the
+/// filter of pure Dart's [makeMealThumb]) reads every pixel: a 12 MP
+/// photo's thumbnail measures 35 dB PSNR against pure Dart's (27 dB
+/// before), in 80-130 ms of desktop CPU against pure Dart's 2 s. The
+/// analysis copy (1568 px) is still asked for at its own size.
+const int kEngineMinDecodeLongSidePx = 4 * kThumbLongSidePx;
 
 /// The native call's deadline in the app's engine: generous (ImageIO is
 /// CPU-only and finishes), but a reply that never comes must not hang the
@@ -138,7 +178,7 @@ bool looksLikeJpeg(Uint8List b) =>
 /// visibly instead of asking a model about bytes it cannot read, and a JPEG
 /// whose segments cannot be walked is never sent with its GPS intact).
 ///
-/// Only reached when both decoders failed, so nothing re-encodes the pixels:
+/// Only reached when every decoder failed, so nothing re-encodes the pixels:
 /// the EXIF Orientation goes with the rest of the EXIF and a rotated photo
 /// arrives sideways. Sideways is still readable; its location is not sent.
 Uint8List? unprocessedFallback(Uint8List original, {required int maxBytes}) =>
@@ -228,7 +268,11 @@ Future<Uint8List?> normalizeAnyForAnalysis(Uint8List original) =>
         longSidePx: kAnalysisLongSidePx,
         jpegQuality: kAnalysisJpegQuality);
 
-/// The history thumbnail, through the same chain.
+/// The history thumbnail, through the same chain: ImageIO decodes at the
+/// thumbnail size, the engine codec at [kEngineMinDecodeLongSidePx] and
+/// box-averages the rest, as pure Dart does. Neither makes a second
+/// full-resolution decode of the original (pure Dart, their fallback,
+/// still makes one).
 Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
     decodeForUpload(original,
         pureDart: makeMealThumb,
@@ -236,16 +280,17 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
         jpegQuality: kThumbJpegQuality);
 
 /// The decode chain (library docs): on iOS ImageIO, then pure Dart, then
-/// the engine codec where it can finish; elsewhere pure Dart, then the
-/// engine codec. Null when every allowed step failed — the caller reports
-/// an undecodable photo. Never throws.
+/// the engine codec where it can finish; elsewhere (Android) the engine
+/// codec, then pure Dart. Null when every allowed step failed — the caller
+/// reports an undecodable photo. Never throws.
 ///
 /// The seams default to production: [isolate] runs [pureDart] (compute),
 /// [native] is [downscaleViaImageIO], [engine] is [decodeViaPlatform];
 /// [ios] / [headless] / [backgrounded] default to the target platform,
 /// [isHeadlessEngine] and [isEngineBackgrounded]. The native step is
 /// bounded here as well
-/// ([nativeDecodeTimeoutFor]), whatever [native] does itself.
+/// ([nativeDecodeTimeoutFor]), whatever [native] does itself, and the
+/// engine step always by [engineTimeout].
 ///
 /// The native JPEG is used as is: ImageIO already baked the orientation,
 /// capped the long side and re-encoded at [jpegQuality]. Piping it through
@@ -254,11 +299,13 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
 /// is dropped by [downscaleViaImageIO] with the same byte walk the
 /// unprocessed fallback uses.
 ///
-/// The engine codec stays the last resort everywhere EXCEPT the iOS
-/// background engine, and the iOS app engine while it is in the
-/// background: there it cannot finish (library docs). Android never
-/// switches its engine's GPU off, so its background run keeps it — under the
-/// same deadline as every other caller.
+/// On Android the engine codec runs FIRST (library docs). Null from it (a
+/// format it cannot read, a failure, its deadline) hands the photo to pure
+/// Dart, and the engine is not asked again. Android never switches its
+/// engine's GPU off, so its background run keeps it — under the same
+/// deadline as every other caller. On iOS the engine codec stays the last
+/// resort, and never runs in the background engine, or in the app engine
+/// while it is in the background: there it cannot finish (library docs).
 Future<Uint8List?> decodeForUpload(
   Uint8List original, {
   required Uint8List? Function(Uint8List) pureDart,
@@ -287,6 +334,16 @@ Future<Uint8List?> decodeForUpload(
           nativeDecodeTimeoutFor(headless: inHeadless));
       if (viaImageIO != null) return viaImageIO;
     } catch (_) {}
+  } else {
+    // Android: the engine codec first (library docs). Null (a format it
+    // cannot read, such as TIFF or PSD, a failure, its deadline) falls
+    // through to pure Dart.
+    try {
+      final viaCodec = await orNullAfter(
+          engine(original, longSidePx: longSidePx, jpegQuality: jpegQuality),
+          engineTimeout);
+      if (viaCodec != null) return viaCodec;
+    } catch (_) {}
   }
   try {
     final viaDart = await (isolate ?? _inIsolate)(pureDart, original);
@@ -312,6 +369,9 @@ Future<Uint8List?> decodeForUpload(
       gpuOffDecodeSkips++;
       return null;
     }
+  } else {
+    // Android asked the engine codec first: there is nothing left to try.
+    return null;
   }
   try {
     return await orNullAfter(
@@ -362,6 +422,19 @@ Future<Uint8List?> downscaleViaImageIO(Uint8List original,
 /// at most [longSidePx] (never upscaled), and re-encode as JPEG. Null on
 /// any failure — an undecodable image is the caller's problem to report.
 ///
+/// The codec applies the EXIF Orientation, so the pixels come out upright
+/// and the size is measured on the upright picture; a JPEG larger than
+/// that size is subsampled while it decodes, never held at full
+/// resolution. The JPEG is encoded from those bare pixels, so none of the
+/// original's EXIF (GPS, camera, times) goes with it. A JPEG has no alpha:
+/// a transparent pixel is laid over white once ([_encodeRgbaJpeg]), as
+/// pure Dart's encoder and ImageIO lay it.
+///
+/// The codec is never asked for less than [kEngineMinDecodeLongSidePx]:
+/// below it (the history thumbnail) the pixels are box-averaged down to
+/// [longSidePx] in Dart, as pure Dart's thumbnail is, instead of being
+/// skipped by the codec's bilinear shrink.
+///
 /// Can wait forever where the engine's GPU is off (the iOS background
 /// engine; see the library docs) — callers go through [decodeForUpload],
 /// which never calls it there and bounds it everywhere else.
@@ -376,23 +449,27 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
     descriptor = await ui.ImageDescriptor.encoded(buffer);
     final w = descriptor.width, h = descriptor.height;
     if (w <= 0 || h <= 0) return null;
+    final decodePx = longSidePx > kEngineMinDecodeLongSidePx
+        ? longSidePx
+        : kEngineMinDecodeLongSidePx;
     int? targetW, targetH;
-    if ((w > h ? w : h) > longSidePx) {
+    if ((w > h ? w : h) > decodePx) {
       if (w >= h) {
-        targetW = longSidePx;
+        targetW = decodePx;
       } else {
-        targetH = longSidePx;
+        targetH = decodePx;
       }
     }
     codec = await descriptor.instantiateCodec(
         targetWidth: targetW, targetHeight: targetH);
     image = (await codec.getNextFrame()).image;
+    // rawRgba is PREMULTIPLIED: [_encodeRgbaJpeg] relies on it.
     final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
     if (data == null) return null;
     final rgba =
         data.buffer.asUint8List(data.offsetInBytes, data.lengthInBytes);
-    return await compute(
-        _encodeRgbaJpeg, (rgba, image.width, image.height, jpegQuality));
+    return await compute(_encodeRgbaJpeg,
+        (rgba, image.width, image.height, longSidePx, jpegQuality));
   } catch (_) {
     return null;
   } finally {
@@ -403,16 +480,43 @@ Future<Uint8List?> decodeViaPlatform(Uint8List original,
   }
 }
 
-Uint8List? _encodeRgbaJpeg((Uint8List, int, int, int) a) {
+/// The codec's premultiplied RGBA → a JPEG whose long side is at most the
+/// one asked, at the given quality.
+///
+/// A JPEG has no alpha, so every pixel is laid over white first, once:
+/// from premultiplied values that is c + (255 − a) per channel, the same
+/// colour pure Dart's encoder makes from a straight one (c·a + 255·(1 − a))
+/// and ImageIO's white fill gives. Until review 171's second pass these
+/// bytes went to the encoder as straight RGBA, and it laid them over white
+/// by their alpha a second time: half-transparent pixels came out too dark.
+///
+/// Pixels past the long side asked ([kEngineMinDecodeLongSidePx]) are then
+/// box-averaged down, as [makeMealThumb] does: after the white, so a
+/// transparent pixel averages in as the white it shows, not as the black
+/// the codec stores.
+Uint8List? _encodeRgbaJpeg((Uint8List, int, int, int, int) a) {
   try {
-    final (rgba, width, height, quality) = a;
-    final decoded = img.Image.fromBytes(
-        width: width,
-        height: height,
-        bytes: rgba.buffer,
-        bytesOffset: rgba.offsetInBytes,
-        numChannels: 4);
-    return Uint8List.fromList(img.encodeJpg(decoded, quality: quality));
+    final (premultiplied, width, height, longSidePx, quality) = a;
+    // Clamped: a premultiplied channel never exceeds its alpha, so a sum
+    // over 255 would only come from a malformed pixel; it must not wrap.
+    final rgb = Uint8ClampedList(width * height * 3);
+    for (var i = 0, o = 0; o < rgb.length; i += 4, o += 3) {
+      final white = 255 - premultiplied[i + 3];
+      rgb[o] = premultiplied[i] + white;
+      rgb[o + 1] = premultiplied[i + 1] + white;
+      rgb[o + 2] = premultiplied[i + 2] + white;
+    }
+    var opaque = img.Image.fromBytes(
+        width: width, height: height, bytes: rgb.buffer, numChannels: 3);
+    if ((width > height ? width : height) > longSidePx) {
+      // normalize.dart's _reencode, with makeMealThumb's filter.
+      opaque = width >= height
+          ? img.copyResize(opaque,
+              width: longSidePx, interpolation: img.Interpolation.average)
+          : img.copyResize(opaque,
+              height: longSidePx, interpolation: img.Interpolation.average);
+    }
+    return Uint8List.fromList(img.encodeJpg(opaque, quality: quality));
   } catch (_) {
     return null;
   }
