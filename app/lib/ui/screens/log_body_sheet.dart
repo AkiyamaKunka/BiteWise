@@ -223,18 +223,32 @@ class _LogBodySheetState extends State<LogBodySheet> {
       _saving = true;
       _error = null;
     });
-    // Weight: save or (when this edit cleared a previously present value)
-    // delete — leaving the stale row would resurrect it on next load.
-    if (kg != null) {
-      await widget.dao.saveBodyWeight(widget.date, kg, source: 'manual');
-    } else if (widget.existingWeight != null) {
-      await widget.dao.deleteBodyWeight(widget.date);
-    }
-    // Measurements: full-row upsert; all-empty deletes (DAO contract).
-    if (waist != null || chest != null || hip != null ||
-        widget.existing != null) {
-      await widget.dao.saveBodyMeasurements(widget.date,
-          waistCm: waist, chestCm: chest, hipCm: hip);
+    try {
+      // Weight: save or (when this edit cleared a previously present
+      // value) delete — leaving the stale row would resurrect it on next
+      // load.
+      if (kg != null) {
+        await widget.dao.saveBodyWeight(widget.date, kg, source: 'manual');
+      } else if (widget.existingWeight != null) {
+        await widget.dao.deleteBodyWeight(widget.date);
+      }
+      // Measurements: full-row upsert; all-empty deletes (DAO contract).
+      if (waist != null || chest != null || hip != null ||
+          widget.existing != null) {
+        await widget.dao.saveBodyMeasurements(widget.date,
+            waistCm: waist, chestCm: chest, hipCm: hip);
+      }
+    } catch (e) {
+      // The raw error is for the log. The sheet keeps what was typed,
+      // says so and can save again: it stayed on 'Saving…' with Save and
+      // Delete disabled, and said nothing.
+      debugPrint('Body: save failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _saving = false;
+        _error = l.bodySaveFailed;
+      });
+      return;
     }
     if (mounted) Navigator.pop(context, true);
   }

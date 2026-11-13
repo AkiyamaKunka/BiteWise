@@ -72,6 +72,10 @@ class BodyScreenState extends State<BodyScreen> {
   Map<String, BodyMeasurements> _measurementsBy = const {};
   bool _loading = true;
 
+  /// The last read failed: the page shows the error and Retry instead of
+  /// data it may not have, and no Log button (see build).
+  bool _loadFailed = false;
+
   DateTime get _now => (widget.clock ?? DateTime.now)();
 
   @override
@@ -84,18 +88,31 @@ class BodyScreenState extends State<BodyScreen> {
   /// same as the other data tabs (IndexedStack keeps stale state alive).
   Future<void> reload() async {
     final end = isoDate(_now);
-    final weights = await widget.dao.listBodyWeights(_kAllTime, end);
-    final measurements = await widget.dao.listBodyMeasurements(_kAllTime, end);
-    if (!mounted) return;
-    setState(() {
-      _weights = weights;
-      _measurements = measurements;
-      _weightBy = {for (final w in weights) w.date: w};
-      _measurementsBy = {for (final m in measurements) m.date: m};
-      _dates = {..._weightBy.keys, ..._measurementsBy.keys}.toList()
-        ..sort((a, b) => b.compareTo(a));
-      _loading = false;
-    });
+    try {
+      final weights = await widget.dao.listBodyWeights(_kAllTime, end);
+      final measurements =
+          await widget.dao.listBodyMeasurements(_kAllTime, end);
+      if (!mounted) return;
+      setState(() {
+        _weights = weights;
+        _measurements = measurements;
+        _weightBy = {for (final w in weights) w.date: w};
+        _measurementsBy = {for (final m in measurements) m.date: m};
+        _dates = {..._weightBy.keys, ..._measurementsBy.keys}.toList()
+          ..sort((a, b) => b.compareTo(a));
+        _loading = false;
+        _loadFailed = false;
+      });
+    } catch (e) {
+      // The raw error is for the log; the page says one sentence and
+      // offers Retry, as Today and History do. It was a spinner for good.
+      debugPrint('Body: load failed: $e');
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _loadFailed = true;
+      });
+    }
   }
 
   WeightEntry? _weightOn(String date) => _weightBy[date];
@@ -195,10 +212,11 @@ class BodyScreenState extends State<BodyScreen> {
     final now = _now;
     return Scaffold(
       backgroundColor: Colors.transparent,
-      // No Log button until the page has loaded: the sheet prefills from
-      // the day's values, and one opened before them would save today's
-      // measurements as a whole row with the untouched ones blank.
-      floatingActionButton: _loading
+      // No Log button until the page has loaded, nor after a failed read:
+      // the sheet prefills from the day's values, and one opened without
+      // them would save today's measurements as a whole row with the
+      // untouched ones blank.
+      floatingActionButton: _loading || _loadFailed
           ? null
           : FloatingActionButton.extended(
               key: const Key('logBodyButton'),
@@ -214,6 +232,16 @@ class BodyScreenState extends State<BodyScreen> {
         if (_loading)
           const SliverFillRemaining(
               hasScrollBody: false, child: LoadingState())
+        else if (_loadFailed)
+          // InlineError's own 16-pt padding lines it up with the title.
+          SliverToBoxAdapter(
+            child: InlineError(
+              key: const Key('bodyLoadError'),
+              message: l.bodyLoadFailed,
+              onRetry: reload,
+              retryKey: const Key('bodyRetry'),
+            ),
+          )
         else if (empty)
           // EmptyState.sliver keeps growing to the hint's height, so at
           // the largest text sizes it scrolls instead of overflowing. At

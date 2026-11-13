@@ -3229,4 +3229,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String importDeletedLeftOut(int count) {
     return '你在这台手机上删除过的 $count 餐没有被恢复。';
   }
+
+  @override
+  String get bodyLoadFailed => '无法加载体重和围度记录。';
+
+  @override
+  String get bodySaveFailed => '没能保存，请再试一次。';
 }

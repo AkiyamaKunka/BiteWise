@@ -3559,4 +3559,10 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0 left out.';
   }
+
+  @override
+  String get bodyLoadFailed => 'Couldn\'t load your weight and measurements.';
+
+  @override
+  String get bodySaveFailed => 'Couldn\'t save. Try again.';
 }

@@ -999,5 +999,7 @@
   "importNoMatchingMeals": "这些图片都不属于这台手机上的餐。请先导入备份或导出文件。",
   "importTooBig": "超过 100 MB 的文件没有导入。",
   "importPickUnavailable": "这里无法打开文件，请改用「从剪贴板导入」粘贴文件内容。",
-  "importDeletedLeftOut": "你在这台手机上删除过的 {count} 餐没有被恢复。"
+  "importDeletedLeftOut": "你在这台手机上删除过的 {count} 餐没有被恢复。",
+  "bodyLoadFailed": "无法加载体重和围度记录。",
+  "bodySaveFailed": "没能保存，请再试一次。"
 }

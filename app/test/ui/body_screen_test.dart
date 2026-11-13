@@ -483,6 +483,116 @@ void main() {
     expect(rows, findsNWidgets(364));
   });
 
+  // Review 1.7.1: the page and its sheet had no failure path. A failed
+  // read left a spinner for good, with no Log button and no way to try
+  // again (Today and History show an error with Retry); a failed save left
+  // the sheet on 'Saving…' with Save and Delete disabled and nothing said.
+  group('when the database fails', () {
+    Future<_FlakyBodyDao> pumpFlaky(WidgetTester tester,
+        {bool failReads = false, Locale? locale}) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final dao = _FlakyBodyDao()..failReads = failReads;
+      dao.weightsByDate['2026-07-28'] =
+          const WeightEntry('2026-07-28', 82.4, source: 'manual');
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: BodyScreen(dao: dao, clock: () => clock),
+      ));
+      await tester.pumpAndSettle();
+      return dao;
+    }
+
+    testWidgets('a failed read says so, and Retry loads the page',
+        (tester) async {
+      final dao = await pumpFlaky(tester, failReads: true);
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('bodyLoadError')), findsOneWidget);
+      expect(find.text("Couldn't load your weight and measurements."),
+          findsOneWidget);
+      expect(find.textContaining('database is locked'), findsNothing,
+          reason: 'the raw error belongs in the log');
+      expect(find.byType(CircularProgressIndicator), findsNothing,
+          reason: 'not a spinner for good');
+      expect(find.byKey(const Key('logBodyButton')), findsNothing,
+          reason: 'the sheet prefills from data the page does not have');
+
+      dao.failReads = false;
+      await tester.tap(find.byKey(const Key('bodyRetry')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('bodyLoadError')), findsNothing);
+      expect(find.text('82.4'), findsOneWidget);
+      expect(find.byKey(const Key('logBodyButton')), findsOneWidget);
+    });
+
+    testWidgets('a read that fails after a good one shows the error, not '
+        'the old page', (tester) async {
+      final dao = await pumpFlaky(tester);
+      expect(find.text('82.4'), findsOneWidget);
+      dao.failReads = true;
+      await tester
+          .state<BodyScreenState>(find.byType(BodyScreen))
+          .reload();
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byKey(const Key('bodyLoadError')), findsOneWidget);
+      expect(find.byKey(const Key('logBodyButton')), findsNothing);
+    });
+
+    testWidgets('zh: the error sentence is Chinese', (tester) async {
+      await pumpFlaky(tester, failReads: true, locale: const Locale('zh'));
+      expect(find.text('无法加载体重和围度记录。'), findsOneWidget);
+      expect(find.text('重试'), findsOneWidget);
+    });
+
+    testWidgets('a failed save keeps the sheet and what was typed, says '
+        'so, and Save works again', (tester) async {
+      final dao = await pumpFlaky(tester);
+      await tester.tap(find.byKey(const Key('logBodyButton')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '81.6');
+      dao.failWrites = true;
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(find.byType(LogBodySheet), findsOneWidget,
+          reason: 'the sheet stays open');
+      expect(find.text("Couldn't save. Try again."), findsOneWidget);
+      expect(find.textContaining('disk I/O'), findsNothing);
+      final save =
+          tester.widget<FilledButton>(find.byKey(const Key('bodySheetSave')));
+      expect(save.onPressed, isNotNull, reason: 'not stuck on Saving…');
+      expect((save.child! as Text).data, 'Save');
+      expect(
+          tester
+              .widget<TextField>(find.byKey(const Key('bodyWeightField')))
+              .controller!
+              .text,
+          '81.6');
+
+      dao.failWrites = false;
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LogBodySheet), findsNothing);
+      expect(dao.weightsByDate['2026-08-02']?.kg, 81.6);
+      expect(find.text('81.6'), findsOneWidget, reason: 'page reloaded');
+    });
+
+    testWidgets('zh: the save failure is Chinese', (tester) async {
+      final dao = await pumpFlaky(tester, locale: const Locale('zh'));
+      await tester.tap(find.byKey(const Key('logBodyButton')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '81.6');
+      dao.failWrites = true;
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pumpAndSettle();
+      expect(find.text('没能保存，请再试一次。'), findsOneWidget);
+    });
+  });
+
   // ── Measurements rows at accessibility text sizes (2026-10-07) ────────
   // The row was label (fixed 64 px) + value + 'on {date}' + Spacer + delta,
   // none of which could shrink: at 1.64× (AX1) and 2× it overflowed the
@@ -592,4 +702,25 @@ void main() {
       }
     }
   }, skip: haveIphoneFonts ? false : 'needs the macOS system fonts');
+}
+
+/// A DAO whose body reads or writes can be made to fail, as a locked or
+/// full database does.
+class _FlakyBodyDao extends FakeDao {
+  bool failReads = false;
+  bool failWrites = false;
+
+  @override
+  Future<List<WeightEntry>> listBodyWeights(
+      String startDate, String endDate) async {
+    if (failReads) throw StateError('database is locked');
+    return super.listBodyWeights(startDate, endDate);
+  }
+
+  @override
+  Future<void> saveBodyWeight(String date, double kg,
+      {String source = 'nl'}) async {
+    if (failWrites) throw StateError('disk I/O error');
+    return super.saveBodyWeight(date, kg, source: source);
+  }
 }

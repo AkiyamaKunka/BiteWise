@@ -5410,6 +5410,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{count, plural, =1{1 meal you deleted on this phone was} other{{count} meals you deleted on this phone were}} left out.'**
   String importDeletedLeftOut(int count);
+
+  /// Body tab error state when reading the weight or measurements fails; shown with a Retry button and no Log button (the raw error goes to the debug log only).
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load your weight and measurements.'**
+  String get bodyLoadFailed;
+
+  /// Log body sheet: shown under the fields when saving the weight or measurements fails. The sheet stays open with what was typed, and Save can be tapped again.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save. Try again.'**
+  String get bodySaveFailed;
 }
 
 class _AppLocalizationsDelegate
