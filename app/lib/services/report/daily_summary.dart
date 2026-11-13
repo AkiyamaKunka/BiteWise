@@ -1,19 +1,14 @@
 /// Delivering the daily coach notification (user request 2026-08-06).
 ///
-/// WHY THIS IS NOT JUST A TIMER: ReportNotifier arms an in-process Timer,
-/// which dies the moment the OS kills the app — and EMUI-class Androids
-/// kill aggressively, so the scheduled summary silently never arrived.
-/// The durable path piggybacks the WorkManager heartbeat that already
-/// runs every 30 minutes for the photo watcher: on each run, if the
-/// report time has passed and today's summary has not been posted yet,
-/// compute it from the LOCAL database and post.
+/// On both phones the summary is a card handed to the OS ahead of time
+/// (ui/os_summary.dart), built by [summaryForDay]. [maybePostDailySummary]
+/// is the POST-at-the-slot path: Android's delivery from August 2026 to the
+/// Play push (an in-process Timer plus the 30-minute WorkManager job, which
+/// came late or never), kept for a host with no OS scheduler.
 ///
-/// Both paths (live Timer, background catch-up) go through
-/// [maybePostDailySummary], guarded by a persisted per-date watermark that
-/// each caller reads FRESH (the paths run in different isolates, whose
-/// SharedPreferences caches never see each other's writes). Two posters
-/// reading at the same instant could still both post; the fresh read
-/// closes the common case of a Timer that fires late, after the heartbeat.
+/// It is guarded by a persisted per-date watermark that each caller reads
+/// FRESH (two isolates' SharedPreferences caches never see each other's
+/// writes), so two posters cannot both say the same day.
 library;
 
 import '../../core/coerce.dart' show safeNumber;

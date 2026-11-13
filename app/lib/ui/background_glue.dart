@@ -39,7 +39,6 @@ import '../services/photo/glasses_check.dart' show recordGlassesCheckLocally;
 import '../services/photo/photo_library.dart' show photoLibraryAccess;
 import '../services/photo/watcher.dart';
 import '../services/report/notifications.dart';
-import '../services/report/daily_summary.dart';
 import 'coach_strings.dart';
 import '../services/settings/app_settings.dart';
 import 'photo_pipeline.dart';
@@ -616,47 +615,16 @@ Future<String> _stopReason(BackfillDrain drain,
   return BackgroundStop.done;
 }
 
-/// The Android heartbeat's half of the daily summary: post it when the
-/// slot has passed, that day's is unposted, and the user has not switched
-/// the summary off in Settings. Returns whether a card was presented.
-///
-/// The off switch gates DELIVERY, not the heartbeat: the job stays
-/// registered (see [syncBackgroundScan]) and the photo scan after this
-/// runs regardless. Off opens no database either — a run that has
-/// nothing to say should not take a shot at the shared-handle races.
-/// Before the switch (2026-10-10) this path fired for every install,
-/// every night, watcher and key or not: friends who upgraded from the
-/// Timer-only APKs got a "0 kcal" card they never opted into.
-@visibleForTesting
-Future<bool> postHeadlessSummary({
-  required AppSettings settings,
-  required Future<MealsDao> Function() openDao,
-  required Future<void> Function(String title, String body) present,
-  DateTime Function() now = DateTime.now,
-}) async {
-  if (!settings.summaryEnabled) return false;
-  return maybePostDailySummary(DailySummaryDeps(
-    dao: await openDao(),
-    reportTime: settings.reportTime,
-    calorieGoal: settings.calorieGoal,
-    postedDate: await settings.freshSummaryPostedDate(),
-    markPosted: settings.markSummaryPosted,
-    present: present,
-    strings: coachStringsFor(settings.appLanguage),
-    now: now,
-  ));
-}
-
 /// Production assembly for one background run. Mirrors di.dart's startup
 /// EXCEPT reclaimStaleProcessing: that launch sweep assumes it owns the
 /// only pipeline, and the foreground app may be mid-analysis right now —
 /// reclaiming its 'processing' reservation here could double-log a meal.
 ///
-/// Platform split for the daily summary: Android POSTS it from this
-/// heartbeat (the durable path there); iOS instead RE-ARMS the OS card
-/// after the scan, so a meal logged while the app was closed is in the
-/// card the OS delivers at the slot — posting here too would put a second
-/// alert under the same id minutes after the OS one.
+/// The daily summary: after the scan the run RE-ARMS the OS card, on both
+/// platforms, so a meal logged while the app was closed is in the card the
+/// OS delivers at the slot (os_summary.dart). Android used to POST it from
+/// this job instead (2026-08-06 to the Play push), which is why it came
+/// late, or never offline or in the Rare and Restricted buckets.
 ///
 /// The launch marker is written BEFORE the settings load, and a failed load
 /// ends the run as a success. Loading reads every key from the keychain;
@@ -768,8 +736,8 @@ class RunInFlight {
   }
 }
 
-/// [runHeadlessBackfill] past the launch stamp: settings, the Android
-/// summary, the scan, the iOS summary card.
+/// [runHeadlessBackfill] past the launch stamp: settings, the scan, the
+/// summary card, and on iOS the iCloud Backup.
 Future<bool> _runAfterLaunch({
   required bool ios,
   required SharedPreferences prefs,
@@ -800,25 +768,6 @@ Future<bool> _runAfterLaunch({
       channelStrings: () => notificationChannelFor(settings.appLanguage),
       mealCardIdSeed: 10000 +
           (DateTime.now().millisecondsSinceEpoch ~/ 10000) % 8640000);
-  // The DURABLE daily-summary path. ReportNotifier's in-process Timer
-  // dies with the app, and EMUI kills aggressively — so the notification
-  // the user asked for is delivered by this 30-minute heartbeat instead,
-  // guarded by a freshly read per-date watermark so the live Timer does
-  // not double-post (user request 2026-08-06).
-  if (!ios) {
-    try {
-      await postHeadlessSummary(
-        settings: settings,
-        openDao: createMealsDao,
-        present: (title, body) async {
-          await notifier.init();
-          await notifier.showDailySummary(title, body);
-        },
-      );
-    } catch (_) {
-      // A summary must never take the photo scan down with it.
-    }
-  }
   final bool ok;
   try {
     ok = await headlessBackfillWith(
@@ -865,13 +814,18 @@ Future<bool> _runAfterLaunch({
     await recorder.finish(BackgroundStop.error(e));
     rethrow;
   }
+  try {
+    // Android: a card still pending past its slot (the inexact alarm runs
+    // late) is posted rather than replaced (deliverOverdue).
+    await armOsDailySummary(
+        dao: await createMealsDao(),
+        settings: settings,
+        notifier: notifier,
+        deliverOverdue: !ios);
+  } catch (_) {
+    // The scan's work is saved either way; the card refreshes next open.
+  }
   if (ios) {
-    try {
-      await armOsDailySummary(
-          dao: await createMealsDao(), settings: settings, notifier: notifier);
-    } catch (_) {
-      // The scan's work is saved either way; the card refreshes next open.
-    }
     // iCloud Backup (1.7.0): only a backup this install already owns, only
     // if something changed, with at least 8 s left before the deadline;
     // never a first write, a download or a question here (G8).

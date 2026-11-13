@@ -6,6 +6,7 @@ library;
 import 'package:calorie_tracker/services/report/notifications.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timezone/timezone.dart' show TZDateTime;
 
 /// Records what ReportNotifier hands the real plugin. Everything else
 /// (the permission request) hits Fake's throwing noSuchMethod, which init
@@ -44,6 +45,38 @@ class _RecordingPlugin extends Fake implements FlutterLocalNotificationsPlugin {
     String? payload,
   }) async =>
       shown.add(notificationDetails);
+
+  /// What zonedSchedule was handed, and the pending list it builds (the
+  /// plugin's own record, as Android keeps it until the alarm fires).
+  final zoned = <({int id, TZDateTime when, String? payload,
+      AndroidScheduleMode mode})>[];
+  final pending = <PendingNotificationRequest>[];
+
+  @override
+  Future<void> zonedSchedule({
+    required int id,
+    required TZDateTime scheduledDate,
+    required NotificationDetails notificationDetails,
+    required AndroidScheduleMode androidScheduleMode,
+    String? title,
+    String? body,
+    String? payload,
+    DateTimeComponents? matchDateTimeComponents,
+  }) async {
+    zoned.add((
+      id: id,
+      when: scheduledDate,
+      payload: payload,
+      mode: androidScheduleMode
+    ));
+    pending
+      ..removeWhere((p) => p.id == id)
+      ..add(PendingNotificationRequest(id, title, body, payload));
+  }
+
+  @override
+  Future<List<PendingNotificationRequest>> pendingNotificationRequests() async =>
+      List.of(pending);
 
   @override
   T? resolvePlatformSpecificImplementation<
@@ -377,6 +410,41 @@ void main() {
     expect(android.channelName, 'Reports & meals');
     expect(android.channelDescription,
         'Daily calorie reports and auto-logged meal cards');
+  });
+
+  // The Android OS card (Play push, 2026-11-13): the alarm is inexact, and
+  // the card says which slot it is for, so a re-arm after the slot can
+  // tell a card still waiting for its alarm from one delivered.
+  test('the OS card is inexact and carries its slot, which reads back '
+      'while the OS holds it', () async {
+    final plugin = _RecordingPlugin(android: _FakeAndroid());
+    final notifier = ReportNotifier(plugin: plugin);
+    expect(await notifier.pendingDailySlot(), isNull);
+    final when = DateTime(2026, 11, 13, 21, 30);
+    await notifier.scheduleDailyAt(when: when, title: 't', body: 'b');
+    final z = plugin.zoned.single;
+    expect(z.id, ReportNotifier.dailyReportNotificationId);
+    expect(z.mode, AndroidScheduleMode.inexactAllowWhileIdle,
+        reason: 'no exact-alarm permission is declared, by policy');
+    expect(z.when.isAtSameMomentAs(when), isTrue);
+    expect(z.payload, ReportNotifier.dailySlotPayload(when));
+    expect(await notifier.pendingDailySlot(), when);
+    plugin.pending.clear(); // the alarm fired: the plugin forgets the card
+    expect(await notifier.pendingDailySlot(), isNull);
+  });
+
+  test('a pending card without a slot payload reads as no slot', () async {
+    expect(ReportNotifier.slotFromPayload(null), isNull);
+    expect(ReportNotifier.slotFromPayload(''), isNull);
+    expect(ReportNotifier.slotFromPayload('daily:junk'), isNull);
+    expect(ReportNotifier.slotFromPayload('meal:2026-11-13T03:30:00.000Z'),
+        isNull);
+    final when = DateTime(2026, 3, 8, 2, 30); // any local wall time
+    expect(ReportNotifier.slotFromPayload(ReportNotifier.dailySlotPayload(when)),
+        when);
+    final notifier = ReportNotifier(plugin: _BarePlugin());
+    await expectLater(notifier.pendingDailySlot(), completion(isNull),
+        reason: 'no platform plugin: never throws');
   });
 
   test('scheduledDailyAt answers only while the OS still holds the card',

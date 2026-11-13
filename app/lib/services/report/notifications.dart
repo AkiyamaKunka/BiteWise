@@ -1,13 +1,15 @@
 /// Local notifications for the report module (spec §5 delivery surface).
 ///
-/// scheduleDaily takes the dependency-free route the port spec allows: the
-/// timezone package is NOT a pubspec dependency, so instead of
-/// zonedSchedule the notifier computes the next wall-clock occurrence with
-/// plain DateTime, arms a Timer, and re-arms after each fire
-/// (reschedule-after-fire pattern). Constraint: an in-process Timer does
-/// not survive process death — the integrator re-calls scheduleDaily on app
-/// launch with the persisted hh:mm setting. Exact delivery while the app is
-/// dead would need zonedSchedule + the timezone dep, or platform alarms.
+/// Two ways to deliver the daily summary:
+///   * [ReportNotifier.scheduleDailyAt] hands ONE card for the next slot to
+///     the OS, built ahead of time — the path on both phones (iOS since
+///     2026-09-28, Android since the Play push, 2026-11-13). The OS
+///     delivers it with the app dead; callers re-arm whenever the content
+///     could have changed (os_summary.dart).
+///   * [ReportNotifier.scheduleDaily] arms an in-process Timer and re-arms
+///     after each fire. It dies with the process, so it is only the
+///     fallback for a host with no OS scheduler (and the tests' seam).
+/// Meal cards and the other notices are posted at once ([showMealCard]).
 library;
 
 import 'dart:async';
@@ -37,6 +39,7 @@ class ReportNotifier {
     Future<String?> Function(DateTime slotDate)? dailyBody,
     ({String name, String description}) Function()? channelStrings,
     int? mealCardIdSeed,
+    Future<String?> Function()? pendingDailyPayload,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
         _clock = clock ?? DateTime.now,
         // ignore: prefer_initializing_formals
@@ -52,7 +55,9 @@ class ReportNotifier {
         // ignore: prefer_initializing_formals
         _dailyBody = dailyBody,
         // ignore: prefer_initializing_formals
-        _channelStrings = channelStrings {
+        _channelStrings = channelStrings,
+        // ignore: prefer_initializing_formals
+        _pendingDailyPayload = pendingDailyPayload {
     // Each background run constructs a FRESH notifier; a fixed 100-base
     // would make every run overwrite the previous run's unread meal cards.
     // Headless callers pass a time-derived seed so ids keep advancing.
@@ -83,6 +88,10 @@ class ReportNotifier {
 
   /// Test seam for [scheduledDailyAt]: the ids the OS still holds pending.
   final Future<List<int>> Function()? _pendingIds;
+
+  /// Test seam for [pendingDailySlot]: the payload of the daily card the OS
+  /// still holds, null when it holds none.
+  final Future<String?> Function()? _pendingDailyPayload;
 
   /// Android channel name/description in the app language, read at post
   /// time so a language switch shows on the very next card. Injected by
@@ -345,7 +354,44 @@ class ReportNotifier {
     }
   }
 
-  /// Hand the daily summary to the OS to deliver at [when] — the iOS path.
+  /// The payload of the card [scheduleDailyAt] hands the OS: its slot, as
+  /// a UTC instant. The OS keeps it with the pending card, so any engine
+  /// can later ask which slot the card it holds is for
+  /// ([pendingDailySlot]). Nothing reads it on a tap.
+  static String dailySlotPayload(DateTime when) =>
+      'daily:${when.toUtc().toIso8601String()}';
+
+  /// The slot in a [dailySlotPayload], in local time; null for anything
+  /// else (a card armed before payloads, say).
+  static DateTime? slotFromPayload(String? payload) {
+    const prefix = 'daily:';
+    if (payload == null || !payload.startsWith(prefix)) return null;
+    return DateTime.tryParse(payload.substring(prefix.length))?.toLocal();
+  }
+
+  /// The slot of the daily card the OS still holds, or null: none pending,
+  /// or the OS would not say. On Android a pending card whose slot has
+  /// passed has not been delivered yet — an inexact alarm runs late — or
+  /// never will be (a force stop takes the alarm, not the plugin's record
+  /// of it). Never throws.
+  Future<DateTime?> pendingDailySlot() async {
+    try {
+      final probe = _pendingDailyPayload;
+      if (probe != null) return slotFromPayload(await probe());
+      if (_scheduler != null) return null; // seam-only tests: no OS
+      for (final p in await _plugin.pendingNotificationRequests()) {
+        if (p.id == dailyReportNotificationId) {
+          return slotFromPayload(p.payload);
+        }
+      }
+    } catch (_) {
+      // No platform plugin (tests), or the OS would not say.
+    }
+    return null;
+  }
+
+  /// Hand the daily summary to the OS to deliver at [when] — the path on
+  /// both phones (os_summary.dart).
   ///
   /// iOS suspends the process seconds after backgrounding and this app has
   /// no background execution there (spec §6: share/picker only, no
@@ -359,7 +405,16 @@ class ReportNotifier {
   /// "today" title. If the app is never opened again, silence beats a lie.
   ///
   /// Same id as the live path, so a re-arm REPLACES the pending card rather
-  /// than stacking one per app open.
+  /// than stacking one per app open. The card carries its slot
+  /// ([dailySlotPayload]).
+  ///
+  /// Android: an INEXACT alarm (no exact-alarm permission, by policy). On
+  /// Android 12+ it fires within about an hour after [when], later in Doze
+  /// or battery saver; it needs no network, and even the Restricted
+  /// standby bucket allows one a day, but the user's own battery
+  /// 'Restricted' setting blocks it. The receivers that deliver it and
+  /// re-arm it after a reboot or an app update are declared in the
+  /// manifest (flutter_local_notifications' README).
   Future<void> scheduleDailyAt({
     required DateTime when,
     required String title,
@@ -382,8 +437,9 @@ class ReportNotifier {
       // for a repeating wall-clock trigger, which this is not.)
       scheduledDate: tz.TZDateTime.from(when, tz.UTC),
       notificationDetails: _details(),
-      // Ignored on iOS. Inexact so that if Android ever opts in this cannot
-      // throw for a missing SCHEDULE_EXACT_ALARM grant.
+      payload: dailySlotPayload(when),
+      // Ignored on iOS. Inexact: the app holds no SCHEDULE_EXACT_ALARM or
+      // USE_EXACT_ALARM permission, and an exact mode would throw for it.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
     _nextDailyFire = when;

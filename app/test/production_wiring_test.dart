@@ -729,6 +729,63 @@ void main() {
     });
   });
 
+  // Play push, 2026-11-13: Android's summary is an OS card too (an
+  // inexact alarm), armed and re-armed like the iPhone's; it used to come
+  // from a Timer or the 30-minute photo job, late or never.
+  group('the daily summary is an OS card on both phones', () {
+    test('di.dart arms it on Android too, posting a card left past its '
+        'slot first, and the shell and slot edits re-arm it', () {
+      final init = _body(
+        _source('lib/ui/di.dart'),
+        'static Future<AppServices> init(',
+        indent: '  ',
+      );
+      expect(
+        init,
+        _wired(
+          r'final osSchedulesSummary = Platform\.isIOS \|\| Platform\.isAndroid;',
+        ),
+      );
+      expect(
+        init,
+        _wired(
+          r'Future<void> armOsSummary\(\) => armOsDailySummary\( dao: dao, '
+          r'settings: settings, notifier: notifier, '
+          r'deliverOverdue: Platform\.isAndroid\);',
+        ),
+      );
+      expect(
+        init,
+        _wired(
+          r'refreshDailyNotification: osSchedulesSummary \? armOsSummary : null,',
+        ),
+      );
+      expect(
+        init,
+        _wired(
+          r'onReportTimeChanged: osSchedulesSummary \? armOsSummary : null\);',
+        ),
+      );
+    });
+
+    test('the background run re-arms it on both platforms and posts '
+        'nothing itself', () {
+      final glue = _source('lib/ui/background_glue.dart');
+      final after = _body(glue, 'Future<bool> _runAfterLaunch({');
+      expect(
+        after,
+        _wired(
+          r'\n  try \{\s*(//[^\n]*\n\s*)*await armOsDailySummary\( '
+          r'dao: await createMealsDao\(\), settings: settings, '
+          r'notifier: notifier, deliverOverdue: !ios\);',
+        ),
+      );
+      expect(glue, isNot(contains('postHeadlessSummary')));
+      expect(glue, isNot(contains('maybePostDailySummary')));
+      expect(glue, isNot(contains('showDailySummary')));
+    });
+  });
+
   group('lib/ui/background_glue.dart (the headless run)', () {
     String glue() => _source('lib/ui/background_glue.dart');
     String launch() => _body(glue(), 'Future<bool> runHeadlessBackfill({');
