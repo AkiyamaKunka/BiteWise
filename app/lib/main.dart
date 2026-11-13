@@ -2,8 +2,11 @@
 /// services, wired in ui/di.dart), then the Material app shell.
 library;
 
+import 'dart:ui' show PlatformDispatcher;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show PlatformException;
+import 'package:sqflite/sqflite.dart' show DatabaseException;
 
 import 'ui/app.dart';
 import 'ui/di.dart';
@@ -119,7 +122,21 @@ bool _flushSnackbars() {
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  PlatformDispatcher.instance.onError = onUncaughtError;
   await _boot();
+}
+
+/// The root isolate's uncaught errors. The engine's own report of one
+/// ('Unhandled Exception: ' and its text) reaches the device log in release
+/// builds too, and sqflite's text carries the statement and its arguments:
+/// meal text, weights, girths. A database error is logged by its type
+/// alone and handled; every other error goes on to the engine's report as
+/// before (false). A backstop: the code that writes catches its errors.
+@visibleForTesting
+bool onUncaughtError(Object error, StackTrace stack) {
+  if (error is! DatabaseException) return false;
+  debugPrint('Uncaught database error (${error.runtimeType})');
+  return true;
 }
 
 /// One startup attempt. A failure shows [StartupErrorApp], which calls this
