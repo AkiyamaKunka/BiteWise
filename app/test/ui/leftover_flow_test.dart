@@ -2,6 +2,7 @@
 // pick the photo, confirm — and the exact incident that motivated the
 // feature (the watcher already logged the leftover photo as a new meal)
 // must repair itself in the same confirmation.
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
@@ -11,6 +12,7 @@ import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/photo/photo_hash.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/ui/meal_in_use.dart';
 import 'package:calorie_tracker/ui/screens/leftover_flow.dart';
 import 'package:calorie_tracker/ui/services.dart'
     show RecentAsset, UiServices;
@@ -84,6 +86,21 @@ class _FailingDao extends FakeDao {
   Future<void> deleteMeal(int mealId) async {
     if (failDelete) throw StateError('disk I/O error');
     return super.deleteMeal(mealId);
+  }
+}
+
+/// The model call held open until [gate] completes: the estimate in
+/// flight, the analyzing overlay up.
+class _HeldAnalyzer extends FakeAnalyzer {
+  final gate = Completer<Map<String, dynamic>?>();
+  int calls = 0;
+
+  @override
+  Future<Map<String, dynamic>?> leftoverIntent(
+      Uint8List originalBytes, String originalCompact) {
+    calls++;
+    lastLeftoverCompact = originalCompact;
+    return gate.future;
   }
 }
 
@@ -767,6 +784,93 @@ void main() {
       await tester.pumpAndSettle();
       expect(failing.byId(1).analysis['total_calories'], 665);
       expect(failing.meals.where((m) => m.id == 2), isEmpty);
+    });
+  });
+
+  // The analyzing overlay was a plain Text over the photo step: silent to
+  // a screen reader, and its scrim stopped a finger but not VoiceOver.
+  // 'Change' under it let go of the meal's hold mid-estimate and brought
+  // back the meal picker; a meal picked there showed as chosen while the
+  // confirm deducted the first one (review 171, C30).
+  group('while a photo is analyzed', () {
+    late MealInUseRegistry registry;
+    late _HeldAnalyzer held;
+
+    /// Meal 2 picked, its leftover photo tapped, the model call in flight.
+    Future<void> startEstimate(WidgetTester tester) async {
+      registry = MealInUseRegistry();
+      held = _HeldAnalyzer();
+      dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));
+      dao.put(_meal(2, '12:30', 965, hash: 'h2', desc: 'Beef noodles'));
+      await pump(tester,
+          services: makeServices(
+              dao: dao, analyzer: held, picker: picker, mealInUse: registry));
+      await tester.tap(find.byKey(const Key('leftoverMeal-2')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('leftoverPhoto-lp1')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(held.calls, 1, reason: 'the model call is in flight');
+      expect(registry.isInUse(2), isTrue);
+    }
+
+    /// The estimate comes back for meal 2; its confirm, then Cancel.
+    Future<void> finishEstimate(WidgetTester tester) async {
+      held.gate.complete(analyzer.nextLeftover);
+      await tester.pumpAndSettle();
+      expect(
+          find.descendant(
+              of: find.byType(AlertDialog),
+              matching: find.text('Beef noodles')),
+          findsOneWidget);
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a screen reader hears it: the label is a live region',
+        (tester) async {
+      final handle = tester.ensureSemantics();
+      final en = AppLocalizationsEn();
+      await startEstimate(tester);
+      expect(tester.getSemantics(find.text(en.analyzing)),
+          isSemantics(label: en.analyzing, isLiveRegion: true));
+      await finishEstimate(tester);
+      handle.dispose();
+    });
+
+    testWidgets('a screen reader cannot reach the step under it, and gets '
+        'it back after', (tester) async {
+      final handle = tester.ensureSemantics();
+      final en = AppLocalizationsEn();
+      await startEstimate(tester);
+      expect(find.semantics.byLabel(en.leftoverChangeMeal), findsNothing);
+      expect(find.semantics.byLabel(RegExp('^Photo 1 of 1')), findsNothing);
+      await finishEstimate(tester);
+      expect(find.semantics.byLabel(en.leftoverChangeMeal), findsOne);
+      expect(find.semantics.byLabel(RegExp('^Photo 1 of 1')), findsOne);
+      handle.dispose();
+    },
+        variant: TargetPlatformVariant(
+            {TargetPlatform.iOS, TargetPlatform.android}));
+
+    testWidgets('Change does nothing until the estimate is done, however it '
+        'is pressed', (tester) async {
+      await startEstimate(tester);
+      // A hardware keyboard or Switch Control presses the button itself,
+      // with no hit test for the scrim to stop.
+      tester
+          .widget<TextButton>(find.byKey(const Key('leftoverChangeMeal')))
+          .onPressed!();
+      await tester.pump();
+      expect(find.byKey(const Key('leftoverChosenMeal')), findsOneWidget);
+      expect(registry.isInUse(2), isTrue, reason: 'the meal is still held');
+      await finishEstimate(tester);
+
+      await tester.tap(find.byKey(const Key('leftoverChangeMeal')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('leftoverMeal-1')), findsOneWidget,
+          reason: 'once it is done, Change works again');
+      expect(registry.isInUse(2), isFalse);
     });
   });
 }

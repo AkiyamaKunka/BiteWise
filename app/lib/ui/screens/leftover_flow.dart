@@ -138,6 +138,9 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
   }
 
   void _clearSelection() {
+    // Not while a photo is estimated against this meal: its hold lasts
+    // until the result, and the confirm is for the meal shown.
+    if (_busy) return;
     _hold?.release();
     _hold = null;
     setState(() => _selected = null);
@@ -404,37 +407,31 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
     return Scaffold(
       appBar: AppBar(title: Text(l.leftoverTitle)),
       body: Stack(children: [
-        if (_loading)
-          const Center(child: CircularProgressIndicator())
-        else if (_loadFailed)
-          ListView(children: [
-            InlineError(
-              key: const Key('leftoverLoadError'),
-              message: l.leftoverLoadFailed,
-              onRetry: _retryLoad,
-              retryKey: const Key('leftoverRetry'),
-            ),
-          ])
-        else if (_selected == null)
-          _mealPicker(theme, l)
-        else
-          _photoPicker(theme, l),
+        // The scrim stops a finger, not a screen reader: while a photo is
+        // analyzed the step is out of its reach too ('Change' under the
+        // spinner let go of the meal mid-estimate; review 171).
+        ExcludeSemantics(excluding: _analyzing, child: _step(theme, l)),
         if (_analyzing)
-          Container(
-            color: theme.colorScheme.surface.withValues(alpha: 0.7),
-            child: Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const CircularProgressIndicator(),
-                  const SizedBox(height: 12),
-                  Text(l.analyzing),
-                ],
-              ),
-            ),
-          ),
+          // The shared overlay: its label is a live region, so the round
+          // trip is not silent to a screen reader until the result.
+          AnalyzingOverlay(label: l.analyzing),
       ]),
     );
+  }
+
+  Widget _step(ThemeData theme, AppLocalizations l) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadFailed) {
+      return ListView(children: [
+        InlineError(
+          key: const Key('leftoverLoadError'),
+          message: l.leftoverLoadFailed,
+          onRetry: _retryLoad,
+          retryKey: const Key('leftoverRetry'),
+        ),
+      ]);
+    }
+    return _selected == null ? _mealPicker(theme, l) : _photoPicker(theme, l);
   }
 
   Widget _mealPicker(ThemeData theme, dynamic l) {
