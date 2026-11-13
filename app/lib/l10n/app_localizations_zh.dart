@@ -826,9 +826,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get unitsFooter => '身体体重与围度的显示和输入单位。食物始终使用克与千卡。';
 
   @override
-  String get bodyEmptyHintImperial => '点击「记录」来记体重或腰围、胸围、臀围。';
-
-  @override
   String bodySince(String date) {
     return '自 $date';
   }

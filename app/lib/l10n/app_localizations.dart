@@ -1458,12 +1458,6 @@ abstract class AppLocalizations {
   /// **'How body weight and measurements are shown and entered. Food stays in grams and kcal either way.'**
   String get unitsFooter;
 
-  /// bodyEmptyHint for imperial units (en-only surface; zh never renders imperial).
-  ///
-  /// In en, this message translates to:
-  /// **'Tap Log to record your weight or your waist, chest and hip measurements.'**
-  String get bodyEmptyHintImperial;
-
   /// No description provided for @bodySince.
   ///
   /// In en, this message translates to:

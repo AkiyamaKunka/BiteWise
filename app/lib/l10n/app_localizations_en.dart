@@ -884,10 +884,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'How body weight and measurements are shown and entered. Food stays in grams and kcal either way.';
 
   @override
-  String get bodyEmptyHintImperial =>
-      'Tap Log to record your weight or your waist, chest and hip measurements.';
-
-  @override
   String bodySince(String date) {
     return 'since $date';
   }

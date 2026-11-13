@@ -667,10 +667,6 @@
   "unitsImperialDetail": "Imperial — lb · in",
   "unitsSheetTitle": "Units",
   "unitsFooter": "How body weight and measurements are shown and entered. Food stays in grams and kcal either way.",
-  "bodyEmptyHintImperial": "Tap Log to record your weight or your waist, chest and hip measurements.",
-  "@bodyEmptyHintImperial": {
-    "description": "bodyEmptyHint for imperial units (en-only surface; zh never renders imperial)."
-  },
   "bodySince": "since {date}",
   "@bodySince": {
     "placeholders": {
