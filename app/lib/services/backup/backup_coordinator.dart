@@ -238,6 +238,7 @@ class BackupCoordinator {
     Future<void> Function(String name, Future<void> Function() body)?
         backgroundGuard,
     this.onDataImported,
+    this.onCatchUpReleased,
     this.debounce = const Duration(minutes: 2),
     this.pollEvery = const Duration(minutes: 5),
     this.gatherWait = const Duration(seconds: 90),
@@ -252,7 +253,10 @@ class BackupCoordinator {
     _status = ValueNotifier(_statusFromPrefs());
     // The launch's look for a backup to offer: the shell starts it after
     // the first frame, and init asks about the photo catch-up before that.
-    if (uiEngine) _deciding = Completer<void>();
+    if (uiEngine) {
+      _deciding = Completer<void>();
+      _decidingSince = _now;
+    }
   }
 
   final MealsDao _dao;
@@ -273,6 +277,14 @@ class BackupCoordinator {
   /// After a restore, takeover or combine brought rows in: the screens
   /// reload and the thumbnail cache is cleared.
   final void Function()? onDataImported;
+
+  /// The app's engine: a restore offer or a restore (or a takeover or
+  /// combine that merged another install's backup in) stopped holding the
+  /// photo catch-up. The photos it kept back are caught up then (di.dart),
+  /// not only at the next return to the app: the launch or resume catch-up
+  /// asked while it held, and the live watcher's photos were released.
+  /// Not while something else still holds it ([holdsPhotosNow]).
+  final void Function()? onCatchUpReleased;
 
   final Duration debounce;
   final Duration pollEvery;
@@ -312,6 +324,10 @@ class BackupCoordinator {
   /// one (or ended without deciding): the photo catch-up waits for it
   /// ([holdsCatchUp]). Pending from the start in the app's engine.
   Completer<void>? _deciding;
+
+  /// When [_deciding] began ([holdsPhotosNow] waits no longer than
+  /// [holdsCatchUp] does).
+  DateTime? _decidingSince;
 
   /// A look for a backup to offer got as far as deciding (an offer, the
   /// notice, or nothing to ask) for the iCloud account of now. One that
@@ -1085,7 +1101,10 @@ class BackupCoordinator {
   }
 
   Future<void> _launchCheck({bool startWatching = false}) async {
-    _deciding ??= Completer<void>();
+    if (_deciding == null) {
+      _deciding = Completer<void>();
+      _decidingSince = _now;
+    }
     final bool nothingToAsk;
     try {
       nothingToAsk = await _lookForOffer(startWatching: startWatching);
@@ -1287,9 +1306,33 @@ class BackupCoordinator {
   /// engine sets and lets go the lease itself): a catch-up already running
   /// asks it before each photo, and stops before the next one once an
   /// offer is raised or a restore starts.
+  ///
+  /// An offer raised here holds until it is answered or dismissed, however
+  /// long it waits: the 30-minute lease is how the background run sees it,
+  /// and what a crash leaves behind, not how long an offer may stay open.
   bool get holdsCatchUpNow {
+    if (prompt.value is RestoreOfferPrompt) return true;
     final until = _prefs.holdCatchUpUntil;
     return until != null && until.isAfter(_now);
+  }
+
+  /// Whether an AUTOMATIC photo should wait right now: the app's pipeline
+  /// releases it untouched (PhotoPipeline.intakeHeld), and a catch-up
+  /// after the hold offers it again ([onCatchUpReleased]). Held while
+  /// [holdsCatchUpNow], and while a look for a backup to offer has not
+  /// decided, as the catch-up waits for it ([holdsCatchUp]: [gatherWait] +
+  /// [lookSlack] at most from when the look began). The live watcher hands
+  /// photos over from the first frame on, while the launch's look is still
+  /// gathering the folder: a photo logged then would be kept over the
+  /// backup's own, maybe corrected, meal for it once the offer it raises
+  /// is answered with Restore (a restore merges photo meals by their
+  /// photo).
+  bool get holdsPhotosNow {
+    if (holdsCatchUpNow) return true;
+    final since = _decidingSince;
+    return _deciding != null &&
+        since != null &&
+        _now.difference(since) < gatherWait + lookSlack;
   }
 
   /// This install's id once it has one (an export's header uses it).
@@ -1423,7 +1466,16 @@ class BackupCoordinator {
 
   Future<void> _holdCatchUp() =>
       _prefs.setHoldCatchUpUntil(_now.add(catchUpLease));
-  Future<void> _releaseCatchUp() => _prefs.setHoldCatchUpUntil(null);
+
+  /// Lets the lease go, and the app catch up on what it held back once
+  /// nothing else holds it ([onCatchUpReleased]).
+  Future<void> _releaseCatchUp() async {
+    await _prefs.setHoldCatchUpUntil(null);
+    if (!uiEngine || holdsPhotosNow) return;
+    try {
+      onCatchUpReleased?.call();
+    } catch (_) {}
+  }
 
   Future<void> _markAnswered(String installId) async {
     final answered = {..._prefs.offersAnswered, installId}.toList();
@@ -1566,6 +1618,9 @@ class BackupCoordinator {
   /// ([restoreTakesOver]), it adopts it: the next write replaces it with
   /// this phone's (now merged) record.
   Future<RestoreSummary> restore(BackupCandidate c) async {
+    // Held from the tap: the offer may have outwaited its own lease, and a
+    // run may have the lock (the import renews it as long as it runs).
+    await _holdCatchUp();
     prompt.value = null;
     _setBusy(true);
     try {
@@ -1700,6 +1755,8 @@ class BackupCoordinator {
   Future<bool> takeOver({required bool replace}) async {
     _setBusy(true);
     var unknown = false;
+    // The merge's import holds the photo catch-up (_importBackup).
+    var held = false;
     try {
       final ok = await _locked(() async {
         await _prefs.reload();
@@ -1710,6 +1767,7 @@ class BackupCoordinator {
           var done = header.months.keys.toList();
           var before = await _monthPrints();
           if (!replace) {
+            held = true;
             final (summary, months, prints, fetched) =
                 await _importBackup(kRecordsFileName, header.installId);
             if (!summary.ok || fetched == null) return false;
@@ -1750,6 +1808,7 @@ class BackupCoordinator {
           replaceUnknown: unknown));
       return state == BackupState.uploading || state == BackupState.ok;
     } finally {
+      if (held) await _releaseCatchUp();
       _setBusy(false);
     }
   }
@@ -1760,6 +1819,8 @@ class BackupCoordinator {
   /// up"); the merge itself stays in either way.
   Future<bool> combine() async {
     _setBusy(true);
+    // The merge's import holds the photo catch-up (_importBackup).
+    var held = false;
     try {
       final ok = await _locked(() async {
         await _prefs.reload();
@@ -1794,6 +1855,7 @@ class BackupCoordinator {
         if (cur.kind == CloudResultKind.ok &&
             curHeader != null &&
             curHeader.installId != me) {
+          held = true;
           final (summary, done, before, fetched) =
               await _importBackup(kRecordsFileName, curHeader.installId);
           if (summary.ok && fetched != null) {
@@ -1813,6 +1875,7 @@ class BackupCoordinator {
           await _run(const _Run(_Kind.now, force: true, takeover: true));
       return state == BackupState.uploading || state == BackupState.ok;
     } finally {
+      if (held) await _releaseCatchUp();
       _setBusy(false);
     }
   }

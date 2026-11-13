@@ -233,6 +233,8 @@ class AppServices {
         ? null
         : (o) =>
             notify(outcomeSnackbar(localizationsFor(settings.appLanguage), o));
+    // iCloud Backup (iPhone; built below, after the screens' services).
+    late final BackupCoordinator? cloudBackup;
     final pipeline = PhotoPipeline(
         dao: dao,
         analyzer: analyzer,
@@ -252,6 +254,12 @@ class AppServices {
         // automatic photo starts once the app is in the background.
         backgroundTime: Platform.isIOS ? const BackgroundTime() : null,
         backgrounded: Platform.isIOS ? appEngineBackgrounded : null,
+        // iCloud Backup: while a restore offer, a restore or the look for
+        // one holds the intake, an automatic photo is let go untouched; a
+        // photo logged then would win over the backup's own, maybe
+        // corrected, meal for it. The catch-up below offers it again once
+        // the hold ends.
+        intakeHeld: () => cloudBackup?.holdsPhotosNow ?? false,
         // A photo the background run kept deferring is forgotten once it
         // has a verdict here. 'Already logged' was settled by an earlier
         // run, which forgot it then.
@@ -389,10 +397,31 @@ class AppServices {
     // the app shell can ask; an allowed recipient passes straight through.
     final shareConsent = SharedPhotoConsentGate(store);
     final thumbs = MealThumbResolver(dao: dao, library: photoLibrary);
+    // The photos an iCloud Backup hold kept back (the launch or resume
+    // catch-up asked while it held; the pipeline let the live watcher's
+    // go): caught up as soon as the offer is answered or dismissed, or the
+    // restore ends, not only at the next return to the app. The same
+    // catch-up, under the same conditions as the resume's.
+    Future<void> catchUpAfterHold() async {
+      try {
+        await settings.reloadAnalysisBlock();
+      } catch (_) {}
+      if (!settings.watcherEnabled ||
+          !settings.canAutoAnalyze ||
+          !appEngineInForeground()) {
+        return;
+      }
+      await foregroundCatchUp(photoIntake,
+              shouldContinue: () =>
+                  appEngineInForeground() &&
+                  !(cloudBackup?.holdsCatchUpNow ?? false))
+          .then((_) {}, onError: (Object _) {});
+    }
+
     // iCloud Backup (iPhone, 1.7.0): the user's own iCloud Drive, ON by
     // default, nothing uploaded before the notice is answered. The shell
     // starts it after the first frame. Android has no automatic file.
-    final cloudBackup = Platform.isIOS
+    cloudBackup = Platform.isIOS
         ? BackupCoordinator(
             dao: dao,
             transport: const ICloudTransport(),
@@ -404,6 +433,7 @@ class AppServices {
               thumbs.clear();
               signalMealsChanged();
             },
+            onCatchUpReleased: () => unawaited(catchUpAfterHold()),
           )
         : null;
     final ui = UiServices(
@@ -488,7 +518,9 @@ class AppServices {
       // that look (a catch-up begun before the offer exists would log the
       // backup's photos afresh, and the restore would keep those over its
       // own, maybe corrected, meals). One running stops before its next
-      // photo once an offer or a restore holds it.
+      // photo once an offer or a restore holds it; one held is caught up
+      // once the hold ends (catchUpAfterHold), and the pipeline holds the
+      // live watcher's photos meanwhile.
       if (settings.canAutoAnalyze) {
         catchingUp = true;
         Future<void> launchCatchUp() async {

@@ -159,6 +159,11 @@ const String leftoverConflictReason = 'leftover_conflict';
 /// ([AiSendGate]): released, nothing hashed or uploaded.
 const String notAllowedReason = 'not_allowed';
 
+/// [PhotoOutcome.reason] of an automatic photo let go, untouched, while
+/// iCloud Backup holds the intake ([PhotoPipeline.intakeHeld]): released,
+/// and offered again by the catch-up once the hold ends.
+const String backupHoldReason = 'backup_hold';
+
 /// The Glasses check card's outcome (glasses_check.dart) for [o], or null
 /// for a verdict that is not this photo's own: already logged, being
 /// analyzed by another run, a deliberate duplicate of minutes ago.
@@ -376,6 +381,18 @@ class PhotoPipeline {
   /// [glassesCheckLimit]; a throw changes nothing. Null: not recorded.
   final Future<void> Function(GlassesCheckEntry entry)? glassesCheckLog;
 
+  /// iCloud Backup, the app's own engine on iPhone (di.dart:
+  /// BackupCoordinator.holdsPhotosNow): whether a restore offer, a restore
+  /// or the look for a backup to offer holds the automatic intake right
+  /// now. A photo logged then would be kept over the backup's own, maybe
+  /// corrected, meal for the same photo (a restore merges photo meals by
+  /// their photo). An AUTOMATIC photo is therefore released before it is
+  /// hashed, reserved or given a task — retryable, so the watcher keeps it
+  /// unseen and the frontier halts — and the catch-up after the hold
+  /// offers it again. Deliberate photos (picked, shared) always run. Null
+  /// everywhere else; a throwing probe holds nothing.
+  final bool Function()? intakeHeld;
+
   /// The food check that ran on the photo in flight, for its record.
   FoodCheck? _foodChecked;
 
@@ -435,6 +452,7 @@ class PhotoPipeline {
       this.includeGlasses,
       this.foodCheck,
       this.glassesCheckLog,
+      this.intakeHeld,
       Future<String> Function(Uint8List bytes)? hasher,
       Future<Uint8List?> Function(Uint8List original)? thumbnailer,
       DateTime Function()? clock})
@@ -590,6 +608,15 @@ class PhotoPipeline {
   bool _inBackground() {
     try {
       return backgrounded?.call() ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// [intakeHeld], contained: a throwing probe holds nothing.
+  bool _intakeIsHeld() {
+    try {
+      return intakeHeld?.call() ?? false;
     } catch (_) {
       return false;
     }
@@ -828,9 +855,11 @@ class PhotoPipeline {
       final time = backgroundTime;
       final outcome = !photo.deliberate && _inBackground()
           ? _waitsForForeground
-          : await (time == null
-              ? _process(photo)
-              : time.guard('photo', () => _process(photo)));
+          : !photo.deliberate && _intakeIsHeld()
+              ? _heldForBackup
+              : await (time == null
+                  ? _process(photo)
+                  : time.guard('photo', () => _process(photo)));
       // Settled or released by now: no reservation is held past process().
       _held = null;
       final checked = _foodChecked;
@@ -1410,6 +1439,16 @@ class PhotoPipeline {
       retryable: true,
       errorKind: AnalysisErrorKind.unknown,
       detail: 'in the background');
+
+  /// An automatic photo met while iCloud Backup holds the intake
+  /// ([intakeHeld]): released untouched, offered again by the catch-up once
+  /// the hold ends.
+  static const _heldForBackup = PhotoOutcome(PhotoOutcomeKind.failed,
+      'A restore from iCloud is offered or running: this photo waits for it.',
+      retryable: true,
+      errorKind: AnalysisErrorKind.unknown,
+      detail: 'held for iCloud Backup',
+      reason: backupHoldReason);
 
   /// An automatic glasses photo another file of whose shutter press is
   /// already a meal (design G2b): tombstoned, no model call.

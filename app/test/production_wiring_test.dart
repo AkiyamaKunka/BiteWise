@@ -154,6 +154,44 @@ void main() {
       );
     });
 
+    // Review r171: the restore offer's hold stopped only the catch-ups.
+    // The live watcher's photos were still logged (and kept over the
+    // backup's own meals by the restore), and a catch-up the hold had
+    // skipped waited for the next return to the app.
+    test('iCloud Backup holds the automatic intake, and the catch-up it held '
+        'runs once it lets go', () {
+      final pipeline = _call(init(), 'PhotoPipeline(');
+      expect(
+        pipeline,
+        _wired(r'intakeHeld: \(\) => cloudBackup\?\.holdsPhotosNow \?\? false,'),
+      );
+      final coordinator = _call(init(), 'BackupCoordinator(');
+      expect(
+        coordinator,
+        _wired(r'onCatchUpReleased: \(\) => unawaited\(catchUpAfterHold\(\)\),'),
+      );
+      final after = _body(
+        init(),
+        'Future<void> catchUpAfterHold() async {',
+        indent: '    ',
+      );
+      expect(
+        after,
+        _wired(
+          r'if \(!settings\.watcherEnabled \|\| !settings\.canAutoAnalyze \|\| '
+          r'!appEngineInForeground\(\)\) \{ return; \}',
+        ),
+      );
+      expect(
+        after,
+        _wired(
+          r'await foregroundCatchUp\(photoIntake, shouldContinue: \(\) => '
+          r'appEngineInForeground\(\) && '
+          r'!\(cloudBackup\?\.holdsCatchUpNow \?\? false\)\)',
+        ),
+      );
+    });
+
     test('the stuck probe reads the runs and the watermark together', () {
       expect(init(), _wired(r'backgroundScanStuck: backgroundScanStuckNow,'));
     });
