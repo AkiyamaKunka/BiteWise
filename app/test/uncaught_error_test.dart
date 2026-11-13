@@ -5,8 +5,11 @@
 // Some writes can still throw with nothing catching them (an iCloud
 // restore whose import fails, the leftover flow's write, the add flow's
 // Undo Leftover), so main.dart installs a backstop: a database error is
-// logged by its type alone, and every other error goes on to the engine
-// as before.
+// logged by its type and its stack, never its text, and every other error
+// goes on to the engine as before. The stack is frames only (function,
+// file, line; addresses that `flutter symbolize` reads in a release
+// build), and without it every such error was the same one line, with no
+// way to tell which write threw.
 import 'dart:io';
 
 import 'package:calorie_tracker/data/db.dart' show openAppDatabase;
@@ -45,8 +48,8 @@ void main() {
     return lines;
   }
 
-  test('a database error is logged by its type alone, and handled',
-      () async {
+  test('a database error is logged by its type and stack, never its text, '
+      'and handled', () async {
     sqfliteFfiInit();
     databaseFactoryOrNull = createDatabaseFactoryFfi(noIsolate: true);
     final db = await openAppDatabase(path: inMemoryDatabasePath);
@@ -76,6 +79,10 @@ void main() {
         reason: 'handled: the engine prints nothing more of it');
     expect(log, contains('${error.runtimeType}'),
         reason: 'the failure itself is still logged');
+    expect(log, contains('SqfliteMealsDao.saveBodyWeight'),
+        reason: 'its frames say which write threw: $log');
+    expect(log, contains('uncaught_error_test.dart'),
+        reason: 'and from where: $log');
     for (final secret in [
       'INSERT',
       'body_weight',

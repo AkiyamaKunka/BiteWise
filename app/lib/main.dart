@@ -129,13 +129,20 @@ Future<void> main() async {
 /// The root isolate's uncaught errors. The engine's own report of one
 /// ('Unhandled Exception: ' and its text) reaches the device log in release
 /// builds too, and sqflite's text carries the statement and its arguments:
-/// meal text, weights, girths. A database error is logged by its type
-/// alone and handled; every other error goes on to the engine's report as
-/// before (false). A backstop: the code that writes catches its errors.
+/// meal text, weights, girths. A database error is logged by its type and
+/// its stack, never its text, and handled; every other error goes on to
+/// the engine's report as before (false). A backstop: the code that writes
+/// catches its errors.
+///
+/// The stack is frames only (function, file, line; in a release build
+/// addresses, which `flutter symbolize` reads with the Dart symbols each
+/// release keeps), so it says which write threw. The string as the VM
+/// made it: debugPrintStack parses every frame, and a release build's
+/// split-debug-info frames do not parse (it throws on them).
 @visibleForTesting
 bool onUncaughtError(Object error, StackTrace stack) {
   if (error is! DatabaseException) return false;
-  debugPrint('Uncaught database error (${error.runtimeType})');
+  debugPrint('Uncaught database error (${error.runtimeType})\n$stack');
   return true;
 }
 
