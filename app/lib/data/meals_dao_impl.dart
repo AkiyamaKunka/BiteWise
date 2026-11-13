@@ -1128,8 +1128,8 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
     ];
   }
 
-  /// Identity per table — the dedup rule that makes re-importing the same
-  /// file a no-op instead of doubling the user's calories.
+  /// Whether [row] is already here: an edited photoless meal first, then
+  /// the table's identity ([_importIdentity]).
   Future<bool> _importRowExists(
       DatabaseExecutor txn, String table, Map<String, Object?> row) async {
     // A photoless meal that was EDITED after export no longer matches its
@@ -1159,7 +1159,19 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           limit: 1);
       if (edited.isNotEmpty) return true;
     }
-    final (where, args) = switch (table) {
+    final (where, args) = _importIdentity(table, row);
+    final hit = await txn.query(table,
+        columns: ['1'], where: where, whereArgs: args, limit: 1);
+    return hit.isNotEmpty;
+  }
+
+  /// Identity per table — the dedup rule that makes re-importing the same
+  /// file a no-op instead of doubling the user's calories: the WHERE clause
+  /// and its arguments that find [row]'s copy here. A table without a rule
+  /// matches nothing.
+  static (String, List<Object?>) _importIdentity(
+      String table, Map<String, Object?> row) {
+    return switch (table) {
       // A PHOTO meal's identity is its photo (chat+hash): editing its
       // numbers must NOT make an older backup re-import it as a second
       // meal. A PHOTOLESS meal has no such anchor, so it falls back to
@@ -1204,10 +1216,6 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
       // NOT date alone: activities allows many rows per day (UNIQUE is
       // chat_id+source+external_id, and manual rows carry a NULL
       // external_id so each save inserts). Keying on the day would have
-      // collapsed a morning walk and an evening run into one.
-      // NOT date alone: activities allows many rows per day (UNIQUE is
-      // chat_id+source+external_id, and manual rows carry a NULL
-      // external_id so each save inserts). Keying on the day would have
       // collapsed a morning walk and an evening run into one. logged_at
       // is the per-row stamp that makes two same-day manual rows distinct.
       'activities' => (
@@ -1242,9 +1250,6 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
         ),
       _ => ('1 = 0', const <Object?>[]),
     };
-    final hit = await txn.query(table,
-        columns: ['1'], where: where, whereArgs: args, limit: 1);
-    return hit.isNotEmpty;
   }
 }
 
