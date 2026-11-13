@@ -19,6 +19,7 @@ import '../../services/photo/photo_changes.dart'
 import '../diagnostics.dart';
 import '../l10n.dart';
 import '../restaurant_assist_controls.dart' show RestaurantLookupsDiagnostics;
+import '../theme/tokens.dart' show AppThemeContext;
 import '../widgets/small_spinner.dart';
 
 /// How many background runs the page lists (20 are kept).
@@ -125,11 +126,21 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
     }
   }
 
-  (IconData, Color) _iconFor(DiagStatus s, ThemeData theme) => switch (s) {
-        DiagStatus.pass => (Icons.check_circle, Colors.green),
-        DiagStatus.warn => (Icons.warning_amber_rounded, Colors.orange),
-        DiagStatus.fail => (Icons.error, theme.colorScheme.error),
-      };
+  /// A check's state as its icon, in the theme's status colours (Material's
+  /// green and orange were 2.78:1 and 2.16:1 on the white card), with the
+  /// word a screen reader says before the check's name: the colour and the
+  /// shape alone told VoiceOver and TalkBack nothing.
+  Widget _statusIcon(BuildContext context, DiagStatus s) {
+    final c = context.colors;
+    final l = context.l10n;
+    final (icon, color, label) = switch (s) {
+      DiagStatus.pass => (Icons.check_circle, c.success, l.diagStatusPass),
+      DiagStatus.warn =>
+        (Icons.warning_amber_rounded, c.warning, l.diagStatusWarn),
+      DiagStatus.fail => (Icons.error, c.danger, l.diagStatusFail),
+    };
+    return Icon(icon, size: 20, color: color, semanticLabel: label);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -189,8 +200,7 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                   children: [
                     Row(
                       children: [
-                        Icon(_iconFor(r.status, theme).$1,
-                            size: 20, color: _iconFor(r.status, theme).$2),
+                        _statusIcon(context, r.status),
                         const SizedBox(width: 8),
                         Expanded(
                             child: Text(r.stage,

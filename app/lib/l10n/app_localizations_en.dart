@@ -1150,9 +1150,8 @@ class AppLocalizationsEn extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other:
-          '$count problems found — the red/orange rows below say what to do.',
-      one: '1 problem found — the red/orange rows below say what to do.',
+      other: '$count problems found — their rows below say what to do.',
+      one: '1 problem found — its row below says what to do.',
     );
     return '$_temp0';
   }
@@ -3579,4 +3578,13 @@ class AppLocalizationsEn extends AppLocalizations {
     );
     return '$_temp0 left out.';
   }
+
+  @override
+  String get diagStatusPass => 'Passed';
+
+  @override
+  String get diagStatusWarn => 'Warning';
+
+  @override
+  String get diagStatusFail => 'Failed';
 }

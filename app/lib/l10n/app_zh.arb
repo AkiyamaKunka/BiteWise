@@ -318,7 +318,7 @@
   "diagRunAgain": "重新测试",
   "diagRunChecks": "开始检查",
   "diagVerdictOk": "一切正常。如果某张照片仍然失败，那是这张照片的问题 —— 对它试试「重新分析」。",
-  "diagVerdictProblems": "{count, plural, other{发现 {count} 个问题 —— 下面红色/橙色的行说明该怎么做。}}",
+  "diagVerdictProblems": "{count, plural, other{发现 {count} 个问题 —— 下面对应的行说明该怎么做。}}",
   "diagStageTestRun": "测试运行",
   "diagTestRunFailed": "检查本身中途失败了。",
   "diagFixTestRun": "重新运行；如果一直卡在这里，说明服务返回的内容应用完全无法解析。",
@@ -998,5 +998,8 @@
   "importNoMatchingMeals": "这些图片都不属于这台手机上的餐。请先导入备份或导出文件。",
   "importTooBig": "超过 100 MB 的文件没有导入。",
   "importPickUnavailable": "这里无法打开文件，请改用「从剪贴板导入」粘贴文件内容。",
-  "importDeletedLeftOut": "你在这台手机上删除过的 {count} 餐没有被恢复。"
+  "importDeletedLeftOut": "你在这台手机上删除过的 {count} 餐没有被恢复。",
+  "diagStatusPass": "通过",
+  "diagStatusWarn": "警告",
+  "diagStatusFail": "未通过"
 }

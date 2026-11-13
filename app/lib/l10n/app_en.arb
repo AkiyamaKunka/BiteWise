@@ -849,8 +849,9 @@
   "diagRunAgain": "Run again",
   "diagRunChecks": "Run the checks",
   "diagVerdictOk": "Everything works. If a photo still fails, it is photo-specific — try \"Analyze again\" on it.",
-  "diagVerdictProblems": "{count, plural, =1{1 problem found — the red/orange rows below say what to do.} other{{count} problems found — the red/orange rows below say what to do.}}",
+  "diagVerdictProblems": "{count, plural, =1{1 problem found — its row below says what to do.} other{{count} problems found — their rows below say what to do.}}",
   "@diagVerdictProblems": {
+    "description": "Test AI provider: the verdict above the checks when some did not pass. Names no colour: the status signs are the theme's status colours, and the warning sign is amber in light mode and yellow in dark.",
     "placeholders": {
       "count": {
         "type": "int"
@@ -3401,5 +3402,17 @@
         "type": "int"
       }
     }
+  },
+  "diagStatusPass": "Passed",
+  "@diagStatusPass": {
+    "description": "Test AI provider: what a screen reader says for a check's tick, read before the check's name."
+  },
+  "diagStatusWarn": "Warning",
+  "@diagStatusWarn": {
+    "description": "Test AI provider: what a screen reader says for a check's warning sign, read before the check's name."
+  },
+  "diagStatusFail": "Failed",
+  "@diagStatusFail": {
+    "description": "Test AI provider: what a screen reader says for a check's error sign, read before the check's name."
   }
 }

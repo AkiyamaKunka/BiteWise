@@ -332,9 +332,10 @@ When merging #22 after this PR:
 - **Never hand-merge the generated `app_localizations*.dart`.** Take
   either side, then run `flutter gen-l10n` in `app/`.
 - `app/test/ui/usual_copy_test.dart` pins the number of keys in each ARB
-  file: 809 on `main` since #22 merged, 881 on the iCloud Backup branch
+  file: 809 on `main` since #22 merged, 884 on the iCloud Backup branch
   merged with #33 (`feat/icloud-backup` adds 72 `backup*` and `import*`
-  keys, #33's source-link label 1, none shared; review r171 deleted
+  keys, #33's source-link label 1, the Test AI provider page's three
+  `diagStatus*` check states 3, none shared; review r171 deleted
   `bodyEmptyHintImperial`, the same text as `bodyEmptyHint`). If either
   side adds keys before both merge, change the number in that test to the
   merged count, and here too (the test checks this line); both files must

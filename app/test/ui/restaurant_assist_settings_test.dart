@@ -28,11 +28,14 @@ import 'package:calorie_tracker/services/assist/meal_assist.dart'
     show AssistWhereNow;
 import 'package:calorie_tracker/ui/app.dart';
 import 'package:calorie_tracker/ui/restaurant_assist_controls.dart';
+import 'package:calorie_tracker/ui/screens/settings/provider_page.dart'
+    show ProviderSettingsPage;
 import 'package:calorie_tracker/ui/screens/settings/restaurant_section.dart';
 import 'package:calorie_tracker/ui/screens/settings_screen.dart';
 import 'package:calorie_tracker/ui/theme/tokens.dart' show AppColors;
 import 'package:calorie_tracker/ui/widgets/restaurant_consent_sheet.dart';
 
+import '../support/app_theme_harness.dart' show pumpApp;
 import 'fakes.dart';
 
 final DateTime _now = DateTime(2026, 10, 24, 12, 0);
@@ -72,6 +75,9 @@ class _Controls {
   /// What the phone's time zone and region say (MealAssist.whereNow).
   AssistWhereNow where = AssistWhereNow.us;
   int clears = 0;
+
+  /// How many times the own server was asked about lookups.
+  int serverAsks = 0;
   final ValueNotifier<LookupSupport?> consentNeeded =
       ValueNotifier<LookupSupport?>(null);
 
@@ -82,7 +88,10 @@ class _Controls {
           return true;
         },
         consentNeeded: consentNeeded,
-        serverState: () async => server,
+        serverState: () async {
+          serverAsks++;
+          return server;
+        },
         locationSupported: location,
         whereNow: () => where,
         now: () => _now,
@@ -455,18 +464,21 @@ void main() {
         ..restaurantAssistConsentRecipient = 'anthropic';
       final c = _Controls(_anthropic);
       await pump(tester, settings, c);
-      final section = tester.state<RestaurantAssistSectionState>(
-          find.byType(RestaurantAssistSection));
-      final before = section.currentRecipientStamp();
+      final before = restaurantLookupSupport(c.controls).recipientStamp;
       expect(before, 'anthropic');
+      Future<void> askIfChanged() => promptIfRestaurantRecipientChanged(
+          tester.element(find.byType(SettingsScreen)),
+          settings: settings,
+          controls: c.controls,
+          stampBefore: before);
       // Nothing changed: no sheet.
-      await section.promptIfRecipientChanged(before);
+      await askIfChanged();
       await tester.pumpAndSettle();
       expect(sheet(), findsNothing);
       // The user picked OpenRouter on the provider page.
       settings.provider = 'openrouter';
       c.support = _openrouter;
-      final asked = section.promptIfRecipientChanged(before);
+      final asked = askIfChanged();
       await tester.pumpAndSettle();
       expect(
           inSheet('OpenRouter (which passes them on to the maker of the model '
@@ -476,6 +488,110 @@ void main() {
       await tester.pumpAndSettle();
       await asked;
       expect(settings.restaurantAssistConsentRecipient, 'openrouter');
+    });
+
+    // The first-run card (no key yet) opened its own copy of the page:
+    // without the assist, so Test This Provider showed no restaurant
+    // lookups or AI confidence, and with no question on the way back.
+    testWidgets('the first-run card opens the AI provider page as the row '
+        'does, and coming back with another recipient asks at once',
+        (tester) async {
+      final settings = _planSettings()
+        ..provider = 'anthropic' // no key for it yet: the card shows
+        ..restaurantAssist = 'auto'
+        ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+        ..restaurantAssistConsentRecipient = 'anthropic';
+      final c = _Controls(_anthropic);
+      await pump(tester, settings, c);
+      final screen = tester.widget<SettingsScreen>(find.byType(SettingsScreen));
+      await tester.tap(find.byKey(const Key('firstRunCard')));
+      await tester.pumpAndSettle();
+      final page = tester
+          .widget<ProviderSettingsPage>(find.byType(ProviderSettingsPage));
+      expect(page.dao, same(screen.dao),
+          reason: "Test This Provider's AI confidence counts");
+      expect(page.restaurantAssist, same(screen.restaurantAssist),
+          reason: "Test This Provider's restaurant lookups");
+      // The user picked OpenRouter on the page, and comes back.
+      settings.provider = 'openrouter';
+      c.support = _openrouter;
+      tester.state<NavigatorState>(find.byType(Navigator)).pop();
+      await tester.pumpAndSettle();
+      expect(
+          inSheet('OpenRouter (which passes them on to the maker of the model '
+              'you picked) and its search partner Exa'),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('restaurantConsentUseLocation')));
+      await tester.pumpAndSettle();
+      expect(settings.restaurantAssistConsentRecipient, 'openrouter');
+    });
+
+    // The Settings list builds its groups as they scroll near: at the larger
+    // text sizes the restaurant group is far below the AI row and the card,
+    // not built, and the question came from that group's state.
+    for (final opener in const ['firstRunCard', 'aiProviderRow']) {
+      testWidgets('at a large text size, coming back to the top of Settings '
+          'from the AI provider page ($opener) with another recipient still '
+          'asks at once', (tester) async {
+        final settings = _planSettings()
+          ..provider = 'anthropic'
+          ..restaurantAssist = 'auto'
+          ..restaurantAssistConsentAt = DateTime(2026, 10, 1)
+          ..restaurantAssistConsentRecipient = 'anthropic';
+        // A key hides the first-run card, so the AI row is at the top.
+        if (opener == 'aiProviderRow') settings.apiKey = 'k';
+        final c = _Controls(_anthropic);
+        await pumpApp(
+            tester,
+            Scaffold(
+              body: SettingsScreen(
+                settings: settings,
+                analyzer: FakeAnalyzer(),
+                dao: FakeDao(),
+                requestPhotoPermission: () async => true,
+                changes: settings,
+                restaurantAssist: c.controls,
+              ),
+            ),
+            size: const Size(390, 844),
+            scale: 2);
+        expect(find.byType(RestaurantAssistSection, skipOffstage: false),
+            findsNothing,
+            reason: 'the group is below the screen, not built');
+        await tester.tap(find.byKey(Key(opener)));
+        await tester.pumpAndSettle();
+        expect(find.byType(ProviderSettingsPage), findsOneWidget);
+        // The user picked OpenRouter on the page, and comes back.
+        settings.provider = 'openrouter';
+        c.support = _openrouter;
+        tester.state<NavigatorState>(find.byType(Navigator)).pop();
+        await tester.pumpAndSettle();
+        expect(sheet(), findsOneWidget);
+        final brandOnly = find.byKey(const Key('restaurantConsentBrandOnly'));
+        await tester.ensureVisible(brandOnly);
+        await tester.pumpAndSettle();
+        await tester.tap(brandOnly);
+        await tester.pumpAndSettle();
+        expect(settings.restaurantAssistConsentRecipient, 'openrouter');
+        expect(settings.restaurantAssistConsentAt, _now);
+      });
+    }
+
+    // The list matches unkeyed rows by place: without its key the group
+    // was built anew when the first-run card above it left, and asked the
+    // own server about lookups again.
+    testWidgets('the group keeps its state when the first-run card leaves',
+        (tester) async {
+      final settings = _planSettings()..apiKey = ''; // the card shows
+      final c = _Controls(_plan, server: AssistServerState.ready);
+      await pump(tester, settings, c);
+      expect(find.byKey(const Key('firstRunCard')), findsOneWidget);
+      expect(find.byType(RestaurantAssistSection), findsOneWidget);
+      expect(c.serverAsks, 1);
+      await settings.update(apiKey: 'k');
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('firstRunCard')), findsNothing);
+      expect(c.serverAsks, 1, reason: 'the group was not built anew');
     });
 
     testWidgets('another server is another recipient', (tester) async {

@@ -265,17 +265,20 @@ class _SubscriptionProviderPageState
           separatorInset: AppSpace.separatorInset,
           children: [
             for (final (backend, _, note) in kPlanChoices)
-              GroupedRow(
-                key: Key('planChoice-$backend'),
-                title: serverPlanName(context.l10n, backend),
-                value: noteLabel(context.l10n, note),
-                showChevron: false,
-                trailing: _planActive &&
-                        settings.serverBackend == backend
-                    ? Icon(Icons.check_rounded,
-                        size: 20, color: context.colors.accent)
-                    : const SizedBox(width: 20),
-                onTap: () => _selectPlan(backend),
+              announceSelected(
+                selected: _planActive && settings.serverBackend == backend,
+                row: GroupedRow(
+                  key: Key('planChoice-$backend'),
+                  title: serverPlanName(context.l10n, backend),
+                  value: noteLabel(context.l10n, note),
+                  showChevron: false,
+                  trailing: _planActive &&
+                          settings.serverBackend == backend
+                      ? Icon(Icons.check_rounded,
+                          size: 20, color: context.colors.accent)
+                      : const SizedBox(width: 20),
+                  onTap: () => _selectPlan(backend),
+                ),
               ),
           ],
         ),

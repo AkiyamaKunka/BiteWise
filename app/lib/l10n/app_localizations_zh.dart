@@ -1073,7 +1073,7 @@ class AppLocalizationsZh extends AppLocalizations {
     String _temp0 = intl.Intl.pluralLogic(
       count,
       locale: localeName,
-      other: '发现 $count 个问题 —— 下面红色/橙色的行说明该怎么做。',
+      other: '发现 $count 个问题 —— 下面对应的行说明该怎么做。',
     );
     return '$_temp0';
   }
@@ -3226,4 +3226,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String importDeletedLeftOut(int count) {
     return '你在这台手机上删除过的 $count 餐没有被恢复。';
   }
+
+  @override
+  String get diagStatusPass => '通过';
+
+  @override
+  String get diagStatusWarn => '警告';
+
+  @override
+  String get diagStatusFail => '未通过';
 }
