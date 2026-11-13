@@ -26,7 +26,14 @@ Rules for this file:
    counterpart in README.md, and nothing here goes beyond it.
 6. Word map: "AI service" is AI 服务, "provider" is 服务商, "meal" is 一餐 or
    餐食, "portion" is 分量, "estimate" is 估算, "calories" is 热量.
+7. Everything below this comment sits inside <div lang="zh-Hans"> so screen
+   readers read it with a Chinese voice (GitHub's page is lang="en"). Keep the
+   opening and closing div lines and the blank lines next to them. The
+   > [!NOTE] alert sits between two divs: GitHub draws alerts only at the top
+   level, never inside an HTML block.
 -->
+
+<div lang="zh-Hans">
 
 <p align="center"><a href="README.md" lang="en" hreflang="en">English</a> · <b>简体中文</b></p>
 
@@ -300,8 +307,12 @@ Rules for this file:
 3. **粘贴 Key**：打开「设置 › AI 服务 › API Key」，把 Key 粘贴进去。然后返回上一页，点「测试当前服务」。第一次发送任何内容之前，应用会先征求你的同意，点「允许」。
 4. **记录一餐**：打开「今天 › 记录 › 从最近照片选择」，选一张餐食照片。你的 AI 会识别菜品，并估算热量、蛋白质、碳水和脂肪。核对这些数字，看着不对的就改掉。
 
+</div>
+
 > [!NOTE]
 > 热量和营养数据是 AI 根据照片和描述做出的估算，可能有误，请核对并修改。筷拍不是医疗器械，不提供医疗或营养建议。做出健康相关决定前，请咨询医生或注册营养师。
+
+<div lang="zh-Hans">
 
 ## 费用
 
@@ -522,3 +533,5 @@ bash scripts/check_public_safety.sh
 <sub>食物照片：Natalie Behn、Katka Pavlickova、Andrew Relf、Demi DeHerrera 和 Mikey Frost，来自 Unsplash，详见[致谢](docs/readme/CREDITS.md)（英文）。</sub><br>
 <sub>曾用名 Bitewise，更早叫 CalorieTracker。旧链接会跳转到这里。</sub><br>
 <sub>iPhone 是 Apple Inc. 在美国和其他国家及地区注册的商标。App Store 是 Apple Inc. 的服务标记。Android 和 Google Play 是 Google LLC 的商标。其他产品、公司和餐厅名称归各自的所有者所有，筷拍与它们没有关联。</sub>
+
+</div>
