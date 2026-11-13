@@ -17,6 +17,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../ui/fakes.dart' show FakeDao;
+
 class MemKeys implements SecureKeyStore {
   final Map<String, String> data = {};
   @override
@@ -830,6 +832,166 @@ void main() {
       expect(calls, 1);
       expect(await a.validateKey('candidate'), isNotNull,
           reason: 'extract:false skips the SHAPE check, not the JSON check');
+    });
+  });
+
+  group('a failure reported INSIDE an HTTP 200 (OpenRouter) is classified '
+      'by its code, like that HTTP status', () {
+    // OpenRouter answers 200 as soon as the upstream provider accepts the
+    // request, so a failure after that (the upstream rate-limited,
+    // overloaded or erroring) arrives INSIDE the 200: an error object and
+    // no choices, or a choice with an error object or finish_reason "error"
+    // (openrouter.ai/docs/api-reference/errors). Read as the reply's shape,
+    // one upstream hiccup was a permanent 'unexpected response shape' and
+    // the automatic photo was burned for good (review 171, C21). The
+    // OpenRouter lookup client already read both shapes this way.
+    Future<(OpenAiCompatAnalyzer, List<Duration>)> openRouter(
+        http.Client client) async {
+      final s = await settingsWith(provider: 'openrouter');
+      await s.setOpenrouterApiKey('or-key');
+      final cfg = createOpenRouterAnalyzer(s);
+      final sleeps = <Duration>[];
+      return (
+        OpenAiCompatAnalyzer(s,
+            endpoint: cfg.endpoint,
+            label: cfg.label,
+            keyOf: cfg.keyOf,
+            modelOf: cfg.modelOf,
+            supportsJsonMode: cfg.supportsJsonMode,
+            extraBody: cfg.extraBody,
+            extraHeaders: cfg.extraHeaders,
+            notFoundHint: cfg.notFoundHint,
+            client: client,
+            sleep: (d) async => sleeps.add(d),
+            normalizer: (b) async => b),
+        sleeps,
+      );
+    }
+
+    http.Response inside200(Map<String, Object?> body) => http.Response(
+        jsonEncode(body), 200,
+        headers: {'content-type': 'application/json'});
+
+    const upstream502 = {
+      'error': {
+        'code': 502,
+        'message': 'Provider returned error',
+        'metadata': {'provider_name': 'Google'}
+      }
+    };
+
+    // (what OpenRouter sent, the kind the user is told, retryable, HTTP
+    // calls: 3 = retried in place, as for that status)
+    final cases =
+        <String, (Map<String, Object?>, AnalysisErrorKind, bool, int)>{
+      'an upstream 502, no choices':
+          (upstream502, AnalysisErrorKind.network, true, 3),
+      'an upstream 429, no choices': (
+        {
+          'error': {'code': 429, 'message': 'Rate limit exceeded'}
+        },
+        AnalysisErrorKind.rateLimited,
+        true,
+        1
+      ),
+      'a choice with an error object and no content': (
+        {
+          'choices': [
+            {
+              'finish_reason': 'error',
+              'message': {'role': 'assistant', 'content': null},
+              'error': {'code': 502, 'message': 'Upstream error'}
+            }
+          ]
+        },
+        AnalysisErrorKind.network,
+        true,
+        3
+      ),
+      'a choice cut off by finish_reason error mid-answer': (
+        {
+          'choices': [
+            {
+              'finish_reason': 'error',
+              'message': {'role': 'assistant', 'content': '{"is_food": tr'}
+            }
+          ]
+        },
+        AnalysisErrorKind.network,
+        true,
+        3
+      ),
+      'an error object with no code (upstream trouble)': (
+        {
+          'error': {'message': 'Internal Server Error'}
+        },
+        AnalysisErrorKind.network,
+        true,
+        3
+      ),
+      'out of credits (402)': (
+        {
+          'error': {'code': 402, 'message': 'Insufficient credits'}
+        },
+        AnalysisErrorKind.billing,
+        true,
+        1
+      ),
+      'a rejected key (401)': (
+        {
+          'error': {'code': 401, 'message': 'User not found.'}
+        },
+        AnalysisErrorKind.rejectedKey,
+        false,
+        1
+      ),
+    };
+
+    for (final MapEntry(key: name, value: expected) in cases.entries) {
+      test(name, () async {
+        final (body, kind, retryable, calls) = expected;
+        var sent = 0;
+        final (a, sleeps) = await openRouter(MockClient((_) async {
+          sent++;
+          return inside200(body);
+        }));
+        final out = await a.analyzePhoto(photo);
+        expect(out.analysis, isNull);
+        expect(classifyAnalysisError(out.error), kind, reason: out.error);
+        expect(out.retryable, retryable, reason: out.error);
+        expect(sent, calls, reason: out.error);
+        expect(sleeps, hasLength(calls - 1), reason: out.error);
+        expect(a.settings.isQuotaPaused, isFalse);
+      });
+    }
+
+    test('the chat gets the same verdict, not a shape error', () async {
+      final (a, _) = await openRouter(
+          MockClient((_) async => inside200(upstream502)));
+      final out = await a.textIntentOutcome('two bowls, not one');
+      expect(out.json, isNull);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.network,
+          reason: out.error);
+    });
+
+    test('pipeline: an automatic photo is released, then saved once the '
+        'upstream is healthy again', () async {
+      var healthy = false;
+      final (a, _) = await openRouter(MockClient((_) async =>
+          healthy ? _openaiOk(_foodJson) : inside200(upstream502)));
+      final dao = FakeDao();
+      final pipeline = PhotoPipeline(dao: dao, analyzer: a);
+      final first =
+          await pipeline.process(IntakePhoto(photo, 'a1', 'IMG_1.jpg'));
+      expect(first.kind, PhotoOutcomeKind.failed);
+      expect(first.retryable, isTrue, reason: first.message);
+      expect(dao.ledger.values, isNot(contains(IngestionStatus.failed)),
+          reason: 'the automatic scan never reclaims a failed row');
+      healthy = true;
+      final second =
+          await pipeline.process(IntakePhoto(photo, 'a1', 'IMG_1.jpg'));
+      expect(second.kind, PhotoOutcomeKind.saved, reason: second.message);
+      expect(dao.meals, hasLength(1));
     });
   });
 

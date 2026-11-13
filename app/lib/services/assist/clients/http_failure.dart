@@ -1,5 +1,5 @@
 /// HTTP failure classification for the lookup clients, in the same order
-/// as `_HttpVisionAnalyzer._post` in
+/// as `_HttpVisionAnalyzer._throwHttpFailure` in
 /// services/analyzer/provider_analyzers.dart, and the reply rules both of
 /// them read: what a status and body say about billing, the region, the
 /// key and the model is written once, below, so a new vendor signature is

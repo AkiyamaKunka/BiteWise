@@ -183,141 +183,17 @@ abstract class _HttpVisionAnalyzer
     } catch (e) {
       throw _ProviderException('connection error: $e', transient: true);
     }
-    if (resp.statusCode != 200) {
-      // Exhausted-billing signatures ([isBillingExhausted]), checked
-      // BEFORE the auth classification because the providers disagree on
-      // the status code: Ark/Doubao's 403 AccountOverdueError is NOT auth
-      // (treating it as "key rejected" burned the photo non-retryably and
-      // told the user to fix a key that works, review 2026-07-29), and
-      // DashScope's and Anthropic's 400s are NOT client bugs. All mean "the
-      // key authenticated but the account needs money": transient (the
-      // photo stays eligible; a recharge fixes it) and quota-classed
-      // (validateKey accepts — the key itself is proven).
-      final body = resp.body;
-      if (isBillingExhausted(resp.statusCode, body)) {
-        throw _ProviderException(
-            'Provider balance or credits exhausted — check your '
-            '$providerLabel billing.',
-            transient: true,
-            quotaClass: true,
-            billing: true,
-            verbatimMessage: true);
-      }
-      // A region refusal, checked BEFORE the auth branch for the same
-      // reason as billing: OpenAI answers a Hong Kong VPN exit with a 403
-      // whose error code is `unsupported_country_region_territory`, and
-      // "key rejected" sent the user — every ten minutes — to fix a key
-      // that works. Matched on the documented code only. Retryable (a
-      // different VPN node fixes it) but never in place.
-      if (isRegionBlocked(body)) {
-        throw _ProviderException(
-            '$providerLabel is not available from your current network '
-            'region (check the VPN).',
-            transient: true,
-            retryInPlace: false,
-            regionBlocked: true,
-            verbatimMessage: true);
-      }
-      // Every provider — and the owner's server ({"error":"Unauthorized"})
-      // — answers its 401/403 as JSON. An HTML or text 401/403 is a web
-      // filter or captive portal answering in its place (the server is
-      // plain HTTP): the key was never judged, so it is the same
-      // interception as the 3xx below — never 'key rejected', which parks
-      // the automatic scan for a day (review 2026-10-12).
-      if ((resp.statusCode == 401 || resp.statusCode == 403) &&
-          !isJsonObjectBody(body)) {
-        throw _ProviderException(
-            'HTTP ${resp.statusCode} non-JSON reply (captive portal or proxy '
-            'page)',
-            transient: true,
-            retryInPlace: false);
-      }
-      if (isKeyRejected(resp.statusCode, body)) {
-        throw const _ProviderException('key rejected',
-            transient: false, auth: true);
-      }
-      final notFound = notFoundMessage;
-      if (resp.statusCode == 404 && notFound != null) {
-        throw _ProviderException(notFound,
-            transient: false, verbatimMessage: true, modelError: true);
-      }
-      if (resp.statusCode == 503) {
-        final custom = unavailableMessage(resp.body);
-        if (custom != null) {
-          // Three cases, deliberately distinct:
-          //   true  → the CLI was BUSY: retry in place, photo survives.
-          //   false → the run HAPPENED and produced nothing usable:
-          //           TERMINAL, or the watcher re-spends a full CLI run on
-          //           this photo every single scan.
-          //   null  → no verdict (old server, or a config refusal like a
-          //           missing plan key): keep the photo, but do NOT spin —
-          //           seconds cannot add a plan key.
-          final verdict = unavailableRetry(resp.body);
-          throw _ProviderException(custom,
-              transient: verdict != false,
-              retryInPlace: verdict == true,
-              serverBusy: verdict == true,
-              verbatimMessage: true);
-        }
-      }
-      if (resp.statusCode == 400) {
-        final custom = rejectedMessage(resp.body);
-        if (custom != null) {
-          // Terminal: the REQUEST is wrong (an app/server version drift,
-          // typically), so retrying reproduces it. The bare 'HTTP 400'
-          // this used to throw left the owner's 2026-09-29 failure with
-          // no code on either end.
-          throw _ProviderException(custom,
-              transient: false, verbatimMessage: true);
-        }
-        // A wrong / retired model id answered as a 400, not a 404
-        // ([isModelMissingCode]) — the vendor's prose never reaches the
-        // message.
-        if (isModelMissingCode(body)) {
-          throw _ProviderException(
-              notFound ??
-                  '$providerLabel model not found — check the model name '
-                      'in Settings.',
-              transient: false,
-              verbatimMessage: true,
-              modelError: true);
-        }
-      }
-      if (resp.statusCode >= 300 && resp.statusCode < 400) {
-        // No provider redirects a POST: a 3xx is a captive portal (hotel /
-        // airport / campus Wi-Fi before sign-in) or a proxy answering
-        // INSTEAD of the provider. The owner's server is plain HTTP on
-        // port 80 — exactly what portals intercept — and the permanent
-        // 'HTTP 302' this used to throw tombstoned every backlog photo
-        // scanned before the Wi-Fi login, which the automatic scan never
-        // reclaims (loop find 2026-10-10). Transient, so the photo stays
-        // eligible; NOT retryInPlace — a login page does not change in
-        // 15 s, and the sleeps would eat the iOS background-refresh budget
-        // on the first photo. dart:io follows only a POST 303 (as a GET),
-        // whose HTML 200 is the non-JSON case below.
-        throw _ProviderException(
-            'HTTP ${resp.statusCode} redirect (captive portal or proxy)',
-            transient: true,
-            retryInPlace: false);
-      }
-      throw _ProviderException('HTTP ${resp.statusCode}',
-          transient: _isTransientStatus(resp.statusCode),
-          quotaClass: resp.statusCode == 429,
-          // Every direct provider now explains its 404 via notFoundMessage
-          // above; a bare 404 reaches here only from ServerAnalyzer (a
-          // wrong server path), which overrides probeKey, the only reader
-          // of this flag.
-          modelError: resp.statusCode == 404);
-    }
+    if (resp.statusCode != 200) _throwHttpFailure(resp.statusCode, resp.body);
     // A 200 whose body is not JSON never came from the provider — every
     // vendor answers JSON, and so does the owner's server. It is the same
-    // interception as the 3xx above (a portal's login page, a proxy's
-    // error page), classified the same way. Decoded even for
+    // interception as a 3xx ([_throwHttpFailure]: a portal's login page, a
+    // proxy's error page), classified the same way. Decoded even for
     // extract:false, or validateKey / probeKey would take a portal page
     // as proof of a key. 'unexpected response shape' stays PERMANENT, but
-    // only for JSON that lacks the expected keys: that is app/server
-    // version drift, and a retry would re-spend a model call (a full CLI
-    // run, for the server) for the same answer.
+    // only for JSON that lacks the expected keys and reports no failure
+    // ([_ErrorInReply]): that is app/server version drift, and a retry
+    // would re-spend a model call (a full CLI run, for the server) for
+    // the same answer.
     final Object? decoded;
     try {
       decoded = jsonDecode(resp.body);
@@ -332,10 +208,142 @@ abstract class _HttpVisionAnalyzer
       return extractTextFor(req, decoded as Map<String, dynamic>);
     } on _ProviderException {
       rethrow; // extractText may classify precisely — keep its message
+    } on _ErrorInReply catch (e) {
+      // Not the reply's shape: the provider took the request, then failed
+      // (an upstream rate limit, overload or 5xx), and said so in the 200.
+      _throwHttpFailure(e.status, jsonEncode({'error': e.error}));
     } catch (_) {
       throw const _ProviderException('unexpected response shape',
           transient: false);
     }
+  }
+
+  /// A failed answer — HTTP [status] with [body] — classified: kept for a
+  /// later scan, retried in place, or failed for good. A failure reported
+  /// INSIDE a 200 ([_ErrorInReply]) comes here too, with the status it
+  /// names, so it gets that status's verdict.
+  Never _throwHttpFailure(int status, String body) {
+    // Exhausted-billing signatures ([isBillingExhausted]), checked
+    // BEFORE the auth classification because the providers disagree on
+    // the status code: Ark/Doubao's 403 AccountOverdueError is NOT auth
+    // (treating it as "key rejected" burned the photo non-retryably and
+    // told the user to fix a key that works, review 2026-07-29), and
+    // DashScope's and Anthropic's 400s are NOT client bugs. All mean "the
+    // key authenticated but the account needs money": transient (the
+    // photo stays eligible; a recharge fixes it) and quota-classed
+    // (validateKey accepts — the key itself is proven).
+    if (isBillingExhausted(status, body)) {
+      throw _ProviderException(
+          'Provider balance or credits exhausted — check your '
+          '$providerLabel billing.',
+          transient: true,
+          quotaClass: true,
+          billing: true,
+          verbatimMessage: true);
+    }
+    // A region refusal, checked BEFORE the auth branch for the same
+    // reason as billing: OpenAI answers a Hong Kong VPN exit with a 403
+    // whose error code is `unsupported_country_region_territory`, and
+    // "key rejected" sent the user — every ten minutes — to fix a key
+    // that works. Matched on the documented code only. Retryable (a
+    // different VPN node fixes it) but never in place.
+    if (isRegionBlocked(body)) {
+      throw _ProviderException(
+          '$providerLabel is not available from your current network '
+          'region (check the VPN).',
+          transient: true,
+          retryInPlace: false,
+          regionBlocked: true,
+          verbatimMessage: true);
+    }
+    // Every provider — and the owner's server ({"error":"Unauthorized"})
+    // — answers its 401/403 as JSON. An HTML or text 401/403 is a web
+    // filter or captive portal answering in its place (the server is
+    // plain HTTP): the key was never judged, so it is the same
+    // interception as the 3xx below — never 'key rejected', which parks
+    // the automatic scan for a day (review 2026-10-12).
+    if ((status == 401 || status == 403) && !isJsonObjectBody(body)) {
+      throw _ProviderException(
+          'HTTP $status non-JSON reply (captive portal or proxy page)',
+          transient: true,
+          retryInPlace: false);
+    }
+    if (isKeyRejected(status, body)) {
+      throw const _ProviderException('key rejected',
+          transient: false, auth: true);
+    }
+    final notFound = notFoundMessage;
+    if (status == 404 && notFound != null) {
+      throw _ProviderException(notFound,
+          transient: false, verbatimMessage: true, modelError: true);
+    }
+    if (status == 503) {
+      final custom = unavailableMessage(body);
+      if (custom != null) {
+        // Three cases, deliberately distinct:
+        //   true  → the CLI was BUSY: retry in place, photo survives.
+        //   false → the run HAPPENED and produced nothing usable:
+        //           TERMINAL, or the watcher re-spends a full CLI run on
+        //           this photo every single scan.
+        //   null  → no verdict (old server, or a config refusal like a
+        //           missing plan key): keep the photo, but do NOT spin —
+        //           seconds cannot add a plan key.
+        final verdict = unavailableRetry(body);
+        throw _ProviderException(custom,
+            transient: verdict != false,
+            retryInPlace: verdict == true,
+            serverBusy: verdict == true,
+            verbatimMessage: true);
+      }
+    }
+    if (status == 400) {
+      final custom = rejectedMessage(body);
+      if (custom != null) {
+        // Terminal: the REQUEST is wrong (an app/server version drift,
+        // typically), so retrying reproduces it. The bare 'HTTP 400'
+        // this used to throw left the owner's 2026-09-29 failure with
+        // no code on either end.
+        throw _ProviderException(custom,
+            transient: false, verbatimMessage: true);
+      }
+      // A wrong / retired model id answered as a 400, not a 404
+      // ([isModelMissingCode]) — the vendor's prose never reaches the
+      // message.
+      if (isModelMissingCode(body)) {
+        throw _ProviderException(
+            notFound ??
+                '$providerLabel model not found — check the model name '
+                    'in Settings.',
+            transient: false,
+            verbatimMessage: true,
+            modelError: true);
+      }
+    }
+    if (status >= 300 && status < 400) {
+      // No provider redirects a POST: a 3xx is a captive portal (hotel /
+      // airport / campus Wi-Fi before sign-in) or a proxy answering
+      // INSTEAD of the provider. The owner's server is plain HTTP on
+      // port 80 — exactly what portals intercept — and the permanent
+      // 'HTTP 302' this used to throw tombstoned every backlog photo
+      // scanned before the Wi-Fi login, which the automatic scan never
+      // reclaims (loop find 2026-10-10). Transient, so the photo stays
+      // eligible; NOT retryInPlace — a login page does not change in
+      // 15 s, and the sleeps would eat the iOS background-refresh budget
+      // on the first photo. dart:io follows only a POST 303 (as a GET),
+      // whose HTML 200 is the non-JSON case in _post.
+      throw _ProviderException(
+          'HTTP $status redirect (captive portal or proxy)',
+          transient: true,
+          retryInPlace: false);
+    }
+    throw _ProviderException('HTTP $status',
+        transient: _isTransientStatus(status),
+        quotaClass: status == 429,
+        // Every direct provider now explains its 404 via notFoundMessage
+        // above; a bare 404 reaches here only from ServerAnalyzer (a
+        // wrong server path), which overrides probeKey, the only reader
+        // of this flag.
+        modelError: status == 404);
   }
 
   @override
@@ -618,8 +626,41 @@ List<Map<String, Object?>> _chatContent(String prompt, Uint8List? jpegBytes) =>
 
 /// The reply text of an OpenAI-style chat-completions response
 /// (`choices[0].message.content`).
-String _chatReplyText(Map<String, dynamic> body) =>
-    ((body['choices'] as List).first as Map)['message']['content'] as String;
+///
+/// OpenRouter answers 200 as soon as the upstream provider accepts the
+/// request, so a failure after that arrives INSIDE the 200: an `error`
+/// object and no choices, or a choice with an `error` object or
+/// finish_reason "error" (openrouter.ai/docs/api-reference/errors). Each
+/// throws [_ErrorInReply]. Read as the reply's shape, one upstream hiccup
+/// was a permanent 'unexpected response shape' and the automatic photo
+/// was burned for good (review 171, C21).
+String _chatReplyText(Map<String, dynamic> body) {
+  final error = body['error'];
+  if (error is Map) throw _ErrorInReply.of(error);
+  final choice = (body['choices'] as List).first as Map;
+  final choiceError = choice['error'];
+  if (choiceError is Map) throw _ErrorInReply.of(choiceError);
+  if (choice['finish_reason'] == 'error') throw _ErrorInReply.of(const {});
+  return choice['message']['content'] as String;
+}
+
+/// A failure the provider reported inside an HTTP 200, with the HTTP
+/// status its error object names. _post classifies it as that status, as
+/// the OpenRouter lookup client does (classifyHttpFailureFromErrorObject).
+class _ErrorInReply implements Exception {
+  const _ErrorInReply(this.status, this.error);
+
+  /// [error]'s `code` is the upstream's HTTP status; one that names none
+  /// (or names 200) is upstream trouble: 502.
+  factory _ErrorInReply.of(Map error) {
+    final code = error['code'];
+    final status = code is int ? code : int.tryParse('$code') ?? 502;
+    return _ErrorInReply(status == 200 ? 502 : status, error);
+  }
+
+  final int status;
+  final Map error;
+}
 
 /// Per-call delegation on [AppSettings.provider]: switching providers in
 /// Settings takes effect on the NEXT request — no DI rewiring, no restart.
