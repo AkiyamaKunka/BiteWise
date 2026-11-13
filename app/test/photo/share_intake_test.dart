@@ -1,14 +1,20 @@
 // Deliberate intake (spec §6, §2.3): share-sheet stream + pickFromRecent,
 // all deliberate=true; §6.1 extension filter; §8 25 MB cap.
 import 'dart:async';
+import 'dart:convert' show base64Decode;
 import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/services/analyzer/normalize.dart'
+    show normalizeForAnalysis;
+import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
+    show looksLikeJpeg;
 import 'package:calorie_tracker/services/photo/photo_library.dart';
 import 'package:calorie_tracker/services/photo/share_intake.dart';
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:image/image.dart' as img;
 
 import 'watcher_test.dart' show FakeAsset, FakePhotoLibrary;
 
@@ -301,14 +307,66 @@ void main() {
   });
 
   group('§6.1 extension filter', () {
-    test('accepts jpg/jpeg/png/heic/heif/tiff, rejects the rest', () {
+    // WebP and GIF: what Android browsers and chat apps share, and what
+    // MainActivity names a nameless image stream by its MIME type
+    // (IMG_<ts>.webp). The engine codec and the image package decode both;
+    // iOS ImageIO decodes WebP on iOS 14+ (the app's floor is 15). AVIF
+    // stays out: its decoding is unverified on either platform.
+    test('accepts jpg/jpeg/png/heic/heif/tiff/webp/gif, rejects the rest',
+        () {
       for (final name in [
-        'a.jpg', 'a.JPEG', 'a.png', 'a.heic', 'a.HEIF', 'a.tiff'
+        'a.jpg', 'a.JPEG', 'a.png', 'a.heic', 'a.HEIF', 'a.tiff', //
+        'a.webp', 'IMG_1731500000000.WEBP', 'a.gif', 'a.GIF',
       ]) {
         expect(hasSupportedPhotoExtension(name), isTrue, reason: name);
       }
-      for (final name in ['a.gif', 'a.mp4', 'a.txt', 'noext', 'a.']) {
+      for (final name in [
+        'a.avif', 'a.mp4', 'a.txt', 'noext', 'a.', 'a.webp.txt', 'a.gifv'
+      ]) {
         expect(hasSupportedPhotoExtension(name), isFalse, reason: name);
+      }
+    });
+
+    test('a shared WebP and a shared GIF reach the pipeline; an AVIF is '
+        'still dropped and its copy deleted', () async {
+      final source = FakeShareSource();
+      final intake = build(source, FakePhotoLibrary());
+      files['/shared/IMG_1731500000000.webp'] = Uint8List.fromList([1]);
+      files['/shared/lunch.gif'] = Uint8List.fromList([2]);
+      files['/shared/scan.avif'] = Uint8List.fromList([3]);
+      final emitted = <IntakePhoto>[];
+      final sub = intake.photos().listen(emitted.add);
+      source.controller.add([
+        '/shared/IMG_1731500000000.webp',
+        '/shared/lunch.gif',
+        '/shared/scan.avif',
+      ]);
+      await pumpEventQueue();
+      expect(emitted.map((p) => p.fileName),
+          ['IMG_1731500000000.webp', 'lunch.gif']);
+      expect(emitted.every((p) => p.deliberate), isTrue);
+      expect(cleaned, [
+        '/shared/IMG_1731500000000.webp',
+        '/shared/lunch.gif',
+        '/shared/scan.avif',
+      ]);
+      await sub.cancel();
+    });
+
+    // An accepted type the upload chain cannot decode would fail every
+    // share of it: the last resort (pure Dart, normalize.dart) reads both
+    // and sends a JPEG, as every provider path labels it.
+    test('the pure-Dart decoder turns a WebP and a GIF into the upload JPEG',
+        () {
+      // A 1x1 lossless WebP.
+      final webp = base64Decode(
+          'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4HAA==');
+      final gif = img.encodeGif(
+          img.Image(width: 8, height: 8)..clear(img.ColorRgb8(200, 30, 30)));
+      for (final (name, bytes) in [('webp', webp), ('gif', gif)]) {
+        final upload = normalizeForAnalysis(bytes);
+        expect(upload, isNotNull, reason: name);
+        expect(looksLikeJpeg(upload!), isTrue, reason: name);
       }
     });
   });

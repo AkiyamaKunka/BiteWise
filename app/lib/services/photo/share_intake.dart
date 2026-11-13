@@ -19,10 +19,15 @@ import 'filename_dates.dart';
 import 'glasses.dart' show captureMetaFor;
 import 'photo_library.dart';
 
-/// Spec §6.1: SUPPORTED_QUEUE_EXTENSIONS ∪ server-side .tiff. Content is
-/// ultimately validated by decodability downstream (the analyzer's decode),
-/// not by extension — this set only filters obvious non-photos out of the
-/// share sheet.
+/// Spec §6.1: SUPPORTED_QUEUE_EXTENSIONS ∪ server-side .tiff, plus WebP
+/// and GIF (2026-11): what Android browsers and chat apps share, and how
+/// MainActivity names a nameless image stream (`IMG_<ts>.webp`, from its MIME
+/// type); they were dropped without a word. Every decoder in the upload
+/// chain reads both (the engine codec, iOS ImageIO, the `image` package),
+/// and a GIF is sent as its first frame. Not AVIF: its decoding is
+/// unverified. Content is ultimately validated by decodability downstream
+/// (the analyzer's decode), not by extension — this set only filters
+/// obvious non-photos out of the share sheet.
 const Set<String> supportedPhotoExtensions = {
   '.jpg',
   '.jpeg',
@@ -30,6 +35,8 @@ const Set<String> supportedPhotoExtensions = {
   '.heic',
   '.heif',
   '.tiff',
+  '.webp',
+  '.gif',
 };
 
 bool hasSupportedPhotoExtension(String name) {
