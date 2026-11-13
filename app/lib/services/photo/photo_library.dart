@@ -144,10 +144,17 @@ Future<bool?> photoLibraryAccess() async {
 }
 
 class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
-  PhotoManagerLibrary({@visibleForTesting bool? isAndroid})
+  PhotoManagerLibrary(
+      {this._windowStart, @visibleForTesting bool? isAndroid})
       : _isAndroid = isAndroid ?? Platform.isAndroid;
 
   final bool _isAndroid;
+
+  /// Android: where the lookback window starts now (createPhotoIntake reads
+  /// it from the user's setting). A scan from a later cutoff still keeps
+  /// the photos taken since then ([imagesCreatedAfter]). Null: a scan keeps
+  /// only those taken at/after its own cutoff.
+  final DateTime Function()? _windowStart;
 
   /// Ask Android for images only. The manifest declares READ_MEDIA_IMAGES
   /// (+ VISUAL_USER_SELECTED) and no video permission; photo_manager's
@@ -240,14 +247,18 @@ class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
   /// transfer, a USB copy, a saved original) joins the library now with its
   /// old DATE_TAKEN, and the automatic scans sent it to the AI as a new
   /// photo, logged as eaten today once older than 45 days. Only the photos
-  /// taken at/after [cutoff] are kept, as iOS's creation-date query does;
-  /// one with no date taken reports when it joined, and stays. A photo
-  /// taken before a scan's cutoff but added after it is left to a scan
-  /// whose cutoff it is not before: the launch/resume catch-up over the
-  /// whole window. Both dates are whole seconds there. [limit] caps what
-  /// the query lists, before any is left out; the [LibraryListing] says how
-  /// many it listed, so a listing filled with old copies still reads as
-  /// truncated.
+  /// taken at/after [cutoff], or at/after the lookback window's start
+  /// ([_windowStart]) when that is earlier, are kept; one with no date
+  /// taken reports when it joined, and stays. A photo imported late (the
+  /// Meta AI app copying glasses photos in hours after they were taken,
+  /// AirDrop, a WeChat original), taken before a scan's cutoff and added
+  /// after it, is thus still found by the next scan (the live watcher's, or
+  /// the background run's from its watermark) while it was taken inside
+  /// the window: the rule iOS's late-import pass (photo_changes.dart)
+  /// applies to its change history. Both dates are whole seconds
+  /// there. [limit] caps what the query lists, before any is left out; the
+  /// [LibraryListing] says how many it listed, so a listing filled with old
+  /// copies still reads as truncated.
   @override
   Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
       {int limit = 500}) async {
@@ -261,8 +272,15 @@ class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
     );
     final listed = await _query(filter, limit);
     if (!_isAndroid) return listed;
+    var bound = cutoff;
+    try {
+      final start = _windowStart?.call();
+      if (start != null && start.isBefore(bound)) bound = start;
+    } catch (_) {
+      // Unreadable: the scan's own cutoff, as with no window start.
+    }
     final since = DateTime.fromMillisecondsSinceEpoch(
-        cutoff.millisecondsSinceEpoch ~/ 1000 * 1000);
+        bound.millisecondsSinceEpoch ~/ 1000 * 1000);
     return LibraryListing([
       for (final asset in listed)
         if (!asset.createDateTime.isBefore(since)) asset,

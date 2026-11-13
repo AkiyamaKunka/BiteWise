@@ -58,7 +58,9 @@ DateTime lookbackCutoff(DateTime now, int lookbackDays) {
 /// local store, and asks the same channel which photos sit in a Meta
 /// glasses album (G2a) and, for a glasses photo the dating guard could
 /// re-date, when it joined the library (G2b); elsewhere
-/// [PhotoIntake.lateImportScan] does nothing and nothing is asked. The
+/// [PhotoIntake.lateImportScan] does nothing and nothing is asked: on
+/// Android the library keeps a late import while it was taken inside the
+/// window, which it is given the start of (PhotoManagerLibrary). The
 /// live watcher's late-import pass reads a photo only while an automatic
 /// analysis could succeed and the app is open
 /// ([LibraryPhotoIntake.liveLateShouldContinue]), as every other automatic
@@ -72,7 +74,9 @@ PhotoIntake createPhotoIntake(AppSettings settings,
   final changes = platformPhotoChangeSource(isIOS: isIOS);
   return LibraryPhotoIntake(
       lookbackDays: () => settings.lookbackDays,
-      library: PhotoManagerLibrary(),
+      library: PhotoManagerLibrary(
+          windowStart: () =>
+              lookbackCutoff(DateTime.now(), settings.lookbackDays)),
       onBackfillListed: onBackfillListed,
       passOver: passOver,
       lateImports: changes == null

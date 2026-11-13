@@ -824,6 +824,25 @@ void main() {
     });
   });
 
+  // Review 171, C4: on Android the photo library keeps a photo imported
+  // late (taken before a scan's own cutoff, added after it) while it was
+  // taken inside the lookback window. Without the window's start the live
+  // watcher and the background run leave it to the next launch, and the
+  // library's own field is private to the intake.
+  test('createPhotoIntake gives the photo library the lookback window\'s '
+      'start', () {
+    expect(
+      _body(
+        _source('lib/services/photo/watcher.dart'),
+        'PhotoIntake createPhotoIntake(',
+      ),
+      _wired(
+        r'library: PhotoManagerLibrary\( windowStart: \(\) => '
+        r'lookbackCutoff\(DateTime\.now\(\), settings\.lookbackDays\)\),',
+      ),
+    );
+  });
+
   // Behavioural where it can be: the factory's own fields are public.
   test(
     'createPhotoIntake hands passOver and onBackfillListed to the intake',

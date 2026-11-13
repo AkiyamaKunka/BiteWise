@@ -8,9 +8,10 @@
 /// keeps its capture time as its creationDate, so "created after the last
 /// scan" never sees it. iOS 16+ keeps a history of every insert, from any
 /// app, across launches; ios/Runner/PhotoChangesPlugin.swift reads it.
-/// Android needs none of this: there the scan already filters on the date a
-/// photo was added (MediaStore DATE_ADDED), so [platformPhotoChangeSource]
-/// is null.
+/// Android needs none of this: there the scan lists photos by the date they
+/// were added (MediaStore DATE_ADDED) and keeps those taken inside the
+/// lookback window (PhotoManagerLibrary.imagesCreatedAfter), so the scan
+/// after a late import finds it, and [platformPhotoChangeSource] is null.
 ///
 /// [LateImportCursor] (design G1b, below) keeps the token in the backup-
 /// excluded local store, with the photos still owed a verdict, and acts on

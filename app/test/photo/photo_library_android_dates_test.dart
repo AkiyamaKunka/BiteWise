@@ -270,6 +270,128 @@ void main() {
     });
   });
 
+  // Review 171, C4 second pass: Android finds a photo imported late (the
+  // Meta AI app copying glasses photos in hours after they were taken,
+  // AirDrop, a WeChat original) because its scans list by DATE_ADDED; iOS
+  // reads its change history for them (photo_changes.dart). Keeping only
+  // the photos taken since each scan's own cutoff (the live watcher's,
+  // the background run's watermark less its hour) left them to the next
+  // launch, and lost them once that was after the window. The bound is
+  // the lookback window's start, as in iOS's late-import pass.
+  group('photos imported late, inside the lookback window', () {
+    // 19:00; a 2-day window started yesterday at 00:00.
+    final evening = DateTime(2026, 7, 17, 19, 0);
+    final windowStart = lookbackCutoff(evening, 2);
+
+    // Lunch, taken on the glasses at 12:00 and imported by the Meta AI app
+    // at 18:00.
+    _Row glassesLunch() => _Row('photo_glasses_lunch',
+        added: DateTime(2026, 7, 17, 18, 0),
+        taken: DateTime(2026, 7, 17, 12, 0));
+    // Last night's dinner, sent over this evening.
+    _Row lateDinner() => _Row('dinner_late',
+        added: DateTime(2026, 7, 17, 18, 5),
+        taken: DateTime(2026, 7, 16, 19, 30));
+    // Taken on the phone at 15:00 and logged then: the watermark.
+    _Row phoneSnack() => _Row('phone_snack',
+        added: DateTime(2026, 7, 17, 15, 0, 1),
+        taken: DateTime(2026, 7, 17, 15, 0));
+    // Copied in this evening, taken before the window.
+    _Row oldCopy() => _Row('PXL_20240302_183000000',
+        added: DateTime(2026, 7, 17, 18, 30),
+        taken: DateTime(2024, 3, 2, 12, 30));
+    _Row dayBefore() => _Row('IMG_20260715_201500',
+        added: DateTime(2026, 7, 17, 18, 31),
+        taken: DateTime(2026, 7, 15, 20, 15));
+
+    test('Android: a scan from a later cutoff keeps what was taken since '
+        'the window started, and nothing from before it', () async {
+      _answerLikeAndroid(
+          [glassesLunch(), lateDinner(), phoneSnack(), oldCopy(), dayBefore()]);
+      final listed =
+          await PhotoManagerLibrary(isAndroid: true, windowStart: () => windowStart)
+              .imagesCreatedAfter(DateTime(2026, 7, 17, 14, 0));
+      expect(listed.map((a) => a.id).toSet(),
+          {'photo_glasses_lunch', 'dinner_late', 'phone_snack'});
+    });
+
+    test('Android: a cutoff before the window\'s start is the bound (a scan '
+        'asked for more days)', () async {
+      _answerLikeAndroid([dayBefore(), oldCopy()]);
+      final listed =
+          await PhotoManagerLibrary(isAndroid: true, windowStart: () => windowStart)
+              .imagesCreatedAfter(DateTime(2026, 7, 10));
+      expect(listed.map((a) => a.id), ['IMG_20260715_201500']);
+    });
+
+    test('Android: no window start, or one that cannot be read, leaves the '
+        'scan\'s own cutoff', () async {
+      _answerLikeAndroid([glassesLunch(), phoneSnack()]);
+      for (final library in [
+        PhotoManagerLibrary(isAndroid: true),
+        PhotoManagerLibrary(
+            isAndroid: true, windowStart: () => throw StateError('settings')),
+      ]) {
+        final listed =
+            await library.imagesCreatedAfter(DateTime(2026, 7, 17, 14, 0));
+        expect(listed.map((a) => a.id), ['phone_snack']);
+      }
+    });
+
+    test('iOS: the window start changes nothing', () async {
+      _answerLikeAndroid([glassesLunch(), oldCopy()]);
+      final listed =
+          await PhotoManagerLibrary(isAndroid: false, windowStart: () => windowStart)
+              .imagesCreatedAfter(DateTime(2026, 7, 17, 14, 0));
+      expect(listed.map((a) => a.id).toSet(),
+          {'photo_glasses_lunch', 'PXL_20240302_183000000'});
+    });
+
+    test('the background run from its watermark offers the glasses lunch '
+        'imported after it, not the old copy', () async {
+      _answerLikeAndroid([glassesLunch(), phoneSnack(), oldCopy()]);
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2,
+          library: _ReadableLibrary(PhotoManagerLibrary(
+              isAndroid: true, windowStart: () => windowStart)),
+          clock: () => evening);
+      final offered = <IntakePhoto>[];
+      intake.photos.listen(offered.add);
+      // The watermark is the 15:00 snack; the run scans from an hour
+      // before it.
+      await intake.backfillScan(since: DateTime(2026, 7, 17, 14, 0));
+      await pumpEventQueue();
+      expect(offered.map((p) => p.assetId),
+          ['photo_glasses_lunch', 'phone_snack']);
+    });
+
+    test('the live watcher offers a glasses photo imported after it '
+        'started, not an old copy', () async {
+      final rows = <_Row>[];
+      _answerLikeAndroid(rows);
+      final opened = DateTime(2026, 7, 17, 13, 0); // after lunch was taken
+      final library = _ReadableLibrary(PhotoManagerLibrary(
+          isAndroid: true, windowStart: () => lookbackCutoff(opened, 2)));
+      final intake = LibraryPhotoIntake(
+          lookbackDays: () => 2, library: library, clock: () => opened);
+      final offered = <IntakePhoto>[];
+      intake.photos.listen(offered.add);
+      await intake.start();
+      rows.addAll([
+        _Row('photo_glasses_lunch',
+            added: DateTime(2026, 7, 17, 13, 1),
+            taken: DateTime(2026, 7, 17, 12, 0)),
+        _Row('copied_in',
+            added: DateTime(2026, 7, 17, 13, 1, 10),
+            taken: DateTime(2025, 1, 5, 8, 0)),
+      ]);
+      library.onChange!();
+      await pumpEventQueue(times: 50);
+      expect(offered.map((p) => p.assetId), ['photo_glasses_lunch']);
+      await intake.stop();
+    });
+  });
+
   // Review 171, C4 second pass: the listing is capped before any photo is
   // left out, so a phone transfer of 2000 old photos, added after the
   // window's own photos, fills it. Judged by what was kept, such a scan
