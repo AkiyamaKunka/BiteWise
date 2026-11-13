@@ -35,4 +35,17 @@ void main() {
     expect(formatOneDecimal(-3.5), '-3.5');
     expect(formatOneDecimal(1e6), '1000000');
   });
+
+  // OPEN OWNER DECISION (review 171, 2026-11-13). Wholeness is checked on
+  // the RAW value, as in the five copies formatOneDecimal replaced, so a
+  // value just off a whole number keeps its '.0' (the '12.0g beside 9g'
+  // look displayMacro fixed on 2026-11-09). Checking after rounding to 0.1
+  // would print '12' and '80' on the macro legend, My usual foods, the
+  // usual offer card, the restaurant card and Body values: change these
+  // pins only with the owner's choice.
+  test('formatOneDecimal: a value just off a whole number keeps its ".0"',
+      () {
+    expect(formatOneDecimal(12.04), '12.0');
+    expect(formatOneDecimal(79.99999), '80.0');
+  });
 }
