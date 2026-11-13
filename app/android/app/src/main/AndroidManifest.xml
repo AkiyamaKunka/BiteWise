@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- Gemini analysis and key validation need network. Flutter auto-adds
          this ONLY to the debug/profile manifest (for hot reload), so it must
          be declared here or release builds ship with no internet at all —
@@ -80,6 +81,22 @@
                 <data android:mimeType="image/*"/>
             </intent-filter>
         </activity>
+        <!-- The system Photo Picker (MainActivity.pickImages) on Android
+             4.4-10: asks Google Play services to install its backported
+             picker module. Disabled and not exported, a marker only; the
+             class lives in Play services. Without Play services the
+             AndroidX contract falls back to ACTION_OPEN_DOCUMENT itself.
+             (developer.android.com/training/data-storage/shared/photopicker) -->
+        <service
+            android:name="com.google.android.gms.metadata.ModuleDependencies"
+            android:enabled="false"
+            android:exported="false"
+            tools:ignore="MissingClass">
+            <intent-filter>
+                <action android:name="com.google.android.gms.metadata.MODULE_DEPENDENCIES"/>
+            </intent-filter>
+            <meta-data android:name="photopicker_activity:0:required" android:value=""/>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

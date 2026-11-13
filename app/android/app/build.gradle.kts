@@ -146,4 +146,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    // The system Photo Picker contracts (MainActivity.pickImages) need
+    // 1.7.0 or later; 1.9.0 is what the plugins already resolve.
+    implementation("androidx.activity:activity-ktx:1.9.0")
 }

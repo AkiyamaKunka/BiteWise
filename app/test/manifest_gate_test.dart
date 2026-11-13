@@ -76,6 +76,31 @@ String _pluginRoot(String package) {
           .toFilePath();
 }
 
+String _manifest() =>
+    File('${_appRoot().path}/android/app/src/main/AndroidManifest.xml')
+        .readAsStringSync();
+
+/// [xml] without its comments, so a comment that names a permission or a
+/// component never satisfies (or trips) a gate.
+String _uncommented(String xml) =>
+    xml.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
+
+/// Every <uses-permission> in [manifest], by name: true when the entry is
+/// a `tools:node="remove"` (it strips a library's permission from the
+/// merged manifest rather than declaring one).
+Map<String, bool> _permissions(String manifest) => {
+      for (final m in RegExp(r'<uses-permission\b([^>]*)>')
+          .allMatches(_uncommented(manifest)))
+        RegExp(r'android:name="([^"]+)"').firstMatch(m.group(1)!)!.group(1)!:
+            m.group(1)!.contains('tools:node="remove"'),
+    };
+
+/// The permissions [manifest] declares (removals left out).
+Set<String> _declared(String manifest) => {
+      for (final e in _permissions(manifest).entries)
+        if (!e.value) e.key,
+    };
+
 /// Release-manifest drift gate.
 ///
 /// Flutter auto-injects INTERNET into the DEBUG and PROFILE manifests (for
@@ -86,18 +111,29 @@ String _pluginRoot(String package) {
 /// actually needs.
 void main() {
   test('main AndroidManifest declares the permissions release needs', () {
-    final manifest =
-        File('${_appRoot().path}/android/app/src/main/AndroidManifest.xml')
-            .readAsStringSync();
+    final declared = _declared(_manifest());
     for (final permission in [
       'android.permission.INTERNET',
       'android.permission.READ_MEDIA_IMAGES',
       'android.permission.POST_NOTIFICATIONS',
     ]) {
-      expect(manifest.contains(permission), isTrue,
+      expect(declared.contains(permission), isTrue,
           reason: '$permission missing from the MAIN manifest — debug/profile '
               'builds get it auto-injected, release does not.');
     }
+  });
+
+  // Every permission is a Play review question (and a Data safety answer),
+  // so none arrives unnoticed. The system photo picker, Save to device
+  // and the notification-settings link need none.
+  test('the main manifest declares exactly these permissions', () {
+    expect(_declared(_manifest()), {
+      'android.permission.INTERNET',
+      'android.permission.READ_MEDIA_IMAGES',
+      'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
+      'android.permission.READ_EXTERNAL_STORAGE',
+      'android.permission.POST_NOTIFICATIONS',
+    });
   });
 
   // The notification small icon is only ever named from Dart, which the
@@ -820,6 +856,63 @@ void main() {
             .readAsStringSync();
     expect(pluginManifest,
         contains(r'android:authorities="${applicationId}.flutter.share_provider"'));
+  });
+
+  // Log and Leftovers pick photos through the system Photo Picker, which
+  // needs no permission (Play's Photo and Video FAQ asks apps to serve
+  // users who grant no broad access). FlutterActivity is a plain Activity
+  // with no registerForActivityResult, so MainActivity runs AndroidX's
+  // contracts by hand: createIntent, startActivityForResult, parseResult.
+  // Copies go to cacheDir/picked_photos/<uuid>/<name>, under the share cap.
+  // The ModuleDependencies entry asks Play services for the backported
+  // picker on Android 4.4-10; elsewhere the contract falls back to
+  // ACTION_OPEN_DOCUMENT by itself.
+  test('MainActivity serves pickImages through the system photo picker', () {
+    final kotlin = _mainActivity();
+    expect(kotlin, contains('"pickImages" -> pickImages('));
+    expect(kotlin, contains('const val PICKED_PHOTO_FOLDER = "picked_photos"'));
+    expect(kotlin, contains('const val PHOTO_PICK_REQUEST = 4208'));
+    expect(kotlin, contains('ActivityResultContracts.PickVisualMedia()'));
+    expect(kotlin, contains('ActivityResultContracts.PickMultipleVisualMedia('));
+    expect(kotlin,
+        contains('PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)'));
+    expect(kotlin, contains('MediaStore.getPickImagesMaxLimit()'));
+    expect(kotlin, contains('startActivityForResult(intent, PHOTO_PICK_REQUEST)'));
+    expect(kotlin, contains('.parseResult(resultCode, data)'));
+    expect(kotlin, contains('copyAtMost(uri, out, MAX_SHARE_BYTES)'));
+    expect(kotlin, contains('MediaStore.MediaColumns.DATE_TAKEN'));
+    for (final status in ['ok', 'cancelled', 'busy', 'unavailable']) {
+      expect(kotlin, contains('"status" to "$status"'), reason: status);
+    }
+
+    final gradle = File('${_appRoot().path}/android/app/build.gradle.kts')
+        .readAsStringSync();
+    final activity = RegExp(r'implementation\("androidx\.activity:activity-ktx:'
+            r'(\d+)\.(\d+)\.(\d+)"\)')
+        .firstMatch(gradle);
+    expect(activity, isNotNull, reason: 'androidx.activity is not declared');
+    final major = int.parse(activity!.group(1)!);
+    final minor = int.parse(activity.group(2)!);
+    expect(major > 1 || (major == 1 && minor >= 7), isTrue,
+        reason: 'the picker contracts need androidx.activity 1.7.0 or later');
+
+    final manifest = _manifest();
+    expect(RegExp(r'<manifest\b[^>]*>').firstMatch(manifest)?.group(0),
+        contains('xmlns:tools="http://schemas.android.com/tools"'));
+    final service = RegExp(
+            r'<service\s+android:name="com\.google\.android\.gms\.metadata\.'
+            r'ModuleDependencies"(.*?)</service>',
+            dotAll: true)
+        .firstMatch(_uncommented(manifest))
+        ?.group(1);
+    expect(service, isNotNull, reason: 'the picker backport entry is missing');
+    expect(service, contains('android:enabled="false"'));
+    expect(service, contains('android:exported="false"'));
+    expect(service, contains('tools:ignore="MissingClass"'));
+    expect(service, contains('<action android:name='
+        '"com.google.android.gms.metadata.MODULE_DEPENDENCIES"'));
+    expect(service, contains('<meta-data android:name='
+        '"photopicker_activity:0:required" android:value=""'));
   });
 
   // Owner decision 2026-11-13: the package stays, and the upload key the

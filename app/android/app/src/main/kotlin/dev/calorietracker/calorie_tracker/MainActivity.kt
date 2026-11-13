@@ -1,5 +1,6 @@
 package dev.calorietracker.calorie_tracker
 
+import android.annotation.SuppressLint
 import android.app.Activity
 import android.app.ActivityManager
 import android.content.ActivityNotFoundException
@@ -8,8 +9,12 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.ext.SdkExtensions
+import android.provider.MediaStore
 import android.provider.OpenableColumns
 import android.webkit.MimeTypeMap
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -21,6 +26,11 @@ class MainActivity : FlutterActivity() {
     /// The open pickFiles call, answered from onActivityResult once the
     /// picked files are copied. Main thread only.
     private var pickReply: MethodChannel.Result? = null
+
+    /// The open pickImages call, and the most photos it asked the picker
+    /// for (which contract parses the result). Main thread only.
+    private var photoPickReply: MethodChannel.Result? = null
+    private var photoPickMax = 1
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // receive_sharing_intent reads the launch intent while
@@ -247,10 +257,16 @@ class MainActivity : FlutterActivity() {
         // Each picked file is copied into the app's cache, and Dart deletes
         // the copy after the import. No storage permission is involved:
         // ACTION_OPEN_DOCUMENT grants access to the picked files only.
+        // pickImages: Log and Leftovers through the system Photo Picker,
+        // which grants the picked photos only, with no permission at all.
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, FILES_CHANNEL)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "pickFiles" -> pickFiles(result)
+                    "pickImages" -> pickImages(
+                        (call.argument<Any?>("max") as? Number)?.toInt() ?: 1,
+                        result,
+                    )
                     else -> result.notImplemented()
                 }
             }
@@ -286,11 +302,147 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (requestCode != PICK_REQUEST) {
-            super.onActivityResult(requestCode, resultCode, data)
+    /// The system Photo Picker through AndroidX's contracts, run by hand:
+    /// FlutterActivity is a plain Activity, with no
+    /// registerForActivityResult. Where the picker is missing the contract
+    /// itself falls back (Play services' backported picker, see the
+    /// ModuleDependencies entry in AndroidManifest.xml, else
+    /// ACTION_OPEN_DOCUMENT). [requested] is clamped to 1 and to the
+    /// picker's own limit. Answers {status, items, tooBig, failed} once the
+    /// picks are copied (onPhotosPicked); busy while a pick is open.
+    private fun pickImages(requested: Int, result: MethodChannel.Result) {
+        if (photoPickReply != null) {
+            result.success(photoPickAnswer("busy"))
             return
         }
+        val max = requested.coerceIn(1, pickLimit())
+        val request = PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+        val intent = try {
+            if (max == 1) ActivityResultContracts.PickVisualMedia().createIntent(this, request)
+            else ActivityResultContracts.PickMultipleVisualMedia(max).createIntent(this, request)
+        } catch (e: Exception) {
+            result.success(photoPickAnswer("unavailable"))
+            return
+        }
+        photoPickReply = result
+        photoPickMax = max
+        try {
+            startActivityForResult(intent, PHOTO_PICK_REQUEST)
+        } catch (e: Exception) {
+            photoPickReply = null
+            result.success(photoPickAnswer("unavailable"))
+        }
+    }
+
+    /// The system picker's most photos per pick (its contract refuses
+    /// more): where AndroidX uses it, API 33+ or R extension 2+. Its
+    /// fallbacks take any number.
+    @SuppressLint("NewApi")
+    private fun pickLimit(): Int =
+        if (Build.VERSION.SDK_INT >= 33 ||
+            (Build.VERSION.SDK_INT >= 30 && SdkExtensions.getExtensionVersion(Build.VERSION_CODES.R) >= 2)
+        ) MediaStore.getPickImagesMaxLimit().coerceAtLeast(1) else Int.MAX_VALUE
+
+    private fun photoPickAnswer(
+        status: String,
+        items: List<Map<String, Any>> = emptyList(),
+        tooBig: Int = 0,
+        failed: Int = 0,
+    ): Map<String, Any> =
+        mapOf("status" to status, "items" to items, "tooBig" to tooBig, "failed" to failed)
+
+    /// Copies each picked photo to cacheDir/PICKED_PHOTO_FOLDER/<uuid>/<name>
+    /// (the folder emptied first: Dart has read and deleted the last
+    /// pick's copies by now), under the share cap, with its capture time
+    /// when the provider gives one. Off the UI thread; the call stays open
+    /// (busy) until the answer, so a second pick cannot empty the folder
+    /// while this one writes it. The grants last only while the app runs,
+    /// hence the copies.
+    private fun onPhotosPicked(resultCode: Int, data: Intent?) {
+        val reply = photoPickReply ?: return
+        val uris: List<Uri> = try {
+            if (photoPickMax == 1) {
+                listOfNotNull(ActivityResultContracts.PickVisualMedia().parseResult(resultCode, data))
+            } else {
+                ActivityResultContracts.PickMultipleVisualMedia(photoPickMax).parseResult(resultCode, data)
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        if (resultCode != Activity.RESULT_OK || uris.isEmpty()) {
+            photoPickReply = null
+            reply.success(photoPickAnswer("cancelled"))
+            return
+        }
+        Thread {
+            val items = mutableListOf<Map<String, Any>>()
+            var tooBig = 0
+            var failed = 0
+            val root = File(cacheDir, PICKED_PHOTO_FOLDER)
+            try {
+                root.deleteRecursively()
+                root.mkdirs()
+            } catch (e: Exception) {
+            }
+            uris.forEach { uri ->
+                try {
+                    val name = shareName(uri)
+                        ?: if ("content".equals(uri.scheme, ignoreCase = true)) fallbackShareName(uri) else null
+                    val dir = File(root, UUID.randomUUID().toString())
+                    if (name == null || !dir.mkdirs()) {
+                        failed++
+                        return@forEach
+                    }
+                    val out = File(dir, name)
+                    when (copyAtMost(uri, out, MAX_SHARE_BYTES)) {
+                        Copied.OK -> {
+                            val item = mutableMapOf<String, Any>("path" to out.absolutePath, "name" to name)
+                            dateTaken(uri)?.let { item["dateTakenMs"] = it }
+                            items.add(item)
+                        }
+                        Copied.TOO_BIG -> {
+                            out.delete()
+                            dir.delete()
+                            tooBig++
+                        }
+                        Copied.FAILED -> {
+                            out.delete()
+                            dir.delete()
+                            failed++
+                        }
+                    }
+                } catch (e: Exception) {
+                    failed++
+                }
+            }
+            runOnUiThread {
+                if (photoPickReply === reply) photoPickReply = null
+                reply.success(photoPickAnswer("ok", items, tooBig, failed))
+            }
+        }.start()
+    }
+
+    /// When [uri]'s photo was taken (ms since the epoch), as the provider
+    /// reports it; null when it does not (a document provider, say).
+    private fun dateTaken(uri: Uri): Long? = try {
+        contentResolver.query(uri, arrayOf(MediaStore.MediaColumns.DATE_TAKEN), null, null, null)
+            ?.use { c ->
+                val i = c.getColumnIndex(MediaStore.MediaColumns.DATE_TAKEN)
+                if (c.moveToFirst() && i >= 0 && !c.isNull(i)) c.getLong(i).takeIf { it > 0 } else null
+            }
+    } catch (e: Exception) {
+        null
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        when (requestCode) {
+            PICK_REQUEST -> onFilesPicked(resultCode, data)
+            PHOTO_PICK_REQUEST -> onPhotosPicked(resultCode, data)
+            else -> super.onActivityResult(requestCode, resultCode, data)
+        }
+    }
+
+    private fun onFilesPicked(resultCode: Int, data: Intent?) {
         val reply = pickReply ?: return
         if (resultCode != Activity.RESULT_OK || data == null) {
             pickReply = null
@@ -379,10 +531,14 @@ class MainActivity : FlutterActivity() {
         const val CHANNEL = "dev.calorietracker/background"
         const val FILES_CHANNEL = "dev.calorietracker/files"
         const val PICK_REQUEST = 4207
+        const val PHOTO_PICK_REQUEST = 4208
         const val MAX_BYTES = 100L * 1024 * 1024
 
         /// Under cacheDir; share_intake.dart's androidShareFolderName.
         const val SHARE_FOLDER = "shared_photos"
+
+        /// Under cacheDir: pickImages' copies, one folder each.
+        const val PICKED_PHOTO_FOLDER = "picked_photos"
 
         /// Dart's maxPhotoBytes: share intake refuses anything larger.
         const val MAX_SHARE_BYTES = 25L * 1024 * 1024
