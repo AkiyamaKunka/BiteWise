@@ -802,3 +802,132 @@ def test_ping_timezone_must_be_a_string_when_present(client):
         assert client.http.post("/ping", headers=h,
                                 json=body).status_code == 200
     assert database.get_android_timezone() == "+0530"
+
+
+# ─── Every route refuses a caller without the key ──────────────────────
+
+def test_every_route_refuses_a_caller_without_the_key(client, monkeypatch):
+    """Walks the REAL url_map, so a route added later without the auth
+    check fails here: every rule but Flask's static one answers the exact
+    401 body for a missing or wrong key, and none of the work behind it
+    runs (no VPN record, no heartbeat, no CLI, no session, no lookup)."""
+    import claude_auth
+    import garmin
+    import lookup_jobs
+
+    touched = []
+    for module, name in (
+            (telegram_bot, "maybe_warn_android_vpn_inactive"),
+            (telegram_bot, "_find_failed_upload_by_hash"),
+            (telegram_bot.database, "update_android_heartbeat"),
+            (telegram_bot.database, "get_today_hashes"),
+            (telegram_bot.database, "reserve_photo_hash"),
+            (claude_analyzer, "status_label"),
+            (claude_analyzer, "_cli_path"),
+            (claude_analyzer, "backend_available"),
+            (claude_analyzer, "analyze_food_photo"),
+            (claude_analyzer, "analyze_leftover_photo"),
+            (claude_analyzer, "analyze_text_prompt"),
+            (claude_auth, "start_session"),
+            (claude_auth, "complete_session"),
+            (claude_auth, "cancel_session"),
+            (garmin, "is_configured"),
+            (lookup_jobs, "is_enabled")):
+        monkeypatch.setattr(module, name,
+                            lambda *a, _n=name, **k: touched.append(_n))
+    # One body that would carry every route past its own validation.
+    body = {"timezone": "+0800", "hashes": ["ab" * 16], "date": "2026-08-02",
+            "code": "good-code#state", "image_b64": "aGk=", "prompt": "hi",
+            "original_analysis": "{}", "job_id": "abcdefgh12",
+            "items": [{"name": "taco"}]}
+    app = client.http.application
+    rules = [r for r in app.url_map.iter_rules() if r.endpoint != "static"]
+    assert len(rules) >= 13, [r.rule for r in rules]
+    for rule in rules:
+        method = sorted(rule.methods - {"HEAD", "OPTIONS"})[0]
+        for headers in ({}, {"X-API-Key": "wrong-key"}):
+            resp = client.http.open(rule.rule, method=method,
+                                    headers=headers, json=body)
+            assert resp.status_code == 401, (rule.rule, headers)
+            assert resp.get_json() == {"error": "Unauthorized"}, rule.rule
+    assert touched == []
+
+
+# ─── The 503 contract, byte for byte, on all three CLI endpoints ───────
+#
+# Installed app builds key on these bodies (ServerAnalyzer.unavailableRetry
+# reads "retry"; the reason is shown to the user), so the three endpoints
+# must keep answering them exactly.
+
+_CLI_ENDPOINTS = [
+    # (path, analyzer function, busy reason, empty-result reason, for_photo)
+    ("/api/analyze_photo", "analyze_food_photo",
+     "the analyzer is busy with another photo",
+     "the analysis ran but produced no usable result", True),
+    ("/api/analyze_leftover", "analyze_leftover_photo",
+     "the analyzer is busy with another photo",
+     "the estimation ran but produced no usable result", True),
+    ("/api/text_intent", "analyze_text_prompt",
+     "the analyzer is busy",
+     "the analysis ran but produced no usable result", False),
+]
+
+
+def _cli_body(backend="claude"):
+    import json as _json
+    return {"image_b64": "aGk=", "prompt": "fix meal 2", "backend": backend,
+            "original_analysis": _json.dumps({
+                "meal_description": "tray", "total_calories": 500,
+                "food_items": [{"name": "rice",
+                                "estimated_calories": 300}]})}
+
+
+@pytest.mark.parametrize("path,fn,busy,empty,for_photo", _CLI_ENDPOINTS,
+                         ids=[row[0] for row in _CLI_ENDPOINTS])
+def test_busy_and_empty_result_503_bodies_are_exact(client, monkeypatch, path,
+                                                    fn, busy, empty,
+                                                    for_photo):
+    monkeypatch.setattr(claude_analyzer, "backend_available",
+                        lambda b, for_photo=False: True)
+    h = {"X-API-Key": "secret-key"}
+
+    def raise_busy(*a, **kw):
+        raise claude_analyzer.AnalyzerBusy()
+
+    monkeypatch.setattr(claude_analyzer, fn, raise_busy)
+    resp = client.http.post(path, headers=h, json=_cli_body())
+    assert resp.status_code == 503
+    assert resp.get_json() == {"error": "claude_unavailable",
+                               "reason": busy, "retry": True}
+
+    monkeypatch.setattr(claude_analyzer, fn, lambda *a, **kw: None)
+    resp = client.http.post(path, headers=h, json=_cli_body())
+    assert resp.status_code == 503
+    assert resp.get_json() == {"error": "claude_unavailable",
+                               "reason": empty, "retry": False}
+
+
+@pytest.mark.parametrize("path,fn,busy,empty,for_photo", _CLI_ENDPOINTS,
+                         ids=[row[0] for row in _CLI_ENDPOINTS])
+def test_an_unavailable_backend_is_a_logged_503_naming_the_knob(
+        client, monkeypatch, caplog, path, fn, busy, empty, for_photo):
+    import logging
+    asked = []
+    monkeypatch.setattr(
+        claude_analyzer, "backend_available",
+        lambda b, for_photo=False: asked.append((b, for_photo)) and False)
+    monkeypatch.setattr(claude_analyzer, "backend_status",
+                        lambda: {"glm": "GLM_PLAN_KEY is not set"})
+    monkeypatch.setattr(claude_analyzer, fn,
+                        lambda *a, **kw: pytest.fail("must not run the CLI"))
+    with caplog.at_level(logging.WARNING, logger="calorie_bot"):
+        resp = client.http.post(path, headers={"X-API-Key": "secret-key"},
+                                json=_cli_body(backend="glm"))
+    assert resp.status_code == 503
+    assert resp.get_json() == {"error": "claude_unavailable",
+                               "reason": "GLM_PLAN_KEY is not set"}
+    assert asked == [("glm", for_photo)]
+    label = path.rsplit("/", 1)[1]
+    assert (f"{label} refused: backend 'glm' unavailable "
+            f"(GLM_PLAN_KEY is not set).") in [
+                r.getMessage() for r in caplog.records]

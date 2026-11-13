@@ -18,6 +18,7 @@ Usage:
 
 import base64
 import binascii
+import functools
 import io
 import ipaddress
 import json
@@ -4952,11 +4953,24 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
         return jsonify({"error": code}), 400
 
-    @app.route('/ping', methods=['POST'])
-    def ping():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
+    def _require_api_key(view):
+        """Every route's first gate: the exact 401 body for a missing or
+        wrong key, before any of the route's work runs. One decorator, not
+        a copied check per route, so a new route cannot ship without it
+        (tests walk app.url_map to hold every route to it). functools.wraps
+        keeps the view's name, which Flask uses as the endpoint name;
+        _authorized_api_request still reads both keys at call time.
+        """
+        @functools.wraps(view)
+        def guarded(*args, **kwargs):
+            if not _authorized_api_request():
+                return jsonify({"error": "Unauthorized"}), 401
+            return view(*args, **kwargs)
+        return guarded
 
+    @app.route('/ping', methods=['POST'])
+    @_require_api_key
+    def ping():
         maybe_warn_android_vpn_inactive(bot, "/ping")
 
         # None preserves the stored offset; meal dating depends on it.
@@ -4975,6 +4989,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return jsonify({"status": "ok"})
 
     @app.route('/api/auth_check', methods=['POST'])
+    @_require_api_key
     def api_auth_check():
         """Pure key/reachability probe for the app's "Test connection".
 
@@ -4983,8 +4998,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         forge watcher liveness and suppress the stale-watcher outage alert
         (the exact alert that caught the 2026-07-23 outage).
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         # "backends" lets the phone's Test connection diagnose a missing
         # server-side plan key (GLM_PLAN_KEY / DOUBAO_PLAN_KEY) remotely.
         # "features" (additive) tells a new app which newer contracts this
@@ -4995,6 +5008,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "features": _api_features()})
 
     @app.route('/api/garmin_daily', methods=['POST'])
+    @_require_api_key
     def api_garmin_daily():
         """One user-local day's Garmin summary for the app's energy-balance
         line. Body: {"date": "YYYY-MM-DD"}.
@@ -5005,8 +5019,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         covers every miss (unconfigured, network down, no data yet) — the
         app renders the day unchanged, exactly like the report integrator.
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         if not garmin.is_configured():
             return jsonify({"available": False, "reason": "not_configured"})
         payload = _request_json_object()
@@ -5038,6 +5050,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         })
 
     @app.route('/api/claude_auth/start', methods=['POST'])
+    @_require_api_key
     def api_claude_auth_start():
         """Begin the phone-driven OAuth re-connect: spawn the CLI's own
         setup-token flow and hand back Anthropic's OFFICIAL authorize URL
@@ -5045,8 +5058,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         process on this machine; the token this flow mints authorizes the
         genuine Claude Code client here — nothing is impersonated and no
         credential ever travels to the phone."""
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         cli = claude_analyzer._cli_path()
         if cli is None:
             return jsonify({"error": "claude_cli_missing"}), 503
@@ -5058,9 +5069,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "expires_in": claude_auth.SESSION_TTL_SECONDS})
 
     @app.route('/api/claude_auth/complete', methods=['POST'])
+    @_require_api_key
     def api_claude_auth_complete():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         payload = _request_json_object()
         if payload is None:
             return _api_bad_request("claude_auth/complete",
@@ -5077,9 +5087,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
                         "analyzer": claude_analyzer.status_label()})
 
     @app.route('/api/claude_auth/cancel', methods=['POST'])
+    @_require_api_key
     def api_claude_auth_cancel():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         return jsonify({"ok": True,
                         "cancelled": claude_auth.cancel_session()})
 
@@ -5147,7 +5156,67 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return None, None, _api_bad_request("analyze", "bad_effort")
         return model, effort, None
 
+    def _decode_image_b64(payload, endpoint):
+        """The JSON shape's image: (bytes, None), or (None, a logged 400):
+        no_image for a missing or blank field, bad_image_encoding for text
+        that is not strict base64."""
+        raw = payload.get("image_b64")
+        if not isinstance(raw, str) or not raw.strip():
+            return None, _api_bad_request(endpoint, "no_image")
+        try:
+            return base64.b64decode(raw, validate=True), None
+        except (binascii.Error, ValueError):
+            return None, _api_bad_request(endpoint, "bad_image_encoding")
+
+    def _backend_unavailable(endpoint, backend):
+        """503 for a backend this server cannot run. It keeps old-app
+        compat for claude, and the reason string tells a new app WHICH
+        server-side knob is missing. LOGGED: a burst of these was
+        invisible in the journal on 2026-07-31 and cost an hour of "why is
+        my API broken"."""
+        reason = claude_analyzer.backend_status().get(backend)
+        log.warning(
+            f"{endpoint} refused: backend '{backend}' unavailable "
+            f"({reason}).")
+        return jsonify({"error": "claude_unavailable",
+                        "reason": reason}), 503
+
+    def _cli_result(run, busy_reason, empty_reason):
+        """Run one CLI call: (result, None), or (None, the 503 installed
+        apps key on via ServerAnalyzer.unavailableRetry).
+
+          AnalyzerBusy    retry True: another photo owns the single-flight
+                          CLI, and seconds fix that.
+          PlanRefused     _api_plan_refused: credits are terminal, a closed
+                          usage window comes back later.
+          AnalyzerTimeout retry "later": the model never answered, a slow
+                          run and not a verdict on the photo; an immediate
+                          re-run meets the same slow model and spends
+                          another full CLI limit.
+          empty result    retry False: the run HAPPENED and failed (a reply
+                          that broke the contract, a blind GLM run).
+                          Retrying spends another full CLI run (up to 120 s
+                          of the subscription) on a request that already
+                          answered, so the app stops at one.
+        """
+        try:
+            result = run()
+        except claude_analyzer.AnalyzerBusy:
+            return None, (jsonify({"error": "claude_unavailable",
+                                   "reason": busy_reason,
+                                   "retry": True}), 503)
+        except claude_analyzer.PlanRefused as refusal:
+            return None, _api_plan_refused(refusal)
+        except claude_analyzer.AnalyzerTimeout as timeout:
+            return None, _api_come_back_later(timeout.reason)
+        if not result:
+            return None, (jsonify({"error": "claude_unavailable",
+                                   "reason": empty_reason,
+                                   "retry": False}), 503)
+        return result, None
+
     @app.route('/api/analyze_photo', methods=['POST'])
+    @_require_api_key
     def api_analyze_photo():
         """Analyze a photo with the Claude Code CLI and RETURN the analysis.
 
@@ -5157,8 +5226,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         PURE — no meal row, no ledger entry, no Telegram card: the app owns
         its own database and decides what to keep.
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         prompt = None
         backend = "claude"
         if request.is_json:
@@ -5171,13 +5238,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             payload = _request_json_object()
             if payload is None:
                 return _api_bad_request("analyze_photo", "bad_request_shape")
-            raw = payload.get("image_b64")
-            if not isinstance(raw, str) or not raw.strip():
-                return _api_bad_request("analyze_photo", "no_image")
-            try:
-                data = base64.b64decode(raw, validate=True)
-            except (binascii.Error, ValueError):
-                return _api_bad_request("analyze_photo", "bad_image_encoding")
+            data, refused = _decode_image_b64(payload, "analyze_photo")
+            if refused is not None:
+                return refused
             profile = payload.get("dietary_profile")
             if isinstance(profile, str) and profile.strip():
                 if len(profile) > API_PROFILE_MAX_CHARS:
@@ -5220,48 +5283,22 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if backend not in claude_analyzer.SUBSCRIPTION_BACKENDS:
             return _api_bad_request("analyze_photo", "bad_backend")
         if not claude_analyzer.backend_available(backend, for_photo=True):
-            # 503 keeps old-app compat for claude; the reason string tells
-            # a new app WHICH server-side knob is missing. LOGGED: a burst
-            # of these was invisible in the journal on 2026-07-31 and cost
-            # an hour of "why is my API broken".
-            reason = claude_analyzer.backend_status().get(backend)
-            log.warning(
-                f"analyze_photo refused: backend '{backend}' unavailable "
-                f"({reason}).")
-            return jsonify({"error": "claude_unavailable",
-                            "reason": reason}), 503
+            return _backend_unavailable("analyze_photo", backend)
         # allow_file_fallback=False: never run a network-influenced prompt
         # on the Read-tool path.
-        try:
-            analysis = claude_analyzer.analyze_food_photo(
+        analysis, refused = _cli_result(
+            lambda: claude_analyzer.analyze_food_photo(
                 data, prompt, allow_file_fallback=False, backend=backend,
-                raise_on_busy=True, model=model, effort=effort)
-        except claude_analyzer.AnalyzerBusy:
-            # Another photo owns the single-flight CLI — seconds fix this.
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analyzer is busy with another "
-                                      "photo",
-                            "retry": True}), 503
-        except claude_analyzer.PlanRefused as refusal:
-            return _api_plan_refused(refusal)
-        except claude_analyzer.AnalyzerTimeout as timeout:
-            # The model never answered — a slow run, not a verdict on the
-            # photo. Not retry:True either: an immediate re-run meets the
-            # same slow model and spends another full CLI limit.
-            return _api_come_back_later(timeout.reason)
-        if not analysis:
-            # The run HAPPENED and failed: a reply that broke the is_food
-            # contract, or a blind GLM run. Retrying spends another full
-            # CLI run (up to 120 s of the subscription) on a request that
-            # already answered — say so, so the app stops at one.
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analysis ran but produced no "
-                                      "usable result",
-                            "retry": False}), 503
+                raise_on_busy=True, model=model, effort=effort),
+            busy_reason="the analyzer is busy with another photo",
+            empty_reason="the analysis ran but produced no usable result")
+        if refused is not None:
+            return refused
         return jsonify({"ok": True, "analysis": analysis,
                         "analyzed_by": backend})
 
     @app.route('/api/analyze_leftover', methods=['POST'])
+    @_require_api_key
     def api_analyze_leftover():
         """Estimate leftover fractions for a previously analyzed meal.
 
@@ -5273,20 +5310,14 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         whitelist, never embedded verbatim), and the CLI run never takes
         the Read-tool fallback.
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         payload = _request_json_object()
         if payload is None:
             # A JSON array/scalar body crashed .get with a 500
             # (pressure-test find) — it is a client error, say so.
             return _api_bad_request("analyze_leftover", "bad_request_shape")
-        raw = payload.get("image_b64")
-        if not isinstance(raw, str) or not raw.strip():
-            return _api_bad_request("analyze_leftover", "no_image")
-        try:
-            data = base64.b64decode(raw, validate=True)
-        except (binascii.Error, ValueError):
-            return _api_bad_request("analyze_leftover", "bad_image_encoding")
+        data, refused = _decode_image_b64(payload, "analyze_leftover")
+        if refused is not None:
+            return refused
         if not data:
             return _api_bad_request("analyze_leftover", "no_image")
         if len(data) > API_ANALYZE_MAX_BYTES:
@@ -5304,46 +5335,30 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         if bad:
             return bad
         if not claude_analyzer.backend_available(backend, for_photo=True):
-            reason = claude_analyzer.backend_status().get(backend)
-            log.warning(
-                f"analyze_leftover refused: backend '{backend}' unavailable "
-                f"({reason}).")
-            return jsonify({"error": "claude_unavailable",
-                            "reason": reason}), 503
+            return _backend_unavailable("analyze_leftover", backend)
         # Deliberately NO "lang" here: every item in this reply is a
         # back-reference the app matches by exact (then case-insensitive)
         # name against the ORIGINAL meal, which may be English — asking
         # for Chinese invites translated names that silently match nothing
         # and fall back to the meal-level fraction.
         prompt = LEFTOVER_PROMPT_TEMPLATE.format(original_analysis=compact)
-        try:
-            leftover = claude_analyzer.analyze_leftover_photo(
+        leftover, refused = _cli_result(
+            lambda: claude_analyzer.analyze_leftover_photo(
                 data, prompt, backend=backend, raise_on_busy=True,
-                model=model, effort=effort)
-        except claude_analyzer.AnalyzerBusy:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analyzer is busy with another "
-                                      "photo",
-                            "retry": True}), 503
-        except claude_analyzer.PlanRefused as refusal:
-            return _api_plan_refused(refusal)
-        except claude_analyzer.AnalyzerTimeout as timeout:
-            return _api_come_back_later(timeout.reason)
-        if not leftover:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the estimation ran but produced no "
-                                      "usable result",
-                            "retry": False}), 503
+                model=model, effort=effort),
+            busy_reason="the analyzer is busy with another photo",
+            empty_reason="the estimation ran but produced no usable result")
+        if refused is not None:
+            return refused
         return jsonify({"ok": True, "leftover": leftover,
                         "analyzed_by": backend})
 
     @app.route('/api/text_intent', methods=['POST'])
+    @_require_api_key
     def api_text_intent():
         """Run the app's natural-language prompt through the CLI and return
         the model's JSON. Same subscription rationale as /api/analyze_photo;
         the app keeps its own executor semantics (this only supplies JSON)."""
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         payload = _request_json_object()
         if payload is None:
             return _api_bad_request("text_intent", "bad_request_shape")
@@ -5361,30 +5376,17 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         model, effort, bad = _plan_model_effort(payload, backend)
         if bad:
             return bad
+        # No for_photo: a text request needs no GLM vision server (npx).
         if not claude_analyzer.backend_available(backend):
-            reason = claude_analyzer.backend_status().get(backend)
-            log.warning(
-                f"text_intent refused: backend '{backend}' unavailable "
-                f"({reason}).")
-            return jsonify({"error": "claude_unavailable",
-                            "reason": reason}), 503
-        try:
-            out = claude_analyzer.analyze_text_prompt(
+            return _backend_unavailable("text_intent", backend)
+        out, refused = _cli_result(
+            lambda: claude_analyzer.analyze_text_prompt(
                 prompt, backend=backend, raise_on_busy=True,
-                model=model, effort=effort)
-        except claude_analyzer.AnalyzerBusy:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analyzer is busy",
-                            "retry": True}), 503
-        except claude_analyzer.PlanRefused as refusal:
-            return _api_plan_refused(refusal)
-        except claude_analyzer.AnalyzerTimeout as timeout:
-            return _api_come_back_later(timeout.reason)
-        if not out:
-            return jsonify({"error": "claude_unavailable",
-                            "reason": "the analysis ran but produced no "
-                                      "usable result",
-                            "retry": False}), 503
+                model=model, effort=effort),
+            busy_reason="the analyzer is busy",
+            empty_reason="the analysis ran but produced no usable result")
+        if refused is not None:
+            return refused
         return jsonify({"ok": True, "result": out["result"],
                         "analyzed_by": backend})
 
@@ -5405,6 +5407,7 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return lookup_jobs.get_service(lambda: SERVICE_HEALTH_PATH)
 
     @app.route('/api/restaurant_lookup', methods=['POST'])
+    @_require_api_key
     def api_restaurant_lookup():
         """Queue a published-nutrition lookup for chain-restaurant items.
 
@@ -5417,8 +5420,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         {state: done, ...} from the 24 h cache with no CLI run.
         Off unless CLAUDE_LOOKUP_ENABLED (403 {reason: disabled}).
         """
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         if not lookup_jobs.is_enabled():
             return _lookup_refused(403, "disabled")
         payload = request.get_json(silent=True)
@@ -5445,11 +5446,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             429, kind, retry=True if kind == "queue_full" else "later")
 
     @app.route('/api/restaurant_lookup/status', methods=['POST'])
+    @_require_api_key
     def api_restaurant_lookup_status():
         """{job_id} → {state: queued|running|done|failed|unknown, ...}.
         unknown = never seen, expired, or lost in a restart: resubmit."""
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
         if not lookup_jobs.is_enabled():
             return _lookup_refused(403, "disabled")
         payload = request.get_json(silent=True)
@@ -5460,10 +5460,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return jsonify(_lookup_service().status(job_id)), 200
 
     @app.route('/reconcile', methods=['POST'])
+    @_require_api_key
     def reconcile():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-
         maybe_warn_android_vpn_inactive(bot, "/reconcile")
 
         data = _request_json_object()
@@ -5489,10 +5487,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         return jsonify({"missing_hashes": missing_hashes})
 
     @app.route('/upload', methods=['POST'])
+    @_require_api_key
     def upload():
-        if not _authorized_api_request():
-            return jsonify({"error": "Unauthorized"}), 401
-
         if request.content_length and request.content_length > MAX_API_UPLOAD_BYTES:
             return jsonify({"error": "Photo too large"}), 413
 
