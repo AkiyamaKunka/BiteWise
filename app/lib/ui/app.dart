@@ -213,8 +213,10 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   /// iCloud Backup asks (the notice, or a restore offer): like the
   /// consent update, only over the shell itself with nothing on top, and
-  /// after the consent-update question. A later prompt change or a return
-  /// to the app asks again if it could not now.
+  /// after the consent-update question. If it could not now, it asks again
+  /// once the shell is back on top ([_OnRouteReturn]), at a later prompt
+  /// change, or at a return to the app: an open restore offer holds every
+  /// automatic photo until it is answered.
   void _onBackupPrompt() {
     final backup = widget.services.cloudBackup;
     final prompt = backup?.prompt.value;
@@ -545,7 +547,7 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final s = widget.services;
-    return Scaffold(
+    final shell = Scaffold(
       // No shared AppBar: each tab renders its own iOS-style large title
       // that collapses as it scrolls (SliverAppBar.large).
       body: IndexedStack(
@@ -652,7 +654,42 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
         ],
       )),
     );
+    // A backup question that waited for a screen over the shell (the add
+    // flow, say) is asked once that screen is popped. It waited until the
+    // prompt changed or the app came back, holding the photos meanwhile.
+    return _OnRouteReturn(onReturn: _onBackupPrompt, child: shell);
   }
+}
+
+/// Calls [onReturn] each time the route it sits in is back on top: a
+/// screen, sheet or dialog over it was popped or removed. Only this widget
+/// depends on the route, and it hands [child] through untouched: the
+/// shell itself must not depend on it, or every push and pop over it
+/// rebuilds the shell and its selected tab (see _askConsentUpdateWhenIdle).
+class _OnRouteReturn extends StatefulWidget {
+  const _OnRouteReturn({required this.onReturn, required this.child});
+  final VoidCallback onReturn;
+  final Widget child;
+
+  @override
+  State<_OnRouteReturn> createState() => _OnRouteReturnState();
+}
+
+class _OnRouteReturnState extends State<_OnRouteReturn> {
+  /// Whether the route was on top when last told; null before the first.
+  bool? _current;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final current = ModalRoute.isCurrentOf(context) ?? true;
+    final returned = _current == false && current;
+    _current = current;
+    if (returned) widget.onReturn();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.child;
 }
 
 /// The tab bar's top edge: one physical-pixel separator line, painted
