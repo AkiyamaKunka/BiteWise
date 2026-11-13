@@ -31,6 +31,7 @@ import '../services/photo/glasses_check.dart'
     show GlassesCheckEntry, GlassesCheckOutcome;
 import '../services/photo/photo_hash.dart' show originalBytesMd5;
 import 'format.dart';
+import 'meal_edit_logic.dart' show parseClock;
 
 Future<String> _computeMd5(Uint8List bytes) =>
     compute(originalBytesMd5, bytes);
@@ -653,6 +654,25 @@ class PhotoPipeline {
   /// have been dated differently (one by its import time).
   static const int sameShotWindowDays = 2;
 
+  /// How far a meal's clock may run ahead of the photo's and the meal still
+  /// ride along to the leftover check: the two are not read off one clock
+  /// (a meal typed by hand, another camera's EXIF).
+  static const leftoverClockSlack = Duration(minutes: 5);
+
+  /// Whether [m] was eaten no later than [when] (give or take
+  /// [leftoverClockSlack]), by the day and clock it was saved with — the
+  /// wall clock [when]'s meal would be saved with too. A meal of an
+  /// earlier day always was; one whose clock cannot be read keeps its
+  /// place, as before.
+  static bool _eatenBefore(Meal m, DateTime when) {
+    final day = isoDate(when);
+    if (m.date != day) return m.date.compareTo(day) < 0;
+    final t = parseClock(m.time);
+    if (t == null) return true;
+    return t.hour * 60 + t.minute <=
+        when.hour * 60 + when.minute + leftoverClockSlack.inMinutes;
+  }
+
   /// [photo]'s shutter key when the duplicate-capture guard (design G2b)
   /// looks at it — an AUTOMATIC Meta glasses photo whose EXIF names its
   /// shutter press — else null.
@@ -1054,12 +1074,17 @@ class PhotoPipeline {
       // (the manual flow offers yesterday too). The cap below keeps the
       // latest five, so a daytime photo's candidates are unchanged. Only
       // under a consent given for that text ([previousDayContext]).
+      // Only the meals eaten before the photo ([_eatenBefore]): one
+      // analysed late (the launch catch-up in the evening, a glasses
+      // import hours later, a pick from the grid) was offered the day's
+      // later meals, none of which it can show the remains of, and the cap
+      // then dropped the dinner the night before (B14).
       final today = isoDate(when);
       final from = when.hour < 4 && (previousDayContext?.call() ?? false)
           ? isoDate(DateTime(when.year, when.month, when.day - 1))
           : today;
-      final read = byMealClock(
-              (await dao.mealsBetween(from, today)).where(isFoodMeal))
+      final read = byMealClock((await dao.mealsBetween(from, today))
+              .where((m) => isFoodMeal(m) && _eatenBefore(m, when)))
           .toList();
 
       final revision = latch?.revision();

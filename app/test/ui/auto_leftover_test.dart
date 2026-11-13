@@ -37,6 +37,15 @@ Meal _meal(int id, String time, num kcal) => Meal(
       },
     );
 
+/// When these tests' photos are taken: late on the day [_meal]'s meals are
+/// on, so every one of them was eaten before it. Only meals eaten before a
+/// photo ride along to the leftover check (B14), and a photo dated by the
+/// real clock would make each test depend on the time of day it runs at.
+DateTime _lateToday() {
+  final now = DateTime.now();
+  return DateTime(now.year, now.month, now.day, 23, 59);
+}
+
 Map<String, dynamic> _leftoverReply(
         {num index = 0, double confidence = 0.9}) =>
     {
@@ -80,8 +89,9 @@ void main() {
         notify: notifications.add);
   });
 
-  IntakePhoto photo() =>
-      IntakePhoto(Uint8List.fromList([7]), 'w1', 'IMG_7.jpg');
+  IntakePhoto photo() => IntakePhoto(
+      Uint8List.fromList([7]), 'w1', 'IMG_7.jpg',
+      capturedAt: _lateToday());
 
   test('a confident leftover_of ADJUSTS the original — no new meal',
       () async {
@@ -219,7 +229,7 @@ void main() {
       dao.beforeCompareAndSet = (id) async => rewrite(id, ++n);
       final out = await pipeline.process(
           IntakePhoto(Uint8List.fromList([7]), 'w1', 'IMG_7.jpg',
-              deliberate: true));
+              capturedAt: _lateToday(), deliberate: true));
       expect(out.reason, leftoverConflictReason);
       final en = AppLocalizationsEn(), zh = AppLocalizationsZh();
       expect(outcomeBody(en, out, deliberate: true),
@@ -418,7 +428,8 @@ void main() {
       ],
     }, isFood: true, wall: Duration.zero);
     final wrong = await second.process(
-        IntakePhoto(Uint8List.fromList([8]), 'w2', 'IMG_8.jpg'));
+        IntakePhoto(Uint8List.fromList([8]), 'w2', 'IMG_8.jpg',
+            capturedAt: _lateToday()));
     expect(wrong.kind, PhotoOutcomeKind.leftoverApplied);
     expect(dao.byId(1).analysis['total_calories'], isNot(665));
 
@@ -557,6 +568,74 @@ void main() {
         .process(IntakePhoto(Uint8List.fromList([8]), 'w4', 'IMG_10.jpg',
             capturedAt: DateTime(2026, 10, 30, 4, 0)));
     expect(analyzer.lastRecentMeals, isEmpty);
+  });
+
+  // B14 reached late (review r171): a photo is not always analysed when it
+  // is taken — the launch catch-up in the evening, a glasses import hours
+  // later, a pick from the grid. Every food meal of its day rode along,
+  // the ones eaten AFTER it included, and the cap of five then dropped the
+  // dinner the night before: the remains were logged as a meal of their
+  // own, or cut from a later meal that merely looked alike.
+  Meal onThe30th(int id, String time, String name) => Meal(
+        id: id,
+        date: '2026-10-30',
+        time: time,
+        timestamp: '2026-10-30T20:00:0$id',
+        source: 'app_watch',
+        imageHash: 'orig-$id',
+        analysis: {
+          'is_food': true,
+          'meal_description': name,
+          'total_calories': 300,
+        },
+      );
+
+  test('a 00:10 photo analysed that evening is offered the dinner the night '
+      'before, not the meals eaten after it', () async {
+    dao.put(lateDinner());
+    for (final m in [
+      onThe30th(31, '08:00 AM', 'Breakfast'),
+      onThe30th(32, '10:30 AM', 'Coffee'),
+      onThe30th(33, '12:30 PM', 'Lunch'),
+      onThe30th(34, '04:00 PM', 'Snack'),
+      onThe30th(35, '07:00 PM', 'Dinner'),
+    ]) {
+      dao.put(m);
+    }
+    analyzer.nextPhotoOutcome = AnalysisOutcome(
+        analysis: _leftoverReply(), isFood: true, wall: Duration.zero);
+    final out = await PhotoPipeline(
+            dao: dao,
+            analyzer: analyzer,
+            hasher: (_) async => 'leftover-hash-1',
+            previousDayContext: () => true)
+        .process(IntakePhoto(Uint8List.fromList([7]), 'w3', 'IMG_9.jpg',
+            capturedAt: DateTime(2026, 10, 30, 0, 10)));
+    expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
+        ['Hotpot']);
+    expect(out.kind, PhotoOutcomeKind.leftoverApplied);
+    expect(out.mealId, 21);
+    expect(dao.byId(35).analysis['total_calories'], 300,
+        reason: 'the evening dinner is not what the 00:10 photo shows');
+  });
+
+  test('a daytime photo analysed later is offered the meals before it, with '
+      'a few minutes for a clock that runs fast', () async {
+    for (final m in [
+      onThe30th(41, '12:00 PM', 'Lunch'),
+      onThe30th(42, '01:04 PM', 'Coffee'), // the meal's clock 4 min ahead
+      onThe30th(43, '01:30 PM', 'Cake'),
+      onThe30th(44, '07:00 PM', 'Dinner'),
+    ]) {
+      dao.put(m);
+    }
+    analyzer.nextPhotoOutcome =
+        const AnalysisOutcome(analysis: {'is_food': false}, wall: Duration.zero);
+    await pipeline.process(IntakePhoto(
+        Uint8List.fromList([7]), 'w6', 'IMG_12.jpg',
+        capturedAt: DateTime(2026, 10, 30, 13, 0)));
+    expect(analyzer.lastRecentMeals!.map((m) => m['meal_description']),
+        ['Lunch', 'Coffee']);
   });
 
   // Re-consent (run 7): a grant from before the consent text mentioned the
