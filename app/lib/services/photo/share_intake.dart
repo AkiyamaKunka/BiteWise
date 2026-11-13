@@ -10,6 +10,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:path_provider/path_provider.dart' show getTemporaryDirectory;
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 
 import '../../core/contracts.dart';
@@ -70,6 +71,44 @@ class ReceiveSharingIntentSource implements SharedMediaSource {
   }
 }
 
+/// Android: the folder in the app's cache that MainActivity copies every
+/// shared image into, one folder per image (MainActivity.kt SHARE_FOLDER;
+/// review 171, C5). Share intake reads and deletes nothing outside it.
+const String androidShareFolderName = 'shared_photos';
+
+/// [androidShareFolderName] in the cache directory MainActivity copies into.
+Future<String> androidSharedPhotoFolder() async =>
+    '${(await getTemporaryDirectory()).path}/$androidShareFolderName';
+
+/// Whether the absolute POSIX [path] lies inside [folder] once '.' and '..'
+/// are resolved; a relative path never does.
+bool isWithinFolder(String path, String folder) {
+  List<String>? segments(String p) {
+    if (!p.startsWith('/')) return null;
+    final out = <String>[];
+    for (final s in p.split('/')) {
+      if (s.isEmpty || s == '.') continue;
+      if (s == '..') {
+        if (out.isEmpty) return null;
+        out.removeLast();
+      } else {
+        out.add(s);
+      }
+    }
+    return out;
+  }
+
+  final inner = segments(path);
+  final outer = segments(folder);
+  if (inner == null || outer == null || inner.length <= outer.length) {
+    return false;
+  }
+  for (var i = 0; i < outer.length; i++) {
+    if (inner[i] != outer[i]) return false;
+  }
+  return true;
+}
+
 typedef FileBytesReader = Future<Uint8List?> Function(String path);
 typedef SharedFileCleanup = Future<void> Function(String path);
 
@@ -100,7 +139,8 @@ Future<void> _deleteSharedFile(String path) async {
 ShareIntake createShareIntake(AppSettings settings) => ShareIntake(
     source: ReceiveSharingIntentSource(),
     library: PhotoManagerLibrary(),
-    readBytes: _readFileBytes);
+    readBytes: _readFileBytes,
+    sharedFolder: Platform.isAndroid ? androidSharedPhotoFolder : null);
 
 class ShareIntake {
   ShareIntake(
@@ -110,10 +150,15 @@ class ShareIntake {
       SharedFileCleanup? cleanup,
       DateTime Function()? clock,
       // §8 CAPTURED_AT_MAX_AGE_DAYS: default 45, not user-editable.
-      this._capturedAtMaxAgeDays = 45})
+      this._capturedAtMaxAgeDays = 45,
+      this._sharedFolder})
       : _cleanup = cleanup ?? _deleteSharedFile,
         _clock = clock ?? DateTime.now;
 
+  /// The folder a shared file must lie in to be read or deleted (Android:
+  /// [androidSharedPhotoFolder]); null: any path (iOS, where the share
+  /// extension writes the copies, and tests).
+  final Future<String> Function()? _sharedFolder;
   final SharedMediaSource _source;
   final PhotoLibrary _library;
   final FileBytesReader _readBytes;
@@ -155,7 +200,24 @@ class ShareIntake {
     return controller.stream;
   }
 
+  /// Whether [path] is a copy this intake may read and delete.
+  Future<bool> _isShareCopy(String path) async {
+    final folder = _sharedFolder;
+    if (folder == null) return true;
+    try {
+      return isWithinFolder(path, await folder());
+    } catch (_) {
+      return false; // cannot tell: leave it alone
+    }
+  }
+
   Future<IntakePhoto?> _fromPath(String path) async {
+    // Android (review 171, C5): the plugin used to hand over a path of the
+    // sender's making (its file name, climbing out of the cache with
+    // '..'; or a share's text when it had no stream), which was read when
+    // it looked like a photo and deleted either way: the meal database,
+    // the settings. Only MainActivity's copies are touched now.
+    if (!await _isShareCopy(path)) return null;
     try {
       final name = fileBaseName(path);
       if (!hasSupportedPhotoExtension(name)) return null; // §6.1
