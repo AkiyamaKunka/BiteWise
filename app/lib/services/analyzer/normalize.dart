@@ -22,8 +22,12 @@ const int kAnalysisJpegQuality = SharedConstants.normalizeJpegQuality;
 
 /// Decoded-pixel ceiling: the 25 MB BYTE cap does not bound pixels — a
 /// 108 MP JPEG is ~15 MB on disk but ~432 MB as RGBA, an instant OOM in
-/// the background isolate. 50 MP (~200 MB peak, one photo at a time)
-/// admits every mainstream camera's full-resolution output.
+/// the background isolate. 50 MP admits every mainstream camera's
+/// full-resolution output, and it is not cheap: its RGBA alone is 200 MB,
+/// and review 171 measured a 0.75-1.3 GB peak and 4.5-8 s of desktop CPU
+/// for one 50 MP decode. So this decoder is never the first one on a
+/// phone: it runs only for what ImageIO (iOS) or the engine codec
+/// (Android) could not decode (platform_decode.dart), one photo at a time.
 const int kMaxDecodePixels = 50 * 1000 * 1000;
 
 /// Tiny history thumbnail (spec §9 app-only): long side [kThumbLongSidePx],

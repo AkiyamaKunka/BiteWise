@@ -26,6 +26,26 @@ bool _hasApp1(Uint8List jpeg) {
   return false;
 }
 
+/// A 400x200 JPEG as stored, red | green over blue | white, with EXIF
+/// Orientation 6 (turn it 90° clockwise to view it: 200x400 upright) and a
+/// GPS position.
+Uint8List _rotatedJpegWithGps() {
+  final src = img.Image(width: 400, height: 200);
+  for (final p in src) {
+    final (r, g, b) = p.y < 100
+        ? (p.x < 200 ? (255, 0, 0) : (0, 255, 0))
+        : (p.x < 200 ? (0, 0, 255) : (255, 255, 255));
+    p.setRgb(r, g, b);
+  }
+  src.exif.imageIfd['Orientation'] = 6;
+  src.exif.gpsIfd[0x0001] = img.IfdValueAscii('N'); // GPSLatitudeRef
+  src.exif.gpsIfd[0x0002] = img.IfdValueRational(43, 1); // GPSLatitude
+  final jpeg = Uint8List.fromList(img.encodeJpg(src));
+  expect(_hasApp1(jpeg), isTrue, reason: 'the fixture carries its EXIF');
+  expect(img.decodeJpg(jpeg)!.exif.gpsIfd[0x0002], isNotNull);
+  return jpeg;
+}
+
 /// The chain's steps as call-counting fakes.
 class _Steps {
   _Steps({this.dart, this.nativeOut, this.engineOut});
@@ -33,7 +53,7 @@ class _Steps {
   final Uint8List? nativeOut;
   final Future<Uint8List?>? engineOut;
   int dartCalls = 0, nativeCalls = 0, engineCalls = 0;
-  ({int longSidePx, int jpegQuality})? nativeArgs;
+  ({int longSidePx, int jpegQuality})? nativeArgs, engineArgs;
 
   /// The steps in the order they ran.
   final order = <String>[];
@@ -57,15 +77,19 @@ class _Steps {
       {required int longSidePx, required int jpegQuality}) {
     engineCalls++;
     order.add('engine');
+    engineArgs = (longSidePx: longSidePx, jpegQuality: jpegQuality);
     return engineOut ?? Future.value(null);
   }
 
+  /// The chain for the analysis copy, or with [thumb] for the history
+  /// thumbnail (what makeMealThumbAny passes). A null [ios] / [headless]
+  /// leaves them to the platform defaults.
   Future<Uint8List?> run(
-          {required bool ios, required bool headless, bool? backgrounded}) =>
+          {bool? ios, bool? headless, bool? backgrounded, bool thumb = false}) =>
       decodeForUpload(Uint8List.fromList([1, 2, 3]),
-          pureDart: normalizeForAnalysis,
-          longSidePx: kAnalysisLongSidePx,
-          jpegQuality: kAnalysisJpegQuality,
+          pureDart: thumb ? makeMealThumb : normalizeForAnalysis,
+          longSidePx: thumb ? kThumbLongSidePx : kAnalysisLongSidePx,
+          jpegQuality: thumb ? kThumbJpegQuality : kAnalysisJpegQuality,
           isolate: isolate,
           native: native,
           engine: engine,
@@ -147,12 +171,75 @@ void main() {
     final jpeg =
         Uint8List.fromList(img.encodeJpg(img.Image(width: 4, height: 4)));
 
-    test('Android: the pure-Dart result wins; nothing else runs', () async {
+    // Review 171, C0: pure Dart used to run first on Android, so every
+    // photo paid two full-resolution pure-Dart decodes, the analysis copy
+    // and then the history thumbnail (which the Add flow's spinner waits
+    // for): about 4 s of CPU on a desktop core for a 12 MP JPEG, and a
+    // 0.75-1.3 GB peak per decode at 50 MP, in the WorkManager run too.
+    // The engine codec subsamples a JPEG while it decodes. Android never
+    // switches its engine's GPU off, so the background engine keeps it.
+    test('Android: the engine codec runs FIRST, at the analysis size, and '
+        'neither pure Dart nor ImageIO is called when it answers, in both '
+        'engines', () async {
       for (final headless in [false, true]) {
-        final steps = _Steps(dart: jpeg, nativeOut: Uint8List(1));
-        expect(await steps.run(ios: false, headless: headless), same(jpeg));
-        expect((steps.nativeCalls, steps.engineCalls), (0, 0));
+        final steps = _Steps(
+            dart: Uint8List(2),
+            nativeOut: Uint8List(1),
+            engineOut: Future.value(jpeg));
+        expect(await steps.run(ios: false, headless: headless), same(jpeg),
+            reason: 'headless: $headless');
+        expect(steps.order, ['engine'], reason: 'headless: $headless');
+        expect(steps.engineArgs,
+            (longSidePx: kAnalysisLongSidePx, jpegQuality: kAnalysisJpegQuality));
       }
+    });
+
+    test('Android: the thumbnail is the engine codec decoding at the '
+        'thumbnail size, not a second full-resolution decode', () async {
+      final steps = _Steps(dart: Uint8List(2), engineOut: Future.value(jpeg));
+      expect(await steps.run(ios: false, headless: false, thumb: true),
+          same(jpeg));
+      expect(steps.order, ['engine']);
+      expect(steps.engineArgs,
+          (longSidePx: kThumbLongSidePx, jpegQuality: kThumbJpegQuality));
+    });
+
+    test('Android: pure Dart reads what the engine codec cannot (it stays '
+        'the fallback); nothing is asked twice', () async {
+      for (final thumb in [false, true]) {
+        final viaDart = _Steps(dart: jpeg, nativeOut: Uint8List(1));
+        expect(await viaDart.run(ios: false, headless: false, thumb: thumb),
+            same(jpeg));
+        expect(viaDart.order, ['engine', 'dart'], reason: 'thumb: $thumb');
+      }
+      final none = _Steps(nativeOut: Uint8List(1));
+      expect(await none.run(ios: false, headless: true), isNull);
+      expect(none.order, ['engine', 'dart']);
+    });
+
+    test('Android by default (the target platform decides): the engine '
+        'codec first', () async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      final steps = _Steps(dart: Uint8List(2), engineOut: Future.value(jpeg));
+      expect(await steps.run(), same(jpeg));
+      expect(steps.order, ['engine']);
+    });
+
+    testWidgets('Android: an engine decode that never finishes hands over to '
+        'pure Dart at its deadline', (tester) async {
+      // testWidgets runs in fake time: the 8 s pass without waiting.
+      final steps =
+          _Steps(dart: jpeg, engineOut: Completer<Uint8List?>().future);
+      Uint8List? result;
+      steps.run(ios: false, headless: false).then((r) => result = r);
+      await tester
+          .pump(kPlatformDecodeTimeout - const Duration(milliseconds: 1));
+      expect(result, isNull);
+      expect(steps.order, ['engine']);
+      await tester.pump(const Duration(milliseconds: 1));
+      expect(result, same(jpeg));
+      expect(steps.order, ['engine', 'dart']);
     });
 
     // Run 7, P1: pure Dart used to run first on iOS too, so every JPEG/PNG
@@ -406,6 +493,98 @@ void main() {
           });
       expect(out, isNull);
       expect(engineCalls, 0);
+    });
+  });
+
+  // Review 171, C0: on Android the engine codec, not pure Dart, now makes
+  // the copy sent for analysis and the history thumbnail. It must give the
+  // picture pure Dart gave (upright by the EXIF Orientation, at the size
+  // asked) and carry none of the original's EXIF.
+  group('decodeForUpload on Android, with the real engine codec', () {
+    /// [_rotatedJpegWithGps] as it is meant to be viewed, one colour per
+    /// quadrant: top-left, top-right, bottom-left, bottom-right.
+    const upright = [
+      (0, 0, 255), // blue: stored bottom-left
+      (255, 0, 0), // red: stored top-left
+      (255, 255, 255), // white: stored bottom-right
+      (0, 255, 0), // green: stored top-right
+    ];
+
+    /// [jpeg]'s colour at the centre of each quadrant is [upright]'s, each
+    /// channel within JPEG noise.
+    void expectUpright(Uint8List jpeg) {
+      final im = img.decodeJpg(jpeg)!;
+      final w = im.width, h = im.height;
+      final at = [
+        (w ~/ 4, h ~/ 4),
+        (3 * w ~/ 4, h ~/ 4),
+        (w ~/ 4, 3 * h ~/ 4),
+        (3 * w ~/ 4, 3 * h ~/ 4),
+      ];
+      for (var q = 0; q < 4; q++) {
+        final p = im.getPixel(at[q].$1, at[q].$2);
+        final (r, g, b) = upright[q];
+        for (final (got, want) in [(p.r, r), (p.g, g), (p.b, b)]) {
+          expect((got - want).abs(), lessThan(48),
+              reason: 'quadrant $q at ${at[q]}: ${(p.r, p.g, p.b)}, '
+                  'want ${upright[q]}');
+        }
+      }
+    }
+
+    testWidgets('the analysis copy: upright and the size pure Dart makes, '
+        'no EXIF, and pure Dart never runs', (tester) async {
+      final photo = _rotatedJpegWithGps();
+      var dartCalls = 0;
+      final out = await tester.runAsync(() => decodeForUpload(photo,
+          pureDart: normalizeForAnalysis,
+          longSidePx: kAnalysisLongSidePx,
+          jpegQuality: kAnalysisJpegQuality,
+          isolate: (_, _) async {
+            dartCalls++;
+            return Uint8List(1);
+          },
+          ios: false,
+          headless: false));
+      expect(dartCalls, 0, reason: 'no full-resolution pure-Dart decode');
+      expect(out, isNotNull);
+      expect(looksLikeJpeg(out!), isTrue);
+      expect(_hasApp1(out), isFalse, reason: 'no EXIF: no GPS, no camera');
+      final viaEngine = img.decodeJpg(out)!;
+      final dartOut = normalizeForAnalysis(photo)!;
+      final viaDart = img.decodeJpg(dartOut)!;
+      expect((viaEngine.width, viaEngine.height), (200, 400));
+      expect((viaEngine.width, viaEngine.height),
+          (viaDart.width, viaDart.height));
+      expectUpright(out);
+      expectUpright(dartOut); // the same picture pure Dart made
+    });
+
+    testWidgets('the thumbnail: upright at the thumbnail size, no EXIF, and '
+        'pure Dart never runs', (tester) async {
+      final photo = _rotatedJpegWithGps();
+      var dartCalls = 0;
+      final out = await tester.runAsync(() => decodeForUpload(photo,
+          pureDart: makeMealThumb,
+          longSidePx: kThumbLongSidePx,
+          jpegQuality: kThumbJpegQuality,
+          isolate: (_, _) async {
+            dartCalls++;
+            return Uint8List(1);
+          },
+          ios: false,
+          headless: true));
+      expect(dartCalls, 0, reason: 'no second full-resolution decode');
+      expect(out, isNotNull);
+      expect(_hasApp1(out!), isFalse);
+      final viaEngine = img.decodeJpg(out)!;
+      final dartOut = makeMealThumb(photo)!;
+      final viaDart = img.decodeJpg(dartOut)!;
+      expect((viaEngine.width, viaEngine.height), (80, kThumbLongSidePx));
+      expect((viaEngine.width, viaEngine.height),
+          (viaDart.width, viaDart.height));
+      expectUpright(out);
+      expectUpright(dartOut); // the same picture pure Dart made
     });
   });
 

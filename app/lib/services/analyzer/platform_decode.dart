@@ -11,11 +11,13 @@
 /// The chain, in order ([decodeForUpload]):
 ///   1. iOS only: ImageIO over a platform channel
 ///      (ios/Runner/ImageIOPlugin.swift) — CPU only;
-///   2. pure Dart in an isolate (the only first step on Android);
+///   2. pure Dart in an isolate;
 ///   3. the engine codec (dart:ui), which decodes whatever the OS can
 ///      (HEIC/HEIF/AVIF on iOS and modern Android), with orientation
 ///      applied, at a reduced target size — never in the iOS background
 ///      engine, and always under [kPlatformDecodeTimeout].
+/// On Android the engine codec runs FIRST, and pure Dart is the fallback
+/// for what it could not decode.
 ///
 /// WHY IMAGEIO FIRST ON iOS (run 7, P1): until then pure Dart ran first
 /// everywhere, so on iOS only HEIC (which it cannot read) reached ImageIO,
@@ -26,6 +28,17 @@
 /// against about 0.1 s and 56 MB through ImageIO, which subsamples a
 /// JPEG while decoding. Its output is upright, sRGB, capped, and stripped
 /// by [stripJpegMetadata] like every upload.
+///
+/// WHY THE ENGINE CODEC FIRST ON ANDROID (review 171, C0): pure Dart ran
+/// first there until then, so every Android photo paid the same two
+/// full-resolution decodes (the copy sent for analysis, then the history
+/// thumbnail, which the Add flow's spinner waits for), the WorkManager run
+/// included: about 2 s of desktop CPU each for a 12 MP JPEG, and 4.5-8 s
+/// with a 0.75-1.3 GB peak each at 50 MP. The engine codec subsamples a
+/// JPEG while it decodes: 0.3-0.8 s for that 12 MP photo's analysis copy
+/// and about 50 ms for its thumbnail, on the same machine. Its output is
+/// upright (the codec applies the EXIF Orientation), capped, and encoded
+/// from bare pixels, so it carries no EXIF ([decodeViaPlatform]).
 ///
 /// WHY 2 AND THE RULES ON 3 (2026-10-18): the background scan runs in a
 /// headless engine, and on iOS that engine's GPU switch is off for the whole
@@ -228,7 +241,9 @@ Future<Uint8List?> normalizeAnyForAnalysis(Uint8List original) =>
         longSidePx: kAnalysisLongSidePx,
         jpegQuality: kAnalysisJpegQuality);
 
-/// The history thumbnail, through the same chain.
+/// The history thumbnail, through the same chain: ImageIO or the engine
+/// codec decode at the thumbnail size, never a second full-resolution
+/// decode of the original (pure Dart, their fallback, still makes one).
 Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
     decodeForUpload(original,
         pureDart: makeMealThumb,
@@ -236,16 +251,17 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
         jpegQuality: kThumbJpegQuality);
 
 /// The decode chain (library docs): on iOS ImageIO, then pure Dart, then
-/// the engine codec where it can finish; elsewhere pure Dart, then the
-/// engine codec. Null when every allowed step failed — the caller reports
-/// an undecodable photo. Never throws.
+/// the engine codec where it can finish; elsewhere (Android) the engine
+/// codec, then pure Dart. Null when every allowed step failed — the caller
+/// reports an undecodable photo. Never throws.
 ///
 /// The seams default to production: [isolate] runs [pureDart] (compute),
 /// [native] is [downscaleViaImageIO], [engine] is [decodeViaPlatform];
 /// [ios] / [headless] / [backgrounded] default to the target platform,
 /// [isHeadlessEngine] and [isEngineBackgrounded]. The native step is
 /// bounded here as well
-/// ([nativeDecodeTimeoutFor]), whatever [native] does itself.
+/// ([nativeDecodeTimeoutFor]), whatever [native] does itself, and the
+/// engine step always by [engineTimeout].
 ///
 /// The native JPEG is used as is: ImageIO already baked the orientation,
 /// capped the long side and re-encoded at [jpegQuality]. Piping it through
@@ -254,11 +270,13 @@ Future<Uint8List?> makeMealThumbAny(Uint8List original) =>
 /// is dropped by [downscaleViaImageIO] with the same byte walk the
 /// unprocessed fallback uses.
 ///
-/// The engine codec stays the last resort everywhere EXCEPT the iOS
-/// background engine, and the iOS app engine while it is in the
-/// background: there it cannot finish (library docs). Android never
-/// switches its engine's GPU off, so its background run keeps it — under the
-/// same deadline as every other caller.
+/// On Android the engine codec runs FIRST (library docs). Null from it (a
+/// format it cannot read, a failure, its deadline) hands the photo to pure
+/// Dart, and the engine is not asked again. Android never switches its
+/// engine's GPU off, so its background run keeps it — under the same
+/// deadline as every other caller. On iOS the engine codec stays the last
+/// resort, and never runs in the background engine, or in the app engine
+/// while it is in the background: there it cannot finish (library docs).
 Future<Uint8List?> decodeForUpload(
   Uint8List original, {
   required Uint8List? Function(Uint8List) pureDart,
@@ -287,6 +305,16 @@ Future<Uint8List?> decodeForUpload(
           nativeDecodeTimeoutFor(headless: inHeadless));
       if (viaImageIO != null) return viaImageIO;
     } catch (_) {}
+  } else {
+    // Android: the engine codec first (library docs). Null (a format it
+    // cannot read, such as TIFF or PSD, a failure, its deadline) falls
+    // through to pure Dart.
+    try {
+      final viaCodec = await orNullAfter(
+          engine(original, longSidePx: longSidePx, jpegQuality: jpegQuality),
+          engineTimeout);
+      if (viaCodec != null) return viaCodec;
+    } catch (_) {}
   }
   try {
     final viaDart = await (isolate ?? _inIsolate)(pureDart, original);
@@ -312,6 +340,9 @@ Future<Uint8List?> decodeForUpload(
       gpuOffDecodeSkips++;
       return null;
     }
+  } else {
+    // Android asked the engine codec first: there is nothing left to try.
+    return null;
   }
   try {
     return await orNullAfter(
@@ -361,6 +392,12 @@ Future<Uint8List?> downscaleViaImageIO(Uint8List original,
 /// Decode [original] with the engine codec, downscaled so the long side is
 /// at most [longSidePx] (never upscaled), and re-encode as JPEG. Null on
 /// any failure — an undecodable image is the caller's problem to report.
+///
+/// The codec applies the EXIF Orientation, so the pixels come out upright
+/// and the size is measured on the upright picture; a JPEG larger than
+/// that size is subsampled while it decodes, never held at full
+/// resolution. The JPEG is encoded from those bare pixels, so none of the
+/// original's EXIF (GPS, camera, times) goes with it.
 ///
 /// Can wait forever where the engine's GPU is off (the iOS background
 /// engine; see the library docs) — callers go through [decodeForUpload],
