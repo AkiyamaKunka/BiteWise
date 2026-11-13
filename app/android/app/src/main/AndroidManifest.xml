@@ -23,6 +23,12 @@
         android:maxSdkVersion="32"/>
     <!-- Meal-card / daily-report notifications (runtime permission, API 33+). -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- The OS-armed daily summary: flutter_local_notifications re-arms its
+         scheduled card after a reboot (ScheduledNotificationBootReceiver
+         below). WorkManager merges it in too; declared here because the
+         app relies on it. Inexact alarms only, so no exact-alarm
+         permission. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <!-- Backup: everything is backed up as before except files/bitewise_local/,
          the backup-excluded local store (lib/services/local_store.dart):
          res/xml/data_extraction_rules.xml on Android 12+, backup_rules.xml
@@ -81,6 +87,20 @@
                 <data android:mimeType="image/*"/>
             </intent-filter>
         </activity>
+        <!-- flutter_local_notifications' scheduled notifications (its
+             README, AndroidManifest.xml setup): the daily summary card the
+             OS posts at its time (zonedSchedule, inexactAllowWhileIdle),
+             and its re-arming after a reboot or an app update. Alarms do
+             not survive either. -->
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver"/>
+        <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+            </intent-filter>
+        </receiver>
         <!-- The system Photo Picker (MainActivity.pickImages) on Android
              4.4-10: asks Google Play services to install its backported
              picker module. Disabled and not exported, a marker only; the

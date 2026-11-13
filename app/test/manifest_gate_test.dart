@@ -133,6 +133,7 @@ void main() {
       'android.permission.READ_MEDIA_VISUAL_USER_SELECTED',
       'android.permission.READ_EXTERNAL_STORAGE',
       'android.permission.POST_NOTIFICATIONS',
+      'android.permission.RECEIVE_BOOT_COMPLETED',
     });
   });
 
@@ -981,6 +982,62 @@ void main() {
     expect(open.indexOf('Settings.ACTION_APPLICATION_DETAILS_SETTINGS'),
         greaterThan(app), reason: 'App info is the fallback');
     expect(open, contains('Uri.fromParts("package", packageName, null)'));
+  });
+
+  // The daily summary is armed with the OS on Android too (background
+  // lane): flutter_local_notifications' zonedSchedule posts it from
+  // ScheduledNotificationReceiver, and alarms die at shutdown, so the boot
+  // receiver re-arms them after a reboot or an app update. Inexact only
+  // (AndroidScheduleMode.inexactAllowWhileIdle): no exact-alarm permission,
+  // which Play reviews.
+  test("flutter_local_notifications' scheduled-notification receivers are "
+      'declared, and no exact-alarm permission', () {
+    final manifest = _uncommented(_manifest());
+    final application = RegExp(r'<application\b.*?</application>',
+            dotAll: true)
+        .firstMatch(manifest)
+        ?.group(0);
+    expect(application, isNotNull);
+    const package = 'com.dexterous.flutterlocalnotifications';
+    expect(
+        RegExp('<receiver\\s+android:exported="false"\\s+'
+                'android:name="$package\\.ScheduledNotificationReceiver"\\s*/>')
+            .hasMatch(application!),
+        isTrue,
+        reason: 'ScheduledNotificationReceiver missing');
+    final boot = RegExp(
+            '<receiver\\s+android:exported="false"\\s+'
+            'android:name="$package\\.ScheduledNotificationBootReceiver"\\s*>'
+            '(.*?)</receiver>',
+            dotAll: true)
+        .firstMatch(application)
+        ?.group(1);
+    expect(boot, isNotNull, reason: 'ScheduledNotificationBootReceiver missing');
+    expect(
+        RegExp(r'<action android:name="([^"]+)"\s*/>')
+            .allMatches(boot!)
+            .map((m) => m.group(1))
+            .toSet(),
+        {
+          'android.intent.action.BOOT_COMPLETED',
+          'android.intent.action.MY_PACKAGE_REPLACED',
+          'android.intent.action.QUICKBOOT_POWERON',
+          'com.htc.intent.action.QUICKBOOT_POWERON',
+        });
+    expect(_declared(manifest), contains('android.permission.RECEIVE_BOOT_COMPLETED'));
+    for (final exact in ['SCHEDULE_EXACT_ALARM', 'USE_EXACT_ALARM']) {
+      expect(manifest, isNot(contains(exact)), reason: exact);
+    }
+    // The classes exist in the plugin version pub resolved.
+    final sources = '${_pluginRoot('flutter_local_notifications')}/android/'
+        'src/main/java/com/dexterous/flutterlocalnotifications';
+    for (final receiver in [
+      'ScheduledNotificationReceiver',
+      'ScheduledNotificationBootReceiver',
+    ]) {
+      expect(File('$sources/$receiver.java').existsSync(), isTrue,
+          reason: receiver);
+    }
   });
 
   // Owner decision 2026-11-13: the package stays, and the upload key the
