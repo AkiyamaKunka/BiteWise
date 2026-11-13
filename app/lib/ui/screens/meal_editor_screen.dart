@@ -54,13 +54,7 @@ import '../../core/coerce.dart'
     show addCalendarDays, finiteAnalysis, isFoodTruthy, normalizeImageHash;
 import '../../core/contracts.dart';
 import '../../core/restaurant_assist_logic.dart'
-    show
-        AssistOutcome,
-        acceptAssistSuggestion,
-        assistDecisionItemsKcal,
-        assistSameNumbers,
-        dropAssistClaims,
-        normalizeSourceUrl;
+    show acceptAssistSuggestion, dropAssistClaims, normalizeSourceUrl;
 import '../../services/assist/meal_assist.dart'
     show
         AssistActionResult,
@@ -75,6 +69,7 @@ import '../../services/photo/filename_dates.dart'
 import '../../services/photo/glasses.dart'
     show captureAnalysis, isMetaGlassesAnalysis;
 import '../../services/usual/usual_foods.dart';
+import '../assist_lookup_text.dart';
 import '../assist_view.dart';
 import '../format.dart' show formatKcal, isoDate;
 import '../l10n.dart';
@@ -1135,97 +1130,11 @@ class _MealEditorScreenState extends State<MealEditorScreen> {
       await _refreshBasis();
       return;
     }
-    final stillRunning = run.code == AssistSkip.pending ||
-        run.code == AssistSkip.working ||
-        run.code == AssistSkip.background;
-    final message = stillRunning
-        ? l.assistLookupStillRunning
-        : f &&
-                (beforeKind == AssistViewKind.applied ||
-                    beforeKind == AssistViewKind.suggested)
-            ? _searchAgainText(l, run, before)
-            : run.decision != null
-                // Answered, but nothing usable to write (another chain,
-                // items that changed meanwhile, a malformed answer).
-                ? l.assistContextOnly
-                : _lookupFailureText(l, run.code);
+    final message = manualLookupMessage(l, run,
+        fresh: f, beforeKind: beforeKind, before: before);
     if (message != null) {
       _say(message, key: const Key('assistLookupSnack'));
     }
-  }
-
-  /// A fresh search over published numbers that stand on the meal, or
-  /// over a suggestion it can still take, wrote nothing (usual foods §2.4;
-  /// an answer that found nothing never replaces either): what it found. A
-  /// search that could not run says why instead.
-  static String? _searchAgainText(
-      AppLocalizations l, AssistRun run, Map<String, dynamic> before) {
-    final d = run.decision;
-    if (d == null && _lookupFailed(run.code)) {
-      return _lookupFailureText(l, run.code);
-    }
-    if (d == null ||
-        d.outcome == AssistOutcome.reject ||
-        d.outcome == AssistOutcome.contextOnly ||
-        d.items.isEmpty) {
-      return l.assistSearchAgainNoChange;
-    }
-    if (assistSameNumbers(before, d)) return l.assistSearchAgainSame;
-    return l.assistSearchAgainDiffers(formatKcal(assistDecisionItemsKcal(d)));
-  }
-
-  /// [code] says the lookup got no answer (not started, refused, or
-  /// failed): a code [_lookupFailureText] names, not its "no chain"
-  /// fallback.
-  static bool _lookupFailed(String code) =>
-      code.startsWith('lookup_') ||
-      const {
-        AssistSkip.consentNeeded,
-        AssistSkip.off,
-        AssistSkip.cancelled,
-        AssistSkip.pickNeedsHttps,
-        AssistSkip.outsideUs,
-        AssistSkip.regionUnknown,
-        AssistSkip.dailyCap,
-        AssistSkip.placeThrottled,
-        AssistSkip.placeError,
-        AssistSkip.error,
-        AssistSkip.unsupported,
-      }.contains(code);
-
-  /// Why a manual lookup wrote nothing, or null when there is nothing to
-  /// say (it was not started, or already runs).
-  static String? _lookupFailureText(AppLocalizations l, String code) {
-    switch (code) {
-      case AssistSkip.consentNeeded:
-      case AssistSkip.off:
-      case AssistSkip.cancelled:
-        return null;
-      case AssistSkip.working:
-      case AssistSkip.background:
-        return l.assistLookupStillRunning;
-      case AssistSkip.pickNeedsHttps:
-        return l.assistLookupPickNeedsHttps;
-      case AssistSkip.outsideUs:
-        return l.assistLookupOutsideUs;
-      case AssistSkip.regionUnknown:
-        return l.assistLookupRegionUnknown;
-      case AssistSkip.dailyCap:
-      case 'lookup_daily_cap':
-        return l.assistLookupDailyCap;
-      case 'lookup_server_outdated':
-        return l.restaurantServerOutdated;
-      case 'lookup_disabled':
-        return l.restaurantServerDisabled;
-      case AssistSkip.placeThrottled:
-      case AssistSkip.placeError:
-      case AssistSkip.error:
-      case AssistSkip.unsupported:
-        return l.assistLookupFailed;
-    }
-    if (code.startsWith('lookup_')) return l.assistLookupFailed;
-    // No chain to ask about: nothing printed, none nearby, a zone.
-    return l.assistLookupNoChain;
   }
 
   /// Opens the source page: only a normalized https address, in the
