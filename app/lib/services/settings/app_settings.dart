@@ -433,24 +433,18 @@ class AppSettings extends ChangeNotifier {
     s._provider = AiProvider.values.firstWhere(
         (v) => v.name == (p.getString(_kProvider) ?? ''),
         orElse: () => AiProvider.gemini);
-    final model = (p.getString(_kModel) ?? '').trim();
-    s._model = model.isEmpty ? defaultModel : model;
-    final oaModel = (p.getString(_kOpenaiModel) ?? '').trim();
-    s._openaiModel = oaModel.isEmpty ? defaultOpenaiModel : oaModel;
-    final anModel = (p.getString(_kAnthropicModel) ?? '').trim();
-    s._anthropicModel = anModel.isEmpty ? defaultAnthropicModel : anModel;
-    final qwModel = (p.getString(_kQwenModel) ?? '').trim();
-    s._qwenModel = qwModel.isEmpty ? defaultQwenModel : qwModel;
-    final dbModel = (p.getString(_kDoubaoModel) ?? '').trim();
-    s._doubaoModel = dbModel.isEmpty ? defaultDoubaoModel : dbModel;
-    final glModel = (p.getString(_kGlmModel) ?? '').trim();
-    s._glmModel = glModel.isEmpty ? defaultGlmModel : glModel;
-    final dsModel = (p.getString(_kDeepseekModel) ?? '').trim();
-    s._deepseekModel = dsModel.isEmpty ? defaultDeepseekModel : dsModel;
-    final xaModel = (p.getString(_kXaiModel) ?? '').trim();
-    s._xaiModel = xaModel.isEmpty ? defaultXaiModel : xaModel;
-    final orModel = (p.getString(_kOpenrouterModel) ?? '').trim();
-    s._openrouterModel = orModel.isEmpty ? defaultOpenrouterModel : orModel;
+    s._model = _modelOr(p.getString(_kModel), defaultModel);
+    s._openaiModel = _modelOr(p.getString(_kOpenaiModel), defaultOpenaiModel);
+    s._anthropicModel =
+        _modelOr(p.getString(_kAnthropicModel), defaultAnthropicModel);
+    s._qwenModel = _modelOr(p.getString(_kQwenModel), defaultQwenModel);
+    s._doubaoModel = _modelOr(p.getString(_kDoubaoModel), defaultDoubaoModel);
+    s._glmModel = _modelOr(p.getString(_kGlmModel), defaultGlmModel);
+    s._deepseekModel =
+        _modelOr(p.getString(_kDeepseekModel), defaultDeepseekModel);
+    s._xaiModel = _modelOr(p.getString(_kXaiModel), defaultXaiModel);
+    s._openrouterModel =
+        _modelOr(p.getString(_kOpenrouterModel), defaultOpenrouterModel);
     s._lookbackDays = (p.getInt(_kLookbackDays) ?? defaultLookbackDays)
         .clamp(minLookbackDays, maxLookbackDays);
     final rt = p.getString(_kReportTime) ?? defaultReportTime;
@@ -528,13 +522,8 @@ class AppSettings extends ChangeNotifier {
   String get model => _model;
 
   /// Blank resets to [defaultModel] (spec §8: user-editable model string).
-  Future<void> setModel(String value) async {
-    final v = value.trim();
-    _model = v.isEmpty ? defaultModel : v;
-    await _prefs.setString(_kModel, _model);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setModel(String value) =>
+      _setProviderModel(value, _kModel, defaultModel, (v) => _model = v);
 
   /// The provider all analyses route through (delegated per call — no
   /// restart needed). Switching clears the quota-pause latch: it belongs
@@ -716,69 +705,56 @@ class AppSettings extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> setOpenaiModel(String value) async {
-    final v = value.trim();
-    _openaiModel = v.isEmpty ? defaultOpenaiModel : v;
-    await _prefs.setString(_kOpenaiModel, _openaiModel);
+  /// Every provider's model string: trimmed, blank resets to [fallback]
+  /// (what is then stored), and the edit lifts the automatic-analysis
+  /// latch as a key edit does.
+  Future<void> _setProviderModel(String value, String prefsKey,
+      String fallback, void Function(String) assign) async {
+    final v = _modelOr(value, fallback);
+    assign(v);
+    await _prefs.setString(prefsKey, v);
     await _credentialsEdited();
     notifyListeners();
   }
 
-  Future<void> setAnthropicModel(String value) async {
-    final v = value.trim();
-    _anthropicModel = v.isEmpty ? defaultAnthropicModel : v;
-    await _prefs.setString(_kAnthropicModel, _anthropicModel);
-    await _credentialsEdited();
-    notifyListeners();
+  /// [raw] trimmed, or [fallback] when that leaves nothing: a model string
+  /// is never blank, typed or stored.
+  static String _modelOr(String? raw, String fallback) {
+    final v = (raw ?? '').trim();
+    return v.isEmpty ? fallback : v;
   }
 
-  Future<void> setQwenModel(String value) async {
-    final v = value.trim();
-    _qwenModel = v.isEmpty ? defaultQwenModel : v;
-    await _prefs.setString(_kQwenModel, _qwenModel);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setOpenaiModel(String value) =>
+      _setProviderModel(value, _kOpenaiModel, defaultOpenaiModel,
+          (v) => _openaiModel = v);
 
-  Future<void> setDoubaoModel(String value) async {
-    final v = value.trim();
-    _doubaoModel = v.isEmpty ? defaultDoubaoModel : v;
-    await _prefs.setString(_kDoubaoModel, _doubaoModel);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setAnthropicModel(String value) =>
+      _setProviderModel(value, _kAnthropicModel, defaultAnthropicModel,
+          (v) => _anthropicModel = v);
 
-  Future<void> setDeepseekModel(String value) async {
-    final v = value.trim();
-    _deepseekModel = v.isEmpty ? defaultDeepseekModel : v;
-    await _prefs.setString(_kDeepseekModel, _deepseekModel);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setQwenModel(String value) =>
+      _setProviderModel(value, _kQwenModel, defaultQwenModel,
+          (v) => _qwenModel = v);
 
-  Future<void> setXaiModel(String value) async {
-    final v = value.trim();
-    _xaiModel = v.isEmpty ? defaultXaiModel : v;
-    await _prefs.setString(_kXaiModel, _xaiModel);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setDoubaoModel(String value) =>
+      _setProviderModel(value, _kDoubaoModel, defaultDoubaoModel,
+          (v) => _doubaoModel = v);
 
-  Future<void> setOpenrouterModel(String value) async {
-    final v = value.trim();
-    _openrouterModel = v.isEmpty ? defaultOpenrouterModel : v;
-    await _prefs.setString(_kOpenrouterModel, _openrouterModel);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setDeepseekModel(String value) =>
+      _setProviderModel(value, _kDeepseekModel, defaultDeepseekModel,
+          (v) => _deepseekModel = v);
 
-  Future<void> setGlmModel(String value) async {
-    final v = value.trim();
-    _glmModel = v.isEmpty ? defaultGlmModel : v;
-    await _prefs.setString(_kGlmModel, _glmModel);
-    await _credentialsEdited();
-    notifyListeners();
-  }
+  Future<void> setXaiModel(String value) =>
+      _setProviderModel(value, _kXaiModel, defaultXaiModel,
+          (v) => _xaiModel = v);
+
+  Future<void> setOpenrouterModel(String value) =>
+      _setProviderModel(value, _kOpenrouterModel, defaultOpenrouterModel,
+          (v) => _openrouterModel = v);
+
+  Future<void> setGlmModel(String value) =>
+      _setProviderModel(value, _kGlmModel, defaultGlmModel,
+          (v) => _glmModel = v);
 
   /// Backfill-scan window, spec §6.4 / §8 (SYNC_LOOKBACK_DAYS, clamp 1–30).
   int get lookbackDays => _lookbackDays;
