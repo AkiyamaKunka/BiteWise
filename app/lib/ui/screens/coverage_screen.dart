@@ -72,8 +72,9 @@ class CoverageScreen extends StatefulWidget {
 enum _Phase { idle, scanning, done, acting }
 
 class _CoverageScreenState extends State<CoverageScreen> {
+  static const int _minDays = 1, _maxDays = 30;
   _Phase _phase = _Phase.idle;
-  late int _days = widget.initialLookbackDays.clamp(1, 30);
+  late int _days = widget.initialLookbackDays.clamp(_minDays, _maxDays);
   CoverageReport? _report;
   String? _error;
   int _progressDone = 0;
@@ -365,6 +366,8 @@ class _CoverageScreenState extends State<CoverageScreen> {
     final colors = context.colors;
     final report = _report;
     final busy = _phase == _Phase.scanning || _phase == _Phase.acting;
+    final canIncrease = !busy && _days < _maxDays;
+    final canDecrease = !busy && _days > _minDays;
     return Scaffold(
       backgroundColor: pageColor(context),
       appBar: AppBar(title: Text(context.l10n.covTitle)),
@@ -388,16 +391,40 @@ class _CoverageScreenState extends State<CoverageScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: Slider.adaptive(
-                        key: const Key('coverageWindowSlider'),
-                        value: _days.toDouble(),
-                        min: 1,
-                        max: 30,
-                        divisions: 29,
-                        label: context.l10n.covDaysShort(_days),
-                        onChanged: busy
-                            ? null
-                            : (v) => setState(() => _days = v.round()),
+                      // Read as the window and its days: on its own the
+                      // slider said '21%' with no name on an iPhone (the
+                      // Cupertino slider has no semantic formatter) and
+                      // its value label, '7 d', as its name on Android. A
+                      // screen reader's swipe up / down moves it a day, as
+                      // the lookback sheet's does (settings_screen.dart).
+                      child: Semantics(
+                        container: true,
+                        excludeSemantics: true,
+                        slider: true,
+                        enabled: !busy,
+                        label: context.l10n.covWindowLabel,
+                        value: context.l10n.lookbackDays(_days),
+                        increasedValue: canIncrease
+                            ? context.l10n.lookbackDays(_days + 1)
+                            : null,
+                        decreasedValue: canDecrease
+                            ? context.l10n.lookbackDays(_days - 1)
+                            : null,
+                        onIncrease:
+                            canIncrease ? () => setState(() => _days++) : null,
+                        onDecrease:
+                            canDecrease ? () => setState(() => _days--) : null,
+                        child: Slider.adaptive(
+                          key: const Key('coverageWindowSlider'),
+                          value: _days.toDouble(),
+                          min: _minDays.toDouble(),
+                          max: _maxDays.toDouble(),
+                          divisions: _maxDays - _minDays,
+                          label: context.l10n.covDaysShort(_days),
+                          onChanged: busy
+                              ? null
+                              : (v) => setState(() => _days = v.round()),
+                        ),
                       ),
                     ),
                     const SizedBox(width: AppSpace.s8),

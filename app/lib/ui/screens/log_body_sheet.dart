@@ -60,6 +60,8 @@ class LogBodySheet extends StatefulWidget {
     this.draft,
     this.dateLabel,
     this.onChangeDate,
+    this.onWrote,
+    this.onPartlySaved,
   });
   final MealsDao dao;
   final String date;
@@ -81,9 +83,21 @@ class LogBodySheet extends StatefulWidget {
   final bool imperial;
 
   /// For a day that already has data: asks, deletes the whole day and
-  /// resolves true when it did (the sheet then closes). Null hides the
+  /// resolves true when it did (the sheet then closes). A delete that
+  /// failed throws: the sheet says so and stays open. Null hides the
   /// Delete button. It is also the accessible way to delete a day.
   final Future<bool> Function()? onDelete;
+
+  /// Told after each write that went through, also when a later one in
+  /// the same save failed and the sheet stays open: closed then, however
+  /// it closes, the screen still shows what was written.
+  final VoidCallback? onWrote;
+
+  /// A save failed after some of its writes went through (the weight
+  /// written, the measurements not). Awaited before the sheet takes input
+  /// again: the screen re-reads the day, so the sheet's Delete and its
+  /// date row go by what is stored now, not by the values from before.
+  final Future<void> Function()? onPartlySaved;
 
   @override
   State<LogBodySheet> createState() => _LogBodySheetState();
@@ -223,20 +237,26 @@ class _LogBodySheetState extends State<LogBodySheet> {
       _saving = true;
       _error = null;
     });
+    var wrote = false;
     try {
       // Weight: save or (when this edit cleared a previously present
       // value) delete — leaving the stale row would resurrect it on next
       // load.
       if (kg != null) {
         await widget.dao.saveBodyWeight(widget.date, kg, source: 'manual');
+        wrote = true;
+        widget.onWrote?.call();
       } else if (widget.existingWeight != null) {
         await widget.dao.deleteBodyWeight(widget.date);
+        wrote = true;
+        widget.onWrote?.call();
       }
       // Measurements: full-row upsert; all-empty deletes (DAO contract).
       if (waist != null || chest != null || hip != null ||
           widget.existing != null) {
         await widget.dao.saveBodyMeasurements(widget.date,
             waistCm: waist, chestCm: chest, hipCm: hip);
+        widget.onWrote?.call();
       }
     } catch (e) {
       // The sheet keeps what was typed, says so and can save again: it
@@ -245,6 +265,9 @@ class _LogBodySheetState extends State<LogBodySheet> {
       // text carries the statement's arguments, which are the weight and
       // girths just typed, and debugPrint stays in release builds.
       debugPrint('Body: save failed (${e.runtimeType})');
+      // Still 'Saving…' until the day is re-read: a Delete or a date
+      // change in between went by the values from before the save.
+      if (wrote) await widget.onPartlySaved?.call();
       if (!mounted) return;
       setState(() {
         _saving = false;
@@ -256,7 +279,16 @@ class _LogBodySheetState extends State<LogBodySheet> {
   }
 
   Future<void> _delete() async {
-    final deleted = await widget.onDelete!();
+    final l = context.l10n;
+    final bool deleted;
+    try {
+      deleted = await widget.onDelete!();
+    } catch (_) {
+      // Logged by the screen, which shows what is left. Said here, where
+      // the user is looking: a snackbar would sit under the sheet.
+      if (mounted) setState(() => _error = l.bodyDeleteFailed);
+      return;
+    }
     // The page reloaded already; false tells it not to reload again.
     if (deleted && mounted) Navigator.pop(context, false);
   }

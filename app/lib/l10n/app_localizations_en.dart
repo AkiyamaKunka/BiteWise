@@ -3593,4 +3593,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get diagStatusFail => 'Failed';
+
+  @override
+  String get covWindowLabel => 'Days to check';
+
+  @override
+  String get bodyDeleteFailed => 'Couldn\'t delete. Try again.';
 }
