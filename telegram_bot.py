@@ -1493,6 +1493,21 @@ def _finish_api_upload_processing(image_hash: str):
 _parse_boolish = parse_boolish
 
 
+def _request_json_object() -> Optional[Dict]:
+    """The request's JSON body as an object for callers that .get() from it.
+
+    {} when there is no JSON body or it does not parse (each caller's
+    missing-field answer covers that); None when it parsed to an array, a
+    string or a number. .get on those raised, and an authenticated caller
+    got a 500 with a traceback where a 400 belongs: callers answer None
+    with 400 bad_request_shape (or, for optional hints, read it as {}).
+    """
+    payload = request.get_json(silent=True)
+    if payload is None:
+        return {}
+    return payload if isinstance(payload, dict) else None
+
+
 def _vpn_status_from_request() -> tuple[Optional[bool], str]:
     """Read client VPN status from headers, JSON body, or form fields."""
     vpn_active = _parse_boolish(request.headers.get("X-VPN-Active"))
@@ -1500,7 +1515,7 @@ def _vpn_status_from_request() -> tuple[Optional[bool], str]:
 
     if vpn_active is None:
         if request.is_json:
-            data = request.get_json(silent=True) or {}
+            data = _request_json_object() or {}
             vpn_active = _parse_boolish(data.get("vpn_active"))
             vpn_check = data.get("vpn_check", vpn_check)
         elif request.form:
@@ -1537,7 +1552,7 @@ def _vpn_check_reliable_from_request(vpn_active: Optional[bool], vpn_check: str)
     explicit = _parse_boolish(request.headers.get("X-VPN-Check-Reliable"))
     if explicit is None:
         if request.is_json:
-            data = request.get_json(silent=True) or {}
+            data = _request_json_object() or {}
             explicit = _parse_boolish(data.get("vpn_check_reliable"))
         elif request.form:
             explicit = _parse_boolish(request.form.get("vpn_check_reliable"))
@@ -1572,7 +1587,7 @@ def _vpn_required_from_request() -> bool:
         return vpn_required
 
     if request.is_json:
-        data = request.get_json(silent=True) or {}
+        data = _request_json_object() or {}
         vpn_required = _parse_boolish(data.get("vpn_required"))
     elif request.form:
         vpn_required = _parse_boolish(request.form.get("vpn_required"))
@@ -4906,6 +4921,19 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
     def payload_too_large(error):
         return jsonify({"error": "Photo too large"}), 413
 
+    def _api_bad_request(endpoint, code):
+        """A 400 the app can act on — and LOGGED. These branches used to
+        answer silently: the journal for 2026-09-29 showed one
+        `analyze_photo 400` from the owner's phone and nothing else, so
+        the phone's "photo analysis failed" had no server-side story at
+        all. One line per refusal, with the code and the client platform
+        (never the payload), is all a later reader needs.
+        """
+        log.warning(
+            f"{endpoint} refused (400 {code}); client="
+            f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
+        return jsonify({"error": code}), 400
+
     @app.route('/ping', methods=['POST'])
     def ping():
         if not _authorized_api_request():
@@ -4916,9 +4944,13 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         # None preserves the stored offset; meal dating depends on it.
         tz = None
         if request.is_json:
-            data = request.get_json(silent=True)
-            if data and "timezone" in data:
-                tz = data["timezone"]
+            data = _request_json_object()
+            # The offset column dates every meal: a string or nothing. A
+            # list failed to bind in sqlite (500); a number was stored.
+            if data is None or not isinstance(data.get("timezone"),
+                                              (str, type(None))):
+                return _api_bad_request("ping", "bad_request_shape")
+            tz = data.get("timezone")
 
         database.update_android_heartbeat(timezone=tz)
         log.info(f"📡 Heartbeat ping received from Android Watcher (TZ: {tz or 'unchanged'})")
@@ -4959,7 +4991,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return jsonify({"error": "Unauthorized"}), 401
         if not garmin.is_configured():
             return jsonify({"available": False, "reason": "not_configured"})
-        payload = request.get_json(silent=True) or {}
+        payload = _request_json_object()
+        if payload is None:
+            return _api_bad_request("garmin_daily", "bad_request_shape")
         date_str = str(payload.get("date") or "").strip()
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date_str):
             return jsonify({"error": "bad_date"}), 400
@@ -5009,7 +5043,10 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
     def api_claude_auth_complete():
         if not _authorized_api_request():
             return jsonify({"error": "Unauthorized"}), 401
-        payload = request.get_json(silent=True) or {}
+        payload = _request_json_object()
+        if payload is None:
+            return _api_bad_request("claude_auth/complete",
+                                    "bad_request_shape")
         code = payload.get("code")
         if not isinstance(code, str) or not code.strip():
             return jsonify({"error": "no_code"}), 400
@@ -5027,20 +5064,6 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             return jsonify({"error": "Unauthorized"}), 401
         return jsonify({"ok": True,
                         "cancelled": claude_auth.cancel_session()})
-
-
-    def _api_bad_request(endpoint, code):
-        """A 400 the app can act on — and LOGGED. These branches used to
-        answer silently: the journal for 2026-09-29 showed one
-        `analyze_photo 400` from the owner's phone and nothing else, so
-        the phone's "photo analysis failed" had no server-side story at
-        all. One line per refusal, with the code and the client platform
-        (never the payload), is all a later reader needs.
-        """
-        log.warning(
-            f"{endpoint} refused (400 {code}); client="
-            f"{request.headers.get('X-Client-Platform') or 'unknown'}.")
-        return jsonify({"error": code}), 400
 
     def _api_come_back_later(reason):
         """503 for a TEMPORARY refusal: the plan's closed usage window, a
@@ -5127,7 +5150,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
             # bounded profile appendix. A caller-authored prompt would be
             # an instruction channel into the CLI (see analyze_food_photo's
             # allow_file_fallback note), which is not worth a settings knob.
-            payload = request.get_json(silent=True) or {}
+            payload = _request_json_object()
+            if payload is None:
+                return _api_bad_request("analyze_photo", "bad_request_shape")
             raw = payload.get("image_b64")
             if not isinstance(raw, str) or not raw.strip():
                 return _api_bad_request("analyze_photo", "no_image")
@@ -5232,8 +5257,8 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         """
         if not _authorized_api_request():
             return jsonify({"error": "Unauthorized"}), 401
-        payload = request.get_json(silent=True) or {}
-        if not isinstance(payload, dict):
+        payload = _request_json_object()
+        if payload is None:
             # A JSON array/scalar body crashed .get with a 500
             # (pressure-test find) — it is a client error, say so.
             return _api_bad_request("analyze_leftover", "bad_request_shape")
@@ -5301,7 +5326,9 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
         the app keeps its own executor semantics (this only supplies JSON)."""
         if not _authorized_api_request():
             return jsonify({"error": "Unauthorized"}), 401
-        payload = request.get_json(silent=True) or {}
+        payload = _request_json_object()
+        if payload is None:
+            return _api_bad_request("text_intent", "bad_request_shape")
         prompt = payload.get("prompt")
         if not isinstance(prompt, str) or not prompt.strip():
             return _api_bad_request("text_intent", "no_prompt")
@@ -5421,11 +5448,19 @@ def _build_api_app(bot: TelegramBot, gemini_client) -> Flask:
 
         maybe_warn_android_vpn_inactive(bot, "/reconcile")
 
-        data = request.get_json(silent=True)
-        if not data or 'hashes' not in data:
+        data = _request_json_object()
+        if data is None:
+            return _api_bad_request("reconcile", "bad_request_shape")
+        if 'hashes' not in data:
             return jsonify({"error": "Missing hashes array"}), 400
+        hashes = data['hashes']
+        # Hex digests only: set() of a number or of unhashable entries
+        # raised (500), and a string split into one-character "hashes".
+        if not isinstance(hashes, list) or not all(
+                isinstance(h, str) for h in hashes):
+            return _api_bad_request("reconcile", "bad_request_shape")
 
-        android_hashes = set(data['hashes'])
+        android_hashes = set(hashes)
         server_hashes = set(database.get_today_hashes(ALLOWED_CHAT_ID))
         reserved_hashes = set(database.get_reserved_photo_hashes(ALLOWED_CHAT_ID))
 

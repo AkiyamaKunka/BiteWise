@@ -724,3 +724,81 @@ def test_photo_unreadable_image_container_is_a_400_not_a_guess(
     assert resp.status_code == 400
     assert resp.get_json()["error"] == "bad_image_format"
     assert any("400 bad_image_format" in r.getMessage() for r in caplog.records)
+
+
+# ─── A JSON body that is not an object is a 400, never a 500 ────────────
+
+# Captured before any fixture stubs it: /ping and /reconcile read the body
+# in the VPN hint reader first, so the real one must run in these tests.
+_REAL_VPN_WARN = telegram_bot.maybe_warn_android_vpn_inactive
+
+_JSON_OBJECT_ENDPOINTS = [
+    "/ping", "/reconcile", "/api/garmin_daily", "/api/claude_auth/complete",
+    "/api/analyze_photo", "/api/analyze_leftover", "/api/text_intent",
+]
+
+
+@pytest.mark.parametrize("path", _JSON_OBJECT_ENDPOINTS)
+def test_a_non_object_json_body_is_a_400_not_a_500(client, monkeypatch, path):
+    """A JSON array, string or number where an object belongs raised on
+    .get (or `in`) and answered 500 with a traceback. Only a caller holding
+    the key gets that far, but it is a client error all the same: a coded,
+    logged 400 — and nothing behind it runs (no CLI, no heartbeat)."""
+    import garmin
+    import claude_auth
+
+    monkeypatch.setattr(telegram_bot, "maybe_warn_android_vpn_inactive",
+                        _REAL_VPN_WARN)
+    monkeypatch.setattr(garmin, "is_configured", lambda: True)
+    monkeypatch.setattr(claude_analyzer, "is_configured", lambda: True)
+    ran = []
+    for module, name in ((garmin, "fetch_daily_activity"),
+                         (claude_auth, "complete_session"),
+                         (claude_analyzer, "analyze_food_photo"),
+                         (claude_analyzer, "analyze_leftover_photo"),
+                         (claude_analyzer, "analyze_text_prompt"),
+                         (telegram_bot.database, "update_android_heartbeat"),
+                         (telegram_bot.database, "get_today_hashes")):
+        monkeypatch.setattr(module, name,
+                            lambda *a, _n=name, **k: ran.append(_n))
+    for body in ([1, 2], ["timezone", "hashes"], "timezone", 5):
+        resp = client.http.post(path, headers={"X-API-Key": "secret-key"},
+                                json=body)
+        assert resp.status_code == 400, (path, body, resp.status_code)
+        assert resp.get_json()["error"] == "bad_request_shape", (path, body)
+    assert ran == []
+
+
+def test_reconcile_hashes_must_be_a_list_of_strings(client, monkeypatch):
+    """set() of a number, null, or unhashable entries raised (500); a string
+    was split into one-character "hashes", and numbers came back as
+    "missing". Anything but a list of strings is refused."""
+    monkeypatch.setattr(telegram_bot.database, "get_today_hashes",
+                        lambda chat_id: [])
+    h = {"X-API-Key": "secret-key"}
+    for hashes in (5, None, "aa", [{"a": 1}], [[1]], [1, 2], ["ab", 3]):
+        resp = client.http.post("/reconcile", headers=h,
+                                json={"hashes": hashes})
+        assert resp.status_code == 400, (hashes, resp.status_code)
+        assert resp.get_json()["error"] == "bad_request_shape", hashes
+    ok = client.http.post("/reconcile", headers=h,
+                          json={"hashes": ["ab" * 16]})
+    assert ok.status_code == 200
+    assert ok.get_json() == {"missing_hashes": ["ab" * 16]}
+
+
+def test_ping_timezone_must_be_a_string_when_present(client):
+    """A list or object timezone failed to bind in sqlite (500), and a
+    number or bool was stored in the offset column that dates every meal.
+    A string, null or no timezone at all still records the heartbeat."""
+    database = telegram_bot.database
+    h = {"X-API-Key": "secret-key"}
+    for tz in ([1], {"a": 1}, 8, True):
+        resp = client.http.post("/ping", headers=h, json={"timezone": tz})
+        assert resp.status_code == 400, (tz, resp.status_code)
+        assert resp.get_json()["error"] == "bad_request_shape", tz
+    assert database.get_last_android_heartbeat() is None
+    for body in ({"timezone": "+0530"}, {"timezone": None}, {}):
+        assert client.http.post("/ping", headers=h,
+                                json=body).status_code == 200
+    assert database.get_android_timezone() == "+0530"
