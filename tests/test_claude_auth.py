@@ -159,6 +159,184 @@ def test_apply_token_appends_when_key_absent(tmp_path):
     assert env.read_text().endswith("CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-NEW\n")
 
 
+def make_gated_cli(tmp_path, gate, url=FAKE_URL, name="gated"):
+    """A fake setup-token that prints [url] only once [gate] exists, so a
+    test can hold starts inside the URL harvest and choose the order their
+    URLs arrive in. Afterwards it waits on stdin like the real CLI."""
+    script = tmp_path / f"{name}_setup_token.py"
+    script.write_text(textwrap.dedent(f"""
+        import os, sys, time
+        while not os.path.exists({str(gate)!r}):
+            time.sleep(0.02)
+        sys.stdout.write("Visit: " + {url!r} + "\\r\\n")
+        sys.stdout.flush()
+        sys.stdin.readline()
+        time.sleep(60)
+    """))
+    wrapper = tmp_path / f"{name}cli"
+    wrapper.write_text(f"#!/bin/sh\nexec {sys.executable} {script} \"$@\"\n")
+    wrapper.chmod(0o755)
+    return str(wrapper)
+
+
+def _record_spawns(monkeypatch):
+    """The setup-token processes start_session spawns, in spawn order."""
+    spawned = []
+    real_popen = claude_auth.subprocess.Popen
+
+    def recording_popen(*args, **kwargs):
+        proc = real_popen(*args, **kwargs)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(claude_auth.subprocess, "Popen", recording_popen)
+    return spawned
+
+
+def _wait_until(predicate, timeout=10.0):
+    import time
+    deadline = time.monotonic() + timeout
+    while not predicate() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    return predicate()
+
+
+def _exits(proc, timeout=10):
+    import subprocess
+    try:
+        proc.wait(timeout=timeout)
+        return True
+    except subprocess.TimeoutExpired:
+        return False
+
+
+def _kill_leftovers(spawned):
+    for proc in spawned:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait(timeout=10)
+
+
+def test_concurrent_starts_leave_no_orphan_process(tmp_path, monkeypatch):
+    """Two starts racing through the URL harvest (Flask serves requests on
+    threads; the app can tap Connect again from a fresh screen). The later
+    publish used to overwrite the earlier one without killing it: a
+    setup-token process holding a PTY that neither cancel nor the TTL
+    reaper could see, alive until the service restarted, on a 1 GB VM.
+    Whatever the interleaving, one start publishes, the other kills its own
+    CLI, and cancel_session() then leaves no process."""
+    import threading
+
+    gate = tmp_path / "print-the-url-now"
+    cli = make_gated_cli(tmp_path, gate)
+    spawned = _record_spawns(monkeypatch)
+    results = []
+
+    def start():
+        results.append(claude_auth.start_session(cli, dict(os.environ)))
+
+    threads = [threading.Thread(target=start) for _ in range(2)]
+    try:
+        for t in threads:
+            t.start()
+        assert _wait_until(lambda: len(spawned) == 2), \
+            "both starts must be inside the harvest"
+        gate.touch()
+        for t in threads:
+            t.join(timeout=40)
+        assert sorted("url" in r for r in results) == [False, True], results
+
+        claude_auth.cancel_session()
+
+        for proc in spawned:
+            if not _exits(proc):
+                pytest.fail("a setup-token process outlived cancel_session(): "
+                            "an orphan no reaper can see")
+    finally:
+        gate.touch()
+        _kill_leftovers(spawned)
+
+
+@pytest.mark.parametrize("printed_first", ["newer", "older"])
+def test_the_newest_start_wins_whichever_cli_prints_first(
+        tmp_path, monkeypatch, printed_first):
+    """Tapping Connect again from a fresh screen while the first start
+    still harvests (a slow Node cold start on the 1 GB VM): the first
+    screen is gone, so the user signs in with the NEWER start's URL. The
+    publish order used to decide instead: when the older CLI printed last,
+    its publish replaced (and killed) the session behind that URL, and the
+    pasted code reached the wrong process ("the code was not accepted").
+    Now the newer start's session is the published one whichever CLI
+    prints first, and the older start answers an error, never a URL whose
+    process is already dead."""
+    import threading
+
+    names = ("older", "newer")
+    gates = {n: tmp_path / f"print-{n}" for n in names}
+    urls = {n: f"{FAKE_URL}&tap={n}" for n in names}
+    clis = {n: make_gated_cli(tmp_path, gates[n], urls[n], name=n)
+            for n in names}
+    spawned = _record_spawns(monkeypatch)
+    results = {}
+
+    def start(n):
+        results[n] = claude_auth.start_session(clis[n], dict(os.environ))
+
+    threads = {n: threading.Thread(target=start, args=(n,)) for n in names}
+    try:
+        threads["older"].start()
+        assert _wait_until(lambda: len(spawned) == 1)
+        threads["newer"].start()
+        assert _wait_until(lambda: len(spawned) == 2)
+        older_cli, newer_cli = spawned
+        release = ["newer", "older"] if printed_first == "newer" else names
+        for n in release:
+            gates[n].touch()
+            threads[n].join(timeout=40)
+            assert not threads[n].is_alive(), n
+
+        assert results["newer"] == {"url": urls["newer"]}
+        assert "error" in results["older"], results["older"]
+        assert claude_auth._session["url"] == urls["newer"]
+        assert _exits(older_cli), "the superseded start must kill its CLI"
+        assert newer_cli.poll() is None, "the newest session stays live"
+        claude_auth.cancel_session()
+        assert _exits(newer_cli)
+    finally:
+        for gate in gates.values():
+            gate.touch()
+        _kill_leftovers(spawned)
+
+
+def test_a_cancel_during_the_harvest_stops_that_start(tmp_path, monkeypatch):
+    """A cancel that landed while a start was still harvesting found
+    nothing to kill; the start then published anyway and its process lived
+    until the TTL reaper. Now the start sees the cancel at publish time,
+    kills its own CLI and answers an error: nothing is published."""
+    import threading
+
+    gate = tmp_path / "print-the-url-now"
+    cli = make_gated_cli(tmp_path, gate)
+    spawned = _record_spawns(monkeypatch)
+    result = {}
+    thread = threading.Thread(target=lambda: result.update(
+        claude_auth.start_session(cli, dict(os.environ))))
+    try:
+        thread.start()
+        assert _wait_until(lambda: len(spawned) == 1)
+        assert claude_auth.cancel_session() is False, "nothing published yet"
+        gate.touch()
+        thread.join(timeout=40)
+        assert not thread.is_alive()
+
+        assert "error" in result, result
+        assert claude_auth._session is None
+        assert _exits(spawned[0]), "the cancelled start must kill its CLI"
+    finally:
+        gate.touch()
+        _kill_leftovers(spawned)
+
+
 # ── endpoint layer ────────────────────────────────────────────────
 
 

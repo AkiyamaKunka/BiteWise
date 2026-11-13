@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -52,3 +54,103 @@ def test_prompt_refuses_meals_without_evidence_of_eating():
     for phrase in ["menus", "adverts", "recipes", "social feed",
                    "cancelled order", "phantom meal"]:
         assert phrase in p, phrase
+
+
+# ─── The server reads the shared values, not copies of them ────────────
+#
+# shared/constants.json is the single source of truth: an edit plus
+# sync_shared.py changes the app, and the server must follow. The mismatch
+# threshold, the magnitude clamp and the captured-at window are contracts
+# both sides apply to the same data, so a server left on an old literal
+# would produce different numbers from the app with nothing failing.
+
+_SERVER_DEFAULTS = [
+    # (module, attribute, env override or None, shared_generated name)
+    ("telegram_bot", "NL_MAX_ACTIONS", None, "NL_MAX_ACTIONS"),
+    ("telegram_bot", "TEXT_EDIT_WINDOW_DAYS", "TEXT_EDIT_WINDOW_DAYS",
+     "TEXT_EDIT_WINDOW_DAYS_DEFAULT"),
+    ("telegram_bot", "CAPTURED_AT_MAX_AGE_DAYS", "CAPTURED_AT_MAX_AGE_DAYS",
+     "CAPTURED_AT_MAX_AGE_DAYS_DEFAULT"),
+    ("telegram_bot", "GEMINI_ANALYSIS_MAX_ATTEMPTS",
+     "GEMINI_ANALYSIS_MAX_ATTEMPTS", "GEMINI_ANALYSIS_MAX_ATTEMPTS"),
+    ("telegram_bot", "GEMINI_RETRY_MAX_DELAY_SECONDS",
+     "GEMINI_RETRY_MAX_DELAY_SECONDS", "GEMINI_RETRY_DELAY_CAP_SECONDS"),
+    ("config", "GEMINI_MODEL", "GEMINI_MODEL", "GEMINI_MODEL_DEFAULT"),
+]
+
+
+@pytest.mark.parametrize("module_name,attr,env,shared_name", _SERVER_DEFAULTS,
+                         ids=[row[1] for row in _SERVER_DEFAULTS])
+def test_server_defaults_equal_the_shared_constants(module_name, attr, env,
+                                                    shared_name):
+    import importlib
+    import os
+
+    import shared_generated
+
+    if env and os.environ.get(env) is not None:
+        pytest.skip(f"{env} is set here, so the module holds the override")
+    module = importlib.import_module(module_name)
+    assert getattr(module, attr) == getattr(shared_generated, shared_name)
+
+
+def test_photo_normalize_uses_the_shared_size_and_quality():
+    import io
+
+    from PIL import Image
+
+    import shared_generated as sg
+    import telegram_bot
+
+    src = Image.new("RGB", (4000, 3000), (200, 120, 80))
+    buf = io.BytesIO()
+    src.save(buf, format="JPEG")
+    out = Image.open(io.BytesIO(
+        telegram_bot._normalize_photo_for_analysis(buf.getvalue())))
+    assert max(out.size) == sg.NORMALIZE_MAX_DIMENSION_PX
+    # Same quantization tables as a reference encode at the shared quality.
+    ref = io.BytesIO()
+    out.convert("RGB").save(ref, format="JPEG",
+                            quality=sg.NORMALIZE_JPEG_QUALITY)
+    assert out.quantization == Image.open(ref).quantization
+
+
+def test_captured_at_future_window_is_the_shared_one(monkeypatch):
+    from datetime import datetime, timedelta
+
+    import database
+    import shared_generated as sg
+    import telegram_bot
+
+    now = datetime(2026, 7, 15, 12, 0, 0)
+    monkeypatch.setattr(database, "user_local_now", lambda *a, **k: now)
+    edge = now + timedelta(seconds=sg.CAPTURED_AT_MAX_FUTURE_SECONDS)
+    fmt = "%Y-%m-%d %H:%M:%S"
+    assert telegram_bot._parse_captured_at(edge.strftime(fmt)) == edge
+    late = edge + timedelta(seconds=1)
+    assert telegram_bot._parse_captured_at(late.strftime(fmt)) is None
+
+
+def test_calorie_clamp_and_mismatch_threshold_are_the_shared_ones():
+    import shared_generated as sg
+    import utils
+
+    limit = sg.CALORIE_MAGNITUDE_LIMIT
+    assert utils.safe_number(limit - 1, default=None) == limit - 1
+    assert utils.safe_number(limit, default=None) is None
+    assert utils.safe_number(-limit, default=None) is None
+
+    def meal(total, items):
+        return {"total_calories": total,
+                "food_items": [{"estimated_calories": items}]}
+
+    # Small meals: the absolute floor decides (exactly the floor is fine).
+    floor = sg.MEAL_MISMATCH_MIN_KCAL
+    assert utils.meal_calorie_mismatch(meal(100 + floor, 100)) is None
+    assert utils.meal_calorie_mismatch(meal(100 + floor + 1, 100)) == 100
+    # Large meals: the percentage of the larger number decides.
+    big = 10_000
+    gap = sg.MEAL_MISMATCH_PCT * big
+    assert utils.meal_calorie_mismatch(meal(big, big - gap)) is None
+    assert utils.meal_calorie_mismatch(meal(big, big - gap - 1)) == int(
+        big - gap - 1)

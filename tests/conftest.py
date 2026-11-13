@@ -58,6 +58,26 @@ def _no_real_pushplus_pushes(monkeypatch):
     monkeypatch.setattr(utils_mod, "PUSHPLUS_TOKEN", None)
 
 
+@pytest.fixture(autouse=True)
+def _empty_parked_photo_queue():
+    """telegram_bot._parked_photo_paths is a module-level drain queue.
+
+    A test that parks a photo and stubs the drain left its path behind,
+    and the next test whose upload ran the REAL drain analyzed that stale
+    photo into its own database: test_crash_recovery's kill-window test
+    found a second meal whenever it ran after
+    test_parked_photo_kicks_immediate_drain_and_notes_caption. Empty on
+    both sides, so no test inherits or bequeaths a parked photo.
+    """
+    tb = sys.modules.get("telegram_bot")
+    if tb is not None:
+        tb._parked_photo_paths.clear()
+    yield
+    tb = sys.modules.get("telegram_bot")
+    if tb is not None:
+        tb._parked_photo_paths.clear()
+
+
 # ─── Shared app-API test harness (moved from test_api_analyze_endpoints.py:
 # fixtures in conftest need no imports, which keeps ruff F811 quiet in every
 # suite that uses them) ───
