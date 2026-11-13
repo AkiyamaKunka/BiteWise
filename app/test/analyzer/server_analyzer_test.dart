@@ -51,6 +51,14 @@ Future<AppSettings> serverSettings({
 
 Uint8List jpeg() => Uint8List.fromList([1, 2, 3, 4]);
 
+/// [ServerAnalyzer] with a deadline a test can wait out.
+class _ShortDeadlineServer extends ServerAnalyzer {
+  _ShortDeadlineServer(super.settings, {super.client});
+
+  @override
+  Duration get deadline => const Duration(milliseconds: 200);
+}
+
 void main() {
   test('photo call sends the PROFILE, never a caller-authored prompt',
       () async {
@@ -934,6 +942,37 @@ void main() {
     expect(started.url, isNull);
     expect(started.error, contains('expired'));
     expect(await analyzer.completeClaudeAuth('x'), contains('expired'));
+  });
+
+  test('Connect Claude gives up on a reply body that stalls after the '
+      'headers instead of spinning forever (review 171, C27)', () async {
+    // The deadline covered only the headers, so a body that stalled after
+    // them left Connect Claude spinning until the user left the page —
+    // right after pasting the one-time code, for the complete call.
+    final s = await serverSettings();
+    final bodies = <StreamController<List<int>>>[];
+    addTearDown(() {
+      for (final b in bodies) {
+        unawaited(b.close());
+      }
+    });
+    final analyzer = _ShortDeadlineServer(s,
+        client: MockClient.streaming((req, _) async {
+      final body = StreamController<List<int>>(); // never closes
+      bodies.add(body);
+      return http.StreamedResponse(body.stream, 200,
+          headers: {'content-type': 'application/json'});
+    }));
+    final started = await analyzer.startClaudeAuth().timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => fail('start outlived its deadline'));
+    expect(started.url, isNull);
+    expect(started.error, isNotNull);
+    final completed = await analyzer.completeClaudeAuth('code#state').timeout(
+        const Duration(seconds: 3),
+        onTimeout: () => fail('complete outlived its deadline'));
+    expect(completed, isNotNull);
+    expect(bodies, hasLength(2));
   });
 
   test('startClaudeAuth refuses without an address/key', () async {
