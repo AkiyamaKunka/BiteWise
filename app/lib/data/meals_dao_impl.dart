@@ -1171,6 +1171,11 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
   /// matches nothing.
   static (String, List<Object?>) _importIdentity(
       String table, Map<String, Object?> row) {
+    // A column the file leaves out is stored as its schema DEFAULT
+    // (data/db.dart), a null one as NULL (read as ''). Binding '' for an
+    // absent column matched nothing, so each re-import added the row again.
+    Object column(String name, String schemaDefault) =>
+        row.containsKey(name) ? row[name] ?? '' : schemaDefault;
     return switch (table) {
       // A PHOTO meal's identity is its photo (chat+hash): editing its
       // numbers must NOT make an older backup re-import it as a second
@@ -1227,7 +1232,7 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
           [
             row['chat_id'],
             row['date'],
-            row['source'] ?? '',
+            column('source', 'manual'),
             row['external_id'] ?? '',
             row['logged_at'] ?? '',
             // The NUMBERS too: two manual saves in the same second share a
@@ -1245,7 +1250,7 @@ ON CONFLICT(chat_id, date) DO UPDATE SET
             row['chat_id'],
             row['date'],
             row['logged_at'],
-            row['workout_type'] ?? '',
+            column('workout_type', 'strength'),
           ]
         ),
       _ => ('1 = 0', const <Object?>[]),

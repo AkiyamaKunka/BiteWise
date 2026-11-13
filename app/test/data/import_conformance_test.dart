@@ -492,6 +492,51 @@ void main() {
       expect(await dbA.query('activities'), hasLength(2));
     });
 
+    test('rows that leave out workout_type or source add nothing the second '
+        'time', () async {
+      // A hand-made or foreign file can leave a column out. The insert then
+      // stores the schema DEFAULT ('strength', 'manual'), while the identity
+      // compared '' and matched nothing, so the same file imported twice
+      // added each such row twice (review 171).
+      final payload = jsonEncode({
+        'format': kExportFormat,
+        'version': 1,
+        'tables': {
+          'workouts': [
+            {
+              'chat_id': localChatId,
+              'date': '2026-07-30',
+              'duration_min': 45,
+              'logged_at': '2026-07-30T07:00:00',
+            },
+          ],
+          'activities': [
+            {
+              'chat_id': localChatId,
+              'date': '2026-07-30',
+              'active_calories': 300,
+              'logged_at': '2026-07-30T19:00:00',
+            },
+          ],
+        },
+      });
+      final first = await daoB.importJson(payload);
+      expect(first.added['workouts'], 1);
+      expect(first.added['activities'], 1);
+
+      final again = await daoB.importJson(payload);
+      expect(again.totalAdded, 0);
+      expect(again.skipped['workouts'], 1);
+      expect(again.skipped['activities'], 1);
+      final workouts = await dbB.query('workouts');
+      final activities = await dbB.query('activities');
+      expect(workouts, hasLength(1));
+      expect(activities, hasLength(1));
+      // What lands is the schema's default, as before.
+      expect(workouts.single['workout_type'], 'strength');
+      expect(activities.single['source'], 'manual');
+    });
+
     test('an imported profile never replaces the one already here',
         () async {
       await dbA.insert('fitness_profile',
