@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../core/coerce.dart' show isoDate;
 import '../services/backup/backup_coordinator.dart';
 import '../services/backup/backup_format.dart';
 import 'app_formats.dart';
@@ -27,11 +28,7 @@ String backupSizeLabel(int bytes) {
 String backupDateLabel(BuildContext context, BackupHeader h) {
   final stamp = DateTime.tryParse(h.exportedAt ?? '');
   if (stamp == null) return h.lastDate ?? '';
-  final local = stamp.toLocal();
-  final iso = '${local.year.toString().padLeft(4, '0')}-'
-      '${local.month.toString().padLeft(2, '0')}-'
-      '${local.day.toString().padLeft(2, '0')}';
-  return AppFormats.shortDate(context, iso);
+  return AppFormats.shortDate(context, isoDate(stamp.toLocal()));
 }
 
 /// The status line under the iCloud Backup switch. A backup that landed
