@@ -40,19 +40,26 @@ Meal _meal(String date, {num cal = 500, int id = 0}) => Meal(
       analysis: {'is_food': true, 'total_calories': cal},
     );
 
-/// [n] CALENDAR days before today, as History counts them. Never
-/// `subtract(Duration(days: n))`: at 23:xx on the day DST ends that is
-/// still today, and both seeded days landed on one (review 1.7.1).
-String _daysAgo(int n) => isoDate(addCalendarDays(DateTime.now(), -n));
+/// [n] CALENDAR days before [now] (the real clock when not given), as
+/// History counts them. Never `subtract(Duration(days: n))`: at 23:xx on
+/// the day DST ends that is still today, and both seeded days landed on one
+/// (review 1.7.1).
+String _daysAgo(int n, [DateTime? now]) =>
+    isoDate(addCalendarDays(now ?? DateTime.now(), -n));
 
-FakeDao _dao(Map<int, num> kcalByDaysAgo) {
+FakeDao _dao(Map<int, num> kcalByDaysAgo, DateTime now) {
   final dao = FakeDao();
   var id = 1;
   kcalByDaysAgo.forEach((ago, cal) {
-    dao.meals.add(_meal(_daysAgo(ago), cal: cal, id: id++));
+    dao.meals.add(_meal(_daysAgo(ago, now), cal: cal, id: id++));
   });
   return dao;
 }
+
+/// History at [now], the instant the test seeded its days from: read
+/// apart, the seeds and the screen could disagree across midnight.
+HistoryScreen _history(MealsDao dao, DateTime now) =>
+    HistoryScreen(dao: dao, clock: () => now);
 
 class _FailingDao extends FakeDao {
   bool fail = true;
@@ -287,24 +294,26 @@ void main() {
     testWidgets('day rows are grouped cells that read as buttons',
         (tester) async {
       final handle = tester.ensureSemantics();
-      await pumpApp(tester, Scaffold(body: HistoryScreen(dao: _dao({0: 650, 2: 1800}))),
+      final now = DateTime.now();
+      await pumpApp(
+          tester, Scaffold(body: _history(_dao({0: 650, 2: 1800}, now), now)),
           size: const Size(390, 1400));
       expect(
           find.ancestor(
-              of: find.byKey(Key('historyDay${_daysAgo(0)}')),
+              of: find.byKey(Key('historyDay${_daysAgo(0, now)}')),
               matching: find.byType(GroupedSection)),
           findsOneWidget);
       expect(find.byType(ListTile), findsNothing);
       for (final ago in const [0, 1, 2]) {
         final data = tester
-            .getSemantics(find.byKey(Key('historyDay${_daysAgo(ago)}')))
+            .getSemantics(find.byKey(Key('historyDay${_daysAgo(ago, now)}')))
             .getSemanticsData();
         expect(data.flagsCollection.isButton, isTrue, reason: '$ago days ago');
         expect(data.hasAction(SemanticsAction.tap), isTrue);
       }
       // The row reads its day and its value, once.
       final today = tester
-          .getSemantics(find.byKey(Key('historyDay${_daysAgo(0)}')))
+          .getSemantics(find.byKey(Key('historyDay${_daysAgo(0, now)}')))
           .getSemanticsData();
       expect(today.label, contains('Today'));
       expect(today.label, contains('~650 kcal'));
@@ -314,8 +323,9 @@ void main() {
 
     testWidgets('the average is the card headline; its plain text is the '
         'pinned string', (tester) async {
+      final now = DateTime.now();
       await pumpApp(tester,
-          Scaffold(body: HistoryScreen(dao: _dao({0: 1900, 1: 1918}))));
+          Scaffold(body: _history(_dao({0: 1900, 1: 1918}, now), now)));
       final avg = tester.widget<Text>(find.byKey(const Key('historyAverage')));
       expect(avg.textSpan!.toPlainText(), 'Average: ~1,909 kcal / day');
       expect(find.text('Average: ~1,909 kcal / day'), findsOneWidget);
@@ -350,9 +360,10 @@ void main() {
 
     testWidgets('a failed load shows the user sentence, and Retry reloads',
         (tester) async {
+      final now = DateTime.now();
       final dao = _FailingDao();
-      dao.meals.add(_meal(_daysAgo(0), cal: 650, id: 1));
-      await pumpApp(tester, Scaffold(body: HistoryScreen(dao: dao)));
+      dao.meals.add(_meal(_daysAgo(0, now), cal: 650, id: 1));
+      await pumpApp(tester, Scaffold(body: _history(dao, now)));
       expect(find.byType(InlineError), findsOneWidget);
       expect(find.text("Couldn't load your history."), findsOneWidget);
       expect(find.textContaining('disk I/O'), findsNothing,
@@ -361,7 +372,28 @@ void main() {
       await tester.tap(find.byKey(const Key('historyRetry')));
       await tester.pumpAndSettle();
       expect(find.byType(InlineError), findsNothing);
-      expect(find.byKey(Key('historyDay${_daysAgo(0)}')), findsOneWidget);
+      expect(find.byKey(Key('historyDay${_daysAgo(0, now)}')), findsOneWidget);
+    });
+
+    testWidgets('the screen reads its clock: the window and Today follow it',
+        (tester) async {
+      // The evening of a 25-hour day in the US (DST ended that morning),
+      // and far from any real run: on the real clock the window would hold
+      // none of these meals.
+      final now = DateTime(2025, 11, 2, 23, 30);
+      await pumpApp(
+          tester,
+          Scaffold(
+              body: _history(_dao({0: 1900, 1: 1918, 30: 5000}, now), now)),
+          size: const Size(390, 1400));
+      final today = find.byKey(const Key('historyDay2025-11-02'));
+      expect(find.descendant(of: today, matching: find.text('Today')),
+          findsOneWidget);
+      expect(find.byKey(const Key('historyDay2025-11-01')), findsOneWidget,
+          reason: 'yesterday is its own row');
+      expect(find.byKey(const Key('historyDay2025-10-03')), findsNothing,
+          reason: '30 days back is outside the 30-day window');
+      expect(find.text('Average: ~1,909 kcal / day'), findsOneWidget);
     });
 
     testWidgets('zh: the error sentence is Chinese', (tester) async {
@@ -383,17 +415,17 @@ void main() {
           'value sits under it', (tester) async {
         // Yesterday is a gap day: its 'no meals logged' used to take the
         // whole tile (en) or squeeze the date to a glyph a line (zh).
+        final now = DateTime.now();
         await pumpApp(
             tester,
             Scaffold(
-                body: HistoryScreen(
-                    dao: _dao({0: 2140, 2: 1585, 3: 1990}))),
+                body: _history(_dao({0: 2140, 2: 1585, 3: 1990}, now), now)),
             size: Size(width, 2600),
             locale: locale,
             scale: 3.1);
         expect(tester.takeException(), isNull);
         for (final ago in const [0, 1, 2]) {
-          final row = find.byKey(Key('historyDay${_daysAgo(ago)}'));
+          final row = find.byKey(Key('historyDay${_daysAgo(ago, now)}'));
           await tester.ensureVisible(row);
           await tester.pumpAndSettle();
           expect(tester.takeException(), isNull);
@@ -419,12 +451,13 @@ void main() {
     testWidgets('zh at 3.1x: a two-line value breaks between the number '
         'and 千卡, never inside the unit', (tester) async {
       final handle = tester.ensureSemantics();
+      final now = DateTime.now();
       await pumpApp(
-          tester, Scaffold(body: HistoryScreen(dao: _dao({0: 1751}))),
+          tester, Scaffold(body: _history(_dao({0: 1751}, now), now)),
           size: const Size(375, 1400),
           locale: const Locale('zh'),
           scale: 3.1);
-      final row = find.byKey(Key('historyDay${_daysAgo(0)}'));
+      final row = find.byKey(Key('historyDay${_daysAgo(0, now)}'));
       final unit = find.descendant(of: row, matching: find.text('千卡'));
       expect(unit, findsOneWidget, reason: 'the unit is one unbreakable run');
       expect(find.descendant(of: row, matching: find.text('~1,751')),
@@ -442,8 +475,10 @@ void main() {
 
     testWidgets('at the default size the value stays trailing, beside the '
         'date', (tester) async {
-      await pumpApp(tester, Scaffold(body: HistoryScreen(dao: _dao({0: 2140}))));
-      final row = find.byKey(Key('historyDay${_daysAgo(0)}'));
+      final now = DateTime.now();
+      await pumpApp(
+          tester, Scaffold(body: _history(_dao({0: 2140}, now), now)));
+      final row = find.byKey(Key('historyDay${_daysAgo(0, now)}'));
       final date = tester.getRect(find.text('Today'));
       final value = tester.getRect(find.text('~2,140 kcal'));
       expect(value.left, greaterThan(date.right));
