@@ -69,6 +69,34 @@ void main() {
     expect(report.fullyCovered, isFalse);
   });
 
+  test('a photo no ledger row knows counts as logged when a meal dated '
+      'within a day of its capture names its asset', () async {
+    // An edit in Photos gives a logged photo new bytes, so a new hash
+    // (review 171, C38). The audit applies reservePhotoHash's asset rule,
+    // day bound included.
+    library.assets = [
+      asset(1, at: DateTime(2026, 7, 26, 0, 30)), // edited after logging
+      asset(2), // a meal names it too, but three days off
+    ];
+    Meal named(int id, String date, String fileId) => Meal(
+          id: id,
+          date: date,
+          time: '11:50 PM',
+          timestamp: 'x',
+          source: 'app_photo',
+          imageHash: 'h-before-edit-$id',
+          fileId: fileId,
+          analysis: const {'is_food': true},
+        );
+    dao.seed(named(9, '2026-07-25', 'a1'));
+    dao.seed(named(10, '2026-07-23', 'a2'));
+
+    final report = await auditor.audit(lookbackDays: 2);
+    expect(report.logged.single.assetId, 'a1');
+    expect(report.logged.single.mealId, 9);
+    expect(report.missing.single.assetId, 'a2');
+  });
+
   test('fully covered when everything is accounted for', () async {
     library.assets = [asset(1), asset(2)];
     dao.ledger['h1'] = IngestionStatus.saved;
