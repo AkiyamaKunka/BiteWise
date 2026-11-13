@@ -333,8 +333,12 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         ..headers['content-type'] = 'application/json'
         ..headers['X-API-Key'] = key
         ..body = '{}';
-      final resp = await http.Response.fromStream(
-          await client.send(req).timeout(deadline));
+      // Body read inside the timeout, as in _post: a body that stalled
+      // after the headers left Connect Claude spinning (review 171, C27).
+      final resp = await client
+          .send(req)
+          .then(http.Response.fromStream)
+          .timeout(deadline);
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       if (resp.statusCode == 200 && body['url'] is String) {
         return (url: body['url'] as String, error: null);
@@ -358,8 +362,10 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
         ..headers['content-type'] = 'application/json'
         ..headers['X-API-Key'] = key
         ..body = jsonEncode({'code': code.trim()});
-      final resp = await http.Response.fromStream(
-          await client.send(req).timeout(deadline));
+      final resp = await client
+          .send(req)
+          .then(http.Response.fromStream)
+          .timeout(deadline);
       if (resp.statusCode == 200) return null;
       final body = jsonDecode(resp.body) as Map<String, dynamic>;
       return (body['reason'] ?? 'Server answered HTTP ${resp.statusCode}.')
@@ -423,7 +429,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           .then(http.Response.fromStream)
           .timeout(const Duration(seconds: 8));
       if (resp.statusCode == 401 || resp.statusCode == 403) {
-        return _isJsonObject(resp.body) ? 'rejected' : 'unreachable';
+        return isJsonObjectBody(resp.body) ? 'rejected' : 'unreachable';
       }
       if (resp.statusCode != 200) return 'unreachable';
       final decoded = jsonDecode(resp.body);
@@ -544,7 +550,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       if (resp.statusCode == 401 || resp.statusCode == 403) {
         // The server's own 401 is JSON; an HTML/text one is a web filter
         // or portal on the plain-HTTP path, not a verdict on the key.
-        return _isJsonObject(resp.body)
+        return isJsonObjectBody(resp.body)
             ? 'Your server rejected that key.'
             : _interceptedMessage;
       }

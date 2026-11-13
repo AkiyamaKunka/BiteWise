@@ -5,10 +5,13 @@ import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
+import 'package:calorie_tracker/ui/photo_pipeline.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../ui/fakes.dart' show FakeDao;
 
 class MemoryKeyStore implements SecureKeyStore {
   final Map<String, String> data = {};
@@ -641,5 +644,141 @@ void main() {
       expect(out.retryable, isFalse);
       expect(classifyAnalysisError(out.error), AnalysisErrorKind.unknown);
     });
+  });
+
+  group('an image Gemini could not read is about the photo, not the model '
+      'name (review 171, C28)', () {
+    // Gemini answers 400 INVALID_ARGUMENT for an image it could not read.
+    // Read as any other INVALID_ARGUMENT, that was "check the model name in
+    // Settings" (a setting that was fine), and the photo failed at once
+    // although Google's own text asks for a retry.
+    const unableBody = '{"error": {"code": 400, "message": "Unable to '
+        'process input image. Please retry or report in '
+        'https://developers.generativeai.google/guide/troubleshooting", '
+        '"status": "INVALID_ARGUMENT"}}';
+    const invalidBody = '{"error": {"code": 400, "message": "Provided image '
+        'is not valid.", "status": "INVALID_ARGUMENT"}}';
+
+    test('only the two image sentences: any other INVALID_ARGUMENT stays a '
+        'model error', () {
+      expect(classifyGeminiError('HTTP 400: $unableBody'),
+          GeminiErrorClass.imageRejected);
+      expect(classifyGeminiError('HTTP 400: $invalidBody'),
+          GeminiErrorClass.imageRejected);
+      expect(
+          classifyGeminiError('HTTP 400: {"error": {"code": 400, "message": '
+              '"JSON mode is not enabled for models/gemma-3-27b-it", '
+              '"status": "INVALID_ARGUMENT"}}'),
+          GeminiErrorClass.modelError);
+      expect(isRetryableGeminiError('HTTP 400: $unableBody'), isFalse,
+          reason: 'one retry in place, never the transient classes');
+    });
+
+    test('"Please retry": one more try in place, then the photo verdict',
+        () async {
+      final s = await freshSettings();
+      final h = Harness(s, [
+        http.Response(unableBody, 400),
+        http.Response(unableBody, 400),
+      ]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(h.requests, hasLength(2));
+      expect(h.sleeps, [const Duration(seconds: 5)]);
+      expect(out.retryable, isFalse,
+          reason: "refused twice: the analyzer's verdict is final (the "
+              'pipeline tests below show where it is still sent again)');
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.badPhoto,
+          reason: out.error);
+      expect(out.error, isNot(contains('model')));
+    });
+
+    test('the retry can succeed', () async {
+      final s = await freshSettings();
+      final h = Harness(s, [http.Response(unableBody, 400), ok(foodJson)]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(out.isFood, isTrue, reason: out.error);
+      expect(h.requests, hasLength(2));
+    });
+
+    test('"Provided image is not valid." asks for no retry: one call',
+        () async {
+      final s = await freshSettings();
+      final h = Harness(s, [http.Response(invalidBody, 400)]);
+      final out = await h.analyzer.analyzePhoto(photo);
+      expect(h.requests, hasLength(1));
+      expect(h.sleeps, isEmpty);
+      expect(out.retryable, isFalse);
+      expect(classifyAnalysisError(out.error), AnalysisErrorKind.badPhoto,
+          reason: out.error);
+    });
+
+    // In the photo pipeline. badPhoto is also its mark of a photo an engine
+    // could not turn into upload bytes, which the iOS background run defers
+    // to the app (PhotoPipeline.deferUndecodable) rather than failing. The
+    // refusal shares the kind for its localized line, so it is deferred
+    // there too, and each background run sends it again until
+    // DeferredAssets passes it over (background_glue_test pins that count
+    // for any retryable badPhoto). Pinned so that changing it is a decision.
+    ({GeminiAnalyzer analyzer, List<http.Request> sent}) alwaysRefusing(
+        AppSettings s, String body) {
+      final sent = <http.Request>[];
+      return (
+        analyzer: GeminiAnalyzer(s,
+            client: MockClient((req) async {
+              sent.add(req);
+              return http.Response(body, 400);
+            }),
+            sleep: (_) async {},
+            normalizer: (b) async => b),
+        sent: sent,
+      );
+    }
+
+    for (final (name, body, perRun) in [
+      ('"Please retry"', unableBody, 2),
+      ('"not valid"', invalidBody, 1),
+    ]) {
+      test('$name in the app (or on Android): failed after $perRun '
+          'call(s), and no later automatic scan sends it again', () async {
+        final r = alwaysRefusing(await freshSettings(), body);
+        final dao = FakeDao();
+        final pipeline = PhotoPipeline(dao: dao, analyzer: r.analyzer);
+        final first =
+            await pipeline.process(IntakePhoto(photo, 'a1', 'IMG_1.jpg'));
+        expect(first.kind, PhotoOutcomeKind.failed);
+        expect(first.retryable, isFalse, reason: first.message);
+        expect(first.errorKind, AnalysisErrorKind.badPhoto);
+        expect(dao.ledger.values.single, IngestionStatus.failed);
+        expect(r.sent, hasLength(perRun));
+        final again =
+            await pipeline.process(IntakePhoto(photo, 'a1', 'IMG_1.jpg'));
+        expect(again.kind, PhotoOutcomeKind.alreadyTracked);
+        expect(r.sent, hasLength(perRun));
+      });
+
+      test('$name in an iOS background run: deferred like a photo that '
+          'engine cannot decode, $perRun call(s) a run, then failed by the '
+          "app's own run", () async {
+        final r = alwaysRefusing(await freshSettings(), body);
+        final dao = FakeDao();
+        final background = PhotoPipeline(
+            dao: dao, analyzer: r.analyzer, deferUndecodable: true);
+        final deferred =
+            await background.process(IntakePhoto(photo, 'a1', 'IMG_1.jpg'));
+        expect(deferred.kind, PhotoOutcomeKind.failed);
+        // Exactly what background_glue counts as one deferral.
+        expect(deferred.retryable, isTrue, reason: deferred.message);
+        expect(deferred.errorKind, AnalysisErrorKind.badPhoto);
+        expect(dao.ledger, isEmpty, reason: 'released, so offered again');
+        expect(r.sent, hasLength(perRun));
+
+        final app = PhotoPipeline(dao: dao, analyzer: r.analyzer);
+        final settled =
+            await app.process(IntakePhoto(photo, 'a1', 'IMG_1.jpg'));
+        expect(settled.retryable, isFalse, reason: settled.message);
+        expect(dao.ledger.values.single, IngestionStatus.failed);
+        expect(r.sent, hasLength(2 * perRun));
+      });
+    }
   });
 }
