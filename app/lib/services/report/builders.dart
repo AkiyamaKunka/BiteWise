@@ -20,11 +20,6 @@ ReportBuilder createReportBuilder(MealsDao dao) => ReportBuilderImpl(dao);
 // (isFoodTruthy and mealCalorieMismatch live in core/coerce.dart and are
 // re-exported above, so existing imports of this file keep compiling.)
 
-/// utils._as_number port (spec §3.5): null — not a default — for non-numeric,
-/// bool, NaN/Infinity, and |x| >= 1e9 values, so callers can distinguish
-/// "junk" from a real 0.
-num? boundedNumber(dynamic value) => safeNumberOr(value, null);
-
 /// Python round(): banker's rounding (half-to-even), returning int — Dart's
 /// .round() is half-away-from-zero and would drift on exact .5 ties.
 int pyRound(num value) {

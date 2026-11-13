@@ -27,11 +27,6 @@ import '../theme/tokens.dart';
 Color groupedBackground(ColorScheme scheme) =>
     AppColors.forBrightness(scheme.brightness).page;
 
-/// secondarySystemGroupedBackground: the cells (#FFFFFF / #1C1C1E).
-/// Prefer [cellColor], which also knows when it is inside a sheet.
-Color cellBackground(ColorScheme scheme) =>
-    AppColors.forBrightness(scheme.brightness).cell;
-
 /// The page colour at [context] (the sheet colour inside a grouped sheet).
 Color pageColor(BuildContext context) => AppColors.of(context).page;
 

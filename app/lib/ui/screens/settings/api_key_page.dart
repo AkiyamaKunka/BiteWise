@@ -110,11 +110,6 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
         _ => context.l10n.apiKeyFooterDefault,
       };
 
-  Widget _cellField(Widget field) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        child: field,
-      );
-
   @override
   Widget build(BuildContext context) {
     final settings = widget.settings;
@@ -148,7 +143,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
             header: context.l10n.apiKeyHeader,
             footer: _keyFooter(context),
             children: [
-              _cellField(TextField(
+              cellField(TextField(
                 key: const Key('apiKeyField'),
                 controller: _keyController,
                 obscureText: !_keyVisible,
@@ -190,7 +185,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
             footer: _customModel ? _modelHelperText(context) : null,
             separatorInset: AppSpace.separatorInset,
             children: [
-              _cellField(KeyedSubtree(
+              cellField(KeyedSubtree(
                 key: ValueKey('modelPicker-${settings.provider}'),
                 child: DropdownButtonFormField<String>(
                   key: const Key('modelPicker'),
@@ -244,7 +239,7 @@ class _ApiKeyProviderPageState extends State<ApiKeyProviderPage> {
                 ),
               )),
               if (_customModel)
-                _cellField(TextField(
+                cellField(TextField(
                   key: const Key('modelField'),
                   controller: _modelController,
                   autocorrect: false,

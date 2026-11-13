@@ -12,6 +12,7 @@
 ///   accessibility text sizes a floating label is one line and was cut
 ///   to 'Gemini …', so there the label becomes a wrapping placeholder
 ///   (the section header above the cell still names the field).
+/// - [cellField]: the padding around such a field in its cell.
 /// - [showChoiceSheet]: a grouped sheet with one checkmark row per option
 ///   (Language, Units, the own server's Model and Thinking effort).
 /// - [announceSelected]: the same "selected" for screen readers on rows
@@ -44,6 +45,13 @@ InputDecoration cellFieldDecoration(
     contentPadding: const EdgeInsets.symmetric(vertical: 6),
   );
 }
+
+/// [field] in its grouped cell: the cell's 16-pt side inset, so the label
+/// lines up with the rows and headers, and 10 pt above and below.
+Widget cellField(Widget field) => Padding(
+  padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+  child: field,
+);
 
 /// [row], announced selected when [selected]: for a row whose checkmark is
 /// its own trailing icon, which screen readers do not read, so without

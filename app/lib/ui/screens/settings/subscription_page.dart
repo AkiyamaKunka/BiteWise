@@ -205,11 +205,6 @@ class _SubscriptionProviderPageState
     }
   }
 
-  Widget _cellField(Widget field) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-        child: field,
-      );
-
   String _modelLabel(BuildContext context, String v) => switch (v) {
         'fable' => 'Fable',
         'opus' => 'Opus',
@@ -288,7 +283,7 @@ class _SubscriptionProviderPageState
             footer: context.l10n.serverFooter,
             separatorInset: AppSpace.separatorInset,
             children: [
-              _cellField(TextField(
+              cellField(TextField(
                 key: const Key('serverUrlField'),
                 controller: _serverUrlController,
                 autocorrect: false,
@@ -308,7 +303,7 @@ class _SubscriptionProviderPageState
                 onTapOutside: (_) => settings.update(
                     serverBaseUrl: _serverUrlController.text.trim()),
               )),
-              _cellField(TextField(
+              cellField(TextField(
                 key: const Key('serverUploadKeyField'),
                 controller: _keyController,
                 obscureText: true,
