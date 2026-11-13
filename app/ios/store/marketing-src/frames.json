@@ -218,7 +218,7 @@
     },
     {
       "id": "03_your_ai_your_key",
-      "notes": "Your AI, no Chopstats account. facts §3 (nine providers with your own key, or your own server), §5 (no sign-up or account; key in the iOS Keychain). The ringed Settings footer is the app's own wording: the key is sent only to the provider you picked (not 'stored only on this phone': the Keychain item comes back with a phone backup). The provider list (12) is NOT used: it shows 'free tier' / VPN notes. The provider card is cropped above its footer (no billing line). Check rows name no provider (no third-party marks in added text).",
+      "notes": "Your AI, no Chopstats account. facts §3 (nine providers with your own key, or your own server), §5 (no sign-up or account; key in the iOS Keychain). The ring is on the AI Provider row (the provider you picked). The crop ends above the Settings footer: the footer says the key is 'stored only on this phone', which is not accurate (the Keychain item comes back with a phone backup), so the frame neither rings nor shows it (owner OK 2026-11-13, replaced in the 1.6.1 draft). The provider list (12) is NOT used: it shows 'free tier' / VPN notes. The provider card is cropped above its footer (no billing line). Check rows name no provider (no third-party marks in added text).",
       "deco": {
         "d": 1640,
         "t": 76,
@@ -242,29 +242,23 @@
               0,
               690,
               1320,
-              1212
+              1062
             ],
             "rings": [
               {
                 "box": [
-                  98,
-                  1080,
-                  1216,
-                  1161
+                  96,
+                  805,
+                  1210,
+                  893
                 ],
                 "pad": 14,
                 "chip": {
                   "text": "Goes to the AI you pick",
-                  "pos": "below",
+                  "pos": "above",
                   "align": "end"
                 }
               }
-            ],
-            "touches": [
-              [
-                730,
-                849
-              ]
             ]
           },
           {
@@ -313,29 +307,23 @@
               0,
               1206,
               1320,
-              1732
+              1585
             ],
             "rings": [
               {
                 "box": [
-                  98,
-                  1599,
-                  1243,
-                  1680
+                  96,
+                  1328,
+                  1210,
+                  1414
                 ],
                 "pad": 14,
                 "chip": {
                   "text": "交给你选的 AI 服务",
-                  "pos": "below",
+                  "pos": "above",
                   "align": "end"
                 }
               }
-            ],
-            "touches": [
-              [
-                680,
-                1371
-              ]
             ]
           },
           {
