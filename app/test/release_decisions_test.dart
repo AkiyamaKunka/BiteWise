@@ -497,8 +497,12 @@ void main() {
       // model a lookup goes to, merged on 2026-11-10; run 7 (PR #22: the
       // day before's meals with a photo taken before 4 a.m., under the
       // consent text that says so) merged on 2026-11-11, and so did the
-      // 1.7.0 iCloud Backup (PR #36: the iCloud Backup section).
-      expect(policy, contains('Effective date: 2026-11-11'));
+      // 1.7.0 iCloud Backup (PR #36: the iCloud Backup section). Review
+      // r171 changed it on 2026-11-13: activities in what an export holds,
+      // and that iOS can keep API keys in the Keychain after uninstalling.
+      // If that branch merges on a later day, set the date and this pin to
+      // the merge date.
+      expect(policy, contains('Effective date: 2026-11-13'));
       expect(policy, contains('### Third parties and your consent'));
       expect(policy, contains('### 第三方与你的同意'));
       expect(policy, contains('Stop Sharing with …'));
