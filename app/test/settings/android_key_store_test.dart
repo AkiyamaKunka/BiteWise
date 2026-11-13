@@ -2,12 +2,12 @@
 //
 // flutter_secure_storage keeps each API key in a shared_prefs file,
 // encrypted with a key that lives in this phone's Android Keystore. A copy
-// of that file restored or transferred onto another phone, or kept through
-// an uninstall that keeps the app's data, outlives that Keystore key: it
-// can never be read again. The plugin's own resetOnError covers only its
-// key-mismatch exceptions; any other failure reached AppSettings.load,
-// main.dart then showed StartupErrorApp, and its Retry could never
-// succeed. On Android a key that cannot be read is now no key, so the app
+// of that file whose Keystore key is gone (restored or transferred onto
+// another phone, or kept through an uninstall that keeps the app's data
+// without it) can never be read again. The plugin's own resetOnError
+// covers only its key-mismatch exceptions; any other failure reached
+// AppSettings.load, main.dart then showed StartupErrorApp, and its Retry
+// could never succeed. On Android a key that cannot be read is now no key, so the app
 // starts and asks for it. Only reads: a failed save or delete still fails.
 // iOS keeps MigratingKeyStore exactly as it was (owner rule: no keychain
 // changes), where a locked phone's failed read MUST propagate.

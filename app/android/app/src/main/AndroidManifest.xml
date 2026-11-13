@@ -29,15 +29,30 @@
          app relies on it. Inexact alarms only, so no exact-alarm
          permission. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
+    <!-- WorkManager's library manifest brings FOREGROUND_SERVICE and its
+         SystemForegroundService (no type) for expedited work on Android 11
+         and lower and for setForeground. The app registers one periodic
+         task (lib/services/photo/background.dart) and never asks for
+         either, so both are stripped from the merged manifest. Expedited
+         or one-off work would need them back (manifest_gate_test). -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove"/>
     <!-- Backup: everything is backed up as before except files/bitewise_local/,
          the backup-excluded local store (lib/services/local_store.dart),
          and flutter_secure_storage's files (the API keys, which no other
          phone could decrypt): res/xml/data_extraction_rules.xml on Android
-         12+, backup_rules.xml below it. -->
+         12+, backup_rules.xml below it.
+         hasFragileUserData: on Android 10+ the uninstall dialog offers to
+         keep the app's data, since the meal log lives only on the phone. A
+         reinstall with the same signer then finds the log. Should the
+         kept key store have lost its Keystore key, AndroidSecureKeyStore
+         (app_settings.dart) reads it as no key and the app asks again. -->
     <application
         android:label="@string/app_name"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"
+        android:hasFragileUserData="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:fullBackupContent="@xml/backup_rules">
         <!-- singleTask (review 171, C6): a share while the app runs reaches
@@ -102,6 +117,11 @@
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
             </intent-filter>
         </receiver>
+        <!-- WorkManager's foreground service, stripped with its permission
+             above. -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            tools:node="remove"/>
         <!-- The system Photo Picker (MainActivity.pickImages) on Android
              4.4-10: asks Google Play services to install its backported
              picker module. Disabled and not exported, a marker only; the

@@ -43,12 +43,12 @@ class FlutterSecureKeyStore implements SecureKeyStore {
 ///
 /// flutter_secure_storage keeps each key in a shared_prefs file, encrypted
 /// with a key that lives in this phone's Android Keystore. A copy of that
-/// file that outlives its Keystore key (restored or transferred onto
-/// another phone, or kept through an uninstall that keeps the app's data)
-/// can never be read again, and the plugin's resetOnError covers only its
-/// key-mismatch exceptions. Any other failure stopped [AppSettings.load],
-/// and the startup error's Retry could never succeed; now the app starts
-/// without that key and asks for it. The diagnostics line names the key
+/// file whose Keystore key is gone (restored or transferred onto another
+/// phone, or kept through an uninstall that keeps the app's data without
+/// it) can never be read again, and the plugin's resetOnError covers only
+/// its key-mismatch exceptions. Any other failure stopped
+/// [AppSettings.load], and the startup error's Retry could never succeed;
+/// now the app starts without that key and asks for it. The diagnostics line names the key
 /// and the error's type, never the value or the plugin's message. Reads
 /// only: a failed write or delete still throws, and the unreadable entry
 /// is left as it is (saving a key overwrites it).

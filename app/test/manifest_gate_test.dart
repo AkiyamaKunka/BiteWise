@@ -1105,6 +1105,54 @@ void main() {
     }
   });
 
+  // WorkManager's library manifest brings FOREGROUND_SERVICE and its
+  // SystemForegroundService (no type), which it only uses for expedited
+  // work on Android 11 and lower or for setForeground. The app registers
+  // one periodic task and nothing else, so both are stripped from the
+  // merged manifest. Expedited or one-off work would need them back.
+  // hasFragileUserData: on Android 10+ the uninstall dialog offers to keep
+  // the app's data, and the meal log lives only on the phone. Should the
+  // kept key store lose its Keystore key, AndroidSecureKeyStore turns it
+  // into "no key" (android_key_store_test).
+  test('the manifest strips WorkManager\'s foreground service and keeps '
+      'data on uninstall when asked', () {
+    final manifest = _manifest();
+    final permissions = _permissions(manifest);
+    expect(permissions['android.permission.FOREGROUND_SERVICE'], isTrue,
+        reason: 'FOREGROUND_SERVICE must be a tools:node="remove" entry');
+    expect(_declared(manifest),
+        isNot(contains('android.permission.FOREGROUND_SERVICE')));
+    expect(
+        RegExp(r'<service\s+android:name="androidx\.work\.impl\.foreground\.'
+                r'SystemForegroundService"\s+tools:node="remove"\s*/>')
+            .hasMatch(_uncommented(manifest)),
+        isTrue,
+        reason: 'SystemForegroundService is not removed');
+    final application = RegExp(r'<application\b[^>]*>')
+        .firstMatch(_uncommented(manifest))
+        ?.group(0);
+    expect(application, contains('android:hasFragileUserData="true"'));
+
+    // Nothing in Dart asks WorkManager for expedited or one-off work,
+    // which on Android 11 and lower runs as that foreground service.
+    final dart = Directory('${_appRoot().path}/lib')
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.dart'));
+    for (final file in dart) {
+      final source = file.readAsStringSync();
+      for (final call in [
+        'registerOneOffTask',
+        'outOfQuotaPolicy',
+        'OutOfQuotaPolicy',
+      ]) {
+        expect(source, isNot(contains(call)),
+            reason: '${file.path} uses $call: put WorkManager\'s '
+                'foreground service back first');
+      }
+    }
+  });
+
   // Owner decision 2026-11-13: the package stays, and the upload key the
   // GitHub APKs are signed with becomes Play's app-signing key. Both are
   // permanent once the first bundle is uploaded: a new package is a new
