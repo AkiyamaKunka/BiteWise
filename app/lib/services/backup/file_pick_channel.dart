@@ -15,12 +15,22 @@ import 'cloud_backup_channel.dart';
 const String filesChannelName = 'dev.calorietracker/files';
 
 /// What a pick gave: the copies' paths, how many were refused for size,
-/// or that it was cancelled / is unavailable.
+/// how many could not be copied at all, or that it was cancelled / is
+/// unavailable.
 class PickedFiles {
-  const PickedFiles(this.paths, {this.cancelled = false, this.tooBig = 0, this.unavailable = false});
+  const PickedFiles(this.paths,
+      {this.cancelled = false,
+      this.tooBig = 0,
+      this.failed = 0,
+      this.unavailable = false});
   final List<String> paths;
   final bool cancelled;
   final int tooBig;
+
+  /// Android: picked files that could not be read or copied (a cloud file
+  /// that cannot be fetched now, a grant the provider refuses, a full
+  /// disk), whatever their size.
+  final int failed;
   final bool unavailable;
 }
 
@@ -51,7 +61,8 @@ class PlatformFilePicker implements FilePicker {
       return switch (r['status']) {
         'ok' => PickedFiles(
             [for (final p in (r['paths'] as List?) ?? const []) if (p is String) p],
-            tooBig: (r['tooBig'] as num?)?.toInt() ?? 0),
+            tooBig: (r['tooBig'] as num?)?.toInt() ?? 0,
+            failed: (r['failed'] as num?)?.toInt() ?? 0),
         'cancelled' => const PickedFiles([], cancelled: true),
         _ => const PickedFiles([], unavailable: true),
       };

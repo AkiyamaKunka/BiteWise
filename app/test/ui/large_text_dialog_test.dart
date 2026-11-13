@@ -7,7 +7,9 @@ library;
 
 import 'dart:async';
 
+import 'package:calorie_tracker/ui/ai_consent.dart';
 import 'package:calorie_tracker/ui/app.dart';
+import 'package:calorie_tracker/ui/l10n.dart';
 import 'package:calorie_tracker/ui/screens/usual_foods_screen.dart';
 import 'package:calorie_tracker/ui/services.dart';
 import 'package:calorie_tracker/ui/theme/app_dialog.dart';
@@ -217,4 +219,51 @@ void main() {
     expect(_hittable(tester, find.byKey(const Key('setupLinkConfirm'))),
         isTrue);
   });
+
+  // Review 1.7.0: the AI consent and Watch Camera Roll notice was a plain
+  // AlertDialog with only its content scrolling. At AX5 on a 320 pt phone
+  // the text got 0 pt, so Allow was asked for on text nobody could read.
+  for (final locale in const [Locale('en'), Locale('zh')]) {
+    testWidgets('${locale.languageCode}: the AI consent with the Watch Camera '
+        'Roll notice reads in full at AX5 on 320 pt', (tester) async {
+      await pumpApp(
+          tester,
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                key: const Key('open'),
+                onPressed: () => showAiConsentDialog(context,
+                    provider: 'gemini',
+                    serverBackend: 'claude',
+                    serverBaseUrl: '',
+                    title: context.l10n.watcherDisclosureTitle,
+                    appendix: context.l10n.watcherDisclosureBody(
+                        'Google Gemini', 2),
+                    leadWithAppendix: true),
+                child: const Text('open'),
+              ),
+            ),
+          ),
+          size: const Size(320, 568),
+          locale: locale,
+          scale: _ax5);
+      await tester.tap(find.byKey(const Key('open')));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(tester.widget<AlertDialog>(find.byType(AlertDialog)).scrollable,
+          isTrue);
+      expect(_hittable(tester, find.byKey(const Key('aiConsentAllow'))),
+          isTrue);
+      final body = find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byWidgetPredicate(
+              (w) => w is Text && (w.data ?? '').length > 120));
+      final scrollable = find.descendant(
+          of: find.byType(AlertDialog), matching: find.byType(Scrollable));
+      await tester.dragUntilVisible(
+          body.first, scrollable.first, const Offset(0, -80));
+      expect(tester.getRect(body.first).height, greaterThan(100),
+          reason: 'the disclosure is laid out at full height, not squeezed');
+    });
+  }
 }

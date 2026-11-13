@@ -1,0 +1,67 @@
+{
+  "defaults": {},
+  "slides": [
+    {
+      "id": "social-preview",
+      "layout": "hero",
+      "theme": "light",
+      "format": "png",
+      "footer": false,
+      "ring": true,
+      "style": ".slide{--mx:72px}.l-hero .copy{width:560px}.l-hero .appicon{width:84px;height:84px;border-radius:19px;margin-bottom:26px}.l-hero .title{font-size:58px}.l-hero .tagline{font-size:40px;margin-top:22px;line-height:1.14}.l-hero .sub{font-size:22px;margin-top:16px;max-width:520px}.l-hero .chips{margin-top:26px;gap:8px;flex-wrap:nowrap}.l-hero .chip{font-size:17px;padding:8px 13px;gap:7px}.l-hero .chip i{width:8px;height:8px}.l-hero .ring{--d:640px;--t:44px;left:600px;top:10px}.cnote{position:absolute;left:72px;bottom:22px;z-index:20;font-size:16px;color:var(--fg-3)}",
+      "photos": [
+        {
+          "src": "$photos/yogurt-bowl.jpg",
+          "x": 646,
+          "y": 70,
+          "w": 316,
+          "h": 420,
+          "r": -4,
+          "pos": "50% 70%",
+          "radius": 26
+        }
+      ],
+      "free_phones": [
+        {
+          "src": "$screens/en/01_today.png",
+          "x": 940,
+          "y": 42,
+          "sw": 250,
+          "hl": [
+            [
+              40,
+              1395,
+              1240,
+              490
+            ]
+          ]
+        }
+      ],
+      "zooms": [
+        {
+          "src": "$screens/en/01_today.png",
+          "crop": [
+            40,
+            1395,
+            1240,
+            490
+          ],
+          "x": 700,
+          "y": 410,
+          "w": 516
+        }
+      ],
+      "en": {
+        "tagline": "Your food photos become your <em>calorie log.</em>",
+        "sub": "A free, open-source calorie tracker for iPhone, powered by the AI you choose.",
+        "chips": [
+          "Free",
+          "No subscription",
+          "No account",
+          "Open source"
+        ],
+        "html": "<div class=\"cnote\">Demo data</div>"
+      }
+    }
+  ]
+}

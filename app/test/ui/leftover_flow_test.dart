@@ -86,6 +86,50 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  // Review 1.7.0 (high): the photo step was a fixed Column (the chosen
+  // meal, the heading, then an Expanded grid). At accessibility text sizes
+  // the first two took all the height, the grid got none and no photo cell
+  // was built, so the flow could not be finished.
+  for (final (size, scale) in const [
+    (Size(320, 568), 53 / 17), // AX5 on an SE (1st gen)
+    (Size(375, 667), 2.35), // AX3 on an SE
+  ]) {
+    testWidgets(
+        'at ${scale.toStringAsFixed(2)}x on ${size.width.toInt()} pt the '
+        'photo step scrolls to its photos and one can be picked',
+        (tester) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      dao.put(_meal(1, '12:30', 900));
+      await tester.pumpWidget(MaterialApp(
+        builder: (context, child) => MediaQuery(
+          data: MediaQuery.of(context)
+              .copyWith(textScaler: TextScaler.linear(scale)),
+          child: child!,
+        ),
+        home: LeftoverScreen(
+            services:
+                makeServices(dao: dao, analyzer: analyzer, picker: picker)),
+      ));
+      await tester.pumpAndSettle();
+      final meal = find.byKey(const Key('leftoverMeal-1'));
+      await tester.scrollUntilVisible(meal, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(meal);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final photo = find.byKey(const Key('leftoverPhoto-lp1'));
+      await tester.scrollUntilVisible(photo, 120,
+          scrollable: find.byType(Scrollable).first);
+      await tester.tap(photo);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      expect(analyzer.lastLeftoverCompact, isNotNull,
+          reason: 'the picked photo went on to the leftover check');
+    });
+  }
+
   testWidgets('deducts the uneaten rice and marks the photo ledger',
       (tester) async {
     dao.put(_meal(1, '13:34', 965, hash: 'orig-hash'));

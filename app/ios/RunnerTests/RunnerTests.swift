@@ -2331,6 +2331,19 @@ class CloudFilesTests: XCTestCase {
     XCTAssertEqual(
       CloudFiles.checkOwner(exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other)),
       .allowed)
+    // The adopted install's file only up to the seq it was adopted at.
+    XCTAssertEqual(
+      CloudFiles.checkOwner(
+        exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other, adoptMaxSeq: 9)),
+      .allowed)
+    XCTAssertEqual(
+      CloudFiles.checkOwner(
+        exists: true, header: theirs, expect: E(installId: me, seqs: [0], adoptFrom: other, adoptMaxSeq: 8)),
+      .ownedByOther)
+    XCTAssertTrue(E(installId: me, adoptFrom: other, adoptMaxSeq: 9).owns(theirs))
+    XCTAssertFalse(E(installId: me, adoptFrom: other, adoptMaxSeq: 8).owns(theirs))
+    XCTAssertTrue(E(installId: me, adoptFrom: other, adoptMaxSeq: 1).owns(mine))
+    XCTAssertFalse(E(installId: me, adoptFrom: other).owns(nil))
     XCTAssertEqual(
       CloudFiles.checkOwner(exists: true, header: nil, expect: E(installId: me, allowAbsent: true)), .unknownOwner)
     XCTAssertEqual(
@@ -2343,7 +2356,12 @@ class CloudFilesTests: XCTestCase {
     ])
     XCTAssertEqual(e?.seqs, [3])
     XCTAssertNil(e?.adoptFrom)
+    XCTAssertNil(e?.adoptMaxSeq)
     XCTAssertNil(CloudFiles.Expect(["installId": "short"]))
+    let bounded = CloudFiles.Expect([
+      "installId": me, "adoptFrom": other, "adoptMaxSeq": NSNumber(value: 7), "allowAbsent": false,
+    ])
+    XCTAssertEqual(bounded?.adoptMaxSeq, 7)
   }
 
   // MARK: - write
@@ -2607,5 +2625,74 @@ class CloudFilesTests: XCTestCase {
 
   func testTheContainerIdIsTheOneDartUses() {
     XCTAssertEqual(CloudBackupPlugin.containerIdentifier, "iCloud.dev.calorietracker.calorieTracker")
+  }
+
+  /// iOS gives no identity token when signed out AND while iCloud Drive is
+  /// off for the phone or for the app: noAccount stands for all of them
+  /// (its line asks for both), except on a build without iCloud.
+  func testNoIdentityIsNoAccountOnlyOnABuildWithICloud() {
+    XCTAssertEqual(CloudBackupPlugin.statusName(token: true, container: true, iCloudBuild: true), "ok")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: true, container: false, iCloudBuild: true), "unavailable")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: false, container: false, iCloudBuild: true), "noAccount")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: false, container: true, iCloudBuild: true), "noAccount",
+      "no identity: never ok")
+    XCTAssertEqual(
+      CloudBackupPlugin.statusName(token: false, container: false, iCloudBuild: false), "unavailable",
+      "a build without iCloud: no sign-in would help")
+  }
+
+  func testTheBuildWithICloudNamesTheContainerInInfoPlist() {
+    XCTAssertTrue(CloudBackupPlugin.iCloudBuild(), "Runner's own Info.plist")
+    XCTAssertFalse(CloudBackupPlugin.iCloudBuild(nil))
+    XCTAssertFalse(CloudBackupPlugin.iCloudBuild([:]))
+    XCTAssertFalse(
+      CloudBackupPlugin.iCloudBuild(["NSUbiquitousContainers": ["iCloud.other": [String: Any]()]]))
+    XCTAssertTrue(
+      CloudBackupPlugin.iCloudBuild([
+        "NSUbiquitousContainers": [CloudBackupPlugin.containerIdentifier: [String: Any]()]
+      ]))
+  }
+}
+
+/// When the metadata query runs (CloudBackupPlugin.swift, CloudQueryPlan):
+/// in iOS only after url(forUbiquityContainerIdentifier:) found the
+/// container in the process, and again when the container comes back or
+/// the account changes.
+class CloudQueryPlanTests: XCTestCase {
+  func testTheQueryStartsOnlyAfterAFetchFoundTheContainer() {
+    var plan = CloudQueryPlan()
+    plan.watch()
+    XCTAssertFalse(plan.running, "startWatching alone starts nothing")
+    XCTAssertEqual(plan.fetched(found: false), .none, "no container yet")
+    XCTAssertEqual(plan.fetched(found: true), .start)
+    XCTAssertTrue(plan.running)
+    XCTAssertEqual(plan.fetched(found: true), .none, "started once")
+  }
+
+  func testANewAccountOrAContainerThatCameBackStartsItAgain() {
+    var plan = CloudQueryPlan()
+    plan.watch()
+    XCTAssertEqual(plan.fetched(found: true), .start)
+    XCTAssertEqual(plan.fetched(found: true, accountChanged: true), .restart)
+    XCTAssertEqual(plan.fetched(found: true), .none)
+    XCTAssertEqual(plan.fetched(found: false), .none, "signed out: kept until there is a container")
+    XCTAssertEqual(plan.fetched(found: false), .none)
+    XCTAssertEqual(plan.fetched(found: true), .restart, "signed in again")
+    XCTAssertEqual(plan.fetched(found: true), .none)
+  }
+
+  func testNothingRunsWhileNobodyWatches() {
+    var plan = CloudQueryPlan()
+    XCTAssertEqual(plan.fetched(found: true), .none, "a status call before startWatching")
+    plan.watch()
+    XCTAssertEqual(plan.fetched(found: true), .start)
+    XCTAssertTrue(plan.unwatch(), "stopWatching stops it")
+    XCTAssertFalse(plan.unwatch())
+    XCTAssertEqual(plan.fetched(found: true, accountChanged: true), .none)
+    plan.watch()
+    XCTAssertEqual(plan.fetched(found: true), .start)
   }
 }

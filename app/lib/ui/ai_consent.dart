@@ -31,6 +31,7 @@ import '../core/contracts.dart' show IntakePhoto;
 import 'l10n.dart';
 import 'provider_names.dart' show providerDisplayLabel;
 import 'services.dart' show SettingsStore;
+import 'theme/app_dialog.dart';
 
 /// The recipient the current provider choice sends to.
 String currentAiConsentRoute(SettingsStore s) =>
@@ -111,15 +112,16 @@ Future<bool> showAiConsentDialog(
           provider: provider,
           serverBackend: serverBackend,
           serverBaseUrl: serverBaseUrl);
-      return AlertDialog(
+      // The app's scrolling dialog (A1): title and text scroll together,
+      // so the disclosure is readable at every text size before Allow.
+      return appAlertDialog(
         key: dialogKey,
         title: Text(title ?? l.aiConsentTitle),
-        content: SingleChildScrollView(
-            child: Text(appendix == null
-                ? text
-                : leadWithAppendix
-                    ? '$appendix\n\n$text'
-                    : '$text\n\n$appendix')),
+        content: Text(appendix == null
+            ? text
+            : leadWithAppendix
+                ? '$appendix\n\n$text'
+                : '$text\n\n$appendix'),
         actions: [
           TextButton(
               key: cancelKey,

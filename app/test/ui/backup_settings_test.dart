@@ -17,7 +17,9 @@ import 'package:calorie_tracker/services/backup/cloud_backup_channel.dart';
 import 'package:calorie_tracker/services/backup/file_pick_channel.dart';
 import 'package:calorie_tracker/ui/backup_sheets.dart';
 import 'package:calorie_tracker/ui/screens/settings/data_section.dart';
+import 'package:calorie_tracker/ui/widgets/small_spinner.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -33,6 +35,19 @@ class _Picker implements FilePicker {
   final List<String> paths;
   @override
   Future<PickedFiles> pickJsonFiles() async => PickedFiles(paths);
+}
+
+/// A pick that answers when the test says (Android answers only once the
+/// picked files are copied).
+class _SlowPicker implements FilePicker {
+  _SlowPicker(this.answer);
+  final Future<PickedFiles> answer;
+  int calls = 0;
+  @override
+  Future<PickedFiles> pickJsonFiles() {
+    calls++;
+    return answer;
+  }
 }
 
 void main() {
@@ -54,7 +69,10 @@ void main() {
   });
 
   Future<void> pump(WidgetTester tester,
-      {BackupCoordinator? b, bool android = false, FilePicker? picker}) =>
+      {BackupCoordinator? b,
+      bool android = false,
+      FilePicker? picker,
+      String platform = 'ios'}) =>
       pumpApp(
           tester,
           Scaffold(
@@ -65,6 +83,7 @@ void main() {
                 backup: b,
                 androidBackupNote: android,
                 filePicker: picker ?? _Picker(const []),
+                platform: platform,
               ),
             ]),
           ),
@@ -155,6 +174,54 @@ void main() {
     expect(zh.backupICloudFooterOff, contains('导出'));
   });
 
+  test('blocked or paused (nothing of this iPhone\'s is copied): the footer '
+      'says so too, in English and Chinese', () {
+    final other = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 40,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    for (final l in [_en, AppLocalizationsZh()]) {
+      for (final state in const [
+        BackupState.otherDevice,
+        BackupState.changedElsewhere,
+        BackupState.unknownFile,
+        BackupState.missing,
+        BackupState.shrink,
+      ]) {
+        for (final last in [null, DateTime.now()]) {
+          expect(
+              backupFooter(l,
+                  BackupStatus(state, lastOkAt: last, other: other, count: 40)),
+              l.backupICloudFooterOff,
+              reason: '${l.localeName} $state last=$last');
+        }
+      }
+      // Still backing up: the copy is promised.
+      expect(backupFooter(l, const BackupStatus(BackupState.never)),
+          l.backupICloudFooterBefore);
+      expect(
+          backupFooter(
+              l, BackupStatus(BackupState.ok, lastOkAt: DateTime.now())),
+          l.backupICloudFooter);
+    }
+  });
+
+  testWidgets('no iCloud identity: the line asks to sign in AND to turn on '
+      'iCloud Drive for Chopstats, in English and Chinese', (tester) async {
+    // iOS gives no identity token when signed out and also while iCloud
+    // Drive is off for the phone or for the app, without saying which
+    // (CloudBackupPlugin.statusName): "sign in" alone tells a signed-in
+    // user to do what they did.
+    await pump(tester, b: backup);
+    backup.debugSetStatus(const BackupStatus(BackupState.noAccount));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupStatusNoAccount), findsOneWidget);
+    expect(_en.backupStatusNoAccount,
+        allOf(contains('Sign in to iCloud'),
+            contains('turn on iCloud Drive for Chopstats')));
+    expect(AppLocalizationsZh().backupStatusNoAccount,
+        allOf(contains('登录 iCloud'), contains('为筷拍打开 iCloud 云盘')));
+  });
+
   testWidgets('each state shows only its own rows', (tester) async {
     await pump(tester, b: backup);
     final other = BackupHeader(
@@ -218,6 +285,47 @@ void main() {
     expect(find.text(_en.backupStatusOff), findsOneWidget);
   });
 
+  testWidgets('nothing of this iPhone\'s in iCloud: the switch turns off '
+      'without asking to keep a backup that is not there', (tester) async {
+    await prefs.setBool(BackupPrefs.kNoticeSeen, true);
+    await pump(tester, b: backup);
+    for (final state in const [BackupState.noAccount, BackupState.never]) {
+      await prefs.remove(BackupPrefs.kEnabled);
+      backup.debugSetStatus(BackupStatus(state));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('backupSwitch')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const Key('backupTurnOffKeep')), findsNothing,
+          reason: '$state: "Keep the Backup in iCloud" with none there');
+      expect(prefs.getBool(BackupPrefs.kEnabled), isFalse, reason: '$state');
+      expect(find.text(_en.backupStatusOff), findsOneWidget);
+    }
+    expect(cloud.log, isEmpty);
+  });
+
+  testWidgets('the switch turned off while the notice waits to be asked '
+      'leaves no notice to ask over it', (tester) async {
+    // The launch raised the notice while a screen was on top of the shell,
+    // so it waits; meanwhile the user turns the switch off here.
+    final ok = FakeCloudTransport();
+    final b = BackupCoordinator(
+        dao: dao,
+        transport: ok,
+        prefs: prefs,
+        tempDir: () async => Directory.systemTemp,
+        gatherWait: Duration.zero);
+    addTearDown(b.stop);
+    await tester.runAsync(() => b.launchCheckForTest());
+    expect(b.prompt.value, isA<NoticePrompt>());
+    await pump(tester, b: b);
+    await tester.tap(find.byKey(const Key('backupSwitch')));
+    await tester.pumpAndSettle();
+    expect(prefs.getBool(BackupPrefs.kEnabled), isFalse);
+    expect(b.prompt.value, isNull,
+        reason: '"iCloud Backup is on" would show over a switch that is off, '
+            'and its Keep On turn it back on');
+  });
+
   testWidgets('switched off with this iPhone\'s backup still in iCloud: '
       'Delete iCloud Backup… is offered', (tester) async {
     await pump(tester, b: backup);
@@ -243,6 +351,31 @@ void main() {
     await tester.tap(find.byKey(const Key('backupSwitch')));
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('backupTurnOffDelete')), findsOneWidget);
+  });
+
+  testWidgets('Back Up Now before the notice was answered asks it, and Keep '
+      'On backs up', (tester) async {
+    // Nothing uploads before the notice (G1); dismissed at launch, it is
+    // only asked again at the next one. (Made in the test's zone: its runs
+    // are awaited here.)
+    final b = BackupCoordinator(
+        dao: dao,
+        transport: cloud,
+        prefs: prefs,
+        tempDir: () async => Directory.systemTemp);
+    addTearDown(b.stop);
+    await pump(tester, b: b);
+    expect(find.text(_en.backupStatusNotStarted), findsOneWidget);
+    await tester.tap(find.byKey(const Key('backupNowRow')));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupNoticeTitle), findsOneWidget);
+    expect(cloud.statusCalls, 0, reason: 'nothing ran past the notice');
+    await tester.tap(find.byKey(const Key('backupNoticeKeep')));
+    await tester.pumpAndSettle();
+    expect(prefs.getBool(BackupPrefs.kNoticeSeen), isTrue);
+    expect(prefs.getBool(BackupPrefs.kEnabled), isTrue);
+    expect(cloud.statusCalls, 2,
+        reason: 'the run Keep On starts, then the Back Up Now asked for');
   });
 
   testWidgets('the notice: Keep On records the answer', (tester) async {
@@ -292,6 +425,61 @@ void main() {
         exportedAt: '2026-11-01T08:00:00.000Z');
     unawaited(showRestoreOffer(
         ctx, backup, BackupCandidate('Chopstats Backup 2.json', h), 0));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('2 meals'), findsOneWidget);
+    expect(find.textContaining(_en.backupRestoreTakesOver), findsNothing);
+    await tester.tap(find.byKey(const Key('backupNotNow')));
+    await tester.pumpAndSettle();
+  });
+
+  testWidgets('the restore offer swiped away holds the photo catch-up no '
+      'longer', (tester) async {
+    // The launch holds it (30 min lease) while the offer is open; every
+    // answer lets it go, and so does dismissing it (Not Now for this
+    // launch only).
+    final ok = FakeCloudTransport();
+    final h = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 4,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    ok.put(kRecordsFileName,
+        '${h.envelopePrefix(DateTime.utc(2026, 11, 1))}{"meals":[]}}');
+    final b = BackupCoordinator(
+        dao: dao,
+        transport: ok,
+        prefs: prefs,
+        tempDir: () async => Directory.systemTemp,
+        gatherWait: Duration.zero);
+    addTearDown(b.stop);
+    await tester.runAsync(() => b.launchCheckForTest());
+    final offer = b.prompt.value as RestoreOfferPrompt;
+    expect(backupHoldsCatchUp(prefs, DateTime.now()), isTrue);
+    await pump(tester);
+    final shown = showRestoreOffer(tester.element(find.byType(DataSection)),
+        b, offer.candidate, 0);
+    await tester.pumpAndSettle();
+    expect(find.text(_en.backupRestoreTitle), findsOneWidget);
+    await tester.tapAt(const Offset(195, 20)); // the barrier
+    await tester.pumpAndSettle();
+    await shown;
+    expect(find.text(_en.backupRestoreTitle), findsNothing);
+    expect(b.prompt.value, isNull);
+    expect(backupHoldsCatchUp(prefs, DateTime.now()), isFalse);
+    expect(prefs.getStringList(BackupPrefs.kOffersAnswered), isNull,
+        reason: 'unanswered: it comes back at the next launch');
+  });
+
+  testWidgets('with iCloud Backup off, the restore offer says nothing about '
+      'taking the backup over', (tester) async {
+    // Nothing would write over it, and its iPhone goes on backing up.
+    await prefs.setBool(BackupPrefs.kNoticeSeen, true);
+    await prefs.setBool(BackupPrefs.kEnabled, false);
+    await pump(tester);
+    final ctx = tester.element(find.byType(DataSection));
+    final h = BackupHeader(
+        kind: BackupKind.records, installId: _other, seq: 3, meals: 2,
+        exportedAt: '2026-11-01T08:00:00.000Z');
+    unawaited(showRestoreOffer(
+        ctx, backup, BackupCandidate(kRecordsFileName, h), 0));
     await tester.pumpAndSettle();
     expect(find.textContaining('2 meals'), findsOneWidget);
     expect(find.textContaining(_en.backupRestoreTakesOver), findsNothing);
@@ -350,6 +538,95 @@ void main() {
     for (final p in paths) {
       expect(File(p).existsSync(), isFalse, reason: 'copies are deleted');
     }
+  });
+
+  testWidgets('Android Choose File…: a file that could not be read is never '
+      'called over 100 MB', (tester) async {
+    // MainActivity.kt answers how many picks were too big and how many
+    // could not be copied at all (a Drive file offline, a full disk).
+    Object? answer;
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    messenger.setMockMethodCallHandler(const MethodChannel(filesChannelName),
+        (call) async => call.method == 'pickFiles' ? answer : null);
+    addTearDown(() => messenger.setMockMethodCallHandler(
+        const MethodChannel(filesChannelName), null));
+    await pump(tester, picker: const PlatformFilePicker());
+
+    Future<String> pick(Map<String, Object?> reply) async {
+      answer = reply;
+      await tester.tap(find.byKey(const Key('importButton')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('importChooseFile')));
+      await tester.pumpAndSettle();
+      final shown = tester
+          .widgetList<Text>(find.descendant(
+              of: find.byType(SnackBar), matching: find.byType(Text)))
+          .map((t) => t.data ?? '')
+          .join();
+      ScaffoldMessenger.of(tester.element(find.byType(DataSection)))
+          .removeCurrentSnackBar();
+      await tester.pumpAndSettle();
+      return shown;
+    }
+
+    final failed = await pick(
+        {'status': 'ok', 'paths': <String>[], 'tooBig': 0, 'failed': 1});
+    expect(failed, _en.importPickUnavailable);
+    final both = await pick(
+        {'status': 'ok', 'paths': <String>[], 'tooBig': 1, 'failed': 1});
+    expect(both, '${_en.importTooBig} ${_en.importPickUnavailable}');
+  });
+
+  testWidgets('Android Choose File…: Import is busy until the picked files '
+      'are copied, so a second pick cannot empty the first one\'s copies',
+      (tester) async {
+    Future<void> chooseFile() async {
+      await tester.tap(find.byKey(const Key('importButton')));
+      await tester.pump(const Duration(milliseconds: 500));
+      await tester.tap(find.byKey(const Key('importChooseFile')));
+      await tester.pump(const Duration(milliseconds: 500));
+    }
+
+    final copying = Completer<PickedFiles>();
+    final picker = _SlowPicker(copying.future);
+    await pump(tester, picker: picker, platform: 'android');
+    await chooseFile();
+    expect(picker.calls, 1);
+    expect(find.byType(SmallSpinner), findsOneWidget);
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.byKey(const Key('importChooseFile')), findsNothing,
+        reason: 'no second pick while the first one is copied');
+    copying.complete(const PickedFiles([], cancelled: true));
+    await tester.pumpAndSettle();
+    expect(find.byType(SmallSpinner), findsNothing);
+
+    // iOS answers only after its own picker's copy, and a picker swiped
+    // away is reported not to answer on some iOS versions: the row stays
+    // usable while it is up.
+    final open = _SlowPicker(Completer<PickedFiles>().future);
+    await pump(tester, picker: open);
+    await chooseFile();
+    expect(open.calls, 1);
+    expect(find.byType(SmallSpinner), findsNothing);
+  });
+
+  testWidgets('the import dialog says to choose the file first, and to paste '
+      'only as the other way, in English and Chinese', (tester) async {
+    // Choose File… is the first button since 1.7.0: a full export with
+    // its pictures is tens of MB, which no clipboard carries.
+    await pump(tester);
+    await tester.tap(find.byKey(const Key('importButton')));
+    await tester.pumpAndSettle();
+    expect(find.text(_en.importDialogBody), findsOneWidget);
+    expect(_en.importDialogBody, startsWith('Choose an exported file'));
+    expect(_en.importDialogBody, contains('paste'));
+    expect(_en.importDialogBody, isNot(contains('Paste the contents')));
+    final zh = AppLocalizationsZh();
+    expect(zh.importDialogBody, startsWith('选择导出的文件'));
+    expect(zh.importDialogBody, contains('粘贴'));
+    expect(zh.importDialogBody, isNot(startsWith('粘贴')));
   });
 
   test('a delete says done, done in part (try again), or not done', () {

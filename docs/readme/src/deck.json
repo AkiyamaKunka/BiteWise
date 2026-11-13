@@ -1,0 +1,1306 @@
+{
+  "defaults": {
+    "en": {
+      "note": "Version 1.6 · demo data"
+    },
+    "zh": {
+      "note": "1.6 版本 · 演示数据"
+    },
+    "format": "jpg"
+  },
+  "slides": [
+    {
+      "id": "01-hero",
+      "layout": "hero",
+      "theme": "light",
+      "footer": false,
+      "style": ".l-hero .copy{width:680px}.l-hero .appicon{width:92px;height:92px;border-radius:21px;margin-bottom:30px}.l-hero .title{font-size:40px;font-weight:700;letter-spacing:-0.02em}.l-hero .title span{font-weight:600}.l-hero .tagline{font-size:80px;line-height:1.02;margin-top:20px;letter-spacing:-0.038em;font-weight:750}:lang(zh) .l-hero .tagline{font-size:72px;line-height:1.24;letter-spacing:.02em;font-weight:650}.l-hero .sub{font-size:27px;margin-top:28px;max-width:640px}.l-hero .chips{margin-top:36px;gap:10px}.l-hero .chip{font-size:20px;padding:11px 18px}.l-hero .ring{--d:860px;left:760px;top:40px}.cnote{position:absolute;left:112px;bottom:34px;z-index:20;font-size:22px;color:var(--fg-3)}",
+      "en": {
+        "tagline": "Your food photos become your <em>calorie log.</em>",
+        "sub": "A free, open-source calorie tracker for iPhone, powered by the AI you choose.",
+        "chips": [
+          "No subscription",
+          "No account",
+          "No ads",
+          "Log stays on your phone"
+        ],
+        "photos": [
+          {
+            "src": "$photos/yogurt-bowl.jpg",
+            "x": 790,
+            "y": 96,
+            "w": 420,
+            "h": 470,
+            "r": -4,
+            "pos": "50% 70%",
+            "cap": "Meal photo",
+            "cap_top": true
+          }
+        ],
+        "free_phones": [
+          {
+            "src": "$screens/en/01_today.png",
+            "x": 1176,
+            "y": 64,
+            "sw": 330,
+            "hl": [
+              [
+                40,
+                1395,
+                1240,
+                490
+              ]
+            ]
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/en/01_today.png",
+            "label": "Example estimate",
+            "crop": [
+              40,
+              1395,
+              1240,
+              490
+            ],
+            "x": 866,
+            "y": 498,
+            "w": 672
+          }
+        ],
+        "html": "<div class=\"cnote\">Version 1.6 · demo data</div>"
+      },
+      "zh": {
+        "tagline": "让食物照片<br>变成你的<em>热量记录</em>。",
+        "sub": "免费、开源的 iPhone 热量记录应用，<br>用你自己选的 AI。",
+        "chips": [
+          "无订阅",
+          "无需账户",
+          "无广告",
+          "记录留在手机上"
+        ],
+        "photos": [
+          {
+            "src": "$photos/yogurt-bowl.jpg",
+            "x": 790,
+            "y": 96,
+            "w": 420,
+            "h": 470,
+            "r": -4,
+            "pos": "50% 70%",
+            "cap": "餐食照片",
+            "cap_top": true
+          }
+        ],
+        "free_phones": [
+          {
+            "src": "$screens/zh/01_today.png",
+            "x": 1176,
+            "y": 64,
+            "sw": 330,
+            "hl": [
+              [
+                40,
+                1395,
+                1240,
+                490
+              ]
+            ]
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/zh/01_today.png",
+            "label": "估算示例",
+            "crop": [
+              40,
+              1395,
+              1240,
+              490
+            ],
+            "x": 866,
+            "y": 498,
+            "w": 672
+          }
+        ],
+        "html": "<div class=\"cnote\">1.6 版本 · 演示数据</div>"
+      }
+    },
+    {
+      "id": "02-how",
+      "layout": "steps",
+      "theme": "light",
+      "style": ".l-steps .row{top:226px}.l-steps .step .meta{min-height:132px;margin-bottom:26px}.l-steps .step p{font-size:22px;max-width:400px}.l-steps .step h3{font-size:32px}",
+      "en": {
+        "eyebrow": "How it works",
+        "headline": "Snap. Estimate. <em>Check.</em>",
+        "steps": [
+          {
+            "title": "Snap",
+            "text": "Take photos as usual. Pick one in the app, or share it from Photos.",
+            "stack": [
+              {
+                "src": "$photos/iced-latte.jpg",
+                "x": 6,
+                "y": 26,
+                "w": 240,
+                "h": 300,
+                "r": -9,
+                "pos": "36% 50%",
+                "radius": 22
+              },
+              {
+                "src": "$photos/yogurt-bowl.jpg",
+                "x": 60,
+                "y": 14,
+                "w": 240,
+                "h": 300,
+                "r": 7,
+                "pos": "50% 68%",
+                "radius": 22
+              },
+              {
+                "src": "$photos/chicken-salad.jpg",
+                "x": 14,
+                "y": 70,
+                "w": 282,
+                "h": 330,
+                "r": -1,
+                "pos": "50% 84%",
+                "radius": 22,
+                "badge": true
+              }
+            ]
+          },
+          {
+            "title": "Estimate",
+            "text": "Your AI names each food and estimates its calories and macros.",
+            "screen": "$screens/en/02_today_meals_chipotle_usual_chip.png",
+            "hl": [
+              [
+                40,
+                1720,
+                1240,
+                650
+              ]
+            ]
+          },
+          {
+            "title": "Check",
+            "text": "Change anything that looks wrong. Every number is yours to edit.",
+            "screen": "$screens/en/05_meal_editor.png"
+          }
+        ]
+      },
+      "zh": {
+        "eyebrow": "使用方法",
+        "headline": "拍照，估算，<em>核对</em>。",
+        "steps": [
+          {
+            "title": "拍照",
+            "text": "照常拍照，在应用里选一张，或者从「照片」分享进来。",
+            "stack": [
+              {
+                "src": "$photos/iced-latte.jpg",
+                "x": 6,
+                "y": 26,
+                "w": 240,
+                "h": 300,
+                "r": -9,
+                "pos": "36% 50%",
+                "radius": 22
+              },
+              {
+                "src": "$photos/dumplings.jpg",
+                "x": 60,
+                "y": 14,
+                "w": 240,
+                "h": 300,
+                "r": 7,
+                "pos": "60% 50%",
+                "radius": 22
+              },
+              {
+                "src": "$photos/yogurt-bowl.jpg",
+                "x": 14,
+                "y": 70,
+                "w": 282,
+                "h": 330,
+                "r": -1,
+                "pos": "50% 70%",
+                "radius": 22,
+                "badge": true
+              }
+            ]
+          },
+          {
+            "title": "估算",
+            "text": "AI 识别每样食物，估算热量、蛋白质、碳水和脂肪。",
+            "screen": "$screens/zh/01_today.png",
+            "hl": [
+              [
+                40,
+                1395,
+                1240,
+                490
+              ]
+            ]
+          },
+          {
+            "title": "核对",
+            "text": "看着不对的，直接改。每个数字都由你决定。",
+            "screen": "$screens/zh/05_meal_editor.png"
+          }
+        ]
+      }
+    },
+    {
+      "id": "03-control",
+      "layout": "free",
+      "theme": "light",
+      "copy_style": "left:112px;top:0;bottom:0;width:560px;justify-content:center",
+      "style": ".l-free .headline{font-size:62px}",
+      "en": {
+        "eyebrow": "Numbers you control",
+        "headline": "See the guess.<br><em>Change any number.</em>",
+        "sub": "Your AI is asked to name the portion it assumed, so a wrong guess is easy to spot.",
+        "points": [
+          "<b>Edit</b> calories, protein, carbs or fat.",
+          "<b>Or type a fix</b> in plain words.",
+          "<b>Didn’t finish?</b> Photograph the leftovers."
+        ],
+        "free_phones": [
+          {
+            "src": "$screens/en/05_meal_editor.png",
+            "x": 1196,
+            "y": 60,
+            "sw": 320,
+            "hl": [
+              [
+                40,
+                1575,
+                1250,
+                345
+              ]
+            ]
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/en/05_meal_editor.png",
+            "crop": [
+              40,
+              1575,
+              1250,
+              345
+            ],
+            "x": 706,
+            "y": 368,
+            "w": 476,
+            "label": "The portion it assumed"
+          }
+        ],
+        "html": "<div class=\"bubble\" style=\"left:706px;top:640px\"><div class=\"zlabel muted\"><i></i>Or type a fix</div><br><div class=\"bt\">“the salad had no dressing”</div></div>"
+      },
+      "zh": {
+        "eyebrow": "数字由你掌握",
+        "headline": "分量写明白，<em>数字随你改。</em>",
+        "sub": "应用要求 AI 写明它假设的分量，估错了一眼就能看出来。",
+        "points": [
+          "<b>改数字</b>：热量、蛋白质、碳水、脂肪都能改。",
+          "<b>或者打一句话</b>，让 AI 帮你改。",
+          "<b>没吃完？</b>拍下剩菜，扣掉没吃的部分。"
+        ],
+        "free_phones": [
+          {
+            "src": "$screens/zh/05_meal_editor.png",
+            "x": 1196,
+            "y": 60,
+            "sw": 320,
+            "hl": [
+              [
+                40,
+                1765,
+                1250,
+                345
+              ]
+            ]
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/zh/05_meal_editor.png",
+            "crop": [
+              40,
+              1765,
+              1250,
+              345
+            ],
+            "x": 706,
+            "y": 414,
+            "w": 476,
+            "label": "AI 假设的分量"
+          }
+        ],
+        "html": "<div class=\"bubble\" style=\"left:706px;top:640px\"><div class=\"zlabel muted\"><i></i>或者直接打一句</div><br><div class=\"bt\">「那份沙拉其实没放酱」</div></div>"
+      }
+    },
+    {
+      "id": "10-privacy",
+      "layout": "free",
+      "theme": "light",
+      "copy_style": "left:112px;top:92px;width:860px",
+      "links": [
+        {
+          "d": "M 560 560 L 1000 560"
+        },
+        {
+          "d": "M 560 718 L 712 718",
+          "class": "dash mute",
+          "arrow": false
+        },
+        {
+          "d": "M 850 718 L 1000 718",
+          "class": "dash mute",
+          "arrow": false
+        }
+      ],
+      "en": {
+        "eyebrow": "Privacy",
+        "headline": "Your log stays <em>on your phone.</em>",
+        "sub": "No account, no ads, no tracking. The developer receives none of your data.",
+        "zooms": [
+          {
+            "src": "$screens/en/11_settings_watch_camera_roll_glasses.png",
+            "crop": [
+              20,
+              780,
+              1260,
+              400
+            ],
+            "x": 1040,
+            "y": 104,
+            "w": 450,
+            "label": "Stop any time"
+          }
+        ],
+        "nodes": [
+          {
+            "x": 112,
+            "y": 452,
+            "w": 440,
+            "icon": "phone",
+            "title": "On your iPhone",
+            "list": [
+              "Your meal log",
+              "Weight and measurements",
+              "Settings",
+              "API key <span>· iOS Keychain</span>"
+            ]
+          },
+          {
+            "x": 1010,
+            "y": 470,
+            "w": 480,
+            "kind": "row",
+            "icon": "cloud",
+            "title": "Your AI provider",
+            "text": "or your own server. Its terms apply."
+          },
+          {
+            "x": 1010,
+            "y": 650,
+            "w": 480,
+            "kind": "row ghost",
+            "icon": "server",
+            "title": "Chopstats server: none",
+            "text": "No analytics. No ads."
+          }
+        ],
+        "linklabels": [
+          {
+            "x": 780,
+            "y": 515,
+            "text": "The photo or text you log,<br>plus the context it needs"
+          },
+          {
+            "x": 780,
+            "y": 718,
+            "text": "Nothing"
+          }
+        ],
+        "smallprint": [
+          {
+            "x": 1010,
+            "y": 768,
+            "w": 480,
+            "text": "Restaurant nutrition, if you turn it on, has its own recipients. The privacy policy lists them."
+          }
+        ]
+      },
+      "zh": {
+        "eyebrow": "隐私",
+        "headline": "饮食记录<em>保存在你的手机上。</em>",
+        "sub": "无需账户，没有广告，不做追踪。开发者收不到你的任何数据。",
+        "zooms": [
+          {
+            "src": "$screens/zh/11a_settings_top_welcome.png",
+            "crop": [
+              20,
+              1300,
+              1260,
+              400
+            ],
+            "x": 1040,
+            "y": 104,
+            "w": 450,
+            "label": "随时可以停下"
+          }
+        ],
+        "nodes": [
+          {
+            "x": 112,
+            "y": 452,
+            "w": 440,
+            "icon": "phone",
+            "title": "在你的 iPhone 上",
+            "list": [
+              "你的饮食记录",
+              "体重和围度",
+              "设置",
+              "API Key <span>· iOS 钥匙串</span>"
+            ]
+          },
+          {
+            "x": 1010,
+            "y": 470,
+            "w": 480,
+            "kind": "row",
+            "icon": "cloud",
+            "title": "你选的 AI 服务商",
+            "text": "或者你自己的服务器。<br>以它的条款为准。"
+          },
+          {
+            "x": 1010,
+            "y": 650,
+            "w": 480,
+            "kind": "row ghost",
+            "icon": "server",
+            "title": "筷拍服务器：没有",
+            "text": "没有统计分析，没有广告。"
+          }
+        ],
+        "linklabels": [
+          {
+            "x": 780,
+            "y": 515,
+            "text": "你记录的照片或文字，<br>以及必要的上下文"
+          },
+          {
+            "x": 780,
+            "y": 718,
+            "text": "什么都不发"
+          }
+        ],
+        "smallprint": [
+          {
+            "x": 1010,
+            "y": 768,
+            "w": 480,
+            "text": "「餐厅营养」打开后另有接收方，详见隐私政策。"
+          }
+        ]
+      }
+    },
+    {
+      "id": "11-cost",
+      "layout": "free",
+      "theme": "clay",
+      "copy_style": "left:112px;top:0;bottom:0;width:640px;justify-content:center",
+      "style": ".l-free .headline{font-size:80px}.costcard{position:absolute;left:830px;top:178px;width:660px;z-index:6;padding:36px 38px 34px;border-radius:30px;background:rgba(255,255,255,.06);box-shadow:0 0 0 1px rgba(255,255,255,.16),0 40px 80px -40px rgba(60,20,8,.6)}.costcard h4{font-size:24px;font-weight:650;color:#FFE3D3;letter-spacing:.01em;margin-bottom:20px}.costcard .namechips span{background:rgba(255,255,255,.92);color:#5A2614;box-shadow:none;font-size:21px}.costcard .namechips span.own{background:transparent;color:#fff;box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.6)}.costcard .ln{margin-top:26px;padding-top:24px;border-top:1px solid rgba(255,255,255,.18);display:grid;gap:14px}.costcard .ln p{font-size:21px;line-height:1.42;color:#FBE3D6;padding-left:22px;position:relative}.costcard .ln p::before{content:'';position:absolute;left:0;top:11px;width:9px;height:9px;border-radius:50%;background:#FFCDB2}",
+      "en": {
+        "eyebrow": "What it costs",
+        "headline": "Free app.<br><em>No subscription.</em>",
+        "sub": "Use a key from the AI you choose. If it charges, you pay it directly, never the app.",
+        "chips": [
+          "No in-app purchases",
+          "Typing numbers needs no key"
+        ],
+        "html": "<div class=\"costcard\"><h4>Works with your key from</h4><div class=\"namechips\"><span>Google Gemini</span><span>OpenAI</span><span>Anthropic</span><span>xAI</span><span>OpenRouter</span><span>DeepSeek</span><span>Alibaba Qwen</span><span>ByteDance Doubao</span><span>Zhipu GLM</span><span class=\"own\">or your own server</span></div><div class=\"ln\"><p>Google Gemini, the default, has a free tier. On it, Google says it may use what you send to improve its products.</p><p>DeepSeek, Qwen, Doubao and GLM process data in mainland China.</p><p>Prices change. Check your provider’s pricing page.</p></div></div>",
+        "note": "Version 1.6"
+      },
+      "zh": {
+        "eyebrow": "费用",
+        "headline": "应用免费，<br><em>没有订阅。</em>",
+        "sub": "用你自己选的 AI 的 Key；如果收费，费用直接付给服务商，不付给应用。",
+        "chips": [
+          "无 App 内购买",
+          "自己输入数字不需要 Key"
+        ],
+        "html": "<div class=\"costcard\"><h4>可以用这些服务商的 Key</h4><div class=\"namechips\"><span>Google Gemini</span><span>OpenAI</span><span>Anthropic</span><span>xAI</span><span>OpenRouter</span><span>DeepSeek 深度求索</span><span>Qwen 通义千问</span><span>Doubao 豆包</span><span>GLM 智谱</span><span class=\"own\">或者你自己的服务器</span></div><div class=\"ln\"><p>默认的 Google Gemini 有免费额度；按 Google 的说法，使用免费额度时，它可能把你发送的内容用于改进自己的产品。</p><p>DeepSeek、通义千问、豆包和智谱在中国大陆处理数据。</p><p>价格会变，请查看服务商的定价页面。</p></div></div>",
+        "note": "1.6 版本"
+      }
+    },
+    {
+      "id": "06-usual",
+      "layout": "free",
+      "theme": "light",
+      "copy_style": "left:112px;top:0;bottom:0;width:560px;justify-content:center",
+      "en": {
+        "tags": [
+          {
+            "text": "New in 1.6",
+            "kind": "new"
+          }
+        ],
+        "headline": "Your usual foods, <em>one tap away.</em>",
+        "sub": "Meals you log often wait in My usual foods. Tap one to log it again: no photo, no AI, nothing sent.",
+        "free_phones": [
+          {
+            "src": "$screens/en/10_usual_foods.png",
+            "x": 700,
+            "y": 70,
+            "sw": 326
+          }
+        ],
+        "photos": [
+          {
+            "src": "$photos/iced-latte.jpg",
+            "x": 1104,
+            "y": 92,
+            "w": 392,
+            "h": 300,
+            "r": 3,
+            "pos": "36% 52%",
+            "cap": "Iced latte"
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/en/04_usual_numbers_card.png",
+            "crop": [
+              20,
+              385,
+              1260,
+              445
+            ],
+            "x": 1090,
+            "y": 470,
+            "w": 420,
+            "label": "Next time you log it"
+          }
+        ],
+        "smallprint": [
+          {
+            "x": 1096,
+            "y": 690,
+            "w": 410,
+            "text": "If you set a food’s numbers yourself, the app may offer them on later photos of it. Nothing changes until you accept."
+          }
+        ],
+        "eyebrow": "My usual foods"
+      },
+      "zh": {
+        "tags": [
+          {
+            "text": "1.6 新增",
+            "kind": "new"
+          }
+        ],
+        "headline": "常吃的，<br><em>点一下就记。</em>",
+        "sub": "常记的餐会出现在「我常吃的」里，点一下就再记一次：不用拍照，不用 AI，不发送任何内容。",
+        "free_phones": [
+          {
+            "src": "$screens/zh/10_usual_foods.png",
+            "x": 700,
+            "y": 70,
+            "sw": 326
+          }
+        ],
+        "photos": [
+          {
+            "src": "$photos/iced-latte.jpg",
+            "x": 1104,
+            "y": 92,
+            "w": 392,
+            "h": 300,
+            "r": 3,
+            "pos": "36% 52%",
+            "cap": "冰拿铁"
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/zh/04_usual_numbers_card.png",
+            "crop": [
+              20,
+              568,
+              1260,
+              440
+            ],
+            "x": 1090,
+            "y": 470,
+            "w": 420,
+            "label": "下次再拍到它"
+          }
+        ],
+        "smallprint": [
+          {
+            "x": 1096,
+            "y": 690,
+            "w": 410,
+            "text": "如果你自己设过某种食物的数值，之后再拍到它时，筷拍可能会建议改用；你确认之前不会改动。"
+          }
+        ],
+        "eyebrow": "我常吃的"
+      }
+    },
+    {
+      "id": "07-restaurant",
+      "layout": "free",
+      "theme": "deep",
+      "copy_style": "left:112px;top:0;bottom:0;width:600px;justify-content:center",
+      "style": ".l-free .headline{font-size:58px}.points{gap:14px;margin-top:28px}.points li{font-size:22px}",
+      "en": {
+        "tags": [
+          {
+            "text": "New in 1.6",
+            "kind": "new"
+          },
+          {
+            "text": "Off by default",
+            "kind": "off"
+          }
+        ],
+        "headline": "Chain restaurant?<br><em>Use its published numbers.</em>",
+        "sub": "For a US chain meal, your AI can look up the nutrition the chain publishes.",
+        "points": [
+          "<b>US meals only</b>, from a built-in list of 403 chains.",
+          "<b>Needs an Anthropic or OpenRouter key</b>, or your own server on the Claude plan.",
+          "<b>Undo it</b>, or tap Wrong restaurant."
+        ],
+        "note": "Demo data · not affiliated with the restaurant shown",
+        "free_phones": [
+          {
+            "src": "$screens/en/21_dark_restaurant_source_card.png",
+            "x": 1226,
+            "y": 64,
+            "sw": 300,
+            "hl": [
+              [
+                20,
+                370,
+                1260,
+                395
+              ]
+            ]
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/en/21_dark_restaurant_source_card.png",
+            "crop": [
+              20,
+              370,
+              1260,
+              395
+            ],
+            "x": 762,
+            "y": 150,
+            "w": 440,
+            "label": "Published numbers in use"
+          },
+          {
+            "src": "$screens/en/21_dark_restaurant_source_card.png",
+            "crop": [
+              20,
+              1556,
+              1260,
+              430
+            ],
+            "x": 762,
+            "y": 440,
+            "w": 440,
+            "label": "Where the numbers came from"
+          }
+        ]
+      },
+      "zh": {
+        "tags": [
+          {
+            "text": "1.6 新增",
+            "kind": "new"
+          },
+          {
+            "text": "默认关闭",
+            "kind": "off"
+          }
+        ],
+        "headline": "连锁餐厅？<br><em>用它公布的数值。</em>",
+        "sub": "在美国连锁餐厅吃的餐，你的 AI 可以查找该连锁店公布的营养信息。",
+        "points": [
+          "<b>只查在美国吃的餐</b>，内置 403 家连锁店名单。",
+          "<b>需要 Anthropic 或 OpenRouter 的 Key</b>，或者使用 Claude 套餐的你自己的服务器。",
+          "<b>可以撤销</b>，也可以点「不是这家」。"
+        ],
+        "note": "演示数据 · 与图中餐厅没有任何关联",
+        "free_phones": [
+          {
+            "src": "$screens/zh/21_dark_restaurant_source_card.png",
+            "x": 1226,
+            "y": 64,
+            "sw": 300,
+            "hl": [
+              [
+                20,
+                370,
+                1260,
+                395
+              ]
+            ]
+          }
+        ],
+        "zooms": [
+          {
+            "src": "$screens/zh/21_dark_restaurant_source_card.png",
+            "crop": [
+              20,
+              370,
+              1260,
+              395
+            ],
+            "x": 762,
+            "y": 150,
+            "w": 440,
+            "label": "已采用公布的数值"
+          },
+          {
+            "src": "$screens/zh/21_dark_restaurant_source_card.png",
+            "crop": [
+              20,
+              1556,
+              1260,
+              430
+            ],
+            "x": 762,
+            "y": 440,
+            "w": 440,
+            "label": "数值的来源"
+          }
+        ]
+      }
+    },
+    {
+      "id": "08-watch",
+      "layout": "free",
+      "theme": "light",
+      "copy_style": "left:112px;top:104px;width:800px",
+      "en": {
+        "eyebrow": "Watch Camera Roll",
+        "tags": [
+          {
+            "text": "Off by default",
+            "kind": "off"
+          }
+        ],
+        "headline": "Snap your meal. <em>It logs itself.</em>",
+        "sub": "Turn on Watch Camera Roll, and new food photos are logged for you.",
+        "tiles": {
+          "x": 112,
+          "y": 470,
+          "w": 168,
+          "gap": 22,
+          "items": [
+            {
+              "src": "$photos/yogurt-bowl.jpg",
+              "pos": "50% 68%",
+              "status": "Logged"
+            },
+            {
+              "src": "$photos/burrito-bowl.jpg",
+              "pos": "56% 40%",
+              "status": "Logged"
+            },
+            {
+              "src": "$photos/iced-latte.jpg",
+              "pos": "36% 50%",
+              "status": "Logged"
+            },
+            {
+              "art": "park",
+              "status": "Sent,<br>not a meal",
+              "ok": false
+            }
+          ]
+        },
+        "smallprint": [
+          {
+            "x": 112,
+            "y": 728,
+            "w": 760,
+            "text": "While it is on, every new photo goes to your AI, which decides whether it shows a meal. iOS decides when the background scan runs."
+          }
+        ],
+        "free_phones": [
+          {
+            "src": "$screens/en/11_settings_watch_camera_roll_glasses.png",
+            "x": 1060,
+            "y": 48,
+            "sw": 358,
+            "hl": [
+              [
+                20,
+                1320,
+                1260,
+                160
+              ]
+            ]
+          }
+        ]
+      },
+      "zh": {
+        "eyebrow": "监控相册",
+        "tags": [
+          {
+            "text": "默认关闭",
+            "kind": "off"
+          }
+        ],
+        "headline": "拍下就好，<em>自动记录。</em>",
+        "sub": "打开「监控相册」，新的食物照片会自动记录。",
+        "tiles": {
+          "x": 112,
+          "y": 470,
+          "w": 168,
+          "gap": 22,
+          "items": [
+            {
+              "src": "$photos/dumplings.jpg",
+              "pos": "60% 50%",
+              "status": "已记录"
+            },
+            {
+              "src": "$photos/yogurt-bowl.jpg",
+              "pos": "50% 68%",
+              "status": "已记录"
+            },
+            {
+              "src": "$photos/iced-latte.jpg",
+              "pos": "36% 50%",
+              "status": "已记录"
+            },
+            {
+              "art": "park",
+              "status": "已发送，<br>不是一餐",
+              "ok": false
+            }
+          ]
+        },
+        "smallprint": [
+          {
+            "x": 112,
+            "y": 728,
+            "w": 760,
+            "text": "开启期间，每一张新照片都会发送给你的 AI，由它判断是不是一餐。后台扫描何时运行由 iOS 决定。"
+          }
+        ],
+        "free_phones": [
+          {
+            "src": "$screens/zh/11_settings_watch_camera_roll_glasses.png",
+            "x": 1060,
+            "y": 48,
+            "sw": 358,
+            "hl": [
+              [
+                20,
+                745,
+                1260,
+                150
+              ]
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": "09-glasses",
+      "layout": "free",
+      "theme": "deep",
+      "copy_style": "left:112px;top:84px;width:830px",
+      "footer_side": "left",
+      "style": ".l-free .headline{font-size:66px}",
+      "links": [
+        {
+          "d": "M 388 585 L 430 585"
+        },
+        {
+          "d": "M 718 585 L 760 585"
+        },
+        {
+          "d": "M 1048 560 C 1080 560 1082 496 1112 496"
+        },
+        {
+          "d": "M 1048 610 C 1080 610 1082 676 1112 676",
+          "class": "mute"
+        }
+      ],
+      "en": {
+        "tags": [
+          {
+            "text": "New in 1.6",
+            "kind": "new"
+          }
+        ],
+        "headline": "Your Meta glasses photos <em>count too.</em>",
+        "sub": "Photos the Meta AI app saves to your library are checked for food on your iPhone before anything is sent.",
+        "zooms": [
+          {
+            "src": "$screens/en/11_settings_watch_camera_roll_glasses.png",
+            "crop": [
+              20,
+              1310,
+              1260,
+              345
+            ],
+            "x": 1010,
+            "y": 132,
+            "w": 480,
+            "label": "Settings › Photos"
+          }
+        ],
+        "nodes": [
+          {
+            "x": 112,
+            "y": 440,
+            "w": 270,
+            "h": 290,
+            "icon": "glasses",
+            "title": "Meta AI app",
+            "text": "saves a photo from your glasses to your library."
+          },
+          {
+            "x": 442,
+            "y": 440,
+            "w": 270,
+            "h": 290,
+            "pic": "$photos/chicken-salad.jpg",
+            "pos": "50% 82%",
+            "title": "Your library",
+            "text": "Chopstats sees the new photo."
+          },
+          {
+            "x": 772,
+            "y": 440,
+            "w": 270,
+            "h": 290,
+            "icon": "scan",
+            "title": "Food check",
+            "text": "runs on your iPhone before anything is sent."
+          },
+          {
+            "x": 1118,
+            "y": 440,
+            "w": 372,
+            "kind": "ok row",
+            "icon": "check",
+            "title": "Food",
+            "text": "Sent to your AI, which logs the meal"
+          },
+          {
+            "x": 1118,
+            "y": 620,
+            "w": 372,
+            "kind": "no row",
+            "icon": "cross",
+            "title": "No food",
+            "text": "Not sent"
+          }
+        ],
+        "smallprint": [
+          {
+            "x": 112,
+            "y": 762,
+            "w": 1376,
+            "text": "Needs Watch Camera Roll on. If the food check can’t run, the photo is sent like any other. Chopstats does not connect to the glasses."
+          }
+        ],
+        "note": "Version 1.6 · demo data · not affiliated with Meta"
+      },
+      "zh": {
+        "tags": [
+          {
+            "text": "1.6 新增",
+            "kind": "new"
+          }
+        ],
+        "headline": "Meta 眼镜拍的照片，<br><em>也能记。</em>",
+        "sub": "Meta AI 应用存进相册的眼镜照片，发送之前先在 iPhone 上检查有没有食物。",
+        "zooms": [
+          {
+            "src": "$screens/zh/11_settings_watch_camera_roll_glasses.png",
+            "crop": [
+              20,
+              735,
+              1260,
+              345
+            ],
+            "x": 1010,
+            "y": 132,
+            "w": 480,
+            "label": "设置 › 照片"
+          }
+        ],
+        "nodes": [
+          {
+            "x": 112,
+            "y": 440,
+            "w": 270,
+            "h": 290,
+            "icon": "glasses",
+            "title": "Meta AI 应用",
+            "text": "把眼镜拍的照片存进你的相册。"
+          },
+          {
+            "x": 442,
+            "y": 440,
+            "w": 270,
+            "h": 290,
+            "pic": "$photos/dumplings.jpg",
+            "pos": "60% 50%",
+            "title": "你的相册",
+            "text": "筷拍发现这张新照片。"
+          },
+          {
+            "x": 772,
+            "y": 440,
+            "w": 270,
+            "h": 290,
+            "icon": "scan",
+            "title": "食物检查",
+            "text": "在 iPhone 上完成，检查之前什么都不发送。"
+          },
+          {
+            "x": 1118,
+            "y": 440,
+            "w": 372,
+            "kind": "ok row",
+            "icon": "check",
+            "title": "有食物",
+            "text": "发送给你的 AI，由它记下这一餐"
+          },
+          {
+            "x": 1118,
+            "y": 620,
+            "w": 372,
+            "kind": "no row",
+            "icon": "cross",
+            "title": "没有食物",
+            "text": "不发送"
+          }
+        ],
+        "smallprint": [
+          {
+            "x": 112,
+            "y": 762,
+            "w": 1376,
+            "text": "需要打开「监控相册」。如果食物检查无法运行，照片会像普通照片一样发送。筷拍不连接眼镜。"
+          }
+        ],
+        "note": "1.6 版本 · 演示数据 · 与 Meta 没有关联"
+      }
+    },
+    {
+      "id": "05-no-photo",
+      "layout": "phone1",
+      "theme": "light",
+      "side": "left",
+      "style": ".l-phone1 .copy{width:700px}",
+      "en": {
+        "eyebrow": "No photo needed",
+        "headline": "No photo? <em>Log it anyway.</em>",
+        "sub": "Describe a meal in any language your AI reads, or type the numbers yourself.",
+        "points": [
+          "<b>Describe a meal</b>, like “two eggs and toast with butter”.",
+          "<b>Enter manually</b>: no AI and no key, and it works offline."
+        ],
+        "screens": [
+          "$screens/en/09_log_sheet.png"
+        ],
+        "hl": [
+          [
+            20,
+            2188,
+            1260,
+            276
+          ]
+        ]
+      },
+      "zh": {
+        "eyebrow": "不拍照也能记",
+        "headline": "没有照片，<em>也能记。</em>",
+        "sub": "用你的 AI 读得懂的任何语言描述一餐，<br>或者自己输入数字。",
+        "points": [
+          "<b>文字描述一餐</b>，比如“一碗牛肉面加一个鸡蛋”。",
+          "<b>手动输入</b>：不用 AI，不需要 Key，离线也能用。"
+        ],
+        "screens": [
+          "$screens/zh/09_log_sheet.png"
+        ],
+        "hl": [
+          [
+            20,
+            2188,
+            1260,
+            276
+          ]
+        ]
+      }
+    },
+    {
+      "id": "04-trend",
+      "layout": "phone3",
+      "theme": "deep",
+      "en": {
+        "eyebrow": "Your day and your trend",
+        "headline": "Today vs. <em>your typical day.</em>",
+        "sub": "No goal needed: your last 7 days set the bar. Plus 30 days of History and your weight in Body.",
+        "note": "Version 1.6 · demo data · dark mode",
+        "screens": [
+          "$screens/en/22_dark_history.png",
+          "$screens/en/20_dark_today.png",
+          "$screens/en/23_dark_body.png"
+        ]
+      },
+      "zh": {
+        "eyebrow": "今天和趋势",
+        "headline": "不设目标，<em>也有参照。</em>",
+        "sub": "「今天」对照前 7 天的日常水平，「历史」回看 30 天，「身体」记录体重和围度。",
+        "note": "1.6 版本 · 演示数据 · 深色模式",
+        "screens": [
+          "$screens/zh/22_dark_history.png",
+          "$screens/zh/20_dark_today.png",
+          "$screens/zh/23_dark_body.png"
+        ]
+      },
+      "style": ".l-phone3 .copy{top:92px}"
+    },
+    {
+      "id": "12-languages",
+      "layout": "phone2",
+      "theme": "light",
+      "style": ".l-phone2.align-center .phone{--top:330px}",
+      "en": {
+        "eyebrow": "Two languages",
+        "headline": "In English <em>and 简体中文.</em>",
+        "sub": "Every screen in both languages. Describe meals in any language your AI reads.",
+        "labels": [
+          "English",
+          "简体中文"
+        ],
+        "screens": [
+          "$screens/en/01_today.png",
+          "$screens/zh/01_today.png"
+        ],
+        "photos": [
+          {
+            "src": "$photos/yogurt-bowl.jpg",
+            "x": 100,
+            "y": 440,
+            "w": 270,
+            "h": 340,
+            "r": -6,
+            "pos": "50% 70%"
+          },
+          {
+            "src": "$photos/dumplings.jpg",
+            "x": 1230,
+            "y": 440,
+            "w": 270,
+            "h": 340,
+            "r": 6,
+            "pos": "62% 50%"
+          }
+        ]
+      },
+      "zh": {
+        "eyebrow": "两种语言",
+        "headline": "支持<em>简体中文</em>和英文。",
+        "sub": "每个页面都有中英文。描述一餐时，用你的 AI 读得懂的任何语言都行。",
+        "labels": [
+          "简体中文",
+          "English"
+        ],
+        "screens": [
+          "$screens/zh/01_today.png",
+          "$screens/en/01_today.png"
+        ],
+        "photos": [
+          {
+            "src": "$photos/dumplings.jpg",
+            "x": 100,
+            "y": 440,
+            "w": 270,
+            "h": 340,
+            "r": -6,
+            "pos": "62% 50%"
+          },
+          {
+            "src": "$photos/yogurt-bowl.jpg",
+            "x": 1230,
+            "y": 440,
+            "w": 270,
+            "h": 340,
+            "r": 6,
+            "pos": "50% 70%"
+          }
+        ]
+      }
+    },
+    {
+      "id": "14-get",
+      "layout": "free",
+      "theme": "deep",
+      "footer_pos": "top",
+      "copy_style": "left:112px;top:150px;width:720px",
+      "style": ".l-free .headline{font-size:84px;line-height:1.02}:lang(zh) .l-free .headline{font-size:76px;line-height:1.18}.l-free .sub{font-size:29px;margin-top:26px;max-width:680px}.chips{margin-top:30px;max-width:700px}.qr{position:absolute;left:112px;top:604px;z-index:12;display:flex;align-items:center;gap:28px;padding:18px 34px 18px 18px;border-radius:28px;background:#FFFFFF;color:var(--ink);box-shadow:0 0 0 1px rgba(255,255,255,.1),0 30px 60px -24px rgba(0,0,0,.7)}.qr img{width:196px;height:196px;display:block;image-rendering:pixelated}.qr b{display:block;font-size:30px;font-weight:700;letter-spacing:-0.02em;line-height:1.2}.qr span{display:block;margin-top:10px;font-size:22px;line-height:1.35;color:var(--ink-2)}:lang(zh) .qr b{letter-spacing:.02em;font-weight:650}:lang(zh) .qr span{letter-spacing:.02em}",
+      "free_phones": [
+        {
+          "src": "$screens/{lang}/06_history.png",
+          "x": 904,
+          "y": 122,
+          "sw": 286,
+          "r": -6,
+          "z": 6
+        },
+        {
+          "src": "$screens/{lang}/07_day_detail.png",
+          "x": 1214,
+          "y": 70,
+          "sw": 300,
+          "r": 5,
+          "z": 8
+        }
+      ],
+      "en": {
+        "headline": "Free to download.<br><em>Open to read.</em>",
+        "sub": "Get it free on the App Store. Read every line on GitHub.",
+        "chips": [
+          "iPhone · iOS 15 or later",
+          "Open-source code (MIT)",
+          "Android: APK on GitHub"
+        ],
+        "html": "<div class=\"qr\"><img src=\"../../qr-app-store.png\" alt=\"\"><div><b>Scan with your iPhone camera</b><span>Opens Chopstats on the App Store</span></div></div>"
+      },
+      "zh": {
+        "headline": "免费下载，<br><em>代码公开。</em>",
+        "sub": "在 App Store 免费下载，在 GitHub 上读每一行代码。",
+        "chips": [
+          "iPhone · iOS 15 或更高版本",
+          "代码开源（MIT 许可）",
+          "Android：GitHub 上的 APK"
+        ],
+        "html": "<div class=\"qr\"><img src=\"../../qr-app-store.png\" alt=\"\"><div><b>用 iPhone 相机扫码</b><span>打开筷拍的 App Store 页面</span></div></div>"
+      }
+    }
+  ]
+}

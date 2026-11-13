@@ -54,8 +54,8 @@ const _en = (
       'logging.',
   fix: 'Fix',
   dialogTitle: 'Import exported data',
-  dialogBody: 'Paste the contents of an exported JSON file. Existing meals '
-      'are kept; only new ones are added.',
+  dialogBody: 'Choose an exported file, or paste its contents. Existing '
+      'meals are kept; only new ones are added.',
   cancel: 'Cancel',
   importBtn: 'Import',
   imported: 'Imported 1 meal (1 rows total).',
@@ -77,7 +77,7 @@ const _zh = (
       '请授予访问所有照片的权限，才能自动记录。',
   fix: '去修复',
   dialogTitle: '导入已导出的数据',
-  dialogBody: '粘贴导出的 JSON 文件内容。已有的餐会保留，只会添加新的。',
+  dialogBody: '选择导出的文件，或粘贴文件的内容。已有的餐会保留，只会添加新的。',
   cancel: '取消',
   importBtn: '导入',
   imported: '已导入 1 餐（共 1 行）。',
