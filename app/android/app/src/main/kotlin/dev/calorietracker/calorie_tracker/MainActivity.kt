@@ -86,6 +86,7 @@ class MainActivity : FlutterActivity() {
         streams.forEachIndexed { i, uri ->
             try {
                 if (uri == null) return@forEachIndexed
+                if (isOwnShareOut(uri)) return@forEachIndexed
                 val name = shareName(uri) ?: return@forEachIndexed
                 // The type the plugin gives it: the share's own, or for
                 // several, each one's listed type, else its name's.
@@ -120,6 +121,13 @@ class MainActivity : FlutterActivity() {
             Intent()
         }
     }
+
+    /// Whether [uri] is one of the app's own share-out files (Today's day
+    /// image, an Export), served by share_plus's FileProvider: Chopstats
+    /// is a target in its own sharesheet, and such a file is no meal.
+    private fun isOwnShareOut(uri: Uri): Boolean =
+        "content".equals(uri.scheme, ignoreCase = true) &&
+            "$packageName$SHARE_OUT_AUTHORITY_SUFFIX".equals(uri.authority, ignoreCase = true)
 
     /// [intent] with nothing a plugin reads as a share or a link.
     private fun emptyShare(intent: Intent): Intent = try {
@@ -378,5 +386,9 @@ class MainActivity : FlutterActivity() {
 
         /// Dart's maxPhotoBytes: share intake refuses anything larger.
         const val MAX_SHARE_BYTES = 25L * 1024 * 1024
+
+        /// share_plus's FileProvider authority after the package name
+        /// (its AndroidManifest.xml: ${applicationId}.flutter.share_provider).
+        const val SHARE_OUT_AUTHORITY_SUFFIX = ".flutter.share_provider"
     }
 }

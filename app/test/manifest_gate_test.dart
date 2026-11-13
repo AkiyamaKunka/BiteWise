@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:calorie_tracker/services/analyzer/platform_decode.dart'
@@ -56,6 +57,24 @@ String _pbxObject(
 String _mainActivity() => File('${_appRoot().path}/android/app/src/main/'
         'kotlin/dev/calorietracker/calorie_tracker/MainActivity.kt')
     .readAsStringSync();
+
+/// Where pub resolved [package] (.dart_tool/package_config.json), so a
+/// gate can read the plugin version the app actually builds with.
+String _pluginRoot(String package) {
+  final config = jsonDecode(
+      File('${_appRoot().path}/.dart_tool/package_config.json')
+          .readAsStringSync()) as Map<String, Object?>;
+  final entry = (config['packages'] as List)
+      .cast<Map<String, Object?>>()
+      .firstWhere((p) => p['name'] == package);
+  final root = Uri.parse(entry['rootUri'] as String);
+  return root.isAbsolute
+      ? root.toFilePath()
+      : Directory('${_appRoot().path}/.dart_tool')
+          .uri
+          .resolveUri(root)
+          .toFilePath();
+}
 
 /// Release-manifest drift gate.
 ///
@@ -768,6 +787,39 @@ void main() {
     expect(superCall, greaterThan(safe),
         reason: 'the plugins read the intent inside super.onCreate');
     expect(kotlin, contains('super.onNewIntent(withSafeShares(intent))'));
+  });
+
+  // Chopstats is a target in its own sharesheet: Today's day image and the
+  // Export file go out through share_plus's FileProvider. Picked there,
+  // the report image would come back in as a meal photo and go to the AI.
+  // Share intake leaves out every stream from that provider; with nothing
+  // left, the share reaches no plugin.
+  test("share intake leaves out the app's own share-out files", () {
+    final kotlin = _mainActivity();
+    final safe = RegExp(r'private fun withSafeShares\(.*?\n    \}\n',
+            dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(safe, isNotNull);
+    expect(kotlin,
+        contains('const val SHARE_OUT_AUTHORITY_SUFFIX = ".flutter.share_provider"'));
+    final skip = safe!.indexOf('if (isOwnShareOut(uri)) return@forEachIndexed');
+    expect(skip, greaterThan(0));
+    expect(safe.indexOf('copyShare(uri, name)'), greaterThan(skip),
+        reason: 'skipped before anything is read or copied');
+    expect(safe, contains('if (copies.isEmpty()) return emptyShare(intent)'));
+    final own = RegExp(r'private fun isOwnShareOut\(uri: Uri\).*?\n\n',
+            dotAll: true)
+        .firstMatch(kotlin)
+        ?.group(0);
+    expect(own, contains(r'"$packageName$SHARE_OUT_AUTHORITY_SUFFIX"'));
+    // share_plus's provider: the applicationId, which is the package.
+    final sharePlus = _pluginRoot('share_plus');
+    final pluginManifest =
+        File('$sharePlus/android/src/main/AndroidManifest.xml')
+            .readAsStringSync();
+    expect(pluginManifest,
+        contains(r'android:authorities="${applicationId}.flutter.share_provider"'));
   });
 
   // Owner decision 2026-11-13: the package stays, and the upload key the
