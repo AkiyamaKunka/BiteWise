@@ -61,6 +61,7 @@ class LogBodySheet extends StatefulWidget {
     this.dateLabel,
     this.onChangeDate,
     this.onWrote,
+    this.onPartlySaved,
   });
   final MealsDao dao;
   final String date;
@@ -91,6 +92,12 @@ class LogBodySheet extends StatefulWidget {
   /// the same save failed and the sheet stays open: closed then, however
   /// it closes, the screen still shows what was written.
   final VoidCallback? onWrote;
+
+  /// A save failed after some of its writes went through (the weight
+  /// written, the measurements not). Awaited before the sheet takes input
+  /// again: the screen re-reads the day, so the sheet's Delete and its
+  /// date row go by what is stored now, not by the values from before.
+  final Future<void> Function()? onPartlySaved;
 
   @override
   State<LogBodySheet> createState() => _LogBodySheetState();
@@ -230,15 +237,18 @@ class _LogBodySheetState extends State<LogBodySheet> {
       _saving = true;
       _error = null;
     });
+    var wrote = false;
     try {
       // Weight: save or (when this edit cleared a previously present
       // value) delete — leaving the stale row would resurrect it on next
       // load.
       if (kg != null) {
         await widget.dao.saveBodyWeight(widget.date, kg, source: 'manual');
+        wrote = true;
         widget.onWrote?.call();
       } else if (widget.existingWeight != null) {
         await widget.dao.deleteBodyWeight(widget.date);
+        wrote = true;
         widget.onWrote?.call();
       }
       // Measurements: full-row upsert; all-empty deletes (DAO contract).
@@ -255,6 +265,9 @@ class _LogBodySheetState extends State<LogBodySheet> {
       // text carries the statement's arguments, which are the weight and
       // girths just typed, and debugPrint stays in release builds.
       debugPrint('Body: save failed (${e.runtimeType})');
+      // Still 'Saving…' until the day is re-read: a Delete or a date
+      // change in between went by the values from before the save.
+      if (wrote) await widget.onPartlySaved?.call();
       if (!mounted) return;
       setState(() {
         _saving = false;

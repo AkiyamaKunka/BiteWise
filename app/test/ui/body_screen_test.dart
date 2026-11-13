@@ -2,6 +2,7 @@
 // the page's contract: latest values with honest deltas, a chart only when
 // there is a trend to draw, prefilled edit (so the full-row upsert can't
 // eat data), validation on the SHARED weight bounds, and delete confirm.
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -12,6 +13,7 @@ import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/ui/screens/body_screen.dart';
 import 'package:calorie_tracker/ui/screens/log_body_sheet.dart';
 import 'package:calorie_tracker/ui/theme/tokens.dart';
+import 'package:calorie_tracker/ui/widgets/grouped.dart' show GroupedRow;
 import 'package:calorie_tracker/ui/widgets/weight_trend_painter.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
@@ -638,6 +640,159 @@ void main() {
       });
     }
 
+    // Review 1.7.1, second pass, the fix's own review: the page re-read
+    // the day only when the sheet closed, and while it stayed open the
+    // sheet went by the page's values from before the save. Its Delete,
+    // which deletes the whole day, removed only what the page knew of and
+    // left the new weight behind; its date row brought the day back
+    // without the weight, as a new log; and in place the sheet still took
+    // the day for one without a weight, so clearing it deleted nothing.
+    Future<void> partlySave(WidgetTester tester, _FlakyBodyDao dao) async {
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '81.6');
+      await tester.enterText(find.byKey(const Key('bodyWaistField')), '90');
+      dao.failMeasurementWrites = true;
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pumpAndSettle();
+      dao.failMeasurementWrites = false;
+      expect(find.text("Couldn't save. Try again."), findsOneWidget);
+      expect(find.byType(LogBodySheet), findsOneWidget,
+          reason: 'the sheet stays open');
+    }
+
+    String field(WidgetTester tester, String key) =>
+        tester.widget<TextField>(find.byKey(Key(key))).controller!.text;
+
+    /// Picks [day] in the month the sheet's date picker opens on.
+    Future<void> pickDay(WidgetTester tester, String day) async {
+      await tester.tap(find.byKey(const Key('bodySheetDateRow')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(day));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+    }
+
+    /// Jul 30 has measurements only (waist 84); its sheet is open.
+    Future<_FlakyBodyDao> openMeasurementsOnlyDay(WidgetTester tester) async {
+      final dao = await pumpFlaky(tester);
+      dao.measurementsByDate['2026-07-30'] =
+          const BodyMeasurements('2026-07-30', waistCm: 84);
+      await tester.state<BodyScreenState>(find.byType(BodyScreen)).reload();
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('bodyDay2026-07-30')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Jul 30'), findsOneWidget);
+      return dao;
+    }
+
+    testWidgets("a part-failed save, then the sheet's Delete: the whole day "
+        'goes, the weight just written with it', (tester) async {
+      final dao = await openMeasurementsOnlyDay(tester);
+      await partlySave(tester, dao);
+      expect(dao.weightsByDate['2026-07-30']?.kg, 81.6,
+          reason: 'the weight went through');
+      expect(dao.measurementsByDate['2026-07-30']?.waistCm, 84);
+
+      await tester.tap(find.byKey(const Key('bodySheetDelete')));
+      await tester.pumpAndSettle();
+      expect(
+          find.text('Removes the weight and measurements recorded for this '
+              'day.'),
+          findsOneWidget);
+      await tester.tap(find.byKey(const Key('confirmDeleteBodyDay')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LogBodySheet), findsNothing);
+      expect(dao.weightsByDate.keys, ['2026-07-28']);
+      expect(dao.measurementsByDate, isEmpty);
+      expect(find.byKey(const Key('bodyDay2026-07-30')), findsNothing);
+    });
+
+    testWidgets('a part-failed save, then the date row away and back: the '
+        'day comes back with the weight that was written', (tester) async {
+      final dao = await openMeasurementsOnlyDay(tester);
+      await partlySave(tester, dao);
+      // Jul 28 has its own values: what was typed is let go first.
+      await pickDay(tester, '28');
+      await tester.tap(find.byKey(const Key('bodySheetConfirmSwitch')));
+      await tester.pumpAndSettle();
+      expect(find.text('Edit Jul 28'), findsOneWidget);
+      await pickDay(tester, '30');
+      expect(find.text('Edit Jul 30'), findsOneWidget);
+      expect(field(tester, 'bodyWeightField'), '81.6');
+      expect(field(tester, 'bodyWaistField'), '84',
+          reason: 'the measurements write did not go through');
+    });
+
+    testWidgets('a part-failed save on a day without data: the sheet edits '
+        'the day from then on, and its weight can be cleared or deleted',
+        (tester) async {
+      final dao = await pumpFlaky(tester);
+      await tester.tap(find.byKey(const Key('logBodyButton')));
+      await tester.pumpAndSettle();
+      expect(find.text('Log body · Aug 2'), findsOneWidget);
+      expect(find.byKey(const Key('bodySheetDelete')), findsNothing);
+      await partlySave(tester, dao);
+      expect(dao.weightsByDate['2026-08-02']?.kg, 81.6);
+      expect(find.byKey(const Key('bodyDay2026-08-02')), findsOneWidget,
+          reason: 'the page under the sheet shows it already');
+      expect(find.text('Edit Aug 2'), findsOneWidget);
+      expect(find.byKey(const Key('bodySheetDelete')), findsOneWidget);
+      expect(field(tester, 'bodyWeightField'), '81.6',
+          reason: 'what was typed stays');
+      expect(field(tester, 'bodyWaistField'), '90');
+
+      // Not wanted after all: cleared, it is deleted, as on any day that
+      // has a weight.
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '');
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pumpAndSettle();
+      expect(find.byType(LogBodySheet), findsNothing);
+      expect(dao.weightsByDate.keys, ['2026-07-28']);
+      expect(dao.measurementsByDate['2026-08-02']?.waistCm, 90);
+    });
+
+    testWidgets('a part-failed save takes no input until the day is re-read',
+        (tester) async {
+      final dao = await openMeasurementsOnlyDay(tester);
+      final reread = Completer<void>();
+      dao.holdReads = reread.future;
+      await tester.enterText(find.byKey(const Key('bodyWeightField')), '81.6');
+      await tester.enterText(find.byKey(const Key('bodyWaistField')), '90');
+      dao.failMeasurementWrites = true;
+      await tester.tap(find.byKey(const Key('bodySheetSave')));
+      await tester.pump();
+      expect(dao.weightsByDate['2026-07-30']?.kg, 81.6,
+          reason: 'the weight went through');
+      final save =
+          tester.widget<FilledButton>(find.byKey(const Key('bodySheetSave')));
+      expect(save.onPressed, isNull, reason: 'still saving');
+      expect((save.child! as Text).data, 'Saving…');
+      expect(
+          tester
+              .widget<TextButton>(find.byKey(const Key('bodySheetDelete')))
+              .onPressed,
+          isNull);
+      expect(
+          tester
+              .widget<GroupedRow>(find.byKey(const Key('bodySheetDateRow')))
+              .onTap,
+          isNull);
+
+      reread.complete();
+      await tester.pumpAndSettle();
+      expect(find.text("Couldn't save. Try again."), findsOneWidget);
+      expect(
+          tester
+              .widget<FilledButton>(find.byKey(const Key('bodySheetSave')))
+              .onPressed,
+          isNotNull);
+      expect(
+          tester
+              .widget<TextButton>(find.byKey(const Key('bodySheetDelete')))
+              .onPressed,
+          isNotNull);
+    });
+
     testWidgets('zh: the save failure is Chinese', (tester) async {
       final dao = await pumpFlaky(tester, locale: const Locale('zh'));
       await tester.tap(find.byKey(const Key('logBodyButton')));
@@ -1022,9 +1177,14 @@ class _FlakyBodyDao extends FakeDao {
   bool failWeightDeletes = false;
   bool failMeasurementDeletes = false;
 
+  /// Set: the page's next reads wait for it.
+  Future<void>? holdReads;
+
   @override
   Future<List<WeightEntry>> listBodyWeights(
       String startDate, String endDate) async {
+    final hold = holdReads;
+    if (hold != null) await hold;
     if (failReads) throw StateError('database is locked');
     return super.listBodyWeights(startDate, endDate);
   }

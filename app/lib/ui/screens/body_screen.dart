@@ -148,8 +148,11 @@ class BodyScreenState extends State<BodyScreen> {
     final imperial = _imperial; // resolved before the sheet detaches
     final now = _now;
     // A save that failed part-way (the weight written, the measurements
-    // not) keeps the sheet open; closed then with a swipe or a tap outside,
-    // the page reloads too. It kept the old values until its next reload.
+    // not) keeps the sheet open, and the page re-reads the day at once:
+    // the sheet's Delete and its date row read the page, which kept the
+    // values from before the save until the sheet closed (a Delete then
+    // left the new weight behind). Closed then with a swipe or a tap
+    // outside, the page reloads too.
     var wrote = false;
     // showGroupedSheet's title is fixed when the sheet opens, and this one
     // follows the picked date, so the route builds the same GroupedSheet
@@ -168,6 +171,7 @@ class BodyScreenState extends State<BodyScreen> {
         measurementsOn: _measurementsOn,
         onDelete: _confirmDelete,
         onWrote: () => wrote = true,
+        onPartlySaved: reload,
       ),
     );
     // false: the sheet deleted the day, and the page reloaded then.
@@ -378,6 +382,7 @@ class _BodySheetHost extends StatefulWidget {
     required this.measurementsOn,
     required this.onDelete,
     required this.onWrote,
+    required this.onPartlySaved,
   });
   final MealsDao dao;
   final String initialDate;
@@ -396,6 +401,10 @@ class _BodySheetHost extends StatefulWidget {
 
   /// A write went through, on any day the sheet showed (LogBodySheet).
   final VoidCallback onWrote;
+
+  /// The screen's re-read after a save that failed part-way; the sheet
+  /// then re-reads its own day from it (LogBodySheet.onPartlySaved).
+  final Future<void> Function() onPartlySaved;
 
   @override
   State<_BodySheetHost> createState() => _BodySheetHostState();
@@ -505,6 +514,13 @@ class _BodySheetHostState extends State<_BodySheetHost> {
           onChangeDate: _changeDate,
           onDelete: hasData ? () => widget.onDelete(day) : null,
           onWrote: widget.onWrote,
+          onPartlySaved: () async {
+            await widget.onPartlySaved();
+            // The same day as stored now. The sheet keeps what was typed;
+            // its title, its Delete and what a cleared field deletes go
+            // by the weight that was written (or deleted).
+            if (mounted) setState(() => _load(_day));
+          },
         ),
       ],
     );
