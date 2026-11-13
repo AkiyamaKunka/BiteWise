@@ -9,6 +9,7 @@ library;
 import 'dart:io' show Platform;
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show MethodCall;
 import 'package:photo_manager/photo_manager.dart';
 
@@ -108,6 +109,11 @@ Future<bool?> photoLibraryAccess() async {
 }
 
 class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
+  PhotoManagerLibrary({@visibleForTesting bool? isAndroid})
+      : _isAndroid = isAndroid ?? Platform.isAndroid;
+
+  final bool _isAndroid;
+
   /// Ask Android for images only. The manifest declares READ_MEDIA_IMAGES
   /// (+ VISUAL_USER_SELECTED) and no video permission; photo_manager's
   /// default option asks for image|video, and its Android 14+ delegate folds
@@ -193,9 +199,21 @@ class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
     return assets.map(_PhotoManagerAsset.new).toList();
   }
 
+  /// Android: photo_manager filters this window on MediaStore DATE_ADDED
+  /// (when the file joined the library) but reports createDateTime from
+  /// DATE_TAKEN (review 171, C4). A photo copied onto the phone (a phone
+  /// transfer, a USB copy, a saved original) joins the library now with its
+  /// old DATE_TAKEN, and the automatic scans sent it to the AI as a new
+  /// photo, logged as eaten today once older than 45 days. Only the photos
+  /// taken at/after [cutoff] are kept, as iOS's creation-date query does;
+  /// one with no date taken reports when it joined, and stays. A photo
+  /// taken before a scan's cutoff but added after it is left to a scan
+  /// whose cutoff it is not before: the launch/resume catch-up over the
+  /// whole window. Both dates are whole seconds there. [limit] caps what
+  /// the query lists, before any is left out.
   @override
   Future<List<LibraryAsset>> imagesCreatedAfter(DateTime cutoff,
-      {int limit = 500}) {
+      {int limit = 500}) async {
     final filter = FilterOptionGroup(
       createTimeCond: DateTimeCond(
         min: cutoff,
@@ -204,7 +222,14 @@ class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
       ),
       orders: [const OrderOption(type: OrderOptionType.createDate, asc: false)],
     );
-    return _query(filter, limit);
+    final listed = await _query(filter, limit);
+    if (!_isAndroid) return listed;
+    final since = DateTime.fromMillisecondsSinceEpoch(
+        cutoff.millisecondsSinceEpoch ~/ 1000 * 1000);
+    return [
+      for (final asset in listed)
+        if (!asset.createDateTime.isBefore(since)) asset,
+    ];
   }
 
   @override
