@@ -85,7 +85,7 @@ String _manifest() =>
 String _uncommented(String xml) =>
     xml.replaceAll(RegExp(r'<!--.*?-->', dotAll: true), '');
 
-/// Every <uses-permission> in [manifest], by name: true when the entry is
+/// Every `<uses-permission>` in [manifest], by name: true when the entry is
 /// a `tools:node="remove"` (it strips a library's permission from the
 /// merged manifest rather than declaring one).
 Map<String, bool> _permissions(String manifest) => {
