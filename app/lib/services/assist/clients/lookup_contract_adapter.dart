@@ -27,14 +27,15 @@ import '../../../core/restaurant_assist_logic.dart'
         kAssistBrandNameMax,
         kAssistMaxComponents,
         kAssistMaxOptions,
-        kAssistMaxPublishedGrams,
-        kAssistMaxPublishedKcal,
         kAssistMenuItemMax,
         kAssistNotesMax,
         kAssistOptionLabelMax,
         kAssistServingMax,
         kAssistTitleMax,
         kAssistUnitMax,
+        publishedGrams,
+        publishedKcal,
+        publishedKcalRange,
         sanitizeAssistText;
 import '../../../core/restaurant_lookup_contract.dart';
 import '../../../core/shared_generated.dart' show sharedRestaurantLookupSchema;
@@ -341,21 +342,6 @@ final Set<String> kLookupMatchTypes = _schemaEnum(_props(
 final Set<String> kLookupSourceTypes =
     _schemaEnum(_props(_schema)['source_type']);
 
-/// A published calorie value as lane B reads one: a whole number in
-/// [0, 6000] (590.0 is the published 590; 590.5 is no published value).
-int? _kcal(Object? v) {
-  if (v is bool || v is! num || !v.isFinite) return null;
-  if (v < 0 || v > kAssistMaxPublishedKcal) return null;
-  if (v != v.roundToDouble()) return null;
-  return v.toInt();
-}
-
-num? _grams(Object? v) {
-  if (v is bool || v is! num || !v.isFinite) return null;
-  if (v < 0 || v > kAssistMaxPublishedGrams) return null;
-  return v;
-}
-
 String _str(Object? v, int max) => sanitizeAssistText(v, max);
 
 class LookupOption {
@@ -383,13 +369,8 @@ class LookupOption {
   /// breaks the contract, and a range can never apply.
   static LookupOption? parse(Object? raw) {
     if (raw is! Map) return null;
-    List<int>? range;
-    final r = raw['calories_range'];
-    if (r is List && r.length == 2) {
-      final lo = _kcal(r[0]), hi = _kcal(r[1]);
-      if (lo != null && hi != null && lo <= hi) range = [lo, hi];
-    }
-    final calories = range == null ? _kcal(raw['calories']) : null;
+    final range = publishedKcalRange(raw['calories_range']);
+    final calories = range == null ? publishedKcal(raw['calories']) : null;
     if (calories == null && range == null) return null;
     return LookupOption(
       label: _str(raw['label'], kAssistOptionLabelMax),
@@ -397,9 +378,9 @@ class LookupOption {
       unit: _str(raw['unit'], kAssistUnitMax),
       calories: calories,
       caloriesRange: range,
-      proteinG: _grams(raw['protein_g']),
-      carbsG: _grams(raw['carbs_g']),
-      fatG: _grams(raw['fat_g']),
+      proteinG: publishedGrams(raw['protein_g']),
+      carbsG: publishedGrams(raw['carbs_g']),
+      fatG: publishedGrams(raw['fat_g']),
     );
   }
 }
@@ -420,10 +401,10 @@ class LookupComponent {
     if (raw is! Map) return null;
     return LookupComponent(
       name: _str(raw['name'], kAssistMenuItemMax),
-      calories: _kcal(raw['calories']),
-      proteinG: _grams(raw['protein_g']),
-      carbsG: _grams(raw['carbs_g']),
-      fatG: _grams(raw['fat_g']),
+      calories: publishedKcal(raw['calories']),
+      proteinG: publishedGrams(raw['protein_g']),
+      carbsG: publishedGrams(raw['carbs_g']),
+      fatG: publishedGrams(raw['fat_g']),
     );
   }
 }

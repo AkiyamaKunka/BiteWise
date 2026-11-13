@@ -563,7 +563,12 @@ bool _numEq(num? a, num? b) {
 
 num _round1(num v) => (v * 10).round() / 10;
 
-int? _publishedKcal(dynamic v) {
+/// [v] as a published calorie value: a whole number in
+/// [0, kAssistMaxPublishedKcal], else null. The one reading of a lookup
+/// answer's and a stored block's kcal (lookup_contract_adapter.dart and
+/// ui/assist_view.dart use it too), so they never disagree about what
+/// counts as published.
+int? publishedKcal(Object? v) {
   if (v is bool || v is! num || !v.isFinite) return null;
   if (v < 0 || v > kAssistMaxPublishedKcal) return null;
   // "Copy exactly": 590.0 is the published 590; 590.5 is no published
@@ -572,10 +577,21 @@ int? _publishedKcal(dynamic v) {
   return v.toInt();
 }
 
-num? _publishedGrams(dynamic v) {
+/// [v] as a published gram value: a number in
+/// [0, kAssistMaxPublishedGrams], else null.
+num? publishedGrams(Object? v) {
   if (v is bool || v is! num || !v.isFinite) return null;
   if (v < 0 || v > kAssistMaxPublishedGrams) return null;
   return v;
+}
+
+/// [raw] as a published calorie range [low, high]: a list of two
+/// [publishedKcal] values with low <= high, else null.
+List<int>? publishedKcalRange(Object? raw) {
+  if (raw is! List || raw.length != 2) return null;
+  final lo = publishedKcal(raw[0]);
+  final hi = publishedKcal(raw[1]);
+  return lo != null && hi != null && lo <= hi ? [lo, hi] : null;
 }
 
 // ─── Tokens and word lists ─────────────────────────────────────────────
@@ -937,16 +953,10 @@ final class AssistSize {
 
 _Option? _parseOption(dynamic raw, int index) {
   if (raw is! Map) return null;
-  List<int>? range;
-  final r = raw['calories_range'];
-  if (r is List && r.length == 2) {
-    final lo = _publishedKcal(r[0]);
-    final hi = _publishedKcal(r[1]);
-    if (lo != null && hi != null && lo <= hi) range = [lo, hi];
-  }
+  final range = publishedKcalRange(raw['calories_range']);
   // Both a value and a range breaks the contract; the range wins (it can
   // never apply).
-  final calories = range == null ? _publishedKcal(raw['calories']) : null;
+  final calories = range == null ? publishedKcal(raw['calories']) : null;
   if (calories == null && range == null) return null;
   return _Option(
     index: index,
@@ -957,9 +967,9 @@ _Option? _parseOption(dynamic raw, int index) {
     range: range,
     published: AssistNumbers(
       calories: calories,
-      proteinG: _publishedGrams(raw['protein_g']),
-      carbsG: _publishedGrams(raw['carbs_g']),
-      fatG: _publishedGrams(raw['fat_g']),
+      proteinG: publishedGrams(raw['protein_g']),
+      carbsG: publishedGrams(raw['carbs_g']),
+      fatG: publishedGrams(raw['fat_g']),
     ),
   );
 }
@@ -1221,13 +1231,13 @@ AssistPick? _pickComponents(dynamic item, dynamic components) {
   final figures = <int>[];
   for (final raw in list) {
     if (raw is! Map) return null;
-    final k = _publishedKcal(raw['calories']);
+    final k = publishedKcal(raw['calories']);
     if (k == null) return null;
     kcal += k;
     figures.add(k);
-    final pp = _publishedGrams(raw['protein_g']);
-    final cc = _publishedGrams(raw['carbs_g']);
-    final ff = _publishedGrams(raw['fat_g']);
+    final pp = publishedGrams(raw['protein_g']);
+    final cc = publishedGrams(raw['carbs_g']);
+    final ff = publishedGrams(raw['fat_g']);
     if (pp == null || cc == null || ff == null) {
       macros = false;
     } else {
@@ -2579,13 +2589,13 @@ Map<String, dynamic>? acceptAssistSuggestion(
     final index = match['item_index'] as int;
     final pub = match['published'];
     final p = pub is Map ? pub : const {};
-    final calories = _publishedKcal(p['calories']);
+    final calories = publishedKcal(p['calories']);
     if (calories == null) continue;
     final published = AssistNumbers(
       calories: calories,
-      proteinG: _publishedGrams(p['protein_g']),
-      carbsG: _publishedGrams(p['carbs_g']),
-      fatG: _publishedGrams(p['fat_g']),
+      proteinG: publishedGrams(p['protein_g']),
+      carbsG: publishedGrams(p['carbs_g']),
+      fatG: publishedGrams(p['fat_g']),
     );
     final multiplier = coerceQty(match['qty']);
     final type = match['match_type'];
