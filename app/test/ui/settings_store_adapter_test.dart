@@ -182,8 +182,8 @@ void main() {
     expect(settings.summaryEnabled, isFalse);
     expect(android.summaryEnabled, isFalse);
     expect(notifier.nextDailyFire, isNull, reason: 'the Timer is cancelled');
-    expect(cancelled, [ReportNotifier.dailyReportNotificationId],
-        reason: 'and the card the OS holds is withdrawn');
+    expect(cancelled, ReportNotifier.dailySetIds,
+        reason: 'and the cards the OS holds are withdrawn');
     await android.update(reportTime: '23:00');
     expect(settings.reportTime, '23:00');
     expect(notifier.nextDailyFire, isNull,
@@ -199,7 +199,8 @@ void main() {
     await ios.update(summaryEnabled: false);
     await ios.update(reportTime: '21:00');
     expect(rearmed, 0, reason: 'off: no re-arm, not even for a slot edit');
-    expect(cancelled, hasLength(2));
+    expect(cancelled, hasLength(2 * ReportNotifier.dailySetSize),
+        reason: 'the set withdrawn once per switch-off');
     await ios.update(summaryEnabled: true);
     expect(rearmed, 1);
     expect(notifier.nextDailyFire, isNull, reason: 'no Timer on the OS path');

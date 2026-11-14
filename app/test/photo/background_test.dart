@@ -12,6 +12,7 @@ class FakeScheduler implements BackgroundScheduler {
   Map<String, dynamic>? registeredInput;
   String? registeredUniqueName;
   String? registeredTaskName;
+  ExistingPeriodicWorkPolicy? registeredPolicy;
 
   @override
   Future<void> initialize(Function dispatcher) async {
@@ -21,8 +22,11 @@ class FakeScheduler implements BackgroundScheduler {
 
   @override
   Future<void> registerPeriodic(String uniqueName, String taskName,
-      {required Duration frequency, Map<String, dynamic>? inputData}) async {
+      {required Duration frequency,
+      Map<String, dynamic>? inputData,
+      ExistingPeriodicWorkPolicy? existingWorkPolicy}) async {
     calls.add('register');
+    registeredPolicy = existingWorkPolicy;
     registeredUniqueName = uniqueName;
     registeredTaskName = taskName;
     registeredFrequency = frequency;
@@ -125,13 +129,32 @@ void main() {
       await enableBackgroundScan(true,
           lookbackDays: 99, frequency: const Duration(minutes: 1));
 
-      expect(scheduler.calls,
-          ['initialize', 'cancel:$photoBackfillUniqueName', 'register']);
+      // No cancel first (review 171, C7): cancelling stops a RUNNING
+      // worker, and workmanager's onStopped destroys its engine mid-upload
+      // — every app open did that. UPDATE keeps one chain, lets a running
+      // worker finish and keeps the chain's timing.
+      expect(scheduler.calls, ['initialize', 'register']);
+      expect(scheduler.registeredPolicy, ExistingPeriodicWorkPolicy.update);
       expect(scheduler.registeredUniqueName, photoBackfillUniqueName);
       expect(scheduler.registeredTaskName, photoBackfillTaskName);
       expect(scheduler.registeredFrequency,
           minBackgroundFrequency); // WorkManager >=15 min floor
       expect(scheduler.registeredInput, {'lookbackDays': 30}); // §8 clamp
+    });
+
+    test('Android: registering again never cancels, so a run in progress '
+        'is not stopped', () async {
+      final scheduler = FakeScheduler();
+      debugSchedulerOverride = scheduler;
+      debugIsAndroidOverride = true;
+
+      // Every app start, a lookback edit and a watcher edit re-register.
+      await enableBackgroundScan(true);
+      await enableBackgroundScan(true, lookbackDays: 7);
+      await enableBackgroundScan(true);
+      expect(scheduler.calls.where((c) => c.startsWith('cancel')), isEmpty);
+      expect(scheduler.calls.where((c) => c == 'register'), hasLength(3));
+      expect(scheduler.registeredPolicy, ExistingPeriodicWorkPolicy.update);
     });
 
     test('frequency above the floor is kept as-is', () async {
@@ -175,8 +198,11 @@ void main() {
       debugIsIOSOverride = true;
 
       await enableBackgroundScan(true, frequency: const Duration(minutes: 30));
+      // iOS unchanged: cancel-then-register, no work policy (WorkManager's
+      // policies mean nothing to BGTaskScheduler).
       expect(scheduler.calls,
           ['initialize', 'cancel:$photoBackfillUniqueName', 'register']);
+      expect(scheduler.registeredPolicy, isNull);
       expect(scheduler.registeredUniqueName, photoBackfillUniqueName);
       expect(scheduler.registeredTaskName, photoBackfillTaskName);
       expect(photoBackfillUniqueName, 'calorietracker.photo.backfill.periodic');

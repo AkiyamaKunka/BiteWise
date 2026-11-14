@@ -1,16 +1,19 @@
 /// Local notifications for the report module (spec §5 delivery surface).
 ///
-/// scheduleDaily takes the dependency-free route the port spec allows: the
-/// timezone package is NOT a pubspec dependency, so instead of
-/// zonedSchedule the notifier computes the next wall-clock occurrence with
-/// plain DateTime, arms a Timer, and re-arms after each fire
-/// (reschedule-after-fire pattern). Constraint: an in-process Timer does
-/// not survive process death — the integrator re-calls scheduleDaily on app
-/// launch with the persisted hh:mm setting. Exact delivery while the app is
-/// dead would need zonedSchedule + the timezone dep, or platform alarms.
+/// Two ways to deliver the daily summary:
+///   * [ReportNotifier.scheduleDailyAt] hands ONE card for the next slot to
+///     the OS, built ahead of time — the path on both phones (iOS since
+///     2026-09-28, Android since the Play push, 2026-11-13). The OS
+///     delivers it with the app dead; callers re-arm whenever the content
+///     could have changed (os_summary.dart).
+///   * [ReportNotifier.scheduleDaily] arms an in-process Timer and re-arms
+///     after each fire. It dies with the process, so it is only the
+///     fallback for a host with no OS scheduler (and the tests' seam).
+/// Meal cards and the other notices are posted at once ([showMealCard]).
 library;
 
 import 'dart:async';
+import 'dart:ui' show Color;
 
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -23,7 +26,12 @@ typedef NotificationPresenter = Future<void> Function(
 /// Test seam for [ReportNotifier.scheduleDailyAt]: the OS-side schedule
 /// call, so the iOS delivery path is assertable without platform channels.
 typedef NotificationScheduler = Future<void> Function(
-    int id, String title, String body, DateTime when);
+    int id, String title, String body, DateTime when, String payload);
+
+/// A daily card the OS still holds ([ReportNotifier.pendingDailyCards]):
+/// its id in the daily set, its slot, and the day it describes (null for
+/// a card armed before payloads named it).
+typedef PendingDailyCard = ({int id, DateTime slot, DateTime? day});
 
 class ReportNotifier {
   ReportNotifier({
@@ -36,7 +44,9 @@ class ReportNotifier {
     Future<List<int>> Function()? pendingIds,
     Future<String?> Function(DateTime slotDate)? dailyBody,
     ({String name, String description}) Function()? channelStrings,
+    ({String name, String description}) Function()? mealChannelStrings,
     int? mealCardIdSeed,
+    Future<Map<int, String?>> Function()? pendingPayloads,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
         _clock = clock ?? DateTime.now,
         // ignore: prefer_initializing_formals
@@ -52,7 +62,11 @@ class ReportNotifier {
         // ignore: prefer_initializing_formals
         _dailyBody = dailyBody,
         // ignore: prefer_initializing_formals
-        _channelStrings = channelStrings {
+        _channelStrings = channelStrings,
+        // ignore: prefer_initializing_formals
+        _mealChannelStrings = mealChannelStrings,
+        // ignore: prefer_initializing_formals
+        _pendingPayloads = pendingPayloads {
     // Each background run constructs a FRESH notifier; a fixed 100-base
     // would make every run overwrite the previous run's unread meal cards.
     // Headless callers pass a time-derived seed so ids keep advancing.
@@ -63,7 +77,37 @@ class ReportNotifier {
   /// stacking (one canonical daily report, spec §5.5).
   static const int dailyReportNotificationId = 9001;
 
-  static const String _channelId = 'calorietracker_reports';
+  /// How many daily cards one arm can hand the OS: the next slot (on
+  /// [dailyReportNotificationId]) and, on Android, the 7 after it, on the
+  /// ids that follow (os_summary.dart: with no background job, nothing
+  /// else would arm the next night's card). The ids stay clear of the
+  /// meal cards' (100 up in the app, 10000 up in background runs).
+  static const int dailySetSize = 8;
+
+  /// The daily set's ids, the next slot's first.
+  static List<int> get dailySetIds =>
+      [for (var i = 0; i < dailySetSize; i++) dailyReportNotificationId + i];
+
+  /// Android: a daily card leaves the shade on its own after this long.
+  /// Each night's card has its own id now (one id holds one alarm), so a
+  /// card no longer replaces the night before's; 20 hours keeps about one
+  /// at a time, as before.
+  static const Duration dailyCardLifetime = Duration(hours: 20);
+
+  /// The daily summary's Android channel. The id every install has had
+  /// since July 2026 ('Reports & meals', which also carried the meal
+  /// cards), kept so the user's settings on it — muted, silent, a sound —
+  /// survive; only its name changed, to 'Daily summary' (Play push).
+  static const String summaryChannelId = 'calorietracker_reports';
+
+  /// Meal cards and the automatic-scan notices, on their own channel since
+  /// the Play push: muting them used to mute the summary too.
+  static const String mealChannelId = 'chopstats_meal_cards';
+
+  /// The cards' colour on Android (the small icon and app name in the
+  /// shade): the app's terracotta accent, AppColors.light.accent
+  /// (notifications_test pins the two together).
+  static const Color cardColor = Color(0xFFA64B2A);
 
   /// Android notification small icon (res/drawable/ic_stat_bitewise.xml).
   /// Android draws a small icon from its alpha channel only, so the
@@ -84,23 +128,44 @@ class ReportNotifier {
   /// Test seam for [scheduledDailyAt]: the ids the OS still holds pending.
   final Future<List<int>> Function()? _pendingIds;
 
-  /// Android channel name/description in the app language, read at post
-  /// time so a language switch shows on the very next card. Injected by
-  /// the ui/ callers (localizationsFor) so services/ stays free of ui/;
-  /// null keeps the English pair for tests and createSettingsStore's bare
-  /// fallback notifier.
+  /// Test seam for [pendingDailyCards]: what the OS still holds pending,
+  /// id → payload.
+  final Future<Map<int, String?>> Function()? _pendingPayloads;
+
+  /// Android channel names/descriptions in the app language — the
+  /// summary's and the meal cards' — read at post time so a language
+  /// switch shows on the very next card. Injected by the ui/ callers
+  /// (localizationsFor) so services/ stays free of ui/; null keeps the
+  /// English pair for tests and createSettingsStore's bare fallback
+  /// notifier.
   final ({String name, String description}) Function()? _channelStrings;
+  final ({String name, String description}) Function()? _mealChannelStrings;
 
   static const ({String name, String description}) _englishChannel = (
-    name: 'Reports & meals',
-    description: 'Daily calorie reports and auto-logged meal cards',
+    name: 'Daily summary',
+    description: 'Your calorie summary, at the time you set',
+  );
+
+  static const ({String name, String description}) _englishMealChannel = (
+    name: 'Logged meals',
+    description: 'A card for each meal logged automatically from your '
+        'camera roll',
   );
 
   static const Importance _importance = Importance.defaultImportance;
 
-  /// The channel name/description in the app language right now.
+  /// The summary channel's name/description in the app language right now.
   ({String name, String description}) _channel() =>
       _channelStrings?.call() ?? _englishChannel;
+
+  ({String name, String description}) _mealChannel() =>
+      _mealChannelStrings?.call() ?? _englishMealChannel;
+
+  /// Set when Android would not create the meal-card channel (or could not
+  /// say whether the summary's is blocked): meal cards then go on the
+  /// summary's channel, as they did before the split, so a user's mute
+  /// still holds.
+  bool _mealsOnSummaryChannel = false;
 
   /// Built per post, not const. Android shows the channel name under
   /// 设置 › 应用 › 筷拍 › 通知 and in every card's long-press menu, and it was
@@ -110,14 +175,20 @@ class ReportNotifier {
   /// a MISSING channel never, so on a fresh install Android dropped every
   /// card ("No Channel found", API 35 emulator 2026-10-12). Naming and
   /// renaming is [_syncChannel]'s job, not the post's.
-  NotificationDetails _details() {
-    final channel = _channel();
+  ///
+  /// [meal]: a meal card (or an automatic-scan notice), on the meal-card
+  /// channel; else the daily summary's.
+  NotificationDetails _details({bool meal = false}) {
+    final onMeals = meal && !_mealsOnSummaryChannel;
+    final channel = onMeals ? _mealChannel() : _channel();
     return NotificationDetails(
       android: AndroidNotificationDetails(
-        _channelId,
+        onMeals ? mealChannelId : summaryChannelId,
         channel.name,
         channelDescription: channel.description,
         icon: androidSmallIcon,
+        color: cardColor,
+        timeoutAfter: onMeals ? null : dailyCardLifetime.inMilliseconds,
         importance: _importance,
         priority: Priority.defaultPriority,
         channelAction: AndroidNotificationChannelAction.createIfNotExists,
@@ -127,28 +198,66 @@ class ReportNotifier {
     );
   }
 
-  /// Create the Android channel, or rename an existing one to the app
+  /// Create the Android channels, or rename existing ones to the app
   /// language. Run from init() — which the foreground app and every
   /// headless run both call before posting — and again before each post so
   /// a 语言 switch shows on the very next card. For an existing channel
-  /// Android only takes the name/description (same importance), so the
-  /// user's own per-channel settings survive. Never throws: a no-op off
-  /// Android.
+  /// Android only takes the name/description (an app cannot raise its
+  /// importance), so the user's own per-channel settings survive. Never
+  /// throws: a no-op off Android.
+  ///
+  /// The meal-card channel is new with the Play push. A user who had muted
+  /// the old shared channel, or set it Silent, did so for the meal cards
+  /// too, so the meal channel is CREATED at the lower of the summary
+  /// channel's importance and default — blocked (none) included: Android
+  /// accepts IMPORTANCE_NONE at creation (its range check is NONE..MAX).
+  /// Should it refuse, or should the channel list be unreadable, meal
+  /// cards stay on the summary's channel.
   Future<void> _syncChannel() async {
-    final channel = _channel();
+    final AndroidFlutterLocalNotificationsPlugin? android;
     try {
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.createNotificationChannel(AndroidNotificationChannel(
-            _channelId,
-            channel.name,
-            description: channel.description,
-            importance: _importance,
-          ));
+      android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
     } catch (_) {
-      // No platform plugin (tests); the post's createIfNotExists still
-      // creates a missing channel.
+      return;
+    }
+    if (android == null) return; // not Android (or tests)
+    final summary = _channel();
+    try {
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        summaryChannelId,
+        summary.name,
+        description: summary.description,
+        importance: _importance,
+      ));
+    } catch (_) {
+      // The post's createIfNotExists still creates a missing channel.
+    }
+    try {
+      final existing =
+          await android.getNotificationChannels() ?? const <AndroidNotificationChannel>[];
+      final mealExists = existing.any((c) => c.id == mealChannelId);
+      // The old shared channel's importance, when lower than default: a
+      // user who had set it Silent (low) or blocked it (none) had the meal
+      // cards silent or blocked with it.
+      Importance? lower;
+      for (final c in existing) {
+        final v = c.importance.value;
+        if (c.id == summaryChannelId && v >= 0 && v < _importance.value) {
+          lower = c.importance;
+        }
+      }
+      final meal = _mealChannel();
+      await android.createNotificationChannel(AndroidNotificationChannel(
+        mealChannelId,
+        meal.name,
+        description: meal.description,
+        // Only at creation: an existing channel keeps whatever it has.
+        importance: mealExists ? _importance : (lower ?? _importance),
+      ));
+      _mealsOnSummaryChannel = false;
+    } catch (_) {
+      _mealsOnSummaryChannel = true;
     }
   }
 
@@ -173,6 +282,12 @@ class ReportNotifier {
 
   Future<void>? _initInFlight;
 
+  /// The plugin and the Android channel; on iOS also the permission ask
+  /// (DarwinInitializationSettings). Android's permission is NOT asked
+  /// here: init ran at every start, so a fresh install got the dialog over
+  /// setup and again at the second launch, and two denials are permanent.
+  /// It is asked once, in context (notification_permission.dart).
+  ///
   /// Single-flight: on iOS the first call blocks on the permission dialog,
   /// and every lifecycle transition the dialog itself causes re-arms the
   /// summary through here — one initialize, everyone awaits it.
@@ -191,16 +306,6 @@ class ReportNotifier {
     );
     await _plugin.initialize(settings: settings);
     await _syncChannel();
-    try {
-      // Android 13+ runtime grant; a denial means silent no-shows, so a
-      // failure here is non-fatal.
-      await _plugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.requestNotificationsPermission();
-    } catch (_) {
-      // Older plugin/platform combinations: proceed without the grant.
-    }
     _initialized = true;
   }
 
@@ -250,14 +355,22 @@ class ReportNotifier {
   /// the user switching the summary off. [cancelDaily] only stops this
   /// process's Timer; a card already handed to the OS would still fire
   /// tonight. Never throws: nothing pending is the common case.
+  ///
+  /// The whole daily set ([dailySetIds]): on Android an arm holds the next
+  /// eight nights' cards.
   Future<void> cancelPendingDaily() async {
     if (_dailyTimer == null) _nextDailyFire = null; // nothing armed anywhere
     final cancel = _canceller;
-    if (cancel != null) return cancel(dailyReportNotificationId);
-    try {
-      await _plugin.cancel(id: dailyReportNotificationId);
-    } catch (_) {
-      // No platform plugin (tests) or nothing to withdraw.
+    for (final id in dailySetIds) {
+      if (cancel != null) {
+        await cancel(id);
+        continue;
+      }
+      try {
+        await _plugin.cancel(id: id);
+      } catch (_) {
+        // No platform plugin (tests) or nothing to withdraw.
+      }
     }
   }
 
@@ -322,6 +435,28 @@ class ReportNotifier {
     return null;
   }
 
+  /// Whether the daily summary can be delivered: the app's notifications
+  /// on ([notificationsEnabled]) and, on Android, its own channel not
+  /// blocked — the user can block 'Daily summary' alone, which the
+  /// app-level switch does not show (review, 2026-11-13). Null when the
+  /// platform cannot say. Never throws.
+  Future<bool?> summaryNotificationsEnabled() async {
+    final app = await notificationsEnabled();
+    if (app == false || _enabledProbe != null) return app;
+    try {
+      final android = _plugin.resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>();
+      final channels = await android?.getNotificationChannels();
+      final blocked = channels?.any((c) =>
+              c.id == summaryChannelId && c.importance == Importance.none) ??
+          false;
+      if (blocked) return false;
+    } catch (_) {
+      // The plugin cannot list channels: the app-level answer stands.
+    }
+    return app;
+  }
+
   /// The slot the daily summary is armed for, as far as this process can
   /// tell: the live Timer's next fire (Android), or — on the OS path — the
   /// last armed slot IF the OS still lists the card as pending. Null means
@@ -345,7 +480,75 @@ class ReportNotifier {
     }
   }
 
-  /// Hand the daily summary to the OS to deliver at [when] — the iOS path.
+  /// The payload of the card [scheduleDailyAt] hands the OS: its slot, as
+  /// a UTC instant. The OS keeps it with the pending card, so any engine
+  /// can later ask which slot the card it holds is for
+  /// ([pendingDailyCards]). Nothing reads it on a tap.
+  ///
+  /// [day]: the calendar day the card describes, kept too — on the night
+  /// DST starts a slot can normalise past the night rule's hour, so the
+  /// day cannot always be worked out from the slot again.
+  static String dailySlotPayload(DateTime when, {DateTime? day}) {
+    final slot = 'daily:${when.toUtc().toIso8601String()}';
+    if (day == null) return slot;
+    final d = '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}';
+    return '$slot@$d';
+  }
+
+  static ({DateTime slot, DateTime? day})? _parsePayload(String? payload) {
+    const prefix = 'daily:';
+    if (payload == null || !payload.startsWith(prefix)) return null;
+    final rest = payload.substring(prefix.length).split('@');
+    final slot = DateTime.tryParse(rest.first)?.toLocal();
+    if (slot == null) return null;
+    final day = rest.length > 1 ? DateTime.tryParse(rest[1]) : null;
+    return (
+      slot: slot,
+      day: day == null ? null : DateTime(day.year, day.month, day.day)
+    );
+  }
+
+  /// The slot in a [dailySlotPayload], in local time; null for anything
+  /// else (a card armed before payloads, say).
+  static DateTime? slotFromPayload(String? payload) =>
+      _parsePayload(payload)?.slot;
+
+  /// The daily cards the OS still holds, earliest slot first; empty when
+  /// none, or the OS would not say. On Android a pending card whose slot
+  /// has passed has not been delivered yet — an inexact alarm runs late —
+  /// or never will be (a force stop takes the alarm, not the plugin's
+  /// record of it). Never throws.
+  Future<List<PendingDailyCard>> pendingDailyCards() async {
+    try {
+      final Map<int, String?> pending;
+      final probe = _pendingPayloads;
+      if (probe != null) {
+        pending = await probe();
+      } else if (_scheduler != null) {
+        return const []; // seam-only tests: no OS
+      } else {
+        pending = {
+          for (final p in await _plugin.pendingNotificationRequests())
+            p.id: p.payload,
+        };
+      }
+      final ids = dailySetIds;
+      final cards = <PendingDailyCard>[
+        for (final e in pending.entries)
+          if (ids.contains(e.key))
+            if (_parsePayload(e.value) case final parsed?)
+              (id: e.key, slot: parsed.slot, day: parsed.day),
+      ]..sort((a, b) => a.slot.compareTo(b.slot));
+      return cards;
+    } catch (_) {
+      return const []; // no platform plugin (tests), or the OS would not say
+    }
+  }
+
+  /// Hand the daily summary to the OS to deliver at [when] — the path on
+  /// both phones (os_summary.dart).
   ///
   /// iOS suspends the process seconds after backgrounding and this app has
   /// no background execution there (spec §6: share/picker only, no
@@ -359,21 +562,36 @@ class ReportNotifier {
   /// "today" title. If the app is never opened again, silence beats a lie.
   ///
   /// Same id as the live path, so a re-arm REPLACES the pending card rather
-  /// than stacking one per app open.
+  /// than stacking one per app open. The card carries its slot
+  /// ([dailySlotPayload]).
+  ///
+  /// Android: an INEXACT alarm (no exact-alarm permission, by policy). On
+  /// Android 12+ it fires within about an hour after [when], later in Doze
+  /// or battery saver; it needs no network, and even the Restricted
+  /// standby bucket allows one a day, but the user's own battery
+  /// 'Restricted' setting blocks it. The receivers that deliver it and
+  /// re-arm it after a reboot or an app update are declared in the
+  /// manifest (flutter_local_notifications' README).
+  ///
+  /// [id]: one of [dailySetIds] — [dailyReportNotificationId] for the next
+  /// slot. [day]: the day the card describes, kept in its payload.
   Future<void> scheduleDailyAt({
     required DateTime when,
     required String title,
     required String body,
+    int id = dailyReportNotificationId,
+    DateTime? day,
   }) async {
+    final payload = dailySlotPayload(when, day: day);
     final scheduler = _scheduler;
     if (scheduler != null) {
-      await scheduler(dailyReportNotificationId, title, body, when);
-      _nextDailyFire = when;
+      await scheduler(id, title, body, when, payload);
+      if (id == dailyReportNotificationId) _nextDailyFire = when;
       return;
     }
     await _syncChannel();
     await _plugin.zonedSchedule(
-      id: dailyReportNotificationId,
+      id: id,
       title: title,
       body: body,
       // UTC on purpose: [when] is an absolute instant, and TZDateTime.from
@@ -382,18 +600,20 @@ class ReportNotifier {
       // for a repeating wall-clock trigger, which this is not.)
       scheduledDate: tz.TZDateTime.from(when, tz.UTC),
       notificationDetails: _details(),
-      // Ignored on iOS. Inexact so that if Android ever opts in this cannot
-      // throw for a missing SCHEDULE_EXACT_ALARM grant.
+      payload: payload,
+      // Ignored on iOS. Inexact: the app holds no SCHEDULE_EXACT_ALARM or
+      // USE_EXACT_ALARM permission, and an exact mode would throw for it.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
-    _nextDailyFire = when;
+    if (id == dailyReportNotificationId) _nextDailyFire = when;
   }
 
   /// Meal card for watcher-logged meals (spec §6 auto intake surfaces its
-  /// §5.4 result card as a notification). Ids increment so multiple
-  /// auto-logged meals stack instead of overwriting each other.
+  /// §5.4 result card as a notification), on the meal-card channel. Ids
+  /// increment so multiple auto-logged meals stack instead of overwriting
+  /// each other.
   Future<void> showMealCard(String title, String body) =>
-      _present(_nextMealCardId++, title, body);
+      _present(_nextMealCardId++, title, body, meal: true);
 
   /// The daily coach summary. Shares the daily-report id so a re-post
   /// REPLACES rather than stacks — one summary per day, by construction
@@ -401,11 +621,15 @@ class ReportNotifier {
   Future<void> showDailySummary(String title, String body) =>
       _present(dailyReportNotificationId, title, body);
 
-  Future<void> _present(int id, String title, String body) async {
+  Future<void> _present(int id, String title, String body,
+      {bool meal = false}) async {
     final presenter = _presenter;
     if (presenter != null) return presenter(id, title, body);
     await _syncChannel();
     await _plugin.show(
-        id: id, title: title, body: body, notificationDetails: _details());
+        id: id,
+        title: title,
+        body: body,
+        notificationDetails: _details(meal: meal));
   }
 }

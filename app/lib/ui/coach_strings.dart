@@ -12,6 +12,7 @@ import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 import '../l10n/app_localizations_zh.dart';
 import '../services/report/coach_summary.dart';
+import '../services/report/daily_summary.dart' show SummaryDayNaming;
 
 /// [appLanguage] is the persisted 'system' | 'en' | 'zh'.
 CoachStrings coachStringsFor(String appLanguage) {
@@ -34,15 +35,38 @@ CoachStrings coachStringsFor(String appLanguage) {
   );
 }
 
-/// The Android notification channel's name/description in the app
-/// language — Android shows them in its own Settings and in a card's
-/// long-press menu, and never translates them itself.
+/// Android's day-named card wording (SummaryDayNaming, daily_summary.dart)
+/// in [appLanguage]: 'Thu: 1,850 kcal' / '周四：1,850 千卡'.
+SummaryDayNaming summaryDayNamingFor(String appLanguage) {
+  final l = localizationsFor(appLanguage);
+  const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  return SummaryDayNaming(
+    dayName: (day) => l.coachWeekday(keys[day.weekday - 1]),
+    title: l.coachTitleOnDay,
+    empty: l.coachEmptyOnDay,
+  );
+}
+
+/// The daily summary's Android notification channel, name and
+/// description, in the app language — Android shows them in its own
+/// Settings and in a card's long-press menu, and never translates them
+/// itself.
 ({String name, String description}) notificationChannelFor(
     String appLanguage) {
   final l = localizationsFor(appLanguage);
   return (
     name: l.notificationChannelName,
     description: l.notificationChannelDescription,
+  );
+}
+
+/// The meal cards' Android channel (Play push), likewise.
+({String name, String description}) mealNotificationChannelFor(
+    String appLanguage) {
+  final l = localizationsFor(appLanguage);
+  return (
+    name: l.notificationMealChannelName,
+    description: l.notificationMealChannelDescription,
   );
 }
 

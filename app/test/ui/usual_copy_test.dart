@@ -159,10 +159,16 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// bodyDeleteFailed) and the coverage window slider's screen-reader name
 /// (covWindowLabel), less bodyEmptyHintImperial (review r171: the same
 /// text as bodyEmptyHint), then the Leftovers screen's failure lines
-/// (leftoverLoadFailed, leftoverSaveFailed), then the Android push's ui
-/// lane: the discard-changes question (discardChangesTitle, Body, Keep,
-/// Discard).
-const _keyCount = 894;
+/// (leftoverLoadFailed, leftoverSaveFailed), then Android's system photo
+/// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable) and
+/// the note for a photo older than the dating window
+/// (addOldPhotoLoggedToday), then the Android background lane's block
+/// (summaryBatteryRestrictedHint, notificationsAllowAction,
+/// notificationMealChannelName/Description, watcherAllowAllPhotos,
+/// coachWeekday, coachTitleOnDay, coachEmptyOnDay, diagBgRunNotFinished,
+/// watcherLimitedFooterIos), then the Android push's ui lane: the
+/// discard-changes question (discardChangesTitle, Body, Keep, Discard).
+const _keyCount = 908;
 
 Directory _appRoot() {
   var dir = Directory.current;

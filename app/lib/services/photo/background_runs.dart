@@ -52,6 +52,11 @@ abstract final class BackgroundStop {
   static const noKey = 'no_key';
   static const watcherOff = 'watcher_off';
   static const noPermission = 'no_permission';
+
+  /// Written by the NEXT run on an entry that never finished: the OS
+  /// stopped it (iOS's grant expired, Android's 10-minute limit or job
+  /// quota) and told Dart nothing. Its end stays unknown (null).
+  static const stoppedBySystem = 'system_stop';
   static String error(Object e) => 'error:${e.runtimeType}';
 }
 
@@ -298,8 +303,19 @@ class BackgroundRunRecorder {
 
   /// [bootLead]: how long before the Dart entry the run started natively
   /// (zero or null: no native stamp for this run).
+  ///
+  /// The newest stored entry, unfinished and unlabelled, belongs to a run
+  /// the OS stopped (runs never overlap): it is labelled
+  /// [BackgroundStop.stoppedBySystem], its step and counts kept, so the
+  /// record tells it from a run still going.
   Future<void> begin({DateTime? watermarkBefore, Duration? bootLead}) async {
-    _older = decodeBackgroundRuns(_prefs.getString(backgroundRunsPrefsKey));
+    final older =
+        decodeBackgroundRuns(_prefs.getString(backgroundRunsPrefsKey));
+    final last = older.firstOrNull;
+    _older = last != null && !last.finished && last.stopReason == null
+        ? [last.copyWith(stopReason: BackgroundStop.stoppedBySystem),
+            ...older.skip(1)]
+        : older;
     _current = BackgroundRunRecord(
         start: _clock().toUtc(),
         platform: platform,

@@ -84,10 +84,13 @@ class PhotoOutcome {
   final String? kcal;
   final int? deductedKcal;
 
-  /// [PhotoOutcomeKind.leftoverApplied] only: the meal that was cut, its
-  /// day, and its analysis as it stood just BEFORE this deduction — what
-  /// the add flow's "not leftovers" undo writes back (revertedLeftover).
+  /// [PhotoOutcomeKind.leftoverApplied]: the meal that was cut, its day,
+  /// and its analysis as it stood just BEFORE this deduction — what the
+  /// add flow's "not leftovers" undo writes back (revertedLeftover).
   /// [analysis] is then the deducted analysis this run stored.
+  /// [PhotoOutcomeKind.saved]: the new meal and the day it was logged for
+  /// (the add flow says that day when an old photo went to today); no
+  /// [previousAnalysis].
   final int? mealId;
   final String? mealDate;
   final Map<String, dynamic>? previousAnalysis;
@@ -545,9 +548,18 @@ class PhotoPipeline {
   /// process() keeps announcing saves, leftover deductions and permanent
   /// failures itself (every path), so none of those is said twice, and the
   /// watcher's bind() stays quiet about them.
+  ///
+  /// BACKPRESSURE (review 171, C2): the subscription is paused from each
+  /// photo's arrival until its turn has ended, so the share intake reads
+  /// the next copy only then — one original resident, as bind() keeps the
+  /// watcher's. Without it every shared original sat chained on the tail
+  /// at once (a 40-photo share: about 160 MB).
   void bindStream(Stream<IntakePhoto> photos) {
-    _subs.add(photos.listen((p) {
+    late final StreamSubscription<IntakePhoto> sub;
+    sub = photos.listen((p) {
+      sub.pause();
       final slot = _chain(p);
+      slot.whenComplete(sub.resume).ignore();
       _tail = slot.then((o) {
         // A transient failure was released, and the share copy is already
         // gone: nothing will ever re-offer it, so silence read as "it
@@ -563,7 +575,8 @@ class PhotoPipeline {
           notify?.call(say);
         } catch (_) {}
       });
-    }, onError: (Object _) {}));
+    }, onError: (Object _) {});
+    _subs.add(sub);
   }
 
   Future<void> dispose() async {
@@ -1438,7 +1451,12 @@ class PhotoPipeline {
     // ("meal 2 was roast duck"), so surfacing the SQLite id taught users
     // a number that is guaranteed to miss.
     final saved = PhotoOutcome(PhotoOutcomeKind.saved, 'Meal logged: $summary',
-        analysis: analysis, detail: summary, mealName: name, kcal: kcal);
+        analysis: analysis,
+        detail: summary,
+        mealName: name,
+        kcal: kcal,
+        mealId: id,
+        mealDate: isoDate(when));
     // Same shield as the thumbnail: these run AFTER the commit, so a
     // throwing callback must not fall into the outer catch — that
     // flipped the committed ledger row saved→failed and told the user

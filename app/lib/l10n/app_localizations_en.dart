@@ -1759,11 +1759,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get mealCardLeftoverTitle => '🍽️ Leftovers deducted';
 
   @override
-  String get notificationChannelName => 'Reports & meals';
+  String get notificationChannelName => 'Daily summary';
 
   @override
   String get notificationChannelDescription =>
-      'Daily calorie reports and auto-logged meal cards';
+      'Your calorie summary, at the time you set';
 
   @override
   String dayLoadFailed(String error) {
@@ -2407,11 +2407,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watcherLimitedAccess =>
-      'Only SELECTED photos are shared, so new food photos won\'t be seen automatically. Grant access to ALL photos for automatic logging.';
+      'Only selected photos are shared, so new food photos won\'t be seen automatically. Allow access to all photos for automatic logging.';
 
   @override
   String get watcherLimitedFooter =>
-      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically.';
 
   @override
   String get fixAction => 'Fix';
@@ -3631,4 +3631,70 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get discardChangesDiscard => 'Discard';
+
+  @override
+  String get summaryBatteryRestrictedHint =>
+      'Battery use is Restricted — the daily summary can\'t be delivered.';
+
+  @override
+  String get notificationsAllowAction => 'Allow notifications';
+
+  @override
+  String get notificationMealChannelName => 'Logged meals';
+
+  @override
+  String get notificationMealChannelDescription =>
+      'A card for each meal logged automatically from your camera roll';
+
+  @override
+  String get watcherAllowAllPhotos => 'Allow access to all photos';
+
+  @override
+  String coachWeekday(String weekday) {
+    String _temp0 = intl.Intl.selectLogic(weekday, {
+      'mon': 'Mon',
+      'tue': 'Tue',
+      'wed': 'Wed',
+      'thu': 'Thu',
+      'fri': 'Fri',
+      'sat': 'Sat',
+      'sun': 'Sun',
+      'other': '',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String coachTitleOnDay(String day, String kcal) {
+    return '$day: $kcal kcal';
+  }
+
+  @override
+  String get coachEmptyOnDay =>
+      'Nothing logged that day. Snap your next meal and it lands here automatically.';
+
+  @override
+  String diagBgRunNotFinished(String step) {
+    return 'Not finished yet — still running, or stopped since; last step: $step.';
+  }
+
+  @override
+  String get watcherLimitedFooterIos =>
+      'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
+
+  @override
+  String get addChooseAllPhotos => 'Choose from all photos…';
+
+  @override
+  String get addPickerNote =>
+      'Android\'s photo picker shows all your photos. Chopstats receives only the one you choose.';
+
+  @override
+  String get addPickerUnavailable =>
+      'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.';
+
+  @override
+  String addOldPhotoLoggedToday(String taken, int days) {
+    return 'This photo was taken on $taken, more than $days days ago, so its meal was logged for today. To log it on its own day, open the meal and change its date.';
+  }
 }

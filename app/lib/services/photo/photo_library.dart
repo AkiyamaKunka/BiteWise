@@ -143,6 +143,58 @@ Future<bool?> photoLibraryAccess() async {
   }
 }
 
+/// What [reselectPhotoAccess] came to.
+enum PhotoAccessFix {
+  /// Full access now.
+  full,
+
+  /// Partial access, still or newly (a selection kept, or chosen from a
+  /// denial), or a partial grant the user withdrew in the dialog: their
+  /// choice, so nothing more is opened.
+  answered,
+
+  /// The dialog could not help: no access before and none after — Android
+  /// no longer asks (a permanent denial), the phone is below Android 14
+  /// (where presentLimited does nothing), or the platform would not say.
+  /// The caller opens system settings instead, as before.
+  openSettings,
+}
+
+/// Test seam for [reselectPhotoAccess].
+@visibleForTesting
+Future<PhotoAccessFix> Function()? debugReselectPhotoAccess;
+
+/// Android 14+: with partial photo access ('Allow limited access'), shows
+/// Android's own dialog again — reselect photos, or Allow all — through
+/// photo_manager's presentLimited, which asks for READ_MEDIA_IMAGES and
+/// READ_MEDIA_VISUAL_USER_SELECTED (photo_manager 3.10.0,
+/// PermissionDelegate34). Settings' Fix used to open App info, where 'Allow
+/// all' is three screens down (Play push, UX screenshots 18, 19, 21). App
+/// info stays the remedy only when the dialog could not help
+/// ([PhotoAccessFix.openSettings]): below Android 14, where presentLimited
+/// does nothing, and after a permanent denial, where Android shows no
+/// dialog. A top-level seam, not a [PhotoLibrary] member: the interface
+/// has a dozen test fakes. Android only; never throws.
+Future<PhotoAccessFix> reselectPhotoAccess() async {
+  final override = debugReselectPhotoAccess;
+  if (override != null) return override();
+  try {
+    Future<PermissionState> state() => PhotoManager.getPermissionState(
+        requestOption: PhotoManagerLibrary._photosOnly);
+    final before = await state();
+    if (before == PermissionState.authorized) return PhotoAccessFix.full;
+    await PhotoManager.presentLimited(type: RequestType.image);
+    final after = await state();
+    if (after == PermissionState.authorized) return PhotoAccessFix.full;
+    if (after.hasAccess || before == PermissionState.limited) {
+      return PhotoAccessFix.answered;
+    }
+    return PhotoAccessFix.openSettings;
+  } catch (_) {
+    return PhotoAccessFix.openSettings;
+  }
+}
+
 class PhotoManagerLibrary implements PhotoLibrary, AssetLocationSource {
   PhotoManagerLibrary(
       {this._windowStart, @visibleForTesting bool? isAndroid})

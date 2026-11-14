@@ -9,11 +9,15 @@ library;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart' show DateFormat;
 
+import '../../core/coerce.dart' show isoDate;
 import '../../core/contracts.dart';
+import '../../core/shared_generated.dart' show SharedConstants;
 import '../../core/leftover_logic.dart' show revertedLeftover;
 import '../../core/outcome_kind.dart';
 import '../../services/analyzer/platform_decode.dart';
+import '../../services/photo/system_photo_picker.dart';
 import '../ai_consent.dart';
 import '../outcome_text.dart';
 import '../photo_pipeline.dart';
@@ -112,11 +116,14 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   );
   if (!context.mounted) return;
   if (choice == 'photos') {
+    // Android: the system Photo Picker (Play's photo policy); null on iOS.
     await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => AddPhotoScreen(services: services)));
+        builder: (_) => AddPhotoScreen(
+            services: services, systemPicker: platformSystemPhotoPicker())));
   } else if (choice == 'leftover') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
-        builder: (_) => LeftoverScreen(services: services)));
+        builder: (_) => LeftoverScreen(
+            services: services, systemPicker: platformSystemPhotoPicker())));
   } else if (choice == 'text') {
     await Navigator.of(context).push(MaterialPageRoute<void>(
         builder: (_) => AddTextScreen(
@@ -143,10 +150,19 @@ Future<void> openAddFlow(BuildContext context, UiServices services,
   await onChanged?.call();
 }
 
-/// Recent-photos grid → tap → analyzing spinner → result card.
+/// Recent-photos grid → tap → analyzing spinner → result card. On Android
+/// without full photo access: the system Photo Picker → the same spinner
+/// and card.
 class AddPhotoScreen extends StatefulWidget {
   final UiServices services;
-  const AddPhotoScreen({super.key, required this.services});
+
+  /// Android's system Photo Picker (Google Play's photo policy; the Play
+  /// build declares no photo permission at all). Without full access the
+  /// screen never asks for the library: it asks for the AI consent and
+  /// opens this picker at once. With full access it keeps the grid and
+  /// adds a row that opens the picker. Null on iOS: the grid as before.
+  final SystemPhotoPicker? systemPicker;
+  const AddPhotoScreen({super.key, required this.services, this.systemPicker});
 
   @override
   State<AddPhotoScreen> createState() => _AddPhotoScreenState();
@@ -165,10 +181,51 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   // (the same rule the coverage screen learned).
   final Map<String, Future<Uint8List?>> _thumbs = {};
 
+  /// Android without full access: no grid, the system picker is the
+  /// screen's one source.
+  bool _pickerOnly = false;
+
+  /// Android with full access: the grid, plus a row that opens the picker
+  /// (for a photo older than the grid's thirty).
+  bool _pickerRow = false;
+
+  /// The picker could not open on this phone.
+  bool _pickerUnavailable = false;
+
+  /// Set while the picker is open: one pick at a time.
+  bool _picking = false;
+
+  /// One photo at a time, from the grid or the picker: a grid tap while
+  /// the picker was opening ran a second analysis beside the picked
+  /// photo's, two dialogs stacked (review 2026-11-13).
+  bool get _busy => _analyzing || _askingConsent || _picking;
+
   @override
   void initState() {
     super.initState();
     _assets = _load();
+  }
+
+  Future<List<RecentAsset>> _load() async {
+    final system = widget.systemPicker;
+    if (system == null) return _loadGrid();
+    // Play's photo policy: full access is READ, never asked for. The Play
+    // build declares no photo permission, so a request there was a silent
+    // denial and the "isn't allowed" dead end.
+    final full = await system.hasBroadAccess();
+    if (!mounted) return const [];
+    if (full) {
+      _pickerRow = true;
+      return widget.services.picker.recentAssets();
+    }
+    _pickerOnly = true;
+    // After the first frame: the consent dialog needs this route on
+    // screen.
+    WidgetsBinding.instance
+      ..addPostFrameCallback(
+          (_) => _openSystemPicker(leaveOnCancel: true))
+      ..ensureVisualUpdate();
+    return const [];
   }
 
   /// Ask for permission FIRST: the picker returns [] on denial, which
@@ -180,7 +237,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
   /// each) before showing anything and then decoded each 12 MP image
   /// full-res into a 120 px cell — hundreds of MB resident, on a screen
   /// that uses exactly one photo.
-  Future<List<RecentAsset>> _load() async {
+  Future<List<RecentAsset>> _loadGrid() async {
     final granted = await widget.services.requestPhotoPermission();
     if (!mounted) return const [];
     if (!granted) {
@@ -257,7 +314,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     // BUILD, so two taps in the same frame both pass that check and run
     // two analyses — two model calls, two ledger reservations, for one
     // meal (review 2026-07-31).
-    if (_analyzing || _askingConsent) return;
+    if (_busy) return;
     // App Store 5.1.2(i): permission for this AI recipient before the
     // photo's bytes are even read. Without the spinner: an animating
     // overlay behind a dialog never settles.
@@ -277,6 +334,112 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       return;
     }
     await _analyze(deliberate);
+  }
+
+  /// The AI consent, then the system picker, then the same analysis as a
+  /// grid tap. [leaveOnCancel]: opened by the screen itself, so Not now or
+  /// a cancelled pick closes it — there is nothing else on it to do.
+  Future<void> _openSystemPicker({required bool leaveOnCancel}) async {
+    final system = widget.systemPicker;
+    if (system == null || !mounted || _busy) return;
+    // Consent before any photo is chosen, as for a grid tap (5.1.2(i)).
+    _askingConsent = true;
+    final allowed = await ensureAiConsent(context, widget.services.settings);
+    _askingConsent = false;
+    if (!mounted || _busy) return;
+    if (!allowed) {
+      if (leaveOnCancel) _leave();
+      return;
+    }
+    _picking = true;
+    final SystemPick pick;
+    try {
+      pick = await system.pick(max: 1);
+    } finally {
+      _picking = false;
+    }
+    // Nothing else can have started meanwhile ([_busy]); checked again so
+    // a second analysis can never run beside one.
+    if (!mounted || _busy) return;
+    switch (pick.status) {
+      case SystemPickStatus.unavailable:
+        // No library request here: on the Play build it could only fail.
+        // Over the grid the page note is not on screen: a snackbar says it.
+        setState(() => _pickerUnavailable = true);
+        if (_pickerRow) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(context.l10n.addPickerUnavailable)));
+        }
+        return;
+      case SystemPickStatus.busy:
+        return;
+      case SystemPickStatus.cancelled:
+        if (leaveOnCancel) _leave();
+        return;
+      case SystemPickStatus.ok:
+        break;
+    }
+    if (pick.photos.isEmpty) {
+      if (pick.tooBig + pick.failed > 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(context.l10n.addPhotoUnreadable)));
+      } else if (leaveOnCancel) {
+        _leave(); // nothing chosen: a cancel
+      }
+      return;
+    }
+    await _analyze(pick.photos.first);
+  }
+
+  /// Closes this screen (never the route under it: maybePop leaves a lone
+  /// root route alone).
+  void _leave() => Navigator.of(context).maybePop();
+
+  /// "Choose from all photos…": the picker on request.
+  Widget _pickerButton(BuildContext context) => FilledButton.tonalIcon(
+        key: const Key('addChooseAllPhotos'),
+        onPressed: _analyzing
+            ? null
+            : () => _openSystemPicker(leaveOnCancel: false),
+        icon: const Icon(Icons.photo_library_outlined),
+        label: Text(context.l10n.addChooseAllPhotos),
+      );
+
+  /// The picker-only screen: what the picker is for, the button, and the
+  /// scale tip — or why the picker cannot open.
+  Widget _pickerPage(BuildContext context) {
+    final muted = Theme.of(context).colorScheme.onSurfaceVariant;
+    final small = Theme.of(context).textTheme.bodySmall?.copyWith(color: muted);
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: _pickerUnavailable
+              ? [
+                  Text(
+                    context.l10n.addPickerUnavailable,
+                    key: const Key('addPickerUnavailable'),
+                    textAlign: TextAlign.center,
+                  ),
+                ]
+              : [
+                  Icon(Icons.photo_library_rounded, size: 48, color: muted),
+                  const SizedBox(height: 12),
+                  Text(
+                    context.l10n.addPickerNote,
+                    key: const Key('addPickerNote'),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  _pickerButton(context),
+                  const SizedBox(height: 16),
+                  Text(context.l10n.addPhotosTip,
+                      textAlign: TextAlign.center, style: small),
+                ],
+        ),
+      ),
+    );
   }
 
   Future<void> _analyze(IntakePhoto deliberate) async {
@@ -370,6 +533,7 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
       PhotoOutcomeKind.skipped => l.outcomeLogManuallyHint,
       PhotoOutcomeKind.failed when !quotaPaused =>
         l.outcomeLogManuallyFailedHint,
+      PhotoOutcomeKind.saved => _oldPhotoNote(deliberate, outcome),
       _ => null,
     };
     final choice = await showDialog<String>(
@@ -457,6 +621,24 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
     }
   }
 
+  /// A photo taken before the dating window (spec §8, 45 days) is logged
+  /// for today, and "Choose from all photos…" is there for older photos:
+  /// say which day it was taken, so the user can move the meal (review
+  /// 2026-11-13). Null when the meal went to the photo's own day, or the
+  /// photo's date is unknown.
+  String? _oldPhotoNote(IntakePhoto photo, PhotoOutcome outcome) {
+    final taken = photo.capture?.createDate;
+    final logged = outcome.mealDate;
+    if (taken == null || logged == null) return null;
+    final now = DateTime.now();
+    const window = SharedConstants.capturedAtMaxAgeDaysDefault;
+    if (logged != isoDate(now) || isoDate(taken) == logged) return null;
+    if (now.difference(taken) <= const Duration(days: window)) return null;
+    final locale = Localizations.maybeLocaleOf(context)?.toString();
+    return context.l10n.addOldPhotoLoggedToday(
+        DateFormat.yMMMd(locale).format(taken), window);
+  }
+
   /// Puts the cut meal back as it was before THIS deduction. Re-reads the
   /// row first and writes only while it still shows that deduction
   /// (revertedLeftover) — a deleted meal or a later fix is left alone —
@@ -497,6 +679,9 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
                 ));
               }
               final assets = snap.data ?? const <RecentAsset>[];
+              if (_pickerOnly || (_pickerRow && assets.isEmpty)) {
+                return _pickerPage(context);
+              }
               if (_permissionDenied) {
                 final open = widget.services.openSystemSettings;
                 return Center(
@@ -535,6 +720,13 @@ class _AddPhotoScreenState extends State<AddPhotoScreen> {
               }
               final header = <Widget>[
                 if (_limited) _limitedNote(context),
+                if (_pickerRow)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                    child: Align(
+                        alignment: AlignmentDirectional.centerStart,
+                        child: _pickerButton(context)),
+                  ),
                 // Portion accuracy is the model's weakest link, and a scale
                 // reference in frame is the cheapest fix the USER controls.
                 Padding(
