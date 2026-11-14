@@ -54,8 +54,12 @@ class MainActivity : FlutterActivity() {
         // or relaunches from Recents still carries the intent that first
         // started its task, so the plugins get an empty one, with nothing
         // copied; that also keeps a bitewise://setup link from reopening
-        // its dialog. New shares arrive through onNewIntent, as before. A
-        // several-photo share cut short by the stop is not resumed.
+        // its dialog. New shares arrive through onNewIntent, as before. The
+        // intent is not re-delivered, but copies of a several-photo share
+        // cut short by the stop that were never read stay in shared_photos:
+        // share intake (Dart) picks those up at its next start, within a
+        // day, through the same consent gate (reading a copy deletes it, so
+        // nothing is sent twice).
         val replay = IntakeRules.isRedelivery(savedInstanceState != null, intent?.flags ?: 0)
         if (replay) {
             intent?.let { setIntent(emptyShare(it)) }
