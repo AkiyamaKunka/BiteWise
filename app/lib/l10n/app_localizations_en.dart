@@ -3660,4 +3660,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get coachEmptyOnDay =>
       'Nothing logged that day. Snap your next meal and it lands here automatically.';
+
+  @override
+  String diagBgRunNotFinished(String step) {
+    return 'Not finished yet — still running, or stopped since; last step: $step.';
+  }
 }

@@ -162,8 +162,8 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (leftoverLoadFailed, leftoverSaveFailed), then the Android background
 /// lane's block (summaryBatteryRestrictedHint, notificationsAllowAction,
 /// notificationMealChannelName/Description, watcherAllowAllPhotos,
-/// coachWeekday, coachTitleOnDay, coachEmptyOnDay, …).
-const _keyCount = 898;
+/// coachWeekday, coachTitleOnDay, coachEmptyOnDay, diagBgRunNotFinished, …).
+const _keyCount = 899;
 
 Directory _appRoot() {
   var dir = Directory.current;

@@ -3483,5 +3483,14 @@
   "coachEmptyOnDay": "Nothing logged that day. Snap your next meal and it lands here automatically.",
   "@coachEmptyOnDay": {
     "description": "Android daily summary card body for a day with nothing logged, under coachTitleOnDay; says 'that day' rather than 'today' because the card may come late. Also the text of the nights armed ahead, which are rebuilt whenever something is logged."
+  },
+  "diagBgRunNotFinished": "Not finished yet — still running, or stopped since; last step: {step}.",
+  "@diagBgRunNotFinished": {
+    "description": "Diagnostics › Recent background scans: an entry with no end time that the next scan has not labelled yet — the newest, which may still be running, or may have been stopped by the system since. Once a later scan starts it is labelled and reads diagBgRunKilled. {step} is one of the diagBgStage* words.",
+    "placeholders": {
+      "step": {
+        "type": "String"
+      }
+    }
   }
 }

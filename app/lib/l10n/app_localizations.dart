@@ -5506,6 +5506,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Nothing logged that day. Snap your next meal and it lands here automatically.'**
   String get coachEmptyOnDay;
+
+  /// Diagnostics › Recent background scans: an entry with no end time that the next scan has not labelled yet — the newest, which may still be running, or may have been stopped by the system since. Once a later scan starts it is labelled and reads diagBgRunKilled. {step} is one of the diagBgStage* words.
+  ///
+  /// In en, this message translates to:
+  /// **'Not finished yet — still running, or stopped since; last step: {step}.'**
+  String diagBgRunNotFinished(String step);
 }
 
 class _AppLocalizationsDelegate

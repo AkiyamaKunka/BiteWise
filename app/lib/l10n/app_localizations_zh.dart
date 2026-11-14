@@ -3291,4 +3291,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get coachEmptyOnDay => '当天没有记录。拍下一餐，它会自动出现在这里。';
+
+  @override
+  String diagBgRunNotFinished(String step) {
+    return '尚未完成 —— 仍在运行，或之后被停止；最后一步：$step。';
+  }
 }

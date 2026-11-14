@@ -1015,5 +1015,6 @@
   "watcherAllowAllPhotos": "允许访问所有照片",
   "coachWeekday": "{weekday, select, mon{周一} tue{周二} wed{周三} thu{周四} fri{周五} sat{周六} sun{周日} other{}}",
   "coachTitleOnDay": "{day}：{kcal} 千卡",
-  "coachEmptyOnDay": "当天没有记录。拍下一餐，它会自动出现在这里。"
+  "coachEmptyOnDay": "当天没有记录。拍下一餐，它会自动出现在这里。",
+  "diagBgRunNotFinished": "尚未完成 —— 仍在运行，或之后被停止；最后一步：{step}。"
 }
