@@ -398,6 +398,9 @@ void main() {
       expect(executor.describedTexts, isEmpty);
       await tester.pageBack();
       await tester.pumpAndSettle();
+      // The text is still typed: back asks before it drops it (ui lane).
+      await tester.tap(find.byKey(const Key('discardChangesDiscard')));
+      await tester.pumpAndSettle();
 
       await fromSheet('addFixMeal');
       await tester.enterText(
