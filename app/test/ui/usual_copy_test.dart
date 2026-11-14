@@ -163,7 +163,7 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// lane's (android/privacy):
 /// ten https-only own-server lines (serverHttpConsentNote …
 /// diagFixServerHttps) and shareConsentDeclinedMany.
-const _keyCount = 908;
+const _keyCount = 911;
 
 Directory _appRoot() {
   var dir = Directory.current;

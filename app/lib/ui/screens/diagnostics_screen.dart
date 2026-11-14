@@ -4,8 +4,11 @@
 /// replaces took an hour of server-log archaeology.
 library;
 
+import 'dart:io' show Platform;
+
 import 'package:flutter/material.dart';
 
+import '../../services/android_backup_size.dart';
 import '../../services/photo/background_runs.dart';
 import '../../services/photo/glasses_check.dart'
     show GlassesCheckEntry, readGlassesChecks;
@@ -16,6 +19,7 @@ import '../../services/photo/photo_changes.dart'
         lateImportRescanning,
         lateImportStatsWindow,
         readLateImportStats;
+import '../backup_sheets.dart' show backupSizeLabel;
 import '../diagnostics.dart';
 import '../l10n.dart';
 import '../restaurant_assist_controls.dart' show RestaurantLookupsDiagnostics;
@@ -52,6 +56,11 @@ class DiagnosticsScreen extends StatefulWidget {
 
   /// The clock for the "in 7 days" count.
   final DateTime Function() now;
+
+  /// What Android's own backup would carry for this app, against its 25 MB
+  /// per-app limit (android_backup_size.dart). Null reads it from the
+  /// phone on Android; elsewhere there is no section.
+  final Future<int?> Function()? loadBackupSize;
   const DiagnosticsScreen(
       {super.key,
       required this.diagnostics,
@@ -60,6 +69,7 @@ class DiagnosticsScreen extends StatefulWidget {
       this.loadGlassesChecks,
       this.loadRestaurantLookups,
       this.loadConfidence,
+      this.loadBackupSize,
       this.now = DateTime.now});
 
   @override
@@ -80,6 +90,8 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
       _quiet(widget.loadRestaurantLookups);
   late final Future<({int low, int medium, int high, int unknown})?>
       _confidence = _quiet(widget.loadConfidence);
+  late final Future<int?> _backupSize = _quiet<int?>(widget.loadBackupSize ??
+      (Platform.isAndroid ? readAndroidBackupSetBytes : null));
 
   /// [load]'s answer, or null when there is no loader or it fails: a
   /// section that cannot be read is left out, never an error page.
@@ -262,6 +274,12 @@ class _DiagnosticsScreenState extends State<DiagnosticsScreen> {
                 ? const SizedBox.shrink()
                 : _Confidence(snap.data!),
           ),
+          FutureBuilder<int?>(
+            future: _backupSize,
+            builder: (context, snap) => snap.data == null
+                ? const SizedBox.shrink()
+                : _BackupSize(snap.data!),
+          ),
         ],
       ),
     );
@@ -423,6 +441,37 @@ class _Confidence extends StatelessWidget {
         Text(l.diagConfidenceIntro,
             style: theme.textTheme.bodySmall
                 ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+      ],
+    );
+  }
+}
+
+/// "Android backup": what Android's own backup would carry for this app,
+/// and, over [kAndroidBackupWarnBytes], to keep a copy with Save to Device
+/// (Android stops backing the app up above 25 MB, without a word).
+class _BackupSize extends StatelessWidget {
+  const _BackupSize(this.bytes);
+  final int bytes;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final l = context.l10n;
+    final size = backupSizeLabel(bytes);
+    return Column(
+      key: const Key('diagBackupSize'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SizedBox(height: 24),
+        Text(l.diagBackupSizeTitle, style: theme.textTheme.titleMedium),
+        const SizedBox(height: 4),
+        Text(l.diagBackupSizeLine(size), style: theme.textTheme.bodyMedium),
+        if (bytes > kAndroidBackupWarnBytes) ...[
+          const SizedBox(height: 4),
+          Text(l.backupSizeNearLimit(size),
+              style: theme.textTheme.bodySmall
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+        ],
       ],
     );
   }

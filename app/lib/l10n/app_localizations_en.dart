@@ -3686,4 +3686,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsHealthReminder =>
       'Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.';
+
+  @override
+  String backupSizeNearLimit(String size) {
+    return 'Your data here is $size. Android\'s own backup stops at 25 MB per app, without telling you: keep a copy with Export Data, then Save to Device.';
+  }
+
+  @override
+  String get diagBackupSizeTitle => 'Android backup';
+
+  @override
+  String diagBackupSizeLine(String size) {
+    return 'About $size for Android\'s own backup, which keeps at most 25 MB per app.';
+  }
 }

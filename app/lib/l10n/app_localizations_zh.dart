@@ -3315,4 +3315,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsHealthReminder => '筷拍不提供医疗建议。涉及健康或饮食的决定，请咨询医疗专业人士。';
+
+  @override
+  String backupSizeNearLimit(String size) {
+    return '这里的数据有 $size。Android 自带的备份对每个应用最多保存 25 MB，超过后会停止备份，也不会提示你：请用「导出数据」→「保存到设备…」留一份副本。';
+  }
+
+  @override
+  String get diagBackupSizeTitle => 'Android 备份';
+
+  @override
+  String diagBackupSizeLine(String size) {
+    return 'Android 自带的备份大约要保存 $size，它对每个应用最多保存 25 MB。';
+  }
 }

@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/contracts.dart';
+import '../../../services/android_backup_size.dart';
 import '../../../services/backup/backup_coordinator.dart';
 import '../../../services/backup/backup_files.dart';
 import '../../../services/backup/backup_format.dart';
@@ -65,6 +66,7 @@ class DataSection extends StatefulWidget {
     this.fileSaver = const PlatformFileSaver(),
     this.shareFile = _shareWithSharePlus,
     this.tempDir = getTemporaryDirectory,
+    this.backupSetBytes,
   });
 
   final MealsDao dao;
@@ -97,6 +99,11 @@ class DataSection extends StatefulWidget {
   /// the native save accepts.
   final Future<Directory> Function() tempDir;
 
+  /// Android: what its own backup would carry for this app
+  /// (android_backup_size.dart); over [kAndroidBackupWarnBytes] a line
+  /// recommends Save to Device. Null reads it from the phone on Android.
+  final Future<int?> Function()? backupSetBytes;
+
   /// The 隐私政策 / Privacy Policy row's tap.
   final VoidCallback onOpenPrivacyPolicy;
 
@@ -115,6 +122,24 @@ class _DataSectionState extends State<DataSection> {
   /// This build cannot save to the device (no `saveFile` in MainActivity):
   /// Export goes straight to Share for the rest of the session.
   bool _saveUnavailable = false;
+
+  /// Android: the backup-set size, read once when the page opens; null
+  /// elsewhere, and when it cannot be read.
+  late final Future<int?>? _backupBytes = _readBackupBytes();
+
+  Future<int?>? _readBackupBytes() {
+    if (widget.platform != 'android') return null;
+    final load = widget.backupSetBytes ??
+        (Platform.isAndroid ? readAndroidBackupSetBytes : null);
+    if (load == null) return null;
+    return () async {
+      try {
+        return await load();
+      } catch (_) {
+        return null; // a line that cannot be read is left out
+      }
+    }();
+  }
 
   @override
   void dispose() {
@@ -523,11 +548,29 @@ class _DataSectionState extends State<DataSection> {
             valueListenable: backup.status,
             builder: (context, status, _) => _section(context, status),
           );
+    final backupBytes = _backupBytes;
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         section,
+        // Android stops backing the app up above 25 MB, without a word.
+        if (backupBytes != null)
+          FutureBuilder<int?>(
+            future: backupBytes,
+            builder: (context, snap) {
+              final bytes = snap.data;
+              if (bytes == null || bytes <= kAndroidBackupWarnBytes) {
+                return const SizedBox.shrink();
+              }
+              return GroupedSection(
+                key: const Key('backupSizeNearLimit'),
+                footer: context.l10n
+                    .backupSizeNearLimit(backupSizeLabel(bytes)),
+                children: const [],
+              );
+            },
+          ),
         GroupedSection(
           key: const Key('healthReminder'),
           footer: context.l10n.settingsHealthReminder,

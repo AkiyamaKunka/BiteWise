@@ -1025,5 +1025,8 @@
   "exportSaved": "导出文件已保存。",
   "exportSaveBusy": "另一个文件窗口还开着。关掉它再试一次。",
   "exportSaveFailed": "导出文件没能保存。可以改用「分享…」。",
-  "settingsHealthReminder": "筷拍不提供医疗建议。涉及健康或饮食的决定，请咨询医疗专业人士。"
+  "settingsHealthReminder": "筷拍不提供医疗建议。涉及健康或饮食的决定，请咨询医疗专业人士。",
+  "backupSizeNearLimit": "这里的数据有 {size}。Android 自带的备份对每个应用最多保存 25 MB，超过后会停止备份，也不会提示你：请用「导出数据」→「保存到设备…」留一份副本。",
+  "diagBackupSizeTitle": "Android 备份",
+  "diagBackupSizeLine": "Android 自带的备份大约要保存 {size}，它对每个应用最多保存 25 MB。"
 }

@@ -1,7 +1,10 @@
 // Settings › Your Data: what Android's own backup holds (privacy lane
 // item 4), Google's health reminder on both platforms (Health Content and
 // Services policy: apps remind users to consult a professional; the full
-// disclaimer is for the store description).
+// disclaimer is for the store description), and the warning before
+// Android's 25 MB backup limit (item 5).
+import 'dart:io' show FileSystemException;
+
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/backup/file_pick_channel.dart';
 import 'package:calorie_tracker/ui/screens/settings/data_section.dart';
@@ -22,7 +25,8 @@ void main() {
 
   Future<void> pump(WidgetTester tester,
           {String platform = 'android',
-          Locale locale = const Locale('en')}) =>
+          Locale locale = const Locale('en'),
+          Future<int?> Function()? backupSetBytes}) =>
       pumpApp(
           tester,
           Scaffold(
@@ -33,6 +37,7 @@ void main() {
                 platform: platform,
                 androidBackupNote: platform == 'android',
                 filePicker: _NoPicker(),
+                backupSetBytes: backupSetBytes,
               ),
             ]),
           ),
@@ -93,5 +98,47 @@ void main() {
         });
       }
     }
+  });
+
+  group('the 25 MB backup limit (Android)', () {
+    const mb = 1024 * 1024;
+    final warning = find.byKey(const Key('backupSizeNearLimit'));
+
+    for (final (locale, l) in [
+      (const Locale('en'), en),
+      (const Locale('zh'), zh),
+    ]) {
+      testWidgets('over 20 MB: a line recommending Save to Device '
+          '(${locale.languageCode})', (tester) async {
+        await pump(tester,
+            locale: locale, backupSetBytes: () async => 21 * mb + mb ~/ 2);
+        expect(warning, findsOneWidget);
+        expect(
+            find.descendant(
+                of: warning,
+                matching: find.text(l.backupSizeNearLimit('21.5 MB'))),
+            findsOneWidget);
+      });
+    }
+
+    testWidgets('at 20 MB or under: no line', (tester) async {
+      await pump(tester, backupSetBytes: () async => 20 * mb);
+      expect(warning, findsNothing);
+    });
+
+    testWidgets('iPhone: never (its backup is iCloud Backup, with no such '
+        'limit)', (tester) async {
+      await pump(tester,
+          platform: 'ios', backupSetBytes: () async => 30 * mb);
+      expect(warning, findsNothing);
+    });
+
+    testWidgets('a size that cannot be read: no line', (tester) async {
+      await pump(tester, backupSetBytes: () async => null);
+      expect(warning, findsNothing);
+      await pump(tester,
+          backupSetBytes: () async => throw const FileSystemException('x'));
+      expect(warning, findsNothing);
+    });
   });
 }

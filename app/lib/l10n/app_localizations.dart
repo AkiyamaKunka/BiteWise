@@ -5566,6 +5566,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.'**
   String get settingsHealthReminder;
+
+  /// Settings › Your Data on Android, and the Test AI provider page: shown when what Android's own backup would carry for this app (meal pictures included) is over 20 MB. size is like '21.4 MB'.
+  ///
+  /// In en, this message translates to:
+  /// **'Your data here is {size}. Android\'s own backup stops at 25 MB per app, without telling you: keep a copy with Export Data, then Save to Device.'**
+  String backupSizeNearLimit(String size);
+
+  /// Test AI provider page, Android only: heading of the section with the size of what Android's own backup would carry for this app.
+  ///
+  /// In en, this message translates to:
+  /// **'Android backup'**
+  String get diagBackupSizeTitle;
+
+  /// Test AI provider page, Android only: the size of what Android's own backup would carry for this app (the database with meal pictures, preferences and files, minus what is excluded). size is like '3.2 MB'.
+  ///
+  /// In en, this message translates to:
+  /// **'About {size} for Android\'s own backup, which keeps at most 25 MB per app.'**
+  String diagBackupSizeLine(String size);
 }
 
 class _AppLocalizationsDelegate

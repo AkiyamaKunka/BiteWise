@@ -472,6 +472,58 @@ void main() {
     expect(find.text('Photo analysis'), findsOneWidget);
   });
 
+  // Privacy lane item 5: what Android's own backup would carry, against
+  // its 25 MB per-app limit (meal pictures live in the database).
+  group('the Android backup size', () {
+    const mb = 1024 * 1024;
+    Future<void> open(WidgetTester tester, Future<int?> Function()? load,
+        {Locale locale = const Locale('en')}) async {
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: DiagnosticsScreen(
+              diagnostics: _diag(),
+              loadBackgroundRuns: () async => [],
+              loadLateImports: () async => null,
+              loadGlassesChecks: () async => [],
+              loadBackupSize: load)));
+      await tester.pumpAndSettle();
+    }
+
+    for (final (locale, l) in [
+      (const Locale('en'), AppLocalizationsEn() as AppLocalizations),
+      (const Locale('zh'), AppLocalizationsZh() as AppLocalizations),
+    ]) {
+      testWidgets('shows the size (${locale.languageCode})', (tester) async {
+        await open(tester, () async => 3 * mb + mb ~/ 5, locale: locale);
+        final section = find.byKey(const Key('diagBackupSize'));
+        expect(section, findsOneWidget);
+        expect(find.text(l.diagBackupSizeTitle), findsOneWidget);
+        expect(find.text(l.diagBackupSizeLine('3.2 MB')), findsOneWidget);
+        expect(find.text(l.backupSizeNearLimit('3.2 MB')), findsNothing);
+      });
+    }
+
+    testWidgets('over 20 MB it says to keep a copy', (tester) async {
+      await open(tester, () async => 23 * mb);
+      expect(find.text(AppLocalizationsEn().backupSizeNearLimit('23.0 MB')),
+          findsOneWidget);
+    });
+
+    testWidgets('no loader (iPhone) or no size: no section', (tester) async {
+      await open(tester, null);
+      expect(find.byKey(const Key('diagBackupSize')), findsNothing);
+      await open(tester, () async => null);
+      expect(find.byKey(const Key('diagBackupSize')), findsNothing);
+      await open(tester, () async => throw StateError('unreadable'));
+      expect(find.byKey(const Key('diagBackupSize')), findsNothing);
+    });
+  });
+
   testWidgets('problems show the count and the fixes', (tester) async {
     tester.view.physicalSize = const Size(800, 2400);
     tester.view.devicePixelRatio = 1.0;

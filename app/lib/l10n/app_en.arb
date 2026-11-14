@@ -3515,5 +3515,27 @@
   "settingsHealthReminder": "Chopstats is not medical advice. For decisions about your health or diet, consult a healthcare professional.",
   "@settingsHealthReminder": {
     "description": "Settings › Your Data, both platforms: a line under the section. Google Play's Health Content and Services policy asks apps to remind users to consult a healthcare professional; the full not-a-medical-device disclaimer is in the store description."
+  },
+  "backupSizeNearLimit": "Your data here is {size}. Android's own backup stops at 25 MB per app, without telling you: keep a copy with Export Data, then Save to Device.",
+  "@backupSizeNearLimit": {
+    "description": "Settings › Your Data on Android, and the Test AI provider page: shown when what Android's own backup would carry for this app (meal pictures included) is over 20 MB. size is like '21.4 MB'.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "diagBackupSizeTitle": "Android backup",
+  "@diagBackupSizeTitle": {
+    "description": "Test AI provider page, Android only: heading of the section with the size of what Android's own backup would carry for this app."
+  },
+  "diagBackupSizeLine": "About {size} for Android's own backup, which keeps at most 25 MB per app.",
+  "@diagBackupSizeLine": {
+    "description": "Test AI provider page, Android only: the size of what Android's own backup would carry for this app (the database with meal pictures, preferences and files, minus what is excluded). size is like '3.2 MB'.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
   }
 }
