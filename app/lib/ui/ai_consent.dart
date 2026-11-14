@@ -289,6 +289,12 @@ Future<bool> askAiConsentUpdate(
 /// the recipient is allowed some other way meanwhile, since the user's
 /// answer for them was no. A photo that arrives after the answer is asked
 /// about again.
+///
+/// Known, and safe either way (review finding 7): arrival time is not
+/// share identity. A second share that arrives while the question is open
+/// is covered by that Not now too (dropped, counted, never sent), and a
+/// file of the same share read after the answer is asked about again.
+/// Telling shares apart needs a per-delivery batch id from share_intake.
 class SharedPhotoConsentGate {
   SharedPhotoConsentGate(this._settings);
 

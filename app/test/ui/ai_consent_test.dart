@@ -883,6 +883,46 @@ void main() {
       await input.close();
     });
 
+    // Review finding 7 (declined: telling shares apart needs a batch id
+    // from share_intake). What the line says is what was dropped: a photo
+    // of the same share read after the answer is asked about again (asks
+    // more, never sends more) and is not in the first count.
+    test('the count is exactly the photos dropped; one arriving after the '
+        'answer is asked again, not counted', () async {
+      final settings = _unasked();
+      final gate = SharedPhotoConsentGate(settings);
+      final input = StreamController<IntakePhoto>();
+      final passed = <String>[];
+      final sub = gate.gate(input.stream).listen((p) => passed.add(p.assetId));
+      var asked = 0;
+      final notSent = <int>[];
+      var reading = Completer<void>();
+      Future<bool> ask() async {
+        asked++;
+        await reading.future;
+        reading = Completer<void>();
+        notSent.add(gate.declineOpenQuestion());
+        return false;
+      }
+
+      gate.attach(ask);
+      input.add(_photo('a'));
+      input.add(_photo('b'));
+      await pumpEventQueue();
+      reading.complete(); // Not now, with a and b in
+      await pumpEventQueue();
+      input.add(_photo('c')); // the same share's slow last file
+      await pumpEventQueue();
+      expect(asked, 2);
+      reading.complete(); // Not now again
+      await pumpEventQueue();
+      expect(notSent, [2, 1]);
+      expect(passed, isEmpty);
+      gate.detach(ask);
+      await sub.cancel();
+      await input.close();
+    });
+
     test('a covered photo is dropped even if the recipient is allowed '
         'before its turn', () async {
       final settings = _unasked();
