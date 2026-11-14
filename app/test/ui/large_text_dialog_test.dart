@@ -209,7 +209,7 @@ void main() {
     );
     await pumpApp(tester, HomeShell(services: services),
         size: const Size(375, 667), scale: _ax5);
-    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+    links.add(Uri.parse('bitewise://setup?server=https%3A%2F%2F10.0.0.7'
         '&key=k1234567890abcdef&backend=claude'));
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);

@@ -11,6 +11,7 @@ import 'dart:convert';
 
 import 'package:calorie_tracker/core/contracts.dart';
 import 'package:calorie_tracker/core/outcome_kind.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
 import 'package:calorie_tracker/services/analyzer/gemini_analyzer.dart';
@@ -51,7 +52,7 @@ Future<AppSettings> _settings(AiProvider provider) async {
     case AiProvider.gemini:
       await s.setGeminiApiKey('test-key');
     case AiProvider.server:
-      await s.setServerBaseUrl('http://10.0.0.5');
+      await s.setServerBaseUrl('https://10.0.0.5');
       await s.setServerApiKey('upload-key');
     default:
       fail('unused provider $provider');
@@ -328,5 +329,58 @@ void main() {
       expect((await exec.describeMeal('一碗米饭')).error,
           '❌ 服务拒绝了 API Key，请在设置里检查。');
     });
+  });
+
+  // Review of the privacy lane, finding 2: at a saved server address the
+  // app sends nothing to (not https://), a typed meal and a chat edit said
+  // "Error contacting AI. Please try again." — a retry can never fix it.
+  // Now they say what the photo path says, and a bad address likewise.
+  group('own server address', () {
+    tearDown(() => debugRequireHttpsServerOverride = null);
+
+    for (final (name, l) in [
+      ('en', AppLocalizationsEn()),
+      ('zh', AppLocalizationsZh()),
+    ]) {
+      test('not https:// ($name): both text paths name it, nothing is sent',
+          () async {
+        debugRequireHttpsServerOverride = true;
+        SharedPreferences.setMockInitialValues(const {});
+        final s = await AppSettings.load(
+            prefs: await SharedPreferences.getInstance(),
+            keyStore: MemoryKeyStore());
+        await s.setProvider(AiProvider.server);
+        await s.setServerBaseUrl('http://10.0.0.5');
+        await s.setServerApiKey('upload-key');
+        var sent = 0;
+        final a = ServerAnalyzer(s, client: MockClient((_) async {
+          sent++;
+          return http.Response('{}', 200);
+        }));
+        final ex = DefaultNlExecutor(FakeDao(), a, s, l10n: l);
+        expect((await ex.handleText('lunch 500 kcal')).single.text,
+            '❌ ${l.errServerNeedsHttps}');
+        expect((await ex.describeMeal('a bowl of rice')).error,
+            '❌ ${l.errServerNeedsHttps}');
+        expect(sent, 0);
+      });
+
+      test('not a web address ($name): both text paths say so', () async {
+        SharedPreferences.setMockInitialValues(const {});
+        final s = await AppSettings.load(
+            prefs: await SharedPreferences.getInstance(),
+            keyStore: MemoryKeyStore());
+        await s.setProvider(AiProvider.server);
+        await s.setServerBaseUrl('https://10.0.0.5:5OOO');
+        await s.setServerApiKey('upload-key');
+        final a = ServerAnalyzer(s,
+            client: MockClient((_) async => http.Response('{}', 200)));
+        final ex = DefaultNlExecutor(FakeDao(), a, s, l10n: l);
+        expect((await ex.handleText('lunch 500 kcal')).single.text,
+            '❌ ${l.errBadServerAddress}');
+        expect((await ex.describeMeal('a bowl of rice')).error,
+            '❌ ${l.errBadServerAddress}');
+      });
+    }
   });
 }

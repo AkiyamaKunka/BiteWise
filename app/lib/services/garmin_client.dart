@@ -14,6 +14,7 @@ import 'package:http/http.dart' as http;
 
 import '../core/ai_consent.dart' show aiConsentRoute;
 import '../core/coerce.dart' show safeNumber;
+import 'server_http_client.dart' show HttpsOnlyServerClient;
 import 'settings/app_settings.dart';
 
 /// One day's activity as Today consumes it.
@@ -38,10 +39,15 @@ typedef GarminDailyFetch = Future<GarminDaily?> Function(String date);
 /// It asks only while the server, on its current plan, is a recipient the
 /// user allows: Settings › Stop Sharing with your own server says nothing
 /// more is sent there, and this request carries the date and the upload
-/// key — Today sent them on every reload after it (review 171).
+/// key — Today sent them on every reload after it (review 171). And only
+/// at an https:// address while the https switch is on: the request goes
+/// through an HttpsOnlyServerClient (server_http_client.dart), which
+/// refuses any other (plain http would carry the upload key in clear) and
+/// never follows a redirect. A refusal is a failure like any other here:
+/// no line today.
 GarminDailyFetch makeGarminDailyFetch(AppSettings settings,
     {http.Client? client}) {
-  final http.Client c = client ?? http.Client();
+  final http.Client c = HttpsOnlyServerClient.wrap(client);
   return (String date) async {
     final base = settings.serverBaseUrl.trim();
     final key = settings.serverApiKey?.trim() ?? '';

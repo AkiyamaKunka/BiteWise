@@ -6,6 +6,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_contract_adapter.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_cost.dart';
@@ -120,8 +121,10 @@ void main() {
       expect(s.requests, isEmpty);
     });
 
-    test('http: supported, brand-only; the same host keeps its stamp',
-        () async {
+    test('http (https switch off): supported, brand-only; the same host '
+        'keeps its stamp', () async {
+      debugRequireHttpsServerOverride = false;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
       final (c, _, stamp) = await make([_accepted],
           url: 'http://BiteWise.Example.net:5000');
       expect(c.lookupSupport().supported, isTrue);
@@ -158,6 +161,46 @@ void main() {
             LookupOutcomeKind.unsupported);
         expect(s.requests, isEmpty);
       }
+    });
+
+    // Owner decision 2026-11-13: with the https switch on (the shipped
+    // value) a plain http:// server gets nothing — not the brand-only
+    // request, not the upload key.
+    test('http with the https switch on: unsupported, zero calls', () async {
+      debugRequireHttpsServerOverride = true;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
+      for (final url in [
+        'http://BiteWise.Example.net:5000',
+        'HTTP://10.0.0.5:5000',
+      ]) {
+        final (c, s, _) = await make([_accepted], url: url);
+        final support = c.lookupSupport();
+        expect(support.supported, isFalse, reason: url);
+        expect(support.reason, LookupUnsupportedReason.noServerAddress);
+        expect(support.recipient, LookupRecipient.none);
+        expect(
+            (await c.submit(_mixed,
+                    expectedRecipient: support.recipient,
+                    expectedRecipientStamp: support.recipientStamp))
+                .kind,
+            LookupOutcomeKind.unsupported);
+        expect((await c.poll('job_abcdefgh01')).kind,
+            LookupOutcomeKind.unsupported);
+        expect(s.requests, isEmpty, reason: url);
+      }
+    });
+
+    test('http with the https switch on: a debug build (tests) keeps '
+        'http:// to this device', () async {
+      debugRequireHttpsServerOverride = true;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
+      final (c, s, stamp) =
+          await make([_accepted], url: 'http://127.0.0.1:5000');
+      expect(c.lookupSupport().supported, isTrue);
+      expect(c.lookupSupport().locationAllowed, isFalse);
+      await c.submit(_mixed, expectedRecipientStamp: stamp);
+      expect(s.requests.single.url.toString(),
+          'http://127.0.0.1:5000/api/restaurant_lookup');
     });
   });
 
@@ -439,8 +482,10 @@ void main() {
           ['mcdonalds', 'chipotle']);
     });
 
-    test('http: only the chains printed text names; nothing else changes',
-        () async {
+    test('http (https switch off): only the chains printed text names; '
+        'nothing else changes', () async {
+      debugRequireHttpsServerOverride = false;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
       final (c, s, stamp) = await make([_accepted],
           url: 'http://10.0.0.5:5000');
       await c.submit(_mixed, expectedRecipientStamp: stamp);
@@ -454,7 +499,10 @@ void main() {
           'http://10.0.0.5:5000/api/restaurant_lookup');
     });
 
-    test('http with only a location chain: zero calls', () async {
+    test('http (https switch off) with only a location chain: zero calls',
+        () async {
+      debugRequireHttpsServerOverride = false;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
       final (c, s, stamp) = await make([_accepted],
           url: 'http://10.0.0.5:5000');
       final o = await c.submit(_locationOnly, expectedRecipientStamp: stamp);

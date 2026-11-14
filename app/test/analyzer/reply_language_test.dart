@@ -42,7 +42,7 @@ Future<AppSettings> _settings(AiProvider provider, String appLanguage) async {
       prefs: await SharedPreferences.getInstance(), keyStore: keys);
   await s.setProvider(provider);
   if (provider == AiProvider.server) {
-    await s.setServerBaseUrl('http://10.0.0.5');
+    await s.setServerBaseUrl('https://10.0.0.5');
     await s.setServerApiKey('upload-key');
   }
   await s.setAppLanguage(appLanguage);

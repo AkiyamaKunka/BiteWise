@@ -21,6 +21,9 @@ import '../../core/coerce.dart';
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart' show formatRecentMealsBlock;
 import '../../core/prompts.dart';
+import '../../core/server_transport.dart'
+    show kServerNeedsHttpsMessage, serverAddressRefused;
+import '../server_http_client.dart' show HttpsOnlyServerClient;
 import '../assist/clients/http_failure.dart'
     show
         isBillingExhausted,

@@ -4,6 +4,13 @@
 /// checkmark list; picking one selects the server route AND that plan.
 /// The server config (address, upload key, Claude connect) appears once
 /// a plan is active.
+///
+/// The address must be https:// while the https switch is on
+/// (core/server_transport.dart, owner decision 2026-11-13): an address
+/// that is not is never saved ("Needs https://" under the field), and one
+/// saved before (an older app, the switch off) shows the same line and a
+/// footer saying nothing is sent to it. With the switch off, an http://
+/// address is saved and the footer says it travels unencrypted.
 library;
 
 import 'dart:async';
@@ -11,6 +18,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show HapticFeedback;
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
+import '../../../core/server_transport.dart'
+    show isCleartextServerUrl, requireHttpsServer, serverAddressRefused;
 import '../../ai_consent.dart';
 import '../../services.dart' show SettingsStore;
 import '../../l10n.dart';
@@ -51,6 +60,11 @@ class _SubscriptionProviderPageState
 
   /// The address field holds an edit that is not saved yet.
   bool _serverUrlEdited = false;
+
+  /// The last attempt to save the field's edit was refused: it does not
+  /// start with https:// (core/server_transport.dart). Cleared by the next
+  /// keystroke.
+  bool _refusedEdit = false;
   bool _authBusy = false;
 
   /// 'token' | 'none' | null (unknown / not applicable). Fetched on open
@@ -83,9 +97,20 @@ class _SubscriptionProviderPageState
   /// and the lookups read the saved address at each request, so an
   /// automatic photo and the upload key went to whatever host a half-typed
   /// address named (http://10.0.0.5 on the way to .55, review 171).
-  void _saveServerUrl() {
+  ///
+  /// An address the app would send nothing to is not saved: the edit
+  /// stays in the field under "Needs https://", and the saved address is
+  /// left as it was. False = refused.
+  bool _saveServerUrl() {
+    final url = _serverUrlController.text.trim();
+    if (serverAddressRefused(url)) {
+      if (mounted) setState(() => _refusedEdit = true);
+      return false;
+    }
     _serverUrlEdited = false;
-    widget.settings.update(serverBaseUrl: _serverUrlController.text.trim());
+    widget.settings.update(serverBaseUrl: url);
+    if (mounted) setState(() => _refusedEdit = false);
+    return true;
   }
 
   /// An action about to use the address ([_connectClaude], [_selectPlan])
@@ -95,8 +120,16 @@ class _SubscriptionProviderPageState
   /// else has saved it: with a screen reader, Connect Claude asked for the
   /// address the field showed (the U3 bug run 7 fixed) or went to the old
   /// server, and a plan's question named the old host (review 171).
-  void _saveServerUrlEdit() {
-    if (_serverUrlEdited) _saveServerUrl();
+  ///
+  /// False when the edit was refused ([_saveServerUrl]): the action stops
+  /// rather than go on with the old address while the field shows another.
+  bool _saveServerUrlEdit() {
+    if (!_serverUrlEdited || _saveServerUrl()) return true;
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errServerNeedsHttps)));
+    }
+    return false;
   }
 
   Future<void> _refreshLoginState() async {
@@ -128,7 +161,10 @@ class _SubscriptionProviderPageState
     if (_serverUrlEdited) {
       final settings = widget.settings;
       final url = _serverUrlController.text.trim();
-      scheduleMicrotask(() => settings.update(serverBaseUrl: url));
+      // Never an address the app would send nothing to.
+      if (!serverAddressRefused(url)) {
+        scheduleMicrotask(() => settings.update(serverBaseUrl: url));
+      }
     }
     _serverUrlFocus.dispose();
     _keyController.dispose();
@@ -143,7 +179,7 @@ class _SubscriptionProviderPageState
     if (already) return;
     HapticFeedback.selectionClick();
     // The question names the host the photos would go to.
-    _saveServerUrlEdit();
+    if (!_saveServerUrlEdit()) return;
     // The plan is the AI company behind the server: a new recipient while
     // Watch Camera Roll is on asks now (App Store 5.1.2(i)); Not now keeps
     // the previous plan or provider.
@@ -170,7 +206,7 @@ class _SubscriptionProviderPageState
     final start = widget.startClaudeAuth;
     final complete = widget.completeClaudeAuth;
     if (start == null || complete == null) return;
-    _saveServerUrlEdit();
+    if (!_saveServerUrlEdit()) return;
     // Nothing to sign in yet: the request needs the server's address and
     // upload key, and without them it only came back with an English
     // 'Set the server address and key first.' (U3). Said here instead,
@@ -179,6 +215,12 @@ class _SubscriptionProviderPageState
         widget.settings.apiKey.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(context.l10n.connectNeedsServer)));
+      return;
+    }
+    // A saved address nothing is sent to: said here, nothing called.
+    if (serverAddressRefused(widget.settings.serverBaseUrl)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(context.l10n.errServerNeedsHttps)));
       return;
     }
     setState(() => _authBusy = true);
@@ -291,6 +333,25 @@ class _SubscriptionProviderPageState
     if (mounted) setState(() {});
   }
 
+  /// The server section's footer: what the server is, then how the saved
+  /// address travels when it is not https://.
+  String _serverFooter(AppLocalizations l) {
+    final saved = widget.settings.serverBaseUrl;
+    final note = serverAddressRefused(saved)
+        ? l.serverNeedsHttpsFooter
+        : !requireHttpsServer && isCleartextServerUrl(saved)
+            ? l.serverHttpFooter
+            : null;
+    return note == null ? l.serverFooter : '${l.serverFooter}\n\n$note';
+  }
+
+  /// "Needs https://" under the field: a refused save, or the saved
+  /// address (shown while the field holds it unedited).
+  bool get _showNeedsHttps =>
+      _refusedEdit ||
+      (!_serverUrlEdited &&
+          serverAddressRefused(widget.settings.serverBaseUrl));
+
   @override
   Widget build(BuildContext context) {
     final scheme = Theme.of(context).colorScheme;
@@ -321,7 +382,7 @@ class _SubscriptionProviderPageState
         if (_planActive) ...[
           GroupedSection(
             header: context.l10n.serverHeader,
-            footer: context.l10n.serverFooter,
+            footer: _serverFooter(context.l10n),
             separatorInset: AppSpace.separatorInset,
             children: [
               cellField(TextField(
@@ -333,11 +394,23 @@ class _SubscriptionProviderPageState
                 decoration: cellFieldDecoration(
                   context,
                   labelText: context.l10n.serverAddressLabel,
-                  hintText: 'http://your.server.ip',
-                ),
+                  hintText: 'https://your.server',
+                ).copyWith(
+                    errorText: _showNeedsHttps
+                        ? context.l10n.serverNeedsHttpsField
+                        : null,
+                    // The cell is the frame: the error line only, never
+                    // the theme's outline (see cellFieldDecoration).
+                    errorBorder: InputBorder.none,
+                    focusedErrorBorder: InputBorder.none),
                 // Saved when the edit is over ([_saveServerUrl]), not as
                 // typed.
-                onChanged: (_) => _serverUrlEdited = true,
+                onChanged: (_) {
+                  final wasShown = _showNeedsHttps;
+                  _serverUrlEdited = true;
+                  _refusedEdit = false;
+                  if (wasShown) setState(() {});
+                },
                 onSubmitted: (_) => _saveServerUrl(),
                 // A pointer going down outside leaves the edit going, as
                 // before (the field keeps its focus, the keyboard stays

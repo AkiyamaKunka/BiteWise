@@ -19,6 +19,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/analyzer/provider_analyzers.dart';
 import 'package:calorie_tracker/services/settings/app_settings.dart';
@@ -60,12 +61,12 @@ void main() {
     final address = find.byKey(const Key('serverUrlField'));
     final key = find.byKey(const Key('serverUploadKeyField'));
     await tester.tap(address);
-    await tester.enterText(address, 'http://10.0.0.7');
+    await tester.enterText(address, 'https://10.0.0.7');
     await tester.tap(key);
     await tester.enterText(key, 'up');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.serverBaseUrl, 'https://10.0.0.7');
     expect(settings.apiKey, 'up');
 
     // So Connect Claude asks the server instead of for the address.
@@ -95,8 +96,8 @@ void main() {
     }
 
     for (final (saved, typed) in const [
-      ('', 'http://10.0.0.7'),
-      ('http://10.0.0.7', 'http://10.0.0.55'),
+      ('', 'https://10.0.0.7'),
+      ('https://10.0.0.7', 'https://10.0.0.55'),
     ]) {
       testWidgets('Connect Claude by $by right after "$typed" is typed '
           '(saved: "$saved") uses the typed address', (tester) async {
@@ -152,7 +153,7 @@ void main() {
       final settings =
           FakeSettings(keys: {'server': 'up'}, watcherEnabled: true)
             ..provider = 'server'
-            ..serverBaseUrl = 'http://10.0.0.7'
+            ..serverBaseUrl = 'https://10.0.0.7'
             ..aiConsent = {'server:claude'};
       await tester.pumpWidget(MaterialApp(
         localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -163,7 +164,7 @@ void main() {
 
       final address = find.byKey(const Key('serverUrlField'));
       await tester.tap(address);
-      await tester.enterText(address, 'http://10.0.0.55');
+      await tester.enterText(address, 'https://10.0.0.55');
       await tester.pump();
       await activate(tester, 'planChoice-glm', RegExp('^GLM'));
       await tester.pumpAndSettle();
@@ -180,7 +181,7 @@ void main() {
       await tester.tap(find.byKey(const Key('aiConsentNotNow')));
       await tester.pumpAndSettle();
       expect(settings.serverBackend, 'claude');
-      expect(settings.serverBaseUrl, 'http://10.0.0.55');
+      expect(settings.serverBaseUrl, 'https://10.0.0.55');
       semantics.dispose();
     });
   }
@@ -195,11 +196,11 @@ void main() {
     ));
     await tester.pumpAndSettle();
     await tester.enterText(
-        find.byKey(const Key('serverUrlField')), ' http://10.0.0.7 ');
+        find.byKey(const Key('serverUrlField')), ' https://10.0.0.7 ');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pump();
-    expect(settings.serverBaseUrl, 'http://10.0.0.7');
-    expect(find.text(' http://10.0.0.7 '), findsOneWidget,
+    expect(settings.serverBaseUrl, 'https://10.0.0.7');
+    expect(find.text(' https://10.0.0.7 '), findsOneWidget,
         reason: 'the field keeps what was typed; only the saved value is trimmed');
   });
 
@@ -207,7 +208,7 @@ void main() {
       (tester) async {
     final settings = FakeSettings(keys: {'server': 'up'})
       ..provider = 'server'
-      ..serverBaseUrl = 'http://10.0.0.7';
+      ..serverBaseUrl = 'https://10.0.0.7';
     await tester.pumpWidget(MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -217,20 +218,20 @@ void main() {
     final field = find.byKey(const Key('serverUrlField'));
     final before = settings.updateCalls;
     // The last octet edited in place: 7 deleted, then 5 and 5 typed.
-    for (final typed in ['http://10.0.0.', 'http://10.0.0.5']) {
+    for (final typed in ['https://10.0.0.', 'https://10.0.0.5']) {
       await tester.enterText(field, typed);
       await tester.pump();
-      expect(settings.serverBaseUrl, 'http://10.0.0.7',
+      expect(settings.serverBaseUrl, 'https://10.0.0.7',
           reason: 'half-typed "$typed" must not become the address');
     }
-    await tester.enterText(field, 'http://10.0.0.55');
+    await tester.enterText(field, 'https://10.0.0.55');
     await tester.pump();
-    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.serverBaseUrl, 'https://10.0.0.7');
     expect(settings.updateCalls, before, reason: 'no keystroke saves');
 
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(settings.serverBaseUrl, 'http://10.0.0.55');
+    expect(settings.serverBaseUrl, 'https://10.0.0.55');
     expect(settings.updateCalls, before + 1,
         reason: 'Done saves once, and losing focus with it saves nothing more');
   });
@@ -246,7 +247,7 @@ void main() {
     addTearDown(tester.view.reset);
     final settings = FakeSettings(keys: {'server': 'up'})
       ..provider = 'server'
-      ..serverBaseUrl = 'http://10.0.0.7';
+      ..serverBaseUrl = 'https://10.0.0.7';
     await tester.pumpWidget(MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -256,19 +257,19 @@ void main() {
     final field = find.byKey(const Key('serverUrlField'));
     final before = settings.updateCalls;
     await tester.tap(field);
-    await tester.enterText(field, 'http://10.0.0.5');
+    await tester.enterText(field, 'https://10.0.0.5');
     await tester.pump();
 
     await scrollAndMissField(tester, field);
-    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.serverBaseUrl, 'https://10.0.0.7');
     expect(settings.updateCalls, before);
     expect(tester.widget<TextField>(field).focusNode!.hasFocus, isTrue,
         reason: 'still editing, the keyboard up');
 
-    await tester.enterText(field, 'http://10.0.0.55');
+    await tester.enterText(field, 'https://10.0.0.55');
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
-    expect(settings.serverBaseUrl, 'http://10.0.0.55');
+    expect(settings.serverBaseUrl, 'https://10.0.0.55');
     expect(settings.updateCalls, before + 1);
   });
 
@@ -276,7 +277,7 @@ void main() {
       'without an edit saves nothing', (tester) async {
     final settings = FakeSettings(keys: {'server': 'up'})
       ..provider = 'server'
-      ..serverBaseUrl = 'http://10.0.0.7';
+      ..serverBaseUrl = 'https://10.0.0.7';
     await tester.pumpWidget(MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
@@ -314,11 +315,11 @@ void main() {
 
     // An edit, then Back with the field still focused.
     await open();
-    await tester.enterText(field, 'http://10.0.0.55');
+    await tester.enterText(field, 'https://10.0.0.55');
     await tester.pump();
-    expect(settings.serverBaseUrl, 'http://10.0.0.7');
+    expect(settings.serverBaseUrl, 'https://10.0.0.7');
     await back();
-    expect(settings.serverBaseUrl, 'http://10.0.0.55');
+    expect(settings.serverBaseUrl, 'https://10.0.0.55');
   });
 
   // The reported case, with the production pieces: the store the app uses,
@@ -336,7 +337,7 @@ void main() {
           prefs: await SharedPreferences.getInstance(),
           keyStore: MemoryKeyStore());
       await app.setProvider(AiProvider.server);
-      await app.setServerBaseUrl('http://10.0.0.7');
+      await app.setServerBaseUrl('https://10.0.0.7');
       await app.setServerApiKey('upload-key');
       await app.setAiConsent('server:claude', granted: true);
     });
@@ -373,31 +374,165 @@ void main() {
 
     // The server moved to .55: the last octet is edited in place, and an
     // automatic photo goes out after each keystroke.
-    for (final typed in ['http://10.0.0.', 'http://10.0.0.5', 'http://10.0.0.55']) {
+    for (final typed in ['https://10.0.0.', 'https://10.0.0.5', 'https://10.0.0.55']) {
       await tester.enterText(field, typed);
       await tester.pump();
       await automaticPhoto();
     }
     expect(uploads, List.filled(3, '10.0.0.7 <- upload-key'));
-    expect(app.serverBaseUrl, 'http://10.0.0.7');
+    expect(app.serverBaseUrl, 'https://10.0.0.7');
 
     // Nor after a scroll or a tap beside the field while it is retyped.
-    await tester.enterText(field, 'http://10.0.0.5');
+    await tester.enterText(field, 'https://10.0.0.5');
     await tester.pump();
     await scrollAndMissField(tester, field);
     await tester.runAsync(() async {}); // a save, had one started, finishes
     await automaticPhoto();
     expect(uploads, List.filled(4, '10.0.0.7 <- upload-key'));
-    expect(app.serverBaseUrl, 'http://10.0.0.7');
+    expect(app.serverBaseUrl, 'https://10.0.0.7');
 
-    await tester.enterText(field, 'http://10.0.0.55');
+    await tester.enterText(field, 'https://10.0.0.55');
     await tester.pump();
     await tester.testTextInput.receiveAction(TextInputAction.done);
     await tester.pumpAndSettle();
     await tester.runAsync(() async {}); // the store's save finishes
-    expect(app.serverBaseUrl, 'http://10.0.0.55');
+    expect(app.serverBaseUrl, 'https://10.0.0.55');
     await automaticPhoto();
     expect(uploads.last, '10.0.0.55 <- upload-key');
+  });
+
+  // Owner decision 2026-11-13: plain http is refused everywhere. With the
+  // https switch on (shipped), an address that does not start with
+  // https:// is never saved, and one saved before shows "Needs https://"
+  // and a footer saying nothing is sent to it. With it off, http:// is
+  // saved and the footer says it travels unencrypted.
+  group('an address that is not https://', () {
+    setUp(() => debugRequireHttpsServerOverride = true);
+    tearDown(() => debugRequireHttpsServerOverride = null);
+    final en = lookupAppLocalizations(const Locale('en'));
+    final zh = lookupAppLocalizations(const Locale('zh'));
+
+    Future<(FakeSettings, List<String>)> pumpPage(WidgetTester tester,
+        {String saved = '', Locale locale = const Locale('en')}) async {
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      final settings = FakeSettings(keys: {'server': 'up'})
+        ..provider = 'server'
+        ..serverBaseUrl = saved;
+      final asked = <String>[];
+      await tester.pumpWidget(MaterialApp(
+        locale: locale,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: SubscriptionProviderPage(
+          settings: settings,
+          startClaudeAuth: () async {
+            asked.add(settings.serverBaseUrl);
+            return (url: null, error: 'stop here');
+          },
+          completeClaudeAuth: (_) async => null,
+        ),
+      ));
+      await tester.pumpAndSettle();
+      return (settings, asked);
+    }
+
+    Finder footerWith(String text) => find.byWidgetPredicate(
+        (w) => w is Text && (w.data ?? '').contains(text));
+
+    testWidgets('the hint is an https:// address', (tester) async {
+      await pumpPage(tester);
+      final field = tester.widget<TextField>(
+          find.byKey(const Key('serverUrlField')));
+      expect(field.decoration!.hintText, 'https://your.server');
+    });
+
+    for (final typed in ['http://10.0.0.7', 'HTTP://h.example:5000', '10.0.0.7']) {
+      testWidgets('switch on: "$typed" is not saved, and the field says '
+          'why until the next keystroke', (tester) async {
+        final (settings, _) = await pumpPage(tester, saved: 'https://10.0.0.5');
+        final field = find.byKey(const Key('serverUrlField'));
+        await tester.enterText(field, typed);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(settings.serverBaseUrl, 'https://10.0.0.5',
+            reason: 'the saved address is left as it was');
+        expect(find.text(en.serverNeedsHttpsField), findsOneWidget);
+        await tester.enterText(field, 'https://10.0.0.7');
+        await tester.pump();
+        expect(find.text(en.serverNeedsHttpsField), findsNothing);
+        await tester.testTextInput.receiveAction(TextInputAction.done);
+        await tester.pumpAndSettle();
+        expect(settings.serverBaseUrl, 'https://10.0.0.7');
+        expect(find.text(en.serverNeedsHttpsField), findsNothing);
+      });
+    }
+
+    testWidgets('switch on: Connect Claude after an http:// edit stops and '
+        'says why, calling nothing', (tester) async {
+      final (settings, asked) =
+          await pumpPage(tester, saved: 'https://10.0.0.5');
+      await tester.enterText(
+          find.byKey(const Key('serverUrlField')), 'http://10.0.0.7');
+      await tester.tap(find.byKey(const Key('connectClaudeButton')));
+      await tester.pumpAndSettle();
+      expect(asked, isEmpty);
+      expect(find.text(en.errServerNeedsHttps), findsOneWidget);
+      expect(settings.serverBaseUrl, 'https://10.0.0.5');
+    });
+
+    testWidgets('switch on: leaving the page with an http:// edit saves '
+        'nothing', (tester) async {
+      final (settings, _) = await pumpPage(tester, saved: 'https://10.0.0.5');
+      await tester.enterText(
+          find.byKey(const Key('serverUrlField')), 'http://10.0.0.7');
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      await tester.pumpAndSettle();
+      expect(settings.serverBaseUrl, 'https://10.0.0.5');
+    });
+
+    for (final (locale, l) in [(const Locale('en'), en), (const Locale('zh'), zh)]) {
+      testWidgets('switch on: an http:// address saved before is shown with '
+          '"needs https" and Connect Claude calls nothing '
+          '(${locale.languageCode})', (tester) async {
+        final (settings, asked) =
+            await pumpPage(tester, saved: 'http://10.0.0.7', locale: locale);
+        expect(find.text(l.serverNeedsHttpsField), findsOneWidget);
+        expect(footerWith(l.serverNeedsHttpsFooter), findsOneWidget);
+        expect(footerWith(l.serverFooter), findsOneWidget);
+        await tester.tap(find.byKey(const Key('connectClaudeButton')));
+        await tester.pumpAndSettle();
+        expect(asked, isEmpty);
+        expect(find.text(l.errServerNeedsHttps), findsOneWidget);
+        expect(settings.serverBaseUrl, 'http://10.0.0.7',
+            reason: 'kept, so fixing it is an edit, not a retype');
+      });
+    }
+
+    testWidgets('switch on: an https:// address has neither line',
+        (tester) async {
+      await pumpPage(tester, saved: 'https://10.0.0.7');
+      expect(find.text(en.serverNeedsHttpsField), findsNothing);
+      expect(footerWith(en.serverNeedsHttpsFooter), findsNothing);
+      expect(footerWith(en.serverHttpFooter), findsNothing);
+    });
+
+    testWidgets('switch off: http:// is saved, and the footer says it '
+        'travels unencrypted', (tester) async {
+      debugRequireHttpsServerOverride = false;
+      final (settings, asked) = await pumpPage(tester);
+      await tester.enterText(
+          find.byKey(const Key('serverUrlField')), 'http://10.0.0.7');
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await tester.pumpAndSettle();
+      expect(settings.serverBaseUrl, 'http://10.0.0.7');
+      expect(find.text(en.serverNeedsHttpsField), findsNothing);
+      expect(footerWith(en.serverHttpFooter), findsOneWidget);
+      await tester.tap(find.byKey(const Key('connectClaudeButton')));
+      await tester.pumpAndSettle();
+      expect(asked, ['http://10.0.0.7']);
+    });
   });
 }
 

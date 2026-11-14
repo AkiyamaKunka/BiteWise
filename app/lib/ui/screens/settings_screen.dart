@@ -15,6 +15,7 @@ import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:url_launcher/url_launcher.dart' as launcher;
 
 import '../../core/contracts.dart';
+import '../../core/server_transport.dart' show serverAddressRefused;
 import '../../services/backup/backup_coordinator.dart';
 
 import '../../services/analyzer/platform_decode.dart';
@@ -822,8 +823,13 @@ class _SettingsScreenState extends State<SettingsScreen>
       defaultTargetPlatform == TargetPlatform.android;
 
   /// Why the automatic scan is latched, with its next try; null when not.
+  /// Or that it does not run at all: the own server's address is not
+  /// https://, so nothing is sent to it (AppSettings.canAutoAnalyze).
   String? _autoScanPausedText() {
     final s = widget.settings;
+    if (s.provider == 'server' && serverAddressRefused(s.serverBaseUrl)) {
+      return context.l10n.autoScanNeedsHttps;
+    }
     final until = s.autoScanBlockedUntil;
     if (until == null) return null;
     return autoScanPausedLine(context.l10n,

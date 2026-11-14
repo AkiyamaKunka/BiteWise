@@ -162,13 +162,20 @@ final _placeholderRe = RegExp(r'\{(\w+)\}');
 /// (leftoverLoadFailed, leftoverSaveFailed), then Android's system photo
 /// picker (addChooseAllPhotos, addPickerNote, addPickerUnavailable) and
 /// the note for a photo older than the dating window
-/// (addOldPhotoLoggedToday), then the Android background lane's block
-/// (summaryBatteryRestrictedHint, notificationsAllowAction,
-/// notificationMealChannelName/Description, watcherAllowAllPhotos,
-/// coachWeekday, coachTitleOnDay, coachEmptyOnDay, diagBgRunNotFinished,
-/// watcherLimitedFooterIos), then the Android push's ui lane: the
-/// discard-changes question (discardChangesTitle, Body, Keep, Discard).
-const _keyCount = 908;
+/// (addOldPhotoLoggedToday), then the Android privacy lane's
+/// (android/privacy), 23: ten https-only own-server lines
+/// (serverHttpConsentNote … diagFixServerHttps), shareConsentDeclinedMany,
+/// Export's six Save to Device lines (exportSheetTitle … exportSaveFailed),
+/// settingsHealthReminder, and the Android backup-size lines
+/// (backupSizeNearLimit, diagBackupSizeTitle, diagBackupSizeLine), then
+/// the review's autoScanNeedsHttps and diagBgStopNeedsHttps; the Android
+/// background lane's block (summaryBatteryRestrictedHint,
+/// notificationsAllowAction, notificationMealChannelName/Description,
+/// watcherAllowAllPhotos, coachWeekday, coachTitleOnDay, coachEmptyOnDay,
+/// diagBgRunNotFinished, watcherLimitedFooterIos); and the Android push's
+/// ui lane: the discard-changes question (discardChangesTitle, Body, Keep,
+/// Discard).
+const _keyCount = 931;
 
 Directory _appRoot() {
   var dir = Directory.current;

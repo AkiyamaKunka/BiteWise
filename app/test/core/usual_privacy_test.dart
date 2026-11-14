@@ -167,7 +167,7 @@ void main() {
           prefs: await SharedPreferences.getInstance(),
           keyStore: _MemoryKeys());
       await s.setProvider(AiProvider.server);
-      await s.setServerBaseUrl('http://10.0.0.5');
+      await s.setServerBaseUrl('https://10.0.0.5');
       await s.setServerApiKey('upload-key');
       final bodies = <String>[];
       final analyzer = ServerAnalyzer(

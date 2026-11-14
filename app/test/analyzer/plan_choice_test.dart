@@ -29,7 +29,7 @@ Future<AppSettings> settingsWith(
       prefs: await SharedPreferences.getInstance(),
       keyStore: MemoryKeyStore());
   await s.setProvider(AiProvider.server);
-  await s.setServerBaseUrl('http://s.example');
+  await s.setServerBaseUrl('https://s.example');
   await s.setServerApiKey('upload-key');
   await s.setServerBackend(backend);
   await s.setServerModel(model);

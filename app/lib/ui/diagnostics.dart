@@ -17,6 +17,7 @@ import 'package:image/image.dart' as img;
 import '../core/coerce.dart'
     show EstimateConfidence, isFoodTruthy, mealContextFields;
 import '../core/contracts.dart';
+import '../core/server_transport.dart' show serverAddressRefused;
 import '../l10n/app_localizations.dart';
 import '../services/assist/assist_local_state.dart' show AssistDecisionEntry;
 import '../services/photo/glasses_check.dart';
@@ -97,6 +98,14 @@ class ProviderDiagnostics {
       yield DiagResult(l.diagStageConfiguration, DiagStatus.fail,
           l.diagNoServerAddress,
           fix: l.diagFixEnterServer);
+      return;
+    }
+    // Not https:// while the https switch is on (core/server_transport.dart):
+    // nothing is sent there, the reachability probe included.
+    if (isServer && serverAddressRefused(settings.serverBaseUrl)) {
+      yield DiagResult(l.diagStageConfiguration, DiagStatus.fail,
+          l.diagServerNeedsHttps,
+          fix: l.diagFixServerHttps);
       return;
     }
     if (settings.apiKey.trim().isEmpty) {

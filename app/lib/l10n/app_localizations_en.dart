@@ -3281,7 +3281,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get backupAndroidFooter =>
-      'Android\'s own backup can keep this app\'s data in your Google account. Before you change phones, export a file and import it on the new phone. Import merges: meals already here are left alone.';
+      'Android\'s own backup can keep your food log in your Google account, but not your API keys or server upload key: on a new phone you enter them again. To move to a new phone, use Export Data, then Save to Device, and import that file on the new phone. Import merges: meals already here are left alone.';
 
   @override
   String get backupStatusOff => 'Off';
@@ -3621,6 +3621,110 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bodyDeleteFailed => 'Couldn\'t delete. Try again.';
 
   @override
+  String get serverHttpConsentNote =>
+      'This server\'s address starts with http://, so what Chopstats sends, and your upload key, cross the network unencrypted.';
+
+  @override
+  String get serverHttpsRequiredConsentNote =>
+      'This server\'s address does not start with https://, so Chopstats sends it nothing until you change the address to https://.';
+
+  @override
+  String get serverHttpFooter =>
+      'This address starts with http://: photos, meal text and the upload key travel unencrypted. Change it to https:// once your server has a certificate.';
+
+  @override
+  String get serverNeedsHttpsFooter =>
+      'Needs https:// — Chopstats sends nothing to an address that does not start with https://: no photos, no meal text, no upload key. Set up https on your server, then change the address here.';
+
+  @override
+  String get serverNeedsHttpsField => 'Needs https://';
+
+  @override
+  String get setupLinkNeedsHttps =>
+      'That setup link names a server without https://. Chopstats sends nothing to a plain http:// server, so nothing was set up.';
+
+  @override
+  String get errServerNeedsHttps =>
+      'Your server address does not start with https:// — Chopstats sends nothing to it. Change it to an https:// address in Settings.';
+
+  @override
+  String get reasonServerNeedsHttps => 'the server address needs https://';
+
+  @override
+  String get diagServerNeedsHttps =>
+      'The server address does not start with https://, so nothing is sent to it.';
+
+  @override
+  String get diagFixServerHttps =>
+      'Set up https on your server, then change the server address to https://… in Settings.';
+
+  @override
+  String shareConsentDeclinedMany(int count) {
+    return '$count shared photos were not analyzed — nothing was sent.';
+  }
+
+  @override
+  String get exportSheetTitle => 'Export Data';
+
+  @override
+  String get exportSaveToDevice => 'Save to Device…';
+
+  @override
+  String get exportShare => 'Share…';
+
+  @override
+  String get exportSaved => 'Export saved.';
+
+  @override
+  String get exportSaveBusy =>
+      'Another file window is still open. Close it, then try again.';
+
+  @override
+  String get exportSaveFailed =>
+      'The export could not be saved. Try Share… instead.';
+
+  @override
+  String get settingsHealthReminder =>
+      'Chopstats does not give medical advice. For decisions about your health or diet, consult a healthcare professional.';
+
+  @override
+  String backupSizeNearLimit(String size) {
+    return 'Your data here is $size. Android\'s own backup stops at 25 MB per app, without telling you: keep a copy with Export Data, then Save to Device.';
+  }
+
+  @override
+  String get diagBackupSizeTitle => 'Android backup';
+
+  @override
+  String diagBackupSizeLine(String size) {
+    return 'About $size for Android\'s own backup, which keeps at most 25 MB per app.';
+  }
+
+  @override
+  String get autoScanNeedsHttps =>
+      'Automatic logging is not running: your server address does not start with https://, and Chopstats sends nothing to it. Change it in AI Provider › Your own server.';
+
+  @override
+  String get diagBgStopNeedsHttps =>
+      'Not run: the server address does not start with https://.';
+
+  @override
+  String get addChooseAllPhotos => 'Choose from all photos…';
+
+  @override
+  String get addPickerNote =>
+      'Android\'s photo picker shows all your photos. Chopstats receives only the one you choose.';
+
+  @override
+  String get addPickerUnavailable =>
+      'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.';
+
+  @override
+  String addOldPhotoLoggedToday(String taken, int days) {
+    return 'This photo was taken on $taken, more than $days days ago, so its meal was logged for today. To log it on its own day, open the meal and change its date.';
+  }
+
+  @override
   String get discardChangesTitle => 'Discard changes?';
 
   @override
@@ -3681,20 +3785,4 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get watcherLimitedFooterIos =>
       'Chopstats can\'t see all your photos, so new photos are not logged automatically. Allow access to all photos in the Settings app.';
-
-  @override
-  String get addChooseAllPhotos => 'Choose from all photos…';
-
-  @override
-  String get addPickerNote =>
-      'Android\'s photo picker shows all your photos. Chopstats receives only the one you choose.';
-
-  @override
-  String get addPickerUnavailable =>
-      'The photo picker can\'t open on this phone. You can still share a photo to Chopstats from your gallery app.';
-
-  @override
-  String addOldPhotoLoggedToday(String taken, int days) {
-    return 'This photo was taken on $taken, more than $days days ago, so its meal was logged for today. To log it on its own day, open the meal and change its date.';
-  }
 }

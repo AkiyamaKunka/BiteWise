@@ -23,6 +23,7 @@ import 'ai_consent.dart'
         aiConsentCompanyName,
         aiConsentUpdateNeeded,
         askAiConsentUpdate,
+        askSharedPhotoConsent,
         ensureAiConsent;
 import 'background_glue.dart' show foregroundCatchUp;
 import 'backup_sheets.dart';
@@ -289,8 +290,16 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
 
   /// The share gate's question: true = allowed (and saved). Not now says
   /// that the shared photo was not analyzed.
-  Future<bool> _askShareConsent() async {
-    if (!mounted) return false;
+  /// Null: no dialog could be shown (this shell is going away), which is
+  /// no answer: the gate waits for the next shell (SharedPhotoConsentGate).
+  Future<bool?> _askShareConsent() async {
+    if (!mounted) return null;
+    final gate = widget.services.sharedPhotoConsent;
+    // One question per share: Not now covers the photos already in
+    // (askSharedPhotoConsent).
+    if (gate != null) {
+      return askSharedPhotoConsent(context, widget.services.settings, gate);
+    }
     return ensureAiConsent(context, widget.services.settings,
         declined: context.l10n.shareConsentDeclined);
   }
@@ -371,8 +380,12 @@ class _HomeShellState extends State<HomeShell> with WidgetsBindingObserver {
     final l = context.l10n;
     final link = parseSetupLink(uri);
     if (link == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.setupLinkInvalid)));
+      // A well-formed link to a plain http:// server is refused by the
+      // https switch (core/server_transport.dart): said as such.
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(setupLinkNeedsHttps(uri)
+              ? l.setupLinkNeedsHttps
+              : l.setupLinkInvalid)));
       return;
     }
     // One question at a time: the consent-update one answers first.

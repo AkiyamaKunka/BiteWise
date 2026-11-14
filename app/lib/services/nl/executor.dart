@@ -15,11 +15,13 @@ import '../../core/outcome_kind.dart';
 import '../../core/prompts.dart';
 import '../../core/restaurant_assist_logic.dart'
     show dropAssistClaims, supersedeAssist;
+import '../../core/server_transport.dart' show isServerNeedsHttpsMessage;
 import '../../core/shared_generated.dart';
 import '../../l10n/app_localizations.dart';
 import '../../ui/coach_strings.dart' show localizationsFor;
 import '../../ui/format.dart' show byMealClock, displayClock;
-import '../../ui/outcome_text.dart' show badModelText, regionProvider, serverReason;
+import '../../ui/outcome_text.dart'
+    show badModelText, isBadServerAddress, regionProvider, serverReason;
 import '../settings/app_settings.dart';
 
 export '../../core/coerce.dart' show mealCalorieMismatch;
@@ -159,10 +161,16 @@ class DefaultNlExecutor implements NlExecutor {
   /// (loop find 2026-10-08).
   /// Of the server's refusals only the plan's credits one is named (the
   /// selected model needs credits this plan lacks — the CLI's own words);
-  /// busy, "later" and a reply that came back unusable can retry.
+  /// busy, "later" and a reply that came back unusable can retry. A saved
+  /// server address that is not https:// (nothing is sent to it) or not a
+  /// web address is named too, as the photo path names it.
   String _textFailure(String? error) {
     final reason = error == null ? null : serverReason(error);
     return switch (classifyAnalysisError(error)) {
+      AnalysisErrorKind.noServerKey when isServerNeedsHttpsMessage(error) =>
+        '❌ ${_l.errServerNeedsHttps}',
+      AnalysisErrorKind.noServerKey when isBadServerAddress(error!) =>
+        '❌ ${_l.errBadServerAddress}',
       AnalysisErrorKind.rejectedKey => '❌ ${_l.errRejectedKey}',
       AnalysisErrorKind.badModel => '❌ ${badModelText(_l, error)}',
       AnalysisErrorKind.billing => '❌ ${_l.errBillingText}',

@@ -642,11 +642,44 @@ class IntakePhoto {
   /// (design G3): every photo one scan delivers shares it. Null: no limit
   /// (deliberate adds, older call sites, tests).
   final GlassesQuota? glassesQuota;
+
+  /// A shared photo's delivery: the number the share intake gave the share
+  /// it came in (one per plugin batch event — the launch share, each live
+  /// share, the start-up batch of copies left unread), counting up from 1.
+  /// The consent gate's Not now covers whole deliveries ([ShareDeliveries]).
+  /// Null: not a shared photo.
+  final int? shareDelivery;
   const IntakePhoto(this.bytes, this.assetId, this.fileName,
       {this.capturedAt,
       this.deliberate = false,
       this.capture,
-      this.glassesQuota});
+      this.glassesQuota,
+      this.shareDelivery});
+}
+
+/// What the share intake tells the consent gate about its deliveries
+/// (IntakePhoto.shareDelivery), so one Not now covers a whole share without
+/// reading the rest of it (services/photo/share_intake.dart implements it,
+/// ui/ai_consent.dart SharedPhotoConsentGate reads it).
+abstract interface class ShareDeliveries {
+  /// The latest delivery whose batch event has arrived (0: none yet).
+  int get arrivedDelivery;
+
+  /// How many photos [delivery] holds as far as is known now: all its
+  /// copies, less those already found unreadable. A copy not read yet
+  /// counts, even when it will turn out unusable (an unsupported type,
+  /// over 25 MB, a read that fails), so this can be high, never low.
+  int photoCountOf(int delivery);
+
+  /// Every copy of [deliveries] not read yet is deleted unread (at once,
+  /// even while the stream is paused), never handed on.
+  void declineDeliveries(Set<int> deliveries);
+
+  /// Whether [delivery] is only ever covered by an answer about itself:
+  /// the start-up batch of copies an earlier run left unread, which is no
+  /// share the user is making now, so another share's Not now never
+  /// declines it, whenever its sweep finishes.
+  bool asksAlone(int delivery);
 }
 
 /// Meta glasses photos one automatic scan sends on to the model at most

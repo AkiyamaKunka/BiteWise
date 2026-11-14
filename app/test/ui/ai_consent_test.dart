@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
@@ -36,9 +37,39 @@ FakeSettings _unasked({String apiKey = 'k', bool watcherEnabled = false}) =>
     FakeSettings(apiKey: apiKey, watcherEnabled: watcherEnabled)
       ..aiConsent = {};
 
-IntakePhoto _photo(String id) => IntakePhoto(
+IntakePhoto _photo(String id, {int? delivery}) => IntakePhoto(
     Uint8List.fromList(List.filled(16, 3)), id, '$id.jpg',
-    capturedAt: DateTime(2026, 7, 30, 12));
+    capturedAt: DateTime(2026, 7, 30, 12), shareDelivery: delivery);
+
+/// The share intake's side of a Not now (ShareDeliveries), scripted.
+class _Deliveries implements ShareDeliveries {
+  final sizes = <int, int>{};
+  final unreadable = <int, int>{};
+  final declined = <int>{};
+  int _arrived = 0;
+
+  /// A batch event of [n] copies arrives; its number.
+  int arrive(int n) {
+    sizes[++_arrived] = n;
+    return _arrived;
+  }
+
+  @override
+  int get arrivedDelivery => _arrived;
+
+  @override
+  int photoCountOf(int delivery) =>
+      (sizes[delivery] ?? 0) - (unreadable[delivery] ?? 0);
+
+  @override
+  void declineDeliveries(Set<int> deliveries) => declined.addAll(deliveries);
+
+  /// Start-up batches of copies left unread.
+  final alone = <int>{};
+
+  @override
+  bool asksAlone(int delivery) => alone.contains(delivery);
+}
 
 Finder get _dialog => find.byKey(const Key('aiConsentDialog'));
 
@@ -102,6 +133,73 @@ void main() {
       expect(glm, contains('your own server, which passes it to '
           'Zhipu AI (GLM)'));
       expect(glm, contains('mainland China'));
+    });
+
+    // Owner decision 2026-11-13: a plain http:// server gets nothing while
+    // the https switch is on, and the consent says so; with it off, the
+    // consent says what is sent goes unencrypted. Transport only: the
+    // wording version does not change.
+    group('a server address that is not https://', () {
+      setUp(() => debugRequireHttpsServerOverride = true);
+      tearDown(() => debugRequireHttpsServerOverride = null);
+      String server(AppLocalizations l, String url, {String plan = 'claude'}) =>
+          aiConsentText(l,
+              provider: 'server', serverBackend: plan, serverBaseUrl: url);
+
+      test('switch on: says nothing is sent until it is https://', () {
+        for (final url in ['http://10.0.0.7', 'HTTP://h.example:5000']) {
+          expect(server(en, url), endsWith(en.serverHttpsRequiredConsentNote),
+              reason: url);
+          expect(server(zh, url), endsWith(zh.serverHttpsRequiredConsentNote),
+              reason: url);
+          expect(server(en, url), isNot(contains(en.serverHttpConsentNote)));
+        }
+        // After the mainland-China note, which stays.
+        final glm = server(en, 'http://10.0.0.7', plan: 'glm');
+        expect(glm, contains('mainland China'));
+        expect(glm, endsWith(en.serverHttpsRequiredConsentNote));
+        expect(en.serverHttpsRequiredConsentNote, contains('sends it nothing'));
+        expect(zh.serverHttpsRequiredConsentNote, contains('不会向它发送任何内容'));
+      });
+
+      test('switch off: says it travels unencrypted', () {
+        debugRequireHttpsServerOverride = false;
+        expect(server(en, 'http://10.0.0.7'), endsWith(en.serverHttpConsentNote));
+        expect(server(zh, 'http://10.0.0.7'), endsWith(zh.serverHttpConsentNote));
+        expect(en.serverHttpConsentNote, contains('unencrypted'));
+        expect(zh.serverHttpConsentNote, contains('未加密'));
+      });
+
+      test('https://, no address, and other providers: no line', () {
+        for (final require in [true, false]) {
+          debugRequireHttpsServerOverride = require;
+          for (final t in [
+            server(en, 'https://10.0.0.7'),
+            server(en, ''),
+            aiConsentText(en,
+                provider: 'gemini',
+                serverBackend: 'claude',
+                serverBaseUrl: 'http://10.0.0.7'),
+          ]) {
+            expect(t, isNot(contains(en.serverHttpConsentNote)));
+            expect(t, isNot(contains(en.serverHttpsRequiredConsentNote)));
+          }
+        }
+      });
+
+      testWidgets('the dialog shows it', (tester) async {
+        await tester.pumpWidget(_app(Builder(
+            builder: (context) => TextButton(
+                onPressed: () => showAiConsentDialog(context,
+                    provider: 'server',
+                    serverBackend: 'claude',
+                    serverBaseUrl: 'http://10.0.0.7'),
+                child: const Text('go')))));
+        await tester.tap(find.text('go'));
+        await tester.pumpAndSettle();
+        expect(_dialogText(tester, _dialog),
+            endsWith(en.serverHttpsRequiredConsentNote));
+      });
     });
 
     test('mainland-China providers say where the data is processed; '
@@ -727,6 +825,393 @@ void main() {
     });
   });
 
+  // One Not now per share (an-bugs 'PROBE consent'): a 5-photo Android
+  // share answered Not now asked five times. The share intake numbers each
+  // share as its batch event arrives (IntakePhoto.shareDelivery); a Not now
+  // covers every delivery that had arrived by the answer — dropped unasked,
+  // never sent, their unread copies deleted — and one line says how many.
+  // A share that arrives after the answer asks again. (share_intake_test
+  // runs the same through the real intake: unread copies stay unread.)
+  group('one Not now per share', () {
+    late _Deliveries deliveries;
+    late SharedPhotoConsentGate gate;
+    late StreamController<IntakePhoto> input;
+    late List<String> passed;
+    late StreamSubscription<IntakePhoto> sub;
+    late FakeSettings settings;
+
+    setUp(() {
+      settings = _unasked();
+      deliveries = _Deliveries();
+      gate = SharedPhotoConsentGate(settings);
+      input = StreamController<IntakePhoto>();
+      passed = [];
+      sub = gate
+          .gate(input.stream, deliveries: deliveries)
+          .listen((p) => passed.add(p.assetId));
+    });
+    tearDown(() async {
+      await sub.cancel();
+      await input.close();
+    });
+
+    /// A share of [n] photos arrives (its batch event), numbered next.
+    List<IntakePhoto> share(String name, int n) {
+      final d = deliveries.arrive(n);
+      return [for (var i = 1; i <= n; i++) _photo('$name-$i', delivery: d)];
+    }
+
+    test('a 5-photo share: one question, nothing passes, the rest is '
+        'declined at the intake; a later share asks again', () async {
+      final notSent = <int>[];
+      var asked = 0;
+      final answers = [false, true];
+      Future<bool> ask() async {
+        final yes = answers[asked++];
+        if (yes) {
+          await settings.setAiConsent('gemini', granted: true);
+        } else {
+          notSent.add(gate.declineOpenQuestion());
+        }
+        return yes;
+      }
+
+      gate.attach(ask);
+      final first = share('share1', 5);
+      // The intake hands on one photo at a time; the rest wait unread.
+      input.add(first.first);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(notSent, [5], reason: 'all five, four never read');
+      expect(deliveries.declined, {1});
+      expect(passed, isEmpty);
+      // One read ahead before the answer is dropped, not asked.
+      input.add(first[1]);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(passed, isEmpty);
+
+      final second = share('share2', 2);
+      second.forEach(input.add);
+      await pumpEventQueue();
+      expect(asked, 2, reason: 'a share after the answer asks again');
+      expect(passed, ['share2-1', 'share2-2']);
+      gate.detach(ask);
+    });
+
+    test('a share that arrives while the question is open is covered by its '
+        'Not now, and counted', () async {
+      final open = Completer<bool>();
+      final notSent = <int>[];
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        final yes = await open.future;
+        if (!yes) notSent.add(gate.declineOpenQuestion());
+        return yes;
+      }
+
+      gate.attach(ask);
+      final a = share('a', 3);
+      input.add(a.first);
+      await pumpEventQueue();
+      expect(asked, 1);
+      final b = share('b', 2); // shared again while asked
+      open.complete(false);
+      await pumpEventQueue();
+      expect(notSent, [5]);
+      expect(deliveries.declined, {1, 2});
+      [...a.skip(1), ...b].forEach(input.add);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(passed, isEmpty);
+      gate.detach(ask);
+    });
+
+    test("the same share's files read after the answer are covered too; "
+        'only a new share asks again', () async {
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        gate.declineOpenQuestion();
+        return false;
+      }
+
+      gate.attach(ask);
+      final slow = share('slow', 3);
+      input.add(slow[0]);
+      await pumpEventQueue();
+      input.add(slow[1]); // its slow files, after the answer
+      input.add(slow[2]);
+      await pumpEventQueue();
+      expect(asked, 1);
+      input.add(share('next', 1).single);
+      await pumpEventQueue();
+      expect(asked, 2);
+      expect(passed, isEmpty);
+      gate.detach(ask);
+    });
+
+    test('a covered photo is dropped even if the recipient is allowed '
+        'before its turn', () async {
+      Future<bool> ask() async {
+        gate.declineOpenQuestion();
+        // Allowed some other way right after the Not now (Settings).
+        await settings.setAiConsent('gemini', granted: true);
+        return false;
+      }
+
+      gate.attach(ask);
+      share('x', 2).forEach(input.add);
+      await pumpEventQueue();
+      expect(passed, isEmpty, reason: 'the answer for them was no');
+      input.add(share('later', 1).single);
+      await pumpEventQueue();
+      expect(passed, ['later-1'], reason: 'allowed now, and a new share');
+      gate.detach(ask);
+    });
+
+    test('a cold-start share waits for the shell; one Not now covers all of '
+        'it', () async {
+      share('p', 3).forEach(input.add);
+      await pumpEventQueue();
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        return false;
+      }
+
+      gate.attach(ask);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(passed, isEmpty);
+      expect(deliveries.declined, {1});
+      gate.detach(ask);
+    });
+
+    // Review of 46da8b74, low 3: a shell going away answers without showing
+    // a dialog (null). That is no answer: nothing is declined, and the
+    // photo waits for the next shell's question.
+    test('no dialog shown (null) is not a Not now: nothing declined, the '
+        'photo waits for the next shell', () async {
+      var stale = 0;
+      Future<bool?> goingAway() async {
+        stale++;
+        return null;
+      }
+
+      gate.attach(goingAway);
+      share('w', 2).forEach(input.add);
+      await pumpEventQueue();
+      expect(stale, 1, reason: 'asked once, then it waits: no spinning');
+      expect(deliveries.declined, isEmpty);
+      expect(passed, isEmpty);
+
+      var asked = 0;
+      Future<bool> fresh() async {
+        asked++;
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      gate.detach(goingAway);
+      gate.attach(fresh);
+      await pumpEventQueue();
+      expect(stale, 1);
+      expect(asked, 1);
+      expect(passed, ['w-1', 'w-2']);
+      gate.detach(fresh);
+    });
+
+    // Review of 46da8b74, low 1: at a cold start the start-up batch of
+    // copies left unread is numbered right after the launch share, before
+    // the question opens. A Not now covers the share asked about and those
+    // that arrive while it is open, not a delivery already waiting: that
+    // one gets its own question.
+    test('the start-up batch arriving while the question is open is not '
+        'covered either', () async {
+      final open = Completer<void>();
+      final notSent = <int>[];
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        if (asked == 1) {
+          await open.future;
+          notSent.add(gate.declineOpenQuestion());
+          return false;
+        }
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      gate.attach(ask);
+      final launch = share('launch', 2);
+      input.add(launch.first);
+      await pumpEventQueue();
+      final left = share('left', 3); // its sweep finished late
+      deliveries.alone.add(2);
+      final live = share('live', 1); // a share made while asked
+      open.complete();
+      await pumpEventQueue();
+      expect(notSent, [3], reason: 'the launch share and the live share');
+      expect(deliveries.declined, {1, 3});
+      [...launch.skip(1), ...left, ...live].forEach(input.add);
+      await pumpEventQueue();
+      expect(asked, 2);
+      expect(passed, ['left-1', 'left-2', 'left-3']);
+      gate.detach(ask);
+    });
+
+    test('a delivery already waiting when the question opens gets its own '
+        'question', () async {
+      final notSent = <int>[];
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        if (asked == 1) {
+          notSent.add(gate.declineOpenQuestion());
+          return false;
+        }
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      final launch = share('launch', 2);
+      final stranded = share('left', 3); // numbered before the question
+      gate.attach(ask);
+      [...launch, ...stranded].forEach(input.add);
+      await pumpEventQueue();
+      expect(notSent, [2], reason: 'the launch share only');
+      expect(deliveries.declined, {1});
+      expect(asked, 2, reason: 'the waiting batch is asked about');
+      expect(passed, ['left-1', 'left-2', 'left-3']);
+      gate.detach(ask);
+    });
+
+    test('Allow on a several-photo share: one question, every photo passes, '
+        'in order', () async {
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        await settings.setAiConsent('gemini', granted: true);
+        return true;
+      }
+
+      gate.attach(ask);
+      share('a', 4).forEach(input.add);
+      await pumpEventQueue();
+      expect(asked, 1);
+      expect(passed, ['a-1', 'a-2', 'a-3', 'a-4']);
+      expect(deliveries.declined, isEmpty);
+      gate.detach(ask);
+    });
+
+    test('the count leaves out what was already passed on, and copies found '
+        'unreadable', () async {
+      // Allowed for the first two of a 4-photo share, then withdrawn.
+      await settings.setAiConsent('gemini', granted: true);
+      final four = share('w', 4);
+      input
+        ..add(four[0])
+        ..add(four[1]);
+      await pumpEventQueue();
+      expect(passed, ['w-1', 'w-2']);
+      await settings.setAiConsent('gemini', granted: false);
+      deliveries.unreadable[1] = 1; // w-4 turned out not to be a photo
+      final notSent = <int>[];
+      Future<bool> ask() async {
+        notSent.add(gate.declineOpenQuestion());
+        return false;
+      }
+
+      gate.attach(ask);
+      input.add(four[2]);
+      await pumpEventQueue();
+      expect(notSent, [1], reason: 'w-3 only: 4 − 2 passed − 1 unreadable');
+      gate.detach(ask);
+    });
+
+    test('a photo with no delivery (not from the share intake): its Not now '
+        'covers that photo only', () async {
+      var asked = 0;
+      final notSent = <int>[];
+      Future<bool> ask() async {
+        asked++;
+        notSent.add(gate.declineOpenQuestion());
+        return false;
+      }
+
+      gate.attach(ask);
+      input
+        ..add(_photo('loose-1'))
+        ..add(_photo('loose-2'));
+      await pumpEventQueue();
+      expect(asked, 2);
+      expect(notSent, [1, 1]);
+      expect(deliveries.declined, isEmpty);
+      gate.detach(ask);
+    });
+
+    for (final (locale, line) in [
+      (const Locale('en'),
+          '5 shared photos were not analyzed — nothing was sent.'),
+      (const Locale('zh'), '5 张分享的照片没有分析 — 没有发送任何内容。'),
+    ]) {
+      testWidgets('the app shell: one dialog for a 5-photo share, one line '
+          'with the count (${locale.languageCode})', (tester) async {
+        // Its own gate and stream, made inside the test's zone (the ones
+        // from setUp deliver outside it).
+        final settings = _unasked();
+        final deliveries = _Deliveries();
+        final gate = SharedPhotoConsentGate(settings);
+        final input = StreamController<IntakePhoto>();
+        final passed = <String>[];
+        final sub = gate
+            .gate(input.stream, deliveries: deliveries)
+            .listen((p) => passed.add(p.assetId));
+        List<IntakePhoto> share(String name, int n) {
+          final d = deliveries.arrive(n);
+          return [
+            for (var i = 1; i <= n; i++) _photo('$name-$i', delivery: d)
+          ];
+        }
+
+        final services = UiServices(
+          dao: FakeDao(),
+          analyzer: FakeAnalyzer(),
+          executor: FakeExecutor(),
+          settings: settings,
+          picker: FakePicker(),
+          requestPhotoPermission: () async => true,
+          sharedPhotoConsent: gate,
+        );
+        await tester.pumpWidget(
+            _app(HomeShell(services: services), locale: locale));
+        await tester.pumpAndSettle();
+
+        final five = share('s', 5);
+        input.add(five.first);
+        await tester.pumpAndSettle();
+        expect(_dialog, findsOneWidget);
+        await _notNow(tester);
+        expect(find.text(line), findsOneWidget);
+        five.skip(1).forEach(input.add);
+        await tester.pumpAndSettle();
+        expect(_dialog, findsNothing, reason: 'not asked again for s2..s5');
+        expect(passed, isEmpty);
+
+        input.add(share('next', 1).single);
+        await tester.pumpAndSettle();
+        expect(_dialog, findsOneWidget, reason: 'a later share asks again');
+        await _allow(tester);
+        expect(passed, ['next-1']);
+        // Not awaited: a cancel future awaited inside the fake-async zone
+        // never lets the test finish.
+        unawaited(sub.cancel());
+      });
+    }
+  });
+
   testWidgets('a setup link names the plan\'s company, and confirming is '
       'the consent for it', (tester) async {
     final settings = _unasked();
@@ -741,7 +1226,7 @@ void main() {
       setupLinks: links.stream,
     );
     await tester.pumpWidget(_app(HomeShell(services: services)));
-    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+    links.add(Uri.parse('bitewise://setup?server=https%3A%2F%2F10.0.0.7'
         '&key=k1234567890abcdef&backend=doubao'));
     await tester.pumpAndSettle();
     expect(find.textContaining('ByteDance Volcengine (Doubao)'),
@@ -774,7 +1259,7 @@ void main() {
     );
     await tester
         .pumpWidget(_app(HomeShell(services: services), locale: locale));
-    links.add(Uri.parse('bitewise://setup?server=http%3A%2F%2F10.0.0.7'
+    links.add(Uri.parse('bitewise://setup?server=https%3A%2F%2F10.0.0.7'
         '&key=k1234567890abcdef&backend=$backend'));
     await tester.pumpAndSettle();
     return (settings, links);

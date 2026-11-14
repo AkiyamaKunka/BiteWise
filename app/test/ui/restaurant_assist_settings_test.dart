@@ -22,6 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:calorie_tracker/core/ai_consent.dart'
     show allAiConsentRoutes;
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/meal_assist.dart'
@@ -971,6 +972,23 @@ void main() {
           LookupUnsupportedReason.noServerAddress));
       await pump(tester, settings, c);
       expect(footer(tester), contains('Add your server address to use this.'));
+    });
+
+    // Owner decision 2026-11-13: the server client reports no usable
+    // address for an http:// one (the https switch), and the footer says
+    // why instead of asking for an address that is there.
+    testWidgets('Claude Plan at a plain http:// address says it needs '
+        'https', (tester) async {
+      debugRequireHttpsServerOverride = true;
+      addTearDown(() => debugRequireHttpsServerOverride = null);
+      final settings = _planSettings(url: 'http://bitewise.example.test');
+      final c = _Controls(const LookupSupport.unsupported(
+          LookupUnsupportedReason.noServerAddress));
+      await pump(tester, settings, c);
+      expect(footer(tester),
+          contains('Your server address does not start with https://'));
+      expect(footer(tester),
+          isNot(contains('Add your server address to use this.')));
     });
 
     for (final (state, line) in const [

@@ -15,6 +15,11 @@
 /// since the current recipient was allowed ([askAiConsentUpdate]); the
 /// newly described data waits for that Allow.
 ///
+/// A share of several photos is ONE question: Not now covers that share
+/// (and any that arrived before the answer), dropped without being asked
+/// about or sent, and one line says how many were not sent
+/// ([askSharedPhotoConsent]). A share after the answer asks again.
+///
 /// These are the questions. Every automatic send already needs the
 /// watcher, and the watcher only runs for a consented recipient; the photo
 /// pipeline reads the answer once more at each send (photo_pipeline.dart
@@ -23,11 +28,14 @@
 library;
 
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
 import '../core/ai_consent.dart';
-import '../core/contracts.dart' show IntakePhoto;
+import '../core/contracts.dart' show IntakePhoto, ShareDeliveries;
+import '../core/server_transport.dart'
+    show isCleartextServerUrl, serverAddressRefused;
 import 'l10n.dart';
 import 'provider_names.dart' show providerDisplayLabel;
 import 'services.dart' show SettingsStore;
@@ -53,7 +61,11 @@ String aiConsentCompanyName(AppLocalizations l,
 
 /// The full consent text for a provider choice — the body naming the
 /// recipient, plus where its company processes the data when that is
-/// mainland China.
+/// mainland China, plus, for the user's own server, how it travels when
+/// the address is not https:// (core/server_transport.dart): with the
+/// https switch on, that nothing is sent to it; with it off, that it goes
+/// unencrypted. About transport, not about what is sent, so the wording
+/// version (aiConsentWordingVersion) stays.
 String aiConsentText(AppLocalizations l,
     {required String provider,
     required String serverBackend,
@@ -72,10 +84,18 @@ String aiConsentText(AppLocalizations l,
     recipient = company;
   }
   final body = l.aiConsentBody(recipient);
-  return aiRoutesInMainlandChina
+  final text = aiRoutesInMainlandChina
           .contains(aiConsentRoute(provider, serverBackend))
       ? '$body\n\n${l.aiConsentChinaNote(company)}'
       : body;
+  final transport = provider != 'server'
+      ? null
+      : serverAddressRefused(serverBaseUrl)
+          ? l.serverHttpsRequiredConsentNote
+          : isCleartextServerUrl(serverBaseUrl)
+              ? l.serverHttpConsentNote
+              : null;
+  return transport == null ? text : '$text\n\n$transport';
 }
 
 String _hostOf(String url) {
@@ -140,9 +160,11 @@ Future<bool> showAiConsentDialog(
 
 /// Before a FOREGROUND send: true = go ahead (already allowed, nothing can
 /// be sent yet, or the user just allowed it — which is saved). Not now
-/// shows [declined] (default: "Nothing was sent.") and returns false.
+/// shows [declined] (default: "Nothing was sent.") and returns false;
+/// [declinedAtAnswer], when given, words that line instead, read at the
+/// moment of the answer.
 Future<bool> ensureAiConsent(BuildContext context, SettingsStore settings,
-    {String? declined}) async {
+    {String? declined, String Function()? declinedAtAnswer}) async {
   if (!aiConsentNeeded(settings)) return true;
   final route = currentAiConsentRoute(settings);
   final messenger = ScaffoldMessenger.maybeOf(context);
@@ -155,8 +177,25 @@ Future<bool> ensureAiConsent(BuildContext context, SettingsStore settings,
     await settings.setAiConsent(route, granted: true);
     return true;
   }
-  messenger?.showSnackBar(SnackBar(content: Text(declinedText)));
+  messenger?.showSnackBar(SnackBar(
+      content: Text(declinedAtAnswer?.call() ?? declinedText)));
   return false;
+}
+
+/// The app shell's question for a photo shared into the app
+/// ([SharedPhotoConsentGate.attach]). Not now covers the rest of that
+/// share: the gate drops, without asking or sending, every photo of the
+/// shares that had arrived by the answer, and the one line says how many
+/// were not sent ([SharedPhotoConsentGate.declineOpenQuestion]).
+Future<bool> askSharedPhotoConsent(BuildContext context,
+    SettingsStore settings, SharedPhotoConsentGate gate) {
+  final l = context.l10n;
+  return ensureAiConsent(context, settings, declinedAtAnswer: () {
+    final notSent = gate.declineOpenQuestion();
+    return notSent > 1
+        ? l.shareConsentDeclinedMany(notSent)
+        : l.shareConsentDeclined;
+  });
 }
 
 /// A provider or plan choice that would change the recipient. With Watch
@@ -242,47 +281,173 @@ Future<bool> askAiConsentUpdate(
 /// dialog ([attach]) asks, and Not now drops the photo (its container copy
 /// is already deleted by the share intake). Photos keep their order: the
 /// stream waits while a question is open.
+///
+/// Pause-transparent: a plain asyncMap, so while a question is open (and
+/// while the pipeline holds a photo) the share intake reads no further
+/// copy — one shared original in memory, at most one read ahead (review
+/// 171, C2). It used to listen without ever pausing, to time each photo's
+/// arrival, and that loaded every original of a 20-photo share at once.
+///
+/// One Not now per share: a 5-photo share answered Not now used to ask
+/// five times. The intake numbers each share as its batch event arrives
+/// (IntakePhoto.shareDelivery, [ShareDeliveries]); a Not now covers the
+/// share asked about, however slowly its files are read, and every share
+/// that arrived while the question was open. Their photos are dropped
+/// without a question and never sent, even if the recipient is allowed
+/// some other way before their turn (the user's answer for them was no),
+/// and the intake deletes their copies not read yet, unread. A share
+/// already waiting when the question opened, the start-up batch of copies
+/// an earlier run left unread (ShareDeliveries.asksAlone, whenever its
+/// sweep finishes) and one that arrives after the answer get their own
+/// question.
+///
+/// The shell's question answers true (Allow), false (Not now) or null:
+/// no dialog could be shown (the shell is going away). Null is no answer,
+/// like a dialog that failed: nothing is declined, and the photo waits for
+/// the next shell to ask.
 class SharedPhotoConsentGate {
   SharedPhotoConsentGate(this._settings);
 
   final SettingsStore _settings;
-  Future<bool> Function()? _ask;
+  Future<bool?> Function()? _ask;
   Completer<void> _attached = Completer<void>();
+
+  /// Completed by the next [attach]: what a photo whose question could not
+  /// be shown waits for.
+  Completer<void> _reattached = Completer<void>();
+
+  /// The share intake's deliveries; null when [gate] was given none (then
+  /// a Not now covers the asked photo's delivery as far as photos say).
+  ShareDeliveries? _deliveries;
+
+  /// The deliveries a Not now covers.
+  final Set<int> _declined = {};
+
+  /// The latest delivery that had arrived when the open question opened.
+  int _openedAt = 0;
+
+  /// The latest delivery a photo has come from (without [_deliveries]).
+  int _latestSeen = 0;
+
+  /// Photos of each delivery passed on.
+  final Map<int, int> _admitted = {};
+
+  /// The photo the open question is about; null when none is open.
+  IntakePhoto? _asking;
+
+  /// Whether [declineOpenQuestion] already marked the open question's
+  /// answer.
+  bool _declineMarked = false;
 
   /// The app shell's dialog, once it has a navigator; true = allowed (and
   /// recorded). A cold-start share arrives before the first frame and
   /// waits here until then.
-  void attach(Future<bool> Function() ask) {
+  void attach(Future<bool?> Function() ask) {
     _ask = ask;
     if (!_attached.isCompleted) _attached.complete();
+    final waiting = _reattached;
+    _reattached = Completer<void>();
+    waiting.complete();
   }
 
-  void detach(Future<bool> Function() ask) {
+  void detach(Future<bool?> Function() ask) {
     // ==, not identical: two tear-offs of one method are equal only.
     if (_ask != ask) return;
     _ask = null;
     _attached = Completer<void>();
   }
 
-  Stream<IntakePhoto> gate(Stream<IntakePhoto> photos) => photos
-      .asyncMap(_admit)
-      .where((p) => p != null)
-      .cast<IntakePhoto>();
+  /// The open question was answered Not now: covers the asked photo's
+  /// delivery and every one that arrived while the question was open (not
+  /// one already waiting when it opened), tells the intake to delete their
+  /// unread copies, and returns how many shared photos the answer leaves
+  /// unsent — those deliveries' photos not passed on, the asked one
+  /// included. 1 for a photo with no delivery, or when no question is
+  /// open.
+  ///
+  /// The count can be a little high, never low: a copy not read yet that
+  /// turns out unusable (an unsupported type, over 25 MB, a failing read)
+  /// is counted too (ShareDeliveries.photoCountOf).
+  int declineOpenQuestion() {
+    final asking = _asking;
+    if (asking == null) return 1;
+    _declineMarked = true;
+    final delivery = asking.shareDelivery;
+    if (delivery == null) return 1;
+    final deliveries = _deliveries;
+    final now = deliveries?.arrivedDelivery ?? _latestSeen;
+    final covered = {
+      delivery,
+      for (var d = math.max(_openedAt, delivery) + 1; d <= now; d++)
+        // The start-up batch of copies left unread is no share being made
+        // now: it gets its own question, whenever its sweep finished.
+        if (!(deliveries?.asksAlone(d) ?? false)) d,
+    }..removeAll(_declined);
+    _declined.addAll(covered);
+    if (covered.isNotEmpty) deliveries?.declineDeliveries(covered);
+    if (deliveries == null) return 1;
+    var notSent = 0;
+    for (final d in covered) {
+      notSent += math.max(0, deliveries.photoCountOf(d) - (_admitted[d] ?? 0));
+    }
+    return math.max(1, notSent);
+  }
+
+  /// [photos] through the consent question, pausing them while it is open;
+  /// [deliveries] is the share intake that numbered them.
+  Stream<IntakePhoto> gate(Stream<IntakePhoto> photos,
+      {ShareDeliveries? deliveries}) {
+    _deliveries = deliveries;
+    return photos
+        .asyncMap(_admit)
+        .where((p) => p != null)
+        .cast<IntakePhoto>();
+  }
 
   Future<IntakePhoto?> _admit(IntakePhoto photo) async {
+    final delivery = photo.shareDelivery;
+    if (delivery != null && delivery > _latestSeen) _latestSeen = delivery;
+    IntakePhoto passed() {
+      if (delivery != null) _admitted[delivery] = (_admitted[delivery] ?? 0) + 1;
+      return photo;
+    }
+
     while (true) {
+      // Its share was answered Not now: dropped unasked, never sent.
+      if (delivery != null && _declined.contains(delivery)) return null;
       // Re-read after every wait: the user may have allowed it meanwhile.
-      if (!aiConsentNeeded(_settings)) return photo;
+      if (!aiConsentNeeded(_settings)) return passed();
       final ask = _ask;
       if (ask == null) {
         await _attached.future;
         continue;
       }
+      final nextShell = _reattached.future;
+      _asking = photo;
+      _openedAt = _deliveries?.arrivedDelivery ?? _latestSeen;
+      _declineMarked = false;
+      final bool? answer;
       try {
-        return await ask() ? photo : null;
+        answer = await ask();
       } catch (_) {
+        _asking = null;
         return null; // a failed dialog is not consent
       }
+      if (answer == true) {
+        _asking = null;
+        return passed();
+      }
+      if (answer == false) {
+        // Not now: the rest of the share is covered too. Marked here when
+        // the dialog's own line did not.
+        if (!_declineMarked) declineOpenQuestion();
+        _asking = null;
+        return null;
+      }
+      // No dialog could be shown: no answer. Nothing is declined; the
+      // photo waits for the next shell's question.
+      _asking = null;
+      await nextShell;
     }
   }
 }

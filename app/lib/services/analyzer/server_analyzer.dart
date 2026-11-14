@@ -12,13 +12,23 @@ part of 'provider_analyzers.dart';
 /// already holds that credential legitimately and runs the real CLI, so the
 /// device only ever stores the server's own upload key.
 ///
-/// Reachability caveat worth knowing: this points at a plain-HTTP endpoint
-/// on the user's VM, so the upload key and photo bytes cross the network
-/// unencrypted — same exposure the existing Termux watcher already accepts.
-/// TLS in front of Flask is the fix; the app is ready for an https:// base
-/// URL the moment the server has one.
+/// Transport: https:// only. A plain http:// address would carry the
+/// upload key, the photo bytes and the meal text across the network
+/// unencrypted (sweep finding P0), so while the https switch is on
+/// (core/server_transport.dart, owner decision 2026-11-13) every method
+/// here sends NOTHING to it — no photo, no text, no X-API-Key — and says
+/// [kServerNeedsHttpsMessage] instead ([_refused]). docs/SERVER_TLS.md
+/// puts Caddy in front of Flask for the certificate.
+///
+/// Every request goes through an [HttpsOnlyServerClient] wrapped around
+/// [client] (services/server_http_client.dart): the choke point that
+/// refuses such an address whatever method sends, with redirects off. The
+/// [_refused] checks below are only for the words the user sees (and to
+/// skip a photo's decode).
 class ServerAnalyzer extends _HttpVisionAnalyzer {
-  ServerAnalyzer(super.settings, {super.client, super.sleep, super.normalizer});
+  ServerAnalyzer(super.settings,
+      {http.Client? client, super.sleep, super.normalizer})
+      : super(client: HttpsOnlyServerClient.wrap(client));
 
   @override
   String? get apiKey => settings.serverApiKey;
@@ -114,6 +124,12 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
       'Check your server address in Settings — it is not a valid web '
       'address.';
 
+  /// Whether nothing may be sent to the saved address: the https switch
+  /// is on and it does not start with https:// (core/server_transport.dart;
+  /// a debug build keeps http:// to this device itself). Read at every
+  /// call, before anything is built, decoded or sent, like the address.
+  bool get _refused => serverAddressRefused(settings.serverBaseUrl);
+
   /// Whether the saved address parses (an empty one is reported on its
   /// own, by [buildRequest]).
   bool get _addressParses {
@@ -148,9 +164,17 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   /// (the pipeline then burned every automatic photo to 'failed'). Checked
   /// before the photo is decoded: until the address is fixed, each scan
   /// would otherwise decode every window photo only to fail on the URL.
+  /// A refused (http://) address is the same user state: kept, no
+  /// in-place retry, nothing decoded or sent.
   @override
   Future<AnalysisOutcome> analyzePhoto(Uint8List originalBytes,
       {List<Map<String, dynamic>>? recentMeals}) async {
+    if (_refused) {
+      return const AnalysisOutcome(
+          error: kServerNeedsHttpsMessage,
+          retryable: true,
+          wall: Duration.zero);
+    }
     if (settings.serverBaseUrl.isNotEmpty && !_addressParses) {
       return const AnalysisOutcome(
           error: _badAddressMessage, retryable: true, wall: Duration.zero);
@@ -192,7 +216,9 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     // the server re-sanitizes it and composes the leftover prompt from
     // its own shared/ copy (same posture as analyze_photo).
     final key = (apiKey ?? '').trim();
-    if (key.isEmpty || settings.serverBaseUrl.isEmpty) return null;
+    if (key.isEmpty || settings.serverBaseUrl.isEmpty || _refused) {
+      return null; // refused before the decode, not only at the client
+    }
     // The plan as the call starts, before the decode ([_callPlan]).
     final sentBackend = settings.serverBackend;
     final sendBytes = await _normalize(originalBytes) ??
@@ -268,6 +294,11 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
           transient: true,
           retryInPlace: false,
           verbatimMessage: true);
+    }
+    if (_refused) {
+      // Kept for when the address is https://; nothing to retry in place.
+      throw const _ProviderException(kServerNeedsHttpsMessage,
+          transient: true, retryInPlace: false, verbatimMessage: true);
     }
     final isPhoto = jpegBytes != null;
     final Uri url;
@@ -356,6 +387,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
     if (base.isEmpty || key.isEmpty) {
       return (url: null, error: 'Set the server address and key first.');
     }
+    if (_refused) return (url: null, error: kServerNeedsHttpsMessage);
     try {
       final req = http.Request('POST', _uri('/api/claude_auth/start'))
         ..headers['content-type'] = 'application/json'
@@ -385,6 +417,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   /// Null = connected; otherwise a user-facing error.
   Future<String?> completeClaudeAuth(String code) async {
     final key = (settings.serverApiKey ?? '').trim();
+    if (_refused) return kServerNeedsHttpsMessage;
     try {
       final req = http.Request('POST', _uri('/api/claude_auth/complete'))
         ..headers['content-type'] = 'application/json'
@@ -437,12 +470,14 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   /// freshly provisioned phone needs, so it stops implying "Connect Claude"
   /// is required (2026-09-28). 'token' | 'none' from the server;
   /// 'unreachable' / 'rejected' when it could not be asked (the page shows
-  /// "could not check"); null ONLY for a 200 without the field — an older
-  /// server — where the page hides the row rather than guess.
+  /// "could not check"); null for a 200 without the field — an older
+  /// server — where the page hides the row rather than guess, and for an
+  /// address nothing is sent to ([_refused]), where the page says
+  /// "needs https" instead.
   Future<String?> serverLoginState() async {
     final base = settings.serverBaseUrl;
     final key = (settings.serverApiKey ?? '').trim();
-    if (base.isEmpty || key.isEmpty) return null;
+    if (base.isEmpty || key.isEmpty || _refused) return null;
     try {
       final req = http.Request('POST', _uri('/api/auth_check'))
         ..headers['content-type'] = 'application/json'
@@ -512,6 +547,7 @@ class ServerAnalyzer extends _HttpVisionAnalyzer {
   Future<String?> validateKey(String apiKey) async {
     final base = settings.serverBaseUrl;
     if (base.isEmpty) return 'Add your server address first.';
+    if (_refused) return kServerNeedsHttpsMessage;
     final key = apiKey.trim();
     if (key.isEmpty) return 'Enter your server upload key.';
     final Uri url;

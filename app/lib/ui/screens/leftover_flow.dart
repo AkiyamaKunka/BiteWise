@@ -30,6 +30,7 @@ import '../../core/coerce.dart'
     show addCalendarDays, normalizeImageHash, safeNumber;
 import '../../core/contracts.dart';
 import '../../core/leftover_logic.dart';
+import '../../core/server_transport.dart' show serverAddressRefused;
 import '../../services/photo/photo_hash.dart' show originalBytesMd5;
 import '../../services/photo/system_photo_picker.dart';
 import '../ai_consent.dart';
@@ -216,6 +217,14 @@ class _LeftoverScreenState extends State<LeftoverScreen> {
           : settings.provider == 'server'
               ? l.errNoServerKey
               : l.errNoApiKey);
+      return;
+    }
+    // The own server at an address the app sends nothing to (not
+    // https://): "couldn't estimate" would send the user trying other
+    // photos. Said before the consent question and any read.
+    if (settings.provider == 'server' &&
+        serverAddressRefused(settings.serverBaseUrl)) {
+      _snack(context.l10n.errServerNeedsHttps);
       return;
     }
     _busy = true;

@@ -518,7 +518,8 @@ class AppServices {
     pipeline.bind(photoIntake); // automated watch (deliberate=false)
     // Share sheet (deliberate), each photo held until its AI recipient is
     // allowed.
-    pipeline.bindStream(shareConsent.gate(shareIntake.photos()));
+    pipeline.bindStream(
+        shareConsent.gate(shareIntake.photos(), deliveries: shareIntake));
     mealAssist.start();
     var catchingUp = false;
     if (settings.watcherEnabled) {

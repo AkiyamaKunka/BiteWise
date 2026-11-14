@@ -645,6 +645,203 @@ void main() {
       expect(cleaned, paths);
       await pipeline.dispose();
     });
+
+    test('the same, wired as the app wires it (the gate told the deliveries)',
+        () async {
+      final source = FakeShareSource();
+      final paths = share(20);
+      final release = Completer<void>();
+      var analyses = 0;
+      final analyzer = FakeAnalyzer()
+        ..onAnalyze = () async {
+          analyses++;
+          if (analyses == 1) await release.future;
+        };
+      final pipeline = PhotoPipeline(
+          dao: FakeDao(),
+          analyzer: analyzer,
+          hasher: (b) async => 'h${b[0]}-${b.length}',
+          thumbnailer: (_) async => null);
+      final intake = counting(source);
+      pipeline.bindStream(SharedPhotoConsentGate(FakeSettings())
+          .gate(intake.photos(), deliveries: intake));
+      source.controller.add(paths);
+      await pumpEventQueue(times: 50);
+      expect(reads.length, lessThanOrEqualTo(2));
+      release.complete();
+      await pumpEventQueue(times: 400);
+      expect(analyses, 20);
+      await pipeline.dispose();
+    });
+  });
+
+  // One Not now per share, through the real intake (privacy lane; review
+  // finding 7): the consent question pauses the stream like the pipeline
+  // does, so while it is open at most one more copy is read, and a Not now
+  // has the intake delete the rest of the share unread. Each batch event
+  // is one delivery: the launch share, each live share, the start-up batch
+  // of copies left unread.
+  group('consent: one Not now per share, the rest never read', () {
+    late Map<String, Uint8List> held;
+    late List<String> reads;
+
+    ShareIntake counting(FakeShareSource source) => ShareIntake(
+        source: source,
+        library: FakePhotoLibrary(),
+        readBytes: (path) async {
+          reads.add(path);
+          return held[path];
+        },
+        cleanup: (path) async => cleaned.add(path),
+        sharedFolder: () async => '/shared',
+        clock: () => now);
+
+    List<String> share(int n, {String prefix = 'IMG'}) => [
+          for (var i = 0; i < n; i++) '/shared/${prefix}_$i.jpg',
+        ]..forEach((p) => held[p] = Uint8List.fromList([p.hashCode & 0xFF, 1]));
+
+    setUp(() {
+      held = {};
+      reads = [];
+    });
+
+    test('Not now on a 20-photo share: one question, at most two copies read, '
+        'the rest deleted unread; the next share is asked again', () async {
+      final source = FakeShareSource();
+      final settings = FakeSettings(apiKey: 'k')..aiConsent = {};
+      final gate = SharedPhotoConsentGate(settings);
+      final intake = counting(source);
+      final passed = <String>[];
+      final sub = gate
+          .gate(intake.photos(), deliveries: intake)
+          .listen((p) => passed.add(p.fileName));
+      var asked = 0;
+      final notSent = <int>[];
+      final answer = Completer<bool>();
+      Future<bool> ask() async {
+        asked++;
+        if (asked > 1) {
+          await settings.setAiConsent('gemini', granted: true);
+          return true;
+        }
+        final yes = await answer.future;
+        if (!yes) notSent.add(gate.declineOpenQuestion());
+        return yes;
+      }
+
+      gate.attach(ask);
+      final first = share(20, prefix: 'A');
+      source.controller.add(first);
+      await pumpEventQueue(times: 50);
+      expect(asked, 1);
+      expect(reads.length, lessThanOrEqualTo(2),
+          reason: 'the open question pauses the reading');
+
+      answer.complete(false);
+      await pumpEventQueue(times: 100);
+      expect(asked, 1, reason: 'one question for the whole share');
+      expect(notSent, [20]);
+      expect(passed, isEmpty);
+      expect(reads.length, lessThanOrEqualTo(2), reason: 'never read');
+      expect(cleaned.toSet(), first.toSet(),
+          reason: 'every copy deleted, read or not');
+
+      final second = share(2, prefix: 'B');
+      source.controller.add(second);
+      await pumpEventQueue(times: 50);
+      expect(asked, 2, reason: 'a share after the answer asks again');
+      expect(passed, ['B_0.jpg', 'B_1.jpg']);
+      gate.detach(ask);
+      await sub.cancel();
+    });
+
+    test('a share that arrives while the question is open is declined with '
+        'it, unread', () async {
+      final source = FakeShareSource();
+      final settings = FakeSettings(apiKey: 'k')..aiConsent = {};
+      final gate = SharedPhotoConsentGate(settings);
+      final intake = counting(source);
+      final sub = gate.gate(intake.photos(), deliveries: intake).listen((_) {});
+      final answer = Completer<bool>();
+      final notSent = <int>[];
+      var asked = 0;
+      Future<bool> ask() async {
+        asked++;
+        final yes = await answer.future;
+        if (!yes) notSent.add(gate.declineOpenQuestion());
+        return yes;
+      }
+
+      gate.attach(ask);
+      final a = share(3, prefix: 'A');
+      source.controller.add(a);
+      await pumpEventQueue(times: 50);
+      final b = share(4, prefix: 'B');
+      source.controller.add(b);
+      await pumpEventQueue(times: 50);
+      expect(intake.arrivedDelivery, 2);
+      answer.complete(false);
+      await pumpEventQueue(times: 100);
+      expect(asked, 1);
+      expect(notSent, [7]);
+      expect(reads.any((p) => p.contains('B_')), isFalse,
+          reason: 'the second share is never read');
+      expect(cleaned.toSet(), {...a, ...b});
+      gate.detach(ask);
+      await sub.cancel();
+    });
+
+    test('each batch event is its own delivery: launch share, live share, '
+        'and the photos say which', () async {
+      final source = FakeShareSource()..initial = share(2, prefix: 'L');
+      final intake = counting(source);
+      final got = <(String, int?)>[];
+      final sub = intake
+          .photos()
+          .listen((p) => got.add((p.fileName, p.shareDelivery)));
+      await pumpEventQueue(times: 50);
+      source.controller.add(share(1, prefix: 'V'));
+      await pumpEventQueue(times: 50);
+      expect(got, [('L_0.jpg', 1), ('L_1.jpg', 1), ('V_0.jpg', 2)]);
+      expect(intake.arrivedDelivery, 2);
+      expect(intake.photoCountOf(1), 2);
+      expect(intake.photoCountOf(2), 1);
+      await sub.cancel();
+    });
+
+    // Review of 46da8b74, low 4: a declined share's copies go at once, even
+    // while the stream stays paused, and a declined delivery is never
+    // waited on.
+    test('declined while paused: the rest of that share is deleted unread '
+        'at once', () async {
+      final source = FakeShareSource();
+      final intake = counting(source);
+      final paths = share(6);
+      late StreamSubscription<IntakePhoto> sub;
+      sub = intake.photos().listen((_) => sub.pause());
+      source.controller.add(paths);
+      await pumpEventQueue(times: 50);
+      final readBefore = reads.length;
+      expect(readBefore, lessThanOrEqualTo(2));
+      intake.declineDeliveries({1});
+      await pumpEventQueue(times: 50);
+      expect(sub.isPaused, isTrue);
+      expect(reads.length, readBefore, reason: 'nothing more is read');
+      expect(cleaned.toSet(), paths.toSet(), reason: 'deleted, not waiting');
+      await sub.cancel();
+    });
+
+    test('a copy found unreadable is not counted as a photo', () async {
+      final source = FakeShareSource();
+      final intake = counting(source);
+      final paths = share(3);
+      held.remove(paths[1]); // reads as nothing
+      final sub = intake.photos().listen((_) {});
+      source.controller.add(paths);
+      await pumpEventQueue(times: 50);
+      expect(intake.photoCountOf(1), 2);
+      await sub.cancel();
+    });
   });
 
   // Review 2026-11-13: with the C2 backpressure, copies wait in the share
@@ -745,6 +942,52 @@ void main() {
       await sub.cancel();
     });
 
+    // Review of 46da8b74, low 1: the launch share of a cold start, then the
+    // start-up batch. One Not now covers the launch share (its 2 photos,
+    // said as 2), and the copies left unread get a question of their own.
+    test('cold start: Not now on the launch share leaves the copies left '
+        'unread to their own question', () async {
+      final left = [
+        for (var i = 0; i < 3; i++)
+          copyAt('l$i', 'IMG_left$i.jpg', Duration(hours: 3 - i)),
+      ];
+      final launch = [
+        copyAt('n0', 'IMG_new0.jpg', Duration.zero),
+        copyAt('n1', 'IMG_new1.jpg', Duration.zero),
+      ];
+      final source = FakeShareSource()
+        ..initial = [for (final f in launch) f.path];
+      final read = <String>[];
+      final intake = android(source, read);
+      final settings = FakeSettings(apiKey: 'k')..aiConsent = {};
+      final gate = SharedPhotoConsentGate(settings);
+      final passed = <String>[];
+      final notSent = <int>[];
+      var asked = 0;
+      gate.attach(() async {
+        asked++;
+        if (asked == 1) {
+          // The question is open until the start-up batch has arrived.
+          await until(() => intake.arrivedDelivery >= 2, 'the start-up batch');
+          notSent.add(gate.declineOpenQuestion());
+          return false;
+        }
+        settings.aiConsent = {'gemini'};
+        return true;
+      });
+      final sub = gate
+          .gate(intake.photos(), deliveries: intake)
+          .listen((p) => passed.add(p.fileName));
+      await until(() => passed.length >= 3, 'the copies left unread logged');
+      expect(notSent, [2], reason: 'the launch share, not 5');
+      expect(asked, 2);
+      expect(passed, ['IMG_left0.jpg', 'IMG_left1.jpg', 'IMG_left2.jpg']);
+      for (final f in [...launch, ...left]) {
+        expect(f.existsSync(), isFalse, reason: f.path);
+      }
+      await sub.cancel();
+    });
+
     test('a copy both left over and in a live share is logged once',
         () async {
       final c = copyAt('u1', 'IMG_x.jpg', const Duration(minutes: 5));
@@ -752,14 +995,21 @@ void main() {
       final source = FakeShareSource();
       final read = <String>[];
       final emitted = <String>[];
-      final sub = android(source, read)
-          .photos()
-          .listen((p) => emitted.add(p.fileName));
+      final intake = android(source, read);
+      final sub = intake.photos().listen((p) => emitted.add(p.fileName));
       source.controller.add([c.path]);
       await until(() => emitted.length >= 2, 'the live copy and the sentinel');
       expect(emitted.where((n) => n == 'IMG_x.jpg'), hasLength(1),
           reason: 'logged once, not once per route');
       expect(emitted.toSet(), {'IMG_x.jpg', 'IMG_s.jpg'});
+      // And counted once: a Not now's line would otherwise say one more
+      // (review of 46da8b74, low 2).
+      expect(
+          [
+            for (var d = 1; d <= intake.arrivedDelivery; d++)
+              intake.photoCountOf(d)
+          ].fold<int>(0, (a, b) => a + b),
+          2);
       await sub.cancel();
     });
 

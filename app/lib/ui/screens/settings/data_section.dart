@@ -2,6 +2,11 @@
 /// import one back by merge. The privacy-policy row shares this section,
 /// but its tap stays with the Settings screen, which owns the injectable
 /// URL opener.
+///
+/// Export on Android offers Save to Device… (the system's save screen,
+/// save_file_channel.dart) before Share…: Android's share sheet has no
+/// "Save to Files", and the Android footer tells people to export before
+/// changing phones.
 library;
 
 import 'dart:convert' show utf8;
@@ -13,10 +18,12 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../../core/contracts.dart';
+import '../../../services/android_backup_size.dart';
 import '../../../services/backup/backup_coordinator.dart';
 import '../../../services/backup/backup_files.dart';
 import '../../../services/backup/backup_format.dart';
 import '../../../services/backup/file_pick_channel.dart';
+import '../../../services/backup/save_file_channel.dart';
 import '../../backup_sheets.dart';
 import '../../format.dart' show isoDate;
 import '../../l10n.dart';
@@ -34,6 +41,17 @@ String exportFileName(DateTime now) => 'chopstats-${isoDate(now)}.json';
 bool isExportFileName(String name) =>
     name.startsWith('chopstats-') || name.startsWith('calorietracker-');
 
+/// Hands the export file at [path] to the share sheet.
+typedef ShareExportFile = Future<void> Function(String path, String subject);
+
+Future<void> _shareWithSharePlus(String path, String subject) async {
+  await SharePlus.instance
+      .share(ShareParams(files: [XFile(path)], subject: subject));
+}
+
+/// Where Export sends the file on Android.
+enum _ExportTo { device, share }
+
 class DataSection extends StatefulWidget {
   const DataSection({
     super.key,
@@ -45,6 +63,10 @@ class DataSection extends StatefulWidget {
     this.platform = 'ios',
     this.androidBackupNote = false,
     this.onImported,
+    this.fileSaver = const PlatformFileSaver(),
+    this.shareFile = _shareWithSharePlus,
+    this.tempDir = getTemporaryDirectory,
+    this.backupSetBytes,
   });
 
   final MealsDao dao;
@@ -67,6 +89,21 @@ class DataSection extends StatefulWidget {
   /// are dropped.
   final VoidCallback? onImported;
 
+  /// Export › Save to Device… (Android).
+  final FileSaver fileSaver;
+
+  /// Export › Share… (and Export on iPhone).
+  final ShareExportFile shareFile;
+
+  /// Where the export is written: the app's cache folder, the only one
+  /// the native save accepts.
+  final Future<Directory> Function() tempDir;
+
+  /// Android: what its own backup would carry for this app
+  /// (android_backup_size.dart); over [kAndroidBackupWarnBytes] a line
+  /// recommends Save to Device. Null reads it from the phone on Android.
+  final Future<int?> Function()? backupSetBytes;
+
   /// The 隐私政策 / Privacy Policy row's tap.
   final VoidCallback onOpenPrivacyPolicy;
 
@@ -81,6 +118,28 @@ class _DataSectionState extends State<DataSection> {
   final TextEditingController _importController = TextEditingController();
   bool _exporting = false;
   bool _importing = false;
+
+  /// This build cannot save to the device (no `saveFile` in MainActivity):
+  /// Export goes straight to Share for the rest of the session.
+  bool _saveUnavailable = false;
+
+  /// Android: the backup-set size, read once when the page opens; null
+  /// elsewhere, and when it cannot be read.
+  late final Future<int?>? _backupBytes = _readBackupBytes();
+
+  Future<int?>? _readBackupBytes() {
+    if (widget.platform != 'android') return null;
+    final load = widget.backupSetBytes ??
+        (Platform.isAndroid ? readAndroidBackupSetBytes : null);
+    if (load == null) return null;
+    return () async {
+      try {
+        return await load();
+      } catch (_) {
+        return null; // a line that cannot be read is left out
+      }
+    }();
+  }
 
   @override
   void dispose() {
@@ -339,6 +398,110 @@ class _DataSectionState extends State<DataSection> {
     };
   }
 
+  /// Android: Save to Device… first, Share… second, asked once the file
+  /// is written (null = cancelled). iPhone, and a build without the save:
+  /// Share, as before.
+  Future<_ExportTo?> _exportTarget(AppLocalizations l10n) async {
+    if (widget.platform != 'android' || _saveUnavailable) {
+      return _ExportTo.share;
+    }
+    final theme = Theme.of(context);
+    // No spinner on the row behind the sheet.
+    setState(() => _exporting = false);
+    final to = await showGroupedSheet<_ExportTo>(
+      context,
+      title: l10n.exportSheetTitle,
+      builder: (ctx) => GroupedSection(
+        children: [
+          GroupedRow(
+            key: const Key('exportSaveToDevice'),
+            icon: Icons.save_alt_rounded,
+            iconColor: theme.colorScheme.primary,
+            title: l10n.exportSaveToDevice,
+            showChevron: false,
+            onTap: () => Navigator.of(ctx).pop(_ExportTo.device),
+          ),
+          GroupedRow(
+            key: const Key('exportShare'),
+            icon: Icons.share_rounded,
+            iconColor: theme.colorScheme.secondary,
+            title: l10n.exportShare,
+            showChevron: false,
+            onTap: () => Navigator.of(ctx).pop(_ExportTo.share),
+          ),
+          GroupedRow(
+            key: const Key('exportCancel'),
+            title: l10n.cancel,
+            showChevron: false,
+            onTap: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
+    if (mounted) setState(() => _exporting = true);
+    return to;
+  }
+
+  /// Save to Device… with the export at [file]. The temp export is deleted
+  /// afterwards whatever the answer (the native side never deletes it),
+  /// except on [SaveFileStatus.unavailable]: then it is shared instead,
+  /// and the share target still has to read it.
+  Future<void> _saveToDevice(File file, AppLocalizations l10n) async {
+    final name = file.path.split('/').last;
+    final status = await widget.fileSaver
+        .saveFile(path: file.path, name: name, mime: exportMimeType);
+    if (status == SaveFileStatus.unavailable) {
+      _saveUnavailable = true;
+      await _share(file, l10n);
+      return;
+    }
+    _deleteQuietly(file);
+    final line = switch (status) {
+      SaveFileStatus.ok => l10n.exportSaved,
+      SaveFileStatus.busy => l10n.exportSaveBusy,
+      SaveFileStatus.failed => l10n.exportSaveFailed,
+      // Closed by the user: nothing to say.
+      SaveFileStatus.cancelled || SaveFileStatus.unavailable => null,
+    };
+    if (line != null && mounted) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(line)));
+    }
+  }
+
+  /// Share… with the export at [file]. On Android, share_plus (13.2.1,
+  /// Share.kt) copies it into the cache's share_plus/ folder before the
+  /// share sheet opens and shares that copy, so the original goes at once;
+  /// the copy is swept at the next export (and share_plus empties its
+  /// folder at the next share). iOS shares the file itself, which the app
+  /// it goes to may read after the sheet closes: it stays until the next
+  /// export's sweep.
+  Future<void> _share(File file, AppLocalizations l10n) async {
+    await widget.shareFile(file.path, l10n.exportShareSubject);
+    if (widget.platform == 'android') _deleteQuietly(file);
+  }
+
+  static void _deleteQuietly(File file) {
+    try {
+      if (file.existsSync()) file.deleteSync();
+    } catch (_) {}
+  }
+
+  /// Older exports in [dir], and share_plus's copies of them in its
+  /// share_plus/ folder there: each is a full copy of the food log.
+  static void _sweepExports(Directory dir) {
+    for (final d in [dir, Directory('${dir.path}/share_plus')]) {
+      try {
+        if (!d.existsSync()) continue;
+        for (final f in d.listSync()) {
+          if (f is File && isExportFileName(f.path.split('/').last)) {
+            _deleteQuietly(f);
+          }
+        }
+      } catch (_) {}
+    }
+  }
+
   Future<void> _export() async {
     final l10n = context.l10n; // read before the awaits
     setState(() => _exporting = true);
@@ -352,17 +515,11 @@ class _DataSectionState extends State<DataSection> {
       // to kill the share (often the app) with
       // TransactionTooLargeException — and the import feature makes a
       // real FILE the thing the user actually wants to keep.
-      final dir = await getTemporaryDirectory();
+      final dir = await widget.tempDir();
       // Sweep older exports first: each is a FULL copy of the food log,
       // and the cache dir is readable by anything with the app's storage
       // — keeping a year of them there is a privacy cost with no upside.
-      try {
-        for (final f in dir.listSync()) {
-          if (f is File && isExportFileName(f.path.split('/').last)) {
-            f.deleteSync();
-          }
-        }
-      } catch (_) {}
+      _sweepExports(dir);
       // 1.7.0: the full export — the records AND every meal picture,
       // streamed one month at a time (kind `full`), so a file moved to
       // another phone brings the pictures too.
@@ -372,8 +529,23 @@ class _DataSectionState extends State<DataSection> {
           // valid id, and the importer reads only the kind.
           installId: widget.backup?.installIdOrNull ?? newInstallId(),
           snapshot: snapshot);
-      await SharePlus.instance.share(ShareParams(
-          files: [XFile(file.path)], subject: l10n.exportShareSubject));
+      // Written first, so a failure is said before any choice; then where
+      // it goes (no spinner behind the sheet). Cancel deletes it again, as
+      // does leaving the page while it was written.
+      if (!mounted) {
+        _deleteQuietly(file);
+        return;
+      }
+      final to = await _exportTarget(l10n);
+      if (to == null) {
+        _deleteQuietly(file);
+        return;
+      }
+      if (to == _ExportTo.device) {
+        await _saveToDevice(file, l10n);
+      } else {
+        await _share(file, l10n);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -386,13 +558,49 @@ class _DataSectionState extends State<DataSection> {
 
   /// Export and import — the food log is the user's — and on iPhone the
   /// iCloud Backup rows above them.
+  ///
+  /// Under them, on both platforms, the health reminder: Google Play's
+  /// Health Content and Services policy asks apps to remind users to
+  /// consult a healthcare professional (the full not-a-medical-device
+  /// disclaimer belongs in the store description).
   @override
   Widget build(BuildContext context) {
     final backup = widget.backup;
-    if (backup == null) return _section(context, null);
-    return ValueListenableBuilder<BackupStatus>(
-      valueListenable: backup.status,
-      builder: (context, status, _) => _section(context, status),
+    final section = backup == null
+        ? _section(context, null)
+        : ValueListenableBuilder<BackupStatus>(
+            valueListenable: backup.status,
+            builder: (context, status, _) => _section(context, status),
+          );
+    final backupBytes = _backupBytes;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        section,
+        // Android stops backing the app up above 25 MB, without a word.
+        if (backupBytes != null)
+          FutureBuilder<int?>(
+            future: backupBytes,
+            builder: (context, snap) {
+              final bytes = snap.data;
+              if (bytes == null || bytes <= kAndroidBackupWarnBytes) {
+                return const SizedBox.shrink();
+              }
+              return GroupedSection(
+                key: const Key('backupSizeNearLimit'),
+                footer: context.l10n
+                    .backupSizeNearLimit(backupSizeLabel(bytes)),
+                children: const [],
+              );
+            },
+          ),
+        GroupedSection(
+          key: const Key('healthReminder'),
+          footer: context.l10n.settingsHealthReminder,
+          children: const [],
+        ),
+      ],
     );
   }
 

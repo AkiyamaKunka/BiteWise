@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:math';
 
 import 'package:calorie_tracker/core/chain_match.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/core/shared_generated.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_client.dart';
 import 'package:calorie_tracker/services/assist/clients/lookup_clients.dart';
@@ -370,7 +371,13 @@ void main() {
       }
     }
   });
-  test('random requests × the owner server, over https and http', () async {
+  // Owner decision 2026-11-13: with the https switch on (shipped), an
+  // http:// server gets nothing at all — the next test. This one pins the
+  // brand-only http path the switch turned off brings back.
+  test('random requests × the owner server, over https and http (https '
+      'switch off)', () async {
+    debugRequireHttpsServerOverride = false;
+    addTearDown(() => debugRequireHttpsServerOverride = null);
     SharedPreferences.setMockInitialValues({});
     final keys = _Keys()..data['server_api_key'] = 'k-srv';
     final settings = await AppSettings.load(
@@ -471,5 +478,40 @@ void main() {
     expect(sentHttps, greaterThan(20));
     expect(sentHttp, greaterThan(10));
     expect(heldBack, greaterThan(0));
+  });
+
+  test('random requests × an http:// owner server with the https switch '
+      'on: nothing is sent', () async {
+    debugRequireHttpsServerOverride = true;
+    addTearDown(() => debugRequireHttpsServerOverride = null);
+    SharedPreferences.setMockInitialValues({});
+    final keys = _Keys()..data['server_api_key'] = 'k-srv';
+    final settings = await AppSettings.load(
+        prefs: await SharedPreferences.getInstance(), keyStore: keys);
+    await settings.setDietaryProfile(_profile);
+    await settings.setProvider(AiProvider.server);
+    await settings.setServerBaseUrl('http://10.0.0.5:5000');
+    final s = ScriptedClient([
+      (req) => http.Response('{"state":"queued","job_id":"job_abcdefgh01"}',
+          202, headers: {'content-type': 'application/json'}),
+    ]);
+    final client = ServerLookupClient(settings, client: s.client);
+    final r = Random(20261113);
+    for (var round = 0; round < 30; round++) {
+      final point = PhotoPoint.tryCreate(
+          r.nextDouble() * 170 - 85, r.nextDouble() * 350 - 175)!;
+      final req = _randomRequest(r,
+          lat: point.lat.toStringAsFixed(5),
+          lon: point.lon.toStringAsFixed(5),
+          point: point);
+      final support = client.lookupSupport();
+      expect(support.supported, isFalse);
+      final o = await client.submit(req,
+          chainDomains: mcdDomains,
+          expectedRecipient: support.recipient,
+          expectedRecipientStamp: support.recipientStamp);
+      expect(o.kind, LookupOutcomeKind.unsupported);
+    }
+    expect(s.requests, isEmpty);
   });
 }
