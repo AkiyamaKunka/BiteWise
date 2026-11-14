@@ -247,7 +247,7 @@ void main() {
     // re-arm replaces the pending card instead of stacking one per launch.
     final scheduled = <(int, String, String, DateTime)>[];
     final notifier = ReportNotifier(
-      scheduler: (id, title, body, when) async =>
+      scheduler: (id, title, body, when, _) async =>
           scheduled.add((id, title, body, when)),
     );
     final when = DateTime(2026, 9, 28, 23, 55);
@@ -555,22 +555,72 @@ void main() {
   // The Android OS card (Play push, 2026-11-13): the alarm is inexact, and
   // the card says which slot it is for, so a re-arm after the slot can
   // tell a card still waiting for its alarm from one delivered.
-  test('the OS card is inexact and carries its slot, which reads back '
-      'while the OS holds it', () async {
+  test('the OS cards are inexact and carry their slot and day, which read '
+      'back while the OS holds them', () async {
     final plugin = _RecordingPlugin(android: _FakeAndroid());
     final notifier = ReportNotifier(plugin: plugin);
-    expect(await notifier.pendingDailySlot(), isNull);
+    expect(await notifier.pendingDailyCards(), isEmpty);
     final when = DateTime(2026, 11, 13, 21, 30);
-    await notifier.scheduleDailyAt(when: when, title: 't', body: 'b');
-    final z = plugin.zoned.single;
+    final later = DateTime(2026, 11, 14, 0, 30);
+    await notifier.scheduleDailyAt(
+        when: when, title: 't', body: 'b', day: DateTime(2026, 11, 13));
+    await notifier.scheduleDailyAt(
+        id: ReportNotifier.dailyReportNotificationId + 1,
+        when: later,
+        title: 't',
+        body: 'b',
+        day: DateTime(2026, 11, 13));
+    final z = plugin.zoned.first;
     expect(z.id, ReportNotifier.dailyReportNotificationId);
     expect(z.mode, AndroidScheduleMode.inexactAllowWhileIdle,
         reason: 'no exact-alarm permission is declared, by policy');
     expect(z.when.isAtSameMomentAs(when), isTrue);
-    expect(z.payload, ReportNotifier.dailySlotPayload(when));
-    expect(await notifier.pendingDailySlot(), when);
-    plugin.pending.clear(); // the alarm fired: the plugin forgets the card
-    expect(await notifier.pendingDailySlot(), isNull);
+    expect(z.payload,
+        ReportNotifier.dailySlotPayload(when, day: DateTime(2026, 11, 13)));
+    expect(await notifier.pendingDailyCards(), [
+      (
+        id: ReportNotifier.dailyReportNotificationId,
+        slot: when,
+        day: DateTime(2026, 11, 13)
+      ),
+      (
+        id: ReportNotifier.dailyReportNotificationId + 1,
+        slot: later,
+        day: DateTime(2026, 11, 13)
+      ),
+    ]);
+    expect(await notifier.scheduledDailyAt(), when,
+        reason: 'the next slot is the first id\'s');
+    plugin.pending.removeWhere(
+        (p) => p.id == ReportNotifier.dailyReportNotificationId); // fired
+    expect((await notifier.pendingDailyCards()).map((c) => c.id),
+        [ReportNotifier.dailyReportNotificationId + 1]);
+  });
+
+  test('a meal card or another app id is never read as a daily card',
+      () async {
+    final notifier = ReportNotifier(
+      scheduler: (_, _, _, _, _) async {},
+      pendingPayloads: () async => {
+        100: ReportNotifier.dailySlotPayload(DateTime(2026, 11, 13, 21)),
+        ReportNotifier.dailyReportNotificationId: 'junk',
+        ReportNotifier.dailyReportNotificationId + 2:
+            ReportNotifier.dailySlotPayload(DateTime(2026, 11, 15, 21)),
+      },
+    );
+    expect((await notifier.pendingDailyCards()).map((c) => c.id),
+        [ReportNotifier.dailyReportNotificationId + 2]);
+  });
+
+  test('the summary cards leave the shade on their own; meal cards stay',
+      () async {
+    final plugin = _RecordingPlugin(android: _FakeAndroid());
+    final notifier = ReportNotifier(plugin: plugin);
+    await notifier.showDailySummary('Fri: 1,850 kcal', 'On target.');
+    await notifier.showMealCard('🍽️ Meal logged automatically', 'Pasta');
+    expect(plugin.shown.first!.android!.timeoutAfter,
+        ReportNotifier.dailyCardLifetime.inMilliseconds);
+    expect(plugin.shown.last!.android!.timeoutAfter, isNull);
   });
 
   test('a pending card without a slot payload reads as no slot', () async {
@@ -583,7 +633,7 @@ void main() {
     expect(ReportNotifier.slotFromPayload(ReportNotifier.dailySlotPayload(when)),
         when);
     final notifier = ReportNotifier(plugin: _BarePlugin());
-    await expectLater(notifier.pendingDailySlot(), completion(isNull),
+    await expectLater(notifier.pendingDailyCards(), completion(isEmpty),
         reason: 'no platform plugin: never throws');
   });
 
@@ -593,7 +643,7 @@ void main() {
     // id 9001 as pending, null once it fired or was never accepted.
     var pending = <int>[];
     final notifier = ReportNotifier(
-      scheduler: (id, title, body, when) async => pending = [id],
+      scheduler: (id, title, body, when, _) async => pending = [id],
       pendingIds: () async => pending,
     );
     expect(await notifier.scheduledDailyAt(), isNull);
@@ -607,18 +657,20 @@ void main() {
   // The daily summary off switch (2026-10-10): cancelDaily only stops this
   // process's Timer; the card already handed to the OS (iOS one-shot, or
   // an unread Android card) has to be withdrawn by id.
-  test('cancelPendingDaily withdraws id 9001 from the OS', () async {
+  test('cancelPendingDaily withdraws the whole daily set from the OS',
+      () async {
     final plugin = _RecordingPlugin();
     final notifier = ReportNotifier(plugin: plugin);
     await notifier.cancelPendingDaily();
-    expect(plugin.cancelled, [ReportNotifier.dailyReportNotificationId]);
+    expect(plugin.cancelled, ReportNotifier.dailySetIds);
+    expect(plugin.cancelled.first, ReportNotifier.dailyReportNotificationId);
     expect(await notifier.scheduledDailyAt(), isNull);
   });
 
   test('cancelPendingDaily after an OS arm leaves nothing armed', () async {
     var pending = <int>[];
     final notifier = ReportNotifier(
-      scheduler: (id, title, body, when) async => pending = [id],
+      scheduler: (id, title, body, when, _) async => pending = [id],
       canceller: (id) async => pending.remove(id),
       pendingIds: () async => pending,
     );

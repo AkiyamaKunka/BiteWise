@@ -860,13 +860,13 @@ Future<bool> _runAfterLaunch({
     rethrow;
   }
   try {
-    // Android: a card still pending past its slot (the inexact alarm runs
-    // late) is posted rather than replaced (deliverOverdue).
+    // Android: the week ahead, and a card still pending past its slot (the
+    // inexact alarm runs late) posted rather than replaced.
     await armOsDailySummary(
         dao: await createMealsDao(),
         settings: settings,
         notifier: notifier,
-        deliverOverdue: !ios);
+        android: !ios);
   } catch (_) {
     // The scan's work is saved either way; the card refreshes next open.
   }

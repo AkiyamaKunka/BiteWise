@@ -26,7 +26,12 @@ typedef NotificationPresenter = Future<void> Function(
 /// Test seam for [ReportNotifier.scheduleDailyAt]: the OS-side schedule
 /// call, so the iOS delivery path is assertable without platform channels.
 typedef NotificationScheduler = Future<void> Function(
-    int id, String title, String body, DateTime when);
+    int id, String title, String body, DateTime when, String payload);
+
+/// A daily card the OS still holds ([ReportNotifier.pendingDailyCards]):
+/// its id in the daily set, its slot, and the day it describes (null for
+/// a card armed before payloads named it).
+typedef PendingDailyCard = ({int id, DateTime slot, DateTime? day});
 
 class ReportNotifier {
   ReportNotifier({
@@ -41,7 +46,7 @@ class ReportNotifier {
     ({String name, String description}) Function()? channelStrings,
     ({String name, String description}) Function()? mealChannelStrings,
     int? mealCardIdSeed,
-    Future<String?> Function()? pendingDailyPayload,
+    Future<Map<int, String?>> Function()? pendingPayloads,
   })  : _plugin = plugin ?? FlutterLocalNotificationsPlugin(),
         _clock = clock ?? DateTime.now,
         // ignore: prefer_initializing_formals
@@ -61,7 +66,7 @@ class ReportNotifier {
         // ignore: prefer_initializing_formals
         _mealChannelStrings = mealChannelStrings,
         // ignore: prefer_initializing_formals
-        _pendingDailyPayload = pendingDailyPayload {
+        _pendingPayloads = pendingPayloads {
     // Each background run constructs a FRESH notifier; a fixed 100-base
     // would make every run overwrite the previous run's unread meal cards.
     // Headless callers pass a time-derived seed so ids keep advancing.
@@ -71,6 +76,23 @@ class ReportNotifier {
   /// Fixed id: re-firing replaces yesterday's report notification instead of
   /// stacking (one canonical daily report, spec §5.5).
   static const int dailyReportNotificationId = 9001;
+
+  /// How many daily cards one arm can hand the OS: the next slot (on
+  /// [dailyReportNotificationId]) and, on Android, the 7 after it, on the
+  /// ids that follow (os_summary.dart: with no background job, nothing
+  /// else would arm the next night's card). The ids stay clear of the
+  /// meal cards' (100 up in the app, 10000 up in background runs).
+  static const int dailySetSize = 8;
+
+  /// The daily set's ids, the next slot's first.
+  static List<int> get dailySetIds =>
+      [for (var i = 0; i < dailySetSize; i++) dailyReportNotificationId + i];
+
+  /// Android: a daily card leaves the shade on its own after this long.
+  /// Each night's card has its own id now (one id holds one alarm), so a
+  /// card no longer replaces the night before's; 20 hours keeps about one
+  /// at a time, as before.
+  static const Duration dailyCardLifetime = Duration(hours: 20);
 
   /// The daily summary's Android channel. The id every install has had
   /// since July 2026 ('Reports & meals', which also carried the meal
@@ -106,9 +128,9 @@ class ReportNotifier {
   /// Test seam for [scheduledDailyAt]: the ids the OS still holds pending.
   final Future<List<int>> Function()? _pendingIds;
 
-  /// Test seam for [pendingDailySlot]: the payload of the daily card the OS
-  /// still holds, null when it holds none.
-  final Future<String?> Function()? _pendingDailyPayload;
+  /// Test seam for [pendingDailyCards]: what the OS still holds pending,
+  /// id → payload.
+  final Future<Map<int, String?>> Function()? _pendingPayloads;
 
   /// Android channel names/descriptions in the app language — the
   /// summary's and the meal cards' — read at post time so a language
@@ -166,6 +188,7 @@ class ReportNotifier {
         channelDescription: channel.description,
         icon: androidSmallIcon,
         color: cardColor,
+        timeoutAfter: onMeals ? null : dailyCardLifetime.inMilliseconds,
         importance: _importance,
         priority: Priority.defaultPriority,
         channelAction: AndroidNotificationChannelAction.createIfNotExists,
@@ -324,14 +347,22 @@ class ReportNotifier {
   /// the user switching the summary off. [cancelDaily] only stops this
   /// process's Timer; a card already handed to the OS would still fire
   /// tonight. Never throws: nothing pending is the common case.
+  ///
+  /// The whole daily set ([dailySetIds]): on Android an arm holds the next
+  /// eight nights' cards.
   Future<void> cancelPendingDaily() async {
     if (_dailyTimer == null) _nextDailyFire = null; // nothing armed anywhere
     final cancel = _canceller;
-    if (cancel != null) return cancel(dailyReportNotificationId);
-    try {
-      await _plugin.cancel(id: dailyReportNotificationId);
-    } catch (_) {
-      // No platform plugin (tests) or nothing to withdraw.
+    for (final id in dailySetIds) {
+      if (cancel != null) {
+        await cancel(id);
+        continue;
+      }
+      try {
+        await _plugin.cancel(id: id);
+      } catch (_) {
+        // No platform plugin (tests) or nothing to withdraw.
+      }
     }
   }
 
@@ -423,36 +454,67 @@ class ReportNotifier {
   /// a UTC instant. The OS keeps it with the pending card, so any engine
   /// can later ask which slot the card it holds is for
   /// ([pendingDailySlot]). Nothing reads it on a tap.
-  static String dailySlotPayload(DateTime when) =>
-      'daily:${when.toUtc().toIso8601String()}';
+  ///
+  /// [day]: the calendar day the card describes, kept too — on the night
+  /// DST starts a slot can normalise past the night rule's hour, so the
+  /// day cannot always be worked out from the slot again.
+  static String dailySlotPayload(DateTime when, {DateTime? day}) {
+    final slot = 'daily:${when.toUtc().toIso8601String()}';
+    if (day == null) return slot;
+    final d = '${day.year.toString().padLeft(4, '0')}-'
+        '${day.month.toString().padLeft(2, '0')}-'
+        '${day.day.toString().padLeft(2, '0')}';
+    return '$slot@$d';
+  }
+
+  static ({DateTime slot, DateTime? day})? _parsePayload(String? payload) {
+    const prefix = 'daily:';
+    if (payload == null || !payload.startsWith(prefix)) return null;
+    final rest = payload.substring(prefix.length).split('@');
+    final slot = DateTime.tryParse(rest.first)?.toLocal();
+    if (slot == null) return null;
+    final day = rest.length > 1 ? DateTime.tryParse(rest[1]) : null;
+    return (
+      slot: slot,
+      day: day == null ? null : DateTime(day.year, day.month, day.day)
+    );
+  }
 
   /// The slot in a [dailySlotPayload], in local time; null for anything
   /// else (a card armed before payloads, say).
-  static DateTime? slotFromPayload(String? payload) {
-    const prefix = 'daily:';
-    if (payload == null || !payload.startsWith(prefix)) return null;
-    return DateTime.tryParse(payload.substring(prefix.length))?.toLocal();
-  }
+  static DateTime? slotFromPayload(String? payload) =>
+      _parsePayload(payload)?.slot;
 
-  /// The slot of the daily card the OS still holds, or null: none pending,
-  /// or the OS would not say. On Android a pending card whose slot has
-  /// passed has not been delivered yet — an inexact alarm runs late — or
-  /// never will be (a force stop takes the alarm, not the plugin's record
-  /// of it). Never throws.
-  Future<DateTime?> pendingDailySlot() async {
+  /// The daily cards the OS still holds, earliest slot first; empty when
+  /// none, or the OS would not say. On Android a pending card whose slot
+  /// has passed has not been delivered yet — an inexact alarm runs late —
+  /// or never will be (a force stop takes the alarm, not the plugin's
+  /// record of it). Never throws.
+  Future<List<PendingDailyCard>> pendingDailyCards() async {
     try {
-      final probe = _pendingDailyPayload;
-      if (probe != null) return slotFromPayload(await probe());
-      if (_scheduler != null) return null; // seam-only tests: no OS
-      for (final p in await _plugin.pendingNotificationRequests()) {
-        if (p.id == dailyReportNotificationId) {
-          return slotFromPayload(p.payload);
-        }
+      final Map<int, String?> pending;
+      final probe = _pendingPayloads;
+      if (probe != null) {
+        pending = await probe();
+      } else if (_scheduler != null) {
+        return const []; // seam-only tests: no OS
+      } else {
+        pending = {
+          for (final p in await _plugin.pendingNotificationRequests())
+            p.id: p.payload,
+        };
       }
+      final ids = dailySetIds;
+      final cards = <PendingDailyCard>[
+        for (final e in pending.entries)
+          if (ids.contains(e.key))
+            if (_parsePayload(e.value) case final parsed?)
+              (id: e.key, slot: parsed.slot, day: parsed.day),
+      ]..sort((a, b) => a.slot.compareTo(b.slot));
+      return cards;
     } catch (_) {
-      // No platform plugin (tests), or the OS would not say.
+      return const []; // no platform plugin (tests), or the OS would not say
     }
-    return null;
   }
 
   /// Hand the daily summary to the OS to deliver at [when] — the path on
@@ -480,20 +542,26 @@ class ReportNotifier {
   /// 'Restricted' setting blocks it. The receivers that deliver it and
   /// re-arm it after a reboot or an app update are declared in the
   /// manifest (flutter_local_notifications' README).
+  ///
+  /// [id]: one of [dailySetIds] — [dailyReportNotificationId] for the next
+  /// slot. [day]: the day the card describes, kept in its payload.
   Future<void> scheduleDailyAt({
     required DateTime when,
     required String title,
     required String body,
+    int id = dailyReportNotificationId,
+    DateTime? day,
   }) async {
+    final payload = dailySlotPayload(when, day: day);
     final scheduler = _scheduler;
     if (scheduler != null) {
-      await scheduler(dailyReportNotificationId, title, body, when);
-      _nextDailyFire = when;
+      await scheduler(id, title, body, when, payload);
+      if (id == dailyReportNotificationId) _nextDailyFire = when;
       return;
     }
     await _syncChannel();
     await _plugin.zonedSchedule(
-      id: dailyReportNotificationId,
+      id: id,
       title: title,
       body: body,
       // UTC on purpose: [when] is an absolute instant, and TZDateTime.from
@@ -502,12 +570,12 @@ class ReportNotifier {
       // for a repeating wall-clock trigger, which this is not.)
       scheduledDate: tz.TZDateTime.from(when, tz.UTC),
       notificationDetails: _details(),
-      payload: dailySlotPayload(when),
+      payload: payload,
       // Ignored on iOS. Inexact: the app holds no SCHEDULE_EXACT_ALARM or
       // USE_EXACT_ALARM permission, and an exact mode would throw for it.
       androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
     );
-    _nextDailyFire = when;
+    if (id == dailyReportNotificationId) _nextDailyFire = when;
   }
 
   /// Meal card for watcher-logged meals (spec §6 auto intake surfaces its

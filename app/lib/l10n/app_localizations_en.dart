@@ -3636,4 +3636,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get watcherAllowAllPhotos => 'Allow access to all photos';
+
+  @override
+  String coachWeekday(String weekday) {
+    String _temp0 = intl.Intl.selectLogic(weekday, {
+      'mon': 'Mon',
+      'tue': 'Tue',
+      'wed': 'Wed',
+      'thu': 'Thu',
+      'fri': 'Fri',
+      'sat': 'Sat',
+      'sun': 'Sun',
+      'other': '',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String coachTitleOnDay(String day, String kcal) {
+    return '$day: $kcal kcal';
+  }
+
+  @override
+  String get coachEmptyOnDay =>
+      'Nothing logged that day. Snap your next meal and it lands here automatically.';
 }

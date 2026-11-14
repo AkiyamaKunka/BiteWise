@@ -5488,6 +5488,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Allow access to all photos'**
   String get watcherAllowAllPhotos;
+
+  /// Android daily summary card: the short weekday name of the day the card describes, put in coachTitleOnDay. The weekday is one of mon, tue, wed, thu, fri, sat, sun.
+  ///
+  /// In en, this message translates to:
+  /// **'{weekday, select, mon{Mon} tue{Tue} wed{Wed} thu{Thu} fri{Fri} sat{Sat} sun{Sun} other{}}'**
+  String coachWeekday(String weekday);
+
+  /// Android daily summary card title, naming the day it describes (coachWeekday) instead of 'Today' or 'Yesterday': an inexact alarm can come after midnight, and a card re-fired after a reboot can come the next morning. Same shape as coachTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{day}: {kcal} kcal'**
+  String coachTitleOnDay(String day, String kcal);
+
+  /// Android daily summary card body for a day with nothing logged, under coachTitleOnDay; says 'that day' rather than 'today' because the card may come late. Also the text of the nights armed ahead, which are rebuilt whenever something is logged.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing logged that day. Snap your next meal and it lands here automatically.'**
+  String get coachEmptyOnDay;
 }
 
 class _AppLocalizationsDelegate

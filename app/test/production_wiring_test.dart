@@ -751,7 +751,7 @@ void main() {
         _wired(
           r'Future<void> armOsSummary\(\) => armOsDailySummary\( dao: dao, '
           r'settings: settings, notifier: notifier, '
-          r'deliverOverdue: Platform\.isAndroid\);',
+          r'android: Platform\.isAndroid\);',
         ),
       );
       expect(
@@ -821,7 +821,7 @@ void main() {
         _wired(
           r'\n  try \{\s*(//[^\n]*\n\s*)*await armOsDailySummary\( '
           r'dao: await createMealsDao\(\), settings: settings, '
-          r'notifier: notifier, deliverOverdue: !ios\);',
+          r'notifier: notifier, android: !ios\);',
         ),
       );
       expect(glue, isNot(contains('postHeadlessSummary')));

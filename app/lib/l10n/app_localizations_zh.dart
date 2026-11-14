@@ -3268,4 +3268,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get watcherAllowAllPhotos => '允许访问所有照片';
+
+  @override
+  String coachWeekday(String weekday) {
+    String _temp0 = intl.Intl.selectLogic(weekday, {
+      'mon': '周一',
+      'tue': '周二',
+      'wed': '周三',
+      'thu': '周四',
+      'fri': '周五',
+      'sat': '周六',
+      'sun': '周日',
+      'other': '',
+    });
+    return '$_temp0';
+  }
+
+  @override
+  String coachTitleOnDay(String day, String kcal) {
+    return '$day：$kcal 千卡';
+  }
+
+  @override
+  String get coachEmptyOnDay => '当天没有记录。拍下一餐，它会自动出现在这里。';
 }

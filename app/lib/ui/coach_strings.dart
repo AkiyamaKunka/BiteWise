@@ -12,6 +12,7 @@ import '../l10n/app_localizations.dart';
 import '../l10n/app_localizations_en.dart';
 import '../l10n/app_localizations_zh.dart';
 import '../services/report/coach_summary.dart';
+import '../services/report/daily_summary.dart' show SummaryDayNaming;
 
 /// [appLanguage] is the persisted 'system' | 'en' | 'zh'.
 CoachStrings coachStringsFor(String appLanguage) {
@@ -31,6 +32,18 @@ CoachStrings coachStringsFor(String appLanguage) {
     overTypical: l.coachOverTypical,
     noReference: l.coachNoReference,
     detail: l.coachDetail,
+  );
+}
+
+/// Android's day-named card wording (SummaryDayNaming, daily_summary.dart)
+/// in [appLanguage]: 'Thu: 1,850 kcal' / '周四：1,850 千卡'.
+SummaryDayNaming summaryDayNamingFor(String appLanguage) {
+  final l = localizationsFor(appLanguage);
+  const keys = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+  return SummaryDayNaming(
+    dayName: (day) => l.coachWeekday(keys[day.weekday - 1]),
+    title: l.coachTitleOnDay,
+    empty: l.coachEmptyOnDay,
   );
 }
 

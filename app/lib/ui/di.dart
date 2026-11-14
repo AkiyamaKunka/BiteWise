@@ -192,15 +192,15 @@ class AppServices {
     // photo job: late, and never offline or in the Rare and Restricted
     // buckets. Its card is an inexact alarm, within about an hour of the
     // slot on Android 12+ (later in Doze or battery saver), offline too;
-    // the user's battery 'Restricted' setting blocks it. A card still
-    // pending past its slot is posted at the next arm instead of being
-    // replaced (deliverOverdue).
+    // the user's battery 'Restricted' setting blocks it. On Android each
+    // arm also holds the next week's nights, names the day in the title,
+    // and posts a card still pending past its slot (os_summary.dart).
     final osSchedulesSummary = Platform.isIOS || Platform.isAndroid;
     Future<void> armOsSummary() => armOsDailySummary(
         dao: dao,
         settings: settings,
         notifier: notifier,
-        deliverOverdue: Platform.isAndroid);
+        android: Platform.isAndroid);
     // Settings' 下次总结 probe waits on this: on a first run init() sits
     // behind the notification-permission dialog, and a probe answered
     // before the arm read null and painted a red 'Not scheduled' over a

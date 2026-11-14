@@ -3458,5 +3458,30 @@
   "watcherAllowAllPhotos": "Allow access to all photos",
   "@watcherAllowAllPhotos": {
     "description": "Settings › Photos, Android only: a link under the footer while Watch Camera Roll is on and Photos access is partial. It shows Android 14+'s own dialog to change the selection or allow all photos (App info when that cannot help)."
+  },
+  "coachWeekday": "{weekday, select, mon{Mon} tue{Tue} wed{Wed} thu{Thu} fri{Fri} sat{Sat} sun{Sun} other{}}",
+  "@coachWeekday": {
+    "description": "Android daily summary card: the short weekday name of the day the card describes, put in coachTitleOnDay. The weekday is one of mon, tue, wed, thu, fri, sat, sun.",
+    "placeholders": {
+      "weekday": {
+        "type": "String"
+      }
+    }
+  },
+  "coachTitleOnDay": "{day}: {kcal} kcal",
+  "@coachTitleOnDay": {
+    "description": "Android daily summary card title, naming the day it describes (coachWeekday) instead of 'Today' or 'Yesterday': an inexact alarm can come after midnight, and a card re-fired after a reboot can come the next morning. Same shape as coachTitle.",
+    "placeholders": {
+      "day": {
+        "type": "String"
+      },
+      "kcal": {
+        "type": "String"
+      }
+    }
+  },
+  "coachEmptyOnDay": "Nothing logged that day. Snap your next meal and it lands here automatically.",
+  "@coachEmptyOnDay": {
+    "description": "Android daily summary card body for a day with nothing logged, under coachTitleOnDay; says 'that day' rather than 'today' because the card may come late. Also the text of the nights armed ahead, which are rebuilt whenever something is logged."
   }
 }

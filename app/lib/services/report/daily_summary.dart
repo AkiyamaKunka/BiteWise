@@ -87,6 +87,35 @@ DateTime summaryDayFor(DateTime slot, {int? slotHour}) =>
 bool summaryIsAboutYesterday(DateTime day, DateTime at) =>
     calendarDaysBetween(day, at) >= 1;
 
+/// The slot at [hour]:[minute] that most recently passed at [now], if it
+/// passed within [kSummaryGraceWindow]: today's once it has come, else
+/// yesterday's (calendar arithmetic: on the fall-back night a 24 h step
+/// from 23:30 lands on the SAME date). Null when the last one is older.
+DateTime? lastSlotWithinGrace(int hour, int minute, DateTime now) {
+  DateTime slotOn(DateTime day) =>
+      DateTime(day.year, day.month, day.day, hour, minute);
+  final today = slotOn(now);
+  if (!now.isBefore(today)) return today;
+  final yesterday = slotOn(addCalendarDays(now, -1));
+  if (now.difference(yesterday) > kSummaryGraceWindow) return null;
+  return yesterday;
+}
+
+/// Android's card titles name the day ('Thu: 1,850 kcal', '周四：…')
+/// instead of 'Today' / 'Yesterday': an inexact alarm can come after
+/// midnight, and a card the boot receiver re-fires can come the next
+/// morning, so 'Today' could name the wrong day (review, 2026-11-13). The
+/// empty-day line says 'that day' for the same reason.
+class SummaryDayNaming {
+  const SummaryDayNaming(
+      {required this.dayName, required this.title, required this.empty});
+
+  /// 'Thu' / '周四' for [day].
+  final String Function(DateTime day) dayName;
+  final String Function(String day, String kcal) title;
+  final String empty;
+}
+
 /// Post the pending summary if one is due and unposted. Returns true when a
 /// notification was actually presented.
 ///
@@ -102,23 +131,10 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   final slot = _parseHhmm(deps.reportTime);
   if (slot == null) return false;
 
-  DateTime slotOn(DateTime day) =>
-      DateTime(day.year, day.month, day.day, slot.$1, slot.$2);
-
-  // Which slot most recently passed?
-  final DateTime passed;
-  if (!now.isBefore(slotOn(now))) {
-    passed = slotOn(now); // today's slot has passed
-  } else {
-    // Today's slot is still ahead. Yesterday's may have been missed by a
-    // throttled heartbeat — catch it up while it is still worth saying.
-    // Calendar arithmetic, not 24 h: on the fall-back night (25 h day) a
-    // 24 h step from 23:30 lands on the SAME date, and a premature
-    // "Yesterday" card would post today's partial numbers.
-    final yesterday = slotOn(addCalendarDays(now, -1));
-    if (now.difference(yesterday) > kSummaryGraceWindow) return false;
-    passed = yesterday;
-  }
+  // Which slot most recently passed? Yesterday's may have been missed by
+  // a throttled heartbeat — caught up while it is still worth saying.
+  final passed = lastSlotWithinGrace(slot.$1, slot.$2, now);
+  if (passed == null) return false;
 
   // The day it describes, which the watermark names.
   final coveredDay = summaryDayFor(passed, slotHour: slot.$1);
@@ -149,12 +165,15 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
 /// tomorrow: after tonight's slot has passed, the next card describes a day
 /// with nothing logged yet, and the empty-day line is the honest content
 /// until the user logs something and the card is re-armed.
+///
+/// [onDay]: Android's day-named wording ([SummaryDayNaming]).
 Future<CoachSummary> summaryForDay({
   required MealsDao dao,
   required DateTime day,
   required int calorieGoal,
   required CoachStrings strings,
   bool forYesterday = false,
+  SummaryDayNaming? onDay,
 }) async {
   final date = isoDate(day);
   final meals = await dao.mealsBetween(date, date);
@@ -175,7 +194,7 @@ Future<CoachSummary> summaryForDay({
   final prior = await dao.mealsBetween(priorFrom, priorTo);
   final typical = typicalDayKcal(dailyCalorieTotals(prior));
 
-  return buildCoachSummary(
+  final summary = buildCoachSummary(
     eatenKcal: cal,
     mealCount: food.length,
     proteinG: protein,
@@ -185,7 +204,41 @@ Future<CoachSummary> summaryForDay({
     formatKcal: formatKcal,
     forYesterday: forYesterday,
   );
+  return onDay == null
+      ? summary
+      : _namedFor(summary, day, onDay, empty: food.isEmpty);
 }
+
+/// The card for a day nothing is logged on yet — a night armed ahead
+/// (os_summary.dart) — built without the database: the empty-day line.
+CoachSummary emptyDaySummary({
+  required DateTime day,
+  required int calorieGoal,
+  required CoachStrings strings,
+  SummaryDayNaming? onDay,
+}) {
+  final summary = buildCoachSummary(
+    eatenKcal: 0,
+    mealCount: 0,
+    proteinG: 0,
+    goalKcal: calorieGoal,
+    strings: strings,
+    formatKcal: formatKcal,
+  );
+  return onDay == null
+      ? summary
+      : _namedFor(summary, day, onDay, empty: true);
+}
+
+CoachSummary _namedFor(CoachSummary s, DateTime day, SummaryDayNaming onDay,
+        {required bool empty}) =>
+    CoachSummary(
+      title: onDay.title(onDay.dayName(day), formatKcal(s.eaten)),
+      body: empty ? onDay.empty : s.body,
+      eaten: s.eaten,
+      deltaKcal: s.deltaKcal,
+      reference: s.reference,
+    );
 
 (int, int)? _parseHhmm(String raw) {
   final m = RegExp(r'^([01]?\d|2[0-3]):([0-5]\d)$').firstMatch(raw.trim());
