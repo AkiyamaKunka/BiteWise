@@ -11,7 +11,8 @@
 /// writes), so two posters cannot both say the same day.
 library;
 
-import '../../core/coerce.dart' show safeNumber;
+import '../../core/coerce.dart'
+    show addCalendarDays, calendarDaysBetween, safeNumber;
 import '../../core/contracts.dart';
 // format.dart is pure Dart (intl only, no Flutter) — safe to use from the
 // headless WorkManager isolate, and it guarantees the notification's
@@ -61,6 +62,25 @@ class DailySummaryDeps {
 /// remembers. Beyond that it is stale, and silence is better.
 const Duration kSummaryGraceWindow = Duration(hours: 8);
 
+/// Summary slots before this hour describe the day that just ended — the
+/// app's previous-night rule (a photo taken before 04:00 may also be a
+/// leftover from the night before, photo_pipeline.dart).
+const int kSummaryNightEndsHour = 4;
+
+/// The calendar day a summary for [slot] describes (C16/C40): the slot's
+/// own day, or for a slot from 00:00 to 03:59 the day before — a 00:30
+/// summary is about the day that just ended, not the half hour since
+/// midnight, which always read 'Today: 0 kcal'. Calendar arithmetic
+/// (addCalendarDays), never 24 h, so a DST day is still one day.
+DateTime summaryDayFor(DateTime slot) => slot.hour < kSummaryNightEndsHour
+    ? addCalendarDays(slot, -1)
+    : DateTime(slot.year, slot.month, slot.day);
+
+/// Whether a summary about [day], said at [at], is about yesterday (or
+/// earlier) and must be worded so.
+bool summaryIsAboutYesterday(DateTime day, DateTime at) =>
+    calendarDaysBetween(day, at) >= 1;
+
 /// Post the pending summary if one is due and unposted. Returns true when a
 /// notification was actually presented.
 ///
@@ -69,7 +89,8 @@ const Duration kSummaryGraceWindow = Duration(hours: 8);
 /// run is often the first chance the app gets. That late run used to be
 /// dropped (today's slot hasn't arrived, so nothing matched) and the day was
 /// lost for good; it is now caught up within [kSummaryGraceWindow] and
-/// titled "Yesterday" so it never names the wrong day.
+/// titled "Yesterday" so it never names the wrong day. A slot before 04:00
+/// covers the day before it ([summaryDayFor]), titled "Yesterday" too.
 Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   final now = deps.now();
   final slot = _parseHhmm(deps.reportTime);
@@ -78,36 +99,35 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
   DateTime slotOn(DateTime day) =>
       DateTime(day.year, day.month, day.day, slot.$1, slot.$2);
 
-  // Which day is this run reporting on?
-  final DateTime coveredDay;
-  final bool late;
+  // Which slot most recently passed?
+  final DateTime passed;
   if (!now.isBefore(slotOn(now))) {
-    coveredDay = now; // today's slot has passed
-    late = false;
+    passed = slotOn(now); // today's slot has passed
   } else {
     // Today's slot is still ahead. Yesterday's may have been missed by a
     // throttled heartbeat — catch it up while it is still worth saying.
     // Calendar arithmetic, not 24 h: on the fall-back night (25 h day) a
     // 24 h step from 23:30 lands on the SAME date, and a premature
     // "Yesterday" card would post today's partial numbers.
-    final yesterday = DateTime(now.year, now.month, now.day - 1);
-    if (now.difference(slotOn(yesterday)) > kSummaryGraceWindow) return false;
-    coveredDay = yesterday;
-    late = true;
+    final yesterday = slotOn(addCalendarDays(now, -1));
+    if (now.difference(yesterday) > kSummaryGraceWindow) return false;
+    passed = yesterday;
   }
 
-  final today = isoDate(coveredDay);
-  if (deps.postedDate == today) return false; // already said it once
+  // The day it describes, which the watermark names.
+  final coveredDay = summaryDayFor(passed);
+  final covered = isoDate(coveredDay);
+  if (deps.postedDate == covered) return false; // already said it once
 
   final summary = await summaryForDay(
     dao: deps.dao,
     day: coveredDay,
     calorieGoal: deps.calorieGoal,
     strings: deps.strings,
-    forYesterday: late,
+    forYesterday: summaryIsAboutYesterday(coveredDay, now),
   );
   await deps.present(summary.title, summary.body);
-  await deps.markPosted(today);
+  await deps.markPosted(covered);
   return true;
 }
 
@@ -119,9 +139,10 @@ Future<bool> maybePostDailySummary(DailySummaryDeps deps) async {
 /// content has to be built AHEAD of time and handed over. Sharing this one
 /// builder is what keeps the pre-armed card and the live card identical.
 ///
-/// [day] may be tomorrow: after tonight's slot has passed, the next card
-/// describes a day with nothing logged yet, and the empty-day line is the
-/// honest content until the user logs something and the card is re-armed.
+/// [day] is the day DESCRIBED ([summaryDayFor] of the slot). It may be
+/// tomorrow: after tonight's slot has passed, the next card describes a day
+/// with nothing logged yet, and the empty-day line is the honest content
+/// until the user logs something and the card is re-armed.
 Future<CoachSummary> summaryForDay({
   required MealsDao dao,
   required DateTime day,

@@ -141,6 +141,33 @@ void main() {
       expect(os.pendingWhen, DateTime(2026, 11, 14, 21, 30));
     });
 
+    // C16/C40: a slot before 04:00 is about the day that just ended.
+    test('a 00:30 slot arms a card about the day it ends, as Yesterday',
+        () async {
+      dao.seed(_meal('2026-11-13', 650));
+      await arm(DateTime(2026, 11, 13, 19, 0), reportTime: '00:30');
+      expect(os.pendingWhen, DateTime(2026, 11, 14, 0, 30));
+      expect(os.pending!.title, 'Yesterday: 650 kcal');
+    });
+
+    test('04:00 is its own day', () async {
+      dao.seed(_meal('2026-11-13', 650));
+      await arm(DateTime(2026, 11, 13, 19, 0), reportTime: '04:00');
+      expect(os.pendingWhen, DateTime(2026, 11, 14, 4, 0));
+      expect(os.pending!.title, 'Today: 0 kcal');
+    });
+
+    test('a 00:30 card still pending at 00:50 is posted about the day it '
+        'ended', () async {
+      await arm(DateTime(2026, 11, 13, 19, 0), reportTime: '00:30');
+      dao.seed(_meal('2026-11-13', 900));
+      await arm(DateTime(2026, 11, 14, 0, 50), reportTime: '00:30');
+      expect(os.shown.single.title, 'Yesterday: 900 kcal');
+      expect(os.pendingWhen, DateTime(2026, 11, 15, 0, 30));
+      expect(os.pending!.title, 'Yesterday: 0 kcal',
+          reason: 'the next card is about Nov 14, nothing logged yet');
+    });
+
     test('iOS (deliverOverdue false) never posts one', () async {
       await arm(DateTime(2026, 11, 13, 19, 0), deliverOverdue: false);
       await arm(DateTime(2026, 11, 13, 21, 40), deliverOverdue: false);

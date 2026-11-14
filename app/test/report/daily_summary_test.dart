@@ -333,6 +333,116 @@ void main() {
       ('2026-10-25', '2026-10-31'),
     ]);
   });
+
+  // ---------------------------------------------------------------------
+  // C16/C40: a summary time after midnight. The covered day was the day
+  // the slot fell on, so a 00:30 card always said 'Today: 0 kcal' and the
+  // day that had just ended was never summarised. Slots from 00:00 to
+  // 03:59 now describe the previous calendar day (the app's previous-night
+  // rule), as 'Yesterday'. Run under several zones, DST ones included:
+  //   for z in UTC America/Chicago Asia/Shanghai Pacific/Auckland; do
+  //     TZ=$z flutter test test/report/daily_summary_test.dart; done
+  // ---------------------------------------------------------------------
+  group('a slot before 04:00 describes the day that just ended', () {
+    test('summaryDayFor: 00:00, 00:30 and 03:59 are the day before; 04:00 '
+        'is its own day', () {
+      expect(summaryDayFor(DateTime(2026, 8, 16, 0, 0)), DateTime(2026, 8, 15));
+      expect(summaryDayFor(DateTime(2026, 8, 16, 0, 30)), DateTime(2026, 8, 15));
+      expect(summaryDayFor(DateTime(2026, 8, 16, 3, 59)), DateTime(2026, 8, 15));
+      expect(summaryDayFor(DateTime(2026, 8, 16, 4, 0)), DateTime(2026, 8, 16));
+      expect(summaryDayFor(DateTime(2026, 8, 16, 21, 30)), DateTime(2026, 8, 16));
+      // Across a month and a year.
+      expect(summaryDayFor(DateTime(2026, 9, 1, 0, 30)), DateTime(2026, 8, 31));
+      expect(summaryDayFor(DateTime(2027, 1, 1, 0, 30)), DateTime(2026, 12, 31));
+    });
+
+    test('the day after a DST change is still one calendar day back', () {
+      // US: Mar 8 (23 h) and Nov 1 (25 h); New Zealand: Apr 5 and Sep 27.
+      for (final (slot, day) in [
+        (DateTime(2026, 3, 9, 0, 30), '2026-03-08'),
+        (DateTime(2026, 11, 2, 0, 30), '2026-11-01'),
+        (DateTime(2026, 4, 6, 0, 30), '2026-04-05'),
+        (DateTime(2026, 9, 28, 0, 30), '2026-09-27'),
+        (DateTime(2026, 3, 9, 3, 59), '2026-03-08'),
+        (DateTime(2026, 11, 2, 3, 59), '2026-11-01'),
+      ]) {
+        expect(iso(summaryDayFor(slot)), day, reason: '$slot');
+      }
+      // The DST days themselves, at a slot that exists everywhere.
+      expect(iso(summaryDayFor(DateTime(2026, 3, 8, 23, 30))), '2026-03-08');
+      expect(iso(summaryDayFor(DateTime(2026, 11, 1, 0, 30))), '2026-10-31');
+    });
+
+    for (final reportTime in ['00:00', '00:30', '03:59']) {
+      test('$reportTime: posts the day that ended, as Yesterday, and '
+          'watermarks that day', () async {
+        dao.put(meal('2026-08-15', 1800));
+        final parts = reportTime.split(':').map(int.parse).toList();
+        final now = DateTime(2026, 8, 16, parts[0], parts[1] + 1);
+        expect(
+            await maybePostDailySummary(
+                deps(now: now, reportTime: reportTime)),
+            isTrue);
+        expect(posted.single.$1, 'Yesterday: 1,800 kcal');
+        expect(marks, ['2026-08-15']);
+      });
+    }
+
+    test('04:00: posts today, as before', () async {
+      dao.put(meal('2026-08-15', 1800));
+      dao.put(meal('2026-08-16', 300, id: 2));
+      final now = DateTime(2026, 8, 16, 4, 1);
+      expect(await maybePostDailySummary(deps(now: now, reportTime: '04:00')),
+          isTrue);
+      expect(posted.single.$1, 'Today: 300 kcal');
+      expect(marks, ['2026-08-16']);
+    });
+
+    test('the night slot posts once, and not again before the next night',
+        () async {
+      dao.put(meal('2026-08-15', 1800));
+      final at = DateTime(2026, 8, 16, 0, 31);
+      await maybePostDailySummary(deps(now: at, reportTime: '00:30'));
+      expect(marks, ['2026-08-15']);
+      // Later that day: the slot that passed is still 00:30, covering Aug 15.
+      expect(
+          await maybePostDailySummary(deps(
+              now: DateTime(2026, 8, 16, 22, 0),
+              reportTime: '00:30',
+              postedDate: '2026-08-15')),
+          isFalse);
+      // Before 00:30 the next night, yesterday's 00:30 is 23.5 h old.
+      expect(
+          await maybePostDailySummary(deps(
+              now: DateTime(2026, 8, 17, 0, 10),
+              reportTime: '00:30',
+              postedDate: '2026-08-15')),
+          isFalse);
+      expect(posted, hasLength(1));
+    });
+
+    test('its baseline is the 7 days before the day it describes, across '
+        'the fall-back night', () async {
+      final recording = _RangeRecordingDao();
+      final d = DailySummaryDeps(
+        dao: recording,
+        reportTime: '00:30',
+        calorieGoal: 0,
+        postedDate: '',
+        markPosted: (d) async => marks.add(d),
+        present: (t, b) async => posted.add((t, b)),
+        strings: strings,
+        now: () => DateTime(2026, 11, 2, 0, 31),
+      );
+      expect(await maybePostDailySummary(d), isTrue);
+      expect(recording.ranges, [
+        ('2026-11-01', '2026-11-01'),
+        ('2026-10-25', '2026-10-31'),
+      ]);
+      expect(marks, ['2026-11-01']);
+      expect(posted.single.$1, startsWith('Yesterday:'));
+    });
+  });
 }
 
 class _RangeRecordingDao extends BaseFakeDao {

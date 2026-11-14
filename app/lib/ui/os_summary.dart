@@ -22,7 +22,6 @@ import '../core/contracts.dart';
 import '../services/report/daily_summary.dart';
 import '../services/report/notifications.dart';
 import '../services/settings/app_settings.dart';
-import 'format.dart' show isoDate;
 import 'coach_strings.dart';
 
 /// [deliverOverdue] (Android): before arming the next slot, post the card
@@ -59,14 +58,14 @@ Future<void> armOsDailySummary({
     if (overdue != null &&
         !overdue.isAfter(at) &&
         at.difference(overdue) <= kSummaryGraceWindow) {
-      final day = overdue;
+      final day = summaryDayFor(overdue);
       final s = await summaryForDay(
         dao: dao,
         day: day,
         calorieGoal: settings.calorieGoal,
         strings: strings,
         // Said after midnight, it is about yesterday — and says so.
-        forYesterday: isoDate(day) != isoDate(at),
+        forYesterday: summaryIsAboutYesterday(day, at),
       );
       // Same id as the pending card: the arm below replaces its alarm, so
       // this is the one card the slot gets.
@@ -77,12 +76,15 @@ Future<void> armOsDailySummary({
       ReportNotifier.parseHhmm(settings.reportTime), at);
   // The day the card DESCRIBES is the day it fires on — after tonight's
   // slot that is tomorrow, whose honest content is the empty-day line
-  // until something is logged and this re-runs.
+  // until something is logged and this re-runs. A slot before 04:00
+  // describes the day that just ended, as 'Yesterday' (C16/C40).
+  final day = summaryDayFor(when);
   final s = await summaryForDay(
     dao: dao,
-    day: when,
+    day: day,
     calorieGoal: settings.calorieGoal,
     strings: strings,
+    forYesterday: summaryIsAboutYesterday(day, when),
   );
   // Belt and braces: a live in-process Timer must never coexist with the
   // OS card (it would re-post the same slot at the next resume).
