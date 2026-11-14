@@ -915,6 +915,31 @@ void main() {
       expect(workflow, contains('status: completed'));
     });
 
+    // C44: the owner's Mac needs the Aliyun mirrors; CI must never use
+    // them (GitHub Actions sets CI=true). Every mirror line sits inside the
+    // guarded block, in both Gradle files.
+    test('the Aliyun mirrors are for local builds only', () {
+      for (final (file, flag) in [
+        ('android/settings.gradle.kts', 'useMirror'),
+        ('android/build.gradle.kts', 'useAliyunMirror'),
+      ]) {
+        final text = _read(file);
+        expect(text, contains('System.getenv("CI") != "true"'), reason: file);
+        expect(
+            text,
+            contains(
+                'providers.gradleProperty("chopstats.noMirror").orNull != "true"'),
+            reason: file);
+        final guarded =
+            RegExp('if \\($flag\\) \\{\\n((?:[ \\t]+maven \\{[^\\n]*\\n)+)')
+                .firstMatch(text);
+        expect(guarded, isNotNull, reason: file);
+        final inside = 'maven.aliyun.com'.allMatches(guarded!.group(1)!).length;
+        expect(inside, greaterThan(0), reason: file);
+        expect('maven.aliyun.com'.allMatches(text), hasLength(inside),
+            reason: '$file: an Aliyun repository outside the guard');
+      }
+    });
   });
 
 }

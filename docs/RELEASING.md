@@ -1332,11 +1332,20 @@ not propagated yet, or the first manual upload (§ 6.3) never happened.
 **Play: "Only releases with status draft may be created on draft app"** —
 the app record has never had a completed release; do § 6.3 first.
 
-**Gradle hangs resolving dependencies on CI** — `settings.gradle.kts` lists
-Aliyun mirrors first (for the owner's network); Gradle falls through to
-Google/Maven Central but only after the mirror times out. If it bites, retry
-the job; moving `google()` first in both Gradle files is the permanent fix
-but slows builds on the Mac.
+**Gradle and the Aliyun mirrors** — `settings.gradle.kts` and
+`build.gradle.kts` put the Aliyun mirrors first only for builds on the
+owner's Mac, whose network resets TLS to Maven Central and Google. On CI
+(GitHub Actions sets `CI=true`) they are left out, so the signed bundle,
+the GitHub APK and the PR builds resolve only from Google
+(`dl.google.com`), Maven Central (`repo.maven.apache.org`) and the Gradle
+Plugin Portal. Any local build can leave them out too:
+`-Pchopstats.noMirror=true`, or `chopstats.noMirror=true` in
+`~/.gradle/gradle.properties`. `app/test/release_decisions_test.dart`
+pins the rule. A normal run's log names no repository (Flutter runs Gradle
+quietly); to see where each artifact comes from, run the build once with
+`flutter build appbundle -v` and search the log for `aliyun` (no match
+expected on CI). If the Mac stops resolving, that is the mirror or the
+network, not this rule.
 
 **`base64: invalid input` while installing a secret** — the secret holds the
 raw file instead of its base64 text. Re-create it with `base64 -i <file>`.

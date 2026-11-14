@@ -11,11 +11,22 @@ pluginManagement {
     includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
 
     repositories {
-        // Aliyun mirrors first: Maven Central/Google are TLS-reset-prone from
-        // this network (mainland China); the mirrors carry identical artifacts.
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
-        maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        // Aliyun mirrors first, for the owner's Mac only: Maven Central and
+        // Google are TLS-reset-prone from that network (mainland China); the
+        // mirrors carry the same artifacts. Never on CI (GitHub Actions sets
+        // CI=true), so the signed release builds and the PR builds resolve
+        // only from Google, Maven Central and the Gradle Plugin Portal. Any
+        // other build can opt out with -Pchopstats.noMirror=true (or that
+        // line in ~/.gradle/gradle.properties). The same rule is in
+        // build.gradle.kts; docs/RELEASING.md § 9 has the troubleshooting.
+        val useMirror =
+            System.getenv("CI") != "true" &&
+                providers.gradleProperty("chopstats.noMirror").orNull != "true"
+        if (useMirror) {
+            maven { url = uri("https://maven.aliyun.com/repository/public") }
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+            maven { url = uri("https://maven.aliyun.com/repository/gradle-plugin") }
+        }
         google()
         mavenCentral()
         gradlePluginPortal()

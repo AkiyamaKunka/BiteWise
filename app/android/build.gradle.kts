@@ -1,8 +1,15 @@
+// Aliyun mirrors first on the owner's Mac only; never on CI, and not with
+// -Pchopstats.noMirror=true. The rule and why: settings.gradle.kts.
+val useAliyunMirror =
+    System.getenv("CI") != "true" &&
+        providers.gradleProperty("chopstats.noMirror").orNull != "true"
+
 allprojects {
     repositories {
-        // Aliyun mirrors first — see settings.gradle.kts (mainland-China TLS).
-        maven { url = uri("https://maven.aliyun.com/repository/public") }
-        maven { url = uri("https://maven.aliyun.com/repository/google") }
+        if (useAliyunMirror) {
+            maven { url = uri("https://maven.aliyun.com/repository/public") }
+            maven { url = uri("https://maven.aliyun.com/repository/google") }
+        }
         google()
         mavenCentral()
     }
