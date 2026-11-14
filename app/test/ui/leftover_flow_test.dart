@@ -6,6 +6,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:calorie_tracker/core/contracts.dart';
+import 'package:calorie_tracker/core/server_transport.dart';
 import 'package:calorie_tracker/l10n/app_localizations.dart';
 import 'package:calorie_tracker/l10n/app_localizations_en.dart';
 import 'package:calorie_tracker/l10n/app_localizations_zh.dart';
@@ -649,6 +650,29 @@ void main() {
       expect(find.text(AppLocalizationsEn().errNoServerKey), findsOneWidget);
       expectNothingSent();
     });
+
+    // Review of the privacy lane, finding 2: an own server address the app
+    // sends nothing to (not https://) said "couldn't estimate" — before the
+    // consent question and the photo read, it now says why.
+    for (final (locale, l) in [
+      (const Locale('en'), AppLocalizationsEn() as AppLocalizations),
+      (const Locale('zh'), AppLocalizationsZh() as AppLocalizations),
+    ]) {
+      testWidgets('own server not at https:// (${locale.languageCode}): '
+          'names it, asks nothing, reads nothing', (tester) async {
+        debugRequireHttpsServerOverride = true;
+        addTearDown(() => debugRequireHttpsServerOverride = null);
+        final settings = FakeSettings(keys: {'server': 'up'})
+          ..provider = 'server'
+          ..serverBaseUrl = 'http://10.0.0.5'
+          ..aiConsent = {};
+        await tapPhoto(tester, settings, locale: locale);
+        expect(find.text(l.errServerNeedsHttps), findsOneWidget);
+        expect(find.text(l.leftoverFailed), findsNothing);
+        expect(find.byKey(const Key('aiConsentDialog')), findsNothing);
+        expectNothingSent();
+      });
+    }
 
     testWidgets('the quota pause: its own line, no "kept and retried"',
         (tester) async {
