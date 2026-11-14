@@ -82,6 +82,9 @@ SetupLink? _parse(Uri uri) {
   if (RegExp(r'\s').hasMatch(key)) return null;
   if (!kSetupBackends.contains(backend)) return null;
 
-  final origin = '${s.scheme}://${s.host}${s.hasPort ? ':${s.port}' : ''}';
+  // An IPv6 host goes back in its brackets: Uri.host drops them, and
+  // 'https://2001:db8::1:8443' is not an address.
+  final host = s.host.contains(':') ? '[${s.host}]' : s.host;
+  final origin = '${s.scheme}://$host${s.hasPort ? ':${s.port}' : ''}';
   return SetupLink(server: origin, key: key, backend: backend);
 }

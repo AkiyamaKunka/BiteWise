@@ -22,6 +22,22 @@ void main() {
         'https://h.example:8443');
   });
 
+  test('an IPv6 server keeps its brackets', () {
+    expect(
+        parseSetupLink(link('server=${Uri.encodeQueryComponent('https://[2001:db8::1]:8443')}&key=$key'))!
+            .server,
+        'https://[2001:db8::1]:8443');
+    expect(
+        parseSetupLink(link('server=${Uri.encodeQueryComponent('https://[2001:db8::1]')}&key=$key'))!
+            .server,
+        'https://[2001:db8::1]');
+    // A debug build's own loopback, the one http it may use.
+    expect(
+        parseSetupLink(link('server=${Uri.encodeQueryComponent('http://[::1]:5000')}&key=$key'))!
+            .server,
+        'http://[::1]:5000');
+  });
+
   test('backend is validated', () {
     expect(parseSetupLink(link('server=https%3A%2F%2Fh&key=$key&backend=glm'))!.backend,
         'glm');
